@@ -1072,8 +1072,6 @@ void OpenFileTable::_prefetch_dirfrags()
       } else {
 	frag_vec_t leaves;
 	diri->dirfragtree.get_leaves_under(fg, leaves);
-	if (leaves.empty())
-	  leaves.push_back(diri->dirfragtree[fg.value()]);
 	for (auto& leaf : leaves) {
 	  if (diri->is_auth()) {
 	    dir = diri->get_or_open_dirfrag(mdcache, leaf);
