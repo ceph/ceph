@@ -4,7 +4,9 @@
 #ifndef CEPH_LIBRBD_MIGRATION_OPEN_SOURCE_IMAGE_REQUEST_H
 #define CEPH_LIBRBD_MIGRATION_OPEN_SOURCE_IMAGE_REQUEST_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "librbd/Types.h"
+#include <map>
 #include <memory>
 
 struct Context;
@@ -20,17 +22,19 @@ struct FormatInterface;
 template <typename ImageCtxT>
 class OpenSourceImageRequest {
 public:
-  static OpenSourceImageRequest* create(ImageCtxT* destination_image_ctx,
+  static OpenSourceImageRequest* create(librados::IoCtx& io_ctx,
+                                        ImageCtxT* destination_image_ctx,
                                         uint64_t src_snap_id,
                                         const MigrationInfo &migration_info,
                                         ImageCtxT** source_image_ctx,
                                         Context* on_finish) {
-    return new OpenSourceImageRequest(destination_image_ctx, src_snap_id,
-                                      migration_info, source_image_ctx,
-                                      on_finish);
+    return new OpenSourceImageRequest(io_ctx, destination_image_ctx,
+                                      src_snap_id, migration_info,
+                                      source_image_ctx, on_finish);
   }
 
-  OpenSourceImageRequest(ImageCtxT* destination_image_ctx,
+  OpenSourceImageRequest(librados::IoCtx& io_ctx,
+                         ImageCtxT* destination_image_ctx,
                          uint64_t src_snap_id,
                          const MigrationInfo &migration_info,
                          ImageCtxT** source_image_ctx,
@@ -48,11 +52,21 @@ private:
    * OPEN_SOURCE
    *    |
    *    v
-   * <finish>
+   * GET_IMAGE_SIZE  * * * * * * *
+   *    |                        *
+   *    v                        v
+   * GET_SNAPSHOTS * * * * > CLOSE_IMAGE
+   *    |                        |
+   *    v                        |
+   * <finish> <------------------/
    *
    * @endverbatim
    */
 
+  typedef std::map<uint64_t, SnapInfo> SnapInfos;
+
+  CephContext* m_cct;
+  librados::IoCtx& m_io_ctx;
   ImageCtxT* m_dst_image_ctx;
   uint64_t m_src_snap_id;
   MigrationInfo m_migration_info;
@@ -61,8 +75,21 @@ private:
 
   std::unique_ptr<FormatInterface> m_format;
 
+  uint64_t m_image_size = 0;
+  SnapInfos m_snap_infos;
+
   void open_source();
   void handle_open_source(int r);
+
+  void get_image_size();
+  void handle_get_image_size(int r);
+
+  void get_snapshots();
+  void handle_get_snapshots(int r);
+
+  void close_image(int r);
+
+  void register_image_dispatch();
 
   void finish(int r);
 

@@ -8,6 +8,7 @@
 #include "librbd/Types.h"
 #include "librbd/migration/FormatInterface.h"
 #include "json_spirit/json_spirit.h"
+#include <map>
 #include <memory>
 
 struct Context;
@@ -20,7 +21,7 @@ struct ImageCtx;
 namespace migration {
 
 template <typename> struct SourceSpecBuilder;
-struct StreamInterface;
+struct SnapshotInterface;
 
 template <typename ImageCtxT>
 class RawFormat : public FormatInterface {
@@ -54,14 +55,19 @@ public:
                   Context* on_finish) override;
 
 private:
-  struct OpenRequest;
+  typedef std::shared_ptr<SnapshotInterface> Snapshot;
+  typedef std::map<uint64_t, Snapshot> Snapshots;
 
   ImageCtxT* m_image_ctx;
   json_spirit::mObject m_json_object;
   const SourceSpecBuilder<ImageCtxT>* m_source_spec_builder;
 
-  std::unique_ptr<StreamInterface> m_stream;
+  Snapshots m_snapshots;
 
+  void handle_open(int r, Context* on_finish);
+
+  void handle_list_snaps(int r, io::SnapIds&& snap_ids,
+                         io::SnapshotDelta* snapshot_delta, Context* on_finish);
 };
 
 } // namespace migration

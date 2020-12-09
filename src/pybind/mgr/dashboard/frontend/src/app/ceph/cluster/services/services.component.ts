@@ -24,6 +24,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { PlacementPipe } from './placement.pipe';
 
 const BASE_URL = 'services';
 
@@ -44,6 +45,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
   permissions: Permissions;
   tableActions: CdTableAction[];
+  showDocPanel = false;
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
@@ -109,6 +111,12 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         }
       },
       {
+        name: $localize`Placement`,
+        prop: '',
+        pipe: new PlacementPipe(),
+        flexGrow: 1
+      },
+      {
         name: $localize`Running`,
         prop: 'status.running',
         flexGrow: 1
@@ -132,6 +140,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
 
     this.orchService.status().subscribe((status: OrchestratorStatus) => {
       this.orchStatus = status;
+      this.showDocPanel = !status.available;
     });
   }
 

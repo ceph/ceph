@@ -41,16 +41,18 @@ struct Server {
   crimson::common::Throttle byte_throttler;
   crimson::net::MessengerRef msgr;
   crimson::auth::DummyAuthClientServer dummy_auth;
-  struct ServerDispatcher : crimson::net::Dispatcher {
+  struct ServerDispatcher final : crimson::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                  MessageRef m) override {
+    std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef c,
+                                                 MessageRef m) final
+    {
       std::cout << "server got ping " << *m << std::endl;
       // reply with a pong
       return c->send(make_message<MPing>()).then([this] {
         ++count;
         on_reply.signal();
+        return seastar::now();
       });
     }
   } dispatcher;
@@ -67,11 +69,12 @@ struct Client {
   crimson::common::Throttle byte_throttler;
   crimson::net::MessengerRef msgr;
   crimson::auth::DummyAuthClientServer dummy_auth;
-  struct ClientDispatcher : crimson::net::Dispatcher {
+  struct ClientDispatcher final : crimson::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(crimson::net::Connection* c,
-                                  MessageRef m) override {
+    std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef c,
+                                                 MessageRef m) final
+    {
       std::cout << "client got pong " << *m << std::endl;
       ++count;
       on_reply.signal();
@@ -180,11 +183,11 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       server.msgr->set_auth_client(&server.dummy_auth);
       server.msgr->set_auth_server(&server.dummy_auth);
       return server.msgr->bind(entity_addrvec_t{addr}
-      ).then([&server] {
-	auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
-	chained_dispatchers->push_back(server.dispatcher);
-        return server.msgr->start(chained_dispatchers);
-      }).then([&dispatcher=server.dispatcher, count] {
+      ).safe_then([&server] {
+        return server.msgr->start({&server.dispatcher});
+      }, crimson::net::Messenger::bind_ertr::all_same_way([](auto& e) {
+        ceph_abort_msg("bind failed");
+      })).then([&dispatcher=server.dispatcher, count] {
         return dispatcher.on_reply.wait([&dispatcher, count] {
           return dispatcher.count >= count;
         });
@@ -205,9 +208,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       client.msgr->set_require_authorizer(false);
       client.msgr->set_auth_client(&client.dummy_auth);
       client.msgr->set_auth_server(&client.dummy_auth);
-      auto chained_dispatchers = seastar::make_lw_shared<ChainedDispatchers>();
-      chained_dispatchers->push_back(client.dispatcher);
-      return client.msgr->start(chained_dispatchers).then(
+      return client.msgr->start({&client.dispatcher}).then(
           [addr, &client, &disp=client.dispatcher, count] {
         auto conn = client.msgr->connect(addr, entity_name_t::TYPE_OSD);
         return seastar::do_until(

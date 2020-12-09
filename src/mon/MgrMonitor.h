@@ -71,7 +71,7 @@ class MgrMonitor: public PaxosService
   std::vector<MonCommand> pending_command_descs;
 
 public:
-  MgrMonitor(Monitor *mn, Paxos *p, const std::string& service_name)
+  MgrMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name)
   {}
   ~MgrMonitor() override {}

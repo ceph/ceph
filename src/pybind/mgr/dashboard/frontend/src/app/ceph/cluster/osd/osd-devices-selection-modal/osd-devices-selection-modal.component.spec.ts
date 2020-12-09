@@ -23,7 +23,7 @@ describe('OsdDevicesSelectionModalComponent', () => {
 
   const expectSubmitButton = (enabled: boolean) => {
     const nativeElement = fixture.debugElement.nativeElement;
-    const button = nativeElement.querySelector('.modal-footer button');
+    const button = nativeElement.querySelector('.modal-footer .tc_submitButton');
     expect(button.disabled).toBe(!enabled);
   };
 

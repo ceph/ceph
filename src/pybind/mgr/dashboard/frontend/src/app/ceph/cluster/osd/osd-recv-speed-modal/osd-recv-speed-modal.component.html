@@ -82,14 +82,10 @@
         </div>
       </div>
       <div class="modal-footer">
-        <cd-submit-button *ngIf="permissions.configOpt.update"
-                          (submitAction)="submitAction()"
-                          [form]="osdRecvSpeedForm"
-                          i18n>Submit</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="submitAction()"
+                              [form]="osdRecvSpeedForm"
+                              [submitText]="actionLabels.UPDATE"
+                              [showSubmit]="permissions.configOpt.update"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

@@ -5,6 +5,7 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
@@ -45,6 +46,7 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     NgbNavModule,
     NgbPopoverModule,
     NgbTooltipModule,
+    NgxPipeFunctionModule,
     SharedModule,
     RouterModule,
     TreeModule

@@ -250,6 +250,32 @@ public:
     return segment_manager.release(id);
   }
 
+  /**
+   * read_onode_root
+   *
+   * Get onode-tree root logical address
+   */
+  using read_onode_root_ertr = crimson::errorator<
+    crimson::ct_error::input_output_error
+    >;
+  using read_onode_root_ret = read_onode_root_ertr::future<laddr_t>;
+  read_onode_root_ret read_onode_root(Transaction &t) {
+    return cache.get_root(t).safe_then([](auto croot) {
+      return croot->get_root().onode_root;
+    });
+  }
+
+  /**
+   * write_onode_root
+   *
+   * Write onode-tree root logical address, must be called after read.
+   */
+  void write_onode_root(Transaction &t, laddr_t addr) {
+    auto croot = cache.get_root_fast(t);
+    croot = cache.duplicate_for_write(t, croot)->cast<RootBlock>();
+    croot->get_root().onode_root = addr;
+  }
+
   ~TransactionManager();
 
 private:

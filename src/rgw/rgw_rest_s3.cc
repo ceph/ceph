@@ -1411,6 +1411,14 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Stats");
      }
 
+     // send info about quota config
+     auto user_info = s->user->get_info();
+     encode_json("QuotaMaxBytes", user_info.user_quota.max_size, formatter);
+     encode_json("QuotaMaxBuckets", user_info.max_buckets, formatter);
+     encode_json("QuotaMaxObjCount", user_info.user_quota.max_objects, formatter);
+     encode_json("QuotaMaxBytesPerBucket", user_info.bucket_quota.max_objects, formatter);
+     encode_json("QuotaMaxObjCountPerBucket", user_info.bucket_quota.max_size, formatter);
+     // send info about user's capacity utilization
      encode_json("TotalBytes", stats.size, formatter);
      encode_json("TotalBytesRounded", stats.size_rounded, formatter);
      encode_json("TotalEntries", stats.num_objects, formatter);
@@ -2141,6 +2149,15 @@ static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWBucket* bucke
 {
   dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket->get_count()));
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket->get_size()));
+  // only bucket's owner is allowed to get the quota settings of the account
+  if (bucket->is_owner(s->user.get())) {
+    auto user_info = s->user->get_info();
+    dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.user_quota.max_size));
+    dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.user_quota.max_objects));
+    dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
+    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(user_info.bucket_quota.max_size));
+    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(user_info.bucket_quota.max_objects));
+  }
 }
 
 void RGWStatBucket_ObjStore_S3::send_response()
@@ -3868,6 +3885,12 @@ int RGWDeleteMultiObj_ObjStore_S3::get_params(optional_yield y)
   int ret = RGWDeleteMultiObj_ObjStore::get_params(y);
   if (ret < 0) {
     return ret;
+  }
+
+  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  if (bypass_gov_header) {
+    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
   }
 
   return do_aws4_auth_completion();

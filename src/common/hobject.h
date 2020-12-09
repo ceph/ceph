@@ -397,6 +397,14 @@ public:
       shard_id(shard),
       max(false) {}
 
+  ghobject_t(shard_id_t shard, int64_t pool, uint32_t hash,
+             const std::string& nspace, const std::string& oid,
+             snapid_t snap, gen_t gen)
+    : hobj(object_t(oid), "", snap, hash, pool, nspace),
+      generation(gen),
+      shard_id(shard),
+      max(false) {}
+
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
     hobject_t h(object_t(), std::string(), CEPH_NOSNAP, hash, pool, std::string());
     return ghobject_t(h, NO_GEN, shard);

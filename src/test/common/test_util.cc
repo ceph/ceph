@@ -16,12 +16,18 @@
 #include "include/util.h"
 #include "gtest/gtest.h"
 
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
 #include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 
 #if defined(__linux__)
 TEST(util, collect_sys_info)
 {
-  if (!std::experimental::filesystem::exists("/etc/os-release")) {
+  if (!fs::exists("/etc/os-release")) {
     GTEST_SKIP() << "skipping as '/etc/os-release' does not exist";
   }
 

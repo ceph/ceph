@@ -15,7 +15,7 @@
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/log.h"
-#include "Dispatcher.h"
+#include "chained_dispatchers.h"
 #include "Errors.h"
 #include "Socket.h"
 #include "SocketConnection.h"
@@ -125,10 +125,10 @@ void discard_up_to(std::deque<MessageRef>* queue,
 
 namespace crimson::net {
 
-ProtocolV1::ProtocolV1(ChainedDispatchersRef& dispatcher,
+ProtocolV1::ProtocolV1(ChainedDispatchers& dispatchers,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(proto_t::v1, dispatcher, conn), messenger{messenger} {}
+  : Protocol(proto_t::v1, dispatchers, conn), messenger{messenger} {}
 
 ProtocolV1::~ProtocolV1() {}
 
@@ -848,10 +848,10 @@ seastar::future<> ProtocolV1::read_message()
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(m.footer, p);
-      auto pconn = seastar::static_pointer_cast<SocketConnection>(
+      auto conn_ref = seastar::static_pointer_cast<SocketConnection>(
         conn.shared_from_this());
       auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
-                                  m.front, m.middle, m.data, std::move(pconn));
+                                  m.front, m.middle, m.data, conn_ref);
       if (unlikely(!msg)) {
         logger().warn("{} decode message failed", conn);
         throw std::system_error{make_error_code(error::corrupted_message)};
@@ -871,15 +871,13 @@ seastar::future<> ProtocolV1::read_message()
 
       if (unlikely(!conn.update_rx_seq(msg->get_seq()))) {
         // skip this message
-        return;
+        return seastar::now();
       }
 
-      // start dispatch, ignoring exceptions from the application layer
-      gate.dispatch_in_background("ms_dispatch", *this, [this, msg = std::move(msg_ref)] {
-        logger().debug("{} <== #{} === {} ({})",
-                       conn, msg->get_seq(), *msg, msg->get_type());
-        return dispatcher->ms_dispatch(&conn, std::move(msg));
-      });
+      logger().debug("{} <== #{} === {} ({})",
+                     conn, msg_ref->get_seq(), *msg_ref, msg_ref->get_type());
+      // throttle the reading process by the returned future
+      return dispatchers.ms_dispatch(conn_ref, std::move(msg_ref));
     });
 }
 
@@ -919,15 +917,11 @@ void ProtocolV1::execute_open(open_t type)
   set_write_state(write_state_t::open);
 
   if (type == open_t::connected) {
-    gate.dispatch_in_background("ms_handle_connect", *this, [this] {
-      return dispatcher->ms_handle_connect(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatchers.ms_handle_connect(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   } else { // type == open_t::accepted
-    gate.dispatch_in_background("ms_handle_accept", *this, [this] {
-      return dispatcher->ms_handle_accept(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    });
+    dispatchers.ms_handle_accept(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }
 
   gate.dispatch_in_background("execute_open", *this, [this] {

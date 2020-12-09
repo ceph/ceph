@@ -151,7 +151,7 @@ int MemDB::_load()
 
 int MemDB::_init(bool create)
 {
-  int r;
+  int r = 0;
   dout(1) << __func__ << dendl;
   if (create) {
     if (fs::exists(m_db_path)) {

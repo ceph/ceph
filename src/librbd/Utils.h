@@ -274,6 +274,8 @@ SnapContext get_snap_context(
       std::pair<std::uint64_t,
                 std::vector<std::uint64_t>>>& write_snap_context);
 
+uint64_t reserve_async_request_id();
+
 } // namespace util
 } // namespace librbd
 

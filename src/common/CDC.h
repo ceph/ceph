@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 
+#include "include/types.h"
 #include "include/buffer.h"
 
 class CDC {
@@ -25,3 +26,5 @@ public:
     int bits,
     int windowbits = 0);
 };
+
+void generate_buffer(int size, bufferlist *outbl, int seed = 0);

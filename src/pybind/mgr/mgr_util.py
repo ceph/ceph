@@ -20,7 +20,7 @@ else:
     from threading import _Timer as Timer
 
 try:
-    from typing import Tuple, Any, Callable
+    from typing import Tuple, Any, Callable, Optional, Dict
 except ImportError:
     TYPE_CHECKING = False  # just for type checking
 
@@ -385,22 +385,53 @@ class ServerConfigException(Exception):
     pass
 
 
-def create_self_signed_cert(organisation='Ceph', common_name='mgr') -> Tuple[str, str]:
+def create_self_signed_cert(organisation: str = 'Ceph',
+                            common_name: str = 'mgr',
+                            dname: Optional[Dict[str, str]] = None) -> Tuple[str, str]:
     """Returns self-signed PEM certificates valid for 10 years.
-    :return cert, pkey
+    
+    The optional dname parameter provides complete control of the cert/key
+    creation by supporting all valid RDNs via a dictionary. However, if dname
+    is not provided the default O and CN settings will be applied.
+
+    :param organisation: String representing the Organisation(O) RDN (default='Ceph')
+    :param common_name: String representing the Common Name(CN) RDN (default='mgr')
+    :param dname: Optional dictionary containing RDNs to use for crt/key generation 
+
+    :return: ssl crt and key in utf-8 format
+
+    :raises ValueError: if the dname parameter received contains invalid RDNs
+
     """
 
     from OpenSSL import crypto
     from uuid import uuid4
 
+    # RDN = Relative Distinguished Name
+    valid_RDN_list = ['C', 'ST', 'L', 'O', 'OU', 'CN', 'emailAddress']
+
     # create a key pair
     pkey = crypto.PKey()
     pkey.generate_key(crypto.TYPE_RSA, 2048)
 
+    # Create a "subject" object
+    req = crypto.X509Req()
+    subj = req.get_subject()
+
+    if dname:
+        # dname received, so check it contains valid RDNs
+        if not all(field in valid_RDN_list for field in dname):
+            raise ValueError("Invalid DNAME received. Valid DNAME fields are {}".format(', '.join(valid_RDN_list)))
+    else:
+        dname = {"O": organisation, "CN": common_name}
+
+    # populate the subject with the dname settings
+    for k, v in dname.items():
+        setattr(subj, k, v)
+
     # create a self-signed cert
     cert = crypto.X509()
-    cert.get_subject().O = organisation
-    cert.get_subject().CN = common_name
+    cert.set_subject(req.get_subject())
     cert.set_serial_number(int(uuid4()))
     cert.gmtime_adj_notBefore(0)
     cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)  # 10 years

@@ -19,9 +19,13 @@
 #include <map>
 #include <set>
 #include <vector>
-#include <experimental/filesystem>       // For path
-
+#if __has_include(<filesystem>)	 // For extension
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
 namespace fs = std::experimental::filesystem;
+#endif
 
 using socket_results = std::map<std::string, std::string>;
 using test_functions =

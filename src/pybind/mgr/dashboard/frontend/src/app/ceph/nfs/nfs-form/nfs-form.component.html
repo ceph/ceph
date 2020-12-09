@@ -31,7 +31,7 @@
                       value=""
                       i18n>-- Select the cluster --</option>
               <option *ngFor="let cluster of allClusters"
-                      [value]="cluster">{{ cluster }}</option>
+                      [value]="cluster.cluster_id">{{ cluster.cluster_id }}</option>
             </select>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('cluster_id', formDir, 'required')"
@@ -40,7 +40,8 @@
         </div>
 
         <!-- daemons -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="clusterType">
           <label class="cd-col-form-label"
                  for="daemons">
             <ng-container i18n>Daemons</ng-container>
@@ -52,7 +53,8 @@
                        type="text"
                        [value]="daemon"
                        disabled />
-                <span class="input-group-append">
+                <span *ngIf="clusterType === 'user'"
+                      class="input-group-append">
                   <button class="btn btn-light"
                           type="button"
                           (click)="removeDaemon(i, daemon)">
@@ -63,7 +65,8 @@
               </div>
             </ng-container>
 
-            <div class="row">
+            <div *ngIf="clusterType === 'user'"
+                 class="row">
               <div class="col-md-12">
                 <cd-select [data]="nfsForm.get('daemons').value"
                            [options]="daemonsSelections"
@@ -73,6 +76,22 @@
                   <i [ngClass]="[icons.add]"></i>
                   <ng-container i18n>Add daemon</ng-container>
                 </cd-select>
+              </div>
+            </div>
+
+            <div *ngIf="clusterType === 'orchestrator'"
+                 class="row">
+              <div class="col-md-12">
+                <button type="button"
+                        class="btn btn-light float-right"
+                        (click)="onToggleAllDaemonsSelection()">
+                  <i [ngClass]="[icons.add]"></i>
+                  <ng-container *ngIf="nfsForm.getValue('daemons').length === 0; else hasDaemons"
+                                i18n>Add all daemons</ng-container>
+                  <ng-template #hasDaemons>
+                    <ng-container i18n>Remove all daemons</ng-container>
+                  </ng-template>
+                </button>
               </div>
             </div>
           </div>
@@ -485,13 +504,10 @@
       </div>
 
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button
-            (submitAction)="submitAction()"
-            i18n="form action button|Example: Create Pool@@formActionButton"
-            [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submitAction()"
+                              [form]="nfsForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

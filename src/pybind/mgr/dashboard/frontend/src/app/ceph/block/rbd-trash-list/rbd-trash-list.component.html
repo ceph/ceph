@@ -41,9 +41,10 @@
 </ng-template>
 
 <ng-template #deleteTpl
-             let-expiresAt>
+             let-expiresAt="expiresAt"
+             let-isExpired="isExpired">
   <p class="text-danger"
-     *ngIf="!isExpired(expiresAt)">
+     *ngIf="!isExpired">
     <strong>
       <ng-container i18n>This image is protected until {{ expiresAt | cdDate }}.</ng-container>
     </strong>

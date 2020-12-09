@@ -3,6 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
@@ -28,6 +29,7 @@ export class RbdTrashRestoreModalComponent implements OnInit {
   constructor(
     private rbdService: RbdService,
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private fb: CdFormBuilder,
     private taskWrapper: TaskWrapperService
   ) {}

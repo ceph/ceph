@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/extentmap_manager/btree/extentmap_btree_node_impl.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node_impl.h"
 #include "crimson/os/seastore/onode_manager/simple-fltree/onode_block.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "test/crimson/seastore/test_block.h"
 
 namespace {
@@ -467,6 +468,8 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   }
 }
 
+using StagedOnodeBlock = crimson::os::seastore::onode::SeastoreNodeExtent;
+
 Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
@@ -500,6 +503,11 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       });
     case extent_types_t::ONODE_BLOCK:
       return get_extent<OnodeBlock>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::ONODE_BLOCK_STAGED:
+      return get_extent<StagedOnodeBlock>(offset, length
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });

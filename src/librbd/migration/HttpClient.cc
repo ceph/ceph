@@ -460,7 +460,7 @@ private:
     if (work->header_only()) {
       m_parser.emplace(std::move(*m_header_parser));
     }
-    response = std::move(m_parser->release());
+    response = m_parser->release();
 
     // basic response code handling in a common location
     int r = 0;

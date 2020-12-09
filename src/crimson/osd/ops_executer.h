@@ -194,6 +194,10 @@ public:
   uint32_t get_pool_stripe_width() const {
     return pool_info.get_stripe_width();
   }
+
+  bool has_seen_write() const {
+    return num_write > 0;
+  }
 };
 
 template <class Context, class MainFunc, class EffectFunc>

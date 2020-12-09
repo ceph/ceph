@@ -3,43 +3,34 @@
 
 #pragma once
 
-#include <boost/intrusive/slist.hpp>
-
-#include "crimson/net/Dispatcher.h"
+#include "Fwd.h"
 #include "crimson/common/log.h"
 
-using crimson::net::Dispatcher;
+namespace crimson::net {
 
-// in existing Messenger, dispatchers are put into a chain as described by
-// chain-of-responsibility pattern. we could do the same to stop processing
-// the message once any of the dispatchers claims this message, and prevent
-// other dispatchers from reading it. but this change is more involved as
-// it requires changing the ms_ methods to return a bool. so as an intermediate 
-// solution, we are using an observer dispatcher to notify all the interested
-// or unintersted parties.
+class Dispatcher;
+
 class ChainedDispatchers {
-  boost::intrusive::slist<
-    Dispatcher,
-    boost::intrusive::linear<true>,
-    boost::intrusive::cache_last<true>> dispatchers;
 public:
-  void push_front(Dispatcher& dispatcher) {
-    dispatchers.push_front(dispatcher);
+  void assign(const dispatchers_t& _dispatchers) {
+    assert(empty());
+    assert(!_dispatchers.empty());
+    dispatchers = _dispatchers;
   }
-  void push_back(Dispatcher& dispatcher) {
-    dispatchers.push_back(dispatcher);
-  }
-  void erase(Dispatcher& dispatcher) {
-    dispatchers.erase(dispatchers.iterator_to(dispatcher));
+  void clear() {
+    dispatchers.clear();
   }
   bool empty() const {
     return dispatchers.empty();
   }
-  seastar::future<> ms_dispatch(crimson::net::Connection* conn, MessageRef m);
+  seastar::future<> ms_dispatch(crimson::net::ConnectionRef, MessageRef);
   void ms_handle_accept(crimson::net::ConnectionRef conn);
   void ms_handle_connect(crimson::net::ConnectionRef conn);
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace);
   void ms_handle_remote_reset(crimson::net::ConnectionRef conn);
+
+ private:
+  dispatchers_t dispatchers;
 };
 
-using ChainedDispatchersRef = seastar::lw_shared_ptr<ChainedDispatchers>;
+}

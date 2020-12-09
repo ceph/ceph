@@ -1,4 +1,6 @@
-#!/bin/bash -e
+#!/usr/bin/env bash 
+
+set -e
 
 refine_nasm_options=""
 while [ -n "$*" ]; do

@@ -601,6 +601,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
 
+            remove_column = 'CONTAINER ID'
+            if table.get_string(fields=[remove_column], border=False,
+                    header=False).count('<unknown>') == len(daemons):
+                try:
+                    table.del_column(remove_column)
+                except AttributeError as e:
+                    # del_column method was introduced in prettytable 2.0
+                    if str(e) != "del_column":
+                        raise
+                    table.field_names.remove(remove_column)
+                    table._rows = [row[:-1] for row in table._rows]
+
             return HandleCommandResult(stdout=table.get_string())
 
     @_cli_write_command(
@@ -809,7 +821,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add',
-        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus|cephadm-exporter,req=false '
         'name=placement,type=CephString,req=false',
         'Add daemon(s)')
     def _daemon_add_misc(self,
@@ -854,6 +866,8 @@ Usage:
             completion = self.add_nfs(spec)
         elif daemon_type == 'iscsi':
             completion = self.add_iscsi(spec)
+        elif daemon_type == 'cephadm-exporter':
+            completion = self.add_cephadm_exporter(spec)
         else:
             raise OrchestratorValidationError(f'unknown daemon type `{daemon_type}`')
 
@@ -1048,7 +1062,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply',
-        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus|cephadm-exporter,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
         'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '

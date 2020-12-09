@@ -425,7 +425,7 @@ describe('OsdListComponent', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
       const toClassName = TestBed.inject(TableActionsComponent).toClassName;
       const getActionClasses = (action: CdTableAction) =>
-        tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action.name)}`)).classes;
+        tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action)}`)).classes;
 
       component.tableActions.forEach((action) => {
         if (action.name === 'Create') {

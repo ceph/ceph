@@ -85,9 +85,8 @@
 #include "MgrMonitor.h"
 #include "MgrStatMonitor.h"
 #include "ConfigMonitor.h"
-#include "mon/QuorumService.h"
-#include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
+#include "mon/HealthMonitor.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
 #include "include/ceph_assert.h"
@@ -238,19 +237,19 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
       g_conf().get_val<uint64_t>("mon_op_history_slow_op_size"),
       g_conf().get_val<std::chrono::seconds>("mon_op_history_slow_op_threshold").count());
 
-  paxos = new Paxos(this, "paxos");
+  paxos = std::make_unique<Paxos>(*this, "paxos");
 
-  paxos_service[PAXOS_MDSMAP].reset(new MDSMonitor(this, paxos, "mdsmap"));
-  paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(this, paxos, "monmap"));
-  paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, this, paxos, "osdmap"));
-  paxos_service[PAXOS_LOG].reset(new LogMonitor(this, paxos, "logm"));
-  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(this, paxos, "auth"));
-  paxos_service[PAXOS_MGR].reset(new MgrMonitor(this, paxos, "mgr"));
-  paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(this, paxos, "mgrstat"));
-  paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(this, paxos, "health"));
-  paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(this, paxos, "config"));
+  paxos_service[PAXOS_MDSMAP].reset(new MDSMonitor(*this, *paxos, "mdsmap"));
+  paxos_service[PAXOS_MONMAP].reset(new MonmapMonitor(*this, *paxos, "monmap"));
+  paxos_service[PAXOS_OSDMAP].reset(new OSDMonitor(cct, *this, *paxos, "osdmap"));
+  paxos_service[PAXOS_LOG].reset(new LogMonitor(*this, *paxos, "logm"));
+  paxos_service[PAXOS_AUTH].reset(new AuthMonitor(*this, *paxos, "auth"));
+  paxos_service[PAXOS_MGR].reset(new MgrMonitor(*this, *paxos, "mgr"));
+  paxos_service[PAXOS_MGRSTAT].reset(new MgrStatMonitor(*this, *paxos, "mgrstat"));
+  paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
+  paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
 
-  config_key_service = new ConfigKeyService(this, paxos);
+  config_key_service = std::make_unique<ConfigKeyService>(*this, *paxos);
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);
@@ -285,8 +284,7 @@ Monitor::~Monitor()
 {
   op_tracker.on_shutdown();
 
-  delete config_key_service;
-  delete paxos;
+  delete logger;
   ceph_assert(session_map.sessions.empty());
 }
 
@@ -656,7 +654,8 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
   }
 
   if (changed.count("mon_scrub_interval")) {
-    int scrub_interval = conf->mon_scrub_interval;
+    auto scrub_interval =
+      conf.get_val<std::chrono::seconds>("mon_scrub_interval");
     finisher.queue(new C_MonContext{this, [this, scrub_interval](int) {
       std::lock_guard l{lock};
       scrub_update_interval(scrub_interval);
@@ -1082,8 +1081,6 @@ void Monitor::shutdown()
 
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = NULL;
   }
   if (cluster_logger) {
     if (cluster_logger_registered)
@@ -1371,9 +1368,7 @@ set<string> Monitor::get_sync_targets_names()
   for (auto& svc : paxos_service) {
     svc->get_store_prefixes(targets);
   }
-  ConfigKeyService *config_key_service_ptr = dynamic_cast<ConfigKeyService*>(config_key_service);
-  ceph_assert(config_key_service_ptr);
-  config_key_service_ptr->get_store_prefixes(targets);
+  config_key_service->get_store_prefixes(targets);
   return targets;
 }
 
@@ -5640,14 +5635,14 @@ void Monitor::scrub_reset()
   scrub_state.reset();
 }
 
-inline void Monitor::scrub_update_interval(int secs)
+inline void Monitor::scrub_update_interval(ceph::timespan interval)
 {
   // we don't care about changes if we are not the leader.
   // changes will be visible if we become the leader.
   if (!is_leader())
     return;
 
-  dout(1) << __func__ << " new interval = " << secs << dendl;
+  dout(1) << __func__ << " new interval = " << interval << dendl;
 
   // if scrub already in progress, all changes will already be visible during
   // the next round.  Nothing to do.
@@ -5665,15 +5660,17 @@ void Monitor::scrub_event_start()
   if (scrub_event)
     scrub_event_cancel();
 
-  if (cct->_conf->mon_scrub_interval <= 0) {
+  auto scrub_interval =
+    cct->_conf.get_val<std::chrono::seconds>("mon_scrub_interval");
+  if (scrub_interval == std::chrono::seconds::zero()) {
     dout(1) << __func__ << " scrub event is disabled"
-            << " (mon_scrub_interval = " << cct->_conf->mon_scrub_interval
+            << " (mon_scrub_interval = " << scrub_interval
             << ")" << dendl;
     return;
   }
 
   scrub_event = timer.add_event_after(
-    cct->_conf->mon_scrub_interval,
+    scrub_interval,
     new C_MonContext{this, [this](int) {
       scrub_start();
       }});

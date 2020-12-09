@@ -702,7 +702,11 @@ class BaseController(object):
             if isinstance(ret, bytes):
                 ret = ret.decode('utf-8')
             if xml:
-                cherrypy.response.headers['Content-Type'] = 'application/xml'
+                if version:
+                    cherrypy.response.headers['Content-Type'] = \
+                        'application/vnd.ceph.api.v{}+xml'.format(version)
+                else:
+                    cherrypy.response.headers['Content-Type'] = 'application/xml'
                 return ret.encode('utf8')
             if json_response:
                 if version:

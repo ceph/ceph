@@ -83,6 +83,10 @@ export class ActionLabelsI18n {
   REMOVE: string;
   EDIT: string;
   CANCEL: string;
+  PREVIEW: string;
+  MOVE: string;
+  NEXT: string;
+  BACK: string;
   CHANGE: string;
   COPY: string;
   CLONE: string;
@@ -104,6 +108,7 @@ export class ActionLabelsI18n {
   ROLLBACK: string;
   SCRUB: string;
   SET: string;
+  SUBMIT: string;
   SHOW: string;
   TRASH: string;
   UNPROTECT: string;
@@ -121,6 +126,7 @@ export class ActionLabelsI18n {
     /* Add an existing item to a container */
     this.ADD = $localize`Add`;
     this.SET = $localize`Set`;
+    this.SUBMIT = $localize`Submit`;
 
     /* Remove an item from a container WITHOUT deleting it */
     this.REMOVE = $localize`Remove`;
@@ -130,6 +136,12 @@ export class ActionLabelsI18n {
     this.EDIT = $localize`Edit`;
     this.UPDATE = $localize`Update`;
     this.CANCEL = $localize`Cancel`;
+    this.PREVIEW = $localize`Preview`;
+    this.MOVE = $localize`Move`;
+
+    /* Wizard wording */
+    this.NEXT = $localize`Next`;
+    this.BACK = $localize`Back`;
 
     /* Non-standard actions */
     this.CLONE = $localize`Clone`;
@@ -174,6 +186,8 @@ export class SucceededActionLabelsI18n {
   REMOVED: string;
   EDITED: string;
   CANCELED: string;
+  PREVIEWED: string;
+  MOVED: string;
   COPIED: string;
   CLONED: string;
   DEEP_SCRUBBED: string;
@@ -213,6 +227,8 @@ export class SucceededActionLabelsI18n {
     /* Make changes to an existing item */
     this.EDITED = $localize`Edited`;
     this.CANCELED = $localize`Canceled`;
+    this.PREVIEWED = $localize`Previewed`;
+    this.MOVED = $localize`Moved`;
 
     /* Non-standard actions */
     this.CLONED = $localize`Cloned`;

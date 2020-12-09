@@ -14,11 +14,8 @@
 
 #pragma once
 
-#include <seastar/core/future.hh>
-
 #include "Fwd.h"
 #include "crimson/common/throttle.h"
-#include "crimson/net/chained_dispatchers.h"
 #include "msg/Message.h"
 #include "msg/Policy.h"
 
@@ -65,15 +62,18 @@ public:
     return seastar::now();
   }
 
+  using bind_ertr = crimson::errorator<
+    crimson::ct_error::address_in_use // The address (range) is already bound
+    >;
   /// bind to the given address
-  virtual seastar::future<> bind(const entity_addrvec_t& addr) = 0;
+  virtual bind_ertr::future<> bind(const entity_addrvec_t& addr) = 0;
 
   /// try to bind to the first unused port of given address
-  virtual seastar::future<> try_bind(const entity_addrvec_t& addr,
-                                     uint32_t min_port, uint32_t max_port) = 0;
+  virtual bind_ertr::future<> try_bind(const entity_addrvec_t& addr,
+                                       uint32_t min_port, uint32_t max_port) = 0;
 
   /// start the messenger
-  virtual seastar::future<> start(ChainedDispatchersRef) = 0;
+  virtual seastar::future<> start(const dispatchers_t&) = 0;
 
   /// either return an existing connection to the peer,
   /// or a new pending connection
@@ -90,13 +90,13 @@ public:
   // wait for messenger shutdown
   virtual seastar::future<> wait() = 0;
 
-  virtual void add_dispatcher(Dispatcher&) = 0;
+  // stop dispatching events and messages
+  virtual void stop() = 0;
 
-  virtual void remove_dispatcher(Dispatcher&) = 0;
+  virtual bool is_started() const = 0;
 
-  virtual bool dispatcher_chain_empty() const = 0;
-  /// stop listenening and wait for all connections to close. safe to destruct
-  /// after this future becomes available
+  // free internal resources before destruction, must be called after stopped,
+  // and must be called if is bound.
   virtual seastar::future<> shutdown() = 0;
 
   uint32_t get_crc_flags() const {

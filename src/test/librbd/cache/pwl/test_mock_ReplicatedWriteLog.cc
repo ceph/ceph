@@ -7,10 +7,10 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "include/rbd/librbd.hpp"
-#include "librbd/cache/pwl/AbstractWriteLog.h"
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/Types.h"
 #include "librbd/cache/ImageWriteback.h"
+#include "librbd/plugin/Api.h"
 
 namespace librbd {
 namespace {
@@ -37,11 +37,13 @@ inline ImageCtx *get_image_ctx(MockImageCtx *image_ctx) {
 
 #include "librbd/cache/pwl/AbstractWriteLog.cc"
 #include "librbd/cache/pwl/ReplicatedWriteLog.cc"
+template class librbd::cache::pwl::ReplicatedWriteLog<librbd::MockImageCtx>;
 
 // template definitions
 #include "librbd/cache/ImageWriteback.cc"
 #include "librbd/cache/pwl/ImageCacheState.cc"
 #include "librbd/cache/pwl/Request.cc"
+#include "librbd/plugin/Api.cc"
 
 namespace librbd {
 namespace cache {
@@ -52,12 +54,18 @@ using ::testing::DoDefault;
 using ::testing::InSequence;
 using ::testing::Invoke;
 
+typedef io::Extent Extent;
+typedef io::Extents Extents;
+
 struct TestMockCacheReplicatedWriteLog : public TestMockFixture {
   typedef librbd::cache::pwl::ReplicatedWriteLog<librbd::MockImageCtx> MockReplicatedWriteLog;
   typedef librbd::cache::pwl::ImageCacheState<librbd::MockImageCtx> MockImageCacheStateRWL;
+  typedef librbd::cache::ImageWriteback<librbd::MockImageCtx> MockImageWriteback;
+  typedef librbd::plugin::Api<librbd::MockImageCtx> MockApi;
 
-  MockImageCacheStateRWL *get_cache_state(MockImageCtx& mock_image_ctx) {
-    MockImageCacheStateRWL *rwl_state = new MockImageCacheStateRWL(&mock_image_ctx);
+  MockImageCacheStateRWL *get_cache_state(
+      MockImageCtx& mock_image_ctx, MockApi& mock_api) {
+    MockImageCacheStateRWL *rwl_state = new MockImageCacheStateRWL(&mock_image_ctx, mock_api);
     return rwl_state;
   }
 
@@ -112,7 +120,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_write) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockImageCacheStateRWL image_cache_state(&mock_image_ctx);
+  MockApi mock_api;
+  MockImageCacheStateRWL image_cache_state(&mock_image_ctx, mock_api);
 
   validate_cache_state(ictx, image_cache_state, false, true, true, "", "", 0);
   
@@ -152,7 +161,8 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_state_json_write) {
                    \"pwl_path\": \"/tmp\", \
                    \"pwl_size\": \"1024\" }";
   get_jf(strf, &f);
-  MockImageCacheStateRWL image_cache_state(&mock_image_ctx, f);
+  MockApi mock_api;
+  MockImageCacheStateRWL image_cache_state(&mock_image_ctx, f, mock_api);
 
   validate_cache_state(ictx, image_cache_state, true, false, false,
                        "testhost", "/tmp", 1024);
@@ -169,7 +179,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, init_shutdown) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   MockContextRWL finish_ctx1;
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
@@ -189,7 +203,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, write) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
 
   MockContextRWL finish_ctx1;
   expect_op_work_queue(mock_image_ctx);
@@ -218,7 +236,12 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
+
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -254,7 +277,12 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_shutdown) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
+  
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -288,7 +316,12 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_internal) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
+
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -322,7 +355,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, flush_source_user) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -357,7 +394,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_hit_rwl_cache) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -396,7 +437,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_hit_part_rwl_cache) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -439,7 +484,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, read_miss_rwl_cache) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -477,7 +526,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, discard) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -521,7 +574,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, writesame) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -559,7 +616,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, invalidate) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -595,7 +656,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, compare_and_write_compare_matched) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 
@@ -645,7 +710,11 @@ TEST_F(TestMockCacheReplicatedWriteLog, compare_and_write_compare_failed) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockReplicatedWriteLog rwl(mock_image_ctx, get_cache_state(mock_image_ctx));
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockReplicatedWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
   expect_op_work_queue(mock_image_ctx);
   expect_metadata_set(mock_image_ctx);
 

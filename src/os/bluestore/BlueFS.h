@@ -607,6 +607,8 @@ public:
 			      size_t read_len,
 			      bufferlist* bl);
 
+  size_t probe_alloc_avail(int dev, uint64_t alloc_size);
+
   /// test purpose methods
   const PerfCounters* get_perf_counters() const {
     return logger;

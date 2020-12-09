@@ -1907,11 +1907,16 @@ protected:
   bool quiet;
   bool status_dumped;
   bool acl_allowed = false;
+  bool bypass_perm;
+  bool bypass_governance_mode;
+
 
 public:
   RGWDeleteMultiObj() {
     quiet = false;
     status_dumped = false;
+    bypass_perm = true;
+    bypass_governance_mode = false;
   }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;

@@ -300,7 +300,7 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
-find_package(fmt 5.2.1 QUIET)
+find_package(fmt 6.0.0 QUIET)
 if(fmt_FOUND)
   include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
 else()

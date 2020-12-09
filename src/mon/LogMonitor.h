@@ -143,7 +143,7 @@ private:
   void _create_sub_incremental(MLog *mlog, int level, version_t sv);
 
  public:
-  LogMonitor(Monitor *mn, Paxos *p, const std::string& service_name) 
+  LogMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name) { }
 
   void init() override {

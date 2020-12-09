@@ -7,6 +7,7 @@ import _ from 'lodash';
 import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfigOptionTypes } from '~/app/shared/components/config-option/config-option.types';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -27,6 +28,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
 
   constructor(
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private configService: ConfigurationService,
     private notificationService: NotificationService,

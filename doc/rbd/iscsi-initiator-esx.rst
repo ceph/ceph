@@ -16,7 +16,7 @@ The following instructions will use the default vSphere web client and esxcli.
       :align: center
 
    Click on "Storage" from "Navigator", and select the "Adapters" tab.
-   From there right click "Confgure iSCSI".
+   From there right click "Configure iSCSI".
 
 #. Set Initiator Name
 

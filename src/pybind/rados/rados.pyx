@@ -161,8 +161,8 @@ cdef extern from "rados/librados.h" nogil:
     int rados_getaddrs(rados_t cluster, char** addrs)
     int rados_application_enable(rados_ioctx_t io, const char *app_name,
                                  int force)
-    void rados_set_osdmap_full_try(rados_ioctx_t io)
-    void rados_unset_osdmap_full_try(rados_ioctx_t io)
+    void rados_set_pool_full_try(rados_ioctx_t io)
+    void rados_unset_pool_full_try(rados_ioctx_t io)
     int rados_application_list(rados_ioctx_t io, char *values,
                              size_t *values_len)
     int rados_application_metadata_get(rados_ioctx_t io, const char *app_name,
@@ -299,12 +299,14 @@ cdef extern from "rados/librados.h" nogil:
                    const char * in_buf, size_t in_len, char * buf, size_t out_len)
     int rados_aio_exec(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * cls, const char * method,
                        const char * in_buf, size_t in_len, char * buf, size_t out_len)
+    int rados_aio_setxattr(rados_ioctx_t io, const char *o, rados_completion_t completion, const char *name, const char *buf, size_t len)
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num)
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len)
     void rados_write_op_omap_clear(rados_write_op_t write_op)
+    void rados_write_op_omap_rm_range2(rados_write_op_t write_op, const char *key_begin, size_t key_begin_len, const char *key_end, size_t key_end_len)
     void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
     void rados_write_op_setxattr(rados_write_op_t write_op, const char *name, const char *value, size_t value_len)
     void rados_write_op_rmxattr(rados_write_op_t write_op, const char *name)
@@ -2835,6 +2837,41 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error executing %s::%s on %s" % (cls, method, object_name))
         return completion
 
+    def aio_setxattr(self, object_name: str, xattr_name: str, xattr_value: bytes,
+                     oncomplete: Optional[Callable] = None) -> Completion:
+        """
+        Asynchronously set an extended attribute on an object
+
+        :param object_name: the name of the object to set xattr to
+        :param xattr_name: which extended attribute to set
+        :param xattr_value: the value of the  extended attribute
+        :param oncomplete: what to do when the setxttr completes
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+        object_name_raw = cstr(object_name, 'object_name')
+        xattr_name_raw = cstr(xattr_name , 'xattr_name')
+
+        cdef:
+            Completion completion
+            char* _object_name = object_name_raw
+            char* _xattr_name = xattr_name_raw
+            char* _xattr_value = xattr_value
+            size_t xattr_value_len = len(xattr_value)
+
+        completion = self.__get_completion(oncomplete, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_setxattr(self.io, _object_name,
+                               completion.rados_comp,
+                               _xattr_name, _xattr_value, xattr_value_len)
+
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "Failed to set xattr %r" % xattr_name)
+        return completion
+
     def aio_remove(self, object_name: str,
                   oncomplete: Optional[Callable] = None,
                   onsafe: Optional[Callable] = None) -> Completion:
@@ -4047,6 +4084,26 @@ returned %d, but should return zero on success." % (self.name, ret))
         with nogil:
             rados_write_op_omap_clear(_write_op.write_op)
 
+    def remove_omap_range2(self, write_op: WriteOp, key_begin: str, key_end: str):
+        """
+        Remove key/value pairs from an object whose keys are in the range
+        [key_begin, key_end)
+        :param write_op: write operation object
+        :param key_begin: the lower bound of the key range to remove
+        :param key_end: the upper bound of the key range to remove
+        """
+        key_begin_raw = cstr(key_begin, 'key_begin')
+        key_end_raw = cstr(key_end, 'key_end')
+        cdef:
+            WriteOp _write_op = write_op
+            char* _key_begin = key_begin_raw
+            size_t key_begin_len = len(key_begin)
+            char* _key_end = key_end_raw
+            size_t key_end_len = len(key_end)
+        with nogil:
+            rados_write_op_omap_rm_range2(_write_op.write_op, _key_begin, key_begin_len,
+                                           _key_end, key_end_len)
+
     def lock_exclusive(self, key: str, name: str, cookie: str, desc: str = "",
                        duration: Optional[int] = None,
                        flags: int = 0):
@@ -4172,14 +4229,14 @@ returned %d, but should return zero on success." % (self.name, ret))
         Set global osdmap_full_try label to true
         """
         with nogil:
-            rados_set_osdmap_full_try(self.io)
+            rados_set_pool_full_try(self.io)
 
     def unset_osdmap_full_try(self):
         """
         Unset
         """
         with nogil:
-            rados_unset_osdmap_full_try(self.io)
+            rados_unset_pool_full_try(self.io)
 
     def application_enable(self, app_name: str, force: bool = False):
         """

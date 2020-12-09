@@ -61,10 +61,9 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button (submitAction)="onSubmit()"
-                          i18n="form action button|Example: Create Pool@@formActionButton"
-                          [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"></cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="formGroup"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

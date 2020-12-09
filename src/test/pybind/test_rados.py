@@ -578,6 +578,26 @@ class TestIoctx(object):
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
 
+    def test_remove_omap_ramge2(self):
+        keys = ("1", "2", "3", "4")
+        values = (b"a", b"bb", b"ccc", b"dddd")
+        with WriteOpCtx() as write_op:
+            self.ioctx.set_omap(write_op, keys, values)
+            self.ioctx.operate_write_op(write_op, "test_obj")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "test_obj")
+            eq(list(iter), list(zip(keys, values)))
+        with WriteOpCtx() as write_op:
+            self.ioctx.remove_omap_range2(write_op, "1", "4")
+            self.ioctx.operate_write_op(write_op, "test_obj")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "test_obj")
+            eq(list(iter), [("4", b"dddd")])
+
     def test_xattrs_op(self):
         xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
         with WriteOpCtx() as write_op:
@@ -988,6 +1008,22 @@ class TestIoctx(object):
         eq(retval[0], b"Hello, nose!")
 
         [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_aio_setxattr(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_setxattr("obj", "key", b'value', cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(self.ioctx.get_xattr("obj", "key"), b'value')
 
     def test_applications(self):
         cmd = {"prefix":"osd dump", "format":"json"}

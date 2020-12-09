@@ -596,14 +596,14 @@ private:
     }
 
     template <class FuncT>
-    auto finally(FuncT &&func) {
+    _future finally(FuncT &&func) {
       return this->then_wrapped(
         [func = std::forward<FuncT>(func)](auto &&result) mutable noexcept {
         if constexpr (seastar::is_future<std::invoke_result_t<FuncT>>::value) {
           return ::seastar::futurize_invoke(std::forward<FuncT>(func)).then_wrapped(
             [result = std::move(result)](auto&& f_res) mutable {
             // TODO: f_res.failed()
-            f_res.discard_result();
+            (void)f_res.discard_result();
             return std::move(result);
           });
         } else {
@@ -1017,6 +1017,7 @@ namespace ct_error {
     ct_error_code<std::errc::resource_unavailable_try_again>;
   using file_too_large =
     ct_error_code<std::errc::file_too_large>;
+  using address_in_use = ct_error_code<std::errc::address_in_use>;
 
   struct pass_further_all {
     template <class ErrorT>

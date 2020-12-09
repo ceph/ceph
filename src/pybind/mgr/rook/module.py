@@ -374,7 +374,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for p in pods:
             sd = orchestrator.DaemonDescription()
             sd.hostname = p['hostname']
-            sd.container_id = p['name']
             sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
             status = {
                 'Pending': -1,
@@ -397,6 +396,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if service_name is not None and service_name != sd.service_name():
                 continue
             sd.container_image_name = p['container_image_name']
+            sd.container_image_id = p['container_image_id']
             sd.created = p['created']
             sd.last_configured = p['created']
             sd.last_deployed = p['created']

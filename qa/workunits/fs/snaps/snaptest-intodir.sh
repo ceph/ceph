@@ -1,7 +1,5 @@
 #!/bin/sh -ex
 
-ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
-
 # this tests fix for #1399
 mkdir foo
 mkdir foo/.snap/one

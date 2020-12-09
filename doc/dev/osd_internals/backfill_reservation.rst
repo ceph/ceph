@@ -39,7 +39,7 @@ which PGs are recovered.  Admins can override the default order by using
 ``force-recovery`` or ``force-backfill``. A ``force-recovery`` with op
 priority ``255`` will start before a ``force-backfill`` op at priority ``254``.
 
-If a recovery is needed because a PG is below ``min_size`` a base priority of
+If recovery is needed because a PG is below ``min_size`` a base priority of
 ``220`` is used. This is incremented by the number of OSDs short of the pool's
 ``min_size`` as well as a value relative to the pool's ``recovery_priority``.
 The resultant priority is capped at ``253`` so that it does not confound forced
@@ -47,11 +47,12 @@ ops as described above. Under ordinary circumstances a recovery op is
 prioritized at ``180`` plus a value relative to the pool's ``recovery_priority``.
 The resultant priority is capped at ``219``.
 
-If a backfill op is needed because the number of acting OSDs is less than
+If backfill is needed because the number of acting OSDs is less than
 the pool's ``min_size``, a priority of ``220`` is used.  The number of OSDs
-short of the pool's `` min_size`` is added as well as a value relative to
+short of the pool's ``min_size`` is added as well as a value relative to
 the pool's ``recovery_priority``.  The total priority is limited to ``253``.
-If a backfill op is needed because a PG is undersized,
+
+If backfill is needed because a PG is undersized,
 a priority of ``140`` is used.  The number of OSDs below the size of the pool is
 added as well as a value relative to the pool's ``recovery_priority``.  The
 resultant priority is capped at ``179``.  If a backfill op is

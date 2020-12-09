@@ -414,10 +414,10 @@
                 <div class="col-12">
                   <button type="button"
                           class="btn btn-light float-right tc_addCapButton"
-                          [disabled]="hasAllCapabilities()"
+                          [disabled]="capabilities | pipeFunction:hasAllCapabilities"
                           i18n-ngbTooltip
                           ngbTooltip="All capabilities are already added."
-                          [disableTooltip]="!hasAllCapabilities()"
+                          [disableTooltip]="!(capabilities | pipeFunction:hasAllCapabilities)"
                           triggers="pointerenter:pointerleave"
                           (click)="showCapabilityModal()">
                     <i [ngClass]="[icons.add]"></i>
@@ -619,12 +619,10 @@
       </div>
 
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button (submitAction)="onSubmit()"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            [form]="userForm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="userForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

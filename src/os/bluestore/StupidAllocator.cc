@@ -12,9 +12,9 @@
 
 StupidAllocator::StupidAllocator(CephContext* cct,
                                  const std::string& name,
+                                 int64_t _size,
                                  int64_t _block_size)
-  : Allocator(name), cct(cct), num_free(0),
-    block_size(_block_size),
+  : Allocator(name, _size, _block_size), cct(cct), num_free(0),
     free(10)
 {
   ceph_assert(cct != nullptr);
@@ -260,13 +260,14 @@ uint64_t StupidAllocator::get_free()
 
 double StupidAllocator::get_fragmentation()
 {
-  ceph_assert(block_size);
+  ceph_assert(get_block_size());
   double res;
   uint64_t max_intervals = 0;
   uint64_t intervals = 0;
   {
     std::lock_guard l(lock);
-    max_intervals = p2roundup<uint64_t>(num_free, block_size) / block_size;
+    max_intervals = p2roundup<uint64_t>(num_free,
+                                        get_block_size()) / get_block_size();
     for (unsigned bin = 0; bin < free.size(); ++bin) {
       intervals += free[bin].num_intervals();
     }

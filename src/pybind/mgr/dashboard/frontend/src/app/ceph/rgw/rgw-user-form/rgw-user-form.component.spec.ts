@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
@@ -32,7 +33,8 @@ describe('RgwUserFormComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      NgbTooltipModule
+      NgbTooltipModule,
+      NgxPipeFunctionModule
     ]
   });
 
@@ -322,7 +324,7 @@ describe('RgwUserFormComponent', () => {
 
       fixture.detectChanges();
 
-      expect(component.hasAllCapabilities()).toBeTruthy();
+      expect(component.hasAllCapabilities(component.capabilities)).toBeTruthy();
       const capabilityButton = fixture.debugElement.nativeElement.querySelector('.tc_addCapButton');
       expect(capabilityButton.disabled).toBeTruthy();
     });

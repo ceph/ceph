@@ -430,12 +430,11 @@ void PGRecovery::request_primary_scan(
 }
 
 void PGRecovery::enqueue_push(
-  const pg_shard_t& target,
   const hobject_t& obj,
   const eversion_t& v)
 {
-  logger().debug("{}: target={} obj={} v={}",
-                 __func__, target, obj, v);
+  logger().debug("{}: obj={} v={}",
+                 __func__, obj, v);
   pg->get_recovery_backend()->add_recovering(obj);
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception([] (auto) {
@@ -453,7 +452,24 @@ void PGRecovery::enqueue_drop(
   const hobject_t& obj,
   const eversion_t& v)
 {
-  ceph_abort_msg("Not implemented");
+  // allocate a pair if target is seen for the first time
+  auto& req = backfill_drop_requests[target];
+  if (!req) {
+    req = ceph::make_message<MOSDPGBackfillRemove>(
+      spg_t(pg->get_pgid().pgid, target.shard), pg->get_osdmap_epoch());
+  }
+  req->ls.emplace_back(obj, v);
+}
+
+void PGRecovery::maybe_flush()
+{
+  for (auto& [target, req] : backfill_drop_requests) {
+    std::ignore = pg->get_shard_services().send_to_osd(
+      target.osd,
+      std::move(req),
+      pg->get_osdmap_epoch());
+  }
+  backfill_drop_requests.clear();
 }
 
 void PGRecovery::update_peers_last_backfill(
@@ -524,8 +540,8 @@ void PGRecovery::on_backfill_reserved()
   using BackfillState = crimson::osd::BackfillState;
   backfill_state = std::make_unique<BackfillState>(
     *this,
-    std::make_unique<BackfillState::PeeringFacade>(pg->get_peering_state()),
-    std::make_unique<BackfillState::PGFacade>(
+    std::make_unique<crimson::osd::PeeringFacade>(pg->get_peering_state()),
+    std::make_unique<crimson::osd::PGFacade>(
       *static_cast<crimson::osd::PG*>(pg)));
   // yes, it's **not** backfilling yet. The PG_STATE_BACKFILLING
   // will be set after on_backfill_reserved() returns.

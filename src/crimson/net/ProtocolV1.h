@@ -12,7 +12,7 @@ namespace crimson::net {
 
 class ProtocolV1 final : public Protocol {
  public:
-  ProtocolV1(ChainedDispatchersRef& dispatcher,
+  ProtocolV1(ChainedDispatchers& dispatchers,
              SocketConnection& conn,
              SocketMessenger& messenger);
   ~ProtocolV1() override;
