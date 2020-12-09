@@ -30,20 +30,20 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
     [this, soid, need](auto& pops, auto& shards) {
     return maybe_pull_missing_obj(soid, need).then([this, soid](bool pulled) {
       return load_obc_for_recovery(soid, pulled);
-    }).then([this, soid, need, &pops, &shards] {
+    }).safe_then([this, soid, need, &pops, &shards] {
       if (!shards.empty()) {
 	return prep_push(soid, need, &pops, shards);
       } else {
 	return seastar::now();
       }
-    }).handle_exception([this, soid](auto e) {
+    }, crimson::ct_error::all_same_way([this, soid](const std::error_code& e) {
       auto recovery_waiter = recovering.find(soid);
       if (auto obc = recovery_waiter->second.obc; obc) {
         obc->drop_recovery_read();
       }
       recovering.erase(recovery_waiter);
       return seastar::make_exception_future<>(e);
-    }).then([this, &pops, &shards, soid] {
+    })).then([this, &pops, &shards, soid] {
       return seastar::parallel_for_each(shards,
 	[this, &pops, soid](auto shard) {
 	auto msg = make_message<MOSDPGPush>();
@@ -114,18 +114,20 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   });
 }
 
-seastar::future<> ReplicatedRecoveryBackend::load_obc_for_recovery(
+auto ReplicatedRecoveryBackend::load_obc_for_recovery(
   const hobject_t& soid,
-  bool pulled)
+  bool pulled) ->
+  load_obc_ertr::future<>
 {
   auto& recovery_waiter = recovering.at(soid);
   if (recovery_waiter.obc) {
-    return seastar::now();
+    return load_obc_ertr::now();
   }
   return pg.with_head_obc<RWState::RWREAD>(soid, [&recovery_waiter](auto obc) {
     logger().debug("load_obc_for_recovery: loaded obc: {}", obc->obs.oi.soid);
     recovery_waiter.obc = obc;
-    return recovery_waiter.obc->wait_recovery_read();
+    recovery_waiter.obc->wait_recovery_read();
+    return seastar::now();
   });
 }
 
@@ -649,8 +651,8 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
         recovery_waiter.obc = obc;
         obc->obs.oi.decode(pop.attrset[OI_ATTR]);
         pi.recovery_info.oi = obc->obs.oi;
-        return seastar::make_ready_future<>();
-      });
+        return crimson::osd::PG::load_obc_ertr::now();
+      }).handle_error(crimson::ct_error::assert_all{});
   };
   return prepare_waiter.then([this, first=pi.recovery_progress.first,
 			      &pi, &pop, t, response]() mutable {

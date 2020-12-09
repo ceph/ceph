@@ -27,17 +27,19 @@ class OSDService(CephService):
     def create_from_spec(self, drive_group: DriveGroupSpec) -> str:
         logger.debug(f"Processing DriveGroup {drive_group}")
         osd_id_claims = self.find_destroyed_osds()
-        logger.info(f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims}")
+        if osd_id_claims:
+            logger.info(
+                f"Found osd claims for drivegroup {drive_group.service_id} -> {osd_id_claims}")
 
         @forall_hosts
         def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
-            logger.info('Applying %s on host %s...' % (drive_group.service_id, host))
             cmd = self.driveselection_to_ceph_volume(drive_selection,
                                                      osd_id_claims.get(host, []))
             if not cmd:
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(
                     drive_group.service_id))
                 return None
+            logger.info('Applying drive group %s on host %s...' % (drive_group.service_id, host))
             env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = self.create_single_host(
                 host, cmd, replace_osd_ids=osd_id_claims.get(host, []), env_vars=env_vars
@@ -71,7 +73,11 @@ class OSDService(CephService):
                 '--format', 'json',
             ])
         before_osd_uuid_map = self.mgr.get_osd_uuid_map(only_up=True)
-        osds_elems = json.loads('\n'.join(out))
+        try:
+            osds_elems = json.loads('\n'.join(out))
+        except ValueError:
+            logger.exception('Cannot decode JSON: \'%s\'' % '\n'.join(out))
+            osds_elems = {}
         fsid = self.mgr._cluster_fsid
         osd_uuid_map = self.mgr.get_osd_uuid_map()
         created = []
@@ -201,7 +207,12 @@ class OSDService(CephService):
                 # get preview data from ceph-volume
                 out, err, code = self._run_ceph_volume_command(host, cmd)
                 if out:
-                    concat_out: Dict[str, Any] = json.loads(" ".join(out))
+                    try:
+                        concat_out: Dict[str, Any] = json.loads(' '.join(out))
+                    except ValueError:
+                        logger.exception('Cannot decode JSON: \'%s\'' % ' '.join(out))
+                        concat_out = {}
+
                     ret_all.append({'data': concat_out,
                                     'osdspec': osdspec.service_id,
                                     'host': host})
@@ -274,8 +285,8 @@ class OSDService(CephService):
             raise OrchestratorError(str(e))
         try:
             tree = json.loads(out)
-        except json.decoder.JSONDecodeError:
-            logger.exception(f"Could not decode json -> {out}")
+        except ValueError:
+            logger.exception(f'Cannot decode JSON: \'{out}\'')
             return osd_host_map
 
         nodes = tree.get('nodes', {})
@@ -284,8 +295,8 @@ class OSDService(CephService):
                 osd_host_map.update(
                     {node.get('name'): [str(_id) for _id in node.get('children', list())]}
                 )
-        self.mgr.log.info(
-            f"Found osd claims -> {osd_host_map}")
+        if osd_host_map:
+            self.mgr.log.info(f"Found osd claims -> {osd_host_map}")
         return osd_host_map
 
 
@@ -371,7 +382,12 @@ class RemoveUtil(object):
             'prefix': base_cmd,
             'format': 'json'
         })
-        return json.loads(out)
+        try:
+            ret = json.loads(out)
+        except ValueError:
+            logger.exception(f'Cannot decode JSON: \'{out}\'')
+            return {}
+        return ret
 
     def get_pg_count(self, osd_id: int, osd_df: Optional[dict] = None) -> int:
         if not osd_df:

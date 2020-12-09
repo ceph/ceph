@@ -179,7 +179,7 @@ class Paxos {
   /**
    * The Monitor to which this Paxos class is associated with.
    */
-  Monitor *mon;
+  Monitor &mon;
 
   /// perf counter for internal instrumentations
   PerfCounters *logger;
@@ -1045,7 +1045,7 @@ public:
    * @param name A name for the paxos service. It serves as the naming space
    * of the underlying persistent storage for this service.
    */
-  Paxos(Monitor *m, const std::string &name) 
+  Paxos(Monitor &m, const std::string &name) 
 		 : mon(m),
 		   logger(NULL),
 		   paxos_name(name),
@@ -1064,6 +1064,10 @@ public:
 		   accept_timeout_event(0),
 		   clock_drift_warned(0),
 		   trimming(false) { }
+
+  ~Paxos() {
+    delete logger;
+  }
 
   const std::string get_name() const {
     return paxos_name;

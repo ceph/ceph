@@ -140,7 +140,10 @@ enum {
   l_bluestore_omap_upper_bound_lat,
   l_bluestore_omap_lower_bound_lat,
   l_bluestore_omap_next_lat,
+  l_bluestore_omap_get_keys_lat,
+  l_bluestore_omap_get_values_lat,
   l_bluestore_clist_lat,
+  l_bluestore_remove_lat,
   l_bluestore_last
 };
 
@@ -1991,9 +1994,17 @@ public:
   struct KVFinalizeThread : public Thread {
     BlueStore *store;
     explicit KVFinalizeThread(BlueStore *s) : store(s) {}
-    void *entry() {
+    void *entry() override {
       store->_kv_finalize_thread();
       return NULL;
+    }
+  };
+  struct ZonedCleanerThread : public Thread {
+    BlueStore *store;
+    explicit ZonedCleanerThread(BlueStore *s) : store(s) {}
+    void *entry() override {
+      store->_zoned_cleaner_thread();
+      return nullptr;
     }
   };
 
@@ -2109,6 +2120,13 @@ private:
   std::deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
   std::deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
   bool kv_finalize_in_progress = false;
+
+  ZonedCleanerThread zoned_cleaner_thread;
+  ceph::mutex zoned_cleaner_lock = ceph::make_mutex("BlueStore::zoned_cleaner_lock");
+  ceph::condition_variable zoned_cleaner_cond;
+  bool zoned_cleaner_started = false;
+  bool zoned_cleaner_stop = false;
+  std::deque<uint64_t> zoned_cleaner_queue;
 
   PerfCounters *logger = nullptr;
 
@@ -2466,6 +2484,11 @@ private:
   void _kv_stop();
   void _kv_sync_thread();
   void _kv_finalize_thread();
+
+  void _zoned_cleaner_start();
+  void _zoned_cleaner_stop();
+  void _zoned_cleaner_thread();
+  void _zoned_clean_zone(uint64_t zone_num);
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
   void _deferred_queue(TransContext *txc);

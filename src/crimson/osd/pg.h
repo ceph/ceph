@@ -34,8 +34,8 @@
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/recovery_backend.h"
 
-class OSDMap;
 class MQuery;
+class OSDMap;
 class PGBackend;
 class PGPeeringEvent;
 class osd_op_params_t;
@@ -54,6 +54,7 @@ namespace crimson::os {
 
 namespace crimson::osd {
 class ClientRequest;
+class OpsExecuter;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -327,7 +328,8 @@ public:
   void on_removal(ceph::os::Transaction &t) final {
     // TODO
   }
-  void do_delete_work(ceph::os::Transaction &t) final;
+  ghobject_t do_delete_work(ceph::os::Transaction &t,
+    ghobject_t _next) final;
 
   // merge/split not ready
   void clear_ready_to_merge() final {}
@@ -361,6 +363,7 @@ public:
 
   bool try_reserve_recovery_space(
     int64_t primary_num_bytes, int64_t local_num_bytes) final {
+    // TODO
     return true;
   }
   void unreserve_recovery_space() final {}
@@ -500,11 +503,15 @@ public:
   load_obc_ertr::future<crimson::osd::ObjectContextRef>
   load_head_obc(ObjectContextRef obc);
 
+  load_obc_ertr::future<>
+  reload_obc(crimson::osd::ObjectContext& obc) const;
+
 public:
-  using with_obc_func_t = std::function<seastar::future<> (ObjectContextRef)>;
+  using with_obc_func_t =
+    std::function<load_obc_ertr::future<> (ObjectContextRef)>;
 
   template<RWState::State State>
-  seastar::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
+  load_obc_ertr::future<> with_head_obc(hobject_t oid, with_obc_func_t&& func);
 
   load_obc_ertr::future<> with_locked_obc(
     Ref<MOSDOp> &m,
@@ -513,7 +520,7 @@ public:
     with_obc_func_t&& f);
 
   seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
-  void handle_rep_op_reply(crimson::net::Connection* conn,
+  void handle_rep_op_reply(crimson::net::ConnectionRef conn,
 			   const MOSDRepOpReply& m);
 
   void print(std::ostream& os) const;
@@ -521,7 +528,7 @@ public:
 
 private:
   template<RWState::State State>
-  seastar::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
+  load_obc_ertr::future<> with_clone_obc(hobject_t oid, with_obc_func_t&& func);
 
   load_obc_ertr::future<ObjectContextRef> get_locked_obc(
     Operation *op,
@@ -535,6 +542,11 @@ private:
     osd_op_params_t&& osd_op_p,
     Ref<MOSDOp> m,
     const bool user_modify);
+  seastar::future<Ref<MOSDOpReply>> handle_failed_op(
+    const std::error_code& e,
+    ObjectContextRef obc,
+    const OpsExecuter& ox,
+    const MOSDOp& m) const;
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,
@@ -660,7 +672,7 @@ private:
   friend class PeeringEvent;
   friend class RepRequest;
   friend class BackfillRecovery;
-  friend struct BackfillState::PGFacade;
+  friend struct PGFacade;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);

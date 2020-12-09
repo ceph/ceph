@@ -670,8 +670,9 @@ protected:
 
   // -- commit --
   void _commit(version_t want, int op_prio);
-  void _omap_commit_ops(int r, int op_prio, version_t version, bool _new, bufferlist &bl,
-                        vector<dentry_key_t> &to_remove, vector<dentry_commit_item> &to_set,
+  void _omap_commit_ops(int r, int op_prio, int64_t metapool, version_t version, bool _new,
+			vector<dentry_commit_item> &to_set, bufferlist &dfts,
+			vector<dentry_key_t> &to_remove,
 			mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
   void _omap_commit(int op_prio);
   void _parse_dentry(CDentry *dn, dentry_commit_item &item,

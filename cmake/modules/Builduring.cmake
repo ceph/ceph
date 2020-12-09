@@ -8,7 +8,7 @@ function(build_uring)
   else()
     set(source_dir_args
       SOURCE_DIR ${CMAKE_BINARY_DIR}/src/liburing
-      GIT_REPOSITORY https://git.kernel.dk/liburing
+      GIT_REPOSITORY https://github.com/axboe/liburing.git
       GIT_TAG "liburing-0.7"
       GIT_SHALLOW TRUE
       GIT_CONFIG advice.detachedHead=false)

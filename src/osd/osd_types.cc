@@ -1354,7 +1354,13 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("pg_autoscale_bias", pool_opts_t::opt_desc_t(
 	     pool_opts_t::PG_AUTOSCALE_BIAS, pool_opts_t::DOUBLE))
            ("read_lease_interval", pool_opts_t::opt_desc_t(
-	     pool_opts_t::READ_LEASE_INTERVAL, pool_opts_t::DOUBLE));
+	     pool_opts_t::READ_LEASE_INTERVAL, pool_opts_t::DOUBLE))
+           ("dedup_tier", pool_opts_t::opt_desc_t(
+	     pool_opts_t::DEDUP_TIER, pool_opts_t::INT))
+           ("dedup_chunk_algorithm", pool_opts_t::opt_desc_t(
+	     pool_opts_t::DEDUP_CHUNK_ALGORITHM, pool_opts_t::STR))
+           ("dedup_cdc_chunk_size", pool_opts_t::opt_desc_t(
+	     pool_opts_t::DEDUP_CDC_CHUNK_SIZE, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {

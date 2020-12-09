@@ -135,7 +135,7 @@ void FormatRequest<I>::handle_write_header(int r) {
 
 template <typename I>
 void FormatRequest<I>::finish(int r) {
-  explicit_bzero(&m_passphrase[0], m_passphrase.size());
+  ceph_memzero_s(&m_passphrase[0], m_passphrase.capacity(), m_passphrase.size());
   m_on_finish->complete(r);
   delete this;
 }

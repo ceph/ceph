@@ -3511,7 +3511,8 @@ void BlueStore::Onode::get() {
   }
 }
 void BlueStore::Onode::put() {
-  if (--nref == 2) {
+  int n = --nref;
+  if (n == 2) {
     c->get_onode_cache()->unpin(this, [&]() {
         bool was_pinned = pinned;
         pinned = pinned && nref > 2; // intentionally use > not >= as we have
@@ -3519,12 +3520,12 @@ void BlueStore::Onode::put() {
         bool r = was_pinned && !pinned;
         // additional decrement for newly unpinned instance
         if (r) {
-          --nref;
+          n = --nref;
         }
         return cached && r;
       });
   }
-  if (nref == 0) {
+  if (n == 0) {
     delete this;
   }
 }
@@ -4408,6 +4409,7 @@ BlueStore::BlueStore(CephContext *cct,
     finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
+    zoned_cleaner_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
     mempool_thread(this)
@@ -4915,8 +4917,15 @@ void BlueStore::_init_logger()
     "Average omap iterator lower_bound call latency");
   b.add_time_avg(l_bluestore_omap_next_lat, "omap_next_lat",
     "Average omap iterator next call latency");
+  b.add_time_avg(l_bluestore_omap_get_keys_lat, "omap_get_keys_lat",
+    "Average omap get_keys call latency");
+  b.add_time_avg(l_bluestore_omap_get_values_lat, "omap_get_values_lat",
+    "Average omap get_values call latency");
   b.add_time_avg(l_bluestore_clist_lat, "clist_lat",
     "Average collection listing latency");
+  b.add_time_avg(l_bluestore_remove_lat, "remove_lat",
+    "Average removal latency");
+
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -5336,7 +5345,7 @@ int BlueStore::_init_alloc()
   ceph_assert(shared_alloc.a != NULL);
 
   if (bdev->is_smr()) {
-    shared_alloc.a->set_zone_states(fm->get_zone_states(db));
+    shared_alloc.a->zoned_set_zone_states(fm->get_zone_states(db));
   }
 
   uint64_t num = 0, bytes = 0;
@@ -5352,10 +5361,15 @@ int BlueStore::_init_alloc()
   }
   fm->enumerate_reset();
 
-  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
-    << " in " << num << " extents"
-    << " available " << byte_u_t(shared_alloc.a->get_free())
-    << dendl;
+  dout(1) << __func__
+          << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
+          << std::hex
+          << ", allocator type " << shared_alloc.a->get_type()
+          << ", capacity 0x" << shared_alloc.a->get_capacity()
+          << ", block size 0x" << shared_alloc.a->get_block_size()
+          << ", free 0x" << shared_alloc.a->get_free()
+          << ", fragmentation " << shared_alloc.a->get_fragmentation()
+          << std::dec << dendl;
 
   return 0;
 }
@@ -6875,6 +6889,10 @@ int BlueStore::_mount()
 
   _kv_start();
 
+  if (bdev->is_smr()) {
+    _zoned_cleaner_start();
+  }
+
   r = _deferred_replay();
   if (r < 0)
     goto out_stop;
@@ -6904,6 +6922,9 @@ int BlueStore::_mount()
   return 0;
 
  out_stop:
+  if (bdev->is_smr()) {
+    _zoned_cleaner_stop();
+  }
   _kv_stop();
  out_coll:
   _shutdown_cache();
@@ -6922,6 +6943,10 @@ int BlueStore::umount()
   mounted = false;
   if (!_kv_only) {
     mempool_thread.shutdown();
+    if (bdev->is_smr()) {
+      dout(20) << __func__ << " stopping zone cleaner thread" << dendl;
+      _zoned_cleaner_stop();
+    }
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
     _shutdown_cache();
@@ -10474,6 +10499,7 @@ int BlueStore::omap_get_keys(
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
+  auto start1 = mono_clock::now();
   std::shared_lock l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -10505,6 +10531,12 @@ int BlueStore::omap_get_keys(
     }
   }
  out:
+  c->store->log_latency(
+    __func__,
+    l_bluestore_omap_get_keys_lat,
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
+
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
@@ -10522,6 +10554,7 @@ int BlueStore::omap_get_values(
   if (!c->exists)
     return -ENOENT;
   std::shared_lock l(c->lock);
+  auto start1 = mono_clock::now();
   int r = 0;
   string final_key;
   OnodeRef o = c->get_onode(oid, false);
@@ -10549,6 +10582,12 @@ int BlueStore::omap_get_values(
     }
   }
  out:
+  c->store->log_latency(
+    __func__,
+    l_bluestore_omap_get_values_lat,
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
+
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
@@ -11691,7 +11730,25 @@ void BlueStore::_kv_sync_thread()
   ceph_assert(!kv_sync_started);
   kv_sync_started = true;
   kv_cond.notify_all();
+
+  auto t0 = mono_clock::now();
+  timespan twait = ceph::make_timespan(0);
+  size_t kv_submitted = 0;
+
   while (true) {
+    auto period = cct->_conf->bluestore_kv_sync_util_logging_s;
+    auto observation_period =
+      ceph::make_timespan(period);
+    auto elapsed = mono_clock::now() - t0;
+    if (period && elapsed >= observation_period) {
+      dout(5) << __func__ << " utilization: idle "
+	      << twait << " of " << elapsed
+	      << ", submitted: " << kv_submitted
+	      <<dendl;
+      t0 = mono_clock::now();
+      twait = ceph::make_timespan(0);
+      kv_submitted = 0;
+    }
     ceph_assert(kv_committing.empty());
     if (kv_queue.empty() &&
 	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
@@ -11699,8 +11756,11 @@ void BlueStore::_kv_sync_thread()
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
+      auto t = mono_clock::now();
       kv_sync_in_progress = false;
       kv_cond.wait(l);
+      twait += mono_clock::now() - t;
+
       dout(20) << __func__ << " wake" << dendl;
     } else {
       deque<TransContext*> kv_submitting;
@@ -11794,6 +11854,7 @@ void BlueStore::_kv_sync_thread()
       for (auto txc : kv_committing) {
 	throttle.log_state_latency(*txc, logger, l_bluestore_state_kv_queued_lat);
 	if (txc->get_state() == TransContext::STATE_KV_QUEUED) {
+	  ++kv_submitted;
 	  _txc_apply_kv(txc, false);
 	  --txc->osr->kv_committing_serially;
 	} else {
@@ -11998,6 +12059,63 @@ void BlueStore::_kv_finalize_thread()
   }
   dout(10) << __func__ << " finish" << dendl;
   kv_finalize_started = false;
+}
+
+void BlueStore::_zoned_cleaner_start() {
+  dout(10) << __func__ << dendl;
+
+  zoned_cleaner_thread.create("bstore_zcleaner");
+}
+
+void BlueStore::_zoned_cleaner_stop() {
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock l{zoned_cleaner_lock};
+    while (!zoned_cleaner_started) {
+      zoned_cleaner_cond.wait(l);
+    }
+    zoned_cleaner_stop = true;
+    zoned_cleaner_cond.notify_all();
+  }
+  zoned_cleaner_thread.join();
+  {
+    std::lock_guard l{zoned_cleaner_lock};
+    zoned_cleaner_stop = false;
+  }
+  dout(10) << __func__ << " done" << dendl;
+}
+
+void BlueStore::_zoned_cleaner_thread() {
+  dout(10) << __func__ << " start" << dendl;
+  std::unique_lock l{zoned_cleaner_lock};
+  ceph_assert(!zoned_cleaner_started);
+  zoned_cleaner_started = true;
+  zoned_cleaner_cond.notify_all();
+  std::deque<uint64_t> zones_to_clean;
+  while (true) {
+    if (zoned_cleaner_queue.empty()) {
+      if (zoned_cleaner_stop) {
+	break;
+      }
+      dout(20) << __func__ << " sleep" << dendl;
+      zoned_cleaner_cond.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      zones_to_clean.swap(zoned_cleaner_queue);
+      l.unlock();
+      while (!zones_to_clean.empty()) {
+	_zoned_clean_zone(zones_to_clean.front());
+	zones_to_clean.pop_front();
+      }
+      l.lock();
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+  zoned_cleaner_started = false;
+}
+
+void BlueStore::_zoned_clean_zone(uint64_t zone_num) {
+  dout(10) << __func__ << " cleaning zone " << zone_num << dendl;
 }
 
 bluestore_deferred_op_t *BlueStore::_get_deferred_op(
@@ -13658,6 +13776,15 @@ int BlueStore::_do_alloc_write(
   }
   _collect_allocation_stats(need, min_alloc_size, prealloc.size());
 
+  if (bdev->is_smr()) {
+    std::deque<uint64_t> zones_to_clean;
+    if (shared_alloc.a->zoned_get_zones_to_clean(&zones_to_clean)) {
+      std::lock_guard l{zoned_cleaner_lock};
+      zoned_cleaner_queue.swap(zones_to_clean);
+      zoned_cleaner_cond.notify_one();
+    }
+  }
+
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
 
@@ -14429,7 +14556,23 @@ int BlueStore::_remove(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " onode " << o.get()
 	   << " txc "<< txc << dendl;
+
+  auto start_time = mono_clock::now();
   int r = _do_remove(txc, c, o);
+  log_latency_fn(
+    __func__,
+    l_bluestore_remove_lat,
+    mono_clock::now() - start_time,
+    cct->_conf->bluestore_log_op_age,
+    [&](const ceph::timespan& lat) {
+      ostringstream ostr;
+      ostr << ", lat = " << timespan_str(lat)
+        << " cid =" << c->cid
+        << " oid =" << o->oid;
+      return ostr.str();
+    }
+  );
+
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }

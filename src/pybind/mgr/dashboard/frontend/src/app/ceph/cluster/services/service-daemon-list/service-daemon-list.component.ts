@@ -46,6 +46,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   columns: CdTableColumn[] = [];
 
   hasOrchestrator = false;
+  showDocPanel = false;
 
   private daemonsTable: TableComponent;
   private daemonsTableTplsSub: Subscription;
@@ -126,6 +127,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
 
     this.orchService.status().subscribe((data: { available: boolean }) => {
       this.hasOrchestrator = data.available;
+      this.showDocPanel = !data.available;
     });
   }
 
@@ -149,14 +151,14 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     }
   }
 
-  getStatusClass(status: number) {
+  getStatusClass(row: Daemon): string {
     return _.get(
       {
         '-1': 'badge-danger',
         '0': 'badge-warning',
         '1': 'badge-success'
       },
-      status,
+      row.status,
       'badge-dark'
     );
   }

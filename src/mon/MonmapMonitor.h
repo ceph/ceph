@@ -31,7 +31,7 @@
 
 class MonmapMonitor : public PaxosService {
  public:
-  MonmapMonitor(Monitor *mn, Paxos *p, const std::string& service_name)
+  MonmapMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
     : PaxosService(mn, p, service_name)
   {
   }

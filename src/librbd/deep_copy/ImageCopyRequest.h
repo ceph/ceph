@@ -14,6 +14,7 @@
 #include <functional>
 #include <map>
 #include <queue>
+#include <set>
 #include <vector>
 #include <boost/optional.hpp>
 
@@ -101,6 +102,8 @@ private:
   int m_ret_val = 0;
 
   BitVector<2> m_object_diff_state;
+
+  void map_src_objects(uint64_t dst_object, std::set<uint64_t> *src_objects);
 
   void compute_diff();
   void handle_compute_diff(int r);

@@ -82,7 +82,10 @@ describe('ServicesComponent', () => {
   it('should have columns that are sortable', () => {
     expect(
       component.columns
+        // Filter the 'Expand/Collapse Row' column.
         .filter((column) => !(column.cellClass === 'cd-datatable-expand-collapse'))
+        // Filter the 'Placement' column.
+        .filter((column) => !(column.prop === ''))
         .every((column) => Boolean(column.prop))
     ).toBeTruthy();
   });
@@ -90,5 +93,9 @@ describe('ServicesComponent', () => {
   it('should return all services', () => {
     component.getServices(new CdTableFetchDataContext(() => undefined));
     expect(component.services.length).toBe(2);
+  });
+
+  it('should not display doc panel if orchestrator is available', () => {
+    expect(component.showDocPanel).toBeFalsy();
   });
 });

@@ -111,18 +111,28 @@ private:
       make_blocking_future(std::forward<LockF>(lockf)));
   }
 
+  template <typename Lock, typename Func>
+  auto _with_lock(Lock&& lock, Func&& func) {
+    Ref obc = this;
+    return lock.lock().then([&lock, func = std::forward<Func>(func), obc]() mutable {
+      return seastar::futurize_invoke(func).finally([&lock, obc] {
+	lock.unlock();
+      });
+    });
+  }
+
 public:
   template<RWState::State Type, typename Func>
   auto with_lock(Func&& func) {
     switch (Type) {
     case RWState::RWWRITE:
-      return seastar::with_lock(lock.for_write(), std::forward<Func>(func));
+      return _with_lock(lock.for_write(), std::forward<Func>(func));
     case RWState::RWREAD:
-      return seastar::with_lock(lock.for_read(), std::forward<Func>(func));
+      return _with_lock(lock.for_read(), std::forward<Func>(func));
     case RWState::RWEXCL:
-      return seastar::with_lock(lock.for_excl(), std::forward<Func>(func));
+      return _with_lock(lock.for_excl(), std::forward<Func>(func));
     case RWState::RWNONE:
-      return seastar::futurize_invoke(func);
+      return seastar::futurize_invoke(std::forward<Func>(func));
     default:
       assert(0 == "noop");
     }
@@ -131,11 +141,11 @@ public:
   auto with_promoted_lock(Func&& func) {
     switch (Type) {
     case RWState::RWWRITE:
-      return seastar::with_lock(lock.excl_from_write(), std::forward<Func>(func));
+      return _with_lock(lock.excl_from_write(), std::forward<Func>(func));
     case RWState::RWREAD:
-      return seastar::with_lock(lock.excl_from_read(), std::forward<Func>(func));
+      return _with_lock(lock.excl_from_read(), std::forward<Func>(func));
     case RWState::RWEXCL:
-      return seastar::with_lock(lock.excl_from_excl(), std::forward<Func>(func));
+      return _with_lock(lock.excl_from_excl(), std::forward<Func>(func));
      default:
       assert(0 == "noop");
     }
@@ -163,10 +173,8 @@ public:
       return false;
     }
   }
-  seastar::future<> wait_recovery_read() {
-    return lock.lock_for_read().then([this] {
-      recovery_read_marker = true;
-    });
+  void wait_recovery_read() {
+    recovery_read_marker = true;
   }
   void drop_recovery_read() {
     assert(recovery_read_marker);

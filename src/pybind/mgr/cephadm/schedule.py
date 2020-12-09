@@ -36,7 +36,7 @@ class SimpleScheduler(BaseScheduler):
     2) Select from list up to :count
     """
 
-    def __init__(self, spec):
+    def __init__(self, spec: ServiceSpec):
         super(SimpleScheduler, self).__init__(spec)
 
     def place(self, host_pool, count=None):
@@ -74,7 +74,7 @@ class HostAssignment(object):
     def get_hostnames(self) -> List[str]:
         return [h.hostname for h in self.hosts]
 
-    def validate(self):
+    def validate(self) -> None:
         self.spec.validate()
 
         if self.spec.placement.count == 0:
@@ -186,7 +186,7 @@ class HostAssignment(object):
         # remove duplicates before returning
         return list(dict.fromkeys(active_hosts))
 
-    def prefer_hosts_with_active_daemons(self, hosts: List[HostPlacementSpec], count) -> List[HostPlacementSpec]:
+    def prefer_hosts_with_active_daemons(self, hosts: List[HostPlacementSpec], count: int) -> List[HostPlacementSpec]:
         # try to prefer host with active daemon if possible
         active_hosts = self.get_hosts_with_active_daemon(hosts)
         if len(active_hosts) != 0 and count > 0:

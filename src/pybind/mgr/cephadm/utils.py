@@ -78,7 +78,9 @@ def get_cluster_health(mgr: 'CephadmOrchestrator') -> str:
     })
     try:
         j = json.loads(out)
-    except Exception as e:
+    except ValueError:
+        msg = 'Failed to parse health status: Cannot decode JSON'
+        logger.exception('%s: \'%s\'' % (msg, out))
         raise OrchestratorError('failed to parse health status')
 
     return j['status']

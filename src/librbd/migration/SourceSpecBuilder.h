@@ -19,6 +19,7 @@ struct ImageCtx;
 namespace migration {
 
 struct FormatInterface;
+struct SnapshotInterface;
 struct StreamInterface;
 
 template <typename ImageCtxT>
@@ -33,8 +34,12 @@ public:
   int build_format(const json_spirit::mObject& format_object, bool import_only,
                    std::unique_ptr<FormatInterface>* format) const;
 
+  int build_snapshot(const json_spirit::mObject& source_spec_object,
+                     uint64_t index,
+                     std::shared_ptr<SnapshotInterface>* snapshot) const;
+
   int build_stream(const json_spirit::mObject& source_spec_object,
-                   std::unique_ptr<StreamInterface>* stream) const;
+                   std::shared_ptr<StreamInterface>* stream) const;
 
 private:
   ImageCtxT* m_image_ctx;

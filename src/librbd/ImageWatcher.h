@@ -9,8 +9,12 @@
 #include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/Operations.h"
 #include "librbd/Watcher.h"
 #include "librbd/WatchNotifyTypes.h"
+#include "librbd/exclusive_lock/Policy.h"
+#include "librbd/internal.h"
+#include <functional>
 #include <set>
 #include <string>
 #include <utility>
@@ -41,23 +45,29 @@ public:
                           uint64_t flags,
                           ProgressContext &prog_ctx,
 			  Context *on_finish);
-  void notify_snap_rename(const snapid_t &src_snap_id,
+  void notify_snap_rename(uint64_t request_id,
+                          const snapid_t &src_snap_id,
                           const std::string &dst_snap_name,
                           Context *on_finish);
-  void notify_snap_remove(const cls::rbd::SnapshotNamespace &snap_namespace,
+  void notify_snap_remove(uint64_t request_id,
+                          const cls::rbd::SnapshotNamespace &snap_namespace,
 			  const std::string &snap_name,
 			  Context *on_finish);
-  void notify_snap_protect(const cls::rbd::SnapshotNamespace &snap_namespace,
+  void notify_snap_protect(uint64_t request_id,
+                           const cls::rbd::SnapshotNamespace &snap_namespace,
 			   const std::string &snap_name,
 			   Context *on_finish);
-  void notify_snap_unprotect(const cls::rbd::SnapshotNamespace &snap_namespace,
+  void notify_snap_unprotect(uint64_t request_id,
+                             const cls::rbd::SnapshotNamespace &snap_namespace,
 			     const std::string &snap_name,
 			     Context *on_finish);
   void notify_rebuild_object_map(uint64_t request_id,
                                  ProgressContext &prog_ctx, Context *on_finish);
-  void notify_rename(const std::string &image_name, Context *on_finish);
+  void notify_rename(uint64_t request_id,
+                     const std::string &image_name, Context *on_finish);
 
-  void notify_update_features(uint64_t features, bool enabled,
+  void notify_update_features(uint64_t request_id,
+                              uint64_t features, bool enabled,
                               Context *on_finish);
 
   void notify_migrate(uint64_t request_id, ProgressContext &prog_ctx,
@@ -78,9 +88,11 @@ public:
                       Context *on_finish);
   void notify_unquiesce(uint64_t request_id, Context *on_finish);
 
-  void notify_metadata_set(const std::string &key, const std::string &value,
+  void notify_metadata_set(uint64_t request_id,
+                           const std::string &key, const std::string &value,
                            Context *on_finish);
-  void notify_metadata_remove(const std::string &key, Context *on_finish);
+  void notify_metadata_remove(uint64_t request_id,
+                              const std::string &key, Context *on_finish);
 
 private:
   enum TaskCode {
@@ -182,6 +194,8 @@ private:
 
   AsyncOpTracker m_async_op_tracker;
 
+  NoOpProgressContext m_no_op_prog_ctx;
+
   void handle_register_watch(int r);
 
   void schedule_cancel_async_requests();
@@ -229,6 +243,12 @@ private:
   void notify_quiesce(const watch_notify::AsyncRequestId &async_request_id,
                       size_t attempts, ProgressContext &prog_ctx,
                       Context *on_finish);
+
+  bool handle_operation_request(
+    const watch_notify::AsyncRequestId& async_request_id,
+    exclusive_lock::OperationRequestType request_type, Operation operation,
+    std::function<void(ProgressContext &prog_ctx, Context*)> execute,
+    C_NotifyAck *ack_ctx);
 
   bool handle_payload(const watch_notify::HeaderUpdatePayload& payload,
                       C_NotifyAck *ctx);

@@ -93,6 +93,7 @@ set(unittest_librbd_srcs
   migration/test_mock_HttpClient.cc
   migration/test_mock_HttpStream.cc
   migration/test_mock_RawFormat.cc
+  migration/test_mock_RawSnapshot.cc
   migration/test_mock_S3Stream.cc
   migration/test_mock_Utils.cc
   mirror/snapshot/test_mock_CreateNonPrimaryRequest.cc
@@ -166,6 +167,11 @@ target_link_libraries(unittest_librbd
   global
   OpenSSL::SSL
   ${UNITTEST_LIBS})
+
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+  target_link_libraries(unittest_librbd
+    librbd_plugin_pwl_cache)
+endif()
 
 add_executable(ceph_test_librbd
   test_main.cc

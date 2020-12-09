@@ -223,11 +223,6 @@ void FileStream<I>::read(io::Extents&& byte_extents, bufferlist* data,
   on_finish->complete(-EIO);
 }
 
-template <typename I>
-void FileStream<I>::get_size(uint64_t* size, Context* on_finish) {
-  on_finish->complete(-EIO);
-}
-
 #endif // BOOST_ASIO_HAS_POSIX_STREAM_DESCRIPTOR
 
 } // namespace migration

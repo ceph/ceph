@@ -270,7 +270,7 @@ describe('ServiceFormComponent', () => {
 
       it('should submit iscsi with trusted ips', () => {
         formHelper.setValue('ssl', true);
-        formHelper.setValue('trusted_ip_list', '  172.16.0.5,   192.1.1.10  ');
+        formHelper.setValue('trusted_ip_list', ' 172.16.0.5, 192.1.1.10  ');
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'iscsi',
@@ -282,7 +282,7 @@ describe('ServiceFormComponent', () => {
           api_secure: true,
           ssl_cert: '',
           ssl_key: '',
-          trusted_ip_list: ['172.16.0.5', '192.1.1.10']
+          trusted_ip_list: '172.16.0.5, 192.1.1.10'
         });
       });
 

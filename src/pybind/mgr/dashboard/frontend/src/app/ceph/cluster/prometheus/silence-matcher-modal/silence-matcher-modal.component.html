@@ -76,14 +76,9 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button (submitAction)="onSubmit()"
-                          [form]="form">
-          <span i18n>{editMode, select, true {Edit} other {Add}}</span>
-        </cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Close"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="form"
+                              [submitText]="getMode()"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

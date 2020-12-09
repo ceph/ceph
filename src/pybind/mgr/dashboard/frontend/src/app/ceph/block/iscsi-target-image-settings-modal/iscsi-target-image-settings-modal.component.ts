@@ -5,6 +5,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
@@ -23,7 +24,11 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
 
   settingsForm: CdFormGroup;
 
-  constructor(public activeModal: NgbActiveModal, public iscsiService: IscsiService) {}
+  constructor(
+    public activeModal: NgbActiveModal,
+    public iscsiService: IscsiService,
+    public actionLabels: ActionLabelsI18n
+  ) {}
 
   ngOnInit() {
     const fg: Record<string, FormControl> = {

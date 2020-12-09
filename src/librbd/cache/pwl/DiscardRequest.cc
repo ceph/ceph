@@ -7,7 +7,6 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/DiscardRequest.h"
 
-#if defined(WITH_RBD_RWL)
 #if __has_include(<filesystem>)
 #include <filesystem>
 namespace fs = std::filesystem;
@@ -17,7 +16,6 @@ namespace fs = std::experimental::filesystem;
 #endif
 
 #include "librbd/cache/pwl/ImageCacheState.h"
-#endif // WITH_RBD_RWL
 
 #include "librbd/cache/Types.h"
 #include "librbd/io/ImageDispatcherInterface.h"
@@ -40,35 +38,33 @@ using librbd::util::create_context_callback;
 template <typename I>
 DiscardRequest<I>* DiscardRequest<I>::create(
     I &image_ctx,
+    plugin::Api<I>& plugin_api,
     Context *on_finish) {
-  return new DiscardRequest(image_ctx, on_finish);
+  return new DiscardRequest(image_ctx, plugin_api, on_finish);
 }
 
 template <typename I>
 DiscardRequest<I>::DiscardRequest(
     I &image_ctx,
+    plugin::Api<I>& plugin_api,
     Context *on_finish)
   : m_image_ctx(image_ctx),
+    m_plugin_api(plugin_api),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_error_result(0) {
 }
 
 template <typename I>
 void DiscardRequest<I>::send() {
-#if defined(WITH_RBD_RWL)
   delete_image_cache_file();
-#else
-  finish();
-#endif
 }
 
-#if defined(WITH_RBD_RWL)
 template <typename I>
 void DiscardRequest<I>::delete_image_cache_file() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  m_cache_state = ImageCacheState<I>::get_image_cache_state(&m_image_ctx);
+  m_cache_state = ImageCacheState<I>::get_image_cache_state(&m_image_ctx, m_plugin_api);
   if (!m_cache_state) {
     remove_feature_bit();
     return;
@@ -148,16 +144,12 @@ void DiscardRequest<I>::handle_remove_feature_bit(int r) {
   finish();
 }
 
-#endif // WITH_RBD_RWL
-
 template <typename I>
 void DiscardRequest<I>::finish() {
-#if defined(WITH_RBD_RWL)
   if (m_cache_state) {
     delete m_cache_state;
     m_cache_state = nullptr;
   }
-#endif // WITH_RBD_RWL
 
   m_on_finish->complete(m_error_result);
   delete this;

@@ -1996,7 +1996,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("")
     .add_see_also("osd_deep_scrub_interval"),
 
-    Option("mon_scrub_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_scrub_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(1_day)
     .add_service("mon")
     .set_description("frequency for scrubbing mon database"),
@@ -3648,11 +3648,11 @@ std::vector<Option> get_global_options() {
     .set_description("Time in seconds to sleep before next removal transaction for HDDs"),
 
     Option("osd_delete_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(0)
+    .set_default(1)
     .set_description("Time in seconds to sleep before next removal transaction for SSDs"),
 
     Option("osd_delete_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(2)
+    .set_default(1)
     .set_description("Time in seconds to sleep before next removal transaction when data is on HDD and journal is on SSD"),
 
     Option("osd_failsafe_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -4798,6 +4798,14 @@ std::vector<Option> get_global_options() {
     Option("bdev_ioring_sqthread_poll", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Enables Linux io_uring API Offload submission/completion to kernel thread"),
+
+    Option("bluestore_kv_sync_util_logging_s", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(10.0)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("KV sync thread utilization logging period")
+    .set_long_description("How often (in seconds) to print KV sync thread utilization, "
+      "not logged when set to 0 or when utilization is 0%"),
+
 
     // -----------------------------------------
     // kstore
