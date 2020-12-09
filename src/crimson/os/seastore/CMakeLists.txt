@@ -34,6 +34,4 @@ add_library(crimson-seastore STATIC
   ../../../test/crimson/seastore/test_block.cc
 	)
 target_link_libraries(crimson-seastore
-  crimson
-  crimson-os)
-
+  crimson)
