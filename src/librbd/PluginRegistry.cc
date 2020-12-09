@@ -4,6 +4,7 @@
 #include "librbd/PluginRegistry.h"
 #include "include/Context.h"
 #include "common/dout.h"
+#include "librbd/cache/ImageWriteback.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/plugin/Api.h"
 #include <boost/tokenizer.hpp>
@@ -17,7 +18,8 @@ namespace librbd {
 
 template <typename I>
 PluginRegistry<I>::PluginRegistry(I* image_ctx)
-  : m_image_ctx(image_ctx), m_plugin_api(std::make_unique<plugin::Api<I>>()) {
+  : m_image_ctx(image_ctx), m_plugin_api(std::make_unique<plugin::Api<I>>()),
+    m_image_writeback(std::make_unique<cache::ImageWriteback<I>>(*image_ctx)) {
 }
 
 template <typename I>
@@ -45,11 +47,52 @@ void PluginRegistry<I>::init(const std::string& plugins, Context* on_finish) {
       break;
     }
 
-    m_plugin_hook_points.emplace_back();
-    auto hook_points = &m_plugin_hook_points.back();
-    plugin->init(m_image_ctx, *m_plugin_api, hook_points, ctx);
+    plugin->init(
+	m_image_ctx, *m_plugin_api, *m_image_writeback, m_plugin_hook_points, ctx);
   }
 
+  gather_ctx->activate();
+}
+
+template <typename I>
+void PluginRegistry<I>::acquired_exclusive_lock(Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  auto gather_ctx = new C_Gather(cct, on_finish);
+
+  for (auto &hook : m_plugin_hook_points) {
+    auto ctx = gather_ctx->new_sub();
+    hook->acquired_exclusive_lock(ctx);
+  }
+  gather_ctx->activate();
+}
+
+template <typename I>
+void PluginRegistry<I>::prerelease_exclusive_lock(Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  auto gather_ctx = new C_Gather(cct, on_finish);
+
+  for (auto &hook : m_plugin_hook_points) {
+    auto ctx = gather_ctx->new_sub();
+    hook->prerelease_exclusive_lock(ctx);
+  }
+  gather_ctx->activate();
+}
+
+template <typename I>
+void PluginRegistry<I>::discard(Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  auto gather_ctx = new C_Gather(cct, on_finish);
+
+  for (auto &hook : m_plugin_hook_points) {
+    auto ctx = gather_ctx->new_sub();
+    hook->discard(ctx);
+  }
   gather_ctx->activate();
 }
 
