@@ -74,6 +74,7 @@ public:
 
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
+  Context* add_event_after(ceph::timespan duration, Context *callback);
   Context* add_event_after(double seconds, Context *callback);
   Context* add_event_at(clock_t::time_point when, Context *callback);
 

@@ -1119,12 +1119,12 @@ Miscellaneous
 
 ``mon scrub interval``
 
-:Description: How often (in seconds) the monitor scrub its store by comparing
+:Description: How often the monitor scrub its store by comparing
               the stored checksums with the computed ones of all the stored
-              keys.
+              keys. (0 disables it. dangerous, use with care)
 
-:Type: Integer
-:Default: ``3600*24``
+:Type: Seconds
+:Default: ``1 day``
 
 
 ``mon scrub max keys``

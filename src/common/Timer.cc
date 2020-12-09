@@ -117,9 +117,14 @@ void SafeTimer::timer_thread()
 
 Context* SafeTimer::add_event_after(double seconds, Context *callback)
 {
+  return add_event_after(ceph::make_timespan(seconds), callback);
+}
+
+Context* SafeTimer::add_event_after(ceph::timespan duration, Context *callback)
+{
   ceph_assert(ceph_mutex_is_locked(lock));
 
-  auto when = clock_t::now() + ceph::make_timespan(seconds);
+  auto when = clock_t::now() + duration;
   return add_event_at(when, callback);
 }
 
