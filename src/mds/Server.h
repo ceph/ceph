@@ -218,6 +218,7 @@ public:
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
   int parse_quota_vxattr(std::string name, std::string value, quota_info_t *quota);
+  int parse_qos_vxattr(std::string name, std::string value, dmclock_info_t *info);
   void create_quota_realm(CInode *in);
   int parse_layout_vxattr_json(std::string name, std::string value,
 			       const OSDMap& osdmap, file_layout_t *layout);
@@ -439,7 +440,8 @@ private:
            xattr_name == "ceph.dir.subvolume" ||
            xattr_name == "ceph.dir.pin" ||
            xattr_name == "ceph.dir.pin.random" ||
-           xattr_name == "ceph.dir.pin.distributed";
+           xattr_name == "ceph.dir.pin.distributed" ||
+           xattr_name.rfind("ceph.dmclock", 0) == 0;
   }
 
   static bool is_ceph_dir_vxattr(std::string_view xattr_name) {
