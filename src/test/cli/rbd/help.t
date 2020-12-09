@@ -929,20 +929,23 @@
   rbd help group snap create
   usage: rbd group snap create [--pool <pool>] [--namespace <namespace>] 
                                [--group <group>] [--snap <snap>] 
+                               [--skip-quiesce] [--ignore-quiesce-error] 
                                <group-snap-spec> 
   
   Make a snapshot of a group.
   
   Positional arguments
-    <group-snap-spec>    group specification
-                         (example:
-                         [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
+    <group-snap-spec>       group specification
+                            (example:
+                            [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --group arg          group name
-    --snap arg           snapshot name
+    -p [ --pool ] arg       pool name
+    --namespace arg         namespace name
+    --group arg             group name
+    --snap arg              snapshot name
+    --skip-quiesce          do not run quiesce hooks
+    --ignore-quiesce-error  ignore quiesce hook error
   
   rbd help group snap list
   usage: rbd group snap list [--format <format>] [--pretty-format] 
