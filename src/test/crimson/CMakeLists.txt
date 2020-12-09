@@ -44,7 +44,7 @@ add_executable(unittest-seastar-alienstore-thread-pool
 add_ceph_test(unittest-seastar-alienstore-thread-pool
   unittest-seastar-alienstore-thread-pool --memory 256M --smp 1)
 target_link_libraries(unittest-seastar-alienstore-thread-pool
-  crimson-os
+  crimson-alienstore
   crimson)
 
 add_executable(unittest-seastar-config
