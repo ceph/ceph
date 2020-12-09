@@ -6,7 +6,7 @@
 #include <ctime>
 #include <lua.hpp>
 
-class CephContext;
+#include "include/common_fwd.h"
 
 namespace rgw::lua {
 
