@@ -565,6 +565,28 @@ void MDSDaemon::set_up_admin_socket()
     asok_hook,
     "dump stray folder content");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("dump qos",
+                                     asok_hook,
+                                     "dump qos info");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("qos set "
+                                     "name=path,type=CephString,req=true "
+                                     "name=reservation,type=CephInt,req=true "
+                                     "name=weight,type=CephInt,req=true "
+                                     "name=limit,type=CephInt,req=true",
+                                     asok_hook,
+                                     "set qos info");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("qos rm "
+                                     "name=path,type=CephString,req=true",
+                                     asok_hook,
+                                     "rm qos info");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("qos get "
+                                     "name=path,type=CephString,req=true",
+                                     asok_hook,
+                                     "get qos info");
+  ceph_assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()
