@@ -50,8 +50,7 @@ public:
   using Dispatcher::cct;
 private:
   std::unique_ptr<CephContext,
-		  std::function<void(CephContext*)> > cct_deleter{
-    cct, [](CephContext *p) {p->put();}};
+		  std::function<void(CephContext*)>> cct_deleter;
 
 public:
   const ConfigProxy& conf{cct->_conf};
