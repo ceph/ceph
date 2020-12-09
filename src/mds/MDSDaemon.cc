@@ -473,6 +473,10 @@ void MDSDaemon::set_up_admin_socket()
     asok_hook,
     "run cpu profiling on daemon");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("dump qos",
+				     asok_hook,
+				     "dump qos info");
+  ceph_assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()

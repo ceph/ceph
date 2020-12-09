@@ -43,6 +43,7 @@
 #include "Server.h"
 #include "MetricsHandler.h"
 #include "osdc/Journaler.h"
+#include "MDSDmclockScheduler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -150,6 +151,7 @@ class MgrClient;
 class Finisher;
 class ScrubStack;
 class C_ExecAndReply;
+class MDSDmclockScheduler;
 
 struct MDSMetaRequest {
 private:
@@ -435,6 +437,8 @@ class MDSRank {
     SnapClient *snapclient = nullptr;
 
     SessionMap sessionmap;
+
+    MDSDmclockScheduler *mds_dmclock_scheduler = nullptr;
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
