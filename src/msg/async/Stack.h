@@ -300,6 +300,8 @@ class NetworkStack {
 
   std::function<void ()> add_thread(unsigned i);
 
+  virtual Worker* create_worker(CephContext *c, unsigned i) = 0;
+
  protected:
   CephContext *cct;
   std::vector<Worker*> workers;
@@ -316,8 +318,6 @@ class NetworkStack {
   static std::shared_ptr<NetworkStack> create(
     CephContext *c, const std::string &type);
 
-  static Worker* create_worker(
-    CephContext *c, const std::string &t, unsigned i);
   // backend need to override this method if backend doesn't support shared
   // listen table.
   // For example, posix backend has in kernel global listen table. If one
