@@ -1053,7 +1053,7 @@ void OpenFileTable::_prefetch_dirfrags()
   ceph_assert(prefetch_state == DIRFRAGS);
 
   MDCache *mdcache = mds->mdcache;
-  std::vector<CDir*> fetch_queue;
+  std::set<CDir*> fetch_queue;
 
   for (auto& [ino, anchor] : loaded_anchor_map) {
     if (anchor.frags.empty())
@@ -1068,7 +1068,7 @@ void OpenFileTable::_prefetch_dirfrags()
       CDir *dir = diri->get_dirfrag(fg);
       if (dir) {
 	if (dir->is_auth() && !dir->is_complete())
-	  fetch_queue.push_back(dir);
+	  fetch_queue.insert(dir);
       } else {
 	frag_vec_t leaves;
 	diri->dirfragtree.get_leaves_under(fg, leaves);
@@ -1081,7 +1081,7 @@ void OpenFileTable::_prefetch_dirfrags()
 	    dir = diri->get_dirfrag(leaf);
 	  }
 	  if (dir && dir->is_auth() && !dir->is_complete())
-	    fetch_queue.push_back(dir);
+	    fetch_queue.insert(dir);
 	}
       }
     }
