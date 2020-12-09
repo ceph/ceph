@@ -9,3 +9,4 @@ CEPHADM Developer Documentation
 
 
    host-maintenance
+   compliance-check
