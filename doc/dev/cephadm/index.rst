@@ -9,5 +9,6 @@ CEPHADM Developer Documentation
 
 
    host-maintenance
+   compliance-check
    cephadm-exporter
    compliance-check
