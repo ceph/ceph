@@ -24,9 +24,6 @@ bool is_pwl_enabled(T& image_ctx) {
 #endif // WITH_RBD_RWL
 }
 
-template <typename T = librbd::ImageCtx>
-void discard_cache(T &image_ctx, Context *ctx);
-
 } // namespace util
 } // namespace cache
 } // namespace librbd

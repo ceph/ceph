@@ -168,6 +168,11 @@ target_link_libraries(unittest_librbd
   OpenSSL::SSL
   ${UNITTEST_LIBS})
 
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+  target_link_libraries(unittest_librbd
+    librbd_plugin_pwl_cache)
+endif()
+
 add_executable(ceph_test_librbd
   test_main.cc
   $<TARGET_OBJECTS:common_texttable_obj>)

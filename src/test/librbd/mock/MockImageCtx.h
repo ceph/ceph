@@ -12,6 +12,7 @@
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librbd/mock/MockOperations.h"
+#include "test/librbd/mock/MockPluginRegistry.h"
 #include "test/librbd/mock/MockReadahead.h"
 #include "test/librbd/mock/io/MockImageDispatcher.h"
 #include "test/librbd/mock/io/MockObjectDispatcher.h"
@@ -86,6 +87,7 @@ struct MockImageCtx {
       io_image_dispatcher(new io::MockImageDispatcher()),
       io_object_dispatcher(new io::MockObjectDispatcher()),
       op_work_queue(new MockContextWQ()),
+      plugin_registry(new MockPluginRegistry()),
       readahead_max_bytes(image_ctx.readahead_max_bytes),
       event_socket(image_ctx.event_socket),
       parent(NULL), operations(new MockOperations()),
@@ -126,6 +128,7 @@ struct MockImageCtx {
     delete operations;
     delete image_watcher;
     delete op_work_queue;
+    delete plugin_registry;
     delete io_image_dispatcher;
     delete io_object_dispatcher;
   }
@@ -293,6 +296,8 @@ struct MockImageCtx {
   io::MockImageDispatcher *io_image_dispatcher;
   io::MockObjectDispatcher *io_object_dispatcher;
   MockContextWQ *op_work_queue;
+
+  MockPluginRegistry* plugin_registry;
 
   MockReadahead readahead;
   uint64_t readahead_max_bytes;

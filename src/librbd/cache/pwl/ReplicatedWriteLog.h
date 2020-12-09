@@ -34,7 +34,9 @@ template <typename ImageCtxT>
 class ReplicatedWriteLog : public AbstractWriteLog<ImageCtxT> {
 public:
   ReplicatedWriteLog(
-      ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state);
+      ImageCtxT &image_ctx, librbd::cache::pwl::ImageCacheState<ImageCtxT>* cache_state,
+      ImageWritebackInterface& image_writeback,
+      plugin::Api<ImageCtxT>& plugin_api);
   ~ReplicatedWriteLog();
   ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
   ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
