@@ -5361,10 +5361,15 @@ int BlueStore::_init_alloc()
   }
   fm->enumerate_reset();
 
-  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
-    << " in " << num << " extents"
-    << " available " << byte_u_t(shared_alloc.a->get_free())
-    << dendl;
+  dout(1) << __func__
+          << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
+          << std::hex
+          << ", allocator type " << shared_alloc.a->get_type()
+          << ", capacity 0x" << shared_alloc.a->get_capacity()
+          << ", block size 0x" << shared_alloc.a->get_block_size()
+          << ", free 0x" << shared_alloc.a->get_free()
+          << ", fragmentation " << shared_alloc.a->get_fragmentation()
+          << std::dec << dendl;
 
   return 0;
 }

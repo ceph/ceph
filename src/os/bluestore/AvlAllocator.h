@@ -71,6 +71,10 @@ public:
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
 	       const std::string& name);
   ~AvlAllocator();
+  const char* get_type() const override
+  {
+    return "avl";
+  }
   int64_t allocate(
     uint64_t want,
     uint64_t unit,
