@@ -12370,6 +12370,17 @@ size_t Client::_vxattrcb_mirror_info(Inode *in, char *val, size_t size)
                   in->xattrs["ceph.mirror.info.fs_id"].c_str());
 }
 
+size_t Client::_vxattrcb_cluster_fsid(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%s", monclient->get_fsid().to_string().c_str());
+}
+
+size_t Client::_vxattrcb_client_id(Inode *in, char *val, size_t size)
+{
+  auto name = messenger->get_myname();
+  return snprintf(val, size, "%s%ld", name.type_str(), name.num());
+}
+
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
 #define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
 
@@ -12484,6 +12495,24 @@ const Client::VXattr Client::_file_vxattrs[] = {
   { name: "" }     /* Required table terminator */
 };
 
+const Client::VXattr Client::_common_vxattrs[] = {
+  {
+    name: "ceph.cluster_fsid",
+    getxattr_cb: &Client::_vxattrcb_cluster_fsid,
+    readonly: true,
+    exists_cb: nullptr,
+    flags: 0,
+  },
+  {
+    name: "ceph.client_id",
+    getxattr_cb: &Client::_vxattrcb_client_id,
+    readonly: true,
+    exists_cb: nullptr,
+    flags: 0,
+  },
+  { name: "" }     /* Required table terminator */
+};
+
 const Client::VXattr *Client::_get_vxattrs(Inode *in)
 {
   if (in->is_dir())
@@ -12504,7 +12533,16 @@ const Client::VXattr *Client::_match_vxattr(Inode *in, const char *name)
 	vxattr++;
       }
     }
+
+    // for common vxattrs
+    vxattr = _common_vxattrs;
+    while (!vxattr->name.empty()) {
+      if (vxattr->name == name)
+        return vxattr;
+      vxattr++;
+    }
   }
+
   return NULL;
 }
 
