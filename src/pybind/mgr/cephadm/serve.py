@@ -98,15 +98,7 @@ class CephadmServe:
         self.log.debug("serve exit")
 
     def _serve_sleep(self) -> None:
-        sleep_interval = max(
-            30,
-            min(
-                self.mgr.host_check_interval,
-                self.mgr.facts_cache_timeout,
-                self.mgr.daemon_cache_timeout,
-                self.mgr.device_cache_timeout,
-            )
-        )
+        sleep_interval = 600
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
