@@ -64,7 +64,9 @@ HMSMRDevice::HMSMRDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_
   unsigned int iodepth = cct->_conf->bdev_aio_max_queue_depth;
 
   if (use_ioring && ioring_queue_t::supported()) {
-    io_queue = std::make_unique<ioring_queue_t>(iodepth);
+    bool use_ioring_hipri = cct->_conf.get_val<bool>("bdev_ioring_hipri");
+    bool use_ioring_sqthread_poll = cct->_conf.get_val<bool>("bdev_ioring_sqthread_poll");
+    io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
   } else {
     static bool once;
     if (use_ioring && !once) {
