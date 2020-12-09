@@ -149,6 +149,8 @@ prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
 the use of this capability is restricted to clients connecting from
 this network.
 
+.. _fs-authorize-multifs:
+
 File system Information Restriction
 ===================================
 

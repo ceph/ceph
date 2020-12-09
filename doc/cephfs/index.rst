@@ -77,7 +77,8 @@ Administration
 
     Create a CephFS file system <createfs>
     Administrative commands <administration>
-	Provision/Add/Remove MDS(s) <add-remove-mds>
+    Creating Multiple File Systems <multifs>
+    Provision/Add/Remove MDS(s) <add-remove-mds>
     MDS failover and standby configuration <standby>
     MDS Cache Configuration <cache-configuration>
     MDS Configuration Settings <mds-config-ref>

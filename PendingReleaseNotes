@@ -26,6 +26,11 @@
   ``osd_scrub_end_week_day`` are 0 - 6.  The use of 7 is now illegal.
   Specifying ``0`` for both values causes every day of the week to be allowed.
 
+* Multiple file systems in a single Ceph cluster is now stable. New Ceph clusters
+  enable support for multiple file systems by default. Existing clusters
+  must still set the "enable_multiple" flag on the fs. Please see the CephFS
+  documentation for more information.
+
 * A new health check, DAEMON_OLD_VERSION, will warn if different versions of Ceph are running
   on daemons. It will generate a health error if multiple versions are detected.
   This condition must exist for over mon_warn_older_version_delay (set to 1 week by default) in order for the
