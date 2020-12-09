@@ -734,6 +734,7 @@ public:
 			      std::vector<snapid_t>& snaps);
 
   void handle_quota(const MConstRef<MClientQuota>& m);
+  void handle_qos(const MConstRef<MClientQoS>& m);
   void handle_snap(const MConstRef<MClientSnap>& m);
   void handle_caps(const MConstRef<MClientCaps>& m);
   void handle_cap_import(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
@@ -1443,6 +1444,12 @@ private:
   size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_files(Inode *in, char *val, size_t size);
+  
+  size_t _vxattrcb_dmclock(Inode *in, char *val, size_t size);
+  bool _vxattrcb_dmclock_exists(Inode *in);
+  size_t _vxattrcb_dmclock_mds_reservation(Inode* in, char *val, size_t size);
+  size_t _vxattrcb_dmclock_mds_weight(Inode* in, char *val, size_t size);
+  size_t _vxattrcb_dmclock_mds_limit(Inode* in, char *val, size_t size);
 
   bool _vxattrcb_layout_exists(Inode *in);
   size_t _vxattrcb_layout(Inode *in, char *val, size_t size);
