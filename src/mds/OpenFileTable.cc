@@ -1055,16 +1055,16 @@ void OpenFileTable::_prefetch_dirfrags()
   MDCache *mdcache = mds->mdcache;
   std::vector<CDir*> fetch_queue;
 
-  for (auto& it : loaded_anchor_map) {
-    if (it.second.frags.empty())
+  for (auto& [ino, anchor] : loaded_anchor_map) {
+    if (anchor.frags.empty())
       continue;
-    CInode *diri = mdcache->get_inode(it.first);
+    CInode *diri = mdcache->get_inode(ino);
     if (!diri)
       continue;
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
 
-    for (auto& fg: it.second.frags) {
+    for (auto& fg: anchor.frags) {
       CDir *dir = diri->get_dirfrag(fg);
       if (dir) {
 	if (dir->is_auth() && !dir->is_complete())
