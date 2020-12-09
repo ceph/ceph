@@ -9,6 +9,7 @@ from textwrap import dedent
 from ceph_volume import process, decorators, terminal, conf
 from ceph_volume.util import system, disk
 from ceph_volume.util import encryption as encryption_utils
+from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.systemd import systemctl
 
 
@@ -181,7 +182,10 @@ class Activate(object):
         block_wal_device = self.get_device(osd_metadata.get('block.wal', {}).get('uuid'))
 
         if not system.device_is_mounted(data_device, destination=osd_dir):
-            process.run(['mount', '-v', data_device, osd_dir])
+            if osd_metadata.get('type') == 'filestore':
+                prepare_utils.mount_osd(data_device, osd_id)
+            else:
+                process.run(['mount', '-v', data_device, osd_dir])
 
         device_map = {
             'journal': journal_device,
