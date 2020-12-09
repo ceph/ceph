@@ -1261,6 +1261,7 @@ def exec_test():
     opt_rotate_logs = False
     global opt_exit_on_test_failure
     opt_exit_on_test_failure = True
+    opt_mds_qos = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1304,6 +1305,8 @@ def exec_test():
             opt_exit_on_test_failure = False
         elif f == '--debug':
             log.setLevel(logging.DEBUG)
+        elif f == '--enable-mds-qos':
+            opt_mds_qos = True
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1447,6 +1450,11 @@ def exec_test():
     # so that cephfs-data-scan will pick it up too.
     ceph_cluster.set_ceph_conf("global", "mds root ino uid", "%s" % os.getuid())
     ceph_cluster.set_ceph_conf("global", "mds root ino gid", "%s" % os.getgid())
+
+    if opt_mds_qos:
+        ceph_cluster.set_ceph_conf("mds", "mds_dmclock_enable", "true")
+    else:
+        ceph_cluster.set_ceph_conf("mds", "mds_dmclock_enable", "false")
 
     # Monkeypatch get_package_version to avoid having to work out what kind of distro we're on
     def _get_package_version(remote, pkg_name):

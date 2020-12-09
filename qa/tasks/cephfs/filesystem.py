@@ -644,7 +644,22 @@ class Filesystem(MDSCluster):
     target_size_ratio = 0.9
     target_size_ratio_ec = 0.9
 
-    def create(self, recover=False, metadata_overlay=False):
+    def set_mds_qos(self, yes):
+        for id in self.mds_ids:
+            self.mds_asok(["config", "set", "mds_dmclock_enable", str(yes).lower()], mds_id=id)
+
+    def is_mds_qos(self, id=None):
+        if id:
+            return self.mds_asok(["config", "get", "mds_dmclock_enable"],
+                    mds_id=id)["mds_dmclock_enable"] == "true"
+
+        result = []
+        for id_ in self.mds_ids:
+            result.append(self.mds_asok(["config", "get", "mds_dmclock_enable"], mds_id=id_))
+
+        return all(row["mds_dmclock_enable"] == "true" for row in result)
+
+    def create(self):
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
