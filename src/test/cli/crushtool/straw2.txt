@@ -16,17 +16,17 @@ type 2 default
 # buckets
 host host0 {
 	id -1		# do not change unnecessarily
-	# weight 1.000
+	# weight 1.00000
 	alg straw2
 	hash 0	# rjenkins1
-	item device0 weight 1.000
+	item device0 weight 1.00000
 }
 default default {
 	id -2		# do not change unnecessarily
-	# weight 1.000
+	# weight 1.00000
 	alg straw2
 	hash 0	# rjenkins1
-	item host0 weight 1.000
+	item host0 weight 1.00000
 }
 
 # rules

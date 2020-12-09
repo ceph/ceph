@@ -38,26 +38,26 @@
   # buckets
   host localhost {
   \tid -2\t\t# do not change unnecessarily (esc)
-  \t# weight 3.000 (esc)
+  \t# weight 3.00000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem osd.0 weight 1.000 (esc)
-  \titem osd.1 weight 1.000 (esc)
-  \titem osd.2 weight 1.000 (esc)
+  \titem osd.0 weight 1.00000 (esc)
+  \titem osd.1 weight 1.00000 (esc)
+  \titem osd.2 weight 1.00000 (esc)
   }
   rack localrack {
   \tid -3\t\t# do not change unnecessarily (esc)
-  \t# weight 3.000 (esc)
+  \t# weight 3.00000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem localhost weight 3.000 (esc)
+  \titem localhost weight 3.00000 (esc)
   }
   root default {
   \tid -1\t\t# do not change unnecessarily (esc)
-  \t# weight 3.000 (esc)
+  \t# weight 3.00000 (esc)
   \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem localrack weight 3.000 (esc)
+  \titem localrack weight 3.00000 (esc)
   }
   
   # rules

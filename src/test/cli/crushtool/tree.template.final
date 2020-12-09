@@ -18,24 +18,24 @@ type 2 cluster
 # buckets
 host host0 {
 	id -2		# do not change unnecessarily
-	# weight 8.000
+	# weight 8.00000
 	alg tree	# do not change pos for existing items unnecessarily
 	hash 0	# rjenkins1
-	item device0 weight 1.000 pos 0
-	item device1 weight 1.000 pos 1
-	item device2 weight 1.000 pos 2
-	item device3 weight 1.000 pos 3
-	item device4 weight 1.000 pos 4
-	item device5 weight 1.000 pos 5
-	item device6 weight 1.000 pos 6
-	item device7 weight 1.000 pos 7
+	item device0 weight 1.00000 pos 0
+	item device1 weight 1.00000 pos 1
+	item device2 weight 1.00000 pos 2
+	item device3 weight 1.00000 pos 3
+	item device4 weight 1.00000 pos 4
+	item device5 weight 1.00000 pos 5
+	item device6 weight 1.00000 pos 6
+	item device7 weight 1.00000 pos 7
 }
 cluster cluster0 {
 	id -1		# do not change unnecessarily
-	# weight 8.000
+	# weight 8.00000
 	alg tree	# do not change pos for existing items unnecessarily
 	hash 0	# rjenkins1
-	item host0 weight 8.000 pos 0
+	item host0 weight 8.00000 pos 0
 }
 
 # rules
