@@ -938,6 +938,120 @@ def test_multi_period_incremental_sync():
             mdlog = mdlog_list(zone, period)
             assert len(mdlog) == 0
 
+def test_multi_period_incremental_sync_data_log():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 3:
+        raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
+
+    # periods to include in mdlog comparison
+    mdlog_periods = [realm.current_period.id]
+
+    # create a bucket in each zone
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload a dummy object to each bucket and wait for sync. this forces each
+    # bucket to finish a full sync and switch to incremental
+    for source_conn, bucket in zone_bucket:
+        new_key(source_conn, bucket, 'dummy').set_contents_from_string('')
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
+
+    z1, z2, z3 = zonegroup.zones[0:3]
+    assert(z1 == zonegroup.master_zone)
+
+    # kill zone 3 gateways to freeze sync status to incremental in first period
+    z3.stop()
+
+    # change master to zone 2 -> period 2
+    set_master_zone(z2)
+    mdlog_periods += [realm.current_period.id]
+
+    for zone_conn, _ in zone_bucket:
+        if zone_conn.zone == z3:
+            continue
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone_conn.name, bucket_name)
+        bucket = zone_conn.conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
+        new_key(zone_conn, bucket, 'dummy2').set_contents_from_string('')
+        for target_conn in zonegroup_conns.zones:
+            if zone_conn.zone == target_conn.zone:
+                continue
+            if target_conn.zone == z3:
+                continue
+            zone_bucket_checkpoint(target_conn.zone, zone_conn.zone, bucket.name)
+
+
+    # wait for zone 1 to sync
+    zone_meta_checkpoint(z1)
+
+    # change master back to zone 1 -> period 3
+    set_master_zone(z1)
+    mdlog_periods += [realm.current_period.id]
+
+    for zone_conn, bucket_name in zone_bucket:
+        if zone_conn.zone == z3:
+            continue
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone_conn.name, bucket_name)
+        bucket = zone_conn.conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
+        new_key(zone_conn, bucket, 'dummy2').set_contents_from_string('')
+        for target_conn in zonegroup_conns.zones:
+            if zone_conn.zone == target_conn.zone:
+                continue
+            if target_conn.zone == z3:
+                continue
+            zone_bucket_checkpoint(target_conn.zone, zone_conn.zone, bucket.name)
+
+
+    # restart zone 3 gateway and wait for sync
+    z3.start()
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # verify that we end up with the same objects
+    for bucket_name in buckets:
+        zonegroup_bucket_checkpoint(zonegroup, bucket_name)
+    """
+        for source_conn, _ in zone_bucket:
+            for target_conn in zonegroup_conns.zones:
+                if source_conn.zone == target_conn.zone:
+                    continue
+
+                if target_conn.zone.has_buckets():
+                    target_conn.check_bucket_eq(source_conn, bucket_name)
+    """
+
+    # verify that mdlogs are not empty and match for each period
+    for period in mdlog_periods:
+        master_mdlog = mdlog_list(z1, period)
+        assert len(master_mdlog) > 0
+        for zone in zonegroup.zones:
+            if zone == z1:
+                continue
+            mdlog = mdlog_list(zone, period)
+            assert len(mdlog) == len(master_mdlog)
+
+    # autotrim mdlogs for master zone
+    mdlog_autotrim(z1)
+
+    # autotrim mdlogs for peers
+    for zone in zonegroup.zones:
+        if zone == z1:
+            continue
+        mdlog_autotrim(zone)
+
+    # verify that mdlogs are empty for each period
+    for period in mdlog_periods:
+        for zone in zonegroup.zones:
+            mdlog = mdlog_list(zone, period)
+            assert len(mdlog) == 0
+
 def test_datalog_autotrim():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
