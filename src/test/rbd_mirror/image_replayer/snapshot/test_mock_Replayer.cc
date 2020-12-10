@@ -783,7 +783,24 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
          1, true, 0, {{1, CEPH_NOSNAP}}},
        0, {}, 0, 0, {}}},
     }, 0);
-  expect_is_refresh_required(mock_remote_image_ctx, false);
+  expect_is_refresh_required(mock_remote_image_ctx, true);
+  expect_refresh(
+    mock_remote_image_ctx, {
+      {2U, librbd::SnapInfo{"snap2", cls::rbd::UserSnapshotNamespace{},
+       0, {}, 0, 0, {}}},
+      {3U, librbd::SnapInfo{"snap3", cls::rbd::MirrorSnapshotNamespace{
+         cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {""},
+         "", CEPH_NOSNAP, true, 0, {}},
+       0, {}, 0, 0, {}}},
+      {4U, librbd::SnapInfo{"snap4", cls::rbd::MirrorSnapshotNamespace{
+         cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
+         "", CEPH_NOSNAP, true, 0, {}},
+       0, {}, 0, 0, {}}},
+      {5U, librbd::SnapInfo{"snap5", cls::rbd::MirrorSnapshotNamespace{
+         cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, {"remote mirror peer uuid"},
+         "", CEPH_NOSNAP, true, 0, {}},
+       0, {}, 0, 0, {}}}
+    }, 0);
   expect_snapshot_copy(mock_snapshot_copy_request, 1, 4, 11,
                        {{1, 11}, {2, 12}, {4, CEPH_NOSNAP}}, 0);
   expect_get_image_state(mock_get_image_state_request, 4, 0);

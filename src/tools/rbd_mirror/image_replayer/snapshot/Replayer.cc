@@ -555,7 +555,10 @@ void Replayer<I>::scan_remote_mirror_snapshots(
         ceph_assert(m_local_mirror_snap_ns.primary_mirror_uuid ==
                       m_state_builder->remote_mirror_uuid);
 
-        unlink_snap_ids.insert(remote_snap_id);
+        if (m_remote_snap_id_end == CEPH_NOSNAP) {
+          // haven't found the end snap so treat this as a candidate for unlink
+          unlink_snap_ids.insert(remote_snap_id);
+        }
         if (m_local_mirror_snap_ns.complete &&
             m_local_mirror_snap_ns.primary_snap_id >= remote_snap_id) {
           // skip past completed remote snapshot
