@@ -952,8 +952,10 @@ def call(command,  # type: List[str]
                                logging ON for the terminal
     :param timeout: timeout in seconds
     """
-    if not desc:
+    if desc is None:
         desc = command[0]
+    if desc:
+        desc += ': '
     timeout = timeout or args.timeout
 
     logger.debug("Running command: %s" % ' '.join(command))
@@ -986,7 +988,7 @@ def call(command,  # type: List[str]
         if end_time and (time.time() >= end_time):
             stop = True
             if process.poll() is None:
-                logger.info(desc + ':timeout after %s seconds' % timeout)
+                logger.info(desc + 'timeout after %s seconds' % timeout)
                 process.kill()
         if reads and process.poll() is not None:
             # we want to stop, but first read off anything remaining
@@ -1017,9 +1019,9 @@ def call(command,  # type: List[str]
                     out_buffer = lines.pop()
                     for line in lines:
                         if verbose:
-                            logger.info(desc + ':stdout ' + line)
+                            logger.info(desc + 'stdout ' + line)
                         else:
-                            logger.debug(desc + ':stdout ' + line)
+                            logger.debug(desc + 'stdout ' + line)
                 elif fd == process.stderr.fileno():
                     err += message
                     message = err_buffer + message
@@ -1027,37 +1029,37 @@ def call(command,  # type: List[str]
                     err_buffer = lines.pop()
                     for line in lines:
                         if verbose:
-                            logger.info(desc + ':stderr ' + line)
+                            logger.info(desc + 'stderr ' + line)
                         else:
-                            logger.debug(desc + ':stderr ' + line)
+                            logger.debug(desc + 'stderr ' + line)
                 else:
                     assert False
             except (IOError, OSError):
                 pass
         if verbose:
-            logger.debug(desc + ':profile rt=%s, stop=%s, exit=%s, reads=%s'
+            logger.debug(desc + 'profile rt=%s, stop=%s, exit=%s, reads=%s'
                 % (time.time()-start_time, stop, process.poll(), reads))
 
     returncode = process.wait()
 
     if out_buffer != '':
         if verbose:
-            logger.info(desc + ':stdout ' + out_buffer)
+            logger.info(desc + 'stdout ' + out_buffer)
         else:
-            logger.debug(desc + ':stdout ' + out_buffer)
+            logger.debug(desc + 'stdout ' + out_buffer)
     if err_buffer != '':
         if verbose:
-            logger.info(desc + ':stderr ' + err_buffer)
+            logger.info(desc + 'stderr ' + err_buffer)
         else:
-            logger.debug(desc + ':stderr ' + err_buffer)
+            logger.debug(desc + 'stderr ' + err_buffer)
 
     if returncode != 0 and verbose_on_failure and not verbose:
         # dump stdout + stderr
         logger.info('Non-zero exit code %d from %s' % (returncode, ' '.join(command)))
         for line in out.splitlines():
-            logger.info(desc + ':stdout ' + line)
+            logger.info(desc + 'stdout ' + line)
         for line in err.splitlines():
-            logger.info(desc + ':stderr ' + line)
+            logger.info(desc + 'stderr ' + line)
 
     return out, err, returncode
 
@@ -3712,7 +3714,10 @@ def command_unit():
     call_throws([
         'systemctl',
         args.command,
-        unit_name])
+        unit_name],
+        verbose=True,
+        desc=''
+    )
 
 ##################################
 
