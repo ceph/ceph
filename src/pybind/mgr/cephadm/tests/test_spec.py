@@ -273,7 +273,18 @@ def test_dd_octopus(dd_json):
     # https://tracker.ceph.com/issues/44934
     # Those are real user data from early octopus.
     # Please do not modify those JSON values.
-    assert dd_json == DaemonDescription.from_json(dd_json).to_json()
+
+    # Convert datetime properties to old style.
+    # 2020-04-03T07:29:16.926292Z -> 2020-04-03T07:29:16.926292
+    def convert_to_old_style_json(j):
+        for k in ['last_refresh', 'created', 'started', 'last_deployed',
+                  'last_configured']:
+            if k in j:
+                j[k] = j[k].rstrip('Z')
+        return j
+
+    assert dd_json == convert_to_old_style_json(
+        DaemonDescription.from_json(dd_json).to_json())
 
 
 @pytest.mark.parametrize("spec,dd,valid",
