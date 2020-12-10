@@ -74,8 +74,11 @@ def generate_caps(type_):
         yield capability
 
 
-def update_archive_setting(archive_dir, key, value):
-    with open(os.path.join(archive_dir, 'info.yaml'), 'r+') as info_file:
+def update_archive_setting(ctx, key, value):
+    """
+    Add logs directory to job's info log file
+    """
+    with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
         if 'archive' in info_yaml:
@@ -91,9 +94,8 @@ def ceph_crash(ctx, config):
     Gather crash dumps from /var/lib/ceph/crash
     """
 
-    if ctx.archive is not None:
-        # Add crash directory to job's archive
-        update_archive_setting(ctx.archive, 'crash', '/var/lib/ceph/crash')
+    # Add crash directory to job's archive
+    update_archive_setting(ctx, 'crash', '/var/lib/ceph/crash')
 
     try:
         yield
@@ -165,8 +167,7 @@ def ceph_log(ctx, config):
     )
 
     # Add logs directory to job's info log file
-    if ctx.archive is not None:
-        update_archive_setting(ctx.archive, 'log', '/var/log/ceph')
+    update_archive_setting(ctx, 'log', '/var/log/ceph')
 
     class Rotater(object):
         stop_event = gevent.event.Event()
