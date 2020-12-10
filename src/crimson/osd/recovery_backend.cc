@@ -139,7 +139,7 @@ seastar::future<> RecoveryBackend::handle_backfill(
 seastar::future<> RecoveryBackend::handle_backfill_remove(
   MOSDPGBackfillRemove& m)
 {
-  logger().debug("{} m.ls=", __func__, m.ls);
+  logger().debug("{} m.ls={}", __func__, m.ls);
   assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
 
   ObjectStore::Transaction t;
