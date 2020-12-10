@@ -250,7 +250,8 @@ if(WITH_OCF)
 endif()
 
 option(WITH_CEPHFS_JAVA "build libcephfs Java bindings" OFF)
-if(WITH_CEPHFS_JAVA)
+option(WITH_CEPHRGW_JAVA "build libcephrgw Java bindings" OFF)
+if(WITH_CEPHFS_JAVA OR WITH_CEPHRGW_JAVA)
   add_subdirectory(java)
 endif()
 
