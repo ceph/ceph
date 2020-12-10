@@ -5378,11 +5378,13 @@ void Monitor::get_all_versions(std::map<string, list<string> > &versions)
 
 void Monitor::get_versions(std::map<string, list<string> > &versions)
 {
-  int i = 0;
   for (auto& [rank, metadata] : mon_metadata) {
     auto q = metadata.find("ceph_version_short");
+    if (q == metadata.end()) {
+      // not likely
+      continue;
+    }
     versions[q->second].push_back(string("mon.") + monmap->get_name(rank));
-    i = i + 1;
   }
 }
 
