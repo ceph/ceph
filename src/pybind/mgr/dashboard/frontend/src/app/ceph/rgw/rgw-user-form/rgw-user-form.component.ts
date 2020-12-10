@@ -63,6 +63,8 @@ export class RgwUserFormComponent implements OnInit {
     this.subuserLabel = this.i18n('subuser');
     this.s3keyLabel = this.i18n('S3 Key');
     this.capabilityLabel = this.i18n('capability');
+    this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.createForm();
   }
 
@@ -72,7 +74,7 @@ export class RgwUserFormComponent implements OnInit {
       uid: [
         null,
         [Validators.required],
-        [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
+        this.editing ? [] : [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
       ],
       display_name: [null, [Validators.required]],
       email: [
@@ -150,8 +152,6 @@ export class RgwUserFormComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
