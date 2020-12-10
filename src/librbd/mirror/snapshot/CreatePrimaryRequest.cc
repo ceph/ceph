@@ -190,7 +190,7 @@ void CreatePrimaryRequest<I>::unlink_peer() {
   for (auto &peer : m_mirror_peer_uuids) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
     size_t count = 0;
-    uint64_t prev_snap_id = 0;
+    uint64_t unlink_snap_id = 0;
     for (auto &snap_it : m_image_ctx->snap_info) {
       auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
         &snap_it.second.snap_namespace);
@@ -200,15 +200,16 @@ void CreatePrimaryRequest<I>::unlink_peer() {
       if (info->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
         // reset counters -- we count primary snapshots after the last promotion
         count = 0;
-        prev_snap_id = 0;
+        unlink_snap_id = 0;
         continue;
       }
       count++;
-      if (count == max_snapshots - 1) {
-        prev_snap_id = snap_it.first;
-      } else if (count > max_snapshots) {
+      if (count == 3) {
+        unlink_snap_id = snap_it.first;
+      }
+      if (count > max_snapshots) {
         peer_uuid = peer;
-        snap_id = prev_snap_id;
+        snap_id = unlink_snap_id;
         break;
       }
     }
