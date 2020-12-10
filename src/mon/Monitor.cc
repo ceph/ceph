@@ -3545,6 +3545,13 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
+#if defined(WITH_CACHE_REPLICA)
+  if (module == "replica") {
+    replicamon()->dispatch(op);
+    return;
+  }
+#endif
+
   if (prefix == "fsid") {
     if (f) {
       f->open_object_section("fsid");

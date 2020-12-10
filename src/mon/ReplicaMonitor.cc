@@ -9,6 +9,9 @@
 
 #include "ReplicaMonitor.h"
 #include "messages/MReplicaDaemonMap.h"
+#include "common/cmdparse.h"
+
+using TOPNSPC::common::bad_cmd_get;
 
 #define FN_NAME (__CEPH_ASSERT_FUNCTION == nullptr ? __func__ : __CEPH_ASSERT_FUNCTION)
 #define dout_context g_ceph_context
@@ -110,13 +113,35 @@ void ReplicaMonitor::encode_full(MonitorDBStore::TransactionRef mon_dbstore_tran
 
 bool ReplicaMonitor::preprocess_query(MonOpRequestRef mon_op_req)
 {
-// TODO: Must implement pure virtual function
+  auto replica_msg = mon_op_req->get_req<PaxosServiceMessage>();
+
+  switch (replica_msg->get_type()) {
+  case MSG_MON_COMMAND:
+    try {
+      return preprocess_command(mon_op_req);
+    } catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon.reply_command(mon_op_req, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
+
+  default:
+    ceph_abort();
+    return true;
+  }
+
   return false;
 }
 
 bool ReplicaMonitor::prepare_update(MonOpRequestRef mon_op_req)
 {
 // TODO: Must implement pure virtual function
+  return false;
+}
+
+bool ReplicaMonitor::preprocess_command(MonOpRequestRef mon_op_req)
+{
+  // TODO: deal with replica module commands
   return false;
 }
 

@@ -34,6 +34,7 @@ public:
   //return true if being processed
   bool preprocess_query(MonOpRequestRef mon_op_req) override;
   bool prepare_update(MonOpRequestRef mon_op_req) override;
+  bool preprocess_command(MonOpRequestRef mon_op_req);
   void on_restart() override;
 
   void check_sub(Subscription *sub);
