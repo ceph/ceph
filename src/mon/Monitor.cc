@@ -3642,7 +3642,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
     f->open_object_section("report");
     f->dump_stream("cluster_fingerprint") << fingerprint;
-    f->dump_string("version", ceph_version_to_str(cct));
+    f->dump_string("version", ceph_version_to_str());
     f->dump_string("commit", git_version_to_str());
     f->dump_stream("timestamp") << ceph_clock_now();
 
