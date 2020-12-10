@@ -166,6 +166,15 @@ bool ReplicaMonitor::preprocess_command(MonOpRequestRef mon_op_req)
   return false;
 }
 
+bool ReplicaMonitor::should_propose(double& delay)
+{
+  if (!pending_cache_replicadaemon_map.empty()) {
+    return true;
+  }
+
+  return PaxosService::should_propose(delay);
+}
+
 void ReplicaMonitor::on_restart()
 {
 // TODO: Clear the pending map

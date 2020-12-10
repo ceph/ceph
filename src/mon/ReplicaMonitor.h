@@ -36,6 +36,7 @@ public:
   bool prepare_update(MonOpRequestRef mon_op_req) override;
   bool preprocess_blink(MonOpRequestRef mon_op_req);
   bool preprocess_command(MonOpRequestRef mon_op_req);
+  bool should_propose(double& delay) override;
   void on_restart() override;
 
   void check_sub(Subscription *sub);
