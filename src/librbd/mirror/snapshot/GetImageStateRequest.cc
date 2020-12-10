@@ -33,7 +33,7 @@ void GetImageStateRequest<I>::read_object() {
 
   auto oid = util::image_state_object_name(m_image_ctx, m_snap_id,
                                            m_object_index);
-  ldout(cct, 20) << oid << dendl;
+  ldout(cct, 15) << oid << dendl;
 
   librados::ObjectReadOperation op;
   m_bl.clear();
@@ -50,7 +50,7 @@ void GetImageStateRequest<I>::read_object() {
 template <typename I>
 void GetImageStateRequest<I>::handle_read_object(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to read image state object: " << cpp_strerror(r)
@@ -91,7 +91,7 @@ void GetImageStateRequest<I>::handle_read_object(int r) {
 template <typename I>
 void GetImageStateRequest<I>::finish(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r == 0) {
     try {
