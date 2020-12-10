@@ -1329,7 +1329,19 @@ namespace librbd {
                group_ioctx.get_pool_name().c_str(),
 	       group_ioctx.get_id(), group_name, snap_name);
     int r = librbd::api::Group<>::snap_create(group_ioctx, group_name,
-                                              snap_name);
+                                              snap_name, 0);
+    tracepoint(librbd, group_snap_create_exit, r);
+    return r;
+  }
+
+  int RBD::group_snap_create2(IoCtx& group_ioctx, const char *group_name,
+                              const char *snap_name, uint32_t flags) {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+    tracepoint(librbd, group_snap_create_enter,
+               group_ioctx.get_pool_name().c_str(),
+	       group_ioctx.get_id(), group_name, snap_name);
+    int r = librbd::api::Group<>::snap_create(group_ioctx, group_name,
+                                              snap_name, flags);
     tracepoint(librbd, group_snap_create_exit, r);
     return r;
   }
@@ -6942,8 +6954,28 @@ extern "C" int rbd_group_snap_create(rados_ioctx_t group_p,
              group_ioctx.get_pool_name().c_str(),
 	     group_ioctx.get_id(), group_name, snap_name);
 
-  int r = librbd::api::Group<>::snap_create(group_ioctx, group_name, snap_name);
+  int r = librbd::api::Group<>::snap_create(group_ioctx, group_name,
+                                            snap_name, 0);
+  tracepoint(librbd, group_snap_create_exit, r);
 
+  return r;
+}
+
+extern "C" int rbd_group_snap_create2(rados_ioctx_t group_p,
+                                      const char *group_name,
+                                      const char *snap_name,
+                                      uint32_t flags)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+  tracepoint(librbd, group_snap_create_enter,
+             group_ioctx.get_pool_name().c_str(),
+	     group_ioctx.get_id(), group_name, snap_name);
+
+  int r = librbd::api::Group<>::snap_create(group_ioctx, group_name, snap_name,
+                                            flags);
   tracepoint(librbd, group_snap_create_exit, r);
 
   return r;

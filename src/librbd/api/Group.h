@@ -38,7 +38,8 @@ struct Group {
   static int image_get_group(ImageCtxT *ictx, group_info_t *group_info);
 
   static int snap_create(librados::IoCtx& group_ioctx,
-                         const char *group_name, const char *snap_name);
+                         const char *group_name, const char *snap_name,
+                         uint32_t flags);
   static int snap_remove(librados::IoCtx& group_ioctx,
                          const char *group_name, const char *snap_name);
   static int snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
