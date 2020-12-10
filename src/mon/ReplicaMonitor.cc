@@ -46,7 +46,11 @@ void ReplicaMonitor::update_from_paxos(bool *need_bootstrap)
 
 void ReplicaMonitor::create_pending()
 {
-// TODO: Must implement pure virtual function
+  pending_cache_replicadaemon_map = cur_cache_replicadaemon_map;
+  pending_cache_replicadaemon_map.set_epoch(cur_cache_replicadaemon_map.get_epoch() + 1);
+  dout(10) << "cur_cache epoch: " << cur_cache_replicadaemon_map.get_epoch() << ", "
+           << "pening_cache epoch: " << pending_cache_replicadaemon_map.get_epoch()
+           << dendl;
 }
 
 void ReplicaMonitor::encode_pending(MonitorDBStore::TransactionRef mon_dbstore_tran)
