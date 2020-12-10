@@ -33,8 +33,10 @@
 %bcond_without selinux
 %if 0%{?rhel} >= 8
 %bcond_with cephfs_java
+%bcond_with cephrgw_java
 %else
 %bcond_without cephfs_java
+%bcond_without cephrgw_java
 %endif
 %bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
@@ -46,6 +48,7 @@
 %if 0%{?suse_version}
 %bcond_with amqp_endpoint
 %bcond_with cephfs_java
+%bcond_with cephrgw_java
 %bcond_with kafka_endpoint
 %bcond_with libradosstriper
 %ifarch x86_64 aarch64 ppc64le
@@ -123,7 +126,7 @@ Requires:       ceph-mds = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mon = %{_epoch_prefix}%{version}-%{release}
 Requires(post):	binutils
-%if 0%{with cephfs_java}
+%if 0%{with cephfs_java} || 0%{with cephrgw_java}
 BuildRequires:	java-devel
 BuildRequires:	sharutils
 %endif
@@ -1030,6 +1033,47 @@ This package contains the Java libraries for the Ceph File System.
 
 %endif
 
+%if 0%{with cephrgw_java}
+
+%package -n libcephrgw_jni1
+Summary:	Java Native Interface library for CephRGW Java bindings
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
+Requires:	java
+Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
+%description -n libcephrgw_jni1
+This package contains the Java Native Interface library for CephRGW Java
+bindings.
+
+%package -n libcephrgw_jni-devel
+Summary:	Development files for CephRGW Java Native Interface library
+%if 0%{?suse_version}
+Group:		Development/Libraries/Java
+%endif
+Requires:	java
+Requires:	libcephrgw_jni1 = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
+Provides:	libcephrgw_jni1-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	libcephrgw_jni1-devel < %{_epoch_prefix}%{version}-%{release}
+%description -n libcephrgw_jni-devel
+This package contains the development files for CephRGW Java Native Interface
+library.
+
+%package -n cephrgw-java
+Summary:	Java libraries for the CephRGW File System
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
+Requires:	java
+Requires:	libcephrgw_jni1 = %{_epoch_prefix}%{version}-%{release}
+Requires:       junit
+BuildRequires:  junit
+%description -n cephrgw-java
+This package contains the Java libraries for the CephRGW File System.
+
+%endif
+
 %package -n rados-objclass-devel
 Summary:        RADOS object class development kit
 %if 0%{?suse_version}
@@ -1094,7 +1138,7 @@ This package provides Ceph’s default alerts for Prometheus.
 . /opt/rh/gcc-toolset-9/enable
 %endif
 
-%if 0%{with cephfs_java}
+%if 0%{with cephfs_java} || 0%{with cephrgw_java}
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
     [ -d $i ] && java_inc="$java_inc -I$i"
@@ -1161,6 +1205,9 @@ ${CMAKE} .. \
 %endif
 %if 0%{with cephfs_java}
     -DWITH_CEPHFS_JAVA=ON \
+%endif
+%if 0%{with cephrgw_java}
+    -DWITH_CEPHRGW_JAVA=ON \
 %endif
 %if 0%{with selinux}
     -DWITH_SELINUX=ON \
@@ -2147,6 +2194,21 @@ fi
 %files -n cephfs-java
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
+%endif
+
+%if 0%{with cephrgw_java}
+%files -n libcephrgw_jni1
+%{_libdir}/libcephrgw_jni.so.*
+
+%post -n libcephrgw_jni1 -p /sbin/ldconfig
+
+%postun -n libcephrgw_jni1 -p /sbin/ldconfig
+
+%files -n libcephrgw_jni-devel
+%{_libdir}/libcephrgw_jni.so
+
+%files -n cephrgw-java
+%{_javadir}/libcephrgw.jar
 %endif
 
 %files -n rados-objclass-devel
