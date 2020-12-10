@@ -610,6 +610,8 @@ def task(ctx, config):
         )
         if repos:
             nested_config['repos'] = repos
+        if 'shaman' in config:
+            nested_config['shaman'] = config['shaman']
         with contextutil.nested(
             lambda: install(ctx=ctx, config=nested_config),
             lambda: ship_utilities(ctx=ctx, config=None),
