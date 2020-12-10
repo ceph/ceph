@@ -242,18 +242,24 @@ int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
   return r;
 }
 
+DPDKStack::~DPDKStack()
+{
+  ldout(cct, 10) << __func__ << " destructing DPDKStack..." << dendl;
+  _eal.stop();
+}
+
 void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 {
   // create a extra master thread
   //
   funcs[i] = std::move(func);
   int r = 0;
-  r = dpdk::eal::init(cct);
+  r = _eal.init();
   if (r < 0) {
     lderr(cct) << __func__ << " init dpdk rte failed, r=" << r << dendl;
     ceph_abort();
   }
-  // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
+  // if _eal.init already called by NVMEDevice, we will select 1..n
   // cores
   ceph_assert(rte_lcore_count() >= i + 1);
   unsigned core_id;
@@ -263,7 +269,7 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
       break;
     }
   }
-  dpdk::eal::execute_on_master([&]() {
+  _eal.execute_on_master([&]() {
     r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[j]), core_id);
     if (r < 0) {
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
@@ -274,7 +280,7 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 
 void DPDKStack::join_worker(unsigned i)
 {
-  dpdk::eal::execute_on_master([&]() {
+  _eal.execute_on_master([&]() {
     rte_eal_wait_lcore(i+1);
   });
 }

@@ -34,12 +34,6 @@ namespace dpdk {
     return v;
   }
 
-  bool eal::initialized = false;
-  std::thread eal::t;
-  std::mutex eal::lock;
-  std::condition_variable eal::cond;
-  std::list<std::function<void()>> eal::funcs;
-
   static int bitcount(unsigned long long n)
   {
     return std::bitset<CHAR_BIT * sizeof(n)>{n}.count();
@@ -75,7 +69,7 @@ namespace dpdk {
     return count;
   }
 
-  int eal::init(CephContext *c)
+  int eal::init()
   {
     if (initialized) {
       return 1;
@@ -148,17 +142,18 @@ namespace dpdk {
       done = true;
       cond.notify_all();
       while (true) {
+        cond.wait(l, [this]{ return !funcs.empty() || stopped; });
         if (!funcs.empty()) {
           auto f = std::move(funcs.front());
           funcs.pop_front();
           f();
           cond.notify_all();
         } else {
-          cond.wait(l);
+	  assert(stopped);
+	  break;
         }
       }
     });
-    t.detach();
     std::unique_lock<std::mutex> l(lock);
     while (!done)
       cond.wait(l);
@@ -180,6 +175,15 @@ namespace dpdk {
     memsize += (64UL << 20);
 
     return memsize;
+  }
+
+  void eal::stop()
+  {
+    assert(initialized);
+    assert(!stopped);
+    stopped = true;
+    cond.notify_all();
+    t.join();
   }
 
 } // namespace dpdk

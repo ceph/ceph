@@ -46,12 +46,11 @@ namespace dpdk {
 class eal {
  public:
   using cpuset = std::bitset<RTE_MAX_LCORE>;
-
-  static std::mutex lock;
-  static std::condition_variable cond;
-  static std::list<std::function<void()>> funcs;
-  static int init(CephContext *c);
-  static void execute_on_master(std::function<void()> &&f) {
+  explicit eal(CephContext *c)
+    : initialized(false), stopped(false) {}
+  int init();
+  void stop();
+  void execute_on_master(std::function<void()> &&f) {
     bool done = false;
     std::unique_lock<std::mutex> l(lock);
     funcs.emplace_back([&]() { f(); done = true; });
@@ -65,9 +64,15 @@ class eal {
    *
    * @return
    */
-  static size_t mem_size(int num_cpus);
-  static bool initialized;
-  static std::thread t;
+  size_t mem_size(int num_cpus);
+ private:
+  CephContext *c;
+  bool initialized;
+  bool stopped;
+  std::thread t;
+  std::mutex lock;
+  std::condition_variable cond;
+  std::list<std::function<void()>> funcs;
 };
 
 } // namespace dpdk
