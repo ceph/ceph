@@ -169,6 +169,12 @@ bool ReplicaMonitor::prepare_blink(MonOpRequestRef mon_op_req)
   return true;
 }
 
+bool ReplicaMonitor::prepare_command(MonOpRequestRef mon_op_req)
+{
+  // TODO: deal with replica module commands
+  return false;
+}
+
 bool ReplicaMonitor::preprocess_blink(MonOpRequestRef mon_op_req)
 {
   auto session = mon_op_req->get_session();
