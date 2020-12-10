@@ -1,10 +1,9 @@
-import datetime
 import time
 import fnmatch
 from contextlib import contextmanager
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
-from cephadm.module import CEPH_DATEFMT
+from ceph.utils import datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 
 try:
@@ -55,7 +54,7 @@ def with_cephadm_module(module_options=None, store=None):
             store = {}
         if '_ceph_get/mon_map' not in store:
             m.mock_store_set('_ceph_get', 'mon_map', {
-                'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
+                'modified': datetime_to_str(datetime_now()),
                 'fsid': 'foobar',
             })
         for k, v in store.items():

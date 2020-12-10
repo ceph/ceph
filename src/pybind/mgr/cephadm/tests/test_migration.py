@@ -1,12 +1,11 @@
 import json
-from datetime import datetime
 
 import pytest
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
+from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
 from cephadm.inventory import SPEC_STORE_PREFIX
-from cephadm.utils import DATEFMT
 from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
 from orchestrator import OrchestratorError
 from cephadm.serve import CephadmServe
@@ -48,8 +47,8 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
 
             # Sorry, for this hack, but I need to make sure, Migration thinks,
             # we have updated all daemons already.
-            cephadm_module.cache.last_daemon_update['host1'] = datetime.now()
-            cephadm_module.cache.last_daemon_update['host2'] = datetime.now()
+            cephadm_module.cache.last_daemon_update['host1'] = datetime_now()
+            cephadm_module.cache.last_daemon_update['host2'] = datetime_now()
 
             cephadm_module.migration_current = 0
             cephadm_module.migration.migrate()
@@ -72,7 +71,7 @@ def test_migrate_service_id_mon_one(cephadm_module: CephadmOrchestrator):
                     'hosts': ['host1']
                 }
             },
-            'created': datetime.utcnow().strftime(DATEFMT),
+            'created': datetime_to_str(datetime_now()),
         }, sort_keys=True),
         )
 
@@ -103,7 +102,7 @@ def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
                     'count': 5,
                 }
             },
-            'created': datetime.utcnow().strftime(DATEFMT),
+            'created': datetime_to_str(datetime_now()),
         }, sort_keys=True),
         )
         cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon.wrong', json.dumps({
@@ -114,7 +113,7 @@ def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
                     'hosts': ['host1']
                 }
             },
-            'created': datetime.utcnow().strftime(DATEFMT),
+            'created': datetime_to_str(datetime_now()),
         }, sort_keys=True),
         )
 
@@ -146,7 +145,7 @@ def test_migrate_service_id_mds_one(cephadm_module: CephadmOrchestrator):
                     'hosts': ['host1']
                 }
             },
-            'created': datetime.utcnow().strftime(DATEFMT),
+            'created': datetime_to_str(datetime_now()),
         }, sort_keys=True),
         )
 
