@@ -370,7 +370,7 @@ void MonMap::print(ostream& out) const
       << " (" << min_mon_release << ")\n";
   out << "election_strategy: " << strategy << "\n";
   if (disallowed_leaders.size()) {
-    out << "disallowed_leaders" << disallowed_leaders << "\n";
+    out << "disallowed_leaders " << disallowed_leaders << "\n";
   }
   unsigned i = 0;
   for (auto p = ranks.begin(); p != ranks.end(); ++p) {
