@@ -8921,6 +8921,7 @@ TEST_F(TestLibRBD, ConcurentOperations)
     ASSERT_EQ(0, close1_comp->wait_for_complete());
     ASSERT_EQ(1, close1_comp->is_complete());
     ASSERT_EQ(0, close1_comp->get_return_value());
+    close1_comp->release();
 
     create_snap2.join();
     create_snap3.join();
