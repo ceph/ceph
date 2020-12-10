@@ -37,15 +37,6 @@ public:
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 
-  bool preprocess_command(MonOpRequestRef op);
-  bool prepare_command(MonOpRequestRef op);
-
-  bool prepare_health_checks(MonOpRequestRef op);
-
-  bool check_leader_health();
-  bool check_member_health();
-  bool check_mutes();
-
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
@@ -67,6 +58,14 @@ public:
   /**
    * @} // HealthMonitor_Inherited_h
    */
+private:
+  bool preprocess_command(MonOpRequestRef op);
+
+  bool prepare_command(MonOpRequestRef op);
+  bool prepare_health_checks(MonOpRequestRef op);
+  bool check_leader_health();
+  bool check_member_health();
+  bool check_mutes();
 };
 
 #endif // CEPH_HEALTH_MONITOR_H
