@@ -14,7 +14,7 @@
 
 #include "common/version.h"
 
-#include <string.h>
+#include <stdlib.h>
 #include <sstream>
 
 #include "ceph_ver.h"
@@ -23,15 +23,14 @@
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-// Keep ver.c_str() available
-static std::string ver;
-
-const char *ceph_version_to_str(CephContext *cct)
+const char *ceph_version_to_str()
 {
-  if (cct) ver = cct->_conf.get_val<std::string>("debug_version_for_testing");
-  if (ver.size() > 0)
-    return ver.c_str();
-  return CEPH_GIT_NICE_VER;
+  char* debug_version_for_testing = getenv("ceph_debug_version_for_testing");
+  if (debug_version_for_testing) {
+    return debug_version_for_testing;
+  } else {
+    return CEPH_GIT_NICE_VER;
+  }
 }
 
 const char *ceph_release_to_str(void)
