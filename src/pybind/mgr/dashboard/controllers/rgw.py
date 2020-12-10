@@ -30,6 +30,8 @@ class Rgw(BaseController):
     def status(self):
         status = {'available': False, 'message': None}
         try:
+            if not CephService.get_service_list('rgw'):
+                raise LookupError('No RGW service is running.')
             instance = RgwClient.admin_instance()
             # Check if the service is online.
             if not instance.is_service_online():  # pragma: no cover - no complexity there

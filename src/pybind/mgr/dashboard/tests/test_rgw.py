@@ -3,8 +3,22 @@ try:
 except ImportError:
     import unittest.mock as mock
 
-from . import ControllerTestCase
-from ..controllers.rgw import RgwUser
+from .. import mgr
+from ..controllers.rgw import Rgw, RgwUser
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
+
+
+class RgwControllerTestCase(ControllerTestCase):
+    @classmethod
+    def setup_server(cls):
+        Rgw._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
+        cls.setup_controllers([Rgw], '/test')
+
+    def test_status_no_service(self):
+        mgr.list_servers.return_value = []
+        self._get('/test/api/rgw/status')
+        self.assertStatus(200)
+        self.assertJsonBody({'available': False, 'message': 'No RGW service is running.'})
 
 
 class RgwUserControllerTestCase(ControllerTestCase):
