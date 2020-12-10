@@ -28,6 +28,7 @@ struct rgw_bucket_dir_header;
 class RGWSI_BILog_RADOS;
 
 #define RGW_NO_SHARD -1
+#define RGW_DEFAULT_GENERATION 0
 
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
@@ -56,7 +57,7 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               string *bucket_obj, int *shard_id);
 
   int cls_bucket_head(const RGWBucketInfo& bucket_info,
-                      int shard_id,
+                      int shard_id, uint64_t gen_id,
                       vector<rgw_bucket_dir_header> *headers,
                       map<int, string> *bucket_instance_ids,
                       optional_yield y);
@@ -124,6 +125,7 @@ public:
 
   int open_bucket_index(const RGWBucketInfo& bucket_info,
                         std::optional<int> shard_id,
+                        std::optional<uint64_t> gen_id,
                         RGWSI_RADOS::Pool *index_pool,
                         map<int, string> *bucket_objs,
                         map<int, string> *bucket_instance_ids);

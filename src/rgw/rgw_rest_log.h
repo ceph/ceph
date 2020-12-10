@@ -47,6 +47,8 @@ class RGWOp_BILog_Info : public RGWRESTOp {
   string master_ver;
   string max_marker;
   bool syncstopped;
+  uint64_t oldest_gen, latest_gen;
+
 public:
   RGWOp_BILog_Info() : bucket_ver(), master_ver(), syncstopped(false) {}
   ~RGWOp_BILog_Info() override {}

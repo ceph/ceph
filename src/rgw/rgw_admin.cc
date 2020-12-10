@@ -6807,7 +6807,7 @@ next:
       result.reserve(NUM_ENTRIES);
 
       int r = store->getRados()->cls_bucket_list_ordered(
-	bucket_info, RGW_NO_SHARD,
+	bucket_info, RGW_NO_SHARD, RGW_DEFAULT_GENERATION,
 	marker, empty_prefix, empty_delimiter,
 	NUM_ENTRIES, true, expansion_factor,
 	result, &is_truncated, &cls_filtered, &marker,
@@ -8142,9 +8142,11 @@ next:
     if (max_entries < 0)
       max_entries = 1000;
 
+    auto gen_id = bucket_info.layout.current_index.gen;
+
     do {
       list<rgw_bi_log_entry> entries;
-      ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, marker, max_entries - count, entries,
+      ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, gen_id, marker, max_entries - count, entries,
               generation, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -8628,7 +8630,8 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
+    auto gen_id = bucket_info.layout.current_index.gen;
+    ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, gen_id, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8647,7 +8650,8 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    ret = store->svc()->bilog_rados->get_log_status(bucket_info, shard_id,
+    auto gen_id = bucket_info.layout.current_index.gen;
+    ret = store->svc()->bilog_rados->get_log_status(bucket_info, shard_id, gen_id,
 						    &markers, null_yield);
     if (ret < 0) {
       cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;

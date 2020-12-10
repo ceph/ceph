@@ -640,12 +640,16 @@ struct rgw_bucket_index_marker_info {
   string master_ver;
   string max_marker;
   bool syncstopped{false};
+  uint64_t oldest_gen;
+  uint64_t latest_gen;
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
     JSONDecoder::decode_json("master_ver", master_ver, obj);
     JSONDecoder::decode_json("max_marker", max_marker, obj);
     JSONDecoder::decode_json("syncstopped", syncstopped, obj);
+    JSONDecoder::decode_json("oldest_gen", oldest_gen, obj);
+    JSONDecoder::decode_json("latest_gen", latest_gen, obj);
   }
 };
 

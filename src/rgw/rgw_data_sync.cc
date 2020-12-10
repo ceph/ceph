@@ -2700,10 +2700,10 @@ class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
 
 public:
   RGWReadRemoteBucketIndexLogInfoCR(RGWDataSyncCtx *_sc,
-                                  const rgw_bucket_shard& bs,
+                                  const rgw_bucket& bucket,
                                   rgw_bucket_index_marker_info *_info)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      instance_key(bs.get_key()), info(_info) {}
+      instance_key(bucket.get_key()), info(_info) {}
 
   int operate() override {
     reenter(this) {
@@ -2719,6 +2719,7 @@ public:
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
+
       return set_cr_done();
     }
     return 0;
@@ -2734,33 +2735,32 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
 
   rgw_bucket_shard_sync_info& status;
   RGWObjVersionTracker& objv_tracker;
-  rgw_bucket_index_marker_info info;
+  rgw_bucket_index_marker_info& info;
+  const BucketIndexShardsManager& marker_mgr;
   bool exclusive;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncCtx *_sc,
                                         const rgw_bucket_sync_pair_info& _sync_pair,
                                         rgw_bucket_shard_sync_info& _status,
+                                        rgw_bucket_index_marker_info& _info,
+                                        const BucketIndexShardsManager& _marker_mgr,
                                         RGWObjVersionTracker& objv_tracker,
                                         bool exclusive)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
       sync_pair(_sync_pair),
       sync_status_oid(RGWBucketPipeSyncStatusManager::inc_status_oid(sc->source_zone, _sync_pair)),
-      status(_status), objv_tracker(objv_tracker), exclusive(exclusive)
+      status(_status), info(_info), marker_mgr(_marker_mgr), objv_tracker(objv_tracker), exclusive(exclusive)
   {}
 
   int operate() override {
     reenter(this) {
-      /* fetch current position in logs */
-      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.source_bs, &info));
-      if (retcode < 0 && retcode != -ENOENT) {
-        ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
-        return set_cr_error(retcode);
-      }
       yield {
         auto store = sync_env->store;
         rgw_raw_obj obj(sync_env->svc->zone->get_zone_params().log_pool, sync_status_oid);
         const bool stopped = status.state == rgw_bucket_shard_sync_info::StateStopped;
         bool write_status = false;
+
+        auto max_marker = marker_mgr.get(sync_pair.dest_bs.shard_id, "");
 
         if (info.syncstopped) {
           if (stopped && !sync_env->sync_module->should_full_sync()) {
@@ -2770,7 +2770,7 @@ public:
         } else {
           // whether or not to do full sync, incremental sync will follow anyway
           if (sync_env->sync_module->should_full_sync()) {
-            status.inc_marker.position = info.max_marker;
+            status.inc_marker.position = max_marker;
           }
           write_status = true;
           status.inc_marker.timestamp = ceph::real_clock::now();
@@ -3001,19 +3001,25 @@ class InitBucketShardStatusCR : public RGWCoroutine {
   const rgw_bucket_sync_pair_info& pair;
   rgw_bucket_shard_sync_info status;
   RGWObjVersionTracker objv;
+  rgw_bucket_index_marker_info& info;
+  const BucketIndexShardsManager& marker_mgr;
+
   int tries = 10; // retry on racing writes
   bool exclusive = true; // first try is exclusive
   using ReadCR = RGWReadBucketPipeSyncStatusCoroutine;
   using InitCR = RGWInitBucketShardSyncStatusCoroutine;
  public:
-  InitBucketShardStatusCR(RGWDataSyncCtx* sc, const rgw_bucket_sync_pair_info& pair)
-    : RGWCoroutine(sc->cct), sc(sc), pair(pair)
+  InitBucketShardStatusCR(RGWDataSyncCtx* sc,
+                         const rgw_bucket_sync_pair_info& pair,
+                         rgw_bucket_index_marker_info& info,
+                         const BucketIndexShardsManager& marker_mgr)
+    : RGWCoroutine(sc->cct), sc(sc), pair(pair), info(info), marker_mgr(marker_mgr)
   {}
   int operate() {
     reenter(this) {
       // try exclusive create with empty status
       objv.generate_new_write_ver(cct);
-      yield call(new InitCR(sc, pair, status, objv, exclusive));
+      yield call(new InitCR(sc, pair, status, info, marker_mgr, objv, exclusive));
       if (retcode >= 0) {
         return set_cr_done();
       } else if (retcode != -EEXIST) {
@@ -3029,7 +3035,7 @@ class InitBucketShardStatusCR : public RGWCoroutine {
         if (retcode < 0) {
           return set_cr_error(retcode);
         }
-        yield call(new InitCR(sc, pair, status, objv, exclusive));
+        yield call(new InitCR(sc, pair, status, info, marker_mgr, objv, exclusive));
         if (retcode >= 0) {
           return set_cr_done();
         } else if (retcode != -ECANCELED) {
@@ -3046,6 +3052,9 @@ class InitBucketShardStatusCollectCR : public RGWShardCollectCR {
   static constexpr int max_concurrent_shards = 16;
   RGWDataSyncCtx* sc;
   rgw_bucket_sync_pair_info sync_pair;
+  rgw_bucket_index_marker_info& info;
+  const BucketIndexShardsManager& marker_mgr;
+  
   const int num_shards;
   int shard = 0;
 
@@ -3059,9 +3068,11 @@ class InitBucketShardStatusCollectCR : public RGWShardCollectCR {
  public:
   InitBucketShardStatusCollectCR(RGWDataSyncCtx* sc,
                                  const rgw_bucket_sync_pair_info& sync_pair,
+                                 rgw_bucket_index_marker_info& info,
+                                  const BucketIndexShardsManager& marker_mgr,
                                  int num_shards)
     : RGWShardCollectCR(sc->cct, max_concurrent_shards),
-      sc(sc), sync_pair(sync_pair), num_shards(num_shards)
+      sc(sc), sync_pair(sync_pair), info(info), marker_mgr(marker_mgr), num_shards(num_shards)
   {}
 
   bool spawn_next() override {
@@ -3069,7 +3080,7 @@ class InitBucketShardStatusCollectCR : public RGWShardCollectCR {
       return false;
     }
     sync_pair.dest_bs.shard_id = shard++;
-    spawn(new InitBucketShardStatusCR(sc, sync_pair), false);
+    spawn(new InitBucketShardStatusCR(sc, sync_pair, info, marker_mgr), false);
     return true;
   }
 };
@@ -3084,6 +3095,10 @@ class InitBucketFullSyncStatusCR : public RGWCoroutine {
   RGWObjVersionTracker& objv;
   const int num_shards;
   const bool check_compat;
+
+  rgw_bucket_index_marker_info info;
+  BucketIndexShardsManager marker_mgr;
+  
 
   bool all_incremental = true;
 public:
@@ -3101,24 +3116,40 @@ public:
 
   int operate() override {
     reenter(this) {
+      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.dest_bs.bucket, &info));
+      if (retcode < 0) {
+        lderr(cct) << "failed to read remote bilog info: "
+            << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+
+      retcode = marker_mgr.from_string(info.max_marker, -1);
+      if (retcode < 0) {
+        lderr(cct) << "failed to parse bilog shard markers: "
+            << cpp_strerror(retcode) << dendl;
+        return set_cr_error(retcode);
+      }
+
       status.state = BucketSyncState::Init;
 
-      if (check_compat) {
-        // try to convert existing per-shard incremental status for backward compatibility
-        yield call(new CheckAllBucketShardStatusIsIncremental(sc, sync_pair, num_shards, &all_incremental));
-        if (retcode < 0) {
-          return set_cr_error(retcode);
-        }
-        if (all_incremental) {
-          // we can use existing status and resume incremental sync
-          status.state = BucketSyncState::Incremental;
+      if (info.oldest_gen == 0) {
+        if (check_compat) {
+          // try to convert existing per-shard incremental status for backward compatibility
+          yield call(new CheckAllBucketShardStatusIsIncremental(sc, sync_pair, num_shards, &all_incremental));
+          if (retcode < 0) {
+            return set_cr_error(retcode);
+          }
+          if (all_incremental) {
+            // we can use existing status and resume incremental sync
+            status.state = BucketSyncState::Incremental;
+          }
         }
       }
 
       if (status.state != BucketSyncState::Incremental) {
         // initialize all shard sync status. this will populate the log marker
         // positions where incremental sync will resume after full sync
-        yield call(new InitBucketShardStatusCollectCR(sc, sync_pair, num_shards));
+        yield call(new InitBucketShardStatusCollectCR(sc, sync_pair, info, marker_mgr, num_shards));
         if (retcode < 0) {
           ldout(cct, 20) << "failed to init bucket shard status: "
               << cpp_strerror(retcode) << dendl;
@@ -3131,6 +3162,8 @@ public:
           status.state = BucketSyncState::Incremental;
         }
       }
+
+      status.incremental_gen = info.latest_gen;
 
       ldout(cct, 20) << "writing bucket sync state=" << status.state << dendl;
 

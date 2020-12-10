@@ -398,7 +398,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   }
 
   bool truncated;
-  uint64_t generation;
+  uint64_t latest_generation; //gets highest generation number
   unsigned count = 0;
   string err;
 
@@ -409,9 +409,9 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id,
+    int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, gen_id,
                                                marker, max_entries - count,
-                                               entries, generation, &truncated);
+                                               entries, latest_generation, &truncated);
     if (ret < 0) {
       ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << dendl;
       return;
@@ -419,7 +419,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
     count += entries.size();
 
-    send_response(entries, marker, generation);
+    send_response(entries, marker, latest_generation);
   } while (truncated && count < max_entries);
 
   send_response_end();
@@ -478,6 +478,9 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
     return;
   }
 
+  oldest_gen = bucket_info.layout.logs.front().gen;
+  latest_gen = bucket_info.layout.logs.back().gen;
+
   if (!bucket_instance.empty()) {
     rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
     op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
@@ -493,11 +496,12 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->getRados()->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret =  store->getRados()->get_bucket_stats(bucket_info, -1, latest_gen, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;
   }
+
 }
 
 void RGWOp_BILog_Info::send_response() {
@@ -513,6 +517,8 @@ void RGWOp_BILog_Info::send_response() {
   encode_json("master_ver", master_ver, s->formatter);
   encode_json("max_marker", max_marker, s->formatter);
   encode_json("syncstopped", syncstopped, s->formatter);
+  encode_json("oldest_gen", oldest_gen, s->formatter);
+  encode_json("latest_gen", latest_gen, s->formatter);
   s->formatter->close_section();
 
   flusher.flush();
@@ -557,7 +563,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
       return;
     }
   }
-  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
+  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, gen_id, start_marker, end_marker);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
