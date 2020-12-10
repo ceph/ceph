@@ -143,6 +143,32 @@ bool ReplicaMonitor::prepare_update(MonOpRequestRef mon_op_req)
   return false;
 }
 
+bool ReplicaMonitor::prepare_blink(MonOpRequestRef mon_op_req)
+{
+  auto blink_msg = mon_op_req->get_req<MReplicaDaemonBlink>();
+
+  bool peer_updated = false;
+  const auto& recv_replicadaemon_state = blink_msg->get_replicadaemon_stateref();
+  if (recv_replicadaemon_state.daemon_status == STATE_BOOTING) {
+    blink_msg->update_replicadaemon_status(STATE_ACTIVE);
+    peer_updated = true;
+  } else if (recv_replicadaemon_state.daemon_status == STATE_STOPPING) {
+    blink_msg->update_replicadaemon_status(STATE_DOWN);
+    peer_updated = true;
+  }
+
+  if (peer_updated == false) {
+    return false;
+  }
+
+  auto temp_replicadaemon_map = cur_cache_replicadaemon_map;
+  temp_replicadaemon_map.update_daemonmap(recv_replicadaemon_state);
+
+  pending_cache_replicadaemon_map = std::move(temp_replicadaemon_map);
+
+  return true;
+}
+
 bool ReplicaMonitor::preprocess_blink(MonOpRequestRef mon_op_req)
 {
   auto session = mon_op_req->get_session();
