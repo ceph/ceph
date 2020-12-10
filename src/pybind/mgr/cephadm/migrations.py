@@ -36,20 +36,20 @@ class Migrations:
         # let's try to shortcut things here.
         self.migrate()
 
-    def set(self, val):
+    def set(self, val: int) -> None:
         self.mgr.set_module_option('migration_current', val)
         self.mgr.migration_current = val
 
-    def is_migration_ongoing(self):
+    def is_migration_ongoing(self) -> bool:
         return self.mgr.migration_current != LAST_MIGRATION
 
-    def verify_no_migration(self):
+    def verify_no_migration(self) -> None:
         if self.is_migration_ongoing():
             # this is raised in module.serve()
             raise OrchestratorError(
                 "cephadm migration still ongoing. Please wait, until the migration is complete.")
 
-    def migrate(self):
+    def migrate(self) -> None:
         if self.mgr.migration_current == 0:
             if self.migrate_0_1():
                 self.set(1)
