@@ -270,6 +270,34 @@ commands::
 
   $ ceph dashboard ac-user-create <username> <password> administrator
 
+Account Lock-out
+^^^^^^^^^^^^^^^^
+
+It disables a user account if a user repeatedly enters the wrong credentials
+for multiple times. It is enabled by default to prevent brute-force or dictionary
+attacks. The user can get or set the default number of lock-out attempts using
+these commands respectively::
+
+  $ ceph dashboard get-account-lockout-attempts
+  $ ceph dashboard set-account-lockout-attempts <value:int>
+
+.. warning::
+
+  This feature can be disabled by setting the default number of lock-out attempts to 0.
+  However, by disabling this feature, the account is more vulnerable to brute-force or
+  dictionary based attacks. This can be disabled by::
+
+    $ ceph dashboard set-account-lockout-attempts 0
+
+Enable a Locked User
+^^^^^^^^^^^^^^^^^^^^
+
+If a user account is disabled as a result of multiple invalid login attempts, then
+it needs to be manually enabled by the administrator. This can be done by the following
+command::
+
+  $ ceph dashboard ac-user-enable <username>
+
 Accessing the Dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
 
