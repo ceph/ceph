@@ -34,7 +34,9 @@ void ReplicaMonitor::init()
 
 void ReplicaMonitor::create_initial()
 {
-// TODO: Must implement pure virtual function
+  cur_cache_replicadaemon_map.set_epoch(0);
+  pending_cache_replicadaemon_map = cur_cache_replicadaemon_map;
+  pending_cache_replicadaemon_map.set_epoch(cur_cache_replicadaemon_map.get_epoch() + 1);
 }
 
 void ReplicaMonitor::update_from_paxos(bool *need_bootstrap)
