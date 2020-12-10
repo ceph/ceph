@@ -96,6 +96,38 @@ static int cls_rgw_gc_queue_enqueue(cls_method_context_t hctx, bufferlist *in, b
   return queue_write_head(hctx, head);
 }
 
+static int get_urgent_data_from_head(cls_method_context_t hctx, const cls_queue_head& head,
+                                    cls_rgw_gc_urgent_data& urgent_data,
+                                    std::unordered_map<string, ceph::real_time>& xattr_urgent_data_map)
+{
+  int ret = 0;
+  if (head.bl_urgent_data.length() > 0) {
+    auto iter_urgent_data = head.bl_urgent_data.cbegin();
+    try {
+      decode(urgent_data, iter_urgent_data);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(5, "ERROR: get_urgent_data_from_head(): failed to decode urgent data\n");
+      return -EINVAL;
+    }
+  }
+  if (urgent_data.num_xattr_urgent_entries > 0) {
+    bufferlist bl;
+    ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+      return ret;
+    }
+    auto iter = bl.cbegin();
+    try {
+      decode(xattr_urgent_data_map, iter);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(5, "ERROR: get_urgent_data_from_head(): failed to decode xattrs urgent data map");
+      return -EINVAL;
+    }
+  }
+  return 0;
+}
+
 static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
@@ -115,29 +147,10 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
 
   cls_rgw_gc_urgent_data urgent_data;
   std::unordered_map<string,ceph::real_time> xattr_urgent_data_map;
-  if (head.bl_urgent_data.length() > 0) {
-    auto iter_urgent_data = head.bl_urgent_data.cbegin();
-    try {
-      decode(urgent_data, iter_urgent_data);
-    } catch (ceph::buffer::error& err) {
-      CLS_LOG(5, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode urgent data\n");
-      return -EINVAL;
-    }
-  }
-  if (urgent_data.num_xattr_urgent_entries > 0) {
-    bufferlist bl;
-    ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
-      return ret;
-    }
-    auto iter = bl.cbegin();
-    try {
-      decode(xattr_urgent_data_map, iter);
-    } catch (ceph::buffer::error& err) {
-      CLS_LOG(1, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode xattrs urgent data map\n");
-      return -EINVAL;
-    }
+  
+  ret = get_urgent_data_from_head(hctx, head, urgent_data, xattr_urgent_data_map);
+  if (ret < 0) {
+    return ret;
   }
 
   cls_queue_list_op list_op;
@@ -257,30 +270,9 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
 
   cls_rgw_gc_urgent_data urgent_data;
   std::unordered_map<string, ceph::real_time> xattr_urgent_data_map;
-
-  if (head.bl_urgent_data.length() > 0) {
-    auto iter_urgent_data = head.bl_urgent_data.cbegin();
-    try {
-      decode(urgent_data, iter_urgent_data);
-    } catch (ceph::buffer::error& err) {
-      CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode urgent data\n");
-      return -EINVAL;
-    }
-  }
-  if (urgent_data.num_xattr_urgent_entries > 0) {
-    bufferlist bl;
-    ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
-      return ret;
-    }
-    auto iter = bl.cbegin();
-    try {
-      decode(xattr_urgent_data_map, iter);
-    } catch (ceph::buffer::error& err) {
-      CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode xattrs urgent data map");
-      return -EINVAL;
-    }
+  ret = get_urgent_data_from_head(hctx, head, urgent_data, xattr_urgent_data_map);
+  if (ret < 0) {
+    return ret;
   }
 
   // any removed entries that were filtered out based on urgent_data must be
@@ -480,30 +472,11 @@ static int cls_rgw_gc_queue_update_entry(cls_method_context_t hctx, bufferlist *
     return ret;
   }
 
-  auto bl_iter = head.bl_urgent_data.cbegin();
   cls_rgw_gc_urgent_data urgent_data;
-  try {
-    decode(urgent_data, bl_iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(5, "ERROR: cls_rgw_gc_queue_update_entry(): failed to decode urgent data\n");
-    return -EINVAL;
-  }
-
   std::unordered_map<string, ceph::real_time> xattr_urgent_data_map;
-  if (urgent_data.num_xattr_urgent_entries > 0) {
-    bufferlist bl;
-    ret = cls_cxx_getxattr(hctx, "cls_queue_urgent_data", &bl);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
-      return ret;
-    }
-    auto iter = bl.cbegin();
-    try {
-      decode(xattr_urgent_data_map, iter);
-    } catch (ceph::buffer::error& err) {
-      CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode xattrs urgent data map");
-      return -EINVAL;
-    }
+  ret = get_urgent_data_from_head(hctx, head, urgent_data, xattr_urgent_data_map);
+  if (ret < 0) {
+    return ret;
   }
 
   //has_urgent_data signifies whether urgent data in queue has changed
