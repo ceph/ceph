@@ -99,6 +99,21 @@ void ReplicaMonitor::on_restart()
 // TODO: Clear the pending map
 }
 
+void ReplicaMonitor::check_subs()
+{
+  auto& all_subs = mon.session_map.subs;
+  auto replicamap_subs_it = all_subs.find("replicamap");
+  if (replicamap_subs_it == all_subs.end()) {
+    return;
+  }
+  auto replicamap_sub_it = replicamap_subs_it->second->begin();
+  while (!replicamap_sub_it.end()) {
+    auto replicamap_sub = *replicamap_sub_it;
+    ++replicamap_sub_it;
+    check_sub(replicamap_sub);
+  }
+}
+
 void ReplicaMonitor::check_sub(Subscription *sub)
 {
   // Only support subscribe "replicamap"

@@ -37,6 +37,7 @@ public:
   void on_restart() override;
 
   void check_sub(Subscription *sub);
+  void check_subs();
   void decode_replicadaemon_map(bufferlist &replicadaemon_map_bl);
 private:
   /* The trusted ReplicaDaemonMap is at the ReplicMonitor attached with Leader Monitor */
