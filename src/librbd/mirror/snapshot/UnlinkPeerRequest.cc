@@ -63,7 +63,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
   m_image_ctx->image_lock.lock_shared();
   int r = -ENOENT;
   cls::rbd::MirrorSnapshotNamespace* mirror_ns = nullptr;
-  bool newer_mirror_snapshots = false;
+  m_newer_mirror_snapshots = false;
   for (auto snap_it = m_image_ctx->snap_info.find(m_snap_id);
        snap_it != m_image_ctx->snap_info.end(); ++snap_it) {
     if (snap_it->first == m_snap_id) {
@@ -73,7 +73,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
     } else if (boost::get<cls::rbd::MirrorSnapshotNamespace>(
                  &snap_it->second.snap_namespace) != nullptr) {
       ldout(cct, 20) << "located newer mirror snapshot" << dendl;
-      newer_mirror_snapshots = true;
+      m_newer_mirror_snapshots = true;
       break;
     }
   }
@@ -95,7 +95,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
   // if there is or will be no more peers in the mirror snapshot and we have
   // a more recent mirror snapshot, remove the older one
   if ((mirror_ns->mirror_peer_uuids.count(m_mirror_peer_uuid) == 0) ||
-      (mirror_ns->mirror_peer_uuids.size() == 1U && newer_mirror_snapshots)) {
+      (mirror_ns->mirror_peer_uuids.size() <= 1U && m_newer_mirror_snapshots)) {
     m_image_ctx->image_lock.unlock_shared();
     remove_snapshot();
     return;
@@ -184,15 +184,14 @@ void UnlinkPeerRequest<I>::remove_snapshot() {
   }
 
   auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
-    &snap_namespace);
-  ceph_assert(info);
+    snap_namespace);
 
-  if (info->mirror_peer_uuids.size() > 1 ||
-      info->mirror_peer_uuids.count(m_mirror_peer_uuid) == 0) {
+  info.mirror_peer_uuids.erase(m_mirror_peer_uuid);
+  if (!info.mirror_peer_uuids.empty() || !m_newer_mirror_snapshots) {
     ldout(cct, 20) << "skipping removal of snapshot: "
                    << "snap_id=" << m_snap_id << ": "
                    << "mirror_peer_uuid=" << m_mirror_peer_uuid << ", "
-                   << "mirror_peer_uuids=" << info->mirror_peer_uuids << dendl;
+                   << "mirror_peer_uuids=" << info.mirror_peer_uuids << dendl;
     finish(0);
     return;
   }
