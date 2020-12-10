@@ -370,7 +370,7 @@ void MonMap::print(ostream& out) const
       << " (" << ceph_release_name(min_mon_release) << ")\n";
   out << "election_strategy: " << strategy << "\n";
   if (disallowed_leaders.size()) {
-    out << "disallowed_leaders" << disallowed_leaders << "\n";
+    out << "disallowed_leaders " << disallowed_leaders << "\n";
   }
   unsigned i = 0;
 
