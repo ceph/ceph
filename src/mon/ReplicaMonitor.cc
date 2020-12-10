@@ -129,6 +129,9 @@ bool ReplicaMonitor::preprocess_query(MonOpRequestRef mon_op_req)
   case MSG_REPLICADAEMON_BLINK:
     return preprocess_blink(mon_op_req);
 
+  case CEPH_MSG_MON_GET_REPLICADAEMONMAP:
+    return get_replicadaemon_map(mon_op_req);
+
   default:
     ceph_abort();
     return true;
@@ -224,6 +227,15 @@ bool ReplicaMonitor::should_propose(double& delay)
   }
 
   return PaxosService::should_propose(delay);
+}
+
+bool ReplicaMonitor::get_replicadaemon_map(MonOpRequestRef mon_op_req)
+{
+  ReplicaDaemonMap *replicadaemon_map = &cur_cache_replicadaemon_map;
+  auto reply_msg = make_message<MReplicaDaemonMap>(*replicadaemon_map);
+  mon.send_reply(mon_op_req, reply_msg.detach());
+
+  return true;
 }
 
 void ReplicaMonitor::on_restart()

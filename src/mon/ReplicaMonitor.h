@@ -39,6 +39,8 @@ public:
   bool preprocess_blink(MonOpRequestRef mon_op_req);
   bool preprocess_command(MonOpRequestRef mon_op_req);
   bool should_propose(double& delay) override;
+  bool get_replicadaemon_map(MonOpRequestRef mon_op_req);
+
   void on_restart() override;
 
   void check_sub(Subscription *sub);
