@@ -9,6 +9,7 @@
 
 #include "ReplicaMonitor.h"
 #include "messages/MReplicaDaemonMap.h"
+#include "messages/MReplicaDaemonBlink.h"
 #include "common/cmdparse.h"
 
 using TOPNSPC::common::bad_cmd_get;
@@ -125,6 +126,9 @@ bool ReplicaMonitor::preprocess_query(MonOpRequestRef mon_op_req)
       return true;
     }
 
+  case MSG_REPLICADAEMON_BLINK:
+    return preprocess_blink(mon_op_req);
+
   default:
     ceph_abort();
     return true;
@@ -136,6 +140,23 @@ bool ReplicaMonitor::preprocess_query(MonOpRequestRef mon_op_req)
 bool ReplicaMonitor::prepare_update(MonOpRequestRef mon_op_req)
 {
 // TODO: Must implement pure virtual function
+  return false;
+}
+
+bool ReplicaMonitor::preprocess_blink(MonOpRequestRef mon_op_req)
+{
+  auto session = mon_op_req->get_session();
+  mon.no_reply(mon_op_req);
+  if (!session) {
+    dout(10) << __func__ << "no monitor session!" << dendl;
+    return true;
+  }
+
+  // forward blink to the leader's prepare_beacon
+  if (!is_leader()) {
+    return false;
+  }
+
   return false;
 }
 
