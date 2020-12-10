@@ -7,7 +7,15 @@ from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 
-cimport rados
+from types cimport *
+IF BUILD_DOC:
+    include "mock_cephfs.pxi"
+    cdef class Rados:
+        cdef:
+            rados_t cluster
+ELSE:
+    from c_cephfs cimport *
+    from rados cimport Rados
 
 from collections import namedtuple
 from datetime import datetime
@@ -56,198 +64,6 @@ cdef extern from "Python.h":
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
     void PyEval_InitThreads()
-
-
-cdef extern from "sys/statvfs.h":
-    cdef struct statvfs:
-        unsigned long int f_bsize
-        unsigned long int f_frsize
-        unsigned long int f_blocks
-        unsigned long int f_bfree
-        unsigned long int f_bavail
-        unsigned long int f_files
-        unsigned long int f_ffree
-        unsigned long int f_favail
-        unsigned long int f_fsid
-        unsigned long int f_flag
-        unsigned long int f_namemax
-        unsigned long int f_padding[32]
-
-
-IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
-    cdef extern from "dirent.h":
-        cdef struct dirent:
-            long int d_ino
-            unsigned short int d_reclen
-            unsigned char d_type
-            char d_name[256]
-ELSE:
-    cdef extern from "dirent.h":
-        cdef struct dirent:
-            long int d_ino
-            unsigned long int d_off
-            unsigned short int d_reclen
-            unsigned char d_type
-            char d_name[256]
-
-
-cdef extern from "time.h":
-    ctypedef long int time_t
-
-cdef extern from "time.h":
-    cdef struct timespec:
-        time_t      tv_sec
-        long int    tv_nsec
-
-cdef extern from "<sys/uio.h>":
-    cdef struct iovec:
-        void *iov_base
-        size_t iov_len
-
-cdef extern from "sys/types.h":
-    ctypedef unsigned long mode_t
-    ctypedef unsigned long dev_t
-
-cdef extern from "<utime.h>":
-    cdef struct utimbuf:
-        time_t actime
-        time_t modtime
-
-cdef extern from "sys/time.h":
-    cdef struct timeval:
-        long tv_sec
-        long tv_usec
-
-cdef extern from "cephfs/ceph_ll_client.h":
-    cdef struct statx "ceph_statx":
-        uint32_t    stx_mask
-        uint32_t    stx_blksize
-        uint32_t    stx_nlink
-        uint32_t    stx_uid
-        uint32_t    stx_gid
-        uint16_t    stx_mode
-        uint64_t    stx_ino
-        uint64_t    stx_size
-        uint64_t    stx_blocks
-        uint64_t    stx_dev
-        uint64_t    stx_rdev
-        timespec    stx_atime
-        timespec    stx_ctime
-        timespec    stx_mtime
-        timespec    stx_btime
-        uint64_t    stx_version
-
-cdef extern from "cephfs/libcephfs.h" nogil:
-    cdef struct ceph_mount_info:
-        pass
-
-    cdef struct ceph_dir_result:
-        pass
-
-    ctypedef void* rados_t
-
-    const char *ceph_version(int *major, int *minor, int *patch)
-
-    int ceph_create(ceph_mount_info **cmount, const char * const id)
-    int ceph_create_from_rados(ceph_mount_info **cmount, rados_t cluster)
-    int ceph_init(ceph_mount_info *cmount)
-    void ceph_shutdown(ceph_mount_info *cmount)
-
-    int ceph_getaddrs(ceph_mount_info* cmount, char** addrs)
-    int ceph_conf_read_file(ceph_mount_info *cmount, const char *path_list)
-    int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
-    int ceph_conf_get(ceph_mount_info *cmount, const char *option, char *buf, size_t len)
-    int ceph_conf_set(ceph_mount_info *cmount, const char *option, const char *value)
-
-    int ceph_mount(ceph_mount_info *cmount, const char *root)
-    int ceph_select_filesystem(ceph_mount_info *cmount, const char *fs_name)
-    int ceph_unmount(ceph_mount_info *cmount)
-    int ceph_abort_conn(ceph_mount_info *cmount)
-    uint64_t ceph_get_instance_id(ceph_mount_info *cmount)
-    int ceph_fstatx(ceph_mount_info *cmount, int fd, statx *stx, unsigned want, unsigned flags)
-    int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
-    int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
-
-    int ceph_setattrx(ceph_mount_info *cmount, const char *relpath, statx *stx, int mask, int flags)
-    int ceph_fsetattrx(ceph_mount_info *cmount, int fd, statx *stx, int mask)
-    int ceph_mds_command(ceph_mount_info *cmount, const char *mds_spec, const char **cmd, size_t cmdlen,
-                         const char *inbuf, size_t inbuflen, char **outbuf, size_t *outbuflen,
-                         char **outs, size_t *outslen)
-    int ceph_rename(ceph_mount_info *cmount, const char *from_, const char *to)
-    int ceph_link(ceph_mount_info *cmount, const char *existing, const char *newname)
-    int ceph_unlink(ceph_mount_info *cmount, const char *path)
-    int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname)
-    int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
-    int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
-                      const void *value, size_t size, int flags)
-    int ceph_fsetxattr(ceph_mount_info *cmount, int fd, const char *name,
-                       const void *value, size_t size, int flags)
-    int ceph_lsetxattr(ceph_mount_info *cmount, const char *path, const char *name,
-                       const void *value, size_t size, int flags)
-    int ceph_getxattr(ceph_mount_info *cmount, const char *path, const char *name,
-                      void *value, size_t size)
-    int ceph_fgetxattr(ceph_mount_info *cmount, int fd, const char *name,
-                       void *value, size_t size)
-    int ceph_lgetxattr(ceph_mount_info *cmount, const char *path, const char *name,
-                       void *value, size_t size)
-    int ceph_removexattr(ceph_mount_info *cmount, const char *path, const char *name)
-    int ceph_fremovexattr(ceph_mount_info *cmount, int fd, const char *name)
-    int ceph_lremovexattr(ceph_mount_info *cmount, const char *path, const char *name)
-    int ceph_listxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
-    int ceph_flistxattr(ceph_mount_info *cmount, int fd, char *list, size_t size)
-    int ceph_llistxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
-    int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
-    int ceph_pwritev(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
-    int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
-    int ceph_preadv(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
-    int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
-    int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev)
-    int ceph_close(ceph_mount_info *cmount, int fd)
-    int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode)
-    int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
-    int ceph_mkdirs(ceph_mount_info *cmount, const char *path, mode_t mode)
-    int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
-    int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)
-    void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp)
-    int64_t ceph_telldir(ceph_mount_info *cmount, ceph_dir_result *dirp)
-    void ceph_seekdir(ceph_mount_info *cmount, ceph_dir_result *dirp, int64_t offset)
-    int ceph_chdir(ceph_mount_info *cmount, const char *path)
-    dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp)
-    int ceph_rmdir(ceph_mount_info *cmount, const char *path)
-    const char* ceph_getcwd(ceph_mount_info *cmount)
-    int ceph_sync_fs(ceph_mount_info *cmount)
-    int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
-    int ceph_lazyio(ceph_mount_info *cmount, int fd, int enable)
-    int ceph_lazyio_propagate(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
-    int ceph_lazyio_synchronize(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
-    int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
-    int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
-    int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
-    int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
-    int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
-    int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
-    int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid)
-    int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
-    void ceph_buffer_free(char *buf)
-    mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
-    int ceph_utime(ceph_mount_info *cmount, const char *path, utimbuf *buf)
-    int ceph_futime(ceph_mount_info *cmount, int fd, utimbuf *buf)
-    int ceph_utimes(ceph_mount_info *cmount, const char *path, timeval times[2])
-    int ceph_lutimes(ceph_mount_info *cmount, const char *path, timeval times[2])
-    int ceph_futimes(ceph_mount_info *cmount, int fd, timeval times[2])
-    int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2])
-    int ceph_get_file_replication(ceph_mount_info *cmount, int fh)
-    int ceph_get_path_replication(ceph_mount_info *cmount, const char *path)
-    int ceph_get_pool_id(ceph_mount_info *cmount, const char *pool_name)
-    int ceph_get_pool_replication(ceph_mount_info *cmount, int pool_id)
-    int ceph_debug_get_fd_caps(ceph_mount_info *cmount, int fd)
-    int ceph_debug_get_file_caps(ceph_mount_info *cmount, const char *path)
-    uint32_t ceph_get_cap_return_timeout(ceph_mount_info *cmount)
-    void ceph_set_uuid(ceph_mount_info *cmount, const char *uuid)
-    void ceph_set_session_timeout(ceph_mount_info *cmount, unsigned timeout)
-    int ceph_get_file_layout(ceph_mount_info *cmount, int fh, int *stripe_unit, int *stripe_count, int *object_size, int *pg_pool)
-    int ceph_get_file_pool_name(ceph_mount_info *cmount, int fh, char *buf, size_t buflen)
-    int ceph_get_default_data_pool_name(ceph_mount_info *cmount, char *buf, size_t buflen)
 
 
 class Error(Exception):
@@ -595,7 +411,7 @@ cdef class LibCephFS(object):
         else:
             self.create(conf, conffile, auth_id)
 
-    def create_with_rados(self, rados.Rados rados_inst):
+    def create_with_rados(self, Rados rados_inst):
         cdef int ret
         with nogil:
             ret = ceph_create_from_rados(&self.cluster, rados_inst.cluster)

@@ -1,2 +1,7 @@
 plantweb
 git+https://github.com/readthedocs/readthedocs-sphinx-search@master
+Cython
+src/pybind/rados
+src/pybind/cephfs
+src/pybind/rbd
+src/pybind/rgw
