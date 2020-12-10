@@ -73,8 +73,8 @@ function TEST_check_version_health_1() {
     setup $dir || return 1
 
     # create a cluster with two monitors and three osds
-    run_mon $dir a --public-addr=$CEPH_MON_A --mon_warn_older_version_delay=0.0 || return 1
-    run_mon $dir b --public-addr=$CEPH_MON_B --mon_warn_older_version_delay=0.0 || return 1
+    run_mon $dir a --public-addr=$CEPH_MON_A --mon_warn_older_version_delay=0 || return 1
+    run_mon $dir b --public-addr=$CEPH_MON_B --mon_warn_older_version_delay=0 || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
@@ -119,8 +119,8 @@ function TEST_check_version_health_2() {
     setup $dir || return 1
 
     # create a cluster with all daemon types
-    run_mon $dir a --public-addr=$CEPH_MON_A --mon_warn_older_version_delay=0.0 || return 1
-    run_mon $dir b --public-addr=$CEPH_MON_B --mon_warn_older_version_delay=0.0 || return 1
+    run_mon $dir a --public-addr=$CEPH_MON_A --mon_warn_older_version_delay=0 || return 1
+    run_mon $dir b --public-addr=$CEPH_MON_B --mon_warn_older_version_delay=0 || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
@@ -135,7 +135,7 @@ function TEST_check_version_health_2() {
     ceph health detail | grep DAEMON_OLD_VERSION && return 1
 
     kill_daemons $dir KILL mon.b
-    ceph_debug_version_for_testing=01.00.00-gversion-test run_mon $dir b --mon_warn_older_version_delay=0.0
+    ceph_debug_version_for_testing=01.00.00-gversion-test run_mon $dir b --mon_warn_older_version_delay=0
     # XXX: Manager doesn't seem to use the test specific config for version
     #kill_daemons $dir KILL mgr.x
     #ceph_debug_version_for_testing=02.00.00-gversion-test run_mgr $dir x
