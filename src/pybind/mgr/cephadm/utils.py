@@ -5,7 +5,7 @@ import datetime
 import socket
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING
+from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Any
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -42,7 +42,7 @@ def name_to_config_section(name: str) -> ConfEntity:
 
 def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
     @wraps(f)
-    def forall_hosts_wrapper(*args) -> List[T]:
+    def forall_hosts_wrapper(*args: Any) -> List[T]:
         from cephadm.module import CephadmOrchestrator
 
         # Some weired logic to make calling functions with multiple arguments work.
@@ -54,7 +54,7 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
         else:
             assert 'either f([...]) or self.f([...])'
 
-        def do_work(arg):
+        def do_work(arg: Any) -> T:
             if not isinstance(arg, tuple):
                 arg = (arg, )
             try:
