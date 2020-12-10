@@ -139,7 +139,26 @@ bool ReplicaMonitor::preprocess_query(MonOpRequestRef mon_op_req)
 
 bool ReplicaMonitor::prepare_update(MonOpRequestRef mon_op_req)
 {
-// TODO: Must implement pure virtual function
+  auto replica_msg = mon_op_req->get_req<PaxosServiceMessage>();
+
+  switch (replica_msg->get_type()) {
+  case MSG_MON_COMMAND:
+    try {
+      return prepare_command(mon_op_req);
+    } catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon.reply_command(mon_op_req, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
+
+  case MSG_REPLICADAEMON_BLINK:
+    return prepare_blink(mon_op_req);
+
+  default:
+    mon.no_reply(mon_op_req);
+    derr << "Unhandled message type " << replica_msg->get_type() << dendl;
+    return true;
+  }
   return false;
 }
 
