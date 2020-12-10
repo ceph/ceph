@@ -75,6 +75,8 @@ public:
   XMLObjIter find_first();
   // return the first sub-tags matching the name
   XMLObj *find_first(const std::string& name);
+  // return sub-tag count
+  int count(const string& name);
 
   friend ostream& operator<<(ostream &out, const XMLObj &obj);
   friend RGWXMLParser;

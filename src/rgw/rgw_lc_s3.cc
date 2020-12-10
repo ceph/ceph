@@ -11,6 +11,8 @@
 #include "rgw_user.h"
 #include "rgw_lc_s3.h"
 
+static constexpr uint32_t MAX_TAG_KEY_SIZE=128;
+static constexpr uint32_t MAX_TAG_VAL_SIZE=256;
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -137,6 +139,35 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
    * Empty filters are allowed:
    * https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html
    */
+  if (XMLObj* and_xml = obj->find_first("And"); and_xml) {
+
+    if (obj->find_first("Prefix") || obj->find_first("Tag")) {
+      throw RGWXMLDecoder::err("You must wrap the prefix or the tags in the AND element");
+    }
+    if (obj->count("And") > 1) {
+      throw RGWXMLDecoder::err("Multiple And element found in Filter");
+    }
+
+    if (and_xml->find_first("And")) {
+      throw RGWXMLDecoder::err("An And element cannot contain a nested And element");
+    }
+    if (and_xml->count("Prefix") == 1 && and_xml->count("Tag") == 0) {
+      throw RGWXMLDecoder::err("An And element cannot contain a single Prefix element");
+    }
+    if (and_xml->count("Prefix") > 1) {
+      throw RGWXMLDecoder::err("An And operator may only contain one 'Prefix'");
+    }
+
+  } else if (obj->count("Prefix") > 1) {
+    throw RGWXMLDecoder::err("And Filter connot contain multiple Prefix element");
+  } else if (obj->count("Tag") > 1) {
+    throw RGWXMLDecoder::err("You must wrap multiple tags in the AND element");
+  }
+
+  if (obj->find_first("Prefix") && obj->find_first("Tag")) {
+    throw RGWXMLDecoder::err("You must wrap the prefix or the tags in the AND element");
+  }
+
   XMLObj *o = obj->find_first("And");
   if (o == nullptr){
     o = obj;
@@ -149,6 +180,14 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
     std::string _key,_val;
     RGWXMLDecoder::decode_xml("Key", _key, tag_xml);
     RGWXMLDecoder::decode_xml("Value", _val, tag_xml);
+    // No limit count for LC tags, so check length here instead of using RGWObjTags::check_and_add_tag
+    if (_key.size() > MAX_TAG_KEY_SIZE || _key.size() == 0) {
+      throw RGWXMLDecoder::err("A Tag's Key must be a length between 1 and 128.");
+    } else if (_val.size() > MAX_TAG_VAL_SIZE) {
+      throw RGWXMLDecoder::err("A Tag's Value must be a length between 1 and 256.");
+    } else if (obj_tags.get_tags().find(_key) != obj_tags.get_tags().end()) {
+      throw RGWXMLDecoder::err("Duplicate Tag Keys are not allowed.");
+    }
     obj_tags.emplace_tag(std::move(_key), std::move(_val));
   }
 }
@@ -204,6 +243,10 @@ void LCRule_S3::decode_xml(XMLObj *obj)
   dm_expiration = false;
 
   RGWXMLDecoder::decode_xml("ID", id, obj);
+
+  if (obj->find_first("Filter") && obj->find_first("Prefix")) {
+    throw RGWXMLDecoder::err("Prefix and Filter are both provided which is not allowed");
+  }
 
   LCFilter_S3 filter_s3;
   if (!RGWXMLDecoder::decode_xml("Filter", filter_s3, obj)) {
