@@ -26,7 +26,7 @@ class TemplateEngine:
 
 
 class Jinja2Engine(TemplateEngine):
-    def __init__(self):
+    def __init__(self) -> None:
         self.env = Environment(
             loader=PackageLoader('cephadm', 'templates'),
             autoescape=select_autoescape(['html', 'xml'], default_for_string=False),
@@ -46,7 +46,7 @@ class Jinja2Engine(TemplateEngine):
         except j2_exceptions.TemplateNotFound as e:
             raise TemplateNotFoundError(e.message)
 
-    def render_plain(self, source, context):
+    def render_plain(self, source: str, context: Optional[dict]) -> str:
         try:
             template = self.env.from_string(source)
             if context is None:
@@ -68,7 +68,7 @@ class TemplateMgr:
 
     def render(self, name: str,
                context: Optional[dict] = None,
-               managed_context=True,
+               managed_context: bool = True,
                host: Optional[str] = None) -> str:
         """Render a string from a template with context.
 
