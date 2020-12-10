@@ -32,7 +32,7 @@ void RemoveImageStateRequest<I>::get_object_count() {
   CephContext *cct = m_image_ctx->cct;
 
   auto oid = util::image_state_object_name(m_image_ctx, m_snap_id, 0);
-  ldout(cct, 20) << oid << dendl;
+  ldout(cct, 15) << oid << dendl;
 
   librados::ObjectReadOperation op;
   op.read(0, 0, &m_bl, nullptr);
@@ -48,7 +48,7 @@ void RemoveImageStateRequest<I>::get_object_count() {
 template <typename I>
 void RemoveImageStateRequest<I>::handle_get_object_count(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to read image state object: " << cpp_strerror(r)
@@ -82,7 +82,7 @@ void RemoveImageStateRequest<I>::remove_object() {
 
   auto oid = util::image_state_object_name(m_image_ctx, m_snap_id,
                                            m_object_count);
-  ldout(cct, 20) << oid << dendl;
+  ldout(cct, 15) << oid << dendl;
 
   librados::ObjectWriteOperation op;
   op.remove();
@@ -98,7 +98,7 @@ void RemoveImageStateRequest<I>::remove_object() {
 template <typename I>
 void RemoveImageStateRequest<I>::handle_remove_object(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove image state object: " << cpp_strerror(r)
@@ -118,7 +118,7 @@ void RemoveImageStateRequest<I>::handle_remove_object(int r) {
 template <typename I>
 void RemoveImageStateRequest<I>::finish(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
   delete this;
