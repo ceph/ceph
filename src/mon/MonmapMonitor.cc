@@ -965,8 +965,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     if (!mon->osdmon()->is_readable()) {
       mon->osdmon()->wait_for_readable(op, new Monitor::C_RetryMessage(mon, op));
     }
-    CrushWrapper crush;
-    mon->osdmon()->_get_pending_crush(crush);
     vector<string> argvec;
     map<string, string> loc;
     cmd_getval(g_ceph_context, cmdmap, "args", argvec);
