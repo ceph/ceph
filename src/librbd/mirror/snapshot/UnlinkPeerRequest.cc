@@ -148,7 +148,10 @@ void UnlinkPeerRequest<I>::handle_notify_update(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << "r=" << r << dendl;
 
-  if (r < 0 && r != -ENOENT) {
+  if (r == -ENOENT || r == -ETIMEDOUT) {
+    // non-fatel errors
+    lderr(cct) << "failed to notify update: " << cpp_strerror(r) << dendl;
+  } else if (r < 0) {
     lderr(cct) << "failed to notify update: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
