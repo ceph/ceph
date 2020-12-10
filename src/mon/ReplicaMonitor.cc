@@ -42,7 +42,33 @@ void ReplicaMonitor::create_initial()
 
 void ReplicaMonitor::update_from_paxos(bool *need_bootstrap)
 {
-// TODO: Must implement pure virtual function
+  version_t latest_commit_version = get_last_committed();
+  auto cur_commited_version = cur_cache_replicadaemon_map.get_epoch();
+  ceph_assert(latest_commit_version >= cur_commited_version);
+
+  if (latest_commit_version == cur_commited_version) {
+    return;
+  }
+
+  dout(10) << "lastest commit epoch: " << latest_commit_version
+           << ", ReplicaDaemonMap epoch: " << cur_commited_version << dendl;
+
+  load_health();
+
+  // read ReplicaDaemonMap
+  bufferlist cache_replicadaemon_map_bl;
+  int err = get_version(latest_commit_version, cache_replicadaemon_map_bl);
+  ceph_assert(err == 0);
+
+  ceph_assert(cache_replicadaemon_map_bl.length() > 0);
+  dout(10) << "got " << latest_commit_version << dendl;
+
+  decode_replicadaemon_map(cache_replicadaemon_map_bl);
+
+  // output new ReplicaDaemonMap
+  print_map<10>(cur_cache_replicadaemon_map);
+
+  check_subs();
 }
 
 void ReplicaMonitor::create_pending()
