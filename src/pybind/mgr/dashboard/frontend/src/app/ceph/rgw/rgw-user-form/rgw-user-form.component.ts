@@ -61,6 +61,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     this.subuserLabel = $localize`subuser`;
     this.s3keyLabel = $localize`S3 Key`;
     this.capabilityLabel = $localize`capability`;
+    this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.createForm();
   }
 
@@ -70,7 +72,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       uid: [
         null,
         [Validators.required],
-        [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
+        this.editing ? [] : [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
       ],
       display_name: [null, [Validators.required]],
       email: [
@@ -148,8 +150,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
