@@ -55,7 +55,25 @@ void ReplicaMonitor::create_pending()
 
 void ReplicaMonitor::encode_pending(MonitorDBStore::TransactionRef mon_dbstore_tran)
 {
-// TODO: Must implement pure virtual function
+  version_t version = get_last_committed() + 1;
+
+#if 0
+  if (pending_cache_replicadaemon_map.get_epoch() != version) {
+    derr << "should not update the db, always continue here, need refine" << dendl;
+  }
+  ceph_assert(version == pending_cache_replicadaemon_map.get_epoch());
+#endif
+
+  // apply to paxos
+  bufferlist pending_bl;
+  pending_cache_replicadaemon_map.encode(pending_bl, mon.get_quorum_con_features());
+
+  // clear pending ReplicaDaemonMap after being encoded into pending_bl
+  pending_cache_replicadaemon_map = {};
+
+  // put everything in the transaction
+  put_version(mon_dbstore_tran, version, pending_bl);
+  put_last_committed(mon_dbstore_tran, version);
 }
 
 void ReplicaMonitor::encode_full(MonitorDBStore::TransactionRef mon_dbstore_tran)
