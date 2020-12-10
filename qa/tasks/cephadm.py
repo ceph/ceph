@@ -11,8 +11,9 @@ import json
 import re
 import uuid
 import yaml
-
+from typing import Tuple, List, Dict, Any
 from io import BytesIO, StringIO
+
 import toml
 from tarfile import ReadError
 from tasks.ceph_manager import CephManager
@@ -46,6 +47,31 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
             ] + args,
         **kwargs
     )
+
+def _nodes_daemons_for_role(ctx, cluster_name: str, teuthology_role: str) -> Tuple[List[str], Dict[str, Tuple[Any, str]], Any]:
+    nodes = []
+    daemons = {}
+    _remote = None
+    for remote, roles in ctx.cluster.remotes.items():
+        _remote = remote
+        for role in [r for r in roles
+                    if teuthology.is_type(teuthology_role, cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            nodes.append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    return nodes, daemons, _remote
+
+def orch_apply(ctx, cluster_name, remote, nodes, orch_type):
+    if nodes:
+        placement = str(len(nodes)) + ';' + ';'.join(nodes)
+        log.info('Adding %s %s on %s' % (orch_type, placement, remote.shortname))
+
+        _shell(ctx, cluster_name, remote, [
+            'ceph', 'orch', 'apply', orch_type,
+            '--placement', placement
+            ]
+        )
+
 
 def build_initial_config(ctx, config):
     cluster_name = config['cluster']
@@ -566,22 +592,9 @@ def ceph_mgrs(ctx, config):
     fsid = ctx.ceph[cluster_name].fsid
 
     try:
-        nodes = []
-        daemons = {}
-        for remote, roles in ctx.cluster.remotes.items():
-            for mgr in [r for r in roles
-                        if teuthology.is_type('mgr', cluster_name)(r)]:
-                c_, _, id_ = teuthology.split_role(mgr)
-                if c_ == cluster_name and id_ == ctx.ceph[cluster_name].first_mgr:
-                    continue
-                log.info('Adding %s on %s' % (mgr, remote.shortname))
-                nodes.append(remote.shortname + '=' + id_)
-                daemons[mgr] = (remote, id_)
-        if nodes:
-            _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'apply', 'mgr',
-                str(len(nodes) + 1) + ';' + ';'.join(nodes)]
-            )
+        nodes, daemons, remote = _nodes_daemons_for_role(ctx, cluster_name, 'mgr')
+        orch_apply(ctx, cluster_name, remote, nodes, 'mgr')
+
         for mgr, i in daemons.items():
             remote, id_ = i
             ctx.daemons.register_daemon(
@@ -661,21 +674,9 @@ def ceph_mdss(ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
-    nodes = []
-    daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
-        for role in [r for r in roles
-                    if teuthology.is_type('mds', cluster_name)(r)]:
-            c_, _, id_ = teuthology.split_role(role)
-            log.info('Adding %s on %s' % (role, remote.shortname))
-            nodes.append(remote.shortname + '=' + id_)
-            daemons[role] = (remote, id_)
-    if nodes:
-        _shell(ctx, cluster_name, remote, [
-            'ceph', 'orch', 'apply', 'mds',
-            'all',
-            str(len(nodes)) + ';' + ';'.join(nodes)]
-        )
+    nodes, daemons, remote = _nodes_daemons_for_role(ctx, cluster_name, 'mds')
+    orch_apply(ctx, cluster_name, remote, nodes, 'mds')
+
     for role, i in daemons.items():
         remote, id_ = i
         ctx.daemons.register_daemon(
@@ -697,20 +698,10 @@ def ceph_monitoring(daemon_type, ctx, config):
     cluster_name = config['cluster']
     fsid = ctx.ceph[cluster_name].fsid
 
-    nodes = []
-    daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
-        for role in [r for r in roles
-                    if teuthology.is_type(daemon_type, cluster_name)(r)]:
-            c_, _, id_ = teuthology.split_role(role)
-            log.info('Adding %s on %s' % (role, remote.shortname))
-            nodes.append(remote.shortname + '=' + id_)
-            daemons[role] = (remote, id_)
-    if nodes:
-        _shell(ctx, cluster_name, remote, [
-            'ceph', 'orch', 'apply', daemon_type,
-            str(len(nodes)) + ';' + ';'.join(nodes)]
-        )
+    nodes, daemons, remote = _nodes_daemons_for_role(ctx, cluster_name, daemon_type)
+    orch_apply(ctx, cluster_name, remote, nodes, daemon_type)
+
+
     for role, i in daemons.items():
         remote, id_ = i
         ctx.daemons.register_daemon(
