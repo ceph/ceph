@@ -2247,7 +2247,7 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("issue DAEMON_OLD_VERSION health warning if daemons are not all running the same version"),
 
-    Option("mon_warn_older_version_delay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mon_warn_older_version_delay", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(7_day)
     .add_service("mon")
     .set_description("issue DAEMON_OLD_VERSION health warning after this amount of time has elapsed"),

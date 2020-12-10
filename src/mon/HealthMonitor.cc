@@ -706,12 +706,15 @@ bool HealthMonitor::check_leader_health()
 
 void HealthMonitor::check_for_older_version(health_check_map_t *checks)
 {
-  utime_t now = ceph_clock_now();
-  static utime_t old_version_first_time;
+  static ceph::coarse_mono_time old_version_first_time =
+    ceph::coarse_mono_clock::zero();
 
-  if (old_version_first_time == utime_t())
+  auto now = ceph::coarse_mono_clock::now();
+  if (ceph::coarse_mono_clock::is_zero(old_version_first_time)) {
     old_version_first_time = now;
-  if ((now - old_version_first_time) > g_conf().get_val<double>("mon_warn_older_version_delay")) {
+  }
+  const auto warn_delay = g_conf().get_val<std::chrono::seconds>("mon_warn_older_version_delay");
+  if (now - old_version_first_time > warn_delay) {
     std::map<string, std::list<string> > all_versions;
     mon.get_all_versions(all_versions);
     if (all_versions.size() > 1) {
@@ -747,7 +750,7 @@ void HealthMonitor::check_for_older_version(health_check_map_t *checks)
 	d.detail.push_back(ds.str());
       }
     } else {
-      old_version_first_time = utime_t();
+      old_version_first_time = ceph::coarse_mono_clock::zero();
     }
   }
 }
