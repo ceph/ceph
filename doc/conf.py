@@ -91,10 +91,6 @@ else:
 
 build_with_rtd = os.environ.get('READTHEDOCS') == 'True'
 
-if build_with_rtd:
-    exclude_patterns += ['**/api/*',
-                         '**/api.rst']
-
 sys.path.insert(0, os.path.abspath('_ext'))
 
 extensions = [
@@ -203,10 +199,7 @@ class Mock(object):
 sys.modules['ceph_module'] = Mock()
 
 if build_with_rtd:
-    autodoc_mock_imports = ['cephfs',
-                            'rados',
-                            'rbd',
-                            'ceph']
+    autodoc_mock_imports = ['ceph']
     pybinds = ['pybind/mgr',
                'python-common']
 else:
