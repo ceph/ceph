@@ -1364,6 +1364,10 @@ CEPH_RBD_API int rbd_group_image_list_cleanup(rbd_group_image_info_t *images,
 CEPH_RBD_API int rbd_group_snap_create(rados_ioctx_t group_p,
                                        const char *group_name,
                                        const char *snap_name);
+CEPH_RBD_API int rbd_group_snap_create2(rados_ioctx_t group_p,
+                                        const char *group_name,
+                                        const char *snap_name,
+                                        uint32_t flags);
 CEPH_RBD_API int rbd_group_snap_remove(rados_ioctx_t group_p,
                                        const char *group_name,
                                        const char *snap_name);
