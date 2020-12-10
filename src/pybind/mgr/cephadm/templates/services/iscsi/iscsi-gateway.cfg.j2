@@ -2,12 +2,12 @@
 [config]
 cluster_client_name = {{ client_name }}
 pool = {{ spec.pool }}
-trusted_ip_list = {{ spec.trusted_ip_list|default("''", true) }}
+trusted_ip_list = config://{{ spec.mon_config_prefix }}/trusted_ip_list
 minimum_gateways = 1
-api_port = {{ spec.api_port|default("''", true) }}
-api_user = {{ spec.api_user|default("''", true) }}
-api_password = {{ spec.api_password|default("''", true) }}
-api_secure = {{ spec.api_secure|default('False', true) }}
+api_port = config://{{ spec.mon_config_prefix }}/api_port
+api_user = config://{{ spec.mon_config_prefix }}/api_user
+api_password = config://{{ spec.mon_config_prefix }}/api_password
+api_secure = config://{{ spec.mon_config_prefix }}/api_secure
 log_to_stderr = True
 log_to_stderr_prefix = debug
 log_to_file = False

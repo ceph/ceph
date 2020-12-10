@@ -707,6 +707,7 @@ class IscsiServiceSpec(ServiceSpec):
                  ssl_cert: Optional[str] = None,
                  ssl_key: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
+                 mon_config_prefix: Optional[str] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False
                  ):
@@ -724,6 +725,9 @@ class IscsiServiceSpec(ServiceSpec):
         self.api_secure = api_secure
         self.ssl_cert = ssl_cert
         self.ssl_key = ssl_key
+        self.mon_config_prefix = mon_config_prefix
+        if not self.mon_config_prefix:
+            self.mon_config_prefix = 'iscsi'
 
         if not self.api_secure and self.ssl_cert and self.ssl_key:
             self.api_secure = True
@@ -740,6 +744,14 @@ class IscsiServiceSpec(ServiceSpec):
         if not self.api_password:
             raise ServiceSpecValidationError(
                 'Cannot add ISCSI: No Api password specified')
+        if not self.mon_config_prefix.startswith('iscsi/') and \
+                self.mon_config_prefix != 'iscsi':
+            raise ServiceSpecValidationError(
+                'Cannot add ISCSI: mon_config_prefix must start with iscsi/'
+                ' or just be iscsi')
+        if self.mon_config_prefix.endswith('/'):
+            raise ServiceSpecValidationError(
+                'Connot add ISCSI: mon_config_prefix cannot end in "/"')
 
 
 yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
