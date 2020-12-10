@@ -87,6 +87,7 @@ void ReplicaDaemon::update_state_from_replicadaemon_map(ReplicaDaemonMap& replic
       switch(self_state.daemon_status) {
       case STATE_BOOTING:
         self_state.daemon_status = STATE_ACTIVE;
+        derr << __LINE__ << " change from booting to active" << dendl;
         break;
       default:
         // nothing
@@ -98,6 +99,7 @@ void ReplicaDaemon::update_state_from_replicadaemon_map(ReplicaDaemonMap& replic
       switch(self_state.daemon_status) {
       case STATE_STOPPING:
         self_state.daemon_status = STATE_DOWN;
+        derr << __LINE__ << " change from stopping to down" << dendl;
         break;
       default:
         // nothing
