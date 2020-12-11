@@ -6,9 +6,9 @@
 #include "crimson/common/errorator.h"
 #include "crimson/common/log.h"
 
-struct do_until_test_t : public seastar_test_suite_t {
+struct errorator_test_t : public seastar_test_suite_t {
   using ertr = crimson::errorator<crimson::ct_error::invarg>;
-  ertr::future<> test() {
+  ertr::future<> test_do_until() {
     return crimson::do_until([this] {
       if (i < 5) {
         ++i;
@@ -22,9 +22,9 @@ struct do_until_test_t : public seastar_test_suite_t {
   int i = 0;
 };
 
-TEST_F(do_until_test_t, basic)
+TEST_F(errorator_test_t, basic)
 {
   run_async([this] {
-    test().unsafe_get0();
+    test_do_until().unsafe_get0();
   });
 }
