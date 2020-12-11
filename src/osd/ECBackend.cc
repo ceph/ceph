@@ -297,7 +297,7 @@ struct RecoveryMessages {
   map<pg_shard_t, vector<PushReplyOp> > push_replies;
   ObjectStore::Transaction t;
   RecoveryMessages() {}
-  ~RecoveryMessages(){}
+  ~RecoveryMessages() {}
 };
 
 void ECBackend::handle_recovery_push(
