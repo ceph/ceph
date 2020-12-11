@@ -72,7 +72,7 @@ in a local configuration file.  These options include:
     Ceph cluster.  This overrides the known monitor list derived from MonMap
     updates sent to older Ceph instances (like librados cluster handles).  It is
     expected this option is primarily useful for debugging.
-  - ``mon_dns_serv_name`` (default: `ceph-mon`), the name of the DNS
+  - ``mon_dns_srv_name`` (default: `ceph-mon`), the name of the DNS
     SRV record to check to identify the cluster monitors via DNS
   - ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
     similar options that define which local directory the daemon
@@ -638,4 +638,3 @@ listed as follows:
   all options would be grouped into the section of ``global``. But this is
   discouraged now. Since Octopus, only a single option is allowed for
   configuration files without a section name.
-
