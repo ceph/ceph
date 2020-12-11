@@ -84,7 +84,6 @@ function(build_rocksdb)
     CMAKE_ARGS ${rocksdb_CMAKE_ARGS}
     BINARY_DIR "${rocksdb_BINARY_DIR}"
     BUILD_COMMAND "${make_cmd}"
-    BUILD_ALWAYS TRUE
     BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
     INSTALL_COMMAND "true"
     LIST_SEPARATOR !)
