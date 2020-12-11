@@ -3604,7 +3604,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     filter = decrypt.get();
   }
   if (op_ret < 0) {
-    return ret;
+    return op_ret;
   }
 
   ret = read_op.range_to_ofs(obj_size, new_ofs, new_end);
