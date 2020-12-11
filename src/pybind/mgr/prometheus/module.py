@@ -178,42 +178,56 @@ class Metric(object):
 
 
 class MetricCollectionThread(threading.Thread):
-    def __init__(self):
+    def __init__(self, module):
+        # type: (Module) -> None
+        self.mod = module
+        self.active = True
+        self.event = threading.Event()
         super(MetricCollectionThread, self).__init__(target=self.collect)
 
-    @staticmethod
-    def collect():
-        inst = _global_instance
-        inst.log.info('starting metric collection thread')
-        while True:
-            if inst.have_mon_connection():
+    def collect(self):
+        self.mod.log.info('starting metric collection thread')
+        while self.active:
+            self.mod.log.debug('collecting cache in thread')
+            if self.mod.have_mon_connection():
                 start_time = time.time()
-                data = inst.collect()
+
+                try:
+                    data = self.mod.collect()
+                except:
+                    # Log any issues encountered during the data collection and continue
+                    self.mod.log.exception("failed to collect metrics:")
+                    self.event.wait(self.mod.scrape_interval)
+                    continue
+
                 duration = time.time() - start_time
                 
-                sleep_time = inst.scrape_interval - duration
+                sleep_time = self.mod.scrape_interval - duration
                 if sleep_time < 0:
-                    inst.log.warning(
+                    self.mod.log.warning(
                         'Collecting data took more time than configured scrape interval. '
                         'This possibly results in stale data. Please check the '
                         '`stale_cache_strategy` configuration option. '
                         'Collecting data took {:.2f} seconds but scrape interval is configured '
                         'to be {:.0f} seconds.'.format(
                             duration,
-                            inst.scrape_interval,
+                            self.mod.scrape_interval,
                         )
                     )
                     sleep_time = 0
 
-                with inst.collect_lock:
-                    inst.collect_cache = data
-                    inst.collect_time = duration
+                with self.mod.collect_lock:
+                    self.mod.collect_cache = data
+                    self.mod.collect_time = duration
 
-                time.sleep(sleep_time)
+                self.event.wait(sleep_time)
             else:
-                inst.log.error('No MON connection')
-                time.sleep(inst.scrape_interval)
+                self.mod.log.error('No MON connection')
+                self.event.wait(self.mod.scrape_interval)
 
+    def stop(self):
+        self.active = False
+        self.event.set()
 
 class Module(MgrModule):
     COMMANDS = [
@@ -265,7 +279,7 @@ class Module(MgrModule):
         }
         global _global_instance
         _global_instance = self
-        MetricCollectionThread().start()
+        self.metrics_thread = MetricCollectionThread(_global_instance)
 
     def _setup_static_metrics(self):
         metrics = {}
@@ -520,12 +534,10 @@ class Module(MgrModule):
 
         all_modules = {module.get('name'):module.get('can_run') for module in mgr_map['available_modules']}
 
-        ceph_release = None
         for mgr in all_mgrs:
             host_version = servers.get((mgr, 'mgr'), ('', ''))
             if mgr == active:
                 _state = 1
-                ceph_release = host_version[1].split()[-2] # e.g. nautilus
             else:
                 _state = 0
 
@@ -536,7 +548,7 @@ class Module(MgrModule):
             self.metrics['mgr_status'].set(_state, (
                 'mgr.{}'.format(mgr),
             ))
-        always_on_modules = mgr_map['always_on_modules'].get(ceph_release, [])
+        always_on_modules = mgr_map['always_on_modules'].get(self.release_name, [])
         active_modules = list(always_on_modules)
         active_modules.extend(mgr_map['modules'])
 
@@ -1169,6 +1181,8 @@ class Module(MgrModule):
             (server_addr, server_port)
         )
 
+        self.metrics_thread.start()
+
         # Publish the URI that others may use to access the service we're
         # about to start serving
         self.set_uri('http://{0}:{1}/'.format(
@@ -1188,9 +1202,13 @@ class Module(MgrModule):
         # wait for the shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
+        # tell metrics collection thread to stop collecting new metrics
+        self.metrics_thread.stop()
         cherrypy.engine.stop()
         self.log.info('Engine stopped.')
         self.shutdown_rbd_stats()
+        # wait for the metrics collection thread to stop
+        self.metrics_thread.join()
 
     def shutdown(self):
         self.log.info('Stopping engine...')
