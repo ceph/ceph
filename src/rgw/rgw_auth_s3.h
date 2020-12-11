@@ -419,6 +419,7 @@ public:
 } /* namespace rgw */
 
 void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
   const char *method,
   const char *content_md5,
   const char *content_type,
@@ -428,16 +429,17 @@ void rgw_create_s3_canonical_header(
   const char *request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
-bool rgw_create_s3_canonical_header(const req_info& info,
+bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
+                                    const req_info& info,
                                     utime_t *header_time,       /* out */
                                     std::string& dest,          /* out */
                                     bool qsr);
 static inline std::tuple<bool, std::string, utime_t>
-rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
+rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp, const req_info& info, const bool qsr) {
   std::string dest;
   utime_t header_time;
 
-  const bool ok = rgw_create_s3_canonical_header(info, &header_time, dest, qsr);
+  const bool ok = rgw_create_s3_canonical_header(dpp, info, &header_time, dest, qsr);
   return std::make_tuple(ok, dest, header_time);
 }
 
@@ -463,7 +465,8 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 			 std::string_view& signature,            /* out */
 			 std::string_view& date,                 /* out */
 			 std::string_view& session_token,        /* out */
-			 const bool using_qs);                     /* in */
+			 const bool using_qs,                    /* in  */
+                         const DoutPrefixProvider *dpp);         /* in */
 
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
 {
@@ -593,20 +596,23 @@ get_v4_canon_req_hash(CephContext* cct,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
                       const std::string_view& signed_hdrs,
-                      const std::string_view& request_payload_hash);
+                      const std::string_view& request_payload_hash,
+                      const DoutPrefixProvider *dpp);
 
 AWSEngine::VersionAbstractor::string_to_sign_t
 get_v4_string_to_sign(CephContext* cct,
                       const std::string_view& algorithm,
                       const std::string_view& request_date,
                       const std::string_view& credential_scope,
-                      const sha256_digest_t& canonreq_hash);
+                      const sha256_digest_t& canonreq_hash,
+                      const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v4_signature(const std::string_view& credential_scope,
                  CephContext* const cct,
                  const std::string_view& secret_key,
-                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign,
+                 const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,

@@ -94,7 +94,7 @@ public:
 class RGWPutBucketTags_ObjStore_S3 : public RGWPutBucketTags_ObjStore
 {
 public:
-  int get_params(optional_yield y) override;
+  int get_params(const DoutPrefixProvider *dpp, optional_yield y) override;
   void send_response() override;
 };
 

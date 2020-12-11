@@ -51,7 +51,7 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
   RGWSI_BucketInstance_BE_Handler bi_be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> bi_be_module;
 
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   int do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                    const string& key,
@@ -60,11 +60,13 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
                                    map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info,
                                    boost::optional<obj_version> refresh_version,
-                                   optional_yield y);
+                                   optional_yield y,
+                                   const DoutPrefixProvider *dpp);
 
   int read_bucket_stats(const RGWBucketInfo& bucket_info,
                         RGWBucketEnt *ent,
-                        optional_yield y);
+                        optional_yield y,
+                        const DoutPrefixProvider *dpp);
 
 public:
   struct Svc {
@@ -107,6 +109,7 @@ public:
                                   real_time *pmtime,
                                   map<string, bufferlist> *pattrs,
                                   optional_yield y,
+                                  const DoutPrefixProvider *dpp,
                                   rgw_cache_entry_info *cache_info = nullptr,
                                   boost::optional<obj_version> refresh_version = boost::none) override;
 
@@ -117,12 +120,14 @@ public:
                                    real_time mtime,
                                    map<string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
-                                   optional_yield y) override;
+                                   optional_yield y,
+                                   const DoutPrefixProvider *dpp) override;
 
   int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                     const string& key,
                                     RGWObjVersionTracker *objv_tracker,
-                                    optional_yield y) override;
+                                    optional_yield y,
+                                    const DoutPrefixProvider *dpp) override;
 
   int read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                 const string& key,
@@ -130,6 +135,7 @@ public:
                                 real_time *pmtime,
                                 map<string, bufferlist> *pattrs,
                                 optional_yield y,
+                                const DoutPrefixProvider *dpp,
                                 rgw_cache_entry_info *cache_info = nullptr,
                                 boost::optional<obj_version> refresh_version = boost::none) override;
 
@@ -139,7 +145,8 @@ public:
                        real_time *pmtime,
                        map<string, bufferlist> *pattrs,
                        boost::optional<obj_version> refresh_version,
-                       optional_yield y) override;
+                       optional_yield y,
+                       const DoutPrefixProvider *dpp) override;
 
   int store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                  const string& key,
@@ -149,21 +156,25 @@ public:
                                  bool exclusive,
                                  real_time mtime,
                                  map<string, bufferlist> *pattrs,
-                                 optional_yield y) override;
+                                 optional_yield y,
+                                 const DoutPrefixProvider *dpp) override;
 
   int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                   const string& key,
                                   const RGWBucketInfo& bucket_info,
                                   RGWObjVersionTracker *objv_tracker,
-                                  optional_yield y) override;
+                                  optional_yield y,
+                                  const DoutPrefixProvider *dpp) override;
 
   int read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
                         const rgw_bucket& bucket,
                         RGWBucketEnt *ent,
-                        optional_yield y) override;
+                        optional_yield y,
+                        const DoutPrefixProvider *dpp) override;
 
   int read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
                          map<string, RGWBucketEnt>& m,
-                         optional_yield y) override;
+                         optional_yield y,
+                         const DoutPrefixProvider *dpp) override;
 };
 

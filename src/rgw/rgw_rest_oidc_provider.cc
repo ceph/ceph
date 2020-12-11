@@ -28,7 +28,7 @@ int RGWRestOIDCProvider::verify_permission(optional_yield y)
 
   provider_arn = s->info.args.get("OpenIDConnectProviderArn");
   if (provider_arn.empty()) {
-    ldout(s->cct, 20) << "ERROR: Provider ARN is empty"<< dendl;
+    ldpp_dout(this, 20) << "ERROR: Provider ARN is empty"<< dendl;
     return -EINVAL;
   }
 
@@ -107,7 +107,7 @@ int RGWCreateOIDCProvider::get_params()
   }
 
   if (provider_url.empty() || thumbprints.empty()) {
-    ldout(s->cct, 20) << "ERROR: one of url or thumbprints is empty" << dendl;
+    ldpp_dout(this, 20) << "ERROR: one of url or thumbprints is empty" << dendl;
     return -EINVAL;
   }
 
@@ -123,7 +123,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_url,
                             s->user->get_tenant(), client_ids, thumbprints);
-  op_ret = provider.create(true, y);
+  op_ret = provider.create(s, true, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("CreateOpenIDConnectProviderResponse");
@@ -141,7 +141,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
-  op_ret = provider.delete_obj(y);
+  op_ret = provider.delete_obj(s, y);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -159,7 +159,7 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
-  op_ret = provider.get();
+  op_ret = provider.get(s);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -200,7 +200,7 @@ int RGWListOIDCProviders::verify_permission(optional_yield y)
 void RGWListOIDCProviders::execute(optional_yield y)
 {
   vector<RGWOIDCProvider> result;
-  op_ret = RGWOIDCProvider::get_providers(store->getRados(), s->user->get_tenant(), result);
+  op_ret = RGWOIDCProvider::get_providers(s, store->getRados(), s->user->get_tenant(), result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListOpenIDConnectProvidersResponse");
@@ -212,7 +212,7 @@ void RGWListOIDCProviders::execute(optional_yield y)
     for (const auto& it : result) {
       s->formatter->open_object_section("Arn");
       auto& arn = it.get_arn();
-      ldout(s->cct, 0) << "ARN: " << arn << dendl;
+      ldpp_dout(s, 0) << "ARN: " << arn << dendl;
       s->formatter->dump_string("Arn", arn);
       s->formatter->close_section();
     }

@@ -92,14 +92,14 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     if (uid.tenant.empty()) {
       const rgw_user tenanted_uid(uid.id, uid.id);
 
-      if (ctl->user->get_info_by_uid(tenanted_uid, &uinfo, s->yield) >= 0) {
+      if (ctl->user->get_info_by_uid(dpp, tenanted_uid, &uinfo, s->yield) >= 0) {
         /* Succeeded. */
         bucket_tenant = uinfo.user_id.tenant;
         found = true;
       }
     }
 
-    if (!found && ctl->user->get_info_by_uid(uid, &uinfo, s->yield) < 0) {
+    if (!found && ctl->user->get_info_by_uid(dpp, uid, &uinfo, s->yield) < 0) {
       throw -EPERM;
     } else {
       bucket_tenant = uinfo.user_id.tenant;
@@ -113,7 +113,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;
   RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(s->sysobj_ctx);
-  int ret = ctl->bucket->read_bucket_info(b, &bucket_info, y, RGWBucketCtl::BucketInstance::GetParams().set_bectx_params(bectx_params));
+  int ret = ctl->bucket->read_bucket_info(b, &bucket_info, y, dpp, RGWBucketCtl::BucketInstance::GetParams().set_bectx_params(bectx_params));
   if (ret < 0) {
     throw ret;
   }
@@ -121,7 +121,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket_info.owner
                  << dendl;
 
-  if (ctl->user->get_info_by_uid(bucket_info.owner, &owner_info, s->yield) < 0) {
+  if (ctl->user->get_info_by_uid(dpp, bucket_info.owner, &owner_info, s->yield) < 0) {
     throw -EPERM;
   }
 }
@@ -449,7 +449,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 10) << "swift user=" << swift_user << dendl;
 
   RGWUserInfo tmp_uinfo;
-  ret = ctl->user->get_info_by_swift(swift_user, &tmp_uinfo, s->yield);
+  ret = ctl->user->get_info_by_swift(dpp, swift_user, &tmp_uinfo, s->yield);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user" << dendl;
     throw ret;
@@ -570,7 +570,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   RGWUserInfo user_info;
-  ret = ctl->user->get_info_by_swift(swift_user, &user_info, s->yield);
+  ret = ctl->user->get_info_by_swift(dpp, swift_user, &user_info, s->yield);
   if (ret < 0) {
     throw ret;
   }
@@ -687,7 +687,7 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
 
   user_str = user;
 
-  if ((ret = store->ctl()->user->get_info_by_swift(user_str, &info, s->yield)) < 0)
+  if ((ret = store->ctl()->user->get_info_by_swift(s, user_str, &info, s->yield)) < 0)
   {
     ret = -EACCES;
     goto done;
