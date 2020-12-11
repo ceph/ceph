@@ -75,6 +75,8 @@ popd
 #docker tag $REPO/$IMAGE:$TAG $REPO/$IMAGE:latest
 docker push $REPO/ceph/ceph:latest
 #docker push $REPO/$IMAGE:$TAG
+# With a plain HTTP registry
+#podman push $REPO/ceph/ceph:latest --tls-verify=false
 
 # Finally, bounce the containers to pick up the new image
 kubectl -n $NAMESPACE delete pod -l app=rook-ceph-mds
