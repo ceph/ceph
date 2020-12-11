@@ -616,43 +616,54 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     m_remote_snap_id_end = remote_snap_id;
     m_remote_mirror_snap_ns = *mirror_ns;
   }
-  image_locker.unlock();
 
-  unlink_snap_ids.erase(m_remote_snap_id_start);
-  unlink_snap_ids.erase(m_remote_snap_id_end);
-  if (!unlink_snap_ids.empty()) {
-    locker->unlock();
-
-    // retry the unlinking process for a remote snapshot that we do not
-    // need anymore
-    auto remote_snap_id = *unlink_snap_ids.begin();
-    dout(10) << "unlinking from remote snapshot " << remote_snap_id << dendl;
-    unlink_peer(remote_snap_id);
-    return;
+  if (m_remote_snap_id_start != 0 &&
+      remote_image_ctx->snap_info.count(m_remote_snap_id_start) == 0) {
+    // the remote start snapshot was deleted out from under us
+    derr << "failed to locate remote start snapshot: "
+         << "snap_id=" << m_remote_snap_id_start << dendl;
+    split_brain = true;
   }
 
-  if (m_remote_snap_id_end != CEPH_NOSNAP) {
-    dout(10) << "found remote mirror snapshot: "
-             << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
-             << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
-             << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
-    if (m_remote_mirror_snap_ns.complete) {
+  image_locker.unlock();
+
+  if (!split_brain) {
+    unlink_snap_ids.erase(m_remote_snap_id_start);
+    unlink_snap_ids.erase(m_remote_snap_id_end);
+    if (!unlink_snap_ids.empty()) {
       locker->unlock();
 
-      if (m_local_snap_id_end != CEPH_NOSNAP &&
-          !m_local_mirror_snap_ns.complete) {
-        // attempt to resume image-sync
-        dout(10) << "local image contains in-progress mirror snapshot"
-                 << dendl;
-        get_local_image_state();
-      } else {
-        copy_snapshots();
-      }
+      // retry the unlinking process for a remote snapshot that we do not
+      // need anymore
+      auto remote_snap_id = *unlink_snap_ids.begin();
+      dout(10) << "unlinking from remote snapshot " << remote_snap_id << dendl;
+      unlink_peer(remote_snap_id);
       return;
-    } else {
-      // might have raced with the creation of a remote mirror snapshot
-      // so we will need to refresh and rescan once it completes
-      dout(15) << "remote mirror snapshot not complete" << dendl;
+    }
+
+    if (m_remote_snap_id_end != CEPH_NOSNAP) {
+      dout(10) << "found remote mirror snapshot: "
+               << "remote_snap_id_start=" << m_remote_snap_id_start << ", "
+               << "remote_snap_id_end=" << m_remote_snap_id_end << ", "
+               << "remote_snap_ns=" << m_remote_mirror_snap_ns << dendl;
+      if (m_remote_mirror_snap_ns.complete) {
+        locker->unlock();
+
+        if (m_local_snap_id_end != CEPH_NOSNAP &&
+            !m_local_mirror_snap_ns.complete) {
+          // attempt to resume image-sync
+          dout(10) << "local image contains in-progress mirror snapshot"
+                   << dendl;
+          get_local_image_state();
+        } else {
+          copy_snapshots();
+        }
+        return;
+      } else {
+        // might have raced with the creation of a remote mirror snapshot
+        // so we will need to refresh and rescan once it completes
+        dout(15) << "remote mirror snapshot not complete" << dendl;
+      }
     }
   }
 
