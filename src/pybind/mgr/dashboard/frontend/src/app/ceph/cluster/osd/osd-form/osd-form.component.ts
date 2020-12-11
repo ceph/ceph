@@ -7,7 +7,7 @@ import _ from 'lodash';
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { SubmitButtonComponent } from '~/app/shared/components/submit-button/submit-button.component';
+import { FormButtonPanelComponent } from '~/app/shared/components/form-button-panel/form-button-panel.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -37,8 +37,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
   @ViewChild('dbDeviceSelectionGroups')
   dbDeviceSelectionGroups: OsdDevicesSelectionGroupsComponent;
 
-  @ViewChild('previewButton')
-  previewButton: SubmitButtonComponent;
+  @ViewChild('previewButtonPanel')
+  previewButtonPanel: FormButtonPanelComponent;
 
   icons = Icons;
 
@@ -211,6 +211,6 @@ export class OsdFormComponent extends CdForm implements OnInit {
     modalRef.componentInstance.submitAction.subscribe(() => {
       this.router.navigate(['/osd']);
     });
-    this.previewButton.loading = false;
+    this.previewButtonPanel.submitButton.loading = false;
   }
 }
