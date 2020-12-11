@@ -1230,7 +1230,7 @@ int RGWRados::init_complete()
     for (const auto &pt: zonegroup.placement_targets) {
       if (zone_params.placement_pools.find(pt.second.name)
           == zone_params.placement_pools.end()){
-        ldout(cct, 0) << "WARNING: This zone does not contain the placement target "
+        ldpp_dout(store, 0) << "WARNING: This zone does not contain the placement target "
                       << pt.second.name << " present in zonegroup" << dendl;
       }
     }
@@ -1239,7 +1239,7 @@ int RGWRados::init_complete()
     meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this->store, async_processor);
     ret = meta_sync_processor_thread->init();
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to initialize meta sync thread" << dendl;
+      ldpp_dout(store, 0) << "ERROR: failed to initialize meta sync thread" << dendl;
       return ret;
     }
     meta_sync_processor_thread->start();
@@ -1251,7 +1251,7 @@ int RGWRados::init_complete()
     bucket_trim.emplace(this->store, config);
     ret = bucket_trim->init();
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to start bucket trim manager" << dendl;
+      ldpp_dout(store, 0) << "ERROR: failed to start bucket trim manager" << dendl;
       return ret;
     }
     svc.datalog_rados->set_observer(&*bucket_trim);
@@ -1262,7 +1262,7 @@ int RGWRados::init_complete()
       auto *thread = new RGWDataSyncProcessorThread(this->store, svc.rados->get_async_processor(), source_zone);
       ret = thread->init();
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: failed to initialize data sync thread" << dendl;
+        ldpp_dout(store, 0) << "ERROR: failed to initialize data sync thread" << dendl;
         return ret;
       }
       thread->start();
@@ -1273,7 +1273,7 @@ int RGWRados::init_complete()
       sync_log_trimmer = new RGWSyncLogTrimThread(this->store, &*bucket_trim, interval);
       ret = sync_log_trimmer->init();
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: failed to initialize sync log trim thread" << dendl;
+        ldpp_dout(store, 0) << "ERROR: failed to initialize sync log trim thread" << dendl;
         return ret;
       }
       sync_log_trimmer->start();
@@ -1297,10 +1297,10 @@ int RGWRados::init_complete()
                              zone.bucket_index_max_shards);
   if (bucket_index_max_shards > get_max_bucket_shards()) {
     bucket_index_max_shards = get_max_bucket_shards();
-    ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "
+    ldpp_dout(store, 1) << __func__ << " bucket index max shards is too large, reset to value: "
       << get_max_bucket_shards() << dendl;
   }
-  ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+  ldpp_dout(store, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
 
   bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
 
@@ -1323,9 +1323,9 @@ int RGWRados::init_complete()
   if (ret < 0) {
     return ret;
   }
-  ret = rgw::notify::init(cct, store);
+  ret = rgw::notify::init(cct, store, store);
   if (ret < 0 ) {
-    ldout(cct, 1) << "ERROR: failed to initialize notification manager" << dendl;
+    ldpp_dout(store, 1) << "ERROR: failed to initialize notification manager" << dendl;
   }
 
   return ret;
@@ -1359,13 +1359,13 @@ int RGWRados::initialize()
 
   ret = init_svc(false);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
+    ldpp_dout(store, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
 
   ret = init_ctl();
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to init ctls (ret=" << cpp_strerror(-ret) << ")" << dendl;
+    ldpp_dout(store, 0) << "ERROR: failed to init ctls (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
 

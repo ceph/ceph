@@ -2929,7 +2929,7 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::RGWRadosStore* store,
   }
 
   s->info.args.set(p);
-  s->info.args.parse();
+  s->info.args.parse(s);
 
   /* Skip the leading slash of URL hierarchy. */
   if (req_name[0] != '/') {
@@ -3043,7 +3043,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
   std::string copy_source = s->info.env->get("HTTP_X_COPY_FROM", "");
   if (! copy_source.empty()) {
     rgw_obj_key key;
-    bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, key);
+    bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, key, s);
     if (!result)
       return -ERR_BAD_URL;
     s->src_object = store->get_object(key);
@@ -3060,7 +3060,7 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
     rgw_obj_key dest_obj_key;
     bool result =
       RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name,
-				      dest_obj_key);
+				      dest_obj_key, s);
     if (!result)
        return -ERR_BAD_URL;
 

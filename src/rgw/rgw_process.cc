@@ -229,7 +229,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
     abort_early(s, nullptr, init_error, nullptr, yield);
     goto done;
   }
-  dout(10) << "handler=" << typeid(*handler).name() << dendl;
+  ldpp_dout(s, 10) << "handler=" << typeid(*handler).name() << dendl;
 
   should_log = mgr->get_logging();
 

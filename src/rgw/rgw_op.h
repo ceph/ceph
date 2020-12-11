@@ -1474,7 +1474,8 @@ public:
 
   static bool parse_copy_location(const std::string_view& src,
                                   string& bucket_name,
-                                  rgw_obj_key& object);
+                                  rgw_obj_key& object,
+                                  struct req_state *s);
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl));

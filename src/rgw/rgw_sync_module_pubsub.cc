@@ -49,10 +49,10 @@ config:
 
 // utility function to convert the args list from string format 
 // (ampresend separated with equal sign) to prased structure
-RGWHTTPArgs string_to_args(const std::string& str_args) {
+RGWHTTPArgs string_to_args(const std::string& str_args, const DoutPrefixProvider *dpp) {
   RGWHTTPArgs args;
   args.set(str_args);
-  args.parse();
+  args.parse(dpp);
   return args;
 }
 
@@ -67,7 +67,7 @@ struct PSSubConfig {
   std::string arn_topic;
   RGWPubSubEndpoint::Ptr push_endpoint;
 
-  void from_user_conf(CephContext *cct, const rgw_pubsub_sub_config& uc) {
+  void from_user_conf(CephContext *cct, const rgw_pubsub_sub_config& uc, const DoutPrefixProvider *dpp) {
     name = uc.name;
     topic = uc.topic;
     push_endpoint_name = uc.dest.push_endpoint;
@@ -78,10 +78,10 @@ struct PSSubConfig {
     if (!push_endpoint_name.empty()) {
       push_endpoint_args = uc.dest.push_endpoint_args;
       try {
-        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, arn_topic, string_to_args(push_endpoint_args), cct);
-        ldout(cct, 20) << "push endpoint created: " << push_endpoint->to_str() << dendl;
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, arn_topic, string_to_args(push_endpoint_args, dpp), cct);
+        ldpp_dout(dpp, 20) << "push endpoint created: " << push_endpoint->to_str() << dendl;
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
-          ldout(cct, 1) << "ERROR: failed to create push endpoint: " 
+          ldpp_dout(dpp, 1) << "ERROR: failed to create push endpoint: " 
             << push_endpoint_name << " due to: " << e.what() << dendl;
       }
     }
@@ -700,7 +700,7 @@ public:
                                       env(_env),
                                       sub_conf(std::make_shared<PSSubConfig>()),
                                       data_access(std::make_shared<RGWDataAccess>(sync_env->store)) {
-    sub_conf->from_user_conf(sync_env->cct, user_sub_conf);
+    sub_conf->from_user_conf(sync_env->cct, user_sub_conf, sync_env->dpp);
   }
   virtual ~PSSubscription() {
     if (init_cr) {
