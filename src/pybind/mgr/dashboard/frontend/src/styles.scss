@@ -88,11 +88,13 @@ $grid-breakpoints: (
 }
 
 // Custom badges.
+.badge-background-gray,
 .badge-hdd {
   background-color: $gray-600;
   color: $white;
 }
 
+.badge-background-primary,
 .badge-ssd {
   background-color: $primary;
   color: $white;
