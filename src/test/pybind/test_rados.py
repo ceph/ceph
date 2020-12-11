@@ -5,7 +5,7 @@ from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
-                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData)
+                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData, ExtendMismatch)
 from datetime import timedelta
 import time
 import threading
@@ -597,6 +597,45 @@ class TestIoctx(object):
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "test_obj")
             eq(list(iter), [("4", b"dddd")])
+
+    def test_cmpext_op(self):
+        object_id = 'test'
+        with WriteOpCtx() as write_op:
+            write_op.write(b'12345', 0)
+            self.ioctx.operate_write_op(write_op, object_id)
+        with WriteOpCtx() as write_op:
+            write_op.cmpext(b'12345', 0)
+            write_op.write(b'54321', 0)
+            self.ioctx.operate_write_op(write_op, object_id)
+            eq(self.ioctx.read(object_id), b'54321')
+        with WriteOpCtx() as write_op:
+            write_op.cmpext(b'56789', 0)
+            write_op.write(b'12345', 0)
+            try:
+                self.ioctx.operate_write_op(write_op, object_id)
+            except ExtendMismatch as e:
+                # the cmpext_result compare with expected error number, it should be (-MAX_ERRNO - 1)
+                # where "1" is the offset of the first unmatched byte
+                eq(-e.errno, -MAX_ERRNO - 1)
+                eq(e.offset, 1)
+            else:
+                message = "cmpext did not raise Exception when object content does not match"
+                raise AssertionError(message)
+        with ReadOpCtx() as read_op:
+            read_op.cmpext(b'54321', 0)
+            self.ioctx.operate_read_op(read_op, object_id)
+        with ReadOpCtx() as read_op:
+            read_op.cmpext(b'54789', 0)
+            try:
+                self.ioctx.operate_read_op(read_op, object_id)
+            except ExtendMismatch as e:
+                # the cmpext_result compare with expected error number, it should be (-MAX_ERRNO - 2)
+                # where "2" is the offset of the first unmatched byte
+                eq(-e.errno, -MAX_ERRNO - 2)
+                eq(e.offset, 2)
+            else:
+                message = "cmpext did not raise Exception when object content does not match"
+                raise AssertionError(message)
 
     def test_xattrs_op(self):
         xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
