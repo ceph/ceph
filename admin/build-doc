@@ -62,6 +62,7 @@ if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
 else
     PIP_INSTALL="$vdir/bin/pip install"
 fi
+$PIP_INSTALL --quiet --upgrade pip setuptools
 $PIP_INSTALL --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
 
 install -d -m0755 \
