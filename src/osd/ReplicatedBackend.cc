@@ -1864,7 +1864,7 @@ bool ReplicatedBackend::handle_pull_response(
   interval_set<uint64_t> data_zeros;
   uint64_t z_offset = pop.before_progress.data_recovered_to;
   uint64_t z_length = pop.after_progress.data_recovered_to - pop.before_progress.data_recovered_to;
-  if(z_length)
+  if (z_length)
     data_zeros.insert(z_offset, z_length);
   bool complete = pi.is_complete();
   bool clear_omap = !pop.before_progress.omap_complete;
@@ -1923,7 +1923,7 @@ void ReplicatedBackend::handle_push(
   interval_set<uint64_t> data_zeros;
   uint64_t z_offset = pop.before_progress.data_recovered_to;
   uint64_t z_length = pop.after_progress.data_recovered_to - pop.before_progress.data_recovered_to;
-  if(z_length)
+  if (z_length)
     data_zeros.insert(z_offset, z_length);
   response->soid = pop.recovery_info.soid;
 
@@ -2039,12 +2039,12 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   object_info_t oi;
   if (progress.first) {
     int r = store->omap_get_header(ch, ghobject_t(recovery_info.soid), &out_op->omap_header);
-    if(r < 0) {
-      dout(1) << __func__ << " get omap header failed: " << cpp_strerror(-r) << dendl; 
+    if (r < 0) {
+      dout(1) << __func__ << " get omap header failed: " << cpp_strerror(-r) << dendl;
       return r;
     }
     r = store->getattrs(ch, ghobject_t(recovery_info.soid), out_op->attrset);
-    if(r < 0) {
+    if (r < 0) {
       dout(1) << __func__ << " getattrs failed: " << cpp_strerror(-r) << dendl;
       return r;
     }
