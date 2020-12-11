@@ -29,14 +29,14 @@ protected:
   } start_state{StateInit};
 
   virtual void shutdown() {}
-  virtual int do_start(optional_yield) {
+  virtual int do_start(optional_yield, const DoutPrefixProvider *dpp) {
     return 0;
   }
 public:
   RGWServiceInstance(CephContext *_cct) : cct(_cct) {}
   virtual ~RGWServiceInstance() {}
 
-  int start(optional_yield y);
+  int start(optional_yield y, const DoutPrefixProvider *dpp);
   bool is_started() {
     return (start_state == StateStarted);
   }
@@ -108,7 +108,7 @@ struct RGWServices_Def
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y);
+  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
   void shutdown();
 };
 
@@ -147,14 +147,14 @@ struct RGWServices
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y);
+  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y) {
-    return do_init(cct, have_cache, false, run_sync, y);
+  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, false, run_sync, y, dpp);
   }
 
-  int init_raw(CephContext *cct, bool have_cache, optional_yield y) {
-    return do_init(cct, have_cache, true, false, y);
+  int init_raw(CephContext *cct, bool have_cache, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, true, false, y, dpp);
   }
   void shutdown() {
     _svc.shutdown();
@@ -186,7 +186,7 @@ struct RGWCtlDef {
   RGWCtlDef();
   ~RGWCtlDef();
 
-  int init(RGWServices& svc);
+  int init(RGWServices& svc, const DoutPrefixProvider *dpp);
 };
 
 struct RGWCtl {
@@ -208,7 +208,7 @@ struct RGWCtl {
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
 
-  int init(RGWServices *_svc);
+  int init(RGWServices *_svc, const DoutPrefixProvider *dpp);
 };
 
 #endif

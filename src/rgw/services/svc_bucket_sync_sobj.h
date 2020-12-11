@@ -43,7 +43,7 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
 
   std::unique_ptr<RGWSI_Bucket_Sync_SObj_HintIndexManager> hint_index_mgr;
 
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   struct optional_zone_bucket {
     optional<rgw_zone_id> zone;
@@ -67,19 +67,21 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
                          const std::set<rgw_zone_id>& zone_names,
                          const std::set<rgw_bucket>& buckets,
                          std::set<rgw_sync_bucket_entity> *hint_entities,
-                         optional_yield y);
+                         optional_yield y, const DoutPrefixProvider *);
   int resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
                            rgw_sync_bucket_entity& self_entity,
                            RGWBucketSyncPolicyHandlerRef& handler,
                            RGWBucketSyncPolicyHandlerRef& zone_policy_handler,
                            std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
-                           optional_yield y);
+                           optional_yield y,
+                           const DoutPrefixProvider *dpp);
   int do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                             std::optional<rgw_zone_id> zone,
                             std::optional<rgw_bucket> _bucket,
                             std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                             RGWBucketSyncPolicyHandlerRef *handler,
-                            optional_yield y);
+                            optional_yield y,
+                            const DoutPrefixProvider *dpp);
 public:
   struct Svc {
     RGWSI_Zone *zone{nullptr};
@@ -101,7 +103,8 @@ public:
                          std::optional<rgw_zone_id> zone,
                          std::optional<rgw_bucket> bucket,
                          RGWBucketSyncPolicyHandlerRef *handler,
-                         optional_yield y);
+                         optional_yield y,
+                         const DoutPrefixProvider *dpp);
 
   int handle_bi_update(RGWBucketInfo& bucket_info,
                        RGWBucketInfo *orig_bucket_info,

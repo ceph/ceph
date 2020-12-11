@@ -63,10 +63,11 @@ class RGWSI_User_RADOS : public RGWSI_User
                                RGWUserInfo *info,
                                RGWObjVersionTracker * const objv_tracker,
                                real_time * const pmtime,
-                               optional_yield y);
+                               optional_yield y,
+                               const DoutPrefixProvider *dpp);
 
   int remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
-                       optional_yield y);
+                       optional_yield y, const DoutPrefixProvider *dpp);
 
   int remove_key_index(RGWSI_MetaBackend::Context *ctx, const RGWAccessKey& access_key, optional_yield y);
   int remove_email_index(RGWSI_MetaBackend::Context *ctx, const string& email, optional_yield y);
@@ -93,7 +94,7 @@ class RGWSI_User_RADOS : public RGWSI_User
   int cls_user_get_header(const rgw_user& user, cls_user_header *header, optional_yield y);
   int cls_user_get_header_async(const string& user, RGWGetUserHeader_CB *cb);
 
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 public:
   struct Svc {
     RGWSI_User_RADOS *user{nullptr};
@@ -126,7 +127,8 @@ public:
                      real_time * const pmtime,
                      rgw_cache_entry_info * const cache_info,
                      map<string, bufferlist> * const pattrs,
-                     optional_yield y) override;
+                     optional_yield y,
+                     const DoutPrefixProvider *dpp) override;
 
   int store_user_info(RGWSI_MetaBackend::Context *ctx,
                       const RGWUserInfo& info,
@@ -135,30 +137,35 @@ public:
                       const real_time& mtime,
                       bool exclusive,
                       map<string, bufferlist> *attrs,
-                      optional_yield y) override;
+                      optional_yield y,
+                      const DoutPrefixProvider *dpp) override;
 
   int remove_user_info(RGWSI_MetaBackend::Context *ctx,
                        const RGWUserInfo& info,
                        RGWObjVersionTracker *objv_tracker,
-                       optional_yield y) override;
+                       optional_yield y,
+                       const DoutPrefixProvider *dpp) override;
 
   int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                              const string& email, RGWUserInfo *info,
                              RGWObjVersionTracker *objv_tracker,
                              real_time *pmtime,
-                             optional_yield y) override;
+                             optional_yield y,
+                             const DoutPrefixProvider *dpp) override;
   int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
                              const string& swift_name,
                              RGWUserInfo *info,        /* out */
                              RGWObjVersionTracker * const objv_tracker,
                              real_time * const pmtime,
-                             optional_yield y) override;
+                             optional_yield y,
+                             const DoutPrefixProvider *dpp) override;
   int get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
                                   const std::string& access_key,
                                   RGWUserInfo *info,
                                   RGWObjVersionTracker* objv_tracker,
                                   real_time *pmtime,
-                                  optional_yield y) override;
+                                  optional_yield y,
+                                  const DoutPrefixProvider *dpp) override;
 
   /* user buckets directory */
 

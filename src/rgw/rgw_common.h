@@ -319,9 +319,9 @@ class RGWHTTPArgs {
   bool admin_subresource_added = false;
  public:
   RGWHTTPArgs() = default;
-  explicit RGWHTTPArgs(const std::string& s) {
+  explicit RGWHTTPArgs(const std::string& s, const DoutPrefixProvider *dpp) {
       set(s);
-      parse();
+      parse(dpp);
   }
 
   /** Set the arguments; as received */
@@ -332,7 +332,7 @@ class RGWHTTPArgs {
     str = s;
   }
   /** parse the received arguments */
-  int parse();
+  int parse(const DoutPrefixProvider *dpp);
   void append(const std::string& name, const string& val);
   /** Get the value for a specific argument parameter */
   const string& get(const std::string& name, bool *exists = NULL) const;
@@ -1160,7 +1160,7 @@ struct req_info {
 
   req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
-  void init_meta_info(bool *found_bad_meta);
+  void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta);
 };
 
 typedef cls_rgw_obj_key rgw_obj_index_key;

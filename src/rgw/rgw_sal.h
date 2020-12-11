@@ -66,17 +66,18 @@ enum AttrsMod {
 
 using RGWAttrs = std::map<std::string, ceph::buffer::list>;
 
-class RGWStore : public DoutPrefixProvider {
+class RGWStore {
   public:
     RGWStore() {}
     virtual ~RGWStore() = default;
 
     virtual std::unique_ptr<RGWUser> get_user(const rgw_user& u) = 0;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) = 0;
-    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
+    virtual int get_bucket(const DoutPrefixProvider *dpp, RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) = 0;
-    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string& name, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
-    virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
+    virtual int get_bucket(const DoutPrefixProvider *dpp, RGWUser* u, const std::string& tenant, const std::string& name, std::unique_ptr<RGWBucket>* bucket, optional_yield y) = 0;
+    virtual int create_bucket(const DoutPrefixProvider *dpp, 
+                            RGWUser& u, const rgw_bucket& b,
                             const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
                             std::string& swift_ver_location,
@@ -96,7 +97,7 @@ class RGWStore : public DoutPrefixProvider {
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
 					  bufferlist& in_data, JSONParser *jp, req_info& info,
 					  optional_yield y) = 0;
-    virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
+    virtual int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) = 0;
     virtual const RGWZoneGroup& get_zonegroup() = 0;
     virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) = 0;
@@ -105,7 +106,7 @@ class RGWStore : public DoutPrefixProvider {
     virtual RGWLC* get_rgwlc(void) = 0;
     virtual int delete_raw_obj(const rgw_raw_obj& obj) = 0;
     virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) = 0;
-    virtual int get_raw_chunk_size(const rgw_raw_obj& obj, uint64_t* chunk_size) = 0;
+    virtual int get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) = 0;
 
     virtual void finalize(void)=0;
 
@@ -127,7 +128,8 @@ class RGWUser {
     RGWUser(const RGWUserInfo& _i) : info(_i) {}
     virtual ~RGWUser() = default;
 
-    virtual int list_buckets(const std::string& marker, const std::string& end_marker,
+    virtual int list_buckets(const DoutPrefixProvider *dpp, 
+                             const std::string& marker, const std::string& end_marker,
 			     uint64_t max, bool need_stats, RGWBucketList& buckets,
 			     optional_yield y) = 0;
     virtual RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time) = 0;
@@ -142,7 +144,7 @@ class RGWUser {
     static bool empty(RGWUser* u) { return (!u || u->info.user_id.id.empty()); }
 
     /* Placeholders */
-    virtual int load_by_id(optional_yield y) = 0;
+    virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
     /* dang temporary; will be removed when User is complete */
     rgw_user& get_user() { return info.user_id; }
@@ -213,36 +215,36 @@ class RGWBucket {
       ent(), info(_i), owner(_u), attrs(), bucket_version() { ent.bucket = info.bucket;  ent.placement_rule = info.placement_rule;}
     virtual ~RGWBucket() = default;
 
-    virtual int load_by_name(const std::string& tenant, const std::string& bucket_name, const std::string bucket_instance_id, RGWSysObjectCtx *rctx, optional_yield y) = 0;
+    virtual int load_by_name(const DoutPrefixProvider *dpp, const std::string& tenant, const std::string& bucket_name, const std::string bucket_instance_id, RGWSysObjectCtx *rctx, optional_yield y) = 0;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& key) = 0;
-    virtual int list(ListParams&, int, ListResults&, optional_yield y) = 0;
+    virtual int list(const DoutPrefixProvider *dpp, ListParams&, int, ListResults&, optional_yield y) = 0;
     virtual RGWObject* create_object(const rgw_obj_key& key /* Attributes */) = 0;
     virtual RGWAttrs& get_attrs(void) { return attrs; }
     virtual int set_attrs(RGWAttrs a) { attrs = a; return 0; }
-    virtual int remove_bucket(bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
+    virtual int remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, std::string prefix, std::string delimiter, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
-    virtual int set_acl(RGWAccessControlPolicy& acl, optional_yield y) = 0;
-    virtual int get_bucket_info(optional_yield y) = 0;
+    virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) = 0;
+    virtual int get_bucket_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
 				 std::string *bucket_ver, std::string *master_ver,
 				 std::map<RGWObjCategory, RGWStorageStats>& stats,
 				 std::string *max_marker = nullptr,
 				 bool *syncstopped = nullptr) = 0;
-    virtual int read_bucket_stats(optional_yield y) = 0;
+    virtual int read_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int sync_user_stats(optional_yield y) = 0;
-    virtual int update_container_stats(void) = 0;
-    virtual int check_bucket_shards(void) = 0;
-    virtual int link(RGWUser* new_user, optional_yield y) = 0;
+    virtual int update_container_stats(const DoutPrefixProvider *dpp) = 0;
+    virtual int check_bucket_shards(const DoutPrefixProvider *dpp) = 0;
+    virtual int link(const DoutPrefixProvider *dpp, RGWUser* new_user, optional_yield y) = 0;
     virtual int unlink(RGWUser* new_user, optional_yield y) = 0;
-    virtual int chown(RGWUser* new_user, RGWUser* old_user, optional_yield y) = 0;
-    virtual int put_instance_info(bool exclusive, ceph::real_time mtime) = 0;
+    virtual int chown(RGWUser* new_user, RGWUser* old_user, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    virtual int put_instance_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) = 0;
     virtual bool is_owner(RGWUser* user) = 0;
     virtual RGWUser* get_owner(void) { return owner; };
     virtual ACLOwner get_acl_owner(void) { return ACLOwner(info.owner); };
-    virtual int check_empty(optional_yield y) = 0;
+    virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
-    virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) = 0;
-    virtual int try_refresh_info(ceph::real_time *pmtime) = 0;
+    virtual int set_instance_attrs(const DoutPrefixProvider *dpp, RGWAttrs& attrs, optional_yield y) = 0;
+    virtual int try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime) = 0;
     virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool *is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
@@ -365,11 +367,11 @@ class RGWObject {
 
       virtual ~ReadOp() = default;
 
-      virtual int prepare(optional_yield y) = 0;
-      virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y) = 0;
-      virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) = 0;
-      virtual int get_manifest(RGWObjManifest **pmanifest, optional_yield y) = 0;
-      virtual int get_attr(const char *name, bufferlist& dest, optional_yield y) = 0;
+      virtual int prepare(optional_yield y, const DoutPrefixProvider *dpp) = 0;
+      virtual int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+      virtual int iterate(const DoutPrefixProvider *dpp, int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) = 0;
+      virtual int get_manifest(const DoutPrefixProvider *dpp, RGWObjManifest **pmanifest, optional_yield y) = 0;
+      virtual int get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& dest, optional_yield y) = 0;
     };
 
     struct WriteOp {
@@ -401,7 +403,7 @@ class RGWObject {
       virtual ~WriteOp() = default;
 
       virtual int prepare(optional_yield y) = 0;
-      virtual int write_meta(uint64_t size, uint64_t accounted_size, optional_yield y) = 0;
+      virtual int write_meta(const DoutPrefixProvider *dpp, uint64_t size, uint64_t accounted_size, optional_yield y) = 0;
       //virtual int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive) = 0;
     };
 
@@ -432,7 +434,7 @@ class RGWObject {
 
     virtual int read(off_t offset, off_t length, std::iostream& stream) = 0;
     virtual int write(off_t offset, off_t length, std::iostream& stream) = 0;
-    virtual int delete_object(RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
+    virtual int delete_object(const DoutPrefixProvider *dpp, RGWObjectCtx* obj_ctx, ACLOwner obj_owner,
 			      ACLOwner bucket_owner, ceph::real_time unmod_since,
 			      bool high_precision_time, uint64_t epoch,
 			      std::string& version_id, optional_yield y) = 0;
@@ -459,11 +461,11 @@ class RGWObject {
     bool empty() const { return key.empty(); }
     const std::string &get_name() const { return key.name; }
 
-    virtual int get_obj_state(RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjState **state, optional_yield y, bool follow_olh = false) = 0;
-    virtual int set_obj_attrs(RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL) = 0;
-    virtual int get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, rgw_obj* target_obj = NULL) = 0;
-    virtual int modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y) = 0;
-    virtual int delete_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, optional_yield y) = 0;
+    virtual int get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket& bucket, RGWObjState **state, optional_yield y, bool follow_olh = false) = 0;
+    virtual int set_obj_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWAttrs* setattrs, RGWAttrs* delattrs, optional_yield y, rgw_obj* target_obj = NULL) = 0;
+    virtual int get_obj_attrs(RGWObjectCtx *rctx, optional_yield y, const DoutPrefixProvider *dpp, rgw_obj* target_obj = NULL) = 0;
+    virtual int modify_obj_attrs(RGWObjectCtx *rctx, const char *attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    virtual int delete_obj_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, const char *attr_name, optional_yield y) = 0;
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual bool is_expired() = 0;
     virtual void gen_rand_obj_instance_name() = 0;
@@ -477,7 +479,8 @@ class RGWObject {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider *dpp,
 			   optional_yield y) = 0;
-    virtual int get_max_chunk_size(rgw_placement_rule placement_rule,
+    virtual int get_max_chunk_size(const DoutPrefixProvider *dpp, 
+                                   rgw_placement_rule placement_rule,
 				   uint64_t* max_chunk_size,
 				   uint64_t* alignment = nullptr) = 0;
     virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t *max_size) = 0;

@@ -61,13 +61,13 @@ class RGWSI_Zone : public RGWServiceInstance
 	    RGWSI_RADOS *_rados_svc,
 	    RGWSI_SyncModules *_sync_modules_svc,
 	    RGWSI_Bucket_Sync *_bucket_sync_svc);
-  int do_start(optional_yield y) override;
+  int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int replace_region_with_zonegroup(optional_yield y);
+  int replace_region_with_zonegroup(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_period(bool *initialized, optional_yield y);
-  int init_zg_from_local(bool *creating_defaults, optional_yield y);
-  int convert_regionmap(optional_yield y);
+  int init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating_defaults, optional_yield y);
+  int convert_regionmap(const DoutPrefixProvider *dpp, optional_yield y);
 
   int update_placement_map(optional_yield y);
 public:

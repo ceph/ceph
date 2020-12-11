@@ -57,7 +57,7 @@ int RGWOIDCProvider::get_tenant_url_from_arn(string& tenant, string& url)
   return 0;
 }
 
-int RGWOIDCProvider::create(bool exclusive, optional_yield y)
+int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   int ret;
 
@@ -68,7 +68,7 @@ int RGWOIDCProvider::create(bool exclusive, optional_yield y)
   string idp_url = url_remove_prefix(provider_url);
 
   /* check to see the name is not used */
-  ret = read_url(idp_url, tenant);
+  ret = read_url(dpp, idp_url, tenant);
   if (exclusive && ret == 0) {
     ldout(cct, 0) << "ERROR: url " << provider_url << " already in use"
                     << id << dendl;
@@ -137,7 +137,7 @@ int RGWOIDCProvider::delete_obj(optional_yield y)
   return ret;
 }
 
-int RGWOIDCProvider::get()
+int RGWOIDCProvider::get(const DoutPrefixProvider *dpp)
 {
   string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
@@ -152,7 +152,7 @@ int RGWOIDCProvider::get()
     return -EINVAL;
   }
 
-  ret = read_url(url, tenant);
+  ret = read_url(dpp, url, tenant);
   if (ret < 0) {
     return ret;
   }
@@ -186,7 +186,7 @@ void RGWOIDCProvider::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("OpenIDConnectProviderArn", arn, obj);
 }
 
-int RGWOIDCProvider::read_url(const string& url, const string& tenant)
+int RGWOIDCProvider::read_url(const DoutPrefixProvider *dpp, const string& url, const string& tenant)
 {
   auto svc = ctl->svc;
   auto& pool = svc->zone->get_zone_params().oidc_pool;
@@ -194,7 +194,7 @@ int RGWOIDCProvider::read_url(const string& url, const string& tenant)
   bufferlist bl;
   auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, null_yield, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -243,7 +243,7 @@ bool RGWOIDCProvider::validate_input()
   return true;
 }
 
-int RGWOIDCProvider::get_providers(RGWRados *store,
+int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *store,
                                     const string& tenant,
                                     vector<RGWOIDCProvider>& providers)
 {
@@ -269,7 +269,7 @@ int RGWOIDCProvider::get_providers(RGWRados *store,
       bufferlist bl;
       auto obj_ctx = svc->sysobj->init_obj_ctx();
 
-      int ret = rgw_get_system_obj(obj_ctx, pool, iter, bl, NULL, NULL, null_yield);
+      int ret = rgw_get_system_obj(obj_ctx, pool, iter, bl, NULL, NULL, null_yield, dpp);
       if (ret < 0) {
         return ret;
       }

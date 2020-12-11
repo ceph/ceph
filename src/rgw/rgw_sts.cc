@@ -276,14 +276,15 @@ int AssumeRoleRequest::validate_input() const
   return AssumeRoleRequestBase::validate_input();
 }
 
-std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn,
+std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp, 
+                                                 const string& arn,
 						 optional_yield y)
 {
   if (auto r_arn = rgw::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
     RGWRole role(cct, store->getRados()->pctl, roleName, r_arn->account);
-    if (int ret = role.get(y); ret < 0) {
+    if (int ret = role.get(dpp, y); ret < 0) {
       if (ret == -ENOENT) {
         ldout(cct, 0) << "Role doesn't exist: " << roleName << dendl;
         ret = -ERR_NO_ROLE_FOUND;
@@ -311,18 +312,18 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn,
   }
 }
 
-int STSService::storeARN(string& arn, optional_yield y)
+int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y)
 {
   int ret = 0;
   RGWUserInfo info;
-  if (ret = rgw_get_user_info_by_uid(store->ctl()->user, user_id, info, y); ret < 0) {
+  if (ret = rgw_get_user_info_by_uid(dpp, store->ctl()->user, user_id, info, y); ret < 0) {
     return -ERR_NO_SUCH_ENTITY;
   }
 
   info.assumed_role_arn = arn;
 
   RGWObjVersionTracker objv_tracker;
-  if (ret = rgw_store_user_info(store->ctl()->user, info, &info, &objv_tracker, real_time(),
+  if (ret = rgw_store_user_info(dpp, store->ctl()->user, info, &info, &objv_tracker, real_time(),
 				false, y); ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
@@ -392,7 +393,8 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRo
   return response;
 }
 
-AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req,
+AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp, 
+                                          AssumeRoleRequest& req,
 					  optional_yield y)
 {
   AssumeRoleResponse response;
@@ -439,7 +441,7 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req,
 
   //Save ARN with the user
   string arn = response.user.getARN();
-  response.retCode = storeARN(arn, y);
+  response.retCode = storeARN(dpp, arn, y);
   if (response.retCode < 0) {
     return response;
   }

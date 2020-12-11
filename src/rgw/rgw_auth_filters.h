@@ -182,13 +182,13 @@ void ThirdPartyAccountApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, 
     if (acct_user_override.tenant.empty()) {
       const rgw_user tenanted_uid(acct_user_override.id, acct_user_override.id);
 
-      if (ctl->user->get_info_by_uid(tenanted_uid, &user_info, null_yield) >= 0) {
+      if (ctl->user->get_info_by_uid(dpp, tenanted_uid, &user_info, null_yield) >= 0) {
         /* Succeeded. */
         return;
       }
     }
 
-    const int ret = ctl->user->get_info_by_uid(acct_user_override, &user_info, null_yield);
+    const int ret = ctl->user->get_info_by_uid(dpp, acct_user_override, &user_info, null_yield);
     if (ret < 0) {
       /* We aren't trying to recover from ENOENT here. It's supposed that creating
        * someone else's account isn't a thing we want to support in this filter. */
@@ -258,7 +258,7 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
        * reasons. rgw_get_user_info_by_uid doesn't trigger the operator=() but
        * calls ::decode instead. */
       RGWUserInfo euser_info;
-      if (ctl->user->get_info_by_uid(effective_uid, &euser_info, null_yield) < 0) {
+      if (ctl->user->get_info_by_uid(dpp, effective_uid, &euser_info, null_yield) < 0) {
         //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
         throw -EACCES;
       }

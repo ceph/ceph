@@ -229,14 +229,14 @@ class STSService {
   rgw_user user_id;
   RGWRole role;
   rgw::auth::Identity* identity;
-  int storeARN(string& arn, optional_yield y);
+  int storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y);
 public:
   STSService() = default;
   STSService(CephContext* cct, rgw::sal::RGWRadosStore *store, rgw_user user_id,
 	     rgw::auth::Identity* identity)
     : cct(cct), store(store), user_id(user_id), identity(identity) {}
-  std::tuple<int, RGWRole> getRoleInfo(const string& arn, optional_yield y);
-  AssumeRoleResponse assumeRole(AssumeRoleRequest& req, optional_yield y);
+  std::tuple<int, RGWRole> getRoleInfo(const DoutPrefixProvider *dpp, const string& arn, optional_yield y);
+  AssumeRoleResponse assumeRole(const DoutPrefixProvider *dpp, AssumeRoleRequest& req, optional_yield y);
   GetSessionTokenResponse getSessionToken(GetSessionTokenRequest& req);
   AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req);
 };

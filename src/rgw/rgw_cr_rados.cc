@@ -581,9 +581,9 @@ int RGWAsyncGetBucketInstanceInfo::_send_request()
   int r;
   if (!bucket.bucket_id.empty()) {
     RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
-    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, &attrs, null_yield);
+    r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, &attrs, null_yield, dpp);
   } else {
-    r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield,
+    r = store->ctl()->bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp,
                                                RGWBucketCtl::BucketInstance::GetParams().set_attrs(&attrs));
   }
   if (r < 0) {
@@ -738,7 +738,7 @@ int RGWAsyncRemoveObj::_send_request()
 
   RGWObjState *state;
 
-  int ret = store->getRados()->get_obj_state(&obj_ctx, bucket_info, obj, &state, null_yield);
+  int ret = store->getRados()->get_obj_state(dpp, &obj_ctx, bucket_info, obj, &state, null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
@@ -783,7 +783,7 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.high_precision_time = true;
   del_op.params.zones_trace = &zones_trace;
 
-  ret = del_op.delete_obj(null_yield);
+  ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }
