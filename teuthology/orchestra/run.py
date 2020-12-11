@@ -90,7 +90,7 @@ class RemoteProcess(object):
         Execute remote command
         """
         for line in self.command.split('\n'):
-            log.getChild(self.hostname).info('%s> %s' % (self.label or '', line))
+            log.getChild(self.hostname).debug('%s> %s' % (self.label or '', line))
 
         if hasattr(self, 'timeout'):
             (self._stdin_buf, self._stdout_buf, self._stderr_buf) = \
@@ -114,7 +114,7 @@ class RemoteProcess(object):
             # FIXME: Is this actually true?
             raise RuntimeError(self.deadlock_warning % 'stdin')
 
-    def setup_output_stream(self, stream_obj, stream_name):
+    def setup_output_stream(self, stream_obj, stream_name, quiet=False):
         if stream_obj is not PIPE:
             # Log the stream
             host_log = self.logger.getChild(self.hostname)
@@ -125,6 +125,7 @@ class RemoteProcess(object):
                     getattr(self, stream_name),
                     stream_log,
                     stream_obj,
+                    quiet,
                 )
             )
             setattr(self, stream_name, stream_obj)
@@ -258,7 +259,7 @@ def quote(args):
         return args
 
 
-def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):
+def copy_to_log(f, logger, loglevel=logging.INFO, capture=None, quiet=False):
     """
     Copy line by line from file in f to the log from logger
 
@@ -266,6 +267,8 @@ def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):
     :param logger: the destination logger object
     :param loglevel: the level of logging data
     :param capture: an optional stream object for data copy
+    :param quiet: suppress `logger` usage if True, this is useful only
+                  in combination with `capture`, defaults False
     """
     # Work-around for http://tracker.ceph.com/issues/8313
     if isinstance(f, ChannelFile):
@@ -284,6 +287,8 @@ def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):
                     capture.write(line)
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
+        if quiet:
+            continue
         try:
             if isinstance(line, bytes):
                 line = line.decode('utf-8', 'replace')
@@ -305,15 +310,17 @@ def copy_and_close(src, fdst):
     fdst.close()
 
 
-def copy_file_to(src, logger, stream=None):
+def copy_file_to(src, logger, stream=None, quiet=False):
     """
     Copy file
     :param src: file to be copied.
     :param logger: the logger object
-    :param stream: an optional file-like object which will receive a copy of
-                   src.
+    :param stream: an optional file-like object which will receive
+                   a copy of src.
+    :param quiet: disable logger usage if True, useful in combination
+                  with `stream` parameter, defaults False.
     """
-    copy_to_log(src, logger, capture=stream)
+    copy_to_log(src, logger, capture=stream, quiet=quiet)
 
 def spawn_asyncresult(fn, *args, **kwargs):
     """
@@ -384,6 +391,7 @@ def run(
     wait=True,
     name=None,
     label=None,
+    quiet=False,
     timeout=None,
     cwd=None,
     # omit_sudo is used by vstart_runner.py
@@ -417,6 +425,7 @@ def run(
     :param name: Human readable name (probably hostname) of the destination
                  host
     :param label: Can be used to label or describe what the command is doing.
+    :param quiet: Do not log command's stdout and stderr, defaults False.
     :param timeout: timeout value for args to complete on remote channel of
                     paramiko
     :param cwd: Directory in which the command should be executed.
@@ -440,8 +449,8 @@ def run(
                       cwd=cwd)
     r.execute()
     r.setup_stdin(stdin)
-    r.setup_output_stream(stderr, 'stderr')
-    r.setup_output_stream(stdout, 'stdout')
+    r.setup_output_stream(stderr, 'stderr', quiet)
+    r.setup_output_stream(stdout, 'stdout', quiet)
     if wait:
         r.wait()
     return r
