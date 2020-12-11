@@ -57,8 +57,8 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
-extern int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, optional_yield y);
-extern int rgw_user_get_all_buckets_stats(
+extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, const rgw_user& user_id, optional_yield y);
+extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   rgw::sal::RGWRadosStore *store,const rgw_user& user_id,
   map<string, cls_user_bucket_entry>& buckets_usage_map, optional_yield y);
 
@@ -71,7 +71,8 @@ extern void rgw_get_anon_user(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWUserCtl *user_ctl,
+extern int rgw_store_user_info(const DoutPrefixProvider *dpp, 
+                               RGWUserCtl *user_ctl,
                                RGWUserInfo& info,
                                RGWUserInfo *old_info,
                                RGWObjVersionTracker *objv_tracker,
@@ -84,7 +85,8 @@ extern int rgw_store_user_info(RGWUserCtl *user_ctl,
  * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
+extern int rgw_get_user_info_by_uid(const DoutPrefixProvider *dpp, 
+                                    RGWUserCtl *user_ctl,
                                     const rgw_user& user_id,
                                     RGWUserInfo& info,
 				    optional_yield y,
@@ -96,7 +98,8 @@ extern int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(RGWUserCtl *user_ctl,
+extern int rgw_get_user_info_by_email(const DoutPrefixProvider *dpp, 
+                                      RGWUserCtl *user_ctl,
                                       string& email, RGWUserInfo& info,
 				      optional_yield y,
                                       RGWObjVersionTracker *objv_tracker = NULL,
@@ -105,7 +108,8 @@ extern int rgw_get_user_info_by_email(RGWUserCtl *user_ctl,
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
+extern int rgw_get_user_info_by_swift(const DoutPrefixProvider *dpp, 
+                                      RGWUserCtl *user_ctl,
                                       const string& swift_name,
                                       RGWUserInfo& info,        /* out */
 				      optional_yield y,
@@ -115,7 +119,8 @@ extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
+extern int rgw_get_user_info_by_access_key(const DoutPrefixProvider *dpp, 
+                                           RGWUserCtl *user_ctl,
                                            const std::string& access_key,
                                            RGWUserInfo& info,
 					   optional_yield y,
@@ -589,7 +594,8 @@ class RGWAccessKeyPool
 
 private:
   int create_key(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
-  int generate_key(RGWUserAdminOpState& op_state, optional_yield y,
+  int generate_key(const DoutPrefixProvider *dpp, 
+                   RGWUserAdminOpState& op_state, optional_yield y,
 		   std::string *err_msg = NULL);
   int modify_key(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
 
@@ -598,16 +604,18 @@ private:
   int check_op(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
 
   /* API Contract Fulfilment */
-  int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg,
+  int execute_add(const DoutPrefixProvider *dpp, 
+                  RGWUserAdminOpState& op_state, std::string *err_msg,
 		  bool defer_save, optional_yield y);
-  int execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
+  int execute_remove(const DoutPrefixProvider *dpp, 
+                     RGWUserAdminOpState& op_state, std::string *err_msg,
 		     bool defer_save, optional_yield y);
-  int remove_subuser_keys(RGWUserAdminOpState& op_state, std::string *err_msg,
+  int remove_subuser_keys(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 			  bool defer_save, optional_yield y);
 
-  int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
+  int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
 	  optional_yield y);
-  int remove(RGWUserAdminOpState& op_state, std::string *err_msg,
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 	     bool defer_save, optional_yield y);
 public:
   explicit RGWAccessKeyPool(RGWUser* usr);
@@ -615,9 +623,9 @@ public:
   int init(RGWUserAdminOpState& op_state);
 
   /* API Contracted Methods */
-  int add(RGWUserAdminOpState& op_state, optional_yield y,
+  int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
 	  std::string *err_msg = NULL);
-  int remove(RGWUserAdminOpState& op_state, optional_yield y,
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
 	     std::string *err_msg = NULL);
 
   friend class RGWUser;
@@ -639,14 +647,14 @@ private:
   int check_op(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
 
   /* API Contract Fulfillment */
-  int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
-  int execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
-  int execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
+  int execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
+  int execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
+  int execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
 
-  int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
+  int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
 	  optional_yield y);
-  int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
-  int modify(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg, bool defer_save);
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save, optional_yield y);
+  int modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg, bool defer_save);
 public:
   explicit RGWSubUserPool(RGWUser *user);
 
@@ -654,10 +662,10 @@ public:
   int init(RGWUserAdminOpState& op_state);
 
   /* API contracted methods */
-  int add(RGWUserAdminOpState& op_state, optional_yield y,
+  int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
 	  std::string *err_msg = NULL);
-  int remove(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
-  int modify(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
   friend class RGWUser;
 };
@@ -669,9 +677,9 @@ class RGWUserCapPool
   RGWUser *user{nullptr};
 
 private:
-  int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
+  int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
 	  optional_yield y);
-  int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save,
 	     optional_yield y);
 
 public:
@@ -680,9 +688,9 @@ public:
   int init(RGWUserAdminOpState& op_state);
 
   /* API contracted methods */
-  int add(RGWUserAdminOpState& op_state, optional_yield y,
+  int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y,
 	  std::string *err_msg = NULL);
-  int remove(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
   friend class RGWUser;
 };
@@ -703,27 +711,27 @@ private:
   bool is_populated() { return info_stored; }
 
   int check_op(RGWUserAdminOpState&  req, std::string *err_msg);
-  int update(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
+  int update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
 
   void clear_members();
   void init_default();
 
   /* API Contract Fulfillment */
-  int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg,
+  int execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 		  optional_yield y);
-  int execute_remove(RGWUserAdminOpState& op_state,
+  int execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state,
                     std::string *err_msg, optional_yield y);
-  int execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
-  int execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
+  int execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
+  int execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
 
 public:
   RGWUser();
 
-  int init(rgw::sal::RGWRadosStore *storage, RGWUserAdminOpState& op_state,
+  int init(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *storage, RGWUserAdminOpState& op_state,
 	   optional_yield y);
 
   int init_storage(rgw::sal::RGWRadosStore *storage);
-  int init(RGWUserAdminOpState& op_state, optional_yield y);
+  int init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y);
   int init_members(RGWUserAdminOpState& op_state);
 
   rgw::sal::RGWRadosStore *get_store() { return store; }
@@ -735,19 +743,19 @@ public:
   RGWSubUserPool subusers;
 
   /* API Contracted Methods */
-  int add(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
-  int remove(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
-  int rename(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   /* remove an already populated RGWUser */
   int remove(std::string *err_msg = NULL);
 
-  int modify(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
   /* retrieve info from an existing user in the RGW system */
-  int info(RGWUserAdminOpState& op_state, RGWUserInfo& fetched_info, optional_yield y,
+  int info(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, RGWUserInfo& fetched_info, optional_yield y,
 	   std::string *err_msg = NULL);
 
   /* info from an already populated RGWUser */
@@ -769,33 +777,38 @@ public:
   static int list(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int info(rgw::sal::RGWRadosStore *store,
+  static int info(const DoutPrefixProvider *dpp, 
+                  rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		  optional_yield y);
 
-  static int create(rgw::sal::RGWRadosStore *store,
+  static int create(const DoutPrefixProvider *dpp, 
+                    rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
-  static int modify(rgw::sal::RGWRadosStore *store,
+  static int modify(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
 
-  static int remove(rgw::sal::RGWRadosStore *store,
+  static int remove(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
 };
 
 class RGWUserAdminOp_Subuser
 {
 public:
-  static int create(rgw::sal::RGWRadosStore *store,
+  static int create(const DoutPrefixProvider *dpp, 
+                    rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
-  static int modify(rgw::sal::RGWRadosStore *store,
+  static int modify(const DoutPrefixProvider *dpp, 
+                    rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
-  static int remove(rgw::sal::RGWRadosStore *store,
+  static int remove(const DoutPrefixProvider *dpp, 
+                    rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 };
@@ -803,11 +816,12 @@ public:
 class RGWUserAdminOp_Key
 {
 public:
-  static int create(rgw::sal::RGWRadosStore *store,
+  static int create(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 
-  static int remove(rgw::sal::RGWRadosStore *store,
+  static int remove(const DoutPrefixProvider *dpp, 
+                    rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 };
@@ -815,11 +829,13 @@ public:
 class RGWUserAdminOp_Caps
 {
 public:
-  static int add(rgw::sal::RGWRadosStore *store,
+  static int add(const DoutPrefixProvider *dpp, 
+                 rgw::sal::RGWRadosStore *store,
 		 RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		 optional_yield y);
 
-  static int remove(rgw::sal::RGWRadosStore *store,
+  static int remove(const DoutPrefixProvider *dpp, 
+                    rgw::sal::RGWRadosStore *store,
 		    RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
 		    optional_yield y);
 };
@@ -963,23 +979,30 @@ public:
     }
   };
 
-  int get_info_by_uid(const rgw_user& uid, RGWUserInfo *info,
+  int get_info_by_uid(const DoutPrefixProvider *dpp, 
+                      const rgw_user& uid, RGWUserInfo *info,
                       optional_yield y, const GetParams& params = {});
-  int get_info_by_email(const string& email, RGWUserInfo *info,
+  int get_info_by_email(const DoutPrefixProvider *dpp, 
+                        const string& email, RGWUserInfo *info,
                         optional_yield y, const GetParams& params = {});
-  int get_info_by_swift(const string& swift_name, RGWUserInfo *info,
+  int get_info_by_swift(const DoutPrefixProvider *dpp, 
+                        const string& swift_name, RGWUserInfo *info,
                         optional_yield y, const GetParams& params = {});
-  int get_info_by_access_key(const string& access_key, RGWUserInfo *info,
+  int get_info_by_access_key(const DoutPrefixProvider *dpp, 
+                             const string& access_key, RGWUserInfo *info,
                              optional_yield y, const GetParams& params = {});
 
-  int get_attrs_by_uid(const rgw_user& user_id,
+  int get_attrs_by_uid(const DoutPrefixProvider *dpp, 
+                       const rgw_user& user_id,
                        map<string, bufferlist> *attrs,
                        optional_yield y,
                        RGWObjVersionTracker *objv_tracker = nullptr);
 
-  int store_info(const RGWUserInfo& info, optional_yield y,
+  int store_info(const DoutPrefixProvider *dpp, 
+                 const RGWUserInfo& info, optional_yield y,
                  const PutParams& params = {});
-  int remove_info(const RGWUserInfo& info, optional_yield y,
+  int remove_info(const DoutPrefixProvider *dpp, 
+                  const RGWUserInfo& info, optional_yield y,
                   const RemoveParams& params = {});
 
   int add_bucket(const rgw_user& user,
@@ -988,7 +1011,8 @@ public:
 		 optional_yield y);
   int remove_bucket(const rgw_user& user,
                     const rgw_bucket& bucket, optional_yield y);
-  int list_buckets(const rgw_user& user,
+  int list_buckets(const DoutPrefixProvider *dpp, 
+                   const rgw_user& user,
                    const string& marker,
                    const string& end_marker,
                    uint64_t max,

@@ -1084,9 +1084,10 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
   string raw_key;
   bufferlist bl;
+  const DoutPrefixProvider *dpp;
 protected:
   int _send_request() override {
-    int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, RGWMDLogSyncType::APPLY_ALWAYS, true);
+    int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, dpp, RGWMDLogSyncType::APPLY_ALWAYS, true);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1096,8 +1097,9 @@ protected:
 public:
   RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                        const string& _raw_key,
-                       bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                          raw_key(_raw_key), bl(_bl) {}
+                       bufferlist& _bl,
+                       const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                          raw_key(_raw_key), bl(_bl), dpp(dpp) {}
 };
 
 
@@ -1123,7 +1125,7 @@ public:
 
   int send_request() override {
     req = new RGWAsyncMetaStoreEntry(this, stack->create_completion_notifier(),
-			           sync_env->store, raw_key, bl);
+			           sync_env->store, raw_key, bl, sync_env->dpp);
     sync_env->async_rados->queue(req);
     return 0;
   }
@@ -1136,9 +1138,10 @@ public:
 class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
   string raw_key;
+  const DoutPrefixProvider *dpp;
 protected:
   int _send_request() override {
-    int ret = store->ctl()->meta.mgr->remove(raw_key, null_yield);
+    int ret = store->ctl()->meta.mgr->remove(raw_key, null_yield, dpp);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1147,8 +1150,8 @@ protected:
   }
 public:
   RGWAsyncMetaRemoveEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
-                       const string& _raw_key) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                          raw_key(_raw_key) {}
+                       const string& _raw_key, const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                          raw_key(_raw_key), dpp(dpp) {}
 };
 
 
@@ -1172,7 +1175,7 @@ public:
 
   int send_request() override {
     req = new RGWAsyncMetaRemoveEntry(this, stack->create_completion_notifier(),
-			           sync_env->store, raw_key);
+			           sync_env->store, raw_key, sync_env->dpp);
     sync_env->async_rados->queue(req);
     return 0;
   }

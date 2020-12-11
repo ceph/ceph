@@ -2025,7 +2025,7 @@ class RGWUserPermHandler {
     int operate() override {
       auto user_ctl = sync_env->store->getRados()->ctl.user;
 
-      ret = user_ctl->get_info_by_uid(uid, &info->user_info, null_yield);
+      ret = user_ctl->get_info_by_uid(sync_env->dpp, uid, &info->user_info, null_yield);
       if (ret < 0) {
         return ret;
       }
@@ -2038,7 +2038,7 @@ class RGWUserPermHandler {
 
       map<string, bufferlist> uattrs;
 
-      ret = user_ctl->get_attrs_by_uid(uid, &uattrs, null_yield);
+      ret = user_ctl->get_attrs_by_uid(sync_env->dpp, uid, &uattrs, null_yield);
       if (ret == 0) {
         ret = RGWUserPermHandler::policy_from_attrs(sync_env->cct, uattrs, &info->user_acl);
       }
@@ -2463,7 +2463,7 @@ RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncCtx *sc, rgw_bu
                                                       real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   auto sync_env = sc->env;
-  return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
+  return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->store, sc->source_zone,
                             sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             NULL, NULL, false, &mtime, zones_trace);
 }
@@ -2472,7 +2472,7 @@ RGWCoroutine *RGWDefaultDataSyncModule::create_delete_marker(RGWDataSyncCtx *sc,
                                                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   auto sync_env = sc->env;
-  return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
+  return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->store, sc->source_zone,
                             sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
@@ -2516,7 +2516,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_buck
      (sync_pipe.dest_bucket_info.flags & BUCKET_VERSIONS_SUSPENDED)) {
       ldout(sc->cct, 0) << "SYNC_ARCHIVE: sync_object: enabling object versioning for archive bucket" << dendl;
       sync_pipe.dest_bucket_info.flags = (sync_pipe.dest_bucket_info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
-      int op_ret = sync_env->store->getRados()->put_bucket_instance_info(sync_pipe.dest_bucket_info, false, real_time(), NULL);
+      int op_ret = sync_env->store->getRados()->put_bucket_instance_info(sync_pipe.dest_bucket_info, false, real_time(), NULL, sync_env->dpp);
       if (op_ret < 0) {
          ldout(sc->cct, 0) << "SYNC_ARCHIVE: sync_object: error versioning archive bucket" << dendl;
          return NULL;
@@ -2549,7 +2549,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::create_delete_marker(RGWDataSyncCtx *sc,
   ldout(sc->cct, 0) << "SYNC_ARCHIVE: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
 	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
   auto sync_env = sc->env;
-  return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sc->source_zone,
+  return new RGWRemoveObjCR(sync_env->dpp, sync_env->async_rados, sync_env->store, sc->source_zone,
                             sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
@@ -4429,7 +4429,7 @@ public:
 int RGWSyncGetBucketInfoCR::operate()
 {
   reenter(this) {
-    yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bucket, pbucket_info, pattrs));
+    yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bucket, pbucket_info, pattrs, sync_env->dpp));
     if (retcode == -ENOENT) {
       /* bucket instance info has not been synced in yet, fetch it now */
       yield {
@@ -4450,7 +4450,7 @@ int RGWSyncGetBucketInfoCR::operate()
         return set_cr_error(retcode);
       }
 
-      yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bucket, pbucket_info, pattrs));
+      yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bucket, pbucket_info, pattrs, sync_env->dpp));
     }
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{bucket}));
@@ -4547,7 +4547,8 @@ public:
         yield call(new RGWBucketGetSyncPolicyHandlerCR(sync_env->async_rados,
                                                        sync_env->store,
                                                        get_policy_params,
-                                                       policy));
+                                                       policy,
+                                                       sync_env->dpp));
         if (retcode < 0 &&
             retcode != -ENOENT) {
           return set_cr_error(retcode);
@@ -5035,7 +5036,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp,
   if (!psource_bucket_info) {
     auto& bucket_ctl = store->getRados()->ctl.bucket;
 
-    int ret = bucket_ctl->read_bucket_info(source_bucket, &source_bucket_info, null_yield);
+    int ret = bucket_ctl->read_bucket_info(source_bucket, &source_bucket_info, null_yield, dpp);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info: bucket=" << source_bucket << ": " << cpp_strerror(-ret) << dendl;
       return ret;

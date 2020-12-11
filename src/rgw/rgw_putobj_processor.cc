@@ -158,7 +158,7 @@ RadosWriter::~RadosWriter()
   if (need_to_remove_head) {
     std::string version_id;
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = head_obj->delete_object(&obj_ctx, ACLOwner(), bucket->get_acl_owner(), ceph::real_time(),
+    int r = head_obj->delete_object(dpp, &obj_ctx, ACLOwner(), bucket->get_acl_owner(), ceph::real_time(),
 				    false, 0, version_id, null_yield);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
@@ -179,7 +179,7 @@ int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
 
   uint64_t chunk_size = 0;
-  r = store->get_raw_chunk_size(stripe_obj, &chunk_size);
+  r = store->get_raw_chunk_size(dpp, stripe_obj, &chunk_size);
   if (r < 0) {
     return r;
   }
@@ -210,7 +210,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t chunk_size = 0;
   uint64_t alignment;
 
-  int r = head_obj->get_max_chunk_size(bucket->get_placement_rule(),
+  int r = head_obj->get_max_chunk_size(dpp, bucket->get_placement_rule(),
 				       &max_head_chunk_size, &alignment);
   if (r < 0) {
     return r;
@@ -220,7 +220,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   if (bucket->get_placement_rule() != tail_placement_rule) {
     if (!head_obj->placement_rules_match(bucket->get_placement_rule(), tail_placement_rule)) {
       same_pool = false;
-      r = head_obj->get_max_chunk_size(tail_placement_rule, &chunk_size);
+      r = head_obj->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size);
       if (r < 0) {
         return r;
       }
@@ -313,7 +313,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  r = obj_op->write_meta(actual_size, accounted_size, y);
+  r = obj_op->write_meta(dpp, actual_size, accounted_size, y);
   if (r < 0) {
     return r;
   }
@@ -362,7 +362,7 @@ int MultipartObjectProcessor::prepare_head()
   uint64_t stripe_size;
   uint64_t alignment;
 
-  int r = target_obj->get_max_chunk_size(tail_placement_rule, &chunk_size, &alignment);
+  int r = target_obj->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size, &alignment);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
     return r;
@@ -440,7 +440,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  r = obj_op->write_meta(actual_size, accounted_size, y);
+  r = obj_op->write_meta(dpp, actual_size, accounted_size, y);
   if (r < 0)
     return r;
 
@@ -504,7 +504,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::D
 int AppendObjectProcessor::prepare(optional_yield y)
 {
   RGWObjState *astate;
-  int r = head_obj->get_obj_state(&obj_ctx, *bucket, &astate, y);
+  int r = head_obj->get_obj_state(dpp, &obj_ctx, *bucket, &astate, y);
   if (r < 0) {
     return r;
   }
@@ -571,7 +571,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
 
   uint64_t chunk_size = 0;
-  r = store->get_raw_chunk_size(stripe_obj, &chunk_size);
+  r = store->get_raw_chunk_size(dpp, stripe_obj, &chunk_size);
   if (r < 0) {
     return r;
   }
@@ -654,7 +654,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   if (r < 0) {
     return r;
   }
-  r = obj_op->write_meta(actual_size + cur_size, accounted_size + *cur_accounted_size, y);
+  r = obj_op->write_meta(dpp, actual_size + cur_size, accounted_size + *cur_accounted_size, y);
   if (r < 0) {
     return r;
   }

@@ -101,10 +101,12 @@ void RGWRealmReloader::reload()
     reload_scheduled = nullptr;
   }
 
+  const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
+
   while (!store) {
     // recreate and initialize a new store
     store =
-      RGWStoreManager::get_storage(cct,
+      RGWStoreManager::get_storage(&dp, cct,
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
 				   cct->_conf->rgw_enable_quota_threads,

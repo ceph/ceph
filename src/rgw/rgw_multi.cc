@@ -200,7 +200,8 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
 			      next_marker, truncated, assume_unsorted);
 }
 
-int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
+int abort_multipart_upload(const DoutPrefixProvider *dpp,
+                           rgw::sal::RGWRadosStore *store, CephContext *cct,
 			   RGWObjectCtx *obj_ctx, RGWBucketInfo& bucket_info,
 			   RGWMPObj& mp_obj)
 {
@@ -235,7 +236,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
         string oid = mp_obj.get_part(obj_iter->second.num);
         obj.init_ns(bucket_info.bucket, oid, RGW_OBJ_NS_MULTIPART);
         obj.index_hash_source = mp_obj.get_key();
-        ret = store->getRados()->delete_obj(*obj_ctx, bucket_info, obj, 0);
+        ret = store->getRados()->delete_obj(dpp, *obj_ctx, bucket_info, obj, 0);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
@@ -278,7 +279,7 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   del_op.params.parts_accounted_size = parts_accounted_size;
 
   // and also remove the metadata obj
-  ret = del_op.delete_obj(null_yield);
+  ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
@@ -286,7 +287,8 @@ int abort_multipart_upload(rgw::sal::RGWRadosStore *store, CephContext *cct,
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 
-int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
+int list_bucket_multiparts(const DoutPrefixProvider *dpp, 
+                           rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
 			   const string& prefix, const string& marker,
 			   const string& delim,
 			   const int& max_uploads,
@@ -303,11 +305,12 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
 
-  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield));
+  return(list_op.list_objects(dpp, max_uploads, objs, common_prefixes, is_truncated, null_yield));
 }
 
-int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RGWBucketInfo& bucket_info,
-				string& prefix, string& delim)
+int abort_bucket_multiparts(const DoutPrefixProvider *dpp, 
+                            rgw::sal::RGWRadosStore *store, CephContext *cct, 
+                            RGWBucketInfo& bucket_info, string& prefix, string& delim)
 {
   constexpr int max = 1000;
   int ret, num_deleted = 0;
@@ -317,7 +320,7 @@ int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RG
   bool is_truncated;
 
   do {
-    ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
+    ret = list_bucket_multiparts(dpp, store, bucket_info, prefix, marker, delim,
 				 max, &objs, nullptr, &is_truncated);
     if (ret < 0) {
       ldout(store->ctx(), 0) << __func__ <<
@@ -337,7 +340,7 @@ int abort_bucket_multiparts(rgw::sal::RGWRadosStore *store, CephContext *cct, RG
         rgw_obj_key key(obj.key);
         if (!mp.from_meta(key.name))
           continue;
-        ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
+        ret = abort_multipart_upload(dpp, store, cct, &obj_ctx, bucket_info, mp);
         if (ret < 0) {
 	  // we're doing a best-effort; if something cannot be found,
 	  // log it and keep moving forward

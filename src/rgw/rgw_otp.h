@@ -103,6 +103,7 @@ public:
   };
 
   int read_all(const rgw_user& uid, RGWOTPInfo *info, optional_yield y,
+               const DoutPrefixProvider *dpp,
                const GetParams& params = {});
   int store_all(const RGWOTPInfo& info, optional_yield y,
                 const PutParams& params = {});

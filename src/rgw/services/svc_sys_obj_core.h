@@ -119,11 +119,13 @@ protected:
   int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
                                 const rgw_raw_obj& obj, RGWSysObjState **state,
                                 RGWObjVersionTracker *objv_tracker,
-                                optional_yield y);
+                                optional_yield y,
+                                const DoutPrefixProvider *dpp);
   int get_system_obj_state(RGWSysObjectCtxBase *rctx, const rgw_raw_obj& obj,
                            RGWSysObjState **state,
                            RGWObjVersionTracker *objv_tracker,
-                           optional_yield y);
+                           optional_yield y,
+                           const DoutPrefixProvider *dpp);
 
   int stat(RGWSysObjectCtxBase& obj_ctx,
            RGWSI_SysObj_Obj_GetObjState& state,
@@ -133,7 +135,8 @@ protected:
            real_time *lastmod,
            uint64_t *obj_size,
            RGWObjVersionTracker *objv_tracker,
-           optional_yield y);
+           optional_yield y,
+           const DoutPrefixProvider *dpp);
 
 public:
   RGWSI_SysObj_Core(CephContext *cct): RGWServiceInstance(cct) {}

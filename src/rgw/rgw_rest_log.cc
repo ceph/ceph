@@ -119,7 +119,7 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute(optional_yield y) {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = store->svc()->mdlog->read_oldest_log_period(y);
+  period = store->svc()->mdlog->read_oldest_log_period(y, s);
   op_ret = period.get_error();
 }
 
@@ -383,7 +383,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
 
   if (!bucket_instance.empty()) {
     rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
-    op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
+    op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield, s);
     if (op_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
@@ -476,7 +476,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   if (!bucket_instance.empty()) {
     rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
-    op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
+    op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield, s);
     if (op_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
@@ -540,7 +540,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
 
   if (!bucket_instance.empty()) {
     rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
-    op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
+    op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield, s);
     if (op_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
@@ -839,7 +839,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
   // read the bucket instance info for num_shards
   auto ctx = store->svc()->sysobj->init_obj_ctx();
   RGWBucketInfo info;
-  op_ret = store->getRados()->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr, s->yield);
+  op_ret = store->getRados()->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr, s->yield, s);
   if (op_ret < 0) {
     ldpp_dout(s, 4) << "failed to read bucket info: " << cpp_strerror(op_ret) << dendl;
     return;
@@ -880,7 +880,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
   rgw_zone_id source_zone_id(source_zone);
 
   RGWBucketSyncPolicyHandlerRef source_handler;
-  op_ret = store->ctl()->bucket->get_sync_policy_handler(source_zone_id, source_bucket, &source_handler, y);
+  op_ret = store->ctl()->bucket->get_sync_policy_handler(source_zone_id, source_bucket, &source_handler, y, s);
   if (op_ret < 0) {
     lderr(s->cct) << "could not get bucket sync policy handler (r=" << op_ret << ")" << dendl;
     return;
@@ -912,6 +912,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
       op_ret = store->ctl()->bucket->read_bucket_info(*pipe.dest.bucket,
                                                         pinfo,
                                                         s->yield,
+                                                        s,
                                                         RGWBucketCtl::BucketInstance::GetParams(),
                                                         nullptr);
       if (op_ret < 0) {

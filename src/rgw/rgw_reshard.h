@@ -85,13 +85,15 @@ private:
   static const std::initializer_list<uint16_t> reshard_primes;
 
   int create_new_bucket_instance(int new_num_shards,
-				 RGWBucketInfo& new_bucket_info);
+				 RGWBucketInfo& new_bucket_info,
+                                 const DoutPrefixProvider *dpp);
   int do_reshard(int num_shards,
 		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
                  bool verbose,
                  ostream *os,
-		 Formatter *formatter);
+		 Formatter *formatter,
+                 const DoutPrefixProvider *dpp);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
@@ -101,6 +103,7 @@ public:
                    const std::map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
+              const DoutPrefixProvider *dpp,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
@@ -202,7 +205,7 @@ private:
 
     void get_logshard_oid(int shard_num, string *shard);
 protected:
-  class ReshardWorker : public Thread {
+  class ReshardWorker : public Thread, public DoutPrefixProvider {
     CephContext *cct;
     RGWReshard *reshard;
     ceph::mutex lock = ceph::make_mutex("ReshardWorker");
@@ -212,11 +215,14 @@ protected:
     ReshardWorker(CephContext * const _cct,
 		  RGWReshard * const _reshard)
       : cct(_cct),
-        reshard(_reshard) {
-    }
+        reshard(_reshard) {}
 
     void *entry() override;
     void stop();
+
+    CephContext *get_cct() const override;
+    unsigned get_subsys() const;
+    std::ostream& gen_prefix(std::ostream& out) const;
   };
 
   ReshardWorker *worker = nullptr;
@@ -235,8 +241,8 @@ public:
   int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
-  int process_single_logshard(int logshard_num);
-  int process_all_logshards();
+  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp);
+  int process_all_logshards(const DoutPrefixProvider *dpp);
   bool going_down();
   void start_processor();
   void stop_processor();

@@ -169,7 +169,7 @@ void RGWPSAckSubEventOp::execute(optional_yield y) {
   }
   ps.emplace(store, s->owner.get_id().tenant);
   auto sub = ps->get_sub_with_events(sub_name);
-  op_ret = sub->remove_event(event_id);
+  op_ret = sub->remove_event(s, event_id);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
@@ -189,7 +189,7 @@ void RGWPSPullSubEventsOp::execute(optional_yield y) {
     ldout(s->cct, 1) << "failed to get subscription '" << sub_name << "' for events, ret=" << op_ret << dendl;
     return;
   }
-  op_ret = sub->list_events(marker, max_entries);
+  op_ret = sub->list_events(s, marker, max_entries);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get events from subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;

@@ -176,11 +176,13 @@ class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
 
   P params;
   std::shared_ptr<R> result;
+  const DoutPrefixProvider *dpp;
 
   class Request : public RGWAsyncRadosRequest {
     rgw::sal::RGWRadosStore *store;
     P params;
     std::shared_ptr<R> result;
+    const DoutPrefixProvider *dpp;
   protected:
     int _send_request() override;
   public:
@@ -188,21 +190,25 @@ class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
             RGWAioCompletionNotifier *cn,
             rgw::sal::RGWRadosStore *_store,
             const P& _params,
-            std::shared_ptr<R>& _result) : RGWAsyncRadosRequest(caller, cn),
+            std::shared_ptr<R>& _result,
+            const DoutPrefixProvider *_dpp) : RGWAsyncRadosRequest(caller, cn),
                                            store(_store),
                                            params(_params),
-                                           result(_result) {}
+                                           result(_result),
+                                           dpp(_dpp) {}
   } *req{nullptr};
 
  public:
   RGWSimpleAsyncCR(RGWAsyncRadosProcessor *_async_rados,
                    rgw::sal::RGWRadosStore *_store,
                    const P& _params,
-                   std::shared_ptr<R>& _result) : RGWSimpleCoroutine(_store->ctx()),
+                   std::shared_ptr<R>& _result,
+                   const DoutPrefixProvider *_dpp) : RGWSimpleCoroutine(_store->ctx()),
                                                   async_rados(_async_rados),
                                                   store(_store),
                                                   params(_params),
-                                                  result(_result) {}
+                                                  result(_result),
+                                                  dpp(_dpp) {}
 
   ~RGWSimpleAsyncCR() override {
     request_cleanup();
@@ -219,7 +225,8 @@ class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
                       stack->create_completion_notifier(),
                       store,
                       params,
-                      result);
+                      result,
+                      dpp);
 
     async_rados->queue(req);
     return 0;
@@ -821,13 +828,15 @@ public:
 class RGWAsyncGetBucketInstanceInfo : public RGWAsyncRadosRequest {
   rgw::sal::RGWRadosStore *store;
   rgw_bucket bucket;
+  const DoutPrefixProvider *dpp;
 
 protected:
   int _send_request() override;
 public:
   RGWAsyncGetBucketInstanceInfo(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
-                                rgw::sal::RGWRadosStore *_store, const rgw_bucket& bucket)
-    : RGWAsyncRadosRequest(caller, cn), store(_store), bucket(bucket) {}
+                                rgw::sal::RGWRadosStore *_store, const rgw_bucket& bucket,
+                                const DoutPrefixProvider *dpp)
+    : RGWAsyncRadosRequest(caller, cn), store(_store), bucket(bucket), dpp(dpp) {}
 
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
@@ -839,6 +848,7 @@ class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
   rgw_bucket bucket;
   RGWBucketInfo *bucket_info;
   map<string, bufferlist> *pattrs;
+  const DoutPrefixProvider *dpp;
 
   RGWAsyncGetBucketInstanceInfo *req{nullptr};
   
@@ -846,9 +856,9 @@ public:
   // rgw_bucket constructor
   RGWGetBucketInstanceInfoCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
                              const rgw_bucket& _bucket, RGWBucketInfo *_bucket_info,
-                             map<string, bufferlist> *_pattrs)
+                             map<string, bufferlist> *_pattrs, const DoutPrefixProvider *dpp)
     : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-      bucket(_bucket), bucket_info(_bucket_info), pattrs(_pattrs) {}
+      bucket(_bucket), bucket_info(_bucket_info), pattrs(_pattrs), dpp(dpp) {}
   ~RGWGetBucketInstanceInfoCR() override {
     request_cleanup();
   }
@@ -860,7 +870,7 @@ public:
   }
 
   int send_request() override {
-    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, bucket);
+    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, bucket, dpp);
     async_rados->queue(req);
     return 0;
   }
@@ -1127,6 +1137,7 @@ public:
 };
 
 class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *store;
   rgw_zone_id source_zone;
 
@@ -1146,7 +1157,8 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
 protected:
   int _send_request() override;
 public:
-  RGWAsyncRemoveObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
+  RGWAsyncRemoveObj(const DoutPrefixProvider *_dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, 
+                         rgw::sal::RGWRadosStore *_store,
                          const rgw_zone_id& _source_zone,
                          RGWBucketInfo& _bucket_info,
                          const rgw_obj_key& _key,
@@ -1157,7 +1169,7 @@ public:
                          bool _delete_marker,
                          bool _if_older,
                          real_time& _timestamp,
-                         rgw_zone_set* _zones_trace) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                         rgw_zone_set* _zones_trace) : RGWAsyncRadosRequest(caller, cn), dpp(_dpp), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
                                                       key(_key),
@@ -1178,6 +1190,7 @@ public:
 };
 
 class RGWRemoveObjCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
   CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
   rgw::sal::RGWRadosStore *store;
@@ -1200,7 +1213,7 @@ class RGWRemoveObjCR : public RGWSimpleCoroutine {
   rgw_zone_set *zones_trace;
 
 public:
-  RGWRemoveObjCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
+  RGWRemoveObjCR(const DoutPrefixProvider *_dpp, RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
                       const rgw_zone_id& _source_zone,
                       RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
@@ -1210,7 +1223,7 @@ public:
                       string *_owner_display_name,
                       bool _delete_marker,
                       real_time *_timestamp,
-                      rgw_zone_set *_zones_trace) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                      rgw_zone_set *_zones_trace) : RGWSimpleCoroutine(_store->ctx()), dpp(_dpp), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
@@ -1243,7 +1256,7 @@ public:
   }
 
   int send_request() override {
-    req = new RGWAsyncRemoveObj(this, stack->create_completion_notifier(), store, source_zone, bucket_info,
+    req = new RGWAsyncRemoveObj(dpp, this, stack->create_completion_notifier(), store, source_zone, bucket_info,
                                 key, owner, owner_display_name, versioned, versioned_epoch,
                                 delete_marker, del_if_older, timestamp, zones_trace);
     async_rados->queue(req);

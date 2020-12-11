@@ -74,7 +74,8 @@ class StrategyRegistry;
 }
 }
 
-int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
+int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
+                                       CephContext *cct,
 				       rgw::sal::RGWStore *store,
                                        RGWBucketInfo& bucket_info,
                                        map<string, bufferlist>& bucket_attrs,
@@ -86,7 +87,7 @@ protected:
   rgw::sal::RGWRadosStore* store{nullptr};
   struct req_state *s{nullptr};
 
-  int do_init_permissions(optional_yield y);
+  int do_init_permissions(const DoutPrefixProvider *dpp, optional_yield y);
   int do_read_permissions(RGWOp* op, bool only_bucket, optional_yield y);
 
 public:
@@ -1475,7 +1476,8 @@ public:
 
   static bool parse_copy_location(const std::string_view& src,
                                   string& bucket_name,
-                                  rgw_obj_key& object);
+                                  rgw_obj_key& object,
+                                  struct req_state *s);
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
     attrs.emplace(std::move(key), std::move(bl));
@@ -1945,8 +1947,8 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y);
-extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
+extern int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y);
+extern int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, struct req_state *s,
 				     bool prefetch_data, optional_yield y);
 extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
@@ -2013,7 +2015,8 @@ static inline void format_xattr(std::string &xattr)
  * On failure returns a negative error code.
  *
  */
-inline int rgw_get_request_metadata(CephContext* const cct,
+inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp, 
+                                    CephContext* const cct,
 				    struct req_info& info,
 				    std::map<std::string, ceph::bufferlist>& attrs,
 				    const bool allow_empty_attrs = true)
@@ -2031,10 +2034,10 @@ inline int rgw_get_request_metadata(CephContext* const cct,
     std::string& xattr = kv.second;
 
     if (blocklisted_headers.count(name) == 1) {
-      lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
+      ldpp_dout(dpp, 10) << "skipping x>> " << name << dendl;
       continue;
     } else if (allow_empty_attrs || !xattr.empty()) {
-      lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
+      ldpp_dout(dpp, 10) << "x>> " << name << ":" << xattr << dendl;
       format_xattr(xattr);
 
       std::string attr_name(RGW_ATTR_PREFIX);

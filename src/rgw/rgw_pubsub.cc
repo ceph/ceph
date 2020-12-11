@@ -841,7 +841,7 @@ void RGWPubSub::SubWithEvents<EventType>::list_events_result::dump(Formatter *f)
 }
 
 template<typename EventType>
-int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int max_events)
+int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *dpp, const string& marker, int max_events)
 {
   RGWRados *store = ps->store->getRados();
   rgw_pubsub_sub_config sub_conf;
@@ -871,7 +871,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int m
 
   std::vector<rgw_bucket_dir_entry> objs;
 
-  ret = list_op.list_objects(max_events, &objs, nullptr, &list.is_truncated, null_yield);
+  ret = list_op.list_objects(dpp, max_events, &objs, nullptr, &list.is_truncated, null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to list bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
@@ -906,7 +906,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const string& marker, int m
 }
 
 template<typename EventType>
-int RGWPubSub::SubWithEvents<EventType>::remove_event(const string& event_id)
+int RGWPubSub::SubWithEvents<EventType>::remove_event(const DoutPrefixProvider *dpp, const string& event_id)
 {
   rgw::sal::RGWRadosStore *store = ps->store;
   rgw_pubsub_sub_config sub_conf;
@@ -937,7 +937,7 @@ int RGWPubSub::SubWithEvents<EventType>::remove_event(const string& event_id)
   del_op.params.bucket_owner = bucket_info.owner;
   del_op.params.versioning_status = bucket_info.versioning_status();
 
-  ret = del_op.delete_obj(null_yield);
+  ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
   }
