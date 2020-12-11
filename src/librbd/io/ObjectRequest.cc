@@ -232,7 +232,7 @@ void ObjectReadRequest<I>::read_object() {
   }
   image_locker.unlock();
 
-  ldout(image_ctx->cct, 20) << dendl;
+  ldout(image_ctx->cct, 20) << "snap_id=" << read_snap_id << dendl;
 
   neorados::ReadOp read_op;
   for (auto& extent: *this->m_extents) {
@@ -485,14 +485,16 @@ void AbstractObjectWriteRequest<I>::write_object() {
 
   neorados::WriteOp write_op;
   if (m_copyup_enabled) {
-    ldout(image_ctx->cct, 20) << "guarding write" << dendl;
     if (m_guarding_migration_write) {
+      auto snap_seq = (this->m_io_context->write_snap_context() ?
+          this->m_io_context->write_snap_context()->first : 0);
+      ldout(image_ctx->cct, 20) << "guarding write: snap_seq=" << snap_seq
+                                << dendl;
+
       cls_client::assert_snapc_seq(
-        &write_op,
-        (this->m_io_context->write_snap_context() ?
-          this->m_io_context->write_snap_context()->first : 0),
-        cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
+        &write_op, snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
     } else {
+      ldout(image_ctx->cct, 20) << "guarding write" << dendl;
       write_op.assert_exists();
     }
   }
@@ -844,7 +846,8 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
                    << "clone_end_snap_id=" << clone_end_snap_id << ", "
                    << "diff=" << diff << ", "
                    << "end_size=" << end_size << ", "
-                   << "exists=" << exists << dendl;
+                   << "exists=" << exists << ", "
+                   << "whole_object=" << read_whole_object << dendl;
     if (end_snap_id <= first_snap_id) {
       // don't include deltas from the starting snapshots, but we iterate over
       // it to track its existence and size
