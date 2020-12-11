@@ -12,7 +12,7 @@ Hacking on Ceph in Kubernetes with Rook
     to hack on Ceph in Kubernetes.
 
 This guide is aimed at Ceph developers getting started with running
-in a Kubernetes environment.  It assumes that you may be hacking on Rook,
+in a Kubernetes environment. It assumes that you may be hacking on Rook,
 Ceph or both, so everything is built from source.
 
 TL;DR for hacking on MGR modules
@@ -48,21 +48,28 @@ Or `Host your own <https://kubernetes.io/docs/setup/independent/create-cluster-k
 Some Tips
 ---------
 
-Here are some tips for a smoother ride with ``kubeadm``:
+Here are some tips for a smoother ride with
+
+``kubeadm``:
 
 - If you have previously added any yum/deb repos for kubernetes packages,
   disable them before trying to use the packages.cloud.google.com repository.
   If you don't, you'll get quite confusing conflicts.
 - Even if your distro already has docker, make sure you're installing it
   a version from docker.com that is within the range mentioned in the
-  kubeadm install instructions.  Especially, note that the docker in CentOS 7
+  kubeadm install instructions. Especially, note that the docker in CentOS 7, 8
   will *not* work.
+
+``minikube``:
+
+- Start up minikube by passing local docker registry address::
+  ``minikube start --driver=docker --insecure-registry='192.168.122.1:5000'``
 
 Hosted elsewhere
 ----------------
 
 If you do not have any servers to hand, you might try a pure
-container provider such as Google Compute Engine.  Your mileage may
+container provider such as Google Compute Engine. Your mileage may
 vary when it comes to what kinds of storage devices are visible
 to your kubernetes cluster.
 
@@ -140,12 +147,13 @@ The Rook containers and the Ceph containers are independent now. Note that
 Rook's Ceph client libraries need to communicate with the Ceph cluster,
 therefore a compatible major version is required.
 
-You can run a CentOS docker container with access to your Ceph source
+You can run a Registry docker container with access to your Ceph source
 tree using a command like:
 
 ::
 
-    docker run -i -v /my/ceph/src:/my/ceph/src -t centos:7 /bin/bash
+    docker run -i -v /my/ceph/src:/my/ceph/src -p 192.168.122.1:5000:5000 -t --name registry registry:2
+
 
 Once you have built Ceph, you can inject the resulting binaries into
 the Rook container image using the ``kubejacker.sh`` script (run from
@@ -165,7 +173,7 @@ to build a docker image containing your latest Ceph binaries:
 Now you've got your freshly built Rook and freshly built Ceph into
 a single container image, ready to run.  Next time you change something
 in Ceph, you can re-run this to update your image and restart your
-kubernetes containers.  If you change something in Rook, then re-run the Rook
+kubernetes containers. If you change something in Rook, then re-run the Rook
 build, and the Ceph build too.
 
 5. Run a Rook cluster
