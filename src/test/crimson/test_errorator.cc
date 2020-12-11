@@ -18,11 +18,35 @@ struct errorator_test_t : public seastar_test_suite_t {
       }
     });
   }
+  struct noncopyable_t {
+    constexpr noncopyable_t() = default;
+    ~noncopyable_t() = default;
+    noncopyable_t(noncopyable_t&&) = default;
+  private:
+    noncopyable_t(const noncopyable_t&) = delete;
+    noncopyable_t& operator=(const noncopyable_t&) = delete;
+  };
+  ertr::future<> test_non_copy_then() {
+    return create_noncopyable().safe_then([](auto t) {
+      return ertr::now();
+    });
+  }
+private:
+  ertr::future<noncopyable_t> create_noncopyable() {
+    return ertr::make_ready_future<noncopyable_t>();
+  }
 };
 
 TEST_F(errorator_test_t, basic)
 {
   run_async([this] {
     test_do_until().unsafe_get0();
+  });
+}
+
+TEST_F(errorator_test_t, non_copy_then)
+{
+  run_async([this] {
+    test_non_copy_then().unsafe_get0();
   });
 }
