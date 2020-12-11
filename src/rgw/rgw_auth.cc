@@ -55,7 +55,7 @@ transform_old_authinfo(CephContext* const cct,
     }
 
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
-      return rgw_perms_from_aclspec_default_strategy(id, aclspec);
+      return rgw_perms_from_aclspec_default_strategy(id, aclspec, dpp);
     }
 
     bool is_admin_of(const rgw_user& acct_id) const override {
@@ -130,17 +130,18 @@ transform_old_authinfo(const req_state* const s)
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
-  const rgw::auth::Identity::aclspec_t& aclspec)
+  const rgw::auth::Identity::aclspec_t& aclspec,
+  const DoutPrefixProvider *dpp)
 {
-  dout(5) << "Searching permissions for uid=" << uid <<  dendl;
+  ldpp_dout(dpp, 5) << "Searching permissions for uid=" << uid <<  dendl;
 
   const auto iter = aclspec.find(uid.to_str());
   if (std::end(aclspec) != iter) {
-    dout(5) << "Found permission: " << iter->second << dendl;
+    ldpp_dout(dpp, 5) << "Found permission: " << iter->second << dendl;
     return iter->second;
   }
 
-  dout(5) << "Permissions for user not found" << dendl;
+  ldpp_dout(dpp, 5) << "Permissions for user not found" << dendl;
   return 0;
 }
 
@@ -376,7 +377,7 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
   rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
 
-  int ret = ctl->user->store_info(user_info, null_yield,
+  int ret = ctl->user->store_info(dpp, user_info, null_yield,
                                   RGWUserCtl::PutParams().set_exclusive(true));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
@@ -392,14 +393,14 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.ns = "oidc";
 
   //Check in oidc namespace
-  if (ctl->user->get_info_by_uid(federated_user, &user_info, null_yield) >= 0) {
+  if (ctl->user->get_info_by_uid(dpp, federated_user, &user_info, null_yield) >= 0) {
     /* Succeeded. */
     return;
   }
 
   federated_user.ns.clear();
   //Check for old users which wouldn't have been created in oidc namespace
-  if (ctl->user->get_info_by_uid(federated_user, &user_info, null_yield) >= 0) {
+  if (ctl->user->get_info_by_uid(dpp, federated_user, &user_info, null_yield) >= 0) {
     /* Succeeded. */
     return;
   }
@@ -464,7 +465,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
 
   /* For backward compatibility with ACLOwner. */
   perm |= rgw_perms_from_aclspec_default_strategy(info.acct_user,
-                                                  aclspec);
+                                                  aclspec, dpp);
 
   /* We also need to cover cases where rgw_keystone_implicit_tenants
    * was enabled. */
@@ -472,7 +473,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
     const rgw_user tenanted_acct_user(info.acct_user.id, info.acct_user.id);
 
     perm |= rgw_perms_from_aclspec_default_strategy(tenanted_acct_user,
-                                                    aclspec);
+                                                    aclspec, dpp);
   }
 
   /* Now it's a time for invoking additional strategy that was supplied by
@@ -599,7 +600,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
 
-  int ret = ctl->user->store_info(user_info, null_yield,
+  int ret = ctl->user->store_info(dpp, user_info, null_yield,
                                   RGWUserCtl::PutParams().set_exclusive(true));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
@@ -641,7 +642,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   else if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
 
-    if (ctl->user->get_info_by_uid(tenanted_uid, &user_info, null_yield) >= 0) {
+    if (ctl->user->get_info_by_uid(dpp, tenanted_uid, &user_info, null_yield) >= 0) {
       /* Succeeded. */
       return;
     }
@@ -649,7 +650,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
-  else if (ctl->user->get_info_by_uid(acct_user, &user_info, null_yield) >= 0) {
+  else if (ctl->user->get_info_by_uid(dpp, acct_user, &user_info, null_yield) >= 0) {
       /* Succeeded. */
       return;
   }
@@ -666,7 +667,7 @@ const std::string rgw::auth::LocalApplier::NO_SUBUSER;
 
 uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
-  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec);
+  return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec, dpp);
 }
 
 bool rgw::auth::LocalApplier::is_admin_of(const rgw_user& uid) const

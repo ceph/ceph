@@ -28,7 +28,7 @@ public:
   }
 
   void init(RGWSI_Zone *zone_svc);
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
 };

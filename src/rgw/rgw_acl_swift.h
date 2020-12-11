@@ -17,7 +17,7 @@ class RGWUserCtl;
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
-  int add_grants(RGWUserCtl *user_ctl,
+  int add_grants(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl,
                  const std::vector<std::string>& uids,
                  uint32_t perm);
 
@@ -27,7 +27,8 @@ public:
   }
   ~RGWAccessControlPolicy_SWIFT() override = default;
 
-  int create(RGWUserCtl *user_ctl,
+  int create(const DoutPrefixProvider *dpp, 
+             RGWUserCtl *user_ctl,
              const rgw_user& id,
              const std::string& name,
              const char* read_list,
@@ -45,10 +46,12 @@ public:
   }
   ~RGWAccessControlPolicy_SWIFTAcct() override {}
 
-  void add_grants(RGWUserCtl *user_ctl,
+  void add_grants(const DoutPrefixProvider *dpp, 
+                  RGWUserCtl *user_ctl,
                   const std::vector<std::string>& uids,
                   uint32_t perm);
-  bool create(RGWUserCtl *user_ctl,
+  bool create(const DoutPrefixProvider *dpp, 
+              RGWUserCtl *user_ctl,
               const rgw_user& id,
               const std::string& name,
               const std::string& acl_str);

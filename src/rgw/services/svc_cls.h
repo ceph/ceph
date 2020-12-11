@@ -152,6 +152,6 @@ public:
     lock.init(this, zone_svc, rados_svc);
   }
 
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 };
 

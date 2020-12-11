@@ -426,6 +426,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   RGWBucketInfo _bucket_info; 
   const RGWBucketInfo *pbucket_info; //< pointer to bucket instance info to locate bucket indices
   int child_ret = 0;
+  const DoutPrefixProvider *dpp;
 
   using StatusShards = std::vector<rgw_bucket_shard_sync_info>;
   std::vector<StatusShards> peer_status; //< sync status for each peer
@@ -434,11 +435,13 @@ class BucketTrimInstanceCR : public RGWCoroutine {
  public:
   BucketTrimInstanceCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                        BucketTrimObserver *observer,
-                       const std::string& bucket_instance)
+                       const std::string& bucket_instance,
+                       const DoutPrefixProvider *dpp)
     : RGWCoroutine(store->ctx()), store(store),
       http(http), observer(observer),
       bucket_instance(bucket_instance),
-      zone_id(store->svc()->zone->get_zone().id) {
+      zone_id(store->svc()->zone->get_zone().id),
+      dpp(dpp) {
     rgw_bucket_parse_bucket_key(cct, bucket_instance, &bucket, nullptr);
     source_policy = make_shared<rgw_bucket_get_sync_policy_result>();
   }
@@ -456,7 +459,8 @@ int BucketTrimInstanceCR::operate()
     yield call(new RGWBucketGetSyncPolicyHandlerCR(store->svc()->rados->get_async_processor(),
                                                    store,
                                                    get_policy_params,
-                                                   source_policy));
+                                                   source_policy,
+                                                   dpp));
     if (retcode < 0) {
       if (retcode != -ENOENT) {
         ldout(cct, 0) << "ERROR: failed to fetch policy handler for bucket=" << bucket << dendl;
@@ -568,14 +572,17 @@ class BucketTrimInstanceCollectCR : public RGWShardCollectCR {
   BucketTrimObserver *const observer;
   std::vector<std::string>::const_iterator bucket;
   std::vector<std::string>::const_iterator end;
+  const DoutPrefixProvider *dpp;
  public:
   BucketTrimInstanceCollectCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                               BucketTrimObserver *observer,
                               const std::vector<std::string>& buckets,
-                              int max_concurrent)
+                              int max_concurrent,
+                              const DoutPrefixProvider *dpp)
     : RGWShardCollectCR(store->ctx(), max_concurrent),
       store(store), http(http), observer(observer),
-      bucket(buckets.begin()), end(buckets.end())
+      bucket(buckets.begin()), end(buckets.end()),
+      dpp(dpp)
   {}
   bool spawn_next() override;
 };
@@ -585,7 +592,7 @@ bool BucketTrimInstanceCollectCR::spawn_next()
   if (bucket == end) {
     return false;
   }
-  spawn(new BucketTrimInstanceCR(store, http, observer, *bucket), false);
+  spawn(new BucketTrimInstanceCR(store, http, observer, *bucket, dpp), false);
   ++bucket;
   return true;
 }
@@ -776,14 +783,15 @@ class BucketTrimCR : public RGWCoroutine {
   BucketTrimStatus status;
   RGWObjVersionTracker objv; //< version tracker for trim status object
   std::string last_cold_marker; //< position for next trim marker
+  const DoutPrefixProvider *dpp;
 
   static const std::string section; //< metadata section for bucket instances
  public:
   BucketTrimCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                const BucketTrimConfig& config, BucketTrimObserver *observer,
-               const rgw_raw_obj& obj)
+               const rgw_raw_obj& obj, const DoutPrefixProvider *dpp)
     : RGWCoroutine(store->ctx()), store(store), http(http), config(config),
-      observer(observer), obj(obj), counter(config.counter_size)
+      observer(observer), obj(obj), counter(config.counter_size), dpp(dpp)
   {}
 
   int operate() override;
@@ -885,7 +893,7 @@ int BucketTrimCR::operate()
     set_status("trimming buckets");
     ldout(cct, 4) << "collected " << buckets.size() << " buckets for trim" << dendl;
     yield call(new BucketTrimInstanceCollectCR(store, http, observer, buckets,
-                                               config.concurrent_buckets));
+                                               config.concurrent_buckets, dpp));
     // ignore errors from individual buckets
 
     // write updated trim status
@@ -934,15 +942,17 @@ class BucketTrimPollCR : public RGWCoroutine {
   const rgw_raw_obj& obj;
   const std::string name{"trim"}; //< lock name
   const std::string cookie;
+  const DoutPrefixProvider *dpp;
 
  public:
   BucketTrimPollCR(rgw::sal::RGWRadosStore *store, RGWHTTPManager *http,
                    const BucketTrimConfig& config,
-                   BucketTrimObserver *observer, const rgw_raw_obj& obj)
+                   BucketTrimObserver *observer, const rgw_raw_obj& obj,
+                   const DoutPrefixProvider *dpp)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       config(config), observer(observer), obj(obj),
-      cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
-  {}
+      cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
+      dpp(dpp) {}
 
   int operate() override;
 };
@@ -965,7 +975,7 @@ int BucketTrimPollCR::operate()
       }
 
       set_status("trimming");
-      yield call(new BucketTrimCR(store, http, config, observer, obj));
+      yield call(new BucketTrimCR(store, http, config, observer, obj, dpp));
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
@@ -1132,14 +1142,29 @@ void BucketTrimManager::on_bucket_changed(const std::string_view& bucket)
 RGWCoroutine* BucketTrimManager::create_bucket_trim_cr(RGWHTTPManager *http)
 {
   return new BucketTrimPollCR(impl->store, http, impl->config,
-                              impl.get(), impl->status_obj);
+                              impl.get(), impl->status_obj, this);
 }
 
 RGWCoroutine* BucketTrimManager::create_admin_bucket_trim_cr(RGWHTTPManager *http)
 {
   // return the trim coroutine without any polling
   return new BucketTrimCR(impl->store, http, impl->config,
-                          impl.get(), impl->status_obj);
+                          impl.get(), impl->status_obj, this);
+}
+
+CephContext* BucketTrimManager::get_cct() const
+{
+  return impl->store->ctx();
+}
+
+unsigned BucketTrimManager::get_subsys() const
+{
+  return dout_subsys;
+}
+
+std::ostream& BucketTrimManager::gen_prefix(std::ostream& out) const
+{
+  return out << "rgw bucket trim manager: ";
 }
 
 } // namespace rgw
