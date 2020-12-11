@@ -49,6 +49,10 @@ cp $SCRIPTPATH/Dockerfile kubejacker
 #tar czf $BUILDPATH/kubejacker/lib.tar.gz $LIBS
 #popd
 
+pushd ../src/python-common/ceph
+tar --exclude=__pycache__ --exclude=tests -czf $BUILDPATH/kubejacker/python_common.tar.gz *
+popd
+
 pushd ../src/pybind/mgr
 find ./ -name "*.pyc" -exec rm -f {} \;
 # Exclude node_modules because it's the huge sources in dashboard/frontend
