@@ -675,32 +675,28 @@ Examples:
                 self.log.exception(e)
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-            try:
-                dg_specs = []
-                for dg in drivegroups:
-                    spec = DriveGroupSpec.from_json(dg)
-                    if dry_run:
-                        spec.preview_only = True
-                    dg_specs.append(spec)
+            dg_specs = []
+            for dg in drivegroups:
+                spec = DriveGroupSpec.from_json(dg)
+                if dry_run:
+                    spec.preview_only = True
+                dg_specs.append(spec)
 
-                completion = self.apply(dg_specs)
+            completion = self.apply(dg_specs)
+            self._orchestrator_wait([completion])
+            raise_if_exception(completion)
+            out = completion.result_str()
+            if dry_run:
+                completion = self.plan(dg_specs)
                 self._orchestrator_wait([completion])
                 raise_if_exception(completion)
-                out = completion.result_str()
-                if dry_run:
-                    completion = self.plan(dg_specs)
-                    self._orchestrator_wait([completion])
-                    raise_if_exception(completion)
-                    data = completion.result
-                    if format == 'plain':
-                        out = preview_table_osd(data)
-                    else:
-                        out = to_format(data, format, many=True, cls=None)
-                return HandleCommandResult(stdout=out)
+                data = completion.result
+                if format == 'plain':
+                    out = preview_table_osd(data)
+                else:
+                    out = to_format(data, format, many=True, cls=None)
+            return HandleCommandResult(stdout=out)
 
-            except ValueError as e:
-                msg = 'Failed to read JSON/YAML input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
         if all_available_devices:
             if unmanaged is None:
                 unmanaged = False
