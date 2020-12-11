@@ -340,6 +340,7 @@ void ObjectCopyRequest<I>::send_write_object() {
 
   librados::ObjectWriteOperation op;
   if (!m_dst_image_ctx->migration_info.empty()) {
+    ldout(m_cct, 20) << "assert_snapc_seq=" << dst_snap_seq << dendl;
     cls_client::assert_snapc_seq(&op, dst_snap_seq,
                                  cls::rbd::ASSERT_SNAPC_SEQ_GT_SNAPSET_SEQ);
   }

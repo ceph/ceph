@@ -11,6 +11,11 @@
 #include <errno.h>
 #include <include/compat.h>
 
+#define dout_subsys ceph_subsys_rados
+#undef dout_prefix
+#define dout_prefix *_dout << "TestMemIoCtxImpl: " << this << " " << __func__ \
+                           << ": " << oid << " "
+
 static void to_vector(const interval_set<uint64_t> &set,
                       std::vector<std::pair<uint64_t, uint64_t> > *vec) {
   vec->clear();
@@ -73,6 +78,9 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
     return -EBLOCKLISTED;
   }
 
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "length=" << bl.length() << ", snapc=" << snapc << dendl;
+
   TestMemCluster::SharedFile file;
   {
     std::unique_lock l{m_pool->file_lock};
@@ -127,6 +135,9 @@ int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive,
     return -EBLOCKLISTED;
   }
 
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "snapc=" << snapc << dendl;
+
   std::unique_lock l{m_pool->file_lock};
   if (exclusive) {
     TestMemCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, {});
@@ -140,6 +151,9 @@ int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive,
 }
 
 int TestMemIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) {
+  auto cct = m_client->cct();
+  ldout(cct, 20) << dendl;
+
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -206,6 +220,23 @@ int TestMemIoCtxImpl::list_snaps(const std::string& oid, snap_set_t *out_snaps) 
       out_snaps->clones.push_back(head_clone);
     }
   }
+
+  ldout(cct, 20) << "seq=" << out_snaps->seq << ", "
+                 << "clones=[";
+  bool first_clone = true;
+  for (auto& clone : out_snaps->clones) {
+    *_dout << "{"
+           << "cloneid=" << clone.cloneid << ", "
+           << "snaps=" << clone.snaps << ", "
+           << "overlap=" << clone.overlap << ", "
+           << "size=" << clone.size << "}";
+    if (!first_clone) {
+      *_dout << ", ";
+    } else {
+      first_clone = false;
+    }
+  }
+  *_dout << "]" << dendl;
   return 0;
 
 }
@@ -358,6 +389,9 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
   } else if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
+
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "snapc=" << snapc << dendl;
 
   std::unique_lock l{m_pool->file_lock};
   TestMemCluster::SharedFile file = get_file(oid, false, CEPH_NOSNAP, snapc);
@@ -556,6 +590,9 @@ int TestMemIoCtxImpl::truncate(const std::string& oid, uint64_t size,
     return -EBLOCKLISTED;
   }
 
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "size=" << size << ", snapc=" << snapc << dendl;
+
   TestMemCluster::SharedFile file;
   {
     std::unique_lock l{m_pool->file_lock};
@@ -594,6 +631,10 @@ int TestMemIoCtxImpl::write(const std::string& oid, bufferlist& bl, size_t len,
     return -EBLOCKLISTED;
   }
 
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "extent=" << off << "~" << len << ", snapc=" << snapc
+                 << dendl;
+
   TestMemCluster::SharedFile file;
   {
     std::unique_lock l{m_pool->file_lock};
@@ -620,6 +661,9 @@ int TestMemIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
   } else if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
+
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "length=" << bl.length() << ", snapc=" << snapc << dendl;
 
   TestMemCluster::SharedFile file;
   {
@@ -741,6 +785,10 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
+
+  auto cct = m_client->cct();
+  ldout(cct, 20) << "extent=" << off << "~" << len << ", snapc=" << snapc
+                 << dendl;
 
   bool truncate_redirect = false;
   TestMemCluster::SharedFile file;
