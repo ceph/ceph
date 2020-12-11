@@ -67,7 +67,7 @@ rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
   return rgw_pool(cct_->_conf->rgw_zonegroup_root_pool);
 }
 
-int RGWZoneGroup::create_default(optional_yield y, bool old_format)
+int RGWZoneGroup::create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
 {
   name = default_zonegroup_name;
   api_name = default_zonegroup_name;
@@ -82,23 +82,23 @@ int RGWZoneGroup::create_default(optional_yield y, bool old_format)
 
   int r = zone_params.init(cct, sysobj_svc, y, false);
   if (r < 0) {
-    ldout(cct, 0) << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
+    ldpp_dout(dpp, 0) << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  r = zone_params.create_default(y);
+  r = zone_params.create_default(dpp, y);
   if (r < 0 && r != -EEXIST) {
-    ldout(cct, 0) << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
+    ldpp_dout(dpp, 0) << "create_default: error in create_default  zone params: " << cpp_strerror(-r) << dendl;
     return r;
   } else if (r == -EEXIST) {
-    ldout(cct, 10) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
+    ldpp_dout(dpp, 10) << "zone_params::create_default() returned -EEXIST, we raced with another default zone_params creation" << dendl;
     zone_params.clear_id();
     r = zone_params.init(cct, sysobj_svc, y);
     if (r < 0) {
-      ldout(cct, 0) << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
+      ldpp_dout(dpp, 0) << "create_default: error in init existing zone params: " << cpp_strerror(-r) << dendl;
       return r;
     }
-    ldout(cct, 20) << "zone_params::create_default() " << zone_params.get_name() << " id " << zone_params.get_id()
+    ldpp_dout(dpp, 20) << "zone_params::create_default() " << zone_params.get_name() << " id " << zone_params.get_id()
 		   << dendl;
   }
   
@@ -107,14 +107,14 @@ int RGWZoneGroup::create_default(optional_yield y, bool old_format)
   default_zone.id = zone_params.get_id();
   master_zone = default_zone.id;
   
-  r = create(y);
+  r = create(dpp, y);
   if (r < 0 && r != -EEXIST) {
-    ldout(cct, 0) << "error storing zone group info: " << cpp_strerror(-r) << dendl;
+    ldpp_dout(dpp, 0) << "error storing zone group info: " << cpp_strerror(-r) << dendl;
     return r;
   }
 
   if (r == -EEXIST) {
-    ldout(cct, 10) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
+    ldpp_dout(dpp, 10) << "create_default() returned -EEXIST, we raced with another zonegroup creation" << dendl;
     id.clear();
     r = init(cct, sysobj_svc, y);
     if (r < 0) {
@@ -633,7 +633,7 @@ int RGWSystemMetaObj::read(optional_yield y)
   return read_info(id, y);
 }
 
-int RGWSystemMetaObj::create(optional_yield y, bool exclusive)
+int RGWSystemMetaObj::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
 {
   int ret;
 
@@ -701,9 +701,9 @@ const string& RGWRealm::get_predefined_name(CephContext *cct) const {
   return cct->_conf->rgw_realm;
 }
 
-int RGWRealm::create(optional_yield y, bool exclusive)
+int RGWRealm::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
 {
-  int ret = RGWSystemMetaObj::create(y, exclusive);
+  int ret = RGWSystemMetaObj::create(dpp, y, exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -721,7 +721,7 @@ int RGWRealm::create(optional_yield y, bool exclusive)
     if (ret < 0 ) {
       return ret;
     }
-    ret = period.create(y, true);
+    ret = period.create(dpp, y, true);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
       return ret;
@@ -1195,7 +1195,7 @@ int RGWPeriod::read_info(optional_yield y)
   return 0;
 }
 
-int RGWPeriod::create(optional_yield y, bool exclusive)
+int RGWPeriod::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
 {
   int ret;
   
@@ -1422,7 +1422,8 @@ int RGWPeriod::update_sync_status(rgw::sal::RGWRadosStore *store, /* for now */
   return 0;
 }
 
-int RGWPeriod::commit(rgw::sal::RGWRadosStore *store,
+int RGWPeriod::commit(const DoutPrefixProvider *dpp, 
+                      rgw::sal::RGWRadosStore *store,
 		      RGWRealm& realm, const RGWPeriod& current_period,
                       std::ostream& error_stream, optional_yield y,
 		      bool force_if_stale)
@@ -1463,7 +1464,7 @@ int RGWPeriod::commit(rgw::sal::RGWRadosStore *store,
       return r;
     }
     // create an object with a new period id
-    r = create(y, true);
+    r = create(dpp, y, true);
     if (r < 0) {
       ldout(cct, 0) << "failed to create new period: " << cpp_strerror(-r) << dendl;
       return r;
@@ -1520,11 +1521,11 @@ int RGWPeriod::commit(rgw::sal::RGWRadosStore *store,
   return 0;
 }
 
-int RGWZoneParams::create_default(optional_yield y, bool old_format)
+int RGWZoneParams::create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
 {
   name = default_zone_name;
 
-  int r = create(y);
+  int r = create(dpp, y);
   if (r < 0) {
     return r;
   }
@@ -1662,13 +1663,13 @@ int RGWZoneParams::fix_pool_names(optional_yield y)
   return 0;
 }
 
-int RGWZoneParams::create(optional_yield y, bool exclusive)
+int RGWZoneParams::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
 {
   /* check for old pools config */
   rgw_raw_obj obj(domain_root, avail_pools);
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = sysobj_svc->get_obj(obj_ctx, obj);
-  int r = sysobj.rop().stat(y);
+  int r = sysobj.rop().stat(y, dpp);
   if (r < 0) {
     ldout(cct, 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
     /* a new system, let's set new placement info */
@@ -1686,7 +1687,7 @@ int RGWZoneParams::create(optional_yield y, bool exclusive)
     return r;
   }
 
-  r = RGWSystemMetaObj::create(y, exclusive);
+  r = RGWSystemMetaObj::create(dpp, y, exclusive);
   if (r < 0) {
     return r;
   }

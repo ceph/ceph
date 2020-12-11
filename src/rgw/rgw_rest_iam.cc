@@ -118,7 +118,7 @@ int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
   }
 
   s->info.args.set(p);
-  s->info.args.parse();
+  s->info.args.parse(s);
 
   /* must be called after the args parsing */
   if (int ret = allocate_formatter(s, default_formatter, configurable_format); ret < 0)

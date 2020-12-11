@@ -201,11 +201,11 @@ public:
 
   int build_all_oids_index();
   int build_buckets_instance_index();
-  int build_linked_oids_for_bucket(const string& bucket_instance_id, map<int, list<string> >& oids);
-  int build_linked_oids_index();
+  int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const string& bucket_instance_id, map<int, list<string> >& oids);
+  int build_linked_oids_index(const DoutPrefixProvider *dpp);
   int compare_oid_indexes();
 
-  int run();
+  int run(const DoutPrefixProvider *dpp);
   int finish();
 };
 
@@ -275,17 +275,19 @@ public:
     tenant_name(_tenant_name)
   {}
 
-  int process_bucket(const std::string& bucket_instance_id,
+  int process_bucket(const DoutPrefixProvider *dpp, 
+                     const std::string& bucket_instance_id,
 		     const std::string& prefix,
 		     const std::set<rgw_obj_key>& entries_filter);
 
-  int do_incomplete_multipart(rgw::sal::RGWRadosStore* store,
+  int do_incomplete_multipart(const DoutPrefixProvider *dpp, 
+                              rgw::sal::RGWRadosStore* store,
 			      RGWBucketInfo& bucket_info);
 
   int build_linked_oids_index();
 
-  int run(const std::string& bucket_id);
-  int run();
+  int run(const DoutPrefixProvider *dpp, const std::string& bucket_id);
+  int run(const DoutPrefixProvider *dpp);
 }; // class RGWRadosList
 
 #endif

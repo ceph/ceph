@@ -210,10 +210,24 @@ public:
   }
 }; /* RGWFCGXFrontend */
 
-class RGWLoadGenFrontend : public RGWProcessFrontend {
+class RGWLoadGenFrontend : public RGWProcessFrontend, public DoutPrefixProvider {
 public:
   RGWLoadGenFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
     : RGWProcessFrontend(pe, _conf) {}
+
+  CephContext *get_cct() const { 
+    return env.store->ctx(); 
+  }
+
+  unsigned get_subsys() const
+  {
+    return dout_subsys;
+  }
+
+  std::ostream& gen_prefix(std::ostream& out) const
+  {
+    return out << "rgw loadgen frontend: ";
+  }
 
   int init() override {
     int num_threads;
@@ -234,7 +248,7 @@ public:
     rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
-    int ret = env.store->ctl()->user->get_info_by_uid(uid, &user_info, null_yield);
+    int ret = env.store->ctl()->user->get_info_by_uid(this, uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;

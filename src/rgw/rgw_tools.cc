@@ -175,7 +175,7 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
 }
 
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info,
 		       boost::optional<obj_version> refresh_version)
 {
@@ -195,7 +195,7 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
     int ret = rop.set_attrs(pattrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
-                 .stat(y);
+                 .stat(y, dpp);
     if (ret < 0)
       return ret;
 
@@ -430,13 +430,14 @@ int RGWDataAccess::Bucket::finish_init()
   return 0;
 }
 
-int RGWDataAccess::Bucket::init(optional_yield y)
+int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret = sd->store->getRados()->get_bucket_info(sd->store->svc(),
 				       tenant, name,
 				       bucket_info,
 				       &mtime,
                                        y,
+                                       dpp,
 				       &attrs);
   if (ret < 0) {
     return ret;

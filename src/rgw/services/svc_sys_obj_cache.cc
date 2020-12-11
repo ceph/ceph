@@ -30,19 +30,19 @@ public:
   }
 };
 
-int RGWSI_SysObj_Cache::do_start(optional_yield y)
+int RGWSI_SysObj_Cache::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   int r = asocket.start();
   if (r < 0) {
     return r;
   }
 
-  r = RGWSI_SysObj_Core::do_start(y);
+  r = RGWSI_SysObj_Core::do_start(y, dpp);
   if (r < 0) {
     return r;
   }
 
-  r = notify_svc->start(y);
+  r = notify_svc->start(y, dpp);
   if (r < 0) {
     return r;
   }

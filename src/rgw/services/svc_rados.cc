@@ -21,7 +21,7 @@ RGWSI_RADOS::~RGWSI_RADOS()
 {
 }
 
-int RGWSI_RADOS::do_start(optional_yield)
+int RGWSI_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   int ret = rados.init_with_context(cct);
   if (ret < 0) {

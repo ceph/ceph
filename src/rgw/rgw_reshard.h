@@ -85,13 +85,15 @@ private:
   static const std::initializer_list<uint16_t> reshard_primes;
 
   int create_new_bucket_instance(int new_num_shards,
-				 RGWBucketInfo& new_bucket_info);
+				 RGWBucketInfo& new_bucket_info,
+                                 const DoutPrefixProvider *dpp);
   int do_reshard(int num_shards,
 		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
                  bool verbose,
                  ostream *os,
-		 Formatter *formatter);
+		 Formatter *formatter,
+                 const DoutPrefixProvider *dpp);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
@@ -101,6 +103,7 @@ public:
                    const std::map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
+              const DoutPrefixProvider *dpp,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
@@ -199,6 +202,7 @@ private:
     bool verbose;
     ostream *out;
     Formatter *formatter;
+    const DoutPrefixProvider *dpp;
 
     void get_logshard_oid(int shard_num, string *shard);
 protected:
@@ -207,12 +211,15 @@ protected:
     RGWReshard *reshard;
     ceph::mutex lock = ceph::make_mutex("ReshardWorker");
     ceph::condition_variable cond;
+    const DoutPrefixProvider *dpp;
 
   public:
     ReshardWorker(CephContext * const _cct,
-		  RGWReshard * const _reshard)
+		  RGWReshard * const _reshard,
+                  const DoutPrefixProvider *_dpp)
       : cct(_cct),
-        reshard(_reshard) {
+        reshard(_reshard),
+        dpp(_dpp) {
     }
 
     void *entry() override;
@@ -226,7 +233,7 @@ protected:
   void get_bucket_logshard_oid(const string& tenant, const string& bucket_name, string *oid);
 
 public:
-  RGWReshard(rgw::sal::RGWRadosStore* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
+  RGWReshard(rgw::sal::RGWRadosStore* _store, const DoutPrefixProvider *dpp, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(cls_rgw_reshard_entry& entry);
   int update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
   int get(cls_rgw_reshard_entry& entry);
@@ -235,8 +242,8 @@ public:
   int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
-  int process_single_logshard(int logshard_num);
-  int process_all_logshards();
+  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp);
+  int process_all_logshards(const DoutPrefixProvider *dpp);
   bool going_down();
   void start_processor();
   void stop_processor();

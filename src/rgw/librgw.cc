@@ -123,7 +123,9 @@ namespace rgw {
 	RGWLibFS* fs = iter->first->ref();
 	uniq.unlock();
 	fs->gc();
-	fs->update_user();
+        const char *prefix = "librgw: ";
+        const DoutPrefix dp(cct, dout_subsys, prefix);
+	fs->update_user(&dp);
 	fs->rele();
 	uniq.lock();
 	if (cur_gen != gen)
@@ -460,14 +462,14 @@ namespace rgw {
   {
     RGWOp *op = (req->op) ? req->op : dynamic_cast<RGWOp*>(req);
     if (! op) {
-      dout(1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
+      ldpp_dout(op, 1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
       return -EINVAL;
     }
 
-    int ret = req->exec_finish();
+    int ret = req->exec_finish(op);
     int op_ret = op->get_ret();
 
-    dout(1) << "====== " << __func__
+    ldpp_dout(op, 1) << "====== " << __func__
 	    << " finishing continued request req=" << hex << req << dec
 	    << " op status=" << op_ret
 	    << " ======" << dendl;
@@ -537,7 +539,10 @@ namespace rgw {
       g_conf()->rgw_run_sync_thread &&
       g_conf()->rgw_nfs_run_sync_thread;
 
-    store = RGWStoreManager::get_storage(g_ceph_context,
+    const char *prefix = "librgw: ";
+    auto new_cct = cct.get();
+    const DoutPrefix dp(new_cct, dout_subsys, prefix);
+    store = RGWStoreManager::get_storage(&dp, g_ceph_context,
 					 run_gc,
 					 run_lc,
 					 run_quota,
@@ -656,7 +661,9 @@ namespace rgw {
 
   int RGWLibIO::set_uid(rgw::sal::RGWRadosStore *store, const rgw_user& uid)
   {
-    int ret = store->ctl()->user->get_info_by_uid(uid, &user_info, null_yield);
+    const char *prefix = "librgw: ";
+    const DoutPrefix dp(store->ctx(), dout_subsys, prefix);
+    int ret = store->ctl()->user->get_info_by_uid(&dp, uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;

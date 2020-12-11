@@ -89,7 +89,7 @@ void RGWOp_User_Info::execute(optional_yield y)
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_sync_stats(sync_stats);
 
-  op_ret = RGWUserAdminOp_User::info(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_User::info(s, store, op_state, flusher, y);
 }
 
 class RGWOp_User_Create : public RGWRESTOp {
@@ -230,7 +230,7 @@ void RGWOp_User_Create::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_User::create(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_User::create(s, store, op_state, flusher, y);
 }
 
 class RGWOp_User_Modify : public RGWRESTOp {
@@ -372,7 +372,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_User::modify(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_User::modify(s, store, op_state, flusher, y);
 }
 
 class RGWOp_User_Remove : public RGWRESTOp {
@@ -413,7 +413,7 @@ void RGWOp_User_Remove::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_User::remove(store, op_state, flusher, s->yield);
+  op_ret = RGWUserAdminOp_User::remove(s, store, op_state, flusher, s->yield);
 }
 
 class RGWOp_Subuser_Create : public RGWRESTOp {
@@ -489,7 +489,7 @@ void RGWOp_Subuser_Create::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Subuser::create(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Subuser::create(s, store, op_state, flusher, y);
 }
 
 class RGWOp_Subuser_Modify : public RGWRESTOp {
@@ -556,7 +556,7 @@ void RGWOp_Subuser_Modify::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Subuser::modify(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Subuser::modify(s, store, op_state, flusher, y);
 }
 
 class RGWOp_Subuser_Remove : public RGWRESTOp {
@@ -599,7 +599,7 @@ void RGWOp_Subuser_Remove::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Subuser::remove(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Subuser::remove(s, store, op_state, flusher, y);
 }
 
 class RGWOp_Key_Create : public RGWRESTOp {
@@ -655,7 +655,7 @@ void RGWOp_Key_Create::execute(optional_yield y)
     op_state.set_key_type(key_type);
   }
 
-  op_ret = RGWUserAdminOp_Key::create(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Key::create(s, store, op_state, flusher, y);
 }
 
 class RGWOp_Key_Remove : public RGWRESTOp {
@@ -702,7 +702,7 @@ void RGWOp_Key_Remove::execute(optional_yield y)
     op_state.set_key_type(key_type);
   }
 
-  op_ret = RGWUserAdminOp_Key::remove(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Key::remove(s, store, op_state, flusher, y);
 }
 
 class RGWOp_Caps_Add : public RGWRESTOp {
@@ -740,7 +740,7 @@ void RGWOp_Caps_Add::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Caps::add(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Caps::add(s, store, op_state, flusher, y);
 }
 
 class RGWOp_Caps_Remove : public RGWRESTOp {
@@ -778,7 +778,7 @@ void RGWOp_Caps_Remove::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWUserAdminOp_Caps::remove(store, op_state, flusher, y);
+  op_ret = RGWUserAdminOp_Caps::remove(s, store, op_state, flusher, y);
 }
 
 struct UserQuotas {
@@ -844,7 +844,7 @@ void RGWOp_Quota_Info::execute(optional_yield y)
   op_state.set_user_id(uid);
 
   RGWUser user;
-  op_ret = user.init(store, op_state, y);
+  op_ret = user.init(s, store, op_state, y);
   if (op_ret < 0)
     return;
 
@@ -979,7 +979,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   op_state.set_user_id(uid);
 
   RGWUser user;
-  op_ret = user.init(store, op_state, y);
+  op_ret = user.init(s, store, op_state, y);
   if (op_ret < 0) {
     ldout(store->ctx(), 20) << "failed initializing user info: " << op_ret << dendl;
     return;
@@ -1051,7 +1051,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   }
 
   string err;
-  op_ret = user.modify(op_state, y, &err);
+  op_ret = user.modify(s, op_state, y, &err);
   if (op_ret < 0) {
     ldout(store->ctx(), 20) << "failed updating user info: " << op_ret << ": " << err << dendl;
     return;

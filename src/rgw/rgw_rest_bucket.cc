@@ -48,7 +48,7 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
   op_state.set_fetch_stats(fetch_stats);
 
-  op_ret = RGWBucketAdminOp::info(store, op_state, flusher, y);
+  op_ret = RGWBucketAdminOp::info(store, op_state, flusher, y, this);
 }
 
 class RGWOp_Get_Policy : public RGWRESTOp {
@@ -78,7 +78,7 @@ void RGWOp_Get_Policy::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
   op_state.set_object(object);
 
-  op_ret = RGWBucketAdminOp::get_policy(store, op_state, flusher);
+  op_ret = RGWBucketAdminOp::get_policy(store, op_state, flusher, this);
 }
 
 class RGWOp_Check_Bucket_Index : public RGWRESTOp {
@@ -112,7 +112,7 @@ void RGWOp_Check_Bucket_Index::execute(optional_yield y)
   op_state.set_fix_index(fix_index);
   op_state.set_check_objects(check_objects);
 
-  op_ret = RGWBucketAdminOp::check_index(store, op_state, flusher, s->yield);
+  op_ret = RGWBucketAdminOp::check_index(store, op_state, flusher, s->yield, s);
 }
 
 class RGWOp_Bucket_Link : public RGWRESTOp {
@@ -155,7 +155,7 @@ void RGWOp_Bucket_Link::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWBucketAdminOp::link(store, op_state);
+  op_ret = RGWBucketAdminOp::link(store, op_state, s);
 }
 
 class RGWOp_Bucket_Unlink : public RGWRESTOp {
@@ -193,7 +193,7 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-  op_ret = RGWBucketAdminOp::unlink(store, op_state);
+  op_ret = RGWBucketAdminOp::unlink(store, op_state, s);
 }
 
 class RGWOp_Bucket_Remove : public RGWRESTOp {
@@ -219,13 +219,13 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
 
-  op_ret = store->get_bucket(nullptr, string(), bucket_name, &bucket, y);
+  op_ret = store->get_bucket(s, nullptr, string(), bucket_name, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
     return;
   }
 
-  op_ret = bucket->remove_bucket(delete_children, string(), string(), true, &s->info, s->yield);
+  op_ret = bucket->remove_bucket(s, delete_children, string(), string(), true, &s->info, s->yield);
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
@@ -284,7 +284,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
   if (use_http_params) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
-    op_ret = store->getRados()->get_bucket_info(store->svc(), uid.tenant, bucket, bucket_info, NULL, s->yield, &attrs);
+    op_ret = store->getRados()->get_bucket_info(store->svc(), uid.tenant, bucket, bucket_info, NULL, s->yield, s, &attrs);
     if (op_ret < 0) {
       return;
     }
@@ -302,7 +302,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
   op_state.set_quota(quota);
 
-  op_ret = RGWBucketAdminOp::set_quota(store, op_state);
+  op_ret = RGWBucketAdminOp::set_quota(store, op_state, s);
 }
 
 class RGWOp_Sync_Bucket : public RGWRESTOp {
@@ -334,7 +334,7 @@ void RGWOp_Sync_Bucket::execute(optional_yield y)
   op_state.set_tenant(tenant);
   op_state.set_sync_bucket(sync_bucket);
 
-  op_ret = RGWBucketAdminOp::sync_bucket(store, op_state);
+  op_ret = RGWBucketAdminOp::sync_bucket(store, op_state, s);
 }
 
 class RGWOp_Object_Remove: public RGWRESTOp {
@@ -364,7 +364,7 @@ void RGWOp_Object_Remove::execute(optional_yield y)
   op_state.set_bucket_name(bucket);
   op_state.set_object(object);
 
-  op_ret = RGWBucketAdminOp::remove_object(store, op_state);
+  op_ret = RGWBucketAdminOp::remove_object(store, op_state, s);
 }
 
 

@@ -25,7 +25,7 @@ namespace rgw::notify {
 // initialize the notification manager
 // notification manager is dequeing the 2-phase-commit queues
 // and send the notifications to the endpoints
-bool init(CephContext* cct, rgw::sal::RGWRadosStore* store);
+bool init(CephContext* cct, rgw::sal::RGWRadosStore* store, const DoutPrefixProvider *dpp);
 
 // shutdown the notification manager
 void shutdown();
@@ -77,7 +77,8 @@ int publish_commit(rgw::sal::RGWObject* obj,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         EventType event_type,
-        reservation_t& reservation);
+        reservation_t& reservation,
+        const DoutPrefixProvider *dpp);
 
 // cancel the reservation
 int publish_abort(reservation_t& reservation);

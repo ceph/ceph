@@ -80,7 +80,10 @@ int main(const int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
-  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false);
+  const char *prefix = "rgw object expirer: ";
+  auto new_cct = cct.get();
+  const DoutPrefix dp(new_cct, dout_subsys, prefix);
+  store = RGWStoreManager::get_storage(&dp, g_ceph_context, false, false, false, false, false);
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;
@@ -90,7 +93,7 @@ int main(const int argc, const char **argv)
   StoreDestructor store_dtor(store);
 
   RGWObjectExpirer objexp(store);
-  objexp.start_processor();
+  objexp.start_processor(&dp);
 
   const utime_t interval(g_ceph_context->_conf->rgw_objexp_gc_interval, 0);
   while (true) {

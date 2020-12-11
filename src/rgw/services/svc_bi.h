@@ -36,7 +36,8 @@ public:
                          RGWBucketEnt *stats,
                          optional_yield y) = 0;
 
-  virtual int handle_overwrite(const RGWBucketInfo& info,
+  virtual int handle_overwrite(const DoutPrefixProvider *dpp, 
+                               const RGWBucketInfo& info,
                                const RGWBucketInfo& orig_info) = 0;
 };
 

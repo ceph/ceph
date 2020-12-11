@@ -120,14 +120,14 @@ void RGWPutUserPolicy::execute(optional_yield y)
 
   RGWUserInfo info;
   rgw_user user_id(user_name);
-  op_ret = store->ctl()->user->get_info_by_uid(user_id, &info, s->yield);
+  op_ret = store->ctl()->user->get_info_by_uid(s, user_id, &info, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
   map<string, bufferlist> uattrs;
-  op_ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, s->yield);
+  op_ret = store->ctl()->user->get_attrs_by_uid(s, user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -153,7 +153,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
     uattrs[RGW_ATTR_USER_POLICY] = in_bl;
 
     RGWObjVersionTracker objv_tracker;
-    op_ret = store->ctl()->user->store_info(info, s->yield,
+    op_ret = store->ctl()->user->store_info(s, info, s->yield,
                                          RGWUserCtl::PutParams()
                                          .set_objv_tracker(&objv_tracker)
                                          .set_attrs(&uattrs));
@@ -202,7 +202,7 @@ void RGWGetUserPolicy::execute(optional_yield y)
 
   rgw_user user_id(user_name);
   map<string, bufferlist> uattrs;
-  op_ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, s->yield);
+  op_ret = store->ctl()->user->get_attrs_by_uid(s, user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -266,7 +266,7 @@ void RGWListUserPolicies::execute(optional_yield y)
 
   rgw_user user_id(user_name);
   map<string, bufferlist> uattrs;
-  op_ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, s->yield);
+  op_ret = store->ctl()->user->get_attrs_by_uid(s, user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -329,7 +329,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   RGWUserInfo info;
   map<string, bufferlist> uattrs;
   rgw_user user_id(user_name);
-  op_ret = store->ctl()->user->get_info_by_uid(user_id, &info, s->yield,
+  op_ret = store->ctl()->user->get_info_by_uid(s, user_id, &info, s->yield,
                                             RGWUserCtl::GetParams()
                                             .set_attrs(&uattrs));
   if (op_ret < 0) {
@@ -361,7 +361,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
       uattrs[RGW_ATTR_USER_POLICY] = in_bl;
 
       RGWObjVersionTracker objv_tracker;
-      op_ret = store->ctl()->user->store_info(info, s->yield,
+      op_ret = store->ctl()->user->store_info(s, info, s->yield,
                                            RGWUserCtl::PutParams()
                                            .set_old_info(&info)
                                            .set_objv_tracker(&objv_tracker)

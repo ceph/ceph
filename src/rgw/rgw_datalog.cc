@@ -677,24 +677,25 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
-bool RGWDataChangesLog::filter_bucket(const rgw_bucket& bucket,
+bool RGWDataChangesLog::filter_bucket(const DoutPrefixProvider *dpp, 
+                                      const rgw_bucket& bucket,
 				      optional_yield y) const
 {
   if (!bucket_filter) {
     return true;
   }
 
-  return bucket_filter(bucket, y);
+  return bucket_filter(bucket, y, dpp);
 }
 
 std::string RGWDataChangesLog::get_oid(int i) const {
   return be->get_oid(i);
 }
 
-int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
+int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id) {
   auto& bucket = bucket_info.bucket;
 
-  if (!filter_bucket(bucket, null_yield)) {
+  if (!filter_bucket(dpp, bucket, null_yield)) {
     return 0;
   }
 

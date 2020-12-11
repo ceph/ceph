@@ -81,7 +81,7 @@ void RGWSI_User_RADOS::init(RGWSI_RADOS *_rados_svc,
   svc.sync_modules = _sync_modules_svc;
 }
 
-int RGWSI_User_RADOS::do_start(optional_yield)
+int RGWSI_User_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   uinfo_cache.reset(new RGWChainedCacheImpl<user_info_cache_entry>);
   uinfo_cache->init(svc.cache);
@@ -113,7 +113,8 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
                                real_time * const pmtime,
                                rgw_cache_entry_info * const cache_info,
                                map<string, bufferlist> * const pattrs,
-                               optional_yield y)
+                               optional_yield y,
+                               const DoutPrefixProvider *dpp)
 {
   if(user.id == RGW_USER_ANON_ID) {
     ldout(svc.meta_be->ctx(), 20) << "RGWSI_User_RADOS::read_user_info(): anonymous user" << dendl;
@@ -125,7 +126,7 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
   RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
   params.set_cache_info(cache_info);
 
-  int ret = svc.meta_be->get_entry(ctx, get_meta_key(user), params, objv_tracker, y);
+  int ret = svc.meta_be->get_entry(ctx, get_meta_key(user), params, objv_tracker, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -186,7 +187,7 @@ public:
     ui.user_id = info.user_id;
   }
 
-  int prepare() {
+  int prepare(const DoutPrefixProvider *dpp) {
     if (objv_tracker) {
       ot = *objv_tracker;
     }
@@ -206,7 +207,7 @@ public:
       auto& k = iter->second;
       /* check if swift mapping exists */
       RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_swift(ctx, k.id, &inf, nullptr, nullptr, y);
+      int r = svc.user->get_user_info_by_swift(ctx, k.id, &inf, nullptr, nullptr, y, dpp);
       if (r >= 0 && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
         ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
@@ -221,7 +222,7 @@ public:
         continue;
       auto& k = iter->second;
       RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_access_key(ctx, k.id, &inf, nullptr, nullptr, y);
+      int r = svc.user->get_user_info_by_access_key(ctx, k.id, &inf, nullptr, nullptr, y, dpp);
       if (r >= 0 && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
         ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
@@ -232,21 +233,21 @@ public:
     return 0;
   }
 
-  int put() {
+  int put(const DoutPrefixProvider *dpp) {
     bufferlist data_bl;
     encode(ui, data_bl);
     encode(info, data_bl);
 
     RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
 
-    int ret = svc.meta_be->put(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot, y);
+    int ret = svc.meta_be->put(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot, y, dpp);
     if (ret < 0)
       return ret;
 
     return 0;
   }
 
-  int complete() {
+  int complete(const DoutPrefixProvider *dpp) {
     int ret;
 
     bufferlist link_bl;
@@ -288,7 +289,7 @@ public:
     }
 
     if (old_info) {
-      ret = remove_old_indexes(*old_info, info, y);
+      ret = remove_old_indexes(*old_info, info, y, dpp);
       if (ret < 0) {
         return ret;
       }
@@ -297,7 +298,7 @@ public:
     return 0;
   }
 
-  int remove_old_indexes(const RGWUserInfo& old_info, const RGWUserInfo& new_info, optional_yield y) {
+  int remove_old_indexes(const RGWUserInfo& old_info, const RGWUserInfo& new_info, optional_yield y, const DoutPrefixProvider *dpp) {
     int ret;
 
     if (!old_info.user_id.empty() &&
@@ -306,7 +307,7 @@ public:
         ldout(svc.user->ctx(), 0) << "ERROR: tenant mismatch: " << old_info.user_id.tenant << " != " << new_info.user_id.tenant << dendl;
         return -EINVAL;
       }
-      ret = svc.user->remove_uid_index(ctx, old_info, nullptr, y);
+      ret = svc.user->remove_uid_index(ctx, old_info, nullptr, y, dpp);
       if (ret < 0 && ret != -ENOENT) {
         set_err_msg("ERROR: could not remove index for uid " + old_info.user_id.to_str());
         return ret;
@@ -359,7 +360,8 @@ int RGWSI_User_RADOS::store_user_info(RGWSI_MetaBackend::Context *ctx,
                                 const real_time& mtime,
                                 bool exclusive,
                                 map<string, bufferlist> *attrs,
-                                optional_yield y)
+                                optional_yield y,
+                                const DoutPrefixProvider *dpp)
 {
   PutOperation op(svc, ctx,
                   info, old_info,
@@ -368,17 +370,17 @@ int RGWSI_User_RADOS::store_user_info(RGWSI_MetaBackend::Context *ctx,
                   attrs,
                   y);
 
-  int r = op.prepare();
+  int r = op.prepare(dpp);
   if (r < 0) {
     return r;
   }
 
-  r = op.put();
+  r = op.put(dpp);
   if (r < 0) {
     return r;
   }
 
-  r = op.complete();
+  r = op.complete(dpp);
   if (r < 0) {
     return r;
   }
@@ -427,7 +429,8 @@ int RGWSI_User_RADOS::remove_swift_name_index(RGWSI_MetaBackend::Context *_ctx, 
 int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
                                  const RGWUserInfo& info,
                                  RGWObjVersionTracker *objv_tracker,
-                                 optional_yield y)
+                                 optional_yield y,
+                                 const DoutPrefixProvider *dpp)
 {
   int ret;
 
@@ -473,7 +476,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
     return ret;
   }
 
-  ret = remove_uid_index(ctx, info, objv_tracker, y);
+  ret = remove_uid_index(ctx, info, objv_tracker, y, dpp);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -482,12 +485,12 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
 }
 
 int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
-                                       optional_yield y)
+                                       optional_yield y, const DoutPrefixProvider *dpp)
 {
   ldout(cct, 10) << "removing user index: " << user_info.user_id << dendl;
 
   RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y);
+  int ret = svc.meta_be->remove(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y, dpp);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
     string key;
     user_info.user_id.to_str(key);
@@ -504,7 +507,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
                                          const rgw_pool& pool,
                                          RGWUserInfo *info,
                                          RGWObjVersionTracker * const objv_tracker,
-                                         real_time * const pmtime, optional_yield y)
+                                         real_time * const pmtime, optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
@@ -523,7 +526,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_system_obj(*ctx->obj_ctx, pool, key, bl, nullptr, &e.mtime, y);
+  int ret = rgw_get_system_obj(*ctx->obj_ctx, pool, key, bl, nullptr, &e.mtime, y, dpp);
   if (ret < 0)
     return ret;
 
@@ -535,7 +538,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
 
     int ret = read_user_info(ctx, uid.user_id,
                              &e.info, &e.objv_tracker, nullptr, &cache_info, nullptr,
-                             y);
+                             y, dpp);
     if (ret < 0) {
       return ret;
     }
@@ -562,10 +565,11 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
 int RGWSI_User_RADOS::get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                                        const string& email, RGWUserInfo *info,
                                        RGWObjVersionTracker *objv_tracker,
-                                       real_time *pmtime, optional_yield y)
+                                       real_time *pmtime, optional_yield y,
+                                       const DoutPrefixProvider *dpp)
 {
   return get_user_info_from_index(ctx, email, svc.zone->get_zone_params().user_email_pool,
-                                  info, objv_tracker, pmtime, y);
+                                  info, objv_tracker, pmtime, y, dpp);
 }
 
 /**
@@ -576,12 +580,13 @@ int RGWSI_User_RADOS::get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
                                        const string& swift_name,
                                        RGWUserInfo *info,        /* out */
                                        RGWObjVersionTracker * const objv_tracker,
-                                       real_time * const pmtime, optional_yield y)
+                                       real_time * const pmtime, optional_yield y,
+                                       const DoutPrefixProvider *dpp)
 {
   return get_user_info_from_index(ctx,
                                   swift_name,
                                   svc.zone->get_zone_params().user_swift_pool,
-                                  info, objv_tracker, pmtime, y);
+                                  info, objv_tracker, pmtime, y, dpp);
 }
 
 /**
@@ -592,12 +597,13 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
                                             const std::string& access_key,
                                             RGWUserInfo *info,
                                             RGWObjVersionTracker* objv_tracker,
-                                            real_time *pmtime, optional_yield y)
+                                            real_time *pmtime, optional_yield y,
+                                            const DoutPrefixProvider *dpp)
 {
   return get_user_info_from_index(ctx,
                                   access_key,
                                   svc.zone->get_zone_params().user_keys_pool,
-                                  info, objv_tracker, pmtime, y);
+                                  info, objv_tracker, pmtime, y, dpp);
 }
 
 int RGWSI_User_RADOS::cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add, optional_yield y)

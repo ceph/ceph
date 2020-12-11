@@ -17,7 +17,7 @@ class RGWRadosStore;
  * RGWRealmReloader responds to new period notifications by recreating RGWRados
  * with the updated realm configuration.
  */
-class RGWRealmReloader : public RGWRealmWatcher::Watcher {
+class RGWRealmReloader : public RGWRealmWatcher::Watcher, public DoutPrefixProvider {
  public:
   /**
    * Pauser is an interface to pause/resume frontends. Frontend cooperation
@@ -42,6 +42,11 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
 
   /// respond to realm notifications by scheduling a reload()
   void handle_notify(RGWRealmNotify type, bufferlist::const_iterator& p) override;
+
+  CephContext *get_cct() const override;
+  unsigned get_subsys() const;
+
+  std::ostream& gen_prefix(std::ostream& out) const;
 
  private:
   /// pause frontends and replace the RGWRados instance

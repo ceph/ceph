@@ -23,6 +23,7 @@
 #include "include/common_fwd.h"
 #include "include/encoding.h"
 #include "common/ceph_time.h"
+#include "common/dout.h"
 
 class RGWCoroutine;
 class RGWHTTPManager;
@@ -82,10 +83,10 @@ class BucketTrimManager : public BucketChangeObserver {
   void on_bucket_changed(const std::string_view& bucket_instance) override;
 
   /// create a coroutine to run the bucket trim process every trim interval
-  RGWCoroutine* create_bucket_trim_cr(RGWHTTPManager *http);
+  RGWCoroutine* create_bucket_trim_cr(RGWHTTPManager *http, const DoutPrefixProvider *dpp);
 
   /// create a coroutine to trim buckets directly via radosgw-admin
-  RGWCoroutine* create_admin_bucket_trim_cr(RGWHTTPManager *http);
+  RGWCoroutine* create_admin_bucket_trim_cr(RGWHTTPManager *http, const DoutPrefixProvider *dpp);
 };
 
 /// provides persistent storage for the trim manager's current position in the

@@ -238,20 +238,20 @@ void RGWSI_Notify::finalize_watch()
   delete[] watchers;
 }
 
-int RGWSI_Notify::do_start(optional_yield y)
+int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
-  int r = zone_svc->start(y);
+  int r = zone_svc->start(y, dpp);
   if (r < 0) {
     return r;
   }
 
   assert(zone_svc->is_started()); /* otherwise there's an ordering problem */
 
-  r = rados_svc->start(y);
+  r = rados_svc->start(y, dpp);
   if (r < 0) {
     return r;
   }
-  r = finisher_svc->start(y);
+  r = finisher_svc->start(y, dpp);
   if (r < 0) {
     return r;
   }

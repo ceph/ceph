@@ -16,6 +16,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+// this needs to be deleted later
 #undef dout_prefix
 #define dout_prefix (*_dout << "rgw realm reloader: ")
 
@@ -77,6 +78,21 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
   ldout(cct, 4) << "Notification on realm, reconfiguration scheduled" << dendl;
 }
 
+CephContext* RGWRealmReloader::get_cct() const 
+{ 
+  return store->ctx(); 
+}
+
+unsigned RGWRealmReloader::get_subsys() const
+{
+  return dout_subsys;
+}
+
+std::ostream& RGWRealmReloader::gen_prefix(std::ostream& out) const
+{
+  return out << "rgw realm reloader: ";
+}
+
 void RGWRealmReloader::reload()
 {
   CephContext *const cct = store->ctx();
@@ -104,7 +120,7 @@ void RGWRealmReloader::reload()
   while (!store) {
     // recreate and initialize a new store
     store =
-      RGWStoreManager::get_storage(cct,
+      RGWStoreManager::get_storage(this, cct,
 				   cct->_conf->rgw_enable_gc_threads,
 				   cct->_conf->rgw_enable_lc_threads,
 				   cct->_conf->rgw_enable_quota_threads,

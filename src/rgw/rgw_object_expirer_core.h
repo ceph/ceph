@@ -79,15 +79,18 @@ protected:
                        RGWBucketInfo& bucket_info);
 
   class OEWorker : public Thread {
+    const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWObjectExpirer *oe;
     ceph::mutex lock = ceph::make_mutex("OEWorker");
     ceph::condition_variable cond;
 
   public:
-    OEWorker(CephContext * const cct,
+    OEWorker(const DoutPrefixProvider *dpp, 
+             CephContext * const cct,
              RGWObjectExpirer * const oe)
-      : cct(cct),
+      : dpp(dpp),
+        cct(cct),
         oe(oe) {
     }
 
@@ -117,9 +120,10 @@ public:
                                      bucket_id, obj_key);
   }
 
-  int garbage_single_object(objexp_hint_entry& hint);
+  int garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint);
 
-  void garbage_chunk(std::list<cls_timeindex_entry>& entries, /* in  */
+  void garbage_chunk(const DoutPrefixProvider *dpp, 
+                     std::list<cls_timeindex_entry>& entries, /* in  */
                      bool& need_trim);                        /* out */
 
   void trim_chunk(const std::string& shard,
@@ -128,15 +132,17 @@ public:
                   const string& from_marker,
                   const string& to_marker);
 
-  bool process_single_shard(const std::string& shard,
+  bool process_single_shard(const DoutPrefixProvider *dpp, 
+                            const std::string& shard,
                             const utime_t& last_run,
                             const utime_t& round_start);
 
-  bool inspect_all_shards(const utime_t& last_run,
+  bool inspect_all_shards(const DoutPrefixProvider *dpp, 
+                          const utime_t& last_run,
                           const utime_t& round_start);
 
   bool going_down();
-  void start_processor();
+  void start_processor(const DoutPrefixProvider *dpp);
   void stop_processor();
 };
 #endif /* CEPH_OBJEXP_H */

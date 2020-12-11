@@ -29,7 +29,7 @@ RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {
   state.emplace<RGWSI_SysObj_Core::GetObjState>();
 }
 
-int RGWSI_SysObj::Obj::ROp::stat(optional_yield y)
+int RGWSI_SysObj::Obj::ROp::stat(optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
@@ -37,7 +37,7 @@ int RGWSI_SysObj::Obj::ROp::stat(optional_yield y)
   return svc->stat(source.get_ctx(), *state, obj,
 		   attrs, raw_attrs,
                    lastmod, obj_size,
-                   objv_tracker, y);
+                   objv_tracker, y, dpp);
 }
 
 int RGWSI_SysObj::Obj::ROp::read(int64_t ofs, int64_t end, bufferlist *bl,
