@@ -554,10 +554,10 @@ Journal::replay_segment(
 	      [=](auto &delta) {
 		/* The journal may validly contain deltas for extents in
 		 * since released segments.  We can detect those cases by
-		 * whether the segment in question currently has a sequence
-		 * number > the current journal segment seq. We can safely
-		 * skip these deltas because the extent must already have
-		 * been rewritten.
+		 * checking whether the segment in question currently has a
+		 * sequence number > the current journal segment seq. We can
+		 * safetly skip these deltas because the extent must already
+		 * have been rewritten.
 		 *
 		 * Note, this comparison exploits the fact that
 		 * SEGMENT_SEQ_NULL is a large number.
