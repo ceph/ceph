@@ -10,13 +10,13 @@ may cache and what manipulations clients may perform (e.g. writing to a file).
 
 The MDS and clients both try to enforce a cache size. The mechanism for
 specifying the MDS cache size is described below. Note that the MDS cache size
-is a not a hard limit. The MDS always allows clients to lookup new metadata
-which is loaded into the cache. This is an essential policy as its avoids
+is not a hard limit. The MDS always allows clients to lookup new metadata
+which is loaded into the cache. This is an essential policy as it avoids
 deadlock in client requests (some requests may rely on held capabilities before
 capabilities are released).
 
 When the MDS cache is too large, the MDS will **recall** client state so cache
-items become unpinned and eligble to be dropped. The MDS can only drop cache
+items become unpinned and eligible to be dropped. The MDS can only drop cache
 state when no clients refer to the metadata to be dropped. Also described below
 is how to configure the MDS recall settings for your workload's needs. This is
 necessary if the internal throttles on the MDS recall can not keep up with the
@@ -77,7 +77,7 @@ life for the counter. If the MDS is continually removing items from its cache,
 it will reach a steady state of ``-ln(0.5)/rate*threshold`` items removed per
 second.
 
-The defaults are conservative and may need changed for production MDS with
+The defaults are conservative and may need to be changed for production MDS with
 large cache sizes.
 
 
@@ -138,7 +138,7 @@ Session Liveness
 
 The MDS also keeps track of whether sessions are quiescent. If a client session
 is not utilizing its capabilities or is otherwise quiet, the MDS will begin
-recalling state from the session even if its not under cache pressure. This
+recalling state from the session even if it's not under cache pressure. This
 helps the MDS avoid future work when the cluster workload is hot and cache
 pressure is forcing the MDS to recall state. The expectation is that a client
 not utilizing its capabilities is unlikely to use those capabilities anytime
@@ -156,7 +156,7 @@ and::
 The configuration ``mds_session_cache_liveness_decay_rate`` indicates the
 half-life for the decay counter tracking the use of capabilities by the client.
 Each time a client manipulates or acquires a capability, the MDS will increment
-the counter. This is a rough but effective way to monitor utilization of the
+the counter. This is a rough but effective way to monitor the utilization of the
 client cache.
 
 The ``mds_session_cache_liveness_magnitude`` is a base-2 magnitude difference
