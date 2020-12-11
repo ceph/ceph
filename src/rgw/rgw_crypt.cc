@@ -886,7 +886,8 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 int rgw_s3_prepare_decrypt(struct req_state* s,
                        map<string, bufferlist>& attrs,
                        std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses)
+                       std::map<std::string, std::string>& crypt_http_responses,
+                       bool for_source)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
@@ -903,8 +904,22 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
+
+    const char* alg_name;
+    const char* key_name;
+    const char* key_md5_name;
+    if (!for_source) {
+      alg_name = "HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM";
+      key_name = "HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY";
+      key_md5_name = "HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5";
+    } else {
+      alg_name = "HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM";
+      key_name = "HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY";
+      key_md5_name = "HTTP_X_AMZ_COPY_SOURCE_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5";
+    }
+
     const char *req_cust_alg =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
+        s->info.env->get(alg_name, NULL);
 
     if (nullptr == req_cust_alg)  {
       ldout(s->cct, 5) << "ERROR: Request for SSE-C encrypted object missing "
@@ -921,7 +936,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
     std::string key_bin;
     try {
-      key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
+      key_bin = from_base64(s->info.env->get(key_name, ""));
     } catch (...) {
       ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
                        << "which contains character that is not base64 encoded."
@@ -939,7 +954,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
     }
 
     std::string keymd5 =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
+        s->info.env->get(key_md5_name, "");
     std::string keymd5_bin;
     try {
       keymd5_bin = from_base64(keymd5);
