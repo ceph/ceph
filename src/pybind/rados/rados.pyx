@@ -1926,6 +1926,19 @@ cdef class ReadOp(object):
         with nogil:
             rados_release_read_op(self.read_op)
 
+    def cmpext(self, cmp_buf: bytes, offset: int = 0):
+        """
+        Ensure that given object range (extent) satisfies comparison
+        :param cmp_buf: buffer containing bytes to be compared with object contents
+        :param offset: object byte offset at which to start the comparison
+        """
+        cdef:
+            char *_cmp_buf = cmp_buf
+            size_t _cmp_buf_len = len(cmp_buf)
+            uint64_t _offset = offset
+        with nogil:
+            rados_read_op_cmpext(self.read_op, _cmp_buf, _cmp_buf_len, _offset, NULL)
+
     def set_flags(self, flags: int = LIBRADOS_OPERATION_NOFLAG):
         """
         Set flags for the last operation added to this read_op.

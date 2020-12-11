@@ -415,6 +415,8 @@ cdef nogil:
         pass
     void rados_write_op_writesame(rados_write_op_t write_op, const char *buffer, size_t data_len, size_t write_len, uint64_t offset):
         pass
+    void rados_read_op_cmpext(rados_read_op_t read_op, const char *cmp_buf, size_t cmp_len, uint64_t off, int *prval):
+        pass
     void rados_read_op_omap_get_vals2(rados_read_op_t read_op, const char * start_after, const char * filter_prefix, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval):
         pass
     void rados_read_op_omap_get_keys2(rados_read_op_t read_op, const char * start_after, uint64_t max_return, rados_omap_iter_t * iter, unsigned char *pmore, int * prval):
