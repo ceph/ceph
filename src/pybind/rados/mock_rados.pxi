@@ -378,6 +378,8 @@ cdef nogil:
         pass
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags):
         pass
+    void rados_write_op_cmpext(rados_write_op_t write_op, const char *cmp_buf, size_t cmp_len, uint64_t off, int *prval):
+        pass
     void rados_write_op_omap_set(rados_write_op_t write_op, const char * const* keys, const char * const* vals, const size_t * lens, size_t num):
         pass
     void rados_write_op_omap_rm_keys(rados_write_op_t write_op, const char * const* keys, size_t keys_len):
