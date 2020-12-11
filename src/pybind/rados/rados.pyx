@@ -90,6 +90,11 @@ class InvalidArgumentError(Error):
         super(InvalidArgumentError, self).__init__(
             "RADOS invalid argument (%s)" % message, errno)
 
+class ExtendMismatch(Error):
+    def __init__(self, message, errno, offset):
+        super().__init__(
+             "object content does not match (%s)" % message, errno)
+        self.offset = offset
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
@@ -261,6 +266,9 @@ cdef make_ex(ret: int, msg: str):
     ret = abs(ret)
     if ret in errno_to_exception:
         return errno_to_exception[ret](msg, errno=ret)
+    elif ret > MAX_ERRNO:
+         offset = ret - MAX_ERRNO
+         return ExtendMismatch(msg, ret, offset)
     else:
         return OSError(msg, errno=ret)
 
@@ -1888,6 +1896,19 @@ cdef class WriteOp(object):
             uint64_t _offset = offset
         with nogil:
              rados_write_op_writesame(self.write_op, _to_write, _data_len, _write_len, _offset)
+
+    def cmpext(self, cmp_buf: bytes, offset: int = 0):
+        """
+        Ensure that given object range (extent) satisfies comparison
+        :param cmp_buf: buffer containing bytes to be compared with object contents
+        :param offset: object byte offset at which to start the comparison
+        """
+        cdef:
+            char *_cmp_buf = cmp_buf
+            size_t _cmp_buf_len = len(cmp_buf)
+            uint64_t _offset = offset
+        with nogil:
+            rados_write_op_cmpext(self.write_op, _cmp_buf, _cmp_buf_len, _offset, NULL)
 
 class WriteOpCtx(WriteOp, OpCtx):
     """write operation context manager"""
