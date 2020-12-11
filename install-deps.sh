@@ -338,7 +338,6 @@ else
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                 fi
-                $SUDO dnf copr enable -y tchaikov/gcc-toolset-9 centos-stream-x86_64
                 ;;
         esac
         munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
