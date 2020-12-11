@@ -1,0 +1,20 @@
+---
+name: "Pull Request Needs Rebase?"
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - master
+jobs:
+  labeler:
+    runs-on: ubuntu-latest
+    steps:
+      # eps1lon/actions-label-merge-conflict@v2.0.1
+      - name: Check if PR needs rebase
+        uses: eps1lon/actions-label-merge-conflict@b8bf8341285ec9a4567d4318ba474fee998a6919
+        with:
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          dirtyLabel: "needs-rebase"
+          removeOnDirtyLabel: "ready-to-merge"
+          commentOnDirty: "This pull request can no longer be automatically merged: a rebase is needed and changes have to be manually resolved"
