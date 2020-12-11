@@ -65,7 +65,7 @@ def task(ctx, config):
 
     try:
         for client, tests in clients.items():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            (remote,) = (ctx.cluster.only(client).remotes.keys())
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             remote.run(
                 args=[
@@ -97,7 +97,7 @@ def task(ctx, config):
                 _run_tests(ctx, role)
     finally:
         for client, tests in clients.items():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            (remote,) = (ctx.cluster.only(client).remotes.keys())
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             test_files = set([test.rsplit('/', 1)[1] for test in tests])
 
@@ -136,7 +136,7 @@ def _run_tests(ctx, role):
     PREFIX = 'client.'
     assert role.startswith(PREFIX)
     id_ = role[len(PREFIX):]
-    (remote,) = ctx.cluster.only(role).remotes.keys()
+    (remote,) = (ctx.cluster.only(role).remotes.keys())
     ceph_ref = ctx.summary.get('ceph-sha1', 'master')
 
     testdir = teuthology.get_testdir(ctx)
