@@ -380,8 +380,8 @@ Create images directory, and download some images:
 DATE=$(date +%Y%m%d)
 mkdir -p $HOME/.teuthology/www/images
 wget http://download.opensuse.org/distribution/leap/15.2/appliances/openSUSE-Leap-15.2-JeOS.x86_64-OpenStack-Cloud.qcow2 -O $HOME/.teuthology/www/images/opensuse-15.2-$DATE-cloudimg-amd64.img
-wget http://download.opensuse.org/distribution/leap/15.1/jeos/openSUSE-Leap-15.1-JeOS.x86_64-OpenStack-Cloud.qcow2 -O $HOM/.teuthology/www/images/images/opensuse-15.1-$DATE-cloudimg-amd64.img
-wget http://download.opensuse.org/tumbleweed/appliances/openSUSE-Tumbleweed-JeOS.x86_64-15.1.0-OpenStack-Cloud-Snapshot20200810.qcow2 -O $HOME/.teuthology/www/images/opensuse-tumbleweed-20200810-cloudimg-amd64.img
+wget http://download.opensuse.org/distribution/leap/15.1/jeos/openSUSE-Leap-15.1-JeOS.x86_64-OpenStack-Cloud.qcow2 -O $HOME/.teuthology/www/images/opensuse-15.1-$DATE-cloudimg-amd64.img
+wget http://download.opensuse.org/tumbleweed/appliances/openSUSE-Tumbleweed-JeOS.x86_64-OpenStack-Cloud.qcow2 -O $HOME/.teuthology/www/images/opensuse-tumbleweed-20200810-cloudimg-amd64.img
 ````
 
 Create sha512 for the image:
