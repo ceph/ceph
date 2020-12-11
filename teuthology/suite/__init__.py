@@ -193,7 +193,7 @@ def wait(name, max_job_time, upload_url):
     reporter = ResultsReporter()
     past_unfinished_jobs = []
     progress = time.time()
-    log.info("waiting for the suite to complete")
+    log.info(f"waiting for the run {name} to complete")
     log.debug("the list of unfinished jobs will be displayed "
               "every " + str(Run.WAIT_PAUSE / 60) + " minutes")
     exit_code = 0
