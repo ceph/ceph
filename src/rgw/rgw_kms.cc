@@ -115,6 +115,26 @@ static void concat_url(std::string &url, std::string path) {
   }
 }
 
+template<typename E, typename A = ZeroPoolAllocator>
+static inline void
+add_name_val_to_obj(std::string &n, std::string &v, rapidjson::GenericValue<E,A> &d,
+  A &allocator)
+{
+  rapidjson::GenericValue<E,A> name, val;
+  name.SetString(n.c_str(), n.length(), allocator);
+  val.SetString(v.c_str(), v.length(), allocator);
+  d.AddMember(name, val, allocator);
+}
+
+template<typename E, typename A = ZeroPoolAllocator>
+static inline void
+add_name_val_to_obj(const char *n, std::string &v, rapidjson::GenericValue<E,A> &d,
+  A &allocator)
+{
+  std::string ns{n, strlen(n) };
+  add_name_val_to_obj(ns, v, d, allocator);
+}
+
 typedef std::map<std::string, std::string> EngineParmMap;
 
 class VaultSecretEngine: public SecretEngine {
@@ -165,7 +185,10 @@ protected:
     return res;
   }
 
-  int send_request(std::string_view key_id, bufferlist &secret_bl)
+  int send_request(const char *method, std::string_view infix,
+    std::string_view key_id,
+    const std::string& postdata,
+    bufferlist &secret_bl)
   {
     int res;
     string vault_token = "";
@@ -184,10 +207,17 @@ protected:
     }
 
     concat_url(secret_url, cct->_conf->rgw_crypt_vault_prefix);
+    concat_url(secret_url, std::string(infix));
     concat_url(secret_url, std::string(key_id));
 
-    RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
+    RGWHTTPTransceiver secret_req(cct, method, secret_url, &secret_bl);
 
+    if (postdata.length()) {
+      secret_req.set_post_data(postdata);
+      secret_req.set_send_length(postdata.length());
+    }
+
+    secret_req.append_header("X-Vault-Token", vault_token);
     if (!vault_token.empty()){
       secret_req.append_header("X-Vault-Token", vault_token);
       vault_token.replace(0, vault_token.length(), vault_token.length(), '\000');
@@ -217,6 +247,11 @@ protected:
     return res;
   }
 
+  int send_request(std::string_view key_id, bufferlist &secret_bl)
+  {
+    return send_request("GET", "", key_id, string{}, secret_bl);
+  }
+
   int decode_secret(std::string encoded, std::string& actual_key){
     try {
       actual_key = from_base64(encoded);
@@ -234,7 +269,6 @@ public:
     this->cct = cct;
   }
 };
-
 
 class TransitSecretEngine: public VaultSecretEngine {
 public:
@@ -285,7 +319,7 @@ public:
     }
     if (compat == COMPAT_UNSET) {
       std::string_view v { cct->_conf->rgw_crypt_vault_prefix };
-      if (v.rfind("export/encryption-key") == v.length() - 21) {
+      if (v.rfind("/export/encryption-key") == v.length() - 22) {
 	compat = COMPAT_ONLY_OLD;
       } else {
 	compat = COMPAT_NEW_ONLY;
@@ -305,7 +339,8 @@ public:
       return -EINVAL;
     }
 
-    int res = send_request(key_id, secret_bl);
+    int res = send_request("GET", compat == COMPAT_ONLY_OLD ? "" : "/export/encryption-key",
+	key_id, string{}, secret_bl);
     if (res < 0) {
       return res;
     }
@@ -348,6 +383,10 @@ public:
   {
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     if (compat == COMPAT_ONLY_OLD) return get_key(key_id, actual_key);
+    if (key_id.find("/") != std::string::npos) {
+      ldout(cct, 0) << "sorry, can't allow / in keyid" << dendl;
+      return -EINVAL;
+    }
 /*
 	data: {context }
 	post to prefix + /datakey/plaintext/ + key_id
@@ -355,13 +394,78 @@ public:
 	jq: .data.ciphertext	-> (to-be) named attribute
     return decode_secret(json_obj, actual_key)
 */
-lderr(cct) << "make_key: not yet" << dendl;
-    return -EINVAL;
+    std::string context = get_str_attribute(attrs, RGW_ATTR_CRYPT_CONTEXT);
+    ZeroPoolDocument d { rapidjson::kObjectType };
+    auto &allocator { d.GetAllocator() };
+    bufferlist secret_bl;
+
+    add_name_val_to_obj("context", context, d, allocator);
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+    if (!d.Accept(writer)) {
+      ldout(cct, 0) << "ERROR: can't make json for vault" << dendl;
+      return -EINVAL;
+    }
+    std::string post_data { buf.GetString() };
+
+    int res = send_request("POST", "/datakey/plaintext/", key_id,
+	post_data, secret_bl);
+    if (res < 0) {
+      return res;
+    }
+
+    ldout(cct, 20) << "Parse response into JSON Object" << dendl;
+
+    rapidjson::StringStream isw(secret_bl.c_str());
+    d.SetNull();
+    d.ParseStream<>(isw);
+
+    if (d.HasParseError()) {
+      ldout(cct, 0) << "ERROR: Failed to parse JSON response from Vault: "
+	 << rapidjson::GetParseError_En(d.GetParseError()) << dendl;
+      return -EINVAL;
+    }
+    secret_bl.zero();
+
+    if (!d.IsObject()) {
+      ldout(cct, 0) << "ERROR: response from Vault is not an object" << dendl;
+      return -EINVAL;
+    }
+    {
+      auto data_itr { d.FindMember("data") };
+      if (data_itr == d.MemberEnd()) {
+	ldout(cct, 0) << "ERROR: no .data in response from Vault" << dendl;
+        return -EINVAL;
+      }
+      auto ciphertext_itr { data_itr->value.FindMember("ciphertext") };
+      auto plaintext_itr { data_itr->value.FindMember("plaintext") };
+      if (ciphertext_itr == data_itr->value.MemberEnd()) {
+	ldout(cct, 0) << "ERROR: no .data.ciphertext in response from Vault" << dendl;
+	return -EINVAL;
+      }
+      if (plaintext_itr == data_itr->value.MemberEnd()) {
+	ldout(cct, 0) << "ERROR: no .data.plaintext in response from Vault" << dendl;
+	return -EINVAL;
+      }
+      auto &ciphertext_v { ciphertext_itr->value };
+      auto &plaintext_v { plaintext_itr->value };
+      if (!ciphertext_v.IsString()) {
+	ldout(cct, 0) << "ERROR: .data.ciphertext not a string in response from Vault" << dendl;
+	return -EINVAL;
+      }
+      if (!plaintext_v.IsString()) {
+	ldout(cct, 0) << "ERROR: .data.plaintext not a string in response from Vault" << dendl;
+	return -EINVAL;
+      }
+      set_attr(attrs, RGW_ATTR_CRYPT_DATAKEY, ciphertext_v.GetString());
+      return decode_secret(plaintext_v.GetString(), actual_key);
+    }
   }
 
   int reconstitute_actual_key(map<string, bufferlist>& attrs, std::string& actual_key)
   {
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
+    std::string wrapped_key = get_str_attribute(attrs, RGW_ATTR_CRYPT_DATAKEY);
     if (compat == COMPAT_ONLY_OLD || key_id.rfind("/") != std::string::npos) {
       return get_key(key_id, actual_key);
     }
@@ -372,10 +476,63 @@ lderr(cct) << "make_key: not yet" << dendl;
 	jq: .data.plaintext
     return decode_secret(json_obj, actual_key)
 */
-lderr(cct) << "reconstitute_key: not yet" << dendl;
-    return -EINVAL;
-  }
+    std::string context = get_str_attribute(attrs, RGW_ATTR_CRYPT_CONTEXT);
+    ZeroPoolDocument d { rapidjson::kObjectType };
+    auto &allocator { d.GetAllocator() };
+    bufferlist secret_bl;
 
+    add_name_val_to_obj("context", context, d, allocator);
+    add_name_val_to_obj("ciphertext", wrapped_key, d, allocator);
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
+    if (!d.Accept(writer)) {
+      ldout(cct, 0) << "ERROR: can't make json for vault" << dendl;
+      return -EINVAL;
+    }
+    std::string post_data { buf.GetString() };
+
+    int res = send_request("POST", "/decrypt/", key_id,
+	post_data, secret_bl);
+    if (res < 0) {
+      return res;
+    }
+
+    ldout(cct, 20) << "Parse response into JSON Object" << dendl;
+
+    rapidjson::StringStream isw(secret_bl.c_str());
+    d.SetNull();
+    d.ParseStream<>(isw);
+
+    if (d.HasParseError()) {
+      ldout(cct, 0) << "ERROR: Failed to parse JSON response from Vault: "
+	 << rapidjson::GetParseError_En(d.GetParseError()) << dendl;
+      return -EINVAL;
+    }
+    secret_bl.zero();
+
+    if (!d.IsObject()) {
+      ldout(cct, 0) << "ERROR: response from Vault is not an object" << dendl;
+      return -EINVAL;
+    }
+    {
+      auto data_itr { d.FindMember("data") };
+      if (data_itr == d.MemberEnd()) {
+	ldout(cct, 0) << "ERROR: no .data in response from Vault" << dendl;
+        return -EINVAL;
+      }
+      auto plaintext_itr { data_itr->value.FindMember("plaintext") };
+      if (plaintext_itr == data_itr->value.MemberEnd()) {
+	ldout(cct, 0) << "ERROR: no .data.plaintext in response from Vault" << dendl;
+	return -EINVAL;
+      }
+      auto &plaintext_v { plaintext_itr->value };
+      if (!plaintext_v.IsString()) {
+	ldout(cct, 0) << "ERROR: .data.plaintext not a string in response from Vault" << dendl;
+	return -EINVAL;
+      }
+      return decode_secret(plaintext_v.GetString(), actual_key);
+    }
+  }
 };
 
 class KvSecretEngine: public VaultSecretEngine {
