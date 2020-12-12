@@ -11,6 +11,7 @@ python:
   install:
     - requirements: admin/doc-requirements.txt
     - requirements: admin/doc-read-the-docs.txt
+    - requirements: admin/doc-pybind.txt
 sphinx:
   builder: dirhtml
   configuration: doc/conf.py
