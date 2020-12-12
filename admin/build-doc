@@ -48,45 +48,26 @@ fi
 # for availability of commands
 set -e
 
-cd build-doc
-
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
     virtualenv --python=python3 $vdir
 fi
 
-# be compatible with pip shipped by distro older v20.2
-if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
-    PIP_INSTALL="$vdir/bin/pip install --use-feature=2020-resolver"
-else
-    PIP_INSTALL="$vdir/bin/pip install"
-fi
-$PIP_INSTALL --quiet --upgrade pip setuptools
-$PIP_INSTALL --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
+$vdir/bin/pip install --quiet \
+              -r $TOPDIR/admin/doc-requirements.txt \
+              -r $TOPDIR/admin/doc-python-common-requirements.txt
+BUILD_DOC=1 $vdir/bin/pip install --quiet \
+         -r $TOPDIR/admin/doc-pybind.txt
 
 install -d -m0755 \
     $TOPDIR/build-doc/output/html \
     $TOPDIR/build-doc/output/man
 
-# To avoid having to build librbd to build the Python bindings to build the docs,
-# create a dummy librbd.so that allows the module to be imported by sphinx.
-# the module are imported by the "automodule::" directive.
-mkdir -p $vdir/lib
-export LD_LIBRARY_PATH="$vdir/lib"
+# required by script/gen_static_command_descriptions.py, which imports ceph_argparse
 export PYTHONPATH=$TOPDIR/src/pybind
 
-
 $vdir/bin/python $TOPDIR/doc/scripts/gen_mon_command_api.py > $TOPDIR/doc/api/mon_command_api.rst
-
-
-# FIXME(sileht): I dunno how to pass the include-dirs correctly with pip
-# for build_ext step, it should be:
-# --global-option=build_ext --global-option="--cython-include-dirs $TOPDIR/src/pybind/rados/"
-# but that doesn't work, so copying the file in the rbd module directly, that's ok for docs
-for bind in rados rbd cephfs rgw; do
-    BUILD_DOC=1 $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
-done
 
 for opt in "$@"; do
     case $opt in
@@ -104,6 +85,8 @@ if [ -z "$sphinx_targets" ]; then
     sphinx_targets="html man"
 fi
 
+cd build-doc
+
 for target in $sphinx_targets; do
     # Build with -W so that warnings are treated as errors and this fails
     case $target in
@@ -116,7 +99,7 @@ for target in $sphinx_targets; do
                                    $TOPDIR/doc $TOPDIR/build-doc/output/$target
             ;;
         livehtml)
-            $PIP_INSTALL --quiet sphinx-autobuild
+            $vdir/bin/pip install --quiet sphinx-autobuild
             $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' "$@" \
                                        $TOPDIR/doc $TOPDIR/build-doc/output/html
             ;;
