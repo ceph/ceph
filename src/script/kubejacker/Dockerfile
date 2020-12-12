@@ -11,4 +11,5 @@ FROM ceph/daemon-base:latest-master
 #ADD eclib.tar.gz /usr/local/lib64/ceph/erasure-code/
 #ADD clslib.tar.gz /usr/local/lib64/rados-classes/
 
+ADD python_common.tar.gz /usr/share/ceph/python_common
 ADD mgr_plugins.tar.gz /usr/share/ceph/mgr
