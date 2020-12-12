@@ -64,13 +64,8 @@ install -d -m0755 \
     $TOPDIR/build-doc/output/html \
     $TOPDIR/build-doc/output/man
 
-# To avoid having to build librbd to build the Python bindings to build the docs,
-# create a dummy librbd.so that allows the module to be imported by sphinx.
-# the module are imported by the "automodule::" directive.
-mkdir -p $vdir/lib
-export LD_LIBRARY_PATH="$vdir/lib"
+# required by script/gen_static_command_descriptions.py, which imports ceph_argparse
 export PYTHONPATH=$TOPDIR/src/pybind
-
 
 $vdir/bin/python $TOPDIR/doc/scripts/gen_mon_command_api.py > $TOPDIR/doc/api/mon_command_api.rst
 
