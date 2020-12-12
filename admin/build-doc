@@ -62,6 +62,7 @@ if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
 else
     PIP_INSTALL="$vdir/bin/pip install"
 fi
+$PIP_INSTALL --quiet --upgrade pip setuptools
 $PIP_INSTALL --quiet -r $TOPDIR/admin/doc-requirements.txt -r $TOPDIR/admin/doc-python-common-requirements.txt
 
 install -d -m0755 \
@@ -87,26 +88,39 @@ for bind in rados rbd cephfs rgw; do
     BUILD_DOC=1 $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
 done
 
-if [ -z "$@" ]; then
+for opt in "$@"; do
+    case $opt in
+        html|man|livehtml)
+            sphinx_targets="$sphinx_targets $opt"
+            shift
+            ;;
+        --)
+            shift
+            break
+    esac
+done
+
+if [ -z "$sphinx_targets" ]; then
     sphinx_targets="html man"
-else
-    sphinx_targets=$@
 fi
+
 for target in $sphinx_targets; do
-    builder=$target
+    # Build with -W so that warnings are treated as errors and this fails
     case $target in
         html)
-            builder=dirhtml
+            $vdir/bin/sphinx-build -W --keep-going -a -b dirhtml -d doctrees \
+                                   $TOPDIR/doc $TOPDIR/build-doc/output/$target
             ;;
         man)
-            extra_opt="-t man"
+            $vdir/bin/sphinx-build -W --keep-going -a -b man -t man -d doctrees \
+                                   $TOPDIR/doc $TOPDIR/build-doc/output/$target
+            ;;
+        livehtml)
+            $PIP_INSTALL --quiet sphinx-autobuild
+            $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' "$@" \
+                                       $TOPDIR/doc $TOPDIR/build-doc/output/html
             ;;
     esac
-    # Build with -W so that warnings are treated as errors and this fails
-    $vdir/bin/sphinx-build -W --keep-going -a -b $builder $extra_opt -d doctrees \
-                           $TOPDIR/doc $TOPDIR/build-doc/output/$target
-
-
 done
 
 #
