@@ -778,8 +778,8 @@ void RDMAWorker::handle_pending_message()
   dispatcher->notify_pending_workers();
 }
 
-RDMAStack::RDMAStack(CephContext *cct, const std::string &t)
-  : NetworkStack(cct, t), ib(std::make_shared<Infiniband>(cct)),
+RDMAStack::RDMAStack(CephContext *cct)
+  : NetworkStack(cct), ib(std::make_shared<Infiniband>(cct)),
     rdma_dispatcher(std::make_shared<RDMADispatcher>(cct, ib))
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
