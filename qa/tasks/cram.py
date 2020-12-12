@@ -134,8 +134,10 @@ def _run_tests(ctx, role):
     """
     assert isinstance(role, str)
     PREFIX = 'client.'
-    assert role.startswith(PREFIX)
-    id_ = role[len(PREFIX):]
+    if role.startswith(PREFIX):
+        id_ = role[len(PREFIX):]
+    else:
+        id_ = role
     (remote,) = (ctx.cluster.only(role).remotes.keys())
     ceph_ref = ctx.summary.get('ceph-sha1', 'master')
 
