@@ -200,7 +200,6 @@ class CephadmService(metaclass=ABCMeta):
         cmd_dicts = get_set_cmd_dicts(out.strip())
         for cmd_dict in list(cmd_dicts):
             try:
-                logger.info('Setting Dashboard config for %s: command: %s', service_name, cmd_dict)
                 _, out, _ = self.mgr.check_mon_command(cmd_dict)
             except MonCommandFailed as e:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
