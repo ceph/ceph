@@ -147,8 +147,6 @@ void btree_pin_set_t::check_parent(btree_range_pin_t &pin)
   if (parent) {
     logger().debug("{}: releasing parent {}", __func__, *parent);
     release_if_no_children(*parent);
-  } else {
-    assert(pin.is_root());
   }
 }
 

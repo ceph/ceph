@@ -109,24 +109,39 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping(
   laddr_t laddr,
   mutate_func_t &&f)
 {
+  return mutate_mapping_internal(c, laddr, true, std::move(f));
+}
+
+LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping_internal(
+  op_context_t c,
+  laddr_t laddr,
+  bool is_root,
+  mutate_func_t &&f)
+{
+  auto mutation_pt = get_containing_child(laddr);
+  if (mutation_pt == end()) {
+    assert(0 == "impossible");
+    return crimson::ct_error::enoent::make();
+  }
   return get_lba_btree_extent(
     c,
     get_meta().depth - 1,
-    get_containing_child(laddr)->get_val(),
+    mutation_pt->get_val(),
     get_paddr()
-  ).safe_then([this, c, laddr](LBANodeRef extent) {
-    if (extent->at_min_capacity()) {
+  ).safe_then([=](LBANodeRef extent) {
+    if (extent->at_min_capacity() && get_size() > 1) {
       return merge_entry(
 	c,
 	laddr,
-	get_containing_child(laddr),
-	extent);
+	mutation_pt,
+	extent,
+	is_root);
     } else {
       return merge_ertr::make_ready_future<LBANodeRef>(
 	std::move(extent));
     }
   }).safe_then([c, laddr, f=std::move(f)](LBANodeRef extent) mutable {
-    return extent->mutate_mapping(c, laddr, std::move(f));
+    return extent->mutate_mapping_internal(c, laddr, false, std::move(f));
   });
 }
 
@@ -317,12 +332,14 @@ LBAInternalNode::merge_ret
 LBAInternalNode::merge_entry(
   op_context_t c,
   laddr_t addr,
-  internal_iterator_t iter, LBANodeRef entry)
+  internal_iterator_t iter,
+  LBANodeRef entry,
+  bool is_root)
 {
   if (!is_pending()) {
     auto mut = c.cache.duplicate_for_write(c.trans, this)->cast<LBAInternalNode>();
     auto mut_iter = mut->iter_idx(iter->get_offset());
-    return mut->merge_entry(c, addr, mut_iter, entry);
+    return mut->merge_entry(c, addr, mut_iter, entry, is_root);
   }
 
   logger().debug(
@@ -336,8 +353,7 @@ LBAInternalNode::merge_entry(
     get_meta().depth - 1,
     donor_iter->get_val(),
     get_paddr()
-  ).safe_then([this, c, addr, iter, entry, donor_iter, donor_is_left](
-		auto donor) mutable {
+  ).safe_then([=](auto donor) mutable {
     auto [l, r] = donor_is_left ?
       std::make_pair(donor, entry) : std::make_pair(entry, donor);
     auto [liter, riter] = donor_is_left ?
@@ -355,7 +371,25 @@ LBAInternalNode::merge_entry(
 
       c.cache.retire_extent(c.trans, l);
       c.cache.retire_extent(c.trans, r);
-      return split_ertr::make_ready_future<LBANodeRef>(replacement);
+
+      if (is_root && get_size() == 1) {
+	return c.cache.get_root(c.trans).safe_then([=](RootBlockRef croot) {
+	  {
+	    auto mut_croot = c.cache.duplicate_for_write(c.trans, croot);
+	    croot = mut_croot->cast<RootBlock>();
+	  }
+	  croot->root.lba_root_addr = begin()->get_val();
+	  logger().debug(
+	    "LBAInternalNode::merge_entry: collapsing root {} to addr {}",
+	    *this,
+	    begin()->get_val());
+	  croot->root.lba_depth = get_meta().depth - 1;
+	  c.cache.retire_extent(c.trans, this);
+	  return merge_ertr::make_ready_future<LBANodeRef>(replacement);
+	});
+      } else {
+	return merge_ertr::make_ready_future<LBANodeRef>(replacement);
+      }
     } else {
       logger().debug(
 	"LBAInternalEntry::merge_entry balanced l {} r {}",
@@ -379,7 +413,7 @@ LBAInternalNode::merge_entry(
 
       c.cache.retire_extent(c.trans, l);
       c.cache.retire_extent(c.trans, r);
-      return split_ertr::make_ready_future<LBANodeRef>(
+      return merge_ertr::make_ready_future<LBANodeRef>(
 	addr >= pivot ? replacement_r : replacement_l
       );
     }
@@ -470,17 +504,27 @@ LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping(
   laddr_t laddr,
   mutate_func_t &&f)
 {
-  if (!is_pending()) {
-    return c.cache.duplicate_for_write(c.trans, this)->cast<LBALeafNode>(
-    )->mutate_mapping(
-      c,
-      laddr,
-      std::move(f));
-  }
+  return mutate_mapping_internal(c, laddr, true, std::move(f));
+}
 
+LBALeafNode::mutate_mapping_ret LBALeafNode::mutate_mapping_internal(
+  op_context_t c,
+  laddr_t laddr,
+  bool is_root,
+  mutate_func_t &&f)
+{
   auto mutation_pt = find(laddr);
   if (mutation_pt == end()) {
     return crimson::ct_error::enoent::make();
+  }
+
+  if (!is_pending()) {
+    return c.cache.duplicate_for_write(c.trans, this)->cast<LBALeafNode>(
+    )->mutate_mapping_internal(
+      c,
+      laddr,
+      is_root,
+      std::move(f));
   }
 
   auto cur = mutation_pt.get_val();

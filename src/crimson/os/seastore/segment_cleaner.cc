@@ -273,28 +273,30 @@ SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
     return do_gc_ertr::now();
   }
 
-  if (gc_current_pos == P_ADDR_NULL) {
-    gc_current_pos.segment = get_next_gc_target();
-    if (gc_current_pos == P_ADDR_NULL) {
-      // apparently there are no segments to gc
+  if (!scan_cursor) {
+    paddr_t next = P_ADDR_NULL;
+    next.segment = get_next_gc_target();
+    if (next == P_ADDR_NULL) {
       logger().debug(
 	"SegmentCleaner::do_gc: no segments to gc");
       return do_gc_ertr::now();
     }
+    next.offset = 0;
+    scan_cursor =
+      std::make_unique<ExtentCallbackInterface::scan_extents_cursor>(
+	next);
     logger().debug(
       "SegmentCleaner::do_gc: starting gc on segment {}",
-      gc_current_pos.segment);
-    gc_current_pos.offset = 0;
+      scan_cursor->get_offset().segment);
   }
 
   return ecb->scan_extents(
-    gc_current_pos,
+    *scan_cursor,
     bytes
   ).safe_then([=, &t](auto addrs) {
     return seastar::do_with(
       std::move(addrs),
-      [=, &t](auto &addrs) {
-	auto &[next, addr_list] = addrs;
+      [=, &t](auto &addr_list) {
 	return crimson::do_for_each(
 	  addr_list,
 	  [=, &t](auto &addr_pair) {
@@ -324,10 +326,10 @@ SegmentCleaner::do_gc_ret SegmentCleaner::do_gc(
 		t,
 		ext);
 	    });
-	  }).safe_then([next=next, &t, this] {
-	    auto old_pos = std::exchange(gc_current_pos, next);
-	    if (gc_current_pos == P_ADDR_NULL) {
-	      t.mark_segment_to_release(old_pos.segment);
+	  }).safe_then([&t, this] {
+	    if (scan_cursor->is_complete()) {
+	      t.mark_segment_to_release(scan_cursor->get_offset().segment);
+	      scan_cursor.reset();
 	    }
 	    return ExtentCallbackInterface::release_segment_ertr::now();
 	  });
