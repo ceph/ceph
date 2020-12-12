@@ -54,17 +54,11 @@ if [ ! -e $vdir ]; then
     virtualenv --python=python3 $vdir
 fi
 
-# be compatible with pip shipped by distro older v20.2
-if $vdir/bin/pip --use-feature=2020-resolver >/dev/null 2>&1 ; then
-    PIP_INSTALL="$vdir/bin/pip install --use-feature=2020-resolver"
-else
-    PIP_INSTALL="$vdir/bin/pip install"
-fi
-$PIP_INSTALL --quiet --upgrade pip setuptools
-$PIP_INSTALL --quiet \
-             -r $TOPDIR/admin/doc-requirements.txt \
-             -r $TOPDIR/admin/doc-python-common-requirements.txt
-BUILD_DOC=1 $PIP_INSTALL --quiet \
+$vdir/bin/pip install --quiet --upgrade pip setuptools
+$vdir/bin/pip install --quiet \
+              -r $TOPDIR/admin/doc-requirements.txt \
+              -r $TOPDIR/admin/doc-python-common-requirements.txt
+BUILD_DOC=1 $vdir/bin/pip install --quiet \
          -r $TOPDIR/admin/doc-pybind.txt
 
 install -d -m0755 \
@@ -111,7 +105,7 @@ for target in $sphinx_targets; do
                                    $TOPDIR/doc $TOPDIR/build-doc/output/$target
             ;;
         livehtml)
-            $PIP_INSTALL --quiet sphinx-autobuild
+            $vdir/bin/pip install --quiet sphinx-autobuild
             $vdir/bin/sphinx-autobuild --re-ignore '.*\.dot' "$@" \
                                        $TOPDIR/doc $TOPDIR/build-doc/output/html
             ;;
