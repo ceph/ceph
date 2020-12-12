@@ -1,8 +1,9 @@
 # ceph-deploy ftw
 import os
-import errno
-import tempfile
-import shutil
+try:
+    from typing import Optional
+except ImportError:
+    pass
 
 PYTHONS = ['python3', 'python2', 'python']
 PATH = [
@@ -16,6 +17,7 @@ PATH = [
 
 
 def choose_python():
+    # type: () -> Optional[str]
     for e in PYTHONS:
         for b in PATH:
             p = os.path.join(b, e)
