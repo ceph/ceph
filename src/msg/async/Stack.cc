@@ -69,14 +69,14 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
   std::shared_ptr<NetworkStack> stack = nullptr;
 
   if (t == "posix")
-    stack.reset(new PosixNetworkStack(c, t));
+    stack.reset(new PosixNetworkStack(c));
 #ifdef HAVE_RDMA
   else if (t == "rdma")
-    stack.reset(new RDMAStack(c, t));
+    stack.reset(new RDMAStack(c));
 #endif
 #ifdef HAVE_DPDK
   else if (t == "dpdk")
-    stack.reset(new DPDKStack(c, t));
+    stack.reset(new DPDKStack(c));
 #endif
 
   if (stack == nullptr) {
@@ -98,7 +98,8 @@ std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c,
   return stack;
 }
 
-NetworkStack::NetworkStack(CephContext *c, const std:: string &t): type(t), started(false), cct(c)
+NetworkStack::NetworkStack(CephContext *c)
+  : cct(c)
 {
   ceph_assert(cct->_conf->ms_async_op_threads > 0);
 

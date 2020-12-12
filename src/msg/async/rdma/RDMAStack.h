@@ -331,7 +331,7 @@ class RDMAStack : public NetworkStack {
   }
 
  public:
-  explicit RDMAStack(CephContext *cct, const std::string &t);
+  explicit RDMAStack(CephContext *cct);
   virtual ~RDMAStack();
   virtual bool nonblock_connect_need_writable_event() const override { return false; }
 
