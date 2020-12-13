@@ -8,8 +8,7 @@ add_library(librados_impl STATIC
 # C/C++ API
 add_library(librados ${CEPH_SHARED}
   librados_c.cc
-  librados_cxx.cc
-  $<TARGET_OBJECTS:common_buffer_obj>)
+  librados_cxx.cc)
 if(ENABLE_SHARED)
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados

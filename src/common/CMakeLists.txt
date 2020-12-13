@@ -1,6 +1,3 @@
-add_library(common_buffer_obj OBJECT
-  buffer.cc)
-
 add_library(common_texttable_obj OBJECT
   TextTable.cc)
 
@@ -44,6 +41,7 @@ set(common_srcs
   assert.cc
   bit_str.cc
   bloom_filter.cc
+  buffer.cc
   ceph_argparse.cc
   ceph_context.cc
   ceph_crypto.cc
