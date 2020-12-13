@@ -280,7 +280,7 @@ public:
 struct read_remote_data_log_response {
   string marker;
   bool truncated;
-  list<rgw_data_change_log_entry> entries;
+  vector<rgw_data_change_log_entry> entries;
 
   read_remote_data_log_response() : truncated(false) {}
 
@@ -300,7 +300,7 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
   int shard_id;
   const std::string& marker;
   string *pnext_marker;
-  list<rgw_data_change_log_entry> *entries;
+  vector<rgw_data_change_log_entry> *entries;
   bool *truncated;
 
   read_remote_data_log_response response;
@@ -309,7 +309,7 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
 public:
   RGWReadRemoteDataLogShardCR(RGWDataSyncCtx *_sc, int _shard_id,
                               const std::string& marker, string *pnext_marker,
-                              list<rgw_data_change_log_entry> *_entries,
+                              vector<rgw_data_change_log_entry> *_entries,
                               bool *_truncated)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
       shard_id(_shard_id), marker(marker), pnext_marker(pnext_marker),
@@ -1414,8 +1414,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   std::optional<RGWDataSyncShardMarkerTrack> marker_tracker;
 
   std::string next_marker;
-  list<rgw_data_change_log_entry> log_entries;
-  list<rgw_data_change_log_entry>::iterator log_iter;
+  vector<rgw_data_change_log_entry> log_entries;
+  vector<rgw_data_change_log_entry>::iterator log_iter;
   bool truncated = false;
 
   ceph::mutex inc_lock = ceph::make_mutex("RGWDataSyncShardCR::inc_lock");
@@ -3281,7 +3281,7 @@ class RGWReadPendingBucketShardsCoroutine : public RGWCoroutine {
   int count;
 
   std::string next_marker;
-  list<rgw_data_change_log_entry> log_entries;
+  vector<rgw_data_change_log_entry> log_entries;
   bool truncated;
 
 public:
