@@ -32,7 +32,7 @@ std::ostream& operator<<(std::ostream& os, MirrorHealth mirror_health) {
   return os;
 }
 
-std::string MirrorService::get_image_description() const {
+std::string MirrorService::get_description() const {
   std::string description = (!client_id.empty() ? client_id :
                                                   stringify(service_id));
   if (!hostname.empty()) {
@@ -41,7 +41,7 @@ std::string MirrorService::get_image_description() const {
   return description;
 }
 
-void MirrorService::dump_image(
+void MirrorService::dump(
     argument_types::Format::Formatter formatter) const {
   formatter->open_object_section("daemon_service");
   formatter->dump_string("service_id", service_id);
