@@ -35,6 +35,7 @@ set(rbd_srcs
   action/Lock.cc
   action/MergeDiff.cc
   action/Migration.cc
+  action/MirrorGroup.cc
   action/MirrorImage.cc
   action/MirrorPool.cc
   action/MirrorSnapshotSchedule.cc
