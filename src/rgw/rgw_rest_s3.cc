@@ -6232,6 +6232,12 @@ int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_
 
   int status=0;
   for(auto& it : bl.buffers()) {
+
+    if(it.length() == 0) {
+      ldout(s->cct, 10) << "s3select: it->_len is zero."<< dendl;
+      return 0;
+    }
+
     status = run_s3select(m_sql_query.c_str(), &(it)[0], it.length());
     if(status<0) {
       break;
