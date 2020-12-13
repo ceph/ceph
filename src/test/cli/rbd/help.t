@@ -87,6 +87,16 @@
       migration commit                  Commit image migration.
       migration execute                 Execute image migration.
       migration prepare                 Prepare image migration.
+      mirror group demote               Demote an group to non-primary for RBD
+                                        mirroring.
+      mirror group disable              Disable RBD mirroring for an group.
+      mirror group enable               Enable RBD mirroring for an group.
+      mirror group promote              Promote an group to primary for RBD
+                                        mirroring.
+      mirror group resync               Force resync to primary group for RBD
+                                        mirroring.
+      mirror group snapshot             Create RBD mirroring group snapshot.
+      mirror group status               Show RBD mirroring status for an group.
       mirror image demote               Demote an image to non-primary for RBD
                                         mirroring.
       mirror image disable              Disable RBD mirroring for an image.
@@ -1681,6 +1691,128 @@
     (*) supports enabling/disabling on existing images
     (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
+  
+  rbd help mirror group demote
+  usage: rbd mirror group demote [--pool <pool>] [--namespace <namespace>] 
+                                 [--group <group>] 
+                                 <group-spec> 
+  
+  Demote an group to non-primary for RBD mirroring.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+  
+  rbd help mirror group disable
+  usage: rbd mirror group disable [--force] [--pool <pool>] 
+                                  [--namespace <namespace>] [--group <group>] 
+                                  <group-spec> 
+  
+  Disable RBD mirroring for an group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    --force              disable even if not primary
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+  
+  rbd help mirror group enable
+  usage: rbd mirror group enable [--pool <pool>] [--namespace <namespace>] 
+                                 [--group <group>] 
+                                 <group-spec> <mode> 
+  
+  Enable RBD mirroring for an group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+    <mode>               mirror image mode (journal or snapshot) [default:
+                         snapshot]
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+  
+  rbd help mirror group promote
+  usage: rbd mirror group promote [--force] [--pool <pool>] 
+                                  [--namespace <namespace>] [--group <group>] 
+                                  <group-spec> 
+  
+  Promote an group to primary for RBD mirroring.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    --force              promote even if not cleanly demoted by remote cluster
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+  
+  rbd help mirror group resync
+  usage: rbd mirror group resync [--pool <pool>] [--namespace <namespace>] 
+                                 [--group <group>] 
+                                 <group-spec> 
+  
+  Force resync to primary group for RBD mirroring.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+  
+  rbd help mirror group snapshot
+  usage: rbd mirror group snapshot [--pool <pool>] [--namespace <namespace>] 
+                                   [--group <group>] [--skip-quiesce] 
+                                   [--ignore-quiesce-error] 
+                                   <group-spec> 
+  
+  Create RBD mirroring group snapshot.
+  
+  Positional arguments
+    <group-spec>            group specification
+                            (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg       pool name
+    --namespace arg         namespace name
+    --group arg             group name
+    --skip-quiesce          do not run quiesce hooks
+    --ignore-quiesce-error  ignore quiesce hook error
+  
+  rbd help mirror group status
+  usage: rbd mirror group status [--pool <pool>] [--namespace <namespace>] 
+                                 [--group <group>] [--format <format>] 
+                                 [--pretty-format] 
+                                 <group-spec> 
+  
+  Show RBD mirroring status for an group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror image demote
   usage: rbd mirror image demote [--pool <pool>] [--namespace <namespace>] 
