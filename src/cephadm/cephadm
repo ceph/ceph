@@ -2848,7 +2848,7 @@ def command_bootstrap():
             logger.info(f"Creating directory {dirname} for {fname}")
             try:
                 # use makedirs to create intermediate missing dirs
-                os.makedirs(dirname, 0o700)
+                os.makedirs(dirname, 0o755)
             except PermissionError:
                 raise Error(f"Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.")
 
