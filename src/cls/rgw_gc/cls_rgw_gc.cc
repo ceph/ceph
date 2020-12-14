@@ -284,136 +284,134 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
   std::optional<ceph::real_time> last_removed_time;
 
   // List entries and calculate total number of entries (including invalid entries)
-  if (! op.num_entries) {
-    op.num_entries = GC_LIST_DEFAULT_MAX;
-  }
-  cls_queue_list_op list_op;
-  list_op.max = op.num_entries + 1; // +1 to get the offset of last + 1 entry
-  bool is_truncated = true;
-  uint32_t total_num_entries = 0, num_entries = 0;
-  string end_marker;
-  do {
-    cls_queue_list_ret op_ret;
-    int ret = queue_list_entries(hctx, list_op, op_ret, head);
-    if (ret < 0) {
-      CLS_LOG(5, "ERROR: queue_list_entries(): returned error %d\n", ret);
-      return ret;
-    }
-    is_truncated = op_ret.is_truncated;
-    unsigned int index = 0;
-    std::optional<std::pair<string, ceph::real_time>> last_urgent_data_entry, last_xattr_entry;
-    // If data is not empty
-    if (op_ret.entries.size()) {
-      for (const auto& it : op_ret.entries) {
-        cls_rgw_gc_obj_info info;
-        try {
-          decode(info, it.data);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode gc info\n");
-          return -EINVAL;
-        }
-        if (!last_removed_time || *last_removed_time < info.time) {
-          last_removed_time = info.time;
-        }
-        CLS_LOG(20, "INFO: cls_rgw_gc_queue_remove_entries(): entry: %s\n", info.tag.c_str());
-        total_num_entries++;
-        index++;
-        //Search for tag in urgent data map
-        if (auto i = urgent_data.urgent_data_map.find(info.tag);
-            i != urgent_data.urgent_data_map.end()) {
-          if (index == op_ret.entries.size()) {
-            last_urgent_data_entry = std::make_pair(i->first, i->second);
+  if (op.num_entries) {
+    cls_queue_list_op list_op;
+    list_op.max = op.num_entries + 1; // +1 to get the offset of last + 1 entry
+    bool is_truncated = true;
+    uint32_t total_num_entries = 0, num_entries = 0;
+    string end_marker;
+    do {
+      cls_queue_list_ret op_ret;
+      int ret = queue_list_entries(hctx, list_op, op_ret, head);
+      if (ret < 0) {
+        CLS_LOG(5, "ERROR: queue_list_entries(): returned error %d\n", ret);
+        return ret;
+      }
+      is_truncated = op_ret.is_truncated;
+      unsigned int index = 0;
+      std::optional<std::pair<string, ceph::real_time>> last_urgent_data_entry, last_xattr_entry;
+      // If data is not empty
+      if (op_ret.entries.size()) {
+        for (const auto& it : op_ret.entries) {
+          cls_rgw_gc_obj_info info;
+          try {
+            decode(info, it.data);
+          } catch (ceph::buffer::error& err) {
+            CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode gc info\n");
+            return -EINVAL;
           }
-          const auto defer_time = i->second;
-          CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
-          urgent_data.urgent_data_map.erase(i);
+          if (!last_removed_time || *last_removed_time < info.time) {
+            last_removed_time = info.time;
+          }
+          CLS_LOG(20, "INFO: cls_rgw_gc_queue_remove_entries(): entry: %s\n", info.tag.c_str());
+          total_num_entries++;
+          index++;
+          //Search for tag in urgent data map
+          if (auto i = urgent_data.urgent_data_map.find(info.tag);
+              i != urgent_data.urgent_data_map.end()) {
+            if (index == op_ret.entries.size()) {
+              last_urgent_data_entry = std::make_pair(i->first, i->second);
+            }
+            const auto defer_time = i->second;
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
+            urgent_data.urgent_data_map.erase(i);
 
-          if (defer_time > info.time) {
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
-            info.time = defer_time;
-            bufferlist bl;
-            encode(info, bl);
-            requeue_buffers.push_back(std::move(bl));
-            continue;
-          }
-        // Search the xattr urgent data map
-        } else if (auto i = xattr_urgent_data_map.find(info.tag);
-                  i != xattr_urgent_data_map.end()) {
-          if (index == op_ret.entries.size()) {
-            last_xattr_entry = std::make_pair(i->first, i->second);
-          }
-          const auto defer_time = i->second;
-          CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
-          xattr_urgent_data_map.erase(i);
+            if (defer_time > info.time) {
+              CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
+              info.time = defer_time;
+              bufferlist bl;
+              encode(info, bl);
+              requeue_buffers.push_back(std::move(bl));
+              continue;
+            }
+          // Search the xattr urgent data map
+          } else if (auto i = xattr_urgent_data_map.find(info.tag);
+                    i != xattr_urgent_data_map.end()) {
+            if (index == op_ret.entries.size()) {
+              last_xattr_entry = std::make_pair(i->first, i->second);
+            }
+            const auto defer_time = i->second;
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
+            xattr_urgent_data_map.erase(i);
 
-          if (defer_time > info.time) {
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
-            info.time = defer_time;
-            bufferlist bl;
-            encode(info, bl);
-            requeue_buffers.push_back(std::move(bl));
-            continue;
-          }
-        }// search in xattrs
-        num_entries++;
-      }//end-for
+            if (defer_time > info.time) {
+              CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
+              info.time = defer_time;
+              bufferlist bl;
+              encode(info, bl);
+              requeue_buffers.push_back(std::move(bl));
+              continue;
+            }
+          }// search in xattrs
+          num_entries++;
+        }//end-for
 
-      if (num_entries < (op.num_entries + 1)) {
-        if (! op_ret.is_truncated) {
-          end_marker = op_ret.next_marker;
-          CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): not truncated and end offset is %s\n", end_marker.c_str());
-          break;
+        if (num_entries < (op.num_entries + 1)) {
+          if (! op_ret.is_truncated) {
+            end_marker = op_ret.next_marker;
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): not truncated and end offset is %s\n", end_marker.c_str());
+            break;
+          } else {
+            list_op.max = ((op.num_entries + 1) - num_entries);
+            list_op.start_marker = op_ret.next_marker;
+            out->clear();
+          }
         } else {
-          list_op.max = ((op.num_entries + 1) - num_entries);
-          list_op.start_marker = op_ret.next_marker;
-          out->clear();
-        }
-      } else {
-        if (last_urgent_data_entry) {
-          urgent_data.urgent_data_map.insert(*last_urgent_data_entry);
-          //Remove last entry from requeue_buffers
-          if (!requeue_buffers.empty()) {
-            requeue_buffers.pop_back();
+          if (last_urgent_data_entry) {
+            urgent_data.urgent_data_map.insert(*last_urgent_data_entry);
+            //Remove last entry from requeue_buffers
+            if (!requeue_buffers.empty()) {
+              requeue_buffers.pop_back();
+            }
           }
-        }
-        if (last_xattr_entry) {
-          xattr_urgent_data_map.insert(*last_xattr_entry);
-          //Remove last entry from requeue_buffers
-          if (!requeue_buffers.empty()) {
-            requeue_buffers.pop_back();
+          if (last_xattr_entry) {
+            xattr_urgent_data_map.insert(*last_xattr_entry);
+            //Remove last entry from requeue_buffers
+            if (!requeue_buffers.empty()) {
+              requeue_buffers.pop_back();
+            }
           }
+          end_marker = op_ret.entries[index - 1].marker;
+          CLS_LOG(1, "INFO: cls_rgw_gc_queue_remove_entries(): index is %u and end_offset is: %s\n", index, end_marker.c_str());
+          break;
         }
-        end_marker = op_ret.entries[index - 1].marker;
-        CLS_LOG(1, "INFO: cls_rgw_gc_queue_remove_entries(): index is %u and end_offset is: %s\n", index, end_marker.c_str());
+      } //end-if
+      else {
         break;
       }
-    } //end-if
-    else {
-      break;
+    } while(is_truncated);
+
+    CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): Total number of entries to remove: %d\n", total_num_entries);
+    CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): End offset is %s\n", end_marker.c_str());
+
+    if (! end_marker.empty()) {
+      cls_queue_remove_op rem_op;
+      rem_op.end_marker = end_marker;
+      int ret = queue_remove_entries(hctx, rem_op, head);
+      if (ret < 0) {
+        CLS_LOG(5, "ERROR: queue_remove_entries(): returned error %d\n", ret);
+        return ret;
+      }
     }
-  } while(is_truncated);
-
-  CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): Total number of entries to remove: %d\n", total_num_entries);
-  CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): End offset is %s\n", end_marker.c_str());
-
-  if (! end_marker.empty()) {
-    cls_queue_remove_op rem_op;
-    rem_op.end_marker = end_marker;
-    int ret = queue_remove_entries(hctx, rem_op, head);
-    if (ret < 0) {
-      CLS_LOG(5, "ERROR: queue_remove_entries(): returned error %d\n", ret);
-      return ret;
-    }
-  }
-
-  if (!requeue_buffers.empty()) {
-    // requeue any deferred entries that were removed
-    cls_queue_enqueue_op enqueue_op;
-    enqueue_op.bl_data_vec = std::move(requeue_buffers);
-    ret = queue_enqueue(hctx, enqueue_op, head);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s(): queue_enqueue() failed to requeue deferred entries with %d", __func__, ret);
-      return ret;
+    if (!requeue_buffers.empty()) {
+      // requeue any deferred entries that were removed
+      cls_queue_enqueue_op enqueue_op;
+      enqueue_op.bl_data_vec = std::move(requeue_buffers);
+      ret = queue_enqueue(hctx, enqueue_op, head);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: %s(): queue_enqueue() failed to requeue deferred entries with %d", __func__, ret);
+        return ret;
+      }
     }
   }
   if (head.front == head.tail) {
