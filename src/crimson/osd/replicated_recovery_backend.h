@@ -48,13 +48,13 @@ protected:
     const hobject_t& soid,
     eversion_t need,
     std::map<pg_shard_t, PushOp>* pops,
-    const std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards);
+    const std::vector<pg_shard_t>& shards);
   void prepare_pull(
     PullOp& po,
     PullInfo& pi,
     const hobject_t& soid,
     eversion_t need);
-  std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator> get_shards_to_push(
+  std::vector<pg_shard_t> get_shards_to_push(
     const hobject_t& soid);
   seastar::future<ObjectRecoveryProgress> build_push_op(
     const ObjectRecoveryInfo& recovery_info,
@@ -122,7 +122,7 @@ private:
     const hobject_t& soid,
     eversion_t need,
     std::map<pg_shard_t, PushOp>& pops,
-    std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards);
+    std::vector<pg_shard_t>& shards);
 
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
