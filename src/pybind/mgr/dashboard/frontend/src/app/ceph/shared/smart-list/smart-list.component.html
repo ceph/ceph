@@ -7,11 +7,11 @@
                   i18n>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</cd-alert-panel>
 
   <ng-container *ngIf="!error && !incompatible">
-    <cd-alert-panel *ngIf="isEmpty(data)"
+    <cd-alert-panel *ngIf="data | pipeFunction:isEmpty"
                     type="info"
                     i18n>No SMART data available.</cd-alert-panel>
 
-    <ng-container *ngIf="!isEmpty(data)">
+    <ng-container *ngIf="!(data | pipeFunction:isEmpty)">
       <tabset>
         <tab *ngFor="let device of data | keyvalue"
              [heading]="device.value.device + ' (' + device.value.identifier + ')'">
@@ -21,7 +21,7 @@
           </ng-container>
 
           <ng-template #noError>
-            <cd-alert-panel *ngIf="isEmpty(device.value.info?.smart_status); else hasSmartStatus"
+            <cd-alert-panel *ngIf="device.value.info?.smart_status | pipeFunction:isEmpty; else hasSmartStatus"
                             id="alert-self-test-unknown"
                             size="slim"
                             type="warning"
@@ -50,13 +50,13 @@
           </ng-template>
 
           <tabset #innerTabset
-                  *ngIf="!isEmpty(device.value.info) || !isEmpty(device.value.smart)">
+                  *ngIf="!(device.value.info | pipeFunction:isEmpty) || !(device.value.smart | pipeFunction:isEmpty)">
             <tab i18n-heading
                  heading="Device Information">
-              <cd-table-key-value *ngIf="!isEmpty(device.value.info)"
+              <cd-table-key-value *ngIf="!(device.value.info | pipeFunction:isEmpty)"
                                   [renderObjects]="true"
                                   [data]="device.value.info"></cd-table-key-value>
-              <cd-alert-panel *ngIf="isEmpty(device.value.info)"
+              <cd-alert-panel *ngIf="(device.value.info | pipeFunction:isEmpty)"
                               id="alert-device-info-unavailable"
                               type="info"
                               i18n>No device information available for this device.</cd-alert-panel>
