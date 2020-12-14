@@ -52,23 +52,29 @@ struct rgw_data_change {
   DataLogEntityType entity_type;
   std::string key;
   ceph::real_time timestamp;
+  uint64_t gen_id;
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     auto t = std::uint8_t(entity_type);
     encode(t, bl);
     encode(key, bl);
     encode(timestamp, bl);
+    encode(gen_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START(1, bl);
+     DECODE_START(2, bl);
      std::uint8_t t;
      decode(t, bl);
      entity_type = DataLogEntityType(t);
      decode(key, bl);
      decode(timestamp, bl);
+     if (struct_v < 2)
+       gen_id = 0;
+     else
+       decode(gen_id, bl);
      DECODE_FINISH(bl);
   }
 
