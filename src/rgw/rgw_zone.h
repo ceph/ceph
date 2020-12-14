@@ -754,7 +754,7 @@ struct RGWZoneGroupPlacementTier {
   std::string endpoint;
   RGWAccessKey key;
   HostStyle host_style{PathStyle};
-  string tier_storage_class;
+  string target_storage_class;
 
   /* Should below be bucket/zone specific?? */
   string target_path;
@@ -776,7 +776,7 @@ struct RGWZoneGroupPlacementTier {
     encode(key, bl);
     string s = (host_style == PathStyle ? "path" : "virtual");
     encode(s, bl);
-    encode(tier_storage_class, bl);
+    encode(target_storage_class, bl);
     encode(target_path, bl);
     encode(acl_mappings, bl);
     encode(multipart_sync_threshold, bl);
@@ -798,7 +798,7 @@ struct RGWZoneGroupPlacementTier {
     } else {
       host_style = VirtualStyle;
     }
-    decode(tier_storage_class, bl);
+    decode(target_storage_class, bl);
     decode(target_path, bl);
     decode(acl_mappings, bl);
     decode(multipart_sync_threshold, bl);

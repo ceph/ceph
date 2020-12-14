@@ -2114,8 +2114,8 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
       host_style = VirtualStyle;
     }
   }
-  if (config.exists("tier_storage_class")) {
-    tier_storage_class = config["tier_storage_class"];
+  if (config.exists("target_storage_class")) {
+    target_storage_class = config["target_storage_class"];
   }
   if (config.exists("access_key")) {
     key.id = config["access_key"];
@@ -2178,8 +2178,8 @@ int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
     /* default */
     host_style = PathStyle;
   }
-  if (config.exists("tier_storage_class")) {
-    tier_storage_class.clear();
+  if (config.exists("target_storage_class")) {
+    target_storage_class.clear();
   }
   if (config.exists("access_key")) {
     key.id.clear();
