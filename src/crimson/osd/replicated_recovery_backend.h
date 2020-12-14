@@ -44,10 +44,9 @@ protected:
     Ref<MOSDPGRecoveryDelete> m);
   seastar::future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<> prep_push(
+  seastar::future<std::map<pg_shard_t, PushOp>> prep_push(
     const hobject_t& soid,
     eversion_t need,
-    std::map<pg_shard_t, PushOp>* pops,
     const std::vector<pg_shard_t>& shards);
   void prepare_pull(
     PullOp& po,
@@ -121,7 +120,6 @@ private:
   seastar::future<> maybe_push_shards(
     const hobject_t& soid,
     eversion_t need,
-    std::map<pg_shard_t, PushOp>& pops,
     std::vector<pg_shard_t>& shards);
 
   /// read the remaining extents of object to be recovered and fill push_op
