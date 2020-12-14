@@ -55,11 +55,10 @@ protected:
     eversion_t need);
   std::vector<pg_shard_t> get_shards_to_push(
     const hobject_t& soid) const;
-  seastar::future<ObjectRecoveryProgress> build_push_op(
+  seastar::future<PushOp> build_push_op(
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
-    object_stat_sum_t* stat,
-    PushOp* pop);
+    object_stat_sum_t* stat);
   seastar::future<bool> _handle_pull_response(
     pg_shard_t from,
     PushOp& pop,
@@ -91,10 +90,9 @@ protected:
     const PushOp &pop,
     PushReplyOp *response,
     ceph::os::Transaction *t);
-  seastar::future<bool> _handle_push_reply(
+  seastar::future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
-    const PushReplyOp &op,
-    PushOp *reply);
+    const PushReplyOp &op);
   seastar::future<> on_local_recover_persist(
     const hobject_t& soid,
     const ObjectRecoveryInfo& _recovery_info,
