@@ -29,7 +29,7 @@ from ceph.deployment.service_spec import \
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
-from mgr_module import MgrModule, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult, Option
 from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
 import secrets
 import orchestrator
@@ -137,161 +137,161 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     instance = None
     NATIVE_OPTIONS = []  # type: List[Any]
-    MODULE_OPTIONS: List[dict] = [
-        {
-            'name': 'ssh_config_file',
-            'type': 'str',
-            'default': None,
-            'desc': 'customized SSH config file to connect to managed hosts',
-        },
-        {
-            'name': 'device_cache_timeout',
-            'type': 'secs',
-            'default': 30 * 60,
-            'desc': 'seconds to cache device inventory',
-        },
-        {
-            'name': 'daemon_cache_timeout',
-            'type': 'secs',
-            'default': 10 * 60,
-            'desc': 'seconds to cache service (daemon) inventory',
-        },
-        {
-            'name': 'facts_cache_timeout',
-            'type': 'secs',
-            'default': 1 * 60,
-            'desc': 'seconds to cache host facts data',
-        },
-        {
-            'name': 'host_check_interval',
-            'type': 'secs',
-            'default': 10 * 60,
-            'desc': 'how frequently to perform a host check',
-        },
-        {
-            'name': 'mode',
-            'type': 'str',
-            'enum_allowed': ['root', 'cephadm-package'],
-            'default': 'root',
-            'desc': 'mode for remote execution of cephadm',
-        },
-        {
-            'name': 'container_image_base',
-            'default': 'docker.io/ceph/ceph',
-            'desc': 'Container image name, without the tag',
-            'runtime': True,
-        },
-        {
-            'name': 'container_image_prometheus',
-            'default': 'docker.io/prom/prometheus:v2.18.1',
-            'desc': 'Prometheus container image',
-        },
-        {
-            'name': 'container_image_grafana',
-            'default': 'docker.io/ceph/ceph-grafana:6.6.2',
-            'desc': 'Prometheus container image',
-        },
-        {
-            'name': 'container_image_alertmanager',
-            'default': 'docker.io/prom/alertmanager:v0.20.0',
-            'desc': 'Prometheus container image',
-        },
-        {
-            'name': 'container_image_node_exporter',
-            'default': 'docker.io/prom/node-exporter:v0.18.1',
-            'desc': 'Prometheus container image',
-        },
-        {
-            'name': 'warn_on_stray_hosts',
-            'type': 'bool',
-            'default': True,
-            'desc': 'raise a health warning if daemons are detected on a host '
-                    'that is not managed by cephadm',
-        },
-        {
-            'name': 'warn_on_stray_daemons',
-            'type': 'bool',
-            'default': True,
-            'desc': 'raise a health warning if daemons are detected '
-                    'that are not managed by cephadm',
-        },
-        {
-            'name': 'warn_on_failed_host_check',
-            'type': 'bool',
-            'default': True,
-            'desc': 'raise a health warning if the host check fails',
-        },
-        {
-            'name': 'log_to_cluster',
-            'type': 'bool',
-            'default': True,
-            'desc': 'log to the "cephadm" cluster log channel"',
-        },
-        {
-            'name': 'allow_ptrace',
-            'type': 'bool',
-            'default': False,
-            'desc': 'allow SYS_PTRACE capability on ceph containers',
-            'long_desc': 'The SYS_PTRACE capability is needed to attach to a '
-                         'process with gdb or strace.  Enabling this options '
-                         'can allow debugging daemons that encounter problems '
-                         'at runtime.',
-        },
-        {
-            'name': 'container_init',
-            'type': 'bool',
-            'default': False,
-            'desc': 'Run podman/docker with `--init`',
-        },
-        {
-            'name': 'prometheus_alerts_path',
-            'type': 'str',
-            'default': '/etc/prometheus/ceph/ceph_default_alerts.yml',
-            'desc': 'location of alerts to include in prometheus deployments',
-        },
-        {
-            'name': 'migration_current',
-            'type': 'int',
-            'default': None,
-            'desc': 'internal - do not modify',
+    MODULE_OPTIONS = [
+        Option(
+            'ssh_config_file',
+            type='str',
+            default=None,
+            desc='customized SSH config file to connect to managed hosts',
+        ),
+        Option(
+            'device_cache_timeout',
+            type='secs',
+            default=30 * 60,
+            desc='seconds to cache device inventory',
+        ),
+        Option(
+            'daemon_cache_timeout',
+            type='secs',
+            default=10 * 60,
+            desc='seconds to cache service (daemon) inventory',
+        ),
+        Option(
+            'facts_cache_timeout',
+            type='secs',
+            default=1 * 60,
+            desc='seconds to cache host facts data',
+        ),
+        Option(
+            'host_check_interval',
+            type='secs',
+            default=10 * 60,
+            desc='how frequently to perform a host check',
+        ),
+        Option(
+            'mode',
+            type='str',
+            enum_allowed=['root', 'cephadm-package'],
+            default='root',
+            desc='mode for remote execution of cephadm',
+        ),
+        Option(
+            'container_image_base',
+            default='docker.io/ceph/ceph',
+            desc='Container image name, without the tag',
+            runtime=True,
+        ),
+        Option(
+            'container_image_prometheus',
+            default='docker.io/prom/prometheus:v2.18.1',
+            desc='Prometheus container image',
+        ),
+        Option(
+            'container_image_grafana',
+            default='docker.io/ceph/ceph-grafana:6.6.2',
+            desc='Prometheus container image',
+        ),
+        Option(
+            'container_image_alertmanager',
+            default='docker.io/prom/alertmanager:v0.20.0',
+            desc='Prometheus container image',
+        ),
+        Option(
+            'container_image_node_exporter',
+            default='docker.io/prom/node-exporter:v0.18.1',
+            desc='Prometheus container image',
+        ),
+        Option(
+            'warn_on_stray_hosts',
+            type='bool',
+            default=True,
+            desc='raise a health warning if daemons are detected on a host '
+            'that is not managed by cephadm',
+        ),
+        Option(
+            'warn_on_stray_daemons',
+            type='bool',
+            default=True,
+            desc='raise a health warning if daemons are detected '
+            'that are not managed by cephadm',
+        ),
+        Option(
+            'warn_on_failed_host_check',
+            type='bool',
+            default=True,
+            desc='raise a health warning if the host check fails',
+        ),
+        Option(
+            'log_to_cluster',
+            type='bool',
+            default=True,
+            desc='log to the "cephadm" cluster log channel"',
+        ),
+        Option(
+            'allow_ptrace',
+            type='bool',
+            default=False,
+            desc='allow SYS_PTRACE capability on ceph containers',
+            long_desc='The SYS_PTRACE capability is needed to attach to a '
+            'process with gdb or strace.  Enabling this options '
+            'can allow debugging daemons that encounter problems '
+            'at runtime.',
+        ),
+        Option(
+            'container_init',
+            type='bool',
+            default=False,
+            desc='Run podman/docker with `--init`'
+        ),
+        Option(
+            'prometheus_alerts_path',
+            type='str',
+            default='/etc/prometheus/ceph/ceph_default_alerts.yml',
+            desc='location of alerts to include in prometheus deployments',
+        ),
+        Option(
+            'migration_current',
+            type='int',
+            default=None,
+            desc='internal - do not modify',
             # used to track track spec and other data migrations.
-        },
-        {
-            'name': 'config_dashboard',
-            'type': 'bool',
-            'default': True,
-            'desc': 'manage configs like API endpoints in Dashboard.'
-        },
-        {
-            'name': 'manage_etc_ceph_ceph_conf',
-            'type': 'bool',
-            'default': False,
-            'desc': 'Manage and own /etc/ceph/ceph.conf on the hosts.',
-        },
-        {
-            'name': 'registry_url',
-            'type': 'str',
-            'default': None,
-            'desc': 'Custom repository url'
-        },
-        {
-            'name': 'registry_username',
-            'type': 'str',
-            'default': None,
-            'desc': 'Custom repository username'
-        },
-        {
-            'name': 'registry_password',
-            'type': 'str',
-            'default': None,
-            'desc': 'Custom repository password'
-        },
-        {
-            'name': 'use_repo_digest',
-            'type': 'bool',
-            'default': False,
-            'desc': 'Automatically convert image tags to image digest. Make sure all daemons use the same image',
-        }
+        ),
+        Option(
+            'config_dashboard',
+            type='bool',
+            default=True,
+            desc='manage configs like API endpoints in Dashboard.'
+        ),
+        Option(
+            'manage_etc_ceph_ceph_conf',
+            type='bool',
+            default=False,
+            desc='Manage and own /etc/ceph/ceph.conf on the hosts.',
+        ),
+        Option(
+            'registry_url',
+            type='str',
+            default=None,
+            desc='Custom repository url'
+        ),
+        Option(
+            'registry_username',
+            type='str',
+            default=None,
+            desc='Custom repository username'
+        ),
+        Option(
+            'registry_password',
+            type='str',
+            default=None,
+            desc='Custom repository password'
+        ),
+        Option(
+            'use_repo_digest',
+            type='bool',
+            default=False,
+            desc='Automatically convert image tags to image digest. Make sure all daemons use the same image',
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
