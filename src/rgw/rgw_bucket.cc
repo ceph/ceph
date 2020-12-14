@@ -668,7 +668,10 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   }
 
   for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = static_cast<rgw::sal::RadosStore*>(store)->svc()->datalog_rados->add_entry(dpp, bucket->get_info(), shard_id);
+    r = static_cast<rgw::sal::RadosStore*>(store)
+      ->svc()->datalog_rados->add_entry(dpp, bucket->get_info(),
+					bucket->get_info().layout.logs.back(),
+					shard_id);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing data log:" + cpp_strerror(-r));
       return r;
