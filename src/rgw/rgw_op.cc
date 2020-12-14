@@ -3828,7 +3828,7 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 20) << "dest_placement for part=" << upload_info.dest_placement << dendl;
     processor.emplace<MultipartObjectProcessor>(
         &*aio, store, s->bucket.get(), pdest_placement,
-        s->owner.get_id(), obj_ctx, std::move(s->object->clone()),
+        s->owner.get_id(), obj_ctx, s->object->clone(),
         multipart_upload_id, multipart_part_num, multipart_part_str,
         this, s->yield);
   } else if(append) {
@@ -3839,7 +3839,7 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     processor.emplace<AppendObjectProcessor>(
             &*aio, store, s->bucket.get(), pdest_placement, s->bucket_owner.get_id(),
-	    obj_ctx, std::move(s->object->clone()),
+	    obj_ctx, s->object->clone(),
             s->req_id, position, &cur_accounted_size, this, s->yield);
   } else {
     if (s->bucket->versioning_enabled()) {
@@ -3853,7 +3853,7 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     processor.emplace<AtomicObjectProcessor>(
         &*aio, store, s->bucket.get(), pdest_placement,
-        s->bucket_owner.get_id(), obj_ctx,  std::move(s->object->clone()),
+        s->bucket_owner.get_id(), obj_ctx, s->object->clone(),
 	olh_epoch, s->req_id, this, s->yield);
   }
 
