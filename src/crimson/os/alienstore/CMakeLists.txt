@@ -16,6 +16,7 @@ add_library(crimson-alien-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters_collection.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/common/shared_mutex_debug.cc
+  ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
   ${PROJECT_SOURCE_DIR}/src/common/Throttle.cc
   ${PROJECT_SOURCE_DIR}/src/common/Timer.cc
   ${PROJECT_SOURCE_DIR}/src/common/TrackedOp.cc
