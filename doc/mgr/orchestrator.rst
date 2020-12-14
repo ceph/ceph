@@ -58,6 +58,8 @@ Status
 Show current orchestrator mode and high-level status (whether the orchestrator
 plugin is available and operational)
 
+.. _orchestrator-cli-host-management:
+
 Host Management
 ===============
 
@@ -70,7 +72,7 @@ Add and remove hosts::
     ceph orch host add <hostname> [<addr>] [<labels>...]
     ceph orch host rm <hostname>
 
-For cephadm, see also :ref:`cephadm-fqdn`.
+For cephadm, see also :ref:`cephadm-fqdn` and :ref:`cephadm-removing-hosts`.
 
 Host Specification
 ------------------
