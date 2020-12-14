@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class HA_RGWService(CephService):
-    TYPE = 'HA_RGW'
+    TYPE = 'ha-rgw'
 
 
 class HAproxyService(CephService):
@@ -31,20 +31,13 @@ class HAproxyService(CephService):
         host = daemon_spec.host
         spec = daemon_spec.spec
 
-        out, err, code = self.mgr._run_cephadm(host, cephadmNoImage, 'verify-prereqs',
-                                               ['--service-type', 'haproxy'],
-                                               no_fsid=True, error_ok=True)
-
-        if code:
-            raise OrchestratorError(
-                'HAproxy failed prereqs check with code: %d, stderr:%s' % (
-                    code, '\n'.join(err)))
-
+        """
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(daemon_id),
             'caps': [],
         })
+        """
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
@@ -55,7 +48,7 @@ class HAproxyService(CephService):
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
 
-        service_name: str = "HA_RGW." + daemon_id.split('.')[0]
+        service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         if service_name in self.mgr.spec_store.specs:
             spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
 
@@ -64,7 +57,6 @@ class HAproxyService(CephService):
             for daemon in rgw_daemons:
                 rgw_servers.append(self.rgw_server(
                     daemon.name(), resolve_ip(daemon.hostname)))
-
             # virtual ip address cannot have netmask attached when passed to haproxy config
             # since the port is added to the end and something like 123.123.123.10/24:8080 is invalid
             virtual_ip_address = spec.virtual_ip_address
@@ -100,20 +92,13 @@ class KeepAlivedService(CephService):
         host = daemon_spec.host
         spec = daemon_spec.spec
 
-        out, err, code = self.mgr._run_cephadm(host, cephadmNoImage, 'verify-prereqs',
-                                               ['--service-type', 'keepalived'],
-                                               no_fsid=True, error_ok=True)
-
-        if code:
-            raise OrchestratorError(
-                'Keepalived failed prereqs check with code: %d, stderr:%s' % (
-                    code, '\n'.join(err)))
-
+        """
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
-            'entity': self.get_auth_entity(daemon_id),
+            'entity': '',
             'caps': [],
         })
+        """
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
@@ -124,7 +109,7 @@ class KeepAlivedService(CephService):
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
 
-        service_name: str = "HA_RGW." + daemon_id.split('.')[0]
+        service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         if service_name in self.mgr.spec_store.specs:
             spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
 

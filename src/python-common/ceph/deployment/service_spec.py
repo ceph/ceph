@@ -381,9 +381,9 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container HA_RGW cephadm-exporter haproxy ' \
+                          'container cephadm-exporter ha-rgw haproxy ' \
                           'keepalived'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container HA_RGW haproxy ' \
+    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw haproxy ' \
                            'keepalived'.split()
 
     @classmethod
@@ -396,7 +396,7 @@ class ServiceSpec(object):
             'osd': DriveGroupSpec,
             'iscsi': IscsiServiceSpec,
             'alertmanager': AlertManagerSpec,
-            'HA_RGW': HA_RGWSpec,
+            'ha-rgw': HA_RGWSpec,
             'container': CustomContainerSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
@@ -784,7 +784,7 @@ yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
 
 class HA_RGWSpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'HA_RGW',
+                 service_type: str = 'ha-rgw',
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  virtual_ip_interface: Optional[str] = None,
@@ -806,8 +806,8 @@ class HA_RGWSpec(ServiceSpec):
                  keepalived_container_image: Optional[str] = None,
                  definitive_host_list: Optional[List[HostPlacementSpec]] = None
                  ):
-        assert service_type == 'HA_RGW'
-        super(HA_RGWSpec, self).__init__('HA_RGW', service_id=service_id,
+        assert service_type == 'ha-rgw'
+        super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id,
                                                placement=placement)
 
         self.virtual_ip_interface = virtual_ip_interface
@@ -842,38 +842,38 @@ class HA_RGWSpec(ServiceSpec):
 
         if not self.virtual_ip_interface:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No Virtual IP Interface specified')
+                'Cannot add ha-rgw: No Virtual IP Interface specified')
         if not self.virtual_ip_address:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No Virtual IP Address specified')
+                'Cannot add ha-rgw: No Virtual IP Address specified')
         if not self.frontend_port and not self.ha_proxy_frontend_ssl_certificate:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No Frontend Port specified')
+                'Cannot add ha-rgw: No Frontend Port specified')
         if not self.ha_proxy_port:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No HA Proxy Port specified')
+                'Cannot add ha-rgw: No HA Proxy Port specified')
         if not self.ha_proxy_stats_enabled:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: Ha Proxy Stats Enabled option not set')
+                'Cannot add ha-rgw: Ha Proxy Stats Enabled option not set')
         if not self.ha_proxy_stats_user:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No HA Proxy Stats User specified')
+                'Cannot add ha-rgw: No HA Proxy Stats User specified')
         if not self.ha_proxy_stats_password:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No HA Proxy Stats Password specified')
+                'Cannot add ha-rgw: No HA Proxy Stats Password specified')
         if not self.ha_proxy_enable_prometheus_exporter:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: HA Proxy Enable Prometheus Exporter option not set')
+                'Cannot add ha-rgw: HA Proxy Enable Prometheus Exporter option not set')
         if not self.ha_proxy_monitor_uri:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No HA Proxy Monitor Uri specified')
+                'Cannot add ha-rgw: No HA Proxy Monitor Uri specified')
         if not self.keepalived_password:
             raise ServiceSpecValidationError(
-                'Cannot add HA_RGW: No Keepalived Password specified')
+                'Cannot add ha-rgw: No Keepalived Password specified')
         if self.ha_proxy_frontend_ssl_certificate:
             if not self.ha_proxy_frontend_ssl_port:
                 raise ServiceSpecValidationError(
-                    'Cannot add HA_RGW: Specified Ha Proxy Frontend SSL Certificate but no SSL Port')
+                    'Cannot add ha-rgw: Specified Ha Proxy Frontend SSL Certificate but no SSL Port')
 
 
 class CustomContainerSpec(ServiceSpec):

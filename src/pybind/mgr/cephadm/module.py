@@ -434,7 +434,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'node-exporter': self.node_exporter_service,
             'crash': self.crash_service,
             'iscsi': self.iscsi_service,
-            'HA_RGW': self.ha_rgw_service,
+            'ha-rgw': self.ha_rgw_service,
             'haproxy': self.haproxy_service,
             'keepalived': self.keepalived_service,
             'container': self.container_service,
@@ -1504,7 +1504,7 @@ To check that the host is reachable:
                 if sm[n].container_image_name != dd.container_image_name:
                     sm[n].container_image_name = 'mix'
                 if dd.daemon_type == 'haproxy' or dd.daemon_type == 'keepalived':
-                    # HA_RGW has 2 daemons running per host
+                    # ha-rgw has 2 daemons running per host
                     sm[n].size = sm[n].size*2
         for n, spec in self.spec_store.specs.items():
             if n in sm:
@@ -1522,8 +1522,8 @@ To check that the host is reachable:
             if service_type == 'nfs':
                 spec = cast(NFSServiceSpec, spec)
                 sm[n].rados_config_location = spec.rados_config_location()
-            if spec.service_type == 'HA_RGW':
-                # HA_RGW has 2 daemons running per host
+            if spec.service_type == 'ha-rgw':
+                # ha-rgw has 2 daemons running per host
                 sm[n].size = sm[n].size*2
         return list(sm.values())
 

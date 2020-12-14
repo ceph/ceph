@@ -140,7 +140,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.725856",
         "created": "2020-04-02T19:23:08.829543",
         "started": "2020-04-03T07:29:16.932838",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -155,7 +155,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.725903",
         "created": "2020-04-02T19:23:11.390694",
         "started": "2020-04-03T07:29:16.910897",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -170,7 +170,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.725950",
         "created": "2020-04-02T19:23:52.025088",
         "started": "2020-04-03T07:29:16.847972",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -185,7 +185,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.725807",
         "created": "2020-04-02T19:22:18.648584",
         "started": "2020-04-03T07:29:16.856153",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -200,7 +200,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.725715",
         "created": "2020-04-02T19:22:13.863300",
         "started": "2020-04-03T07:29:17.206024",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -215,7 +215,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.725996",
         "created": "2020-04-02T19:23:53.880197",
         "started": "2020-04-03T07:29:16.880044",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -230,7 +230,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.726088",
         "created": "2020-04-02T20:35:02.991435",
         "started": "2020-04-03T07:29:19.373956",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -245,7 +245,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.726134",
         "created": "2020-04-02T20:35:17.142272",
         "started": "2020-04-03T07:29:19.374002",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -260,7 +260,7 @@ def test_spec_octopus(spec_json):
         "last_refresh": "2020-04-03T15:31:48.726042",
         "created": "2020-04-02T19:24:10.281163",
         "started": "2020-04-03T07:29:16.926292",
-        "is_active": false 
+        "is_active": false
     },
     {
         "hostname": "ceph-001",
@@ -268,7 +268,7 @@ def test_spec_octopus(spec_json):
         "daemon_type": "rgw",
         "status": 1,
         "status_desc": "starting",
-        "is_active": false 
+        "is_active": false
     }
 ]""")
 )
@@ -651,7 +651,7 @@ def test_custom_container_spec_config_json():
         assert key not in config_json
 
 def test_HA_RGW_spec():
-    yaml_str ="""service_type: HA_RGW
+    yaml_str ="""service_type: ha-rgw
 service_id: haproxy_for_rgw
 placement:
   hosts:
@@ -672,7 +672,7 @@ spec:
 """
     yaml_file = yaml.safe_load(yaml_str)
     spec = ServiceSpec.from_json(yaml_file)
-    assert spec.service_type == "HA_RGW"
+    assert spec.service_type == "ha-rgw"
     assert spec.service_id == "haproxy_for_rgw"
     assert spec.virtual_ip_interface == "eth0"
     assert spec.virtual_ip_address == "192.168.20.1/24"

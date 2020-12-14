@@ -219,7 +219,17 @@ class Monitoring(object):
     }  # type: ignore
 
 ##################################
-
+def populate_files(config_dir, config_files, uid, gid):
+    # type: (str, Dict, int, int) -> None
+    """create config files for different services"""
+    for fname in config_files:
+        config_file = os.path.join(config_dir, fname)
+        config_content = dict_get_join(config_files, fname)
+        logger.info('Write file: %s' % (config_file))
+        with open(config_file, 'w') as f:
+            os.fchown(f.fileno(), uid, gid)
+            os.fchmod(f.fileno(), 0o600)
+            f.write(config_content)
 
 class NFSGanesha(object):
     """Defines a NFS-Ganesha container"""
@@ -344,14 +354,7 @@ class NFSGanesha(object):
         makedirs(config_dir, uid, gid, 0o755)
 
         # populate files from the config-json
-        for fname in self.files:
-            config_file = os.path.join(config_dir, fname)
-            config_content = dict_get_join(self.files, fname)
-            logger.info('Write file: %s' % (config_file))
-            with open(config_file, 'w') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
-                f.write(config_content)
+        populate_files(config_dir, self.files, uid, gid)
 
         # write the RGW keyring
         if self.rgw:
@@ -492,14 +495,7 @@ class CephIscsi(object):
         makedirs(configfs_dir, uid, gid, 0o755)
 
         # populate files from the config-json
-        for fname in self.files:
-            config_file = os.path.join(data_dir, fname)
-            config_content = dict_get_join(self.files, fname)
-            logger.info('Write file: %s' % (config_file))
-            with open(config_file, 'w') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
-                f.write(config_content)
+        populate_files(data_dir, self.files, uid, gid)
 
     @staticmethod
     def configfs_mount_umount(data_dir, mount=True):
@@ -547,7 +543,6 @@ class HAproxy(object):
         return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
-        # type: (str, int, int) -> None
         """Create files under the container data dir"""
         if not os.path.isdir(data_dir):
             raise OSError('data_dir is not a directory: %s' % (data_dir))
@@ -556,18 +551,8 @@ class HAproxy(object):
         if not os.path.isdir(os.path.join(data_dir, 'haproxy')):
             makedirs(os.path.join(data_dir, 'haproxy'), uid, gid, DATA_DIR_MODE)
 
-        # populate files from the config-json
-        for fname in self.files:
-            if fname == 'haproxy.cfg':
-                config_file = os.path.join(data_dir + '/haproxy', fname)
-            else:
-                config_file = os.path.join(data_dir, fname)
-            config_content = dict_get_join(self.files, fname)
-            logger.info('Write file: %s' % (config_file))
-            with open(config_file, 'w') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
-                f.write(config_content)
+        data_dir = os.path.join(data_dir, 'haproxy')
+        populate_files(data_dir, self.files, uid, gid)
 
     def get_daemon_args(self) -> List[str]:
         return ['haproxy', '-f', '/var/lib/haproxy/haproxy.cfg']
@@ -722,7 +707,6 @@ class Keepalived(object):
         return cls(fsid, daemon_id, get_parm(args.config_json), args.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
-        # type: (str, int, int) -> None
         """Create files under the container data dir"""
         if not os.path.isdir(data_dir):
             raise OSError('data_dir is not a directory: %s' % (data_dir))
@@ -732,14 +716,7 @@ class Keepalived(object):
             makedirs(os.path.join(data_dir, 'keepalived'), uid, gid, DATA_DIR_MODE)
 
         # populate files from the config-json
-        for fname in self.files:
-            config_file = os.path.join(data_dir, fname)
-            config_content = dict_get_join(self.files, fname)
-            logger.info('Write file: %s' % (config_file))
-            with open(config_file, 'w') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
-                f.write(config_content)
+        populate_files(data_dir, self.files, uid, gid)
 
     def validate(self):
         # type: () -> None

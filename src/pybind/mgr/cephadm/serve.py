@@ -484,15 +484,34 @@ class CephadmServe:
             # host
             return len(self.mgr.cache.networks[host].get(public_network, [])) > 0
 
+        def virtual_ip_allowed(host):
+            # type: (str) -> str
+            # Verify that it is possible to use Virtual IPs in the host
+            msg = ''
+            try:
+                if self.mgr.cache.facts[host]['kernel_parameters']['net.ipv4.ip_nonlocal_bind'] == '0':
+                    msg = '<net.ipv4.ip_nonlocal_bind> must be set to <1>'
+            except KeyError:
+                msg = 'cephadm not providing the value of <net.ipv4.ip_nonlocal_bind>'
+
+            return msg
+
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr._hosts_with_daemon_inventory(),
             get_daemons_func=self.mgr.cache.get_daemons_by_service,
             filter_new_host=matches_network if daemon_type == 'mon' else None,
+            host_validator=virtual_ip_allowed if daemon_type == 'ha-rgw' else None,
         )
 
-        hosts: List[HostPlacementSpec] = ha.place()
-        self.log.debug('Usable hosts: %s' % hosts)
+        try:
+            hosts: List[HostPlacementSpec] = ha.place()
+            self.log.debug('Usable hosts: %s' % hosts)
+        except OrchestratorError as e:
+            self.log.error('Failed to apply %s spec %s: %s' % (
+                spec.service_name(), spec, e))
+            self.mgr.events.for_service(spec, 'ERROR', 'Failed to apply: ' + str(e))
+            return False
 
         r = None
 
@@ -510,7 +529,7 @@ class CephadmServe:
         remove_daemon_hosts: Set[orchestrator.DaemonDescription] = ha.remove_daemon_hosts(hosts)
         self.log.debug('Hosts that will loose daemons: %s' % remove_daemon_hosts)
 
-        if daemon_type == 'HA_RGW':
+        if daemon_type == 'ha-rgw':
             spec = self.update_ha_rgw_definitive_hosts(spec, hosts, add_daemon_hosts)
 
         for host, network, name in add_daemon_hosts:
@@ -532,8 +551,8 @@ class CephadmServe:
                 daemon_type, daemon_id, host))
 
             try:
-                # HA_RGW needs to deploy 2 daemons
-                if daemon_type == 'HA_RGW':
+                # ha-rgw needs to deploy 2 daemons
+                if daemon_type == 'ha-rgw':
                     for dtype in ['haproxy', 'keepalived']:
                         daemon_spec.daemon_type = dtype
                         daemon_spec = self.mgr.cephadm_services[dtype].prepare_create(daemon_spec)
@@ -678,8 +697,8 @@ class CephadmServe:
                 if image_info.repo_digest:
                     self.mgr.set_container_image(entity, image_info.repo_digest)
 
-    # HA_RGW needs definitve host list to create keepalived config files
-    # if definitive host list has changed, all HA_RGW daemons must get new
+    # ha-rgw needs definitve host list to create keepalived config files
+    # if definitive host list has changed, all ha-rgw daemons must get new
     # config, including those that are already on the correct host and not
     # going to be deployed
     def update_ha_rgw_definitive_hosts(self, spec: ServiceSpec, hosts: List[HostPlacementSpec],

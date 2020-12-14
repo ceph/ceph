@@ -59,12 +59,14 @@ class HostAssignment(object):
                  get_daemons_func,  # type: Callable[[str],List[orchestrator.DaemonDescription]]
                  filter_new_host=None,  # type: Optional[Callable[[str],bool]]
                  scheduler=None,  # type: Optional[BaseScheduler]
+                 host_validator=None,  # type: Optional[Callable[[str],str]]
                  ):
         assert spec and get_daemons_func
         self.spec = spec  # type: ServiceSpec
         self.scheduler = scheduler if scheduler else SimpleScheduler(self.spec)
         self.hosts: List[orchestrator.HostSpec] = hosts
         self.filter_new_host = filter_new_host
+        self.host_validator = host_validator
         self.service_name = spec.service_name()
         self.daemons = get_daemons_func(self.service_name)
 
@@ -119,6 +121,17 @@ class HostAssignment(object):
         # get candidates based on [hosts, label, host_pattern]
         candidates = self.get_candidates()
 
+        # Candidates must pass host validator
+        if self.host_validator:
+            msg = ''
+            for h in candidates:
+                err = self.host_validator(h.hostname)
+                if err:
+                    msg += f'Problem in host {h.hostname}:  {err}\n'
+            if msg:
+                raise OrchestratorValidationError(
+                    f'Hosts selected are not able to support the service: {msg}')
+
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
@@ -146,35 +159,39 @@ class HostAssignment(object):
                         "deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (count - 1, count))
                     count = count - 1
 
-        # prefer hosts that already have services.
-        # this avoids re-assigning to _new_ hosts
-        # and constant re-distribution of hosts when new nodes are
-        # added to the cluster
-        hosts_with_daemons = self.hosts_with_daemons(candidates)
-
-        # The amount of hosts that need to be selected in order to fulfill count.
-        need = count - len(hosts_with_daemons)
-
-        # hostspecs that are do not have daemons on them but are still candidates.
-        others = difference_hostspecs(candidates, hosts_with_daemons)
-
-        # we don't need any additional hosts
-        if need < 0:
-            return self.prefer_hosts_with_active_daemons(hosts_with_daemons, count)
+            final_candidates = candidates
         else:
-            # exclusive to 'mon' daemons. Filter out hosts that don't have a public network assigned
-            if self.filter_new_host:
-                old = others
-                others = [h for h in others if self.filter_new_host(h.hostname)]
-                logger.debug('filtered %s down to %s' % (old, others))
+            # prefer hosts that already have services.
+            # this avoids re-assigning to _new_ hosts
+            # and constant re-distribution of hosts when new nodes are
+            # added to the cluster
+            hosts_with_daemons = self.hosts_with_daemons(candidates)
 
-            # ask the scheduler to return a set of hosts with a up to the value of <count>
-            others = self.scheduler.place(others, need)
-            logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
-                hosts_with_daemons, others))
-            # if a host already has the anticipated daemon, merge it with the candidates
-            # to get a list of HostPlacementSpec that can be deployed on.
-            return list(merge_hostspecs(hosts_with_daemons, others))
+            # The amount of hosts that need to be selected in order to fulfill count.
+            need = count - len(hosts_with_daemons)
+
+            # hostspecs that are do not have daemons on them but are still candidates.
+            others = difference_hostspecs(candidates, hosts_with_daemons)
+
+            # we don't need any additional hosts
+            if need < 0:
+                final_candidates = self.prefer_hosts_with_active_daemons(hosts_with_daemons, count)
+            else:
+                # exclusive to 'mon' daemons. Filter out hosts that don't have a public network assigned
+                if self.filter_new_host:
+                    old = others
+                    others = [h for h in others if self.filter_new_host(h.hostname)]
+                    logger.info('filtered %s down to %s' % (old, others))
+
+                # ask the scheduler to return a set of hosts with a up to the value of <count>
+                others = self.scheduler.place(others, need)
+                logger.info('Combine hosts with existing daemons %s + new hosts %s' % (
+                    hosts_with_daemons, others))
+                # if a host already has the anticipated daemon, merge it with the candidates
+                # to get a list of HostPlacementSpec that can be deployed on.
+                final_candidates = list(merge_hostspecs(hosts_with_daemons, others))
+
+        return final_candidates
 
     def get_hosts_with_active_daemon(self, hosts: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
         active_hosts: List['HostPlacementSpec'] = []
