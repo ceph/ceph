@@ -13,6 +13,7 @@
 #include "cls/fifo/cls_fifo_types.h"
 
 #include "cls_fifo_legacy.h"
+#include "rgw_bucket_layout.h"
 #include "rgw_datalog.h"
 #include "rgw_tools.h"
 
@@ -612,7 +613,7 @@ int RGWDataChangesLog::renew_entries()
   l.unlock();
 
   auto ut = real_clock::now();
-  for (const auto& bs : entries) {
+  for (const auto& [bs, gen_id] : entries) {
     auto index = choose_oid(bs);
 
     rgw_data_change change;
@@ -620,6 +621,7 @@ int RGWDataChangesLog::renew_entries()
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = ut;
+    change.gen_id = gen_id;
     encode(change, bl);
 
     m[index].first.push_back(bs);
@@ -659,10 +661,11 @@ void RGWDataChangesLog::_get_change(const rgw_bucket_shard& bs,
   }
 }
 
-void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs)
+void RGWDataChangesLog::register_renew(const rgw_bucket_shard& bs,
+				       const rgw::bucket_log_layout_generation& gen)
 {
   std::scoped_lock l{lock};
-  cur_cycle.insert(bs);
+  cur_cycle.insert({bs, gen.gen});
 }
 
 void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
@@ -698,7 +701,11 @@ std::string RGWDataChangesLog::get_oid(int i) const {
   return be->get_oid(i);
 }
 
-int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id) {
+int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
+				 const RGWBucketInfo& bucket_info,
+				 const rgw::bucket_log_layout_generation& gen,
+				 int shard_id)
+{
   auto& bucket = bucket_info.bucket;
 
   if (!filter_bucket(dpp, bucket, null_yield)) {
@@ -731,7 +738,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketI
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
     sl.unlock();
-    register_renew(bs);
+    register_renew(bs, gen);
     return 0;
   }
 
@@ -748,7 +755,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketI
     int ret = cond->wait();
     cond->put();
     if (!ret) {
-      register_renew(bs);
+      register_renew(bs, gen);
     }
     return ret;
   }
@@ -773,6 +780,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketI
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = now;
+    change.gen_id = gen.gen;
     encode(change, bl);
 
     ldout(cct, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
