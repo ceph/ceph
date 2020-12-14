@@ -40,7 +40,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
   const hobject_t& soid,
   eversion_t need,
   std::map<pg_shard_t, PushOp>& pops,
-  std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards)
+  std::vector<pg_shard_t>& shards)
 {
   auto push_func = [this, soid, need, &pops, &shards] {
     auto fut = seastar::now();
@@ -55,11 +55,11 @@ ReplicatedRecoveryBackend::maybe_push_shards(
 	msg->map_epoch = pg.get_osdmap_epoch();
 	msg->min_epoch = pg.get_last_peering_reset();
 	msg->set_priority(pg.get_recovery_op_priority());
-	msg->pushes.push_back(pops[shard->first]);
-	return shard_services.send_to_osd(shard->first.osd, std::move(msg),
+	msg->pushes.push_back(pops[shard]);
+	return shard_services.send_to_osd(shard.osd, std::move(msg),
 				       pg.get_osdmap_epoch()).then(
 	  [this, soid, shard] {
-	  return recovering.at(soid).wait_for_pushes(shard->first);
+	  return recovering.at(soid).wait_for_pushes(shard);
 	});
       });
     }).then([this, soid] {
@@ -284,7 +284,7 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
   const hobject_t& soid,
   eversion_t need,
   std::map<pg_shard_t, PushOp>* pops,
-  const std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards)
+  const std::vector<pg_shard_t>& shards)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
 
@@ -292,15 +292,15 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
     [this, soid, pops, &shards](auto& data_subsets) {
     return seastar::parallel_for_each(shards,
       [this, soid, pops, &data_subsets](auto pg_shard) mutable {
-      pops->emplace(pg_shard->first, PushOp());
+      pops->emplace(pg_shard, PushOp());
       auto& recovery_waiter = recovering.at(soid);
       auto& obc = recovery_waiter.obc;
-      auto& data_subset = data_subsets[pg_shard->first];
+      auto& data_subset = data_subsets[pg_shard];
 
       if (obc->obs.oi.size) {
 	data_subset.insert(0, obc->obs.oi.size);
       }
-      const auto& missing = pg.get_shard_missing().find(pg_shard->first)->second;
+      const auto& missing = pg.get_shard_missing().find(pg_shard)->second;
       if (HAVE_FEATURE(pg.min_peer_features(), SERVER_OCTOPUS)) {
 	const auto it = missing.get_items().find(soid);
 	assert(it != missing.get_items().end());
@@ -308,10 +308,10 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
 	logger().debug("calc_head_subsets {} data_subset {}", soid, data_subset);
       }
 
-      logger().debug("prep_push: {} to {}", soid, pg_shard->first);
-      auto& pi = recovery_waiter.pushing[pg_shard->first];
-      pg.begin_peer_recover(pg_shard->first, soid);
-      const auto pmissing_iter = pg.get_shard_missing().find(pg_shard->first);
+      logger().debug("prep_push: {} to {}", soid, pg_shard);
+      auto& pi = recovery_waiter.pushing[pg_shard];
+      pg.begin_peer_recover(pg_shard, soid);
+      const auto pmissing_iter = pg.get_shard_missing().find(pg_shard);
       const auto missing_iter = pmissing_iter->second.get_items().find(soid);
       assert(missing_iter != pmissing_iter->second.get_items().end());
 
@@ -328,10 +328,10 @@ seastar::future<> ReplicatedRecoveryBackend::prep_push(
 	HAVE_FEATURE(pg.min_peer_features(), SERVER_OCTOPUS);
 
       return build_push_op(pi.recovery_info, pi.recovery_progress,
-			   &pi.stat, &(*pops)[pg_shard->first]).then(
+			   &pi.stat, &(*pops)[pg_shard]).then(
 	[this, soid, pg_shard](auto new_progress) {
 	auto& recovery_waiter = recovering.at(soid);
-	auto& pi = recovery_waiter.pushing[pg_shard->first];
+	auto& pi = recovery_waiter.pushing[pg_shard];
 	pi.recovery_progress = new_progress;
 	return seastar::make_ready_future<>();
       });
@@ -553,19 +553,19 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
   });
 }
 
-std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>
+std::vector<pg_shard_t>
 ReplicatedRecoveryBackend::get_shards_to_push(const hobject_t& soid)
 {
-  std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator> shards;
+  std::vector<pg_shard_t> shards;
   assert(pg.get_acting_recovery_backfill().size() > 0);
   for (const auto& peer : pg.get_acting_recovery_backfill()) {
     if (peer == pg.get_pg_whoami())
       continue;
-    map<pg_shard_t, pg_missing_t>::const_iterator j =
+    auto shard_missing =
       pg.get_shard_missing().find(peer);
-    assert(j != pg.get_shard_missing().end());
-    if (j->second.is_missing(soid)) {
-      shards.push_back(j);
+    assert(shard_missing != pg.get_shard_missing().end());
+    if (shard_missing->second.is_missing(soid)) {
+      shards.push_back(shard_missing->first);
     }
   }
   return shards;
