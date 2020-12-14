@@ -180,7 +180,6 @@ public:
   }
   void drop_recovery_read() {
     assert(recovery_read_marker);
-    lock.unlock_for_read();
     recovery_read_marker = false;
   }
   bool maybe_get_excl() {
