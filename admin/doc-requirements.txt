@@ -1,6 +1,6 @@
 Sphinx == 3.2.1
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
-breathe
+breathe >= 4.20.0
 pyyaml >= 5.1.2
 Cython
 prettytable
