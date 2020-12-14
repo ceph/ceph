@@ -558,13 +558,9 @@ ReplicatedRecoveryBackend::get_shards_to_push(const hobject_t& soid)
 {
   std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator> shards;
   assert(pg.get_acting_recovery_backfill().size() > 0);
-  for (set<pg_shard_t>::iterator i =
-      pg.get_acting_recovery_backfill().begin();
-      i != pg.get_acting_recovery_backfill().end();
-      ++i) {
-    if (*i == pg.get_pg_whoami())
+  for (const auto& peer : pg.get_acting_recovery_backfill()) {
+    if (peer == pg.get_pg_whoami())
       continue;
-    pg_shard_t peer = *i;
     map<pg_shard_t, pg_missing_t>::const_iterator j =
       pg.get_shard_missing().find(peer);
     assert(j != pg.get_shard_missing().end());
