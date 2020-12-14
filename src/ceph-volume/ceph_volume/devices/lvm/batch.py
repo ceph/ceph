@@ -102,7 +102,7 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
     requested_slots = getattr(args, '{}_slots'.format(type_))
     if not requested_slots or requested_slots < fast_slots_per_device:
         if requested_slots:
-            mlogger.info('{}_slots argument is to small, ignoring'.format(type_))
+            mlogger.info('{}_slots argument is too small, ignoring'.format(type_))
         requested_slots = fast_slots_per_device
 
     requested_size = getattr(args, '{}_size'.format(type_), 0)
