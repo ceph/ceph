@@ -55,7 +55,7 @@ protected:
     const hobject_t& soid,
     eversion_t need);
   std::vector<pg_shard_t> get_shards_to_push(
-    const hobject_t& soid);
+    const hobject_t& soid) const;
   seastar::future<ObjectRecoveryProgress> build_push_op(
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
