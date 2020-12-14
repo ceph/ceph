@@ -41,6 +41,7 @@ void rgw_data_change::dump(ceph::Formatter *f) const
   encode_json("key", key, f);
   utime_t ut(timestamp);
   encode_json("timestamp", ut, f);
+  encode_json("gen_id", gen_id, f);
 }
 
 void rgw_data_change::decode_json(JSONObj *obj) {
@@ -55,6 +56,7 @@ void rgw_data_change::decode_json(JSONObj *obj) {
   utime_t ut;
   JSONDecoder::decode_json("timestamp", ut, obj);
   timestamp = ut.to_real_time();
+  JSONDecoder::decode_json("gen_id", gen_id, obj);
 }
 
 void rgw_data_change_log_entry::dump(Formatter *f) const
