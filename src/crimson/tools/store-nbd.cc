@@ -35,6 +35,8 @@
 #include <linux/nbd.h>
 #include <linux/fs.h>
 
+#include <seastar/core/byteorder.hh>
+
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/seastore/segment_manager.h"
@@ -43,15 +45,6 @@
 
 #include "test/crimson/seastar_runner.h"
 #include "test/crimson/seastore/test_block.h"
-
-#ifdef CEPH_BIG_ENDIAN
-#define ntohll(a) (a)
-#elif defined(CEPH_LITTLE_ENDIAN)
-#define ntohll(a) swab(a)
-#else
-#error "Could not determine endianess"
-#endif
-#define htonll(a) ntohll(a)
 
 namespace po = boost::program_options;
 
@@ -166,31 +159,22 @@ struct request_context_t {
     return get_command() == NBD_CMD_WRITE;
   }
 
-
   seastar::future<> read_request(seastar::input_stream<char> &in) {
     return in.read_exactly(sizeof(struct nbd_request)
     ).then([this, &in](auto buf) {
-      auto &wire = *reinterpret_cast<const struct nbd_request *>(buf.get());
-      magic = ntohl(wire.magic);
-      type = ntohl(wire.type);
-      memcpy(handle, wire.handle, sizeof(handle));
-      from = ntohll(wire.from);
-      len = ntohl(wire.len);
+      auto p = buf.get();
+      magic = seastar::consume_be<uint32_t>(p);
+      type = seastar::consume_be<uint32_t>(p);
+      memcpy(handle, p, sizeof(handle));
+      p += sizeof(handle);
+      from = seastar::consume_be<uint64_t>(p);
+      len = seastar::consume_be<uint64_t>(p);
       logger().debug(
-	"Got request, magic {}, type {}, from {}, len {}",
-	magic,
-	type,
-	from,
-	len);
-      logger().debug(
-	"Got wire request, magic {}, type {}, from {}, len {}",
-	wire.magic,
-	wire.type,
-	wire.from,
-	wire.len);
+        "Got request, magic {}, type {}, from {}, len {}",
+	magic, type, from, len);
 
       if (has_input_buffer()) {
-	return in.read_exactly(len).then([this, &in](auto buf) {
+	return in.read_exactly(len).then([this](auto buf) {
 	  in_buffer = ceph::buffer::create_page_aligned(len);
 	  in_buffer->copy_in(0, len, buf.get());
 	  return seastar::now();
@@ -202,29 +186,24 @@ struct request_context_t {
   }
 
   seastar::future<> write_reply(seastar::output_stream<char> &out) {
-    using nbd_reply_t = struct nbd_reply;
-    return seastar::do_with(
-      nbd_reply_t(),
-      [this, &out](auto &reply) {
-	reply.magic = htonl(NBD_REPLY_MAGIC);
-	reply.error = htonl(err);
-	memcpy(reply.handle, handle, sizeof(reply.handle));
-	return out.write(
-	  reinterpret_cast<char*>(&reply), sizeof(reply)
-	).then([this, &out] {
-	  if (out_buffer) {
-	    return seastar::do_for_each(
-	      out_buffer->buffers(),
-	      [&out](auto &ptr) {
-		return out.write(ptr.c_str(), ptr.length());
-	      });
-	  } else {
-	    return seastar::now();
-	  }
-	}).then([this, &out] {
-	  return out.flush();
-	});
-      });
+    seastar::temporary_buffer<char> buffer{sizeof(struct nbd_reply)};
+    auto p = buffer.get_write();
+    seastar::produce_be<uint32_t>(p, NBD_REPLY_MAGIC);
+    seastar::produce_be<uint32_t>(p, err);
+    memcpy(p, handle, sizeof(handle));
+    return out.write(std::move(buffer)).then([this, &out] {
+      if (out_buffer) {
+        return seastar::do_for_each(
+          out_buffer->buffers(),
+          [&out](auto &ptr) {
+            return out.write(ptr.c_str(), ptr.length());
+          });
+      } else {
+        return seastar::now();
+      }
+    }).then([&out] {
+      return out.flush();
+    });
   }
 };
 
@@ -345,31 +324,27 @@ int main(int argc, char** argv)
 }
 
 class nbd_oldstyle_negotiation_t {
-  uint64_t magic = ntohll(0x4e42444d41474943); // "NBDMAGIC"
-  uint64_t magic2 = ntohll(0x00420281861253);  // "IHAVEOPT"
+  uint64_t magic2 = seastar::cpu_to_be(0x00420281861253);  // "IHAVEOPT"
   uint64_t size = 0;
-  uint32_t flags = ntohl(0);
+  uint32_t flags = seastar::cpu_to_be(0);
   char reserved[124] = {0};
 
 public:
   nbd_oldstyle_negotiation_t(uint64_t size, uint32_t flags)
-    : size(htonll(size)), flags(htonl(flags)) {}
+    : size(seastar::cpu_to_be(size)), flags(seastar::cpu_to_be(flags)) {}
 } __attribute__((packed));
 
 seastar::future<> send_negotiation(
   size_t size,
   seastar::output_stream<char>& out)
 {
-  return seastar::do_with(
-    nbd_oldstyle_negotiation_t(
-      size,
-      1),
-    [&out](auto &negotiation) {
-      return out.write(
-	reinterpret_cast<char*>(&negotiation), sizeof(negotiation));
-    }).then([&out] {
-      return out.flush();
-    });
+  return out.write("NBDMAGIC").then([size, &out] {
+    seastar::temporary_buffer<char> buf{sizeof(nbd_oldstyle_negotiation_t)};
+    new (buf.get_write()) nbd_oldstyle_negotiation_t(size, 1);
+    return out.write(std::move(buf));
+  }).then([&out] {
+    return out.flush();
+  });
 }
 
 seastar::future<> handle_command(
