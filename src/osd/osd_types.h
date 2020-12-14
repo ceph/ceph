@@ -202,6 +202,8 @@ WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
 WRITE_CMP_OPERATORS_2(pg_shard_t, osd, shard)
 std::ostream& operator<<(std::ostream &lhs, const pg_shard_t &rhs);
 
+using HobjToShardSetMapping = std::map<hobject_t, std::set<pg_shard_t>>;
+
 class IsPGRecoverablePredicate {
 public:
   /**
@@ -1105,6 +1107,24 @@ public:
     }
     *val = boost::get<T>(i->second);
     return true;
+  }
+
+  template<typename T>
+  T value_or(key_t key, const T& default_value) const {
+    auto i = opts.find(key);
+    if (i == opts.end()) {
+      return default_value;
+    }
+    return boost::get<T>(i->second);
+  }
+
+  template<typename T>
+  T value_or(key_t key, T&& default_value) const {
+    auto i = opts.find(key);
+    if (i == opts.end()) {
+      return std::move(default_value);
+    }
+    return boost::get<T>(i->second);
   }
 
   const value_t& get(key_t key) const;
@@ -6001,6 +6021,8 @@ struct PushOp {
 WRITE_CLASS_ENCODER_FEATURES(PushOp)
 std::ostream& operator<<(std::ostream& out, const PushOp &op);
 
+enum class scrub_level_t : bool { shallow = false, deep = true };
+enum class scrub_type_t : bool { not_repair = false, do_repair = true };
 
 /*
  * summarize pg contents for purposes of a scrub
@@ -6538,5 +6560,9 @@ public:
               const ceph::buffer::list& xattr_data) const override;
 };
 
+// alias name for this structure:
+using missing_map_t = std::map<hobject_t,
+  std::pair<std::optional<uint32_t>,
+    std::optional<uint32_t>>>;
 
 #endif

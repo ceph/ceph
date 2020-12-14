@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -9,9 +9,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_REPLICATEDPG_H
@@ -58,6 +58,7 @@ struct inconsistent_snapset_wrapper;
 class PrimaryLogPG : public PG, public PGBackend::Listener {
   friend class OSD;
   friend class Watch;
+  friend class PrimaryLogScrub;
 
 public:
   MEMPOOL_CLASS_HELPERS();
@@ -158,7 +159,7 @@ public:
     uint64_t start_offset = 0;
     uint64_t last_offset = 0;
     std::vector<OSDOp> chunk_ops;
-  
+
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
 	   object_locator_t l,
            version_t v,
@@ -245,8 +246,8 @@ public:
     bool removal;               ///< we are removing the backend object
     std::optional<std::function<void()>> on_flush; ///< callback, may be null
     // for chunked object
-    std::map<uint64_t, int> io_results; 
-    std::map<uint64_t, ceph_tid_t> io_tids; 
+    std::map<uint64_t, int> io_results;
+    std::map<uint64_t, ceph_tid_t> io_tids;
     uint64_t chunks;
 
     FlushOp()
@@ -335,7 +336,7 @@ public:
     GenContext<ThreadPool::TPHandle&> *c) override;
   GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
     GenContext<ThreadPool::TPHandle&> *c) override;
-    
+
   void send_message(int to_osd, Message *m) override {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap_epoch());
   }
@@ -367,8 +368,8 @@ public:
     return gen_prefix(out);
   }
 
-  const std::map<hobject_t, std::set<pg_shard_t>>
-    &get_missing_loc_shards() const override {
+  const HobjToShardSetMapping& get_missing_loc_shards() const override
+  {
     return recovery_state.get_missing_loc().get_missing_locs();
   }
   const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
@@ -378,7 +379,7 @@ public:
   const std::map<pg_shard_t, pg_info_t> &get_shard_info() const override {
     return recovery_state.get_peer_info();
   }
-  using PGBackend::Listener::get_shard_info;  
+  using PGBackend::Listener::get_shard_info;
   const pg_missing_tracker_t &get_local_missing() const override {
     return recovery_state.get_pg_log().get_missing();
   }
@@ -503,7 +504,7 @@ public:
   bool pg_is_undersized() const override {
     return is_undersized();
   }
-  
+
   bool pg_is_repair() const override {
     return is_repair();
   }
@@ -573,6 +574,11 @@ public:
 
   OstreamTemp clog_error() override { return osd->clog->error(); }
   OstreamTemp clog_warn() override { return osd->clog->warn(); }
+
+  /**
+   * a scrub-map arrived from a replica
+   */
+  void do_replica_scrub_map(OpRequestRef op);
 
   struct watch_disconnect_t {
     uint64_t cookie;
@@ -792,9 +798,9 @@ public:
 
     bool rep_aborted;
     bool all_committed;
-    
+
     utime_t   start;
-    
+
     eversion_t          pg_local_last_complete;
 
     ObcLockManager lock_manager;
@@ -802,7 +808,7 @@ public:
     std::list<std::function<void()>> on_committed;
     std::list<std::function<void()>> on_success;
     std::list<std::function<void()>> on_finish;
-    
+
     RepGather(
       OpContext *c, ceph_tid_t rt,
       eversion_t lc) :
@@ -810,7 +816,7 @@ public:
       op(c->op),
       queue_item(this),
       nref(1),
-      rep_tid(rt), 
+      rep_tid(rt),
       rep_aborted(false),
       all_committed(false),
       pg_local_last_complete(lc),
@@ -912,49 +918,10 @@ protected:
    * Releases locks
    *
    * @param manager [in] manager with locks to release
+   *
+   * (moved to .cc due to scrubber access)
    */
-  void release_object_locks(
-    ObcLockManager &lock_manager) {
-    std::list<std::pair<ObjectContextRef, std::list<OpRequestRef> > > to_req;
-    bool requeue_recovery = false;
-    bool requeue_snaptrim = false;
-    lock_manager.put_locks(
-      &to_req,
-      &requeue_recovery,
-      &requeue_snaptrim);
-    if (requeue_recovery)
-      queue_recovery();
-    if (requeue_snaptrim)
-      snap_trimmer_machine.process_event(TrimWriteUnblocked());
-
-    if (!to_req.empty()) {
-      // requeue at front of scrub blocking queue if we are blocked by scrub
-      for (auto &&p: to_req) {
-	if (write_blocked_by_scrub(p.first->obs.oi.soid.get_head())) {
-          for (auto& op : p.second) {
-            op->mark_delayed("waiting for scrub");
-          }
-
-	  waiting_for_scrub.splice(
-	    waiting_for_scrub.begin(),
-	    p.second,
-	    p.second.begin(),
-	    p.second.end());
-	} else if (is_laggy()) {
-          for (auto& op : p.second) {
-            op->mark_delayed("waiting for readable");
-          }
-	  waiting_for_readable.splice(
-	    waiting_for_readable.begin(),
-	    p.second,
-	    p.second.begin(),
-	    p.second.end());
-	} else {
-	  requeue_ops(p.second);
-	}
-      }
-    }
-  }
+  void release_object_locks(ObcLockManager &lock_manager);
 
   // replica ops
   // [primary|tail]
@@ -1304,7 +1271,7 @@ protected:
   int prepare_transaction(OpContext *ctx);
   std::list<std::pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
-  
+
   // pg on-disk content
   void check_local() override;
 
@@ -1425,14 +1392,6 @@ protected:
   // -- scrub --
   bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) override;
-  void scrub_snapshot_metadata(
-    ScrubMap &map,
-    const std::map<hobject_t,
-                   std::pair<std::optional<uint32_t>,
-                        std::optional<uint32_t>>> &missing_digest) override;
-  void _scrub_clear_state() override;
-  void _scrub_finish() override;
-  object_stat_collection_t scrub_cstat;
 
   void _split_into(pg_t child_pgid, PG *child,
                    unsigned split_bits) override;
@@ -1491,7 +1450,7 @@ protected:
     DECREMENT_REF,
     CREATE_OR_GET_REF,
   };
-  void do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing_oid, 
+  void do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing_oid,
 			   ObjectContextRef obc, bool write_ordered);
   void do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 			     uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
@@ -1588,22 +1547,6 @@ private:
     pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
     return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
   }
-  void log_missing(unsigned missing,
-			const std::optional<hobject_t> &head,
-			LogChannelRef clog,
-			const spg_t &pgid,
-			const char *func,
-			const char *mode,
-			bool allow_incomplete_clones);
-  unsigned process_clones_to(const std::optional<hobject_t> &head,
-    const std::optional<SnapSet> &snapset,
-    LogChannelRef clog,
-    const spg_t &pgid,
-    const char *mode,
-    bool allow_incomplete_clones,
-    std::optional<snapid_t> target,
-    std::vector<snapid_t>::reverse_iterator *curclone,
-    inconsistent_snapset_wrapper &snap_error);
 
 public:
   coll_t get_coll() {
@@ -1657,12 +1600,7 @@ private:
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
-    bool permit_trim() {
-      return
-	pg->is_clean() &&
-	!pg->scrubber.active &&
-	!pg->snap_trimq.empty();
-    }
+    bool permit_trim();
     bool can_trim() {
       return
 	permit_trim() &&
@@ -1964,9 +1902,7 @@ public:
   void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;
   bool check_failsafe_full() override;
-  bool maybe_preempt_replica_scrub(const hobject_t& oid) override {
-    return write_blocked_by_scrub(oid);
-  }
+  bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
   int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);
 
   // attr cache handling
@@ -2004,7 +1940,7 @@ inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
 {
   out << "repgather(" << &repop
       << " " << repop.v
-      << " rep_tid=" << repop.rep_tid 
+      << " rep_tid=" << repop.rep_tid
       << " committed?=" << repop.all_committed
       << " r=" << repop.r
       << ")";
