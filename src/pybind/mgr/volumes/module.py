@@ -4,7 +4,7 @@ import logging
 import traceback
 import threading
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option
 import orchestrator
 
 from .fs.volume import VolumeClient
@@ -396,12 +396,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     ]
 
     MODULE_OPTIONS = [
-        {
-            'name': 'max_concurrent_clones',
-            'type': 'int',
-            'default': 4,
-            'desc': 'Number of asynchronous cloner threads',
-        }
+        Option(
+            'max_concurrent_clones',
+            type='int',
+            default=4,
+            desc='Number of asynchronous cloner threads',
+        )
     ]
 
     def __init__(self, *args, **kwargs):

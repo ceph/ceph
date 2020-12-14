@@ -5,7 +5,7 @@ performance stats for ceph filesystem (for now...)
 import json
 from typing import List, Dict
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option
 
 from .fs.perf_stats import FSPerfStats
 
@@ -20,7 +20,7 @@ class Module(MgrModule):
             "perm": "r"
         },
     ]
-    MODULE_OPTIONS = [] # type: List[Dict]
+    MODULE_OPTIONS: List[Option] = []
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)

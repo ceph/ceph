@@ -4,7 +4,7 @@ try:
 except ImportError:
     TYPE_CHECKING = False
 
-from mgr_module import MgrModule, OSDMap
+from mgr_module import MgrModule, OSDMap, Option
 from mgr_util import to_pretty_timedelta
 from datetime import timedelta
 import os
@@ -54,7 +54,7 @@ class Event(object):
     def refs(self):
         # type: () -> List[str]
         return self._refs
- 
+
     @property
     def add_to_ceph_s(self):
         # type: () -> bool
@@ -427,27 +427,26 @@ class Module(MgrModule):
     ]
 
     MODULE_OPTIONS = [
-        {
-            'name': 'max_completed_events',
-            'default': 50,
-            'type': 'int',
-            'desc': 'number of past completed events to remember',
-            'runtime': True,
-        },
-        {
-            'name': 'persist_interval',
-            'default': 5,
-            'type': 'secs',
-            'desc': 'how frequently to persist completed events',
-            'runtime': True,
-        },
-        {
-            'name': 'enabled',
-            'default': True,
-            'type': 'bool',
-            
-        }
-    ]  # type: List[Dict[str, Any]]
+        Option(
+            'max_completed_events',
+            default=50,
+            type='int',
+            desc='number of past completed events to remember',
+            runtime=True
+        ),
+        Option(
+            'persist_interval',
+            default=5,
+            type='secs',
+            desc='how frequently to persist completed events',
+            runtime=True
+        ),
+        Option(
+            'enabled',
+            default=True,
+            type='bool',
+        )
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -632,17 +631,17 @@ class Module(MgrModule):
             ))
             self._osdmap_changed(old_osdmap, self._latest_osdmap)
         elif notify_type == "pg_summary":
-            # if there are no events we will skip this here to avoid 
+            # if there are no events we will skip this here to avoid
             # expensive get calls
             if len(self._events) == 0:
                 return
- 
+
             global_event = False
             data = self.get("pg_stats")
             ready = self.get("pg_ready")
             for ev_id in list(self._events):
                 ev = self._events[ev_id]
-                # Check for types of events 
+                # Check for types of events
                 # we have to update
                 if isinstance(ev, PgRecoveryEvent):
                     ev.pg_update(data, ready, self.log)
@@ -653,7 +652,7 @@ class Module(MgrModule):
                     self.maybe_complete(ev)
 
             if not global_event:
-                # If there is no global event 
+                # If there is no global event
                 # we create one
                 self._pg_state_changed(data)
 
@@ -848,7 +847,7 @@ class Module(MgrModule):
         self.clear_all_progress_events()
 
     def _handle_clear(self):
-        self.clear()  
+        self.clear()
         return 0, "", ""
 
     def handle_command(self, _, cmd):
