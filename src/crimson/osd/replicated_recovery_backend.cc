@@ -554,7 +554,7 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
 }
 
 std::vector<pg_shard_t>
-ReplicatedRecoveryBackend::get_shards_to_push(const hobject_t& soid)
+ReplicatedRecoveryBackend::get_shards_to_push(const hobject_t& soid) const
 {
   std::vector<pg_shard_t> shards;
   assert(pg.get_acting_recovery_backfill().size() > 0);
