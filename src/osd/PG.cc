@@ -805,7 +805,6 @@ void PG::send_cluster_message(
   ConnectionRef con = osd->get_con_osd_cluster(
     target, get_osdmap_epoch());
   if (!con) {
-    m->put();
     return;
   }
 
