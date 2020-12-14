@@ -119,9 +119,12 @@ private:
   /// load object context for recovery if it is not ready yet
   using load_obc_ertr = crimson::errorator<
     crimson::ct_error::object_corrupted>;
-  load_obc_ertr::future<> load_obc_for_recovery(
+
+  seastar::future<> maybe_push_shards(
     const hobject_t& soid,
-    bool pulled);
+    eversion_t need,
+    std::map<pg_shard_t, PushOp>& pops,
+    std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards);
 
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
