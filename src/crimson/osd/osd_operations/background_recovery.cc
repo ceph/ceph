@@ -64,9 +64,9 @@ seastar::future<> BackgroundRecovery::start()
 seastar::future<bool> UrgentRecovery::do_recovery()
 {
   if (!pg->has_reset_since(epoch_started)) {
-    auto futopt = pg->get_recovery_handler()->recover_missing(soid, need);
-    assert(futopt);
-    return with_blocking_future(std::move(*futopt)).then([] {
+    return with_blocking_future(
+      pg->get_recovery_handler()->recover_missing(soid, need)
+    ).then([] {
       return seastar::make_ready_future<bool>(false);
     });
   }
