@@ -151,13 +151,8 @@ size_t PGRecovery::start_primary_recovery_ops(
       if (pg->get_recovery_backend()->is_recovering(head)) {
 	++skipped;
       } else {
-	auto futopt = recover_missing(soid, item.need);
-	if (futopt) {
-	  out->push_back(std::move(*futopt));
-	  ++started;
-	} else {
-	  ++skipped;
-	}
+	out->push_back(recover_missing(soid, item.need));
+	++started;
       }
     }
 
@@ -257,7 +252,7 @@ size_t PGRecovery::start_replica_recovery_ops(
   return started;
 }
 
-std::optional<crimson::osd::blocking_future<>> PGRecovery::recover_missing(
+crimson::osd::blocking_future<> PGRecovery::recover_missing(
   const hobject_t &soid, eversion_t need)
 {
   if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
