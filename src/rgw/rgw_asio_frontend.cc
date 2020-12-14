@@ -228,7 +228,7 @@ void handle_connection(boost::asio::io_context& context,
       RGWRestfulIO client(cct, &real_client_io);
       auto y = optional_yield{context, yield};
       int http_ret = 0;
-      process_request(env.store, env.rest, &req, env.uri_prefix,
+      int r = process_request(env.store, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &http_ret);
 
@@ -245,6 +245,10 @@ void handle_connection(boost::asio::io_context& context,
             << log_header{message, http::field::user_agent, "\""} << ' '
             << log_header{message, http::field::range} << dendl;
       }
+      if (r < 0) {
+        return;
+      }
+
     }
 
     if (!parser.keep_alive()) {
