@@ -110,9 +110,7 @@ protected:
   }
 private:
   /// pull missing object from peer
-  ///
-  /// @return true if the object is pulled, false otherwise
-  seastar::future<bool> maybe_pull_missing_obj(
+  seastar::future<> maybe_pull_missing_obj(
     const hobject_t& soid,
     eversion_t need);
 

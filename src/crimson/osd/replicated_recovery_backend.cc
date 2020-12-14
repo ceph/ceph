@@ -29,7 +29,7 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   return seastar::do_with(std::map<pg_shard_t, PushOp>(), get_shards_to_push(soid),
     [this, soid, need](auto& pops, auto& shards) {
     return maybe_pull_missing_obj(soid, need).then(
-      [this, soid, need, &pops, &shards](bool pulled) {
+      [this, soid, need, &pops, &shards] {
       return maybe_push_shards(soid, need, pops, shards);
     });
   });
@@ -105,14 +105,14 @@ ReplicatedRecoveryBackend::maybe_push_shards(
   }));
 }
 
-seastar::future<bool>
+seastar::future<>
 ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   const hobject_t& soid,
   eversion_t need)
 {
   pg_missing_tracker_t local_missing = pg.get_local_missing();
   if (!local_missing.is_missing(soid)) {
-    return seastar::make_ready_future<bool>(false);
+    return seastar::make_ready_future<>();
   }
   PullOp po;
   auto& recovery_waiter = recovering.at(soid);
@@ -132,8 +132,6 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
     pg.get_osdmap_epoch()
   ).then([&recovery_waiter] {
     return recovery_waiter.wait_for_pull();
-  }).then([] {
-    return seastar::make_ready_future<bool>(true);
   });
 }
 
