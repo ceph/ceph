@@ -5573,6 +5573,10 @@ int main(int argc, const char **argv)
 	    cerr << "ERROR: storage class '" << storage_class << "' is not defined in zonegroup '" << placement_id << "' placement target" << std::endl;
 	    return EINVAL;
 	  }
+	  if (ptiter->second.tier_targets.find(storage_class) != ptiter->second.tier_targets.end()) {
+	    cerr << "ERROR: storage class '" << storage_class << "' is of tier type in zonegroup '" << placement_id << "' placement target" << std::endl;
+	    return EINVAL;
+	  }
 
           RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
 
