@@ -641,3 +641,30 @@ iMN28C2bKGao5UHvdER1rGy7
         req=Request("http://localhost:9443/v1/metadata/health",headers=hdrs, method="PATCH")
         with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
             urlopen(req)
+
+
+class TestMaintenance:
+    systemd_target = "ceph.00000000-0000-0000-0000-000000c0ffee.target"
+
+    def test_systemd_target_OK(self, tmp_path):
+        base = tmp_path 
+        wants = base / "ceph.target.wants"
+        wants.mkdir()
+        target = wants / TestMaintenance.systemd_target
+        target.touch()
+        cd.UNIT_DIR = str(base)
+
+        assert cd.systemd_target_state(target.name)
+
+    def test_systemd_target_NOTOK(self, tmp_path):
+        base = tmp_path 
+        cd.UNIT_DIR = str(base)
+        assert not cd.systemd_target_state(TestMaintenance.systemd_target)
+
+    def test_parser_OK(self):
+        args = cd._parse_args(['host-maintenance', 'enter'])
+        assert args.maintenance_action == 'enter'
+
+    def test_parser_BAD(self):
+        with pytest.raises(SystemExit):
+            cd._parse_args(['host-maintenance', 'wah'])
