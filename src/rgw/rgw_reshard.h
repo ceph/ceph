@@ -78,7 +78,6 @@ private:
 
   rgw::sal::RadosStore* store;
   RGWBucketInfo bucket_info;
-  rgw::bucket_index_layout_generation prev_index;
 
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
@@ -91,7 +90,7 @@ private:
   int update_bucket(rgw::BucketReshardState s, const DoutPrefixProvider* dpp);
 
   int do_reshard(int num_shards,
-                 int max_entries, const ReshardFaultInjector& f,
+                 int max_entries,
                  bool verbose,
                  std::ostream *os,
 		 Formatter *formatter,
@@ -109,25 +108,11 @@ public:
               ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
-  int cancel(const DoutPrefixProvider *dpp);
-  static int clear_resharding(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
-			      const RGWBucketInfo& bucket_info);
-  int clear_resharding(const DoutPrefixProvider *dpp) {
-    return clear_resharding(dpp, store, bucket_info);
-  }
-  static int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp,
-                                              rgw::sal::RadosStore* store,
-					      const RGWBucketInfo& bucket_info);
-  int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp) {
-    return clear_index_shard_reshard_status(dpp, store, bucket_info);
-  }
-  static int set_resharding_status(const DoutPrefixProvider *dpp,
-                                   rgw::sal::RadosStore* store,
-				   const RGWBucketInfo& bucket_info,
-                                   cls_rgw_reshard_status status);
-  int set_resharding_status(const DoutPrefixProvider *dpp, cls_rgw_reshard_status status) {
-    return set_resharding_status(dpp, store, bucket_info, status);
-  }
+  int cancel(const DoutPrefixProvider* dpp);
+
+  static int clear_resharding(rgw::sal::RadosStore* store,
+			      RGWBucketInfo& bucket_info,
+                              const DoutPrefixProvider* dpp);
 
   static uint32_t get_max_prime_shards() {
     return *std::crbegin(reshard_primes);
