@@ -1966,6 +1966,7 @@ fi
 %{_libdir}/librados.so.*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/libceph-common.so.*
+%{_libdir}/ceph/libcommon_async_dpdk.so.*
 %if %{with lttng}
 %{_libdir}/librados_tp.so.*
 %endif

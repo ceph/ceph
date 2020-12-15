@@ -54,11 +54,46 @@ if(WITH_DPDK)
     async/dpdk/TCP.cc
     async/dpdk/UserspaceEvent.cc
     async/dpdk/ethernet.cc)
-  add_library(common_async_dpdk STATIC
+  add_library(common_async_dpdk_static STATIC
+    ${async_dpdk_srcs})
+  target_link_libraries(common_async_dpdk_static PRIVATE
+    dpdk::dpdk)
+
+  add_library(common_async_dpdk SHARED
     ${async_dpdk_srcs})
   target_link_libraries(common_async_dpdk PRIVATE
     dpdk::dpdk)
   # Stack.cc includes DPDKStack.h, which includes rte_config.h indirectly
   target_include_directories(common-msg-objs PRIVATE
     $<TARGET_PROPERTY:dpdk::dpdk,INTERFACE_INCLUDE_DIRECTORIES>)
+  # appease dpkg-shlibdeps
+  set_target_properties(common_async_dpdk PROPERTIES
+    SOVERSION 1
+    SKIP_RPATH TRUE)
+  if(NOT APPLE AND NOT FREEBSD)
+    # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
+    #
+    # prefer the local symbol definitions when binding references to global
+    # symbols. otherwise we could reference the symbols defined by the application
+    # with the same name, instead of using the one defined in libcommon_async_dpdk.
+    # in other words, we require libcommon_async_dpdk to use local symbols, even if redefined
+    # in application".
+    set_property(
+      TARGET common_async_dpdk
+      APPEND APPEND_STRING
+      PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
+  endif()
+
+  if(MINGW)
+    install(
+      TARGETS common_async_dpdk
+      RUNTIME
+      DESTINATION ${CEPH_INSTALL_PKGLIBDIR})
+  else()
+    install(
+      TARGETS common_async_dpdk
+      LIBRARY
+      DESTINATION ${CEPH_INSTALL_PKGLIBDIR}
+      NAMELINK_SKIP)
+  endif()
 endif(WITH_DPDK)

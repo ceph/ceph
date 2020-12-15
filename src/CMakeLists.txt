@@ -446,10 +446,6 @@ if(HAVE_QATZIP)
   list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
 endif()
 
-if(WITH_DPDK)
-  list(APPEND ceph_common_deps common_async_dpdk)
-endif()
-
 if(WIN32)
   list(APPEND ceph_common_deps ws2_32 mswsock iphlpapi bcrypt)
   list(APPEND ceph_common_deps dlfcn_win32)
@@ -474,6 +470,11 @@ target_link_libraries(common ${ceph_common_deps})
 
 add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
+if(WITH_DPDK)
+  target_link_libraries(common common_async_dpdk_static)
+  target_link_libraries(ceph-common common_async_dpdk)
+endif()
+
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
