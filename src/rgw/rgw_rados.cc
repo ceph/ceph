@@ -6756,7 +6756,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 	ldout(cct, 10) << __func__ <<
 	  " INFO: was able to take reshard lock for bucket " <<
 	  bucket_id << dendl;
-	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info);
+	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info, dpp);
 	if (ret < 0) {
 	  reshard_lock.unlock();
 	  ldout(cct, 0) << __func__ <<

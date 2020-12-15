@@ -7098,7 +7098,7 @@ next:
     if (bucket_initable) {
       // we did not encounter an error, so let's work with the bucket
       RGWBucketReshard br(store, bucket_info, nullptr /* no callback */);
-      int ret = br.cancel();
+      int ret = br.cancel(dpp());
       if (ret < 0) {
         if (ret == -EBUSY) {
           cerr << "There is ongoing resharding, please retry after " <<

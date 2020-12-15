@@ -78,7 +78,6 @@ private:
 
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo bucket_info;
-  rgw::bucket_index_layout_generation prev_index;
 
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
@@ -91,7 +90,7 @@ private:
   int update_bucket(rgw::BucketReshardState s, const DoutPrefixProvider* dpp);
 
   int do_reshard(int num_shards,
-                 int max_entries, const ReshardFaultInjector& f,
+                 int max_entries,
                  bool verbose,
                  ostream *os,
 		 Formatter *formatter,
@@ -109,23 +108,11 @@ public:
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
-  int cancel();
+  int cancel(const DoutPrefixProvider* dpp);
+
   static int clear_resharding(rgw::sal::RGWRadosStore* store,
-			      const RGWBucketInfo& bucket_info);
-  int clear_resharding() {
-    return clear_resharding(store, bucket_info);
-  }
-  static int clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
-					      const RGWBucketInfo& bucket_info);
-  int clear_index_shard_reshard_status() {
-    return clear_index_shard_reshard_status(store, bucket_info);
-  }
-  static int set_resharding_status(rgw::sal::RGWRadosStore* store,
-				   const RGWBucketInfo& bucket_info,
-                                   cls_rgw_reshard_status status);
-  int set_resharding_status(cls_rgw_reshard_status status) {
-    return set_resharding_status(store, bucket_info, status);
-  }
+			      RGWBucketInfo& bucket_info,
+                              const DoutPrefixProvider* dpp);
 
   static uint32_t get_max_prime_shards() {
     return *std::crbegin(reshard_primes);
