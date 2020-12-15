@@ -648,8 +648,8 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error(crimson::ct_error::assert_all{});
   };
-  return prepare_waiter.then([this, first=pi.recovery_progress.first,
-			      &pi, &pop, t, response]() mutable {
+  return prepare_waiter.then([this, &pi, &pop, t, response]() mutable {
+    const bool first = pi.recovery_progress.first;
     pi.recovery_progress = pop.after_progress;
     logger().debug("new recovery_info {}, new progress {}",
 		   pi.recovery_info, pi.recovery_progress);
