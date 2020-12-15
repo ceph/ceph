@@ -255,7 +255,7 @@ public:
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
   void send_message_osd_cluster(std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch);
   void send_message_osd_cluster(MessageRef m, Connection *con) {
-    con->send_message2(m);
+    con->send_message2(std::move(m));
   }
   void send_message_osd_cluster(Message *m, const ConnectionRef& con) {
     con->send_message(m);
