@@ -334,7 +334,7 @@ static int set_target_layout(rgw::sal::RGWRadosStore *store,
 
 int RGWBucketReshard::set_target_layout(int new_num_shards)
 {
-  int ret = RGWBucketReshard::update_bucket(rgw::BucketReshardState::IN_PROGRESS);
+  int ret = RGWBucketReshard::update_bucket(rgw::BucketReshardState::InProgress);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
@@ -392,7 +392,7 @@ public:
   }
 
   int start() {
-    int ret = set_status(rgw::BucketReshardState::IN_PROGRESS);
+    int ret = set_status(rgw::BucketReshardState::InProgress);
     if (ret < 0) {
       return ret;
     }
@@ -401,7 +401,7 @@ public:
   }
 
   int complete() {
-    int ret = set_status(rgw::BucketReshardState::NONE);
+    int ret = set_status(rgw::BucketReshardState::None);
     if (ret < 0) {
       return ret;
     }
@@ -644,7 +644,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   bucket_info.layout.current_index = *bucket_info.layout.target_index;
   bucket_info.layout.target_index = std::nullopt; // target_layout doesn't need to exist after reshard
 
-  ret = RGWBucketReshard::update_bucket(rgw::BucketReshardState::NONE);
+  ret = RGWBucketReshard::update_bucket(rgw::BucketReshardState::None);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed writing bucket instance info: " << dendl;
       return ret;
@@ -744,7 +744,7 @@ error_out:
     // restore old index
   bucket_info.layout.current_index = prev_index;
 
-  ret = RGWBucketReshard::update_bucket(rgw::BucketReshardState::NONE);
+  ret = RGWBucketReshard::update_bucket(rgw::BucketReshardState::None);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to store updated bucket instance info: " << dendl;
     return ret;
