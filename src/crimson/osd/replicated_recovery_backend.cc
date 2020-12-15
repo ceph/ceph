@@ -650,45 +650,42 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
   };
   return prepare_waiter.then([this, first=pi.recovery_progress.first,
 			      &pi, &pop, t, response]() mutable {
-    return seastar::do_with(interval_set<uint64_t>(),
-			    bufferlist(),
-			    interval_set<uint64_t>(),
-			    [this, &pop, &pi, first, t, response]
-			    (auto& data_zeros, auto& data,
-			     auto& usable_intervals) {
-      std::tie(usable_intervals, data) =
-        trim_pushed_data(pi.recovery_info.copy_subset,
-                         pop.data_included, pop.data);
-      pi.recovery_progress = pop.after_progress;
-      logger().debug("new recovery_info {}, new progress {}",
-	  pi.recovery_info, pi.recovery_progress);
-      uint64_t z_offset = pop.before_progress.data_recovered_to;
-      uint64_t z_length = pop.after_progress.data_recovered_to
-	  - pop.before_progress.data_recovered_to;
-      if (z_length)
-	data_zeros.insert(z_offset, z_length);
-      bool complete = pi.is_complete();
-      bool clear_omap = !pop.before_progress.omap_complete;
-      return submit_push_data(pi.recovery_info, first, complete, clear_omap,
+    pi.recovery_progress = pop.after_progress;
+    logger().debug("new recovery_info {}, new progress {}",
+		   pi.recovery_info, pi.recovery_progress);
+    interval_set<uint64_t> data_zeros;
+    {
+      uint64_t offset = pop.before_progress.data_recovered_to;
+      uint64_t length = (pop.after_progress.data_recovered_to -
+			 pop.before_progress.data_recovered_to);
+      if (length) {
+        data_zeros.insert(offset, length);
+      }
+    }
+    auto [usable_intervals, data] =
+      trim_pushed_data(pi.recovery_info.copy_subset,
+                       pop.data_included, pop.data);
+    bool complete = pi.is_complete();
+    bool clear_omap = !pop.before_progress.omap_complete;
+    return submit_push_data(pi.recovery_info, first, complete, clear_omap,
 	  data_zeros, usable_intervals, data, pop.omap_header,
 	  pop.attrset, pop.omap_entries, t).then(
-	[this, response, &pi, &pop, &data, complete, t] {
-	pi.stat.num_keys_recovered += pop.omap_entries.size();
-	pi.stat.num_bytes_recovered += data.length();
+      [this, response, &pi, &pop, complete, t, bytes_recovered=data.length()] {
+      pi.stat.num_keys_recovered += pop.omap_entries.size();
+      pi.stat.num_bytes_recovered += bytes_recovered;
 
-	if (complete) {
-	  pi.stat.num_objects_recovered++;
-	  pg.get_recovery_handler()->on_local_recover(
-	      pop.soid, recovering.at(pop.soid).pi->recovery_info,
-	      false, *t);
-	  return seastar::make_ready_future<bool>(true);
-	} else {
-	  response->soid = pop.soid;
-	  response->recovery_info = pi.recovery_info;
-	  response->recovery_progress = pi.recovery_progress;
-	  return seastar::make_ready_future<bool>(false);
-	}
-      });
+      if (complete) {
+	pi.stat.num_objects_recovered++;
+	pg.get_recovery_handler()->on_local_recover(
+	    pop.soid, recovering.at(pop.soid).pi->recovery_info,
+	    false, *t);
+	return seastar::make_ready_future<bool>(true);
+      } else {
+        response->soid = pop.soid;
+        response->recovery_info = pi.recovery_info;
+        response->recovery_progress = pi.recovery_progress;
+        return seastar::make_ready_future<bool>(false);
+      }
     });
   });
 }
