@@ -35,8 +35,7 @@ struct obc_to_hoid {
   }
 };
 
-class ObjectContext : public Blocker,
-		      public ceph::common::intrusive_lru_base<
+class ObjectContext : public ceph::common::intrusive_lru_base<
   ceph::common::intrusive_lru_config<
     hobject_t, ObjectContext, obc_to_hoid<ObjectContext>>>
 {
@@ -98,19 +97,6 @@ private:
   tri_mutex lock;
   bool recovery_read_marker = false;
 
-  const char *get_type_name() const final {
-    return "ObjectContext";
-  }
-  void dump_detail(Formatter *f) const final;
-
-  template <typename LockF>
-  seastar::future<> get_lock(
-    Operation *op,
-    LockF &&lockf) {
-    return op->with_blocking_future(
-      make_blocking_future(std::forward<LockF>(lockf)));
-  }
-
   template <typename Lock, typename Func>
   auto _with_lock(Lock&& lock, Func&& func) {
     Ref obc = this;
@@ -158,13 +144,6 @@ public:
   }
   bool is_request_pending() const {
     return lock.is_acquired();
-  }
-
-  template <typename F>
-  seastar::future<> get_write_greedy(Operation *op) {
-    return get_lock(op, [this] {
-      return lock.lock_for_write(true);
-    });
   }
 
   bool get_recovery_read() {
