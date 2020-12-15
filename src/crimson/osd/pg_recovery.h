@@ -40,7 +40,7 @@ private:
   std::vector<pg_shard_t> get_replica_recovery_order() const {
     return pg->get_replica_recovery_order();
   }
-  std::optional<crimson::osd::blocking_future<>> recover_missing(
+  crimson::osd::blocking_future<> recover_missing(
     const hobject_t &soid, eversion_t need);
   size_t prep_object_replica_deletes(
     const hobject_t& soid,
