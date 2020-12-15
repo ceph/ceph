@@ -730,6 +730,10 @@ def ping_monitor(cluster_handle, name, timeout):
     return 0
 
 
+def get_admin_socket(parsed_args, name):
+    return ceph_conf(parsed_args, 'admin_socket', name)
+
+
 def maybe_daemon_command(parsed_args, childargs):
     """
     Check if --admin-socket, daemon, or daemonperf command
@@ -751,8 +755,7 @@ def maybe_daemon_command(parsed_args, childargs):
             else:
                 # try resolve daemon name
                 try:
-                    sockpath = ceph_conf(parsed_args, 'admin_socket',
-                                         childargs[1])
+                    sockpath = get_admin_socket(parsed_args, childargs[1])
                 except Exception as e:
                     print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
                     return True, errno.EINVAL
