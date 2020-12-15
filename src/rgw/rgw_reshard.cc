@@ -506,6 +506,7 @@ int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp)
   return ret;
 }
 
+
 RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RGWRadosStore* _store,
 					   const std::string& reshard_lock_oid,
 					   bool _ephemeral) :
