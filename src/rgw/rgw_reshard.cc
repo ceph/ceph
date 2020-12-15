@@ -251,9 +251,8 @@ public:
 
 RGWBucketReshard::RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
 				   const RGWBucketInfo& _bucket_info,
-				   const map<string, bufferlist>& _bucket_attrs,
 				   RGWBucketReshardLock* _outer_reshard_lock) :
-  store(_store), bucket_info(_bucket_info), bucket_attrs(_bucket_attrs),
+  store(_store), bucket_info(_bucket_info),
   reshard_lock(store, bucket_info, true),
   outer_reshard_lock(_outer_reshard_lock)
 { }
@@ -989,12 +988,11 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
 	rgw_bucket bucket;
 	RGWBucketInfo bucket_info;
-	map<string, bufferlist> attrs;
 
 	ret = store->getRados()->get_bucket_info(store->svc(),
 						 entry.tenant, entry.bucket_name,
 						 bucket_info, nullptr,
-						 null_yield, dpp, &attrs);
+						 null_yield, dpp, nullptr);
 	if (ret < 0 || bucket_info.bucket.bucket_id != entry.bucket_id) {
 	  if (ret < 0) {
 	    ldout(cct, 0) <<  __func__ <<
@@ -1030,7 +1028,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 	}
 
 	{
-	RGWBucketReshard br(store, bucket_info, attrs, nullptr);
+	RGWBucketReshard br(store, bucket_info, nullptr);
 
   FaultInjector<std::string_view> f;
 	ret = br.execute(entry.new_num_shards, f, max_entries, dpp,
