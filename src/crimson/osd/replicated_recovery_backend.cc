@@ -656,12 +656,9 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
 			    [this, &pop, &pi, first, t, response]
 			    (auto& data_zeros, auto& data,
 			     auto& usable_intervals) {
-      {
-        ceph::bufferlist usable_data;
-        trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, pop.data,
-	    &usable_intervals, &usable_data);
-        data = std::move(usable_data);
-      }
+      std::tie(usable_intervals, data) =
+        trim_pushed_data(pi.recovery_info.copy_subset,
+                         pop.data_included, pop.data);
       pi.recovery_progress = pop.after_progress;
       logger().debug("new recovery_info {}, new progress {}",
 	  pi.recovery_info, pi.recovery_progress);
@@ -875,22 +872,22 @@ seastar::future<> ReplicatedRecoveryBackend::handle_push_reply(
   });
 }
 
-void ReplicatedRecoveryBackend::trim_pushed_data(
+std::pair<interval_set<uint64_t>,
+	  bufferlist>
+ReplicatedRecoveryBackend::trim_pushed_data(
   const interval_set<uint64_t> &copy_subset,
   const interval_set<uint64_t> &intervals_received,
-  ceph::bufferlist data_received,
-  interval_set<uint64_t> *intervals_usable,
-  bufferlist *data_usable)
+  ceph::bufferlist data_received)
 {
   logger().debug("{}", __func__);
   // what i have is only a subset of what i want
   if (intervals_received.subset_of(copy_subset)) {
-    *intervals_usable = intervals_received;
-    *data_usable = data_received;
-    return;
+    return {intervals_received, data_received};
   }
   // only collect the extents included by copy_subset and intervals_received
-  intervals_usable->intersection_of(copy_subset, intervals_received);
+  interval_set<uint64_t> intervals_usable;
+  bufferlist data_usable;
+  intervals_usable.intersection_of(copy_subset, intervals_received);
   uint64_t have_off = 0;
   for (auto [have_start, have_len] : intervals_received) {
     interval_set<uint64_t> want;
@@ -900,10 +897,11 @@ void ReplicatedRecoveryBackend::trim_pushed_data(
       bufferlist sub;
       uint64_t data_off = have_off + (want_start - have_start);
       sub.substr_of(data_received, data_off, want_len);
-      data_usable->claim_append(sub);
+      data_usable.claim_append(sub);
     }
     have_off += have_len;
   }
+  return {intervals_usable, data_usable};
 }
 
 seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
