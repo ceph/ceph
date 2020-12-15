@@ -108,7 +108,7 @@ class IscsiService(CephService):
                     logger.info('Adding iSCSI gateway %s to Dashboard', safe_service_url)
                     cmd_dicts.append({
                         'prefix': 'dashboard iscsi-gateway-add',
-                        'service_url': service_url,
+                        'inbuf': service_url,
                         'name': dd.hostname
                     })
             return cmd_dicts

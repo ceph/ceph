@@ -18,7 +18,7 @@ class FakeMgr:
         self.config = ''
         self.check_mon_command = MagicMock(side_effect=self._check_mon_command)
 
-    def _check_mon_command(self, cmd_dict):
+    def _check_mon_command(self, cmd_dict, inbuf=None):
         prefix = cmd_dict.get('prefix')
         if prefix == 'get-cmd':
             return 0, self.config, ''
