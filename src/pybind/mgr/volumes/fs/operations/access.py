@@ -1,5 +1,27 @@
 import errno
 import json
+from typing import List
+
+def prepare_updated_caps_list(existing_caps, mds_cap_str, osd_cap_str, authorize=True):
+    caps_list = [] # type: List[str]
+    for k, v in existing_caps['caps'].items():
+        if k == 'mds' or k == 'osd':
+            continue
+        elif k == 'mon':
+            if not authorize and v == 'allow r':
+                continue
+        caps_list.extend((k,v))
+
+    if mds_cap_str:
+        caps_list.extend(('mds', mds_cap_str))
+    if osd_cap_str:
+        caps_list.extend(('osd', osd_cap_str))
+
+    if authorize and 'mon' not in caps_list:
+        caps_list.extend(('mon', 'allow r'))
+
+    return caps_list
+
 
 def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
                  unwanted_mds_cap, unwanted_osd_cap, existing_caps):
@@ -19,8 +41,8 @@ def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
             if not orig_mds_caps:
                 return want_mds_cap, want_osd_cap
 
-            mds_cap_tokens = orig_mds_caps.split(",")
-            osd_cap_tokens = orig_osd_caps.split(",")
+            mds_cap_tokens = [x.strip() for x in orig_mds_caps.split(",")]
+            osd_cap_tokens = [x.strip() for x in orig_osd_caps.split(",")]
 
             if want_mds_cap in mds_cap_tokens:
                 return orig_mds_caps, orig_osd_caps
@@ -41,14 +63,12 @@ def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
             orig_mds_caps, orig_osd_caps, want_mds_cap, want_osd_cap,
             unwanted_mds_cap, unwanted_osd_cap)
 
+        caps_list = prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str)
         mgr.mon_command(
             {
                 "prefix": "auth caps",
                 'entity': client_entity,
-                'caps': [
-                    'mds', mds_cap_str,
-                    'osd', osd_cap_str,
-                    'mon', cap['caps'].get('mon', 'allow r')],
+                'caps': caps_list
             })
         ret, out, err = mgr.mon_command(
             {
@@ -86,8 +106,8 @@ def deny_access(mgr, client_entity, want_mds_caps, want_osd_caps):
         return
 
     def cap_remove(orig_mds_caps, orig_osd_caps, want_mds_caps, want_osd_caps):
-        mds_cap_tokens = orig_mds_caps.split(",")
-        osd_cap_tokens = orig_osd_caps.split(",")
+        mds_cap_tokens = [x.strip() for x in orig_mds_caps.split(",")]
+        osd_cap_tokens = [x.strip() for x in orig_osd_caps.split(",")]
 
         for want_mds_cap, want_osd_cap in zip(want_mds_caps, want_osd_caps):
             if want_mds_cap in mds_cap_tokens:
@@ -103,7 +123,8 @@ def deny_access(mgr, client_entity, want_mds_caps, want_osd_caps):
     mds_cap_str, osd_cap_str = cap_remove(orig_mds_caps, orig_osd_caps,
                                           want_mds_caps, want_osd_caps)
 
-    if not mds_cap_str:
+    caps_list = prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str, authorize=False)
+    if not caps_list:
         mgr.mon_command(
             {
                 'prefix': 'auth rm',
@@ -114,8 +135,5 @@ def deny_access(mgr, client_entity, want_mds_caps, want_osd_caps):
             {
                 "prefix": "auth caps",
                 'entity': client_entity,
-                'caps': [
-                    'mds', mds_cap_str,
-                    'osd', osd_cap_str,
-                    'mon', cap['caps'].get('mon', 'allow r')],
+                'caps': caps_list
             })
