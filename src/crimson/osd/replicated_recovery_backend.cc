@@ -883,28 +883,26 @@ void ReplicatedRecoveryBackend::trim_pushed_data(
   bufferlist *data_usable)
 {
   logger().debug("{}", __func__);
+  // what i have is only a subset of what i want
   if (intervals_received.subset_of(copy_subset)) {
     *intervals_usable = intervals_received;
     *data_usable = data_received;
     return;
   }
-
+  // only collect the extents included by copy_subset and intervals_received
   intervals_usable->intersection_of(copy_subset, intervals_received);
-
-  uint64_t off = 0;
-  for (interval_set<uint64_t>::const_iterator p = intervals_received.begin();
-      p != intervals_received.end(); ++p) {
-    interval_set<uint64_t> x;
-    x.insert(p.get_start(), p.get_len());
-    x.intersection_of(copy_subset);
-    for (interval_set<uint64_t>::const_iterator q = x.begin(); q != x.end();
-	++q) {
+  uint64_t have_off = 0;
+  for (auto [have_start, have_len] : intervals_received) {
+    interval_set<uint64_t> want;
+    want.insert(have_start, have_len);
+    want.intersection_of(copy_subset);
+    for (auto [want_start, want_len] : want) {
       bufferlist sub;
-      uint64_t data_off = off + (q.get_start() - p.get_start());
-      sub.substr_of(data_received, data_off, q.get_len());
+      uint64_t data_off = have_off + (want_start - have_start);
+      sub.substr_of(data_received, data_off, want_len);
       data_usable->claim_append(sub);
     }
-    off += p.get_len();
+    have_off += have_len;
   }
 }
 
@@ -983,13 +981,11 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
 	      local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
 	      local_intervals_included.subtract(local_intervals_excluded);
 	    }
-	    for (interval_set<uint64_t>::const_iterator q = local_intervals_included.begin();
-		q != local_intervals_included.end();
-		++q) {
+	    for (auto [off, len] : local_intervals_included) {
 	      logger().debug(" clone_range {} {}~{}",
-		  recovery_info.soid, q.get_start(), q.get_len());
-	      t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid), ghobject_t(target_oid),
-		  q.get_start(), q.get_len(), q.get_start());
+		  recovery_info.soid, off, len);
+	      t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
+			     ghobject_t(target_oid), off, len, off);
 	    }
 	  }
 	}
@@ -999,10 +995,9 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
     return seastar::make_ready_future<>();
   }().then([this, &data_zeros, &recovery_info, &intervals_included, t, target_oid,
     &omap_entries, &attrs, data_included, complete, first] {
-    uint64_t off = 0;
     uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
     // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
-    if (data_zeros.size() > 0) {
+    if (!data_zeros.empty()) {
       data_zeros.intersection_of(recovery_info.copy_subset);
       assert(intervals_included.subset_of(data_zeros));
       data_zeros.subtract(intervals_included);
@@ -1012,19 +1007,19 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
 	  recovery_info.soid, recovery_info.copy_subset,
 	  intervals_included, data_zeros);
 
-      for (auto p = data_zeros.begin(); p != data_zeros.end(); ++p)
-	t->zero(coll->get_cid(), ghobject_t(target_oid), p.get_start(), p.get_len());
+      for (auto [start, len] : data_zeros) {
+        t->zero(coll->get_cid(), ghobject_t(target_oid), start, len);
+      }
     }
     logger().debug("submit_push_data: test");
-    for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
-	p != intervals_included.end();
-	++p) {
+    uint64_t off = 0;
+    for (auto [start, len] : intervals_included) {
       bufferlist bit;
-      bit.substr_of(data_included, off, p.get_len());
+      bit.substr_of(data_included, off, len);
       logger().debug("submit_push_data: test1");
       t->write(coll->get_cid(), ghobject_t(target_oid),
-	  p.get_start(), p.get_len(), bit, fadvise_flags);
-      off += p.get_len();
+	       start, len, bit, fadvise_flags);
+      off += len;
     }
 
     if (!omap_entries.empty())
@@ -1052,14 +1047,11 @@ void ReplicatedRecoveryBackend::submit_push_complete(
   const ObjectRecoveryInfo &recovery_info,
   ObjectStore::Transaction *t)
 {
-  for (map<hobject_t, interval_set<uint64_t>>::const_iterator p =
-      recovery_info.clone_subset.begin();
-      p != recovery_info.clone_subset.end(); ++p) {
-    for (interval_set<uint64_t>::const_iterator q = p->second.begin();
-	q != p->second.end(); ++q) {
-      logger().debug(" clone_range {} {}~{}", p->first, q.get_start(), q.get_len());
-      t->clone_range(coll->get_cid(), ghobject_t(p->first), ghobject_t(recovery_info.soid),
-	  q.get_start(), q.get_len(), q.get_start());
+  for (const auto& [oid, extents] : recovery_info.clone_subset) {
+    for (const auto [off, len] : extents) {
+      logger().debug(" clone_range {} {}~{}", oid, off, len);
+      t->clone_range(coll->get_cid(), ghobject_t(oid), ghobject_t(recovery_info.soid),
+                     off, len, off);
     }
   }
 }
