@@ -4,6 +4,8 @@ from __future__ import absolute_import
 
 import json
 import logging
+import random
+import string
 from collections import namedtuple
 import time
 
@@ -49,7 +51,10 @@ class DashboardTestCase(MgrTestCase):
             if ex.exitstatus != 2:
                 raise ex
 
-        cls._ceph_cmd(['dashboard', 'ac-user-create', username, password])
+        user_create_args = [
+            'dashboard', 'ac-user-create', username
+        ]
+        cls._ceph_cmd_with_secret(user_create_args, password)
 
         set_roles_args = ['dashboard', 'ac-user-set-roles', username]
         for idx, role in enumerate(roles):
@@ -375,6 +380,28 @@ class DashboardTestCase(MgrTestCase):
         log.info("command result: %s", res)
         return res
 
+    @classmethod
+    def _ceph_cmd_result(cls, cmd):
+        exitstatus = cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd)
+        log.info("command exit status: %d", exitstatus)
+        return exitstatus
+
+    @classmethod
+    def _ceph_cmd_with_secret(cls, cmd, secret, return_exit_code=False):
+        cmd.append('-i')
+        cmd.append('{}'.format(cls._ceph_create_tmp_file(secret)))
+        if return_exit_code:
+            return cls._ceph_cmd_result(cmd)
+        return cls._ceph_cmd(cmd)
+
+    @classmethod
+    def _ceph_create_tmp_file(cls, content):
+        """Create a temporary file in the remote cluster"""
+        file_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(20))
+        file_path = '/tmp/{}'.format(file_name)
+        cls._cmd(['sh', '-c', 'echo -n {} > {}'.format(content, file_path)])
+        return file_path
+
     def set_config_key(self, key, value):
         self._ceph_cmd(['config-key', 'set', key, value])
 
@@ -382,26 +409,26 @@ class DashboardTestCase(MgrTestCase):
         return self._ceph_cmd(['config-key', 'get', key])
 
     @classmethod
+    def _cmd(cls, args):
+        return cls.mgr_cluster.admin_remote.run(args=args)
+
+    @classmethod
     def _rbd_cmd(cls, cmd):
-        args = [
-            'rbd'
-        ]
+        args = ['rbd']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def _radosgw_admin_cmd(cls, cmd):
-        args = [
-            'radosgw-admin'
-        ]
+        args = ['radosgw-admin']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def _rados_cmd(cls, cmd):
         args = ['rados']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def mons(cls):

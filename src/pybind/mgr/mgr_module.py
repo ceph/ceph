@@ -5,6 +5,7 @@ try:
 except ImportError:
     # just for type checking
     pass
+import errno
 import logging
 import json
 import six
@@ -14,6 +15,8 @@ import rados
 import re
 import time
 
+ERROR_MSG_EMPTY_INPUT_FILE = 'Empty content: please add a password/secret to the file.'
+ERROR_MSG_NO_INPUT_FILE = 'Please specify the file containing the password/secret with "-i" option.'
 # Full list of strings in "osd_types.cc:pg_state_string()"
 PG_STATES = [
     "active",
@@ -163,6 +166,9 @@ class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout',
         :type stderr: str
         """
         return super(HandleCommandResult, cls).__new__(cls, retval, stdout, stderr)
+
+
+class MonCommandFailed(RuntimeError): pass
 
 
 class OSDMap(ceph_module.BasePyOSDMap):
@@ -386,6 +392,17 @@ def CLIReadCommand(prefix, args="", desc=""):
 
 def CLIWriteCommand(prefix, args="", desc=""):
     return CLICommand(prefix, args, desc, "w")
+
+
+def CLICheckNonemptyFileInput(func):
+    def check(*args, **kwargs):
+        if not 'inbuf' in kwargs:
+            return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
+        if not kwargs['inbuf'] or (isinstance(kwargs['inbuf'], str)
+                                   and not kwargs['inbuf'].strip('\n')):
+            return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
+        return func(*args, **kwargs)
+    return check
 
 
 def _get_localized_key(prefix, key):
@@ -908,7 +925,20 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
 
-    def mon_command(self, cmd_dict):
+    def check_mon_command(self, cmd_dict, inbuf=None):
+        """
+        Wrapper around :func:`~mgr_module.MgrModule.mon_command`, but raises,
+        if ``retval != 0``.
+        """
+
+        r = HandleCommandResult(*self.mon_command(cmd_dict, inbuf))
+        if r.retval:
+            raise MonCommandFailed(
+                '{} failed: {} retval: {}'.format(cmd_dict["prefix"], r.stderr, r.retval)
+            )
+        return r
+
+    def mon_command(self, cmd_dict, inbuf=None):
         """
         Helper for modules that do simple, synchronous mon command
         execution.
@@ -920,7 +950,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         t1 = time.time()
         result = CommandResult()
-        self.send_command(result, "mon", "", json.dumps(cmd_dict), "")
+        self.send_command(result, "mon", "", json.dumps(cmd_dict), "", inbuf)
         r = result.wait()
         t2 = time.time()
 
@@ -930,7 +960,14 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         return r
 
-    def send_command(self, *args, **kwargs):
+    def send_command(
+            self,
+            result,
+            svc_type,
+            svc_id,
+            command,
+            tag,
+            inbuf=None):
         """
         Called by the plugin to send a command to the mon
         cluster.
@@ -950,8 +987,9 @@ class MgrModule(ceph_module.BaseMgrModule):
             completes, the ``notify()`` callback on the MgrModule instance is
             triggered, with notify_type set to "command", and notify_id set to
             the tag of the command.
+        :param str inbuf: input buffer for sending additional data.
         """
-        self._ceph_send_command(*args, **kwargs)
+        self._ceph_send_command(result, svc_type, svc_id, command, tag, inbuf)
 
     def set_health_checks(self, checks):
         """
