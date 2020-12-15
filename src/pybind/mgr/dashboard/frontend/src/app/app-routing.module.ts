@@ -24,19 +24,16 @@ import { ServiceFormComponent } from './ceph/cluster/services/service-form/servi
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
-import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginPasswordFormComponent } from './core/auth/login-password-form/login-password-form.component';
 import { LoginComponent } from './core/auth/login/login.component';
-import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
 import { UserPasswordFormComponent } from './core/auth/user-password-form/user-password-form.component';
-import { ForbiddenComponent } from './core/forbidden/forbidden.component';
+import { ErrorComponent } from './core/error/error.component';
 import { BlankLayoutComponent } from './core/layouts/blank-layout/blank-layout.component';
 import { LoginLayoutComponent } from './core/layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './core/layouts/workbench-layout/workbench-layout.component';
-import { NotFoundComponent } from './core/not-found/not-found.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -87,6 +84,8 @@ const routes: Routes = [
     canActivateChild: [AuthGuardService, ChangePasswordGuardService],
     children: [
       { path: 'dashboard', component: DashboardComponent },
+      { path: 'error', component: ErrorComponent },
+
       // Cluster
       {
         path: 'hosts',
@@ -107,7 +106,17 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        data: { breadcrumbs: 'Cluster/Services' },
+        canActivateChild: [ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            apiPath: 'orchestrator',
+            redirectTo: 'error',
+            section: 'orch',
+            section_info: 'Orchestrator',
+            header: 'Orchestrator is not available'
+          },
+          breadcrumbs: 'Cluster/Services'
+        },
         children: [
           { path: '', component: ServicesComponent },
           {
@@ -119,8 +128,18 @@ const routes: Routes = [
       },
       {
         path: 'inventory',
+        canActivate: [ModuleStatusGuardService],
         component: InventoryComponent,
-        data: { breadcrumbs: 'Cluster/Inventory' }
+        data: {
+          moduleStatusGuardConfig: {
+            apiPath: 'orchestrator',
+            redirectTo: 'error',
+            section: 'orch',
+            section_info: 'Orchestrator',
+            header: 'Orchestrator is not available'
+          },
+          breadcrumbs: 'Cluster/Inventory'
+        }
       },
       {
         path: 'osd',
@@ -259,7 +278,10 @@ const routes: Routes = [
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'rgw',
-            redirectTo: 'rgw/501'
+            redirectTo: 'error',
+            section: 'rgw',
+            section_info: 'Object Gateway',
+            header: 'The Object Gateway Service is not configured'
           },
           breadcrumbs: true,
           text: 'Object Gateway',
@@ -288,17 +310,15 @@ const routes: Routes = [
       },
       // NFS
       {
-        path: 'nfs/501/:message',
-        component: Nfs501Component,
-        data: { breadcrumbs: 'NFS' }
-      },
-      {
         path: 'nfs',
         canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             apiPath: 'nfs-ganesha',
-            redirectTo: 'nfs/501'
+            redirectTo: 'error',
+            section: 'nfs-ganesha',
+            section_info: 'NFS GANESHA',
+            header: 'NFS-Ganesha is not configured'
           },
           breadcrumbs: 'NFS'
         },
@@ -333,14 +353,7 @@ const routes: Routes = [
   {
     path: '',
     component: BlankLayoutComponent,
-    children: [
-      // Single Sign-On (SSO)
-      { path: 'sso/404', component: SsoNotFoundComponent },
-      // System
-      { path: '403', component: ForbiddenComponent },
-      { path: '404', component: NotFoundComponent },
-      { path: '**', redirectTo: '/404' }
-    ]
+    children: [{ path: '**', redirectTo: '/error' }]
   }
 ];
 

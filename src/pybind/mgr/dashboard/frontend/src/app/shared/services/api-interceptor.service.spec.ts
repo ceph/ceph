@@ -110,7 +110,7 @@ describe('ApiInterceptorService', () => {
         {
           status: 403
         },
-        [['/403']]
+        [['error'], {'state': {'header': 'Access Denied', 'icon': 'fa fa-lock', 'message': 'Sorry, you don’t have permission to view this page or resource.', 'source': 'forbidden'}}] // prettier-ignore
       );
     });
 

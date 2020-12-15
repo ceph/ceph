@@ -1,7 +1,7 @@
 @use './src/styles/vendor/variables' as vv;
 
 .dashboard {
-  background-color: vv.$gray-200;
+  background-color: vv.$body-bg-alt;
   margin: 0;
   padding: 0;
 }
