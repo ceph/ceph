@@ -168,7 +168,7 @@ struct request_context_t {
       memcpy(handle, p, sizeof(handle));
       p += sizeof(handle);
       from = seastar::consume_be<uint64_t>(p);
-      len = seastar::consume_be<uint64_t>(p);
+      len = seastar::consume_be<uint32_t>(p);
       logger().debug(
         "Got request, magic {}, type {}, from {}, len {}",
 	magic, type, from, len);
@@ -194,9 +194,14 @@ struct request_context_t {
     return out.write(std::move(buffer)).then([this, &out] {
       if (out_buffer) {
         return seastar::do_for_each(
-          out_buffer->buffers(),
-          [&out](auto &ptr) {
-            return out.write(ptr.c_str(), ptr.length());
+          out_buffer->mut_buffers(),
+          [&out](bufferptr &ptr) {
+            return out.write(
+	      seastar::temporary_buffer<char>(
+		ptr.c_str(),
+		ptr.length(),
+		seastar::make_deleter([ptr](){}))
+	    );
           });
       } else {
         return seastar::now();
@@ -324,6 +329,7 @@ int main(int argc, char** argv)
 }
 
 class nbd_oldstyle_negotiation_t {
+  uint64_t magic = seastar::cpu_to_be(0x4e42444d41474943); // "NBDMAGIC"
   uint64_t magic2 = seastar::cpu_to_be(0x00420281861253);  // "IHAVEOPT"
   uint64_t size = 0;
   uint32_t flags = seastar::cpu_to_be(0);
@@ -338,11 +344,10 @@ seastar::future<> send_negotiation(
   size_t size,
   seastar::output_stream<char>& out)
 {
-  return out.write("NBDMAGIC").then([size, &out] {
-    seastar::temporary_buffer<char> buf{sizeof(nbd_oldstyle_negotiation_t)};
-    new (buf.get_write()) nbd_oldstyle_negotiation_t(size, 1);
-    return out.write(std::move(buf));
-  }).then([&out] {
+  seastar::temporary_buffer<char> buf{sizeof(nbd_oldstyle_negotiation_t)};
+  new (buf.get_write()) nbd_oldstyle_negotiation_t(size, 1);
+  return out.write(std::move(buf)
+  ).then([&out] {
     return out.flush();
   });
 }
