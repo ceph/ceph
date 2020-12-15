@@ -48,18 +48,6 @@ void Protocol::close(bool dispatch_reset,
                 dispatch_reset ? "yes" : "no",
                 is_replace ? "yes" : "no");
 
-  // unregister_conn() drops a reference, so hold another until completion
-  auto cleanup = [conn_ref = conn.shared_from_this(), this] {
-      logger().debug("{} closed!", conn);
-      on_closed();
-#ifdef UNIT_TESTS_BUILT
-      is_closed_clean = true;
-      if (conn.interceptor) {
-        conn.interceptor->register_conn_closed(conn);
-      }
-#endif
-    };
-
   // atomic operations
   closed = true;
   trigger_close();
@@ -87,7 +75,19 @@ void Protocol::close(bool dispatch_reset,
     } else {
       return seastar::now();
     }
-  }).finally(std::move(cleanup));
+  }).then([this] {
+    logger().debug("{} closed!", conn);
+    on_closed();
+#ifdef UNIT_TESTS_BUILT
+    is_closed_clean = true;
+    if (conn.interceptor) {
+      conn.interceptor->register_conn_closed(conn);
+    }
+#endif
+  }).handle_exception([conn_ref = conn.shared_from_this(), this] (auto eptr) {
+    logger().error("{} closing: close_ready got unexpected exception {}", conn, eptr);
+    ceph_abort();
+  });
 }
 
 seastar::future<> Protocol::send(MessageRef msg)
