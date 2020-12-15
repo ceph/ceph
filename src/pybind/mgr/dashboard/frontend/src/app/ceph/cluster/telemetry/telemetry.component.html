@@ -207,7 +207,7 @@
               <button type="button"
                       class="btn btn-light"
                       (click)="next()">
-                <ng-container i18n>{{ actionLabels.NEXT }}</ng-container>
+                <ng-container>{{ actionLabels.NEXT }}</ng-container>
               </button>
             </div>
           </div>
@@ -267,10 +267,8 @@
                   <cd-download-button [objectItem]="report"
                                       fileName="telemetry_report">
                   </cd-download-button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="report">
-                  </button>
+                  <cd-copy-2-clipboard-button source="report">
+                  </cd-copy-2-clipboard-button>
                 </div>
               </div>
             </div>
