@@ -1022,8 +1022,8 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
 
     if (complete) {
       if (!first) {
-	logger().debug("{}: Removing oid {} from the temp collection",
-	    __func__, target_oid);
+	logger().debug("submit_push_data: Removing oid {} from the temp collection",
+	  target_oid);
 	clear_temp_obj(target_oid);
 	t->remove(coll->get_cid(), ghobject_t(recovery_info.soid));
 	t->collection_move_rename(coll->get_cid(), ghobject_t(target_oid),
