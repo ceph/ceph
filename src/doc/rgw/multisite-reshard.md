@@ -53,7 +53,10 @@ The distinction between *index layout* and *log layout* is important, because in
 
 ### Data Sync
 
-* Datalog entries currently include a bucket shard number. We need to add the log generation number to these entries so we can tell which sharding layout it refers to. If we see a new generation number, that entry also implies an obligation to finish syncing all shards of prior generations.
+* Add the log generation number to datalog entries so we can tell which log layout they refer to.
+* If we see a new generation number in the datalog, that entry also implies an obligation to finish syncing all shards of prior generations:
+    - For each shard of the current generation that's not in the 'done' state, write an error_repo entry to its corresponding datalog shard.
+    - Write the initial datalog entry to the error_repo so it's retried until we reach that generation.
 
 ### Bucket Sync Status
 
@@ -66,6 +69,11 @@ The distinction between *index layout* and *log layout* is important, because in
 * For backward compatibility, add special handling when we get ENOENT trying to read this per-bucket sync status:
     - If the remote's oldest log layout has generation=0, read any existing per-shard sync status objects. If any are found, resume incremental sync from there.
     - Otherwise, initialize for full sync.
+* Use cls_version on the sync status object to detect racing writes. On ECANCELED:
+    - Re-read the sync status object.
+    - If the stored generation number no longer matches (i.e. raced with 'bucket sync init'), return the error.
+    - Otherwise retry the write until it succeeds.
+* Add a generation number to the per-shard sync status objects so we can reuse the same shard objects between generations. Bucket sync just ignores markers from older generations.
 
 ### Bucket Sync
 
@@ -73,8 +81,10 @@ The distinction between *index layout* and *log layout* is important, because in
     - Use a cls_lock to prevent different shards from duplicating this work.
 * When incremental sync gets to the end of a log shard (i.e. listing the log returns truncated=false):
     - If the remote has a newer log generation, flag that shard as 'done' in the bucket sync status.
-    - Once all shards in the current generation reach that 'done' state, incremental bucket sync can advance to the next generation.
-    - Use cls_version on the bucket sync status object to detect racing writes from other shards.
+    - Once all shards in the current generation reach that 'done' state, incremental bucket sync can transition to the next generation.
+* On transition:
+    - Clear the set of 'done' shards and update the num_shards and generation in the bucket sync status.
+    - If num_shards was reduced, delete any extra per-shard sync status objects.
 
 ### Bucket Sync Disable/Enable
 
@@ -95,9 +105,14 @@ Reframe in terms of log generations, instead of handling SYNCSTOP events with a 
 
 ### Admin APIs
 
-* RGWOp_BILog_List response should include the bucket's highest log generation
+* RGWOp_BILog_List
+    - Add query parameter for 'generation' that defaults to the latest generation.
+    - Add query parameter for 'format-ver' that defaults to 1. If format-ver >= 2, return the results as a struct that includes:
+        * A truncated flag that indicates whether more entries are available.
+        * An optional 'next_generation' field that includes 'num_shards' and generation number of the next log generation.
     - Allows incremental sync to determine whether truncated=false means that it's caught up, or that it needs to transition to the next generation.
-* RGWOp_BILog_Info response should include the bucket's lowest and highest log generations
+* RGWOp_BILog_Info
+    - Response should include the bucket's lowest and highest log generations, along with markers for the highest log generation.
     - Allows bucket sync status initialization to decide whether it needs to scan for existing shard status, and where it should resume incremental sync after full sync completes.
 * RGWOp_BILog_Status response should include per-bucket status information
     - For log trimming of old generations
