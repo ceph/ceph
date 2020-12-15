@@ -269,8 +269,8 @@ public:
     object_manifest_t new_manifest;
     
 
-    ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
-      : cb(cb), objecter_tid(tid) {}
+    ManifestOp(RefCountCallback* cb)
+      : cb(cb), objecter_tid(0) {}
   };
   typedef std::shared_ptr<ManifestOp> ManifestOpRef;
   std::map<hobject_t, ManifestOpRef> manifest_ops;
