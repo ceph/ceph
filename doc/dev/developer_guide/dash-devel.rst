@@ -10,7 +10,7 @@ Feature Design
 
 To promote collaboration on new Ceph Dashboard features, the first step is
 the definition of a design document. These documents then form the basis of
-implementation scope and permit wider participation in the evolution of the 
+implementation scope and permit wider participation in the evolution of the
 Ceph Dashboard UI.
 
 .. toctree::
@@ -860,7 +860,7 @@ Buttons are used for performing actions such as: “Submit”, “Edit, “Creat
 button should use the `cd-submit-button` component and the secondary button should
 use `cd-back-button` component. The text on the action button should be same as the
 form title and follow a title case. The text on the secondary button should be
-`Cancel`. `Perform action` button should always be on right while `Cancel` 
+`Cancel`. `Perform action` button should always be on right while `Cancel`
 button should always be on left.
 
 **Modals**: The main action button should use the `cd-submit-button` component and
@@ -878,7 +878,7 @@ same as the form's main button color.
 
 **Drop Down Buttons:** Use dropdown buttons to display predefined lists of
 actions. All drop down buttons have icons corresponding to the action they
-perform.  
+perform.
 
 Links
 .....
@@ -925,6 +925,19 @@ Alerts and notifications
 
 Default notification should have `text-info` color. Success notification should
 have `text-success` color. Failure notification should have `text-danger` color.
+
+Error Handling
+~~~~~~~~~~~~~~
+
+For handling front-end errors, there is a generic Error Component which can be
+found in ``./src/pybind/mgr/dashboard/frontend/src/app/core/error``. For
+reporting a new error, you can simply extend the ``DashboardError`` class
+in ``error.ts`` file and add specific header and message for the new error. Some
+generic error classes are already in place such as ``DashboardNotFoundError``
+and ``DashboardForbiddenError`` which can be called and reused in different
+scenarios.
+
+For example - ``throw new DashboardNotFoundError()``.
 
 I18N
 ----

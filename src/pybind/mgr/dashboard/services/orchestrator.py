@@ -29,7 +29,7 @@ class OrchestratorAPI(OrchestratorClientMixin):
         except (RuntimeError, OrchestratorError, ImportError) as e:
             return dict(
                 available=False,
-                message='Orchestrator is unavailable for unknown reason: {}'.format(str(e)))
+                message='Orchestrator is unavailable: {}'.format(str(e)))
 
     def orchestrator_wait(self, completions):
         return self._orchestrator_wait(completions)
