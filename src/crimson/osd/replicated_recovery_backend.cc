@@ -97,13 +97,11 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     recovery_waiter.obc = obc;
     recovery_waiter.obc->wait_recovery_read();
     return seastar::futurize_invoke(std::move(push_func));
-  }).template safe_then(
-    [] { return seastar::now(); },
+  }).handle_error(
     crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       //TODO: may need eio handling?
       logger().error("recover_object saw error code {},"
 	  " ignoring object {}", code, soid);
-      return seastar::now();
   }));
 }
 
