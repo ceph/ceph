@@ -30,7 +30,7 @@ Name option test to strip the PID
   > [global]
   >     admin socket = \$name.asok
   > EOF
-  $ ceph-conf --name client.admin.133423 --show-config-value admin_socket -c $TESTDIR/ceph.conf
+  $ ceph-conf --name client.admin --pid 133423 --show-config-value admin_socket -c $TESTDIR/ceph.conf
   client.admin.133423.asok
   $ ceph-conf --name mds.a --show-config-value admin_socket -c $TESTDIR/ceph.conf
   mds.a.asok
