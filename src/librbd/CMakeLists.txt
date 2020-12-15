@@ -9,8 +9,17 @@ set(librbd_types_srcs
   watcher/Types.cc
   WatchNotifyTypes.cc)
 
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
+ list(APPEND librbd_types_srcs cache/pwl/Types.cc)
+endif()
+
 add_library(rbd_types STATIC
   ${librbd_types_srcs})
+
+if (WITH_RBD_RWL AND WITH_RBD_SSD_CACHE)
+  target_link_libraries(rbd_types
+    PRIVATE pmem::pmemobj)
+endif()
 
 set(librbd_internal_srcs
   AsioEngine.cc
