@@ -301,7 +301,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         auth_meta['dirty'] = False
         self.auth_mdata_mgr.auth_metadata_set(auth_id, auth_meta)
 
-    def authorize(self, auth_id, access_level, tenant_id=None):
+    def authorize(self, auth_id, access_level, tenant_id=None, allow_existing_id=False):
         """
         Get-or-create a Ceph auth identity for `auth_id` and grant them access
         to
@@ -310,6 +310,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         :param tenant_id: Optionally provide a stringizable object to
                           restrict any created cephx IDs to other callers
                           passing the same tenant ID.
+        :allow_existing_id: Optionally authorize existing auth-ids not
+                          created by ceph_volume_client.
         :return:
         """
 
@@ -346,7 +348,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             }
 
             if auth_meta is None:
-                if existing_caps is not None:
+                if not allow_existing_id and existing_caps is not None:
                     msg = "auth ID: {0} exists and not created by mgr plugin. Not allowed to modify".format(auth_id)
                     log.error(msg)
                     raise VolumeException(-errno.EPERM, msg)
