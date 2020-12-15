@@ -97,13 +97,11 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     recovery_waiter.obc = obc;
     recovery_waiter.obc->wait_recovery_read();
     return seastar::futurize_invoke(std::move(push_func));
-  }).template safe_then(
-    [] { return seastar::now(); },
+  }).handle_error(
     crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       //TODO: may need eio handling?
       logger().error("recover_object saw error code {},"
 	  " ignoring object {}", code, soid);
-      return seastar::now();
   }));
 }
 
@@ -648,50 +646,44 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error(crimson::ct_error::assert_all{});
   };
-  return prepare_waiter.then([this, first=pi.recovery_progress.first,
-			      &pi, &pop, t, response]() mutable {
-    return seastar::do_with(interval_set<uint64_t>(),
-			    bufferlist(),
-			    interval_set<uint64_t>(),
-			    [this, &pop, &pi, first, t, response]
-			    (auto& data_zeros, auto& data,
-			     auto& usable_intervals) {
-      {
-        ceph::bufferlist usable_data;
-        trim_pushed_data(pi.recovery_info.copy_subset, pop.data_included, pop.data,
-	    &usable_intervals, &usable_data);
-        data = std::move(usable_data);
+  return prepare_waiter.then([this, &pi, &pop, t, response]() mutable {
+    const bool first = pi.recovery_progress.first;
+    pi.recovery_progress = pop.after_progress;
+    logger().debug("new recovery_info {}, new progress {}",
+		   pi.recovery_info, pi.recovery_progress);
+    interval_set<uint64_t> data_zeros;
+    {
+      uint64_t offset = pop.before_progress.data_recovered_to;
+      uint64_t length = (pop.after_progress.data_recovered_to -
+			 pop.before_progress.data_recovered_to);
+      if (length) {
+        data_zeros.insert(offset, length);
       }
-      pi.recovery_progress = pop.after_progress;
-      logger().debug("new recovery_info {}, new progress {}",
-	  pi.recovery_info, pi.recovery_progress);
-      uint64_t z_offset = pop.before_progress.data_recovered_to;
-      uint64_t z_length = pop.after_progress.data_recovered_to
-	  - pop.before_progress.data_recovered_to;
-      if (z_length)
-	data_zeros.insert(z_offset, z_length);
-      bool complete = pi.is_complete();
-      bool clear_omap = !pop.before_progress.omap_complete;
-      return submit_push_data(pi.recovery_info, first, complete, clear_omap,
+    }
+    auto [usable_intervals, data] =
+      trim_pushed_data(pi.recovery_info.copy_subset,
+                       pop.data_included, pop.data);
+    bool complete = pi.is_complete();
+    bool clear_omap = !pop.before_progress.omap_complete;
+    return submit_push_data(pi.recovery_info, first, complete, clear_omap,
 	  data_zeros, usable_intervals, data, pop.omap_header,
 	  pop.attrset, pop.omap_entries, t).then(
-	[this, response, &pi, &pop, &data, complete, t] {
-	pi.stat.num_keys_recovered += pop.omap_entries.size();
-	pi.stat.num_bytes_recovered += data.length();
+      [this, response, &pi, &pop, complete, t, bytes_recovered=data.length()] {
+      pi.stat.num_keys_recovered += pop.omap_entries.size();
+      pi.stat.num_bytes_recovered += bytes_recovered;
 
-	if (complete) {
-	  pi.stat.num_objects_recovered++;
-	  pg.get_recovery_handler()->on_local_recover(
-	      pop.soid, recovering.at(pop.soid).pi->recovery_info,
-	      false, *t);
-	  return seastar::make_ready_future<bool>(true);
-	} else {
-	  response->soid = pop.soid;
-	  response->recovery_info = pi.recovery_info;
-	  response->recovery_progress = pi.recovery_progress;
-	  return seastar::make_ready_future<bool>(false);
-	}
-      });
+      if (complete) {
+	pi.stat.num_objects_recovered++;
+	pg.get_recovery_handler()->on_local_recover(
+	    pop.soid, recovering.at(pop.soid).pi->recovery_info,
+	    false, *t);
+	return seastar::make_ready_future<bool>(true);
+      } else {
+        response->soid = pop.soid;
+        response->recovery_info = pi.recovery_info;
+        response->recovery_progress = pi.recovery_progress;
+        return seastar::make_ready_future<bool>(false);
+      }
     });
   });
 }
@@ -875,37 +867,36 @@ seastar::future<> ReplicatedRecoveryBackend::handle_push_reply(
   });
 }
 
-void ReplicatedRecoveryBackend::trim_pushed_data(
+std::pair<interval_set<uint64_t>,
+	  bufferlist>
+ReplicatedRecoveryBackend::trim_pushed_data(
   const interval_set<uint64_t> &copy_subset,
   const interval_set<uint64_t> &intervals_received,
-  ceph::bufferlist data_received,
-  interval_set<uint64_t> *intervals_usable,
-  bufferlist *data_usable)
+  ceph::bufferlist data_received)
 {
   logger().debug("{}", __func__);
+  // what i have is only a subset of what i want
   if (intervals_received.subset_of(copy_subset)) {
-    *intervals_usable = intervals_received;
-    *data_usable = data_received;
-    return;
+    return {intervals_received, data_received};
   }
-
-  intervals_usable->intersection_of(copy_subset, intervals_received);
-
-  uint64_t off = 0;
-  for (interval_set<uint64_t>::const_iterator p = intervals_received.begin();
-      p != intervals_received.end(); ++p) {
-    interval_set<uint64_t> x;
-    x.insert(p.get_start(), p.get_len());
-    x.intersection_of(copy_subset);
-    for (interval_set<uint64_t>::const_iterator q = x.begin(); q != x.end();
-	++q) {
+  // only collect the extents included by copy_subset and intervals_received
+  interval_set<uint64_t> intervals_usable;
+  bufferlist data_usable;
+  intervals_usable.intersection_of(copy_subset, intervals_received);
+  uint64_t have_off = 0;
+  for (auto [have_start, have_len] : intervals_received) {
+    interval_set<uint64_t> want;
+    want.insert(have_start, have_len);
+    want.intersection_of(copy_subset);
+    for (auto [want_start, want_len] : want) {
       bufferlist sub;
-      uint64_t data_off = off + (q.get_start() - p.get_start());
-      sub.substr_of(data_received, data_off, q.get_len());
-      data_usable->claim_append(sub);
+      uint64_t data_off = have_off + (want_start - have_start);
+      sub.substr_of(data_received, data_off, want_len);
+      data_usable.claim_append(sub);
     }
-    off += p.get_len();
+    have_off += have_len;
   }
+  return {intervals_usable, data_usable};
 }
 
 seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
@@ -983,13 +974,11 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
 	      local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
 	      local_intervals_included.subtract(local_intervals_excluded);
 	    }
-	    for (interval_set<uint64_t>::const_iterator q = local_intervals_included.begin();
-		q != local_intervals_included.end();
-		++q) {
+	    for (auto [off, len] : local_intervals_included) {
 	      logger().debug(" clone_range {} {}~{}",
-		  recovery_info.soid, q.get_start(), q.get_len());
-	      t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid), ghobject_t(target_oid),
-		  q.get_start(), q.get_len(), q.get_start());
+		  recovery_info.soid, off, len);
+	      t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
+			     ghobject_t(target_oid), off, len, off);
 	    }
 	  }
 	}
@@ -999,10 +988,9 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
     return seastar::make_ready_future<>();
   }().then([this, &data_zeros, &recovery_info, &intervals_included, t, target_oid,
     &omap_entries, &attrs, data_included, complete, first] {
-    uint64_t off = 0;
     uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
     // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
-    if (data_zeros.size() > 0) {
+    if (!data_zeros.empty()) {
       data_zeros.intersection_of(recovery_info.copy_subset);
       assert(intervals_included.subset_of(data_zeros));
       data_zeros.subtract(intervals_included);
@@ -1012,19 +1000,17 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
 	  recovery_info.soid, recovery_info.copy_subset,
 	  intervals_included, data_zeros);
 
-      for (auto p = data_zeros.begin(); p != data_zeros.end(); ++p)
-	t->zero(coll->get_cid(), ghobject_t(target_oid), p.get_start(), p.get_len());
+      for (auto [start, len] : data_zeros) {
+        t->zero(coll->get_cid(), ghobject_t(target_oid), start, len);
+      }
     }
-    logger().debug("submit_push_data: test");
-    for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
-	p != intervals_included.end();
-	++p) {
+    uint64_t off = 0;
+    for (auto [start, len] : intervals_included) {
       bufferlist bit;
-      bit.substr_of(data_included, off, p.get_len());
-      logger().debug("submit_push_data: test1");
+      bit.substr_of(data_included, off, len);
       t->write(coll->get_cid(), ghobject_t(target_oid),
-	  p.get_start(), p.get_len(), bit, fadvise_flags);
-      off += p.get_len();
+	       start, len, bit, fadvise_flags);
+      off += len;
     }
 
     if (!omap_entries.empty())
@@ -1034,8 +1020,8 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
 
     if (complete) {
       if (!first) {
-	logger().debug("{}: Removing oid {} from the temp collection",
-	    __func__, target_oid);
+	logger().debug("submit_push_data: Removing oid {} from the temp collection",
+	  target_oid);
 	clear_temp_obj(target_oid);
 	t->remove(coll->get_cid(), ghobject_t(recovery_info.soid));
 	t->collection_move_rename(coll->get_cid(), ghobject_t(target_oid),
@@ -1052,14 +1038,11 @@ void ReplicatedRecoveryBackend::submit_push_complete(
   const ObjectRecoveryInfo &recovery_info,
   ObjectStore::Transaction *t)
 {
-  for (map<hobject_t, interval_set<uint64_t>>::const_iterator p =
-      recovery_info.clone_subset.begin();
-      p != recovery_info.clone_subset.end(); ++p) {
-    for (interval_set<uint64_t>::const_iterator q = p->second.begin();
-	q != p->second.end(); ++q) {
-      logger().debug(" clone_range {} {}~{}", p->first, q.get_start(), q.get_len());
-      t->clone_range(coll->get_cid(), ghobject_t(p->first), ghobject_t(recovery_info.soid),
-	  q.get_start(), q.get_len(), q.get_start());
+  for (const auto& [oid, extents] : recovery_info.clone_subset) {
+    for (const auto [off, len] : extents) {
+      logger().debug(" clone_range {} {}~{}", oid, off, len);
+      t->clone_range(coll->get_cid(), ghobject_t(oid), ghobject_t(recovery_info.soid),
+                     off, len, off);
     }
   }
 }
