@@ -44,23 +44,21 @@ protected:
     Ref<MOSDPGRecoveryDelete> m);
   seastar::future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<> prep_push(
+  seastar::future<std::map<pg_shard_t, PushOp>> prep_push(
     const hobject_t& soid,
     eversion_t need,
-    std::map<pg_shard_t, PushOp>* pops,
-    const std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards);
+    const std::vector<pg_shard_t>& shards);
   void prepare_pull(
     PullOp& po,
     PullInfo& pi,
     const hobject_t& soid,
     eversion_t need);
-  std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator> get_shards_to_push(
-    const hobject_t& soid);
-  seastar::future<ObjectRecoveryProgress> build_push_op(
+  std::vector<pg_shard_t> get_shards_to_push(
+    const hobject_t& soid) const;
+  seastar::future<PushOp> build_push_op(
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
-    object_stat_sum_t* stat,
-    PushOp* pop);
+    object_stat_sum_t* stat);
   seastar::future<bool> _handle_pull_response(
     pg_shard_t from,
     PushOp& pop,
@@ -92,10 +90,9 @@ protected:
     const PushOp &pop,
     PushReplyOp *response,
     ceph::os::Transaction *t);
-  seastar::future<bool> _handle_push_reply(
+  seastar::future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
-    const PushReplyOp &op,
-    PushOp *reply);
+    const PushReplyOp &op);
   seastar::future<> on_local_recover_persist(
     const hobject_t& soid,
     const ObjectRecoveryInfo& _recovery_info,
@@ -110,9 +107,7 @@ protected:
   }
 private:
   /// pull missing object from peer
-  ///
-  /// @return true if the object is pulled, false otherwise
-  seastar::future<bool> maybe_pull_missing_obj(
+  seastar::future<> maybe_pull_missing_obj(
     const hobject_t& soid,
     eversion_t need);
 
@@ -123,8 +118,7 @@ private:
   seastar::future<> maybe_push_shards(
     const hobject_t& soid,
     eversion_t need,
-    std::map<pg_shard_t, PushOp>& pops,
-    std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards);
+    std::vector<pg_shard_t>& shards);
 
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them

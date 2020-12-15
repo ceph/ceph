@@ -899,9 +899,7 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
   pg_shard_t from = m->from;
 
   map<pg_shard_t, vector<PushOp> > replies;
-  vector<PullOp> pulls;
-  m->take_pulls(&pulls);
-  for (auto& i : pulls) {
+  for (auto& i : m->take_pulls()) {
     replies[from].push_back(PushOp());
     handle_pull(from, i, &(replies[from].back()));
   }
