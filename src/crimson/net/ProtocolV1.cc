@@ -952,6 +952,9 @@ void ProtocolV1::trigger_close()
 {
   logger().trace("{} trigger closing, was {}",
                  conn, static_cast<int>(state));
+  messenger.closing_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
 
   if (state == state_t::accepting) {
     messenger.unaccept_conn(seastar::static_pointer_cast<SocketConnection>(
@@ -969,6 +972,13 @@ void ProtocolV1::trigger_close()
   }
 
   state = state_t::closing;
+}
+
+void ProtocolV1::on_closed()
+{
+  messenger.closed_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
 }
 
 seastar::future<> ProtocolV1::fault()
