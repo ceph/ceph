@@ -1,33 +1,28 @@
-import { Directive, ElementRef, HostListener, Input, OnInit, Renderer2 } from '@angular/core';
+import { Component, HostListener, Input } from '@angular/core';
 
 import { detect } from 'detect-browser';
 import { ToastrService } from 'ngx-toastr';
 
-@Directive({
-  selector: '[cdCopy2ClipboardButton]'
+import { Icons } from '~/app/shared/enum/icons.enum';
+
+@Component({
+  selector: 'cd-copy-2-clipboard-button',
+  templateUrl: './copy2clipboard-button.component.html',
+  styleUrls: ['./copy2clipboard-button.component.scss']
 })
-export class Copy2ClipboardButtonDirective implements OnInit {
+export class Copy2ClipboardButtonComponent {
   @Input()
-  private cdCopy2ClipboardButton: string;
+  private source: string;
+
   @Input()
   byId = true;
 
-  constructor(
-    private elementRef: ElementRef,
-    private renderer: Renderer2,
-    private toastr: ToastrService
-  ) {}
+  icons = Icons;
 
-  ngOnInit() {
-    const iElement = this.renderer.createElement('i');
-    this.renderer.addClass(iElement, 'fa');
-    this.renderer.addClass(iElement, 'fa-clipboard');
-    this.renderer.setAttribute(iElement, 'title', $localize`Copy to clipboard`);
-    this.renderer.appendChild(this.elementRef.nativeElement, iElement);
-  }
+  constructor(private toastr: ToastrService) {}
 
   private getText(): string {
-    const element = document.getElementById(this.cdCopy2ClipboardButton) as HTMLInputElement;
+    const element = document.getElementById(this.source) as HTMLInputElement;
     return element.value;
   }
 
@@ -35,7 +30,7 @@ export class Copy2ClipboardButtonDirective implements OnInit {
   onClick() {
     try {
       const browser = detect();
-      const text = this.byId ? this.getText() : this.cdCopy2ClipboardButton;
+      const text = this.byId ? this.getText() : this.source;
       const toastrFn = () => {
         this.toastr.success('Copied text to the clipboard successfully.');
       };

@@ -19,10 +19,10 @@
                                 [textItem]="logText"
                                 fileName="cluster_log">
             </cd-download-button>
-            <button type="button"
-                    class="btn btn-light"
-                    [cdCopy2ClipboardButton]="logText"
-                    [byId]="false"></button>
+            <cd-copy-2-clipboard-button
+                    [source]="logText"
+                    [byId]="false">
+            </cd-copy-2-clipboard-button>
           </div>
           <div class="card-body">
             <p *ngFor="let line of clog">
@@ -50,10 +50,10 @@
                                 [textItem]="logText"
                                 fileName="audit_log">
             </cd-download-button>
-            <button type="button"
-                    class="btn btn-light"
-                    [cdCopy2ClipboardButton]="logText"
-                    [byId]="false"></button>
+            <cd-copy-2-clipboard-button
+                    [source]="logText"
+                    [byId]="false">
+            </cd-copy-2-clipboard-button>
           </div>
           <div class="card-body">
             <p *ngFor="let line of audit_log">

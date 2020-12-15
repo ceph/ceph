@@ -4,10 +4,10 @@ import * as BrowserDetect from 'detect-browser';
 import { ToastrService } from 'ngx-toastr';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { Copy2ClipboardButtonDirective } from './copy2clipboard-button.directive';
+import { Copy2ClipboardButtonComponent } from './copy2clipboard-button.component';
 
-describe('Copy2clipboardButtonDirective', () => {
-  let directive: Copy2ClipboardButtonDirective;
+describe('Copy2ClipboardButtonComponent', () => {
+  let component: Copy2ClipboardButtonComponent;
 
   configureTestBed({
     providers: [
@@ -22,8 +22,8 @@ describe('Copy2clipboardButtonDirective', () => {
   });
 
   it('should create an instance', () => {
-    directive = new Copy2ClipboardButtonDirective(null, null, null);
-    expect(directive).toBeTruthy();
+    component = new Copy2ClipboardButtonComponent(null);
+    expect(component).toBeTruthy();
   });
 
   describe('test onClick behaviours', () => {
@@ -33,8 +33,8 @@ describe('Copy2clipboardButtonDirective', () => {
 
     beforeEach(() => {
       toastrService = TestBed.inject(ToastrService);
-      directive = new Copy2ClipboardButtonDirective(null, null, toastrService);
-      spyOn<any>(directive, 'getText').and.returnValue('foo');
+      component = new Copy2ClipboardButtonComponent(toastrService);
+      spyOn<any>(component, 'getText').and.returnValue('foo');
       Object.assign(navigator, {
         permissions: { query: jest.fn() },
         clipboard: {
@@ -51,14 +51,14 @@ describe('Copy2clipboardButtonDirective', () => {
           resolve();
         })
       );
-      directive.onClick();
+      component.onClick();
       expect(queryFn).not.toHaveBeenCalled();
       expect(writeTextFn).toHaveBeenCalledWith('foo');
     });
 
     it('should call permissions API', () => {
       spyOn(BrowserDetect, 'detect').and.returnValue({ name: 'chrome' });
-      directive.onClick();
+      component.onClick();
       expect(queryFn).toHaveBeenCalled();
     });
   });

@@ -319,10 +319,8 @@
                           class="btn btn-light"
                           cdPasswordButton="api_password">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="api_password">
-                  </button>
+                  <cd-copy-2-clipboard-button source="api_password">
+                  </cd-copy-2-clipboard-button>
                 </span>
                 <span class="invalid-feedback"
                       *ngIf="serviceForm.showError('api_password', frm, 'required')"
