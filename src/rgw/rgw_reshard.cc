@@ -491,7 +491,7 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
 
 int RGWBucketReshard::do_reshard(int num_shards,
 				 int max_entries,
-         FaultInjector<std::string_view>& f,
+                                 const ReshardFaultInjector& f,
 				 bool verbose,
 				 ostream *out,
 				 Formatter *formatter)
@@ -670,7 +670,7 @@ int RGWBucketReshard::update_bucket(rgw::BucketReshardState s) {
 }
 
 int RGWBucketReshard::execute(int num_shards,
-                              FaultInjector<std::string_view>& f,
+                              const ReshardFaultInjector& f,
                               int max_op_entries,
                               bool verbose, ostream *out,
                               Formatter *formatter,
@@ -1021,7 +1021,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	{
 	RGWBucketReshard br(store, bucket_info, nullptr);
 
-  FaultInjector<std::string_view> f;
+  ReshardFaultInjector f;
 	ret = br.execute(entry.new_num_shards, f, max_entries, false, nullptr,
 			 nullptr, this);
 	if (ret < 0) {
