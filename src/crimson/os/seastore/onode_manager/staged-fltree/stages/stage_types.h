@@ -13,10 +13,10 @@
 
 namespace crimson::os::seastore::onode {
 
-using match_stage_t = uint8_t;
-constexpr match_stage_t STAGE_LEFT = 2u;   // shard/pool/crush
-constexpr match_stage_t STAGE_STRING = 1u; // nspace/oid
-constexpr match_stage_t STAGE_RIGHT = 0u;  // snap/gen
+using match_stage_t = int8_t;
+constexpr match_stage_t STAGE_LEFT = 2;   // shard/pool/crush
+constexpr match_stage_t STAGE_STRING = 1; // nspace/oid
+constexpr match_stage_t STAGE_RIGHT = 0;  // snap/gen
 constexpr auto STAGE_TOP = STAGE_LEFT;
 constexpr auto STAGE_BOTTOM = STAGE_RIGHT;
 constexpr bool is_valid_stage(match_stage_t stage) {
