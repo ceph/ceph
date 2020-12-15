@@ -316,6 +316,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   set_write_state(write_state_t::delay);
 
   ceph_assert(!socket);
+  ceph_assert(!gate.is_closed());
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
   conn.set_peer_name(_peer_name);
