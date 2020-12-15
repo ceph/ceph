@@ -70,6 +70,7 @@ void Protocol::close(bool dispatch_reset,
     socket->shutdown();
   }
   set_write_state(write_state_t::drop);
+  assert(!gate.is_closed());
   auto gate_closed = gate.close();
 
   if (dispatch_reset) {
@@ -306,6 +307,7 @@ void Protocol::write_event()
    case write_state_t::open:
      [[fallthrough]];
    case write_state_t::delay:
+    assert(!gate.is_closed());
     gate.dispatch_in_background("do_write_dispatch_sweep", *this, [this] {
       return do_write_dispatch_sweep();
     });
