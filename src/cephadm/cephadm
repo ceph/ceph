@@ -2844,7 +2844,14 @@ def command_bootstrap():
                               '--allow-overwrite to overwrite' % f)
         dirname = os.path.dirname(f)
         if dirname and not os.path.exists(dirname):
-            raise Error('%s directory %s does not exist' % (f, dirname))
+            fname = os.path.basename(f)
+            logger.info(f"Creating directory {dirname} for {fname}")
+            try:
+                # use makedirs to create intermediate missing dirs
+                os.makedirs(dirname, 0o755)
+            except PermissionError:
+                raise Error(f"Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.")
+
 
     if not args.skip_prepare_host:
         command_prepare_host()
