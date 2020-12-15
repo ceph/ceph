@@ -157,76 +157,88 @@ static int cls_rgw_gc_queue_list_entries(cls_method_context_t hctx, bufferlist *
   if (! op.max) {
     op.max = GC_LIST_DEFAULT_MAX;
   }
-  
-  list_op.max = op.max;
+
+  // maximum number of deferred entries there in urgent data
+  uint64_t max_num_entries_to_be_skipped = urgent_data.num_head_urgent_entries + urgent_data.num_xattr_urgent_entries;
+
+  // In case there are deferred entries, then list_op.max > op.max else
+  // list_op.max == op.max
+  list_op.max = op.max + max_num_entries_to_be_skipped;
   list_op.start_marker = op.marker;
 
   cls_rgw_gc_list_ret list_ret;
-  uint32_t num_entries = 0; //Entries excluding the deferred ones
-  bool is_truncated = true;
+
+  // In case there are deferred entries, and some entries are skipped while listing
+  // num_entries < total_num_entries else, if no entries are skipped then,
+  // num_entries == total_num_entries
+  uint32_t num_entries = 0, total_num_entries = 0;
+  bool is_truncated = true, non_expired_entry_found = false;
   string next_marker;
-  do {
-    cls_queue_list_ret op_ret;
-    int ret = queue_list_entries(hctx, list_op, op_ret, head);
-    if (ret < 0) {
-      CLS_LOG(5, "ERROR: queue_list_entries(): returned error %d\n", ret);
-      return ret;
-    }
-    is_truncated = op_ret.is_truncated;
-    next_marker = op_ret.next_marker;
   
-    if (op_ret.entries.size()) {
-      for (auto it : op_ret.entries) {
-        cls_rgw_gc_obj_info info;
-        try {
-          decode(info, it.data);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(5, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode gc info\n");
-          return -EINVAL;
-        }
-        //Check for info tag in urgent data map
-        if (auto i = urgent_data.urgent_data_map.find(info.tag);
-            i != urgent_data.urgent_data_map.end()) {
-          if (i->second > info.time) {
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): tag found in urgent data: %s\n", info.tag.c_str());
-            continue;
-          }
-        //Search in xattrs
-        } else if (auto i = xattr_urgent_data_map.find(info.tag);
-                  i != xattr_urgent_data_map.end()) {
-          if (i->second > info.time) {
-            CLS_LOG(1, "INFO: cls_rgw_gc_queue_list_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
-            continue;
-          }
-        }
-        if (op.expired_only) {
-          real_time now = ceph::real_clock::now();
-          if (info.time <= now) {
-            list_ret.entries.emplace_back(info);
-          } else {
-            //Can break out here if info.time > now
-            is_truncated = false;
-            break;
-          }
-        } else {
-          list_ret.entries.emplace_back(info);
-        }
-        num_entries++;
+  cls_queue_list_ret op_ret;
+  ret = queue_list_entries(hctx, list_op, op_ret, head);
+  if (ret < 0) {
+    CLS_LOG(5, "ERROR: queue_list_entries(): returned error %d\n", ret);
+    return ret;
+  }
+  is_truncated = op_ret.is_truncated;
+  next_marker = op_ret.next_marker;
+
+  if (op_ret.entries.size()) {
+    for (auto it : op_ret.entries) {
+      cls_rgw_gc_obj_info info;
+      try {
+        decode(info, it.data);
+      } catch (ceph::buffer::error& err) {
+        CLS_LOG(5, "ERROR: cls_rgw_gc_queue_list_entries(): failed to decode gc info\n");
+        return -EINVAL;
       }
-      CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): num_entries: %u and op.max: %u\n", num_entries, op.max);
-      if (num_entries < op.max && is_truncated) {
-          list_op.max = (op.max - num_entries);
-          list_op.start_marker = op_ret.next_marker;
-          out->clear();
+      total_num_entries++;
+      //Check for info tag in urgent data map
+      if (auto i = urgent_data.urgent_data_map.find(info.tag);
+          i != urgent_data.urgent_data_map.end()) {
+        if (i->second > info.time) {
+          CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): tag found in urgent data: %s\n", info.tag.c_str());
+          continue;
+        }
+      //Search in xattrs
+      } else if (auto i = xattr_urgent_data_map.find(info.tag);
+                i != xattr_urgent_data_map.end()) {
+        if (i->second > info.time) {
+          CLS_LOG(1, "INFO: cls_rgw_gc_queue_list_entries(): tag found in xattrs urgent data map: %s\n", info.tag.c_str());
+          continue;
+        }
+      }
+      if (op.expired_only) {
+        real_time now = ceph::real_clock::now();
+        if (info.time <= now) {
+          list_ret.entries.emplace_back(info);
+        } else {
+          //Can break out here if info.time > now
+          non_expired_entry_found = true;
+          break;
+        }
       } else {
-        //We've reached the max number of entries needed
+        list_ret.entries.emplace_back(info);
+      }
+      num_entries++;
+      if (num_entries == op.max) {
         break;
       }
-    } else {
-      //We dont have data to process
-      break;
+    } //end - for
+    CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): num_entries: %u and op.max: %u\n", num_entries, op.max);
+    CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): total_num_entries: %u and list_op.max: %lu\n", total_num_entries, list_op.max);
+    // Not all fetched entries were used, since some or all were not skipped
+    if (num_entries < total_num_entries) {
+      if (non_expired_entry_found) {
+        is_truncated = false;
+      } else {
+        next_marker = op_ret.entries[total_num_entries].marker;
+        is_truncated = true;
+      }
     }
-  } while(is_truncated);
+    CLS_LOG(10, "INFO: cls_rgw_gc_queue_list_entries(): next marker: %s \n", next_marker.c_str());
+  } //end - if
 
   list_ret.truncated = is_truncated;
   if (list_ret.truncated) {
@@ -285,114 +297,80 @@ static int cls_rgw_gc_queue_remove_entries(cls_method_context_t hctx, bufferlist
 
   // List entries and calculate total number of entries (including invalid entries)
   if (op.num_entries) {
+    // maximum number of deferred entries there in urgend data
+    uint64_t max_num_entries_to_be_skipped = urgent_data.num_head_urgent_entries + urgent_data.num_xattr_urgent_entries;
     cls_queue_list_op list_op;
-    list_op.max = op.num_entries + 1; // +1 to get the offset of last + 1 entry
-    bool is_truncated = true;
+    // Get extra entries so that we do not have to issue multiple reads in case entries get skipped
+    list_op.max = op.num_entries + max_num_entries_to_be_skipped;
     uint32_t total_num_entries = 0, num_entries = 0;
     string end_marker;
-    do {
-      cls_queue_list_ret op_ret;
-      int ret = queue_list_entries(hctx, list_op, op_ret, head);
-      if (ret < 0) {
-        CLS_LOG(5, "ERROR: queue_list_entries(): returned error %d\n", ret);
-        return ret;
-      }
-      is_truncated = op_ret.is_truncated;
-      unsigned int index = 0;
-      std::optional<std::pair<string, ceph::real_time>> last_urgent_data_entry, last_xattr_entry;
-      // If data is not empty
-      if (op_ret.entries.size()) {
-        for (const auto& it : op_ret.entries) {
-          cls_rgw_gc_obj_info info;
-          try {
-            decode(info, it.data);
-          } catch (ceph::buffer::error& err) {
-            CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode gc info\n");
-            return -EINVAL;
-          }
-          if (!last_removed_time || *last_removed_time < info.time) {
-            last_removed_time = info.time;
-          }
-          CLS_LOG(20, "INFO: cls_rgw_gc_queue_remove_entries(): entry: %s\n", info.tag.c_str());
-          total_num_entries++;
-          index++;
-          //Search for tag in urgent data map
-          if (auto i = urgent_data.urgent_data_map.find(info.tag);
-              i != urgent_data.urgent_data_map.end()) {
-            if (index == op_ret.entries.size()) {
-              last_urgent_data_entry = std::make_pair(i->first, i->second);
-            }
-            const auto defer_time = i->second;
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
-            urgent_data.urgent_data_map.erase(i);
+    cls_queue_list_ret op_ret;
+    int ret = queue_list_entries(hctx, list_op, op_ret, head);
+    if (ret < 0) {
+      CLS_LOG(5, "ERROR: queue_list_entries(): returned error %d\n", ret);
+      return ret;
+    }
+    // If data is not empty
+    if (op_ret.entries.size()) {
+      for (const auto& it : op_ret.entries) {
+        cls_rgw_gc_obj_info info;
+        try {
+          decode(info, it.data);
+        } catch (ceph::buffer::error& err) {
+          CLS_LOG(5, "ERROR: cls_rgw_gc_queue_remove_entries(): failed to decode gc info\n");
+          return -EINVAL;
+        }
+        if (!last_removed_time || *last_removed_time < info.time) {
+          last_removed_time = info.time;
+        }
+        CLS_LOG(20, "INFO: cls_rgw_gc_queue_remove_entries(): entry: %s\n", info.tag.c_str());
+        total_num_entries++;
+        //Search for tag in urgent data map
+        if (auto i = urgent_data.urgent_data_map.find(info.tag);
+            i != urgent_data.urgent_data_map.end()) {
+          const auto defer_time = i->second;
+          CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from urgent data: %s\n", info.tag.c_str());
+          urgent_data.urgent_data_map.erase(i);
 
-            if (defer_time > info.time) {
-              CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
-              info.time = defer_time;
-              bufferlist bl;
-              encode(info, bl);
-              requeue_buffers.push_back(std::move(bl));
-              continue;
-            }
-          // Search the xattr urgent data map
-          } else if (auto i = xattr_urgent_data_map.find(info.tag);
-                    i != xattr_urgent_data_map.end()) {
-            if (index == op_ret.entries.size()) {
-              last_xattr_entry = std::make_pair(i->first, i->second);
-            }
-            const auto defer_time = i->second;
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
-            xattr_urgent_data_map.erase(i);
+          if (defer_time > info.time) {
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
+            info.time = defer_time;
+            bufferlist bl;
+            encode(info, bl);
+            requeue_buffers.push_back(std::move(bl));
+            continue;
+          }
+        // Search the xattr urgent data map
+        } else if (auto i = xattr_urgent_data_map.find(info.tag);
+                  i != xattr_urgent_data_map.end()) {
+          const auto defer_time = i->second;
+          CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): erasing tag from xattrs urgent data: %s\n", info.tag.c_str());
+          xattr_urgent_data_map.erase(i);
 
-            if (defer_time > info.time) {
-              CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
-              info.time = defer_time;
-              bufferlist bl;
-              encode(info, bl);
-              requeue_buffers.push_back(std::move(bl));
-              continue;
-            }
-          }// search in xattrs
-          num_entries++;
-        }//end-for
-
-        if (num_entries < (op.num_entries + 1)) {
-          if (! op_ret.is_truncated) {
-            end_marker = op_ret.next_marker;
-            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): not truncated and end offset is %s\n", end_marker.c_str());
-            break;
-          } else {
-            list_op.max = ((op.num_entries + 1) - num_entries);
-            list_op.start_marker = op_ret.next_marker;
-            out->clear();
+          if (defer_time > info.time) {
+            CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): requeing deferred tag: %s\n", info.tag.c_str());
+            info.time = defer_time;
+            bufferlist bl;
+            encode(info, bl);
+            requeue_buffers.push_back(std::move(bl));
+            continue;
           }
-        } else {
-          if (last_urgent_data_entry) {
-            urgent_data.urgent_data_map.insert(*last_urgent_data_entry);
-            //Remove last entry from requeue_buffers
-            if (!requeue_buffers.empty()) {
-              requeue_buffers.pop_back();
-            }
-          }
-          if (last_xattr_entry) {
-            xattr_urgent_data_map.insert(*last_xattr_entry);
-            //Remove last entry from requeue_buffers
-            if (!requeue_buffers.empty()) {
-              requeue_buffers.pop_back();
-            }
-          }
-          end_marker = op_ret.entries[index - 1].marker;
-          CLS_LOG(1, "INFO: cls_rgw_gc_queue_remove_entries(): index is %u and end_offset is: %s\n", index, end_marker.c_str());
+        }// search in xattrs
+        num_entries++;
+        if (num_entries == op.num_entries) {
           break;
         }
-      } //end-if
-      else {
-        break;
+      }//end-for
+      CLS_LOG(5, "INFO: cls_rgw_gc_queue_remove_entries(): number of entries: %d and list_op.max: %ld\n", num_entries, list_op.max);
+      if (num_entries < total_num_entries) {
+        end_marker = op_ret.entries[total_num_entries].marker;
+      } else {
+        end_marker = op_ret.next_marker;
       }
-    } while(is_truncated);
+    } //end-if
 
-    CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): Total number of entries to remove: %d\n", total_num_entries);
-    CLS_LOG(10, "INFO: cls_rgw_gc_queue_remove_entries(): End offset is %s\n", end_marker.c_str());
+    CLS_LOG(5, "INFO: cls_rgw_gc_queue_remove_entries(): Total number of entries to remove: %d\n", total_num_entries);
+    CLS_LOG(5, "INFO: cls_rgw_gc_queue_remove_entries(): End offset is %s\n", end_marker.c_str());
 
     if (! end_marker.empty()) {
       cls_queue_remove_op rem_op;
