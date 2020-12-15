@@ -29,6 +29,8 @@ namespace rgw { namespace sal {
   class RadosStore;
 } }
 
+using ReshardFaultInjector = FaultInjector<std::string_view>;
+
 class RGWBucketReshardLock {
   using Clock = ceph::coarse_mono_clock;
 
@@ -91,7 +93,7 @@ private:
   int do_reshard(int num_shards,
                  RGWBucketInfo& new_bucket_info,
                  int max_entries,
-                 FaultInjector<std::string_view>& f,
+                 const ReshardFaultInjector& f,
                  bool verbose,
                  std::ostream *os,
                  Formatter *formatter,
@@ -104,11 +106,11 @@ public:
 		   const RGWBucketInfo& _bucket_info,
                    const std::map<std::string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
-  int execute(int num_shards, FaultInjector<std::string_view>& f,
+  int execute(int num_shards, const ReshardFaultInjector& f,
               int max_op_entries, const DoutPrefixProvider *dpp,
               bool verbose = false, std::ostream *out = nullptr,
               ceph::Formatter *formatter = nullptr,
-	      RGWReshard *reshard_log = nullptr);
+              RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider *dpp);
   static int clear_resharding(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
