@@ -6112,8 +6112,6 @@ int main(int argc, const char **argv)
       return EINVAL;
   }
 
-  // to test using FaultInjector
-  FaultInjector<std::string_view> fault;
   if (!rgw::sal::User::empty(user)) {
     user_op.set_user_id(user->get_id());
     bucket_op.set_user_id(user->get_id());
@@ -7599,6 +7597,7 @@ next:
       max_entries = DEFAULT_RESHARD_MAX_ENTRIES;
     }
 
+    ReshardFaultInjector fault;
     if (inject_error_at) {
       fault.inject(*inject_error_at, InjectError{-EIO, dpp()});
     } else if (inject_abort_at) {
