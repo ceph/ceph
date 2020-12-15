@@ -4,7 +4,10 @@
 
 .. index:: journal; journal configuration
 
-Ceph OSDs use a journal for two reasons: speed and consistency.  
+Filestore OSDs use a journal for two reasons: speed and consistency.  Note
+that since Luminous, the BlueStore OSD back end has been preferred and default.
+This information is provided for pre-existing OSDs and for rare situations where
+Filestore is preferred for new deployments.
 
 - **Speed:** The journal enables the Ceph OSD Daemon to commit small writes 
   quickly. Ceph writes small, random i/o to the journal sequentially, which 
@@ -25,10 +28,10 @@ Ceph OSDs use a journal for two reasons: speed and consistency.
   OSD Daemons replay the journal starting after the last synchronization 
   operation.
 
-Ceph OSD Daemons support the following journal settings: 
+Ceph OSD Daemons recognize the following journal settings: 
 
 
-``journal dio``
+``journal_dio``
 
 :Description: Enables direct i/o to the journal. Requires ``journal block 
               align`` set to ``true``.
@@ -39,7 +42,7 @@ Ceph OSD Daemons support the following journal settings:
 
 
 
-``journal aio``
+``journal_aio``
 
 .. versionchanged:: 0.61 Cuttlefish
 
@@ -51,7 +54,7 @@ Ceph OSD Daemons support the following journal settings:
 :Default: Version 0.61 and later, ``true``. Version 0.60 and earlier, ``false``.
 
 
-``journal block align``
+``journal_block_align``
 
 :Description: Block aligns write operations. Required for ``dio`` and ``aio``.
 :Type: Boolean
@@ -59,7 +62,7 @@ Ceph OSD Daemons support the following journal settings:
 :Default: ``true``
 
 
-``journal max write bytes``
+``journal_max_write_bytes``
 
 :Description: The maximum number of bytes the journal will write at 
               any one time.
@@ -69,7 +72,7 @@ Ceph OSD Daemons support the following journal settings:
 :Default: ``10 << 20``
 
 
-``journal max write entries``
+``journal_max_write_entries``
 
 :Description: The maximum number of entries the journal will write at 
               any one time.
@@ -79,7 +82,7 @@ Ceph OSD Daemons support the following journal settings:
 :Default: ``100``
 
 
-``journal queue max ops``
+``journal_queue_max_ops``
 
 :Description: The maximum number of operations allowed in the queue at 
               any one time.
@@ -89,7 +92,7 @@ Ceph OSD Daemons support the following journal settings:
 :Default: ``500``
 
 
-``journal queue max bytes``
+``journal_queue_max_bytes``
 
 :Description: The maximum number of bytes allowed in the queue at 
               any one time.
@@ -99,7 +102,7 @@ Ceph OSD Daemons support the following journal settings:
 :Default: ``10 << 20``
 
 
-``journal align min size``
+``journal_align_min_size``
 
 :Description: Align data payloads greater than the specified minimum.
 :Type: Integer
@@ -107,7 +110,7 @@ Ceph OSD Daemons support the following journal settings:
 :Default: ``64 << 10``
 
 
-``journal zero on create``
+``journal_zero_on_create``
 
 :Description: Causes the file store to overwrite the entire journal with 
               ``0``'s during ``mkfs``.

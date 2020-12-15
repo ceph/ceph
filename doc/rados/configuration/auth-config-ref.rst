@@ -105,9 +105,9 @@ generated the keys, you may skip the steps related to generating keys.
 
    .. code-block:: ini
 
-      auth cluster required = cephx
-      auth service required = cephx
-      auth client required = cephx
+      auth_cluster_required = cephx
+      auth_service_required = cephx
+      auth_client_required = cephx
 
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.
@@ -129,9 +129,9 @@ during setup and/or troubleshooting to temporarily disable authentication.
 
    .. code-block:: ini
 
-      auth cluster required = none
-      auth service required = none
-      auth client required = none
+      auth_cluster_required = none
+      auth_service_required = none
+      auth_client_required = none
 
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.
@@ -144,7 +144,7 @@ Enablement
 ----------
 
 
-``auth cluster required``
+``auth_cluster_required``
 
 :Description: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
               ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
@@ -155,7 +155,7 @@ Enablement
 :Default: ``cephx``.
 
 
-``auth service required``
+``auth_service_required``
 
 :Description: If enabled, the Ceph Storage Cluster daemons require Ceph Clients
               to authenticate with the Ceph Storage Cluster in order to access
@@ -166,7 +166,7 @@ Enablement
 :Default: ``cephx``.
 
 
-``auth client required``
+``auth_client_required``
 
 :Description: If enabled, the Ceph Client requires the Ceph Storage Cluster to
               authenticate with the Ceph Client. Valid settings are ``cephx``
@@ -289,13 +289,13 @@ against messages being tampered with in flight (e.g., by a "man in the
 middle" attack).
 
 Like other parts of Ceph authentication, Ceph provides fine-grained control so
-you can enable/disable signatures for service messages between the client and
-Ceph, and you can enable/disable signatures for messages between Ceph daemons.
+you can enable/disable signatures for service messages between clients and
+Ceph, and so you can enable/disable signatures for messages between Ceph daemons.
 
 Note that even with signatures enabled data is not encrypted in
 flight.
 
-``cephx require signatures``
+``cephx_require_signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between the Ceph Client and the Ceph Storage Cluster, and
@@ -310,7 +310,7 @@ flight.
 :Default: ``false``
 
 
-``cephx cluster require signatures``
+``cephx_cluster_require_signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between Ceph daemons comprising the Ceph Storage Cluster.
@@ -320,7 +320,7 @@ flight.
 :Default: ``false``
 
 
-``cephx service require signatures``
+``cephx_service_require_signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between Ceph Clients and the Ceph Storage Cluster.
@@ -330,7 +330,7 @@ flight.
 :Default: ``false``
 
 
-``cephx sign messages``
+``cephx_sign_messages``
 
 :Description: If the Ceph version supports message signing, Ceph will sign
               all messages so they are more difficult to spoof.
@@ -342,7 +342,7 @@ flight.
 Time to Live
 ------------
 
-``auth service ticket ttl``
+``auth_service_ticket_ttl``
 
 :Description: When the Ceph Storage Cluster sends a Ceph Client a ticket for
               authentication, the Ceph Storage Cluster assigns the ticket a
