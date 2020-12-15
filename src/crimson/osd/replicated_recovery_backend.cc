@@ -1006,12 +1006,10 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
         t->zero(coll->get_cid(), ghobject_t(target_oid), start, len);
       }
     }
-    logger().debug("submit_push_data: test");
     uint64_t off = 0;
     for (auto [start, len] : intervals_included) {
       bufferlist bit;
       bit.substr_of(data_included, off, len);
-      logger().debug("submit_push_data: test1");
       t->write(coll->get_cid(), ghobject_t(target_oid),
 	       start, len, bit, fadvise_flags);
       off += len;
