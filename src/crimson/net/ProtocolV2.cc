@@ -2103,6 +2103,10 @@ void ProtocolV2::execute_server_wait()
 
 void ProtocolV2::trigger_close()
 {
+  messenger.closing_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
+
   if (state == state_t::ACCEPTING || state == state_t::SERVER_WAIT) {
     messenger.unaccept_conn(
       seastar::static_pointer_cast<SocketConnection>(
@@ -2117,9 +2121,6 @@ void ProtocolV2::trigger_close()
   }
 
   protocol_timer.cancel();
-  messenger.closing_conn(
-      seastar::static_pointer_cast<SocketConnection>(
-	conn.shared_from_this()));
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
 }
 
