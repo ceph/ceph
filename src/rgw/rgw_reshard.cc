@@ -496,61 +496,6 @@ int RGWBucketReshard::cancel()
   return ret;
 }
 
-class BucketInfoReshardUpdate
-{
-  rgw::sal::RGWRadosStore *store;
-  RGWBucketInfo& bucket_info;
-
-  bool in_progress{false};
-
-  int set_status(rgw::BucketReshardState s) {
-    bucket_info.layout.resharding = s;
-    int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), nullptr);
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: failed to write bucket info, ret=" << ret << dendl;
-      return ret;
-    }
-    return 0;
-  }
-
-public:
-  BucketInfoReshardUpdate(rgw::sal::RGWRadosStore *_store,
-			  RGWBucketInfo& _bucket_info) :
-    store(_store),
-    bucket_info(_bucket_info)
-  {}
-
-  ~BucketInfoReshardUpdate() {
-    if (in_progress) {
-      // resharding must not have ended correctly, clean up
-      int ret =
-       RGWBucketReshard::clear_index_shard_reshard_status(store, bucket_info);
-      if (ret < 0) {
-	lderr(store->ctx()) << "Error: " << __func__ <<
-	  " clear_index_shard_status returned " << ret << dendl;
-      }
-    }
-  }
-
-  int start() {
-    int ret = set_status(rgw::BucketReshardState::InProgress);
-    if (ret < 0) {
-      return ret;
-    }
-    in_progress = true;
-    return 0;
-  }
-
-  int complete() {
-    int ret = set_status(rgw::BucketReshardState::None);
-    if (ret < 0) {
-      return ret;
-    }
-    in_progress = false;
-    return 0;
-  }
-};
-
 
 RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RGWRadosStore* _store,
 					   const std::string& reshard_lock_oid,
