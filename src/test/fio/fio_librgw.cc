@@ -23,7 +23,7 @@
 
 #undef FMT_HEADER_ONLY
 #define FMT_HEADER_ONLY 1
-#include "seastar/fmt/include/fmt/format.h"
+#include "fmt/include/fmt/format.h"
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
