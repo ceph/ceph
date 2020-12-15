@@ -714,7 +714,7 @@ int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_buc
 
 
 int RGWBucketReshard::execute(int num_shards,
-                              const ReshardFaultInjector& f,
+                              const ReshardFaultInjector& fault,
                               int max_op_entries,
                               const DoutPrefixProvider *dpp,
                               bool verbose, ostream *out,
@@ -748,11 +748,11 @@ int RGWBucketReshard::execute(int num_shards,
     goto error_out;
   }
 
-  ret = do_reshard(num_shards,
-                   new_bucket_info,
-                   max_op_entries,
-                   f,
-                   verbose, out, formatter, dpp);
+  if (ret = fault.check("do_reshard");
+      ret == 0) { // no fault injected, do the reshard
+    ret = do_reshard(num_shards, new_bucket_info, max_op_entries, fault,
+                     verbose, out, formatter, dpp);
+  }
   if (ret < 0) {
     goto error_out;
   }
