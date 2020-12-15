@@ -3261,8 +3261,10 @@ struct C_SetManifestRefCountDone : public Context {
   C_SetManifestRefCountDone(
     RefCountCallback* cb, hobject_t soid) : cb(cb), soid(soid) {}
   void finish(int r) override {
-    if (r == -ECANCELED)
+    if (r == -ECANCELED) {
+      cb = nullptr;
       return;
+    }
     auto pg = cb->ctx->pg;
     std::scoped_lock locker{*pg};
     auto it = pg->manifest_ops.find(soid);
