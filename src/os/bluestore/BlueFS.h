@@ -637,9 +637,9 @@ public:
   void dump(std::ostream& sout) override;
 };
 
-class WithoutSlowDirVolumeSelector : public OriginalVolumeSelector {
+class FitToFastVolumeSelector : public OriginalVolumeSelector {
 public:
-  WithoutSlowDirVolumeSelector(
+  FitToFastVolumeSelector(
     uint64_t _wal_total,
     uint64_t _db_total,
     uint64_t _slow_total)

@@ -3596,8 +3596,8 @@ void OriginalVolumeSelector::dump(ostream& sout) {
 }
 
 // ===============================================
-// WithoutSlowDirVolumeSelector
+// FitToFastVolumeSelector
 
-void WithoutSlowDirVolumeSelector::get_paths(const std::string& base, paths& res) const {
+void FitToFastVolumeSelector::get_paths(const std::string& base, paths& res) const {
   res.emplace_back(base, 1);  // size of the last db_path has no effect
 }
