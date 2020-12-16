@@ -139,22 +139,30 @@ struct string_key_view_t {
   enum class Type {MIN, STR, MAX};
   // presumably the maximum string length is 2KiB
   using string_size_t = uint16_t;
+  static constexpr auto MAX = std::numeric_limits<string_size_t>::max();
+  static constexpr auto MIN = string_size_t(0u);
+  static auto is_valid_size(size_t size) {
+    return (size > MIN && size < MAX);
+  }
+
   string_key_view_t(const char* p_end) {
     p_length = p_end - sizeof(string_size_t);
     std::memcpy(&length, p_length, sizeof(string_size_t));
-    if (length && length != std::numeric_limits<string_size_t>::max()) {
+    if (is_valid_size(length)) {
       auto _p_key = p_length - length;
       p_key = static_cast<const char*>(_p_key);
     } else {
+      assert(length == MAX || length == MIN);
       p_key = nullptr;
     }
   }
   Type type() const {
-    if (length == 0u) {
+    if (length == MIN) {
       return Type::MIN;
-    } else if (length == std::numeric_limits<string_size_t>::max()) {
+    } else if (length == MAX) {
       return Type::MAX;
     } else {
+      assert(is_valid_size(length));
       return Type::STR;
     }
   }
@@ -179,6 +187,7 @@ struct string_key_view_t {
   }
   node_offset_t size_logical() const {
     assert(type() == Type::STR);
+    assert(is_valid_size(length));
     return length;
   }
   node_offset_t size_overhead() const {
@@ -188,6 +197,7 @@ struct string_key_view_t {
 
   std::string_view to_string_view() const {
     assert(type() == Type::STR);
+    assert(is_valid_size(length));
     return {p_key, length};
   }
   bool operator==(const string_key_view_t& x) const {
@@ -205,10 +215,9 @@ struct string_key_view_t {
       NodeExtentMutable&, std::string_view, char*& p_append);
 
   static void test_append_str(std::string_view str, char*& p_append) {
+    assert(is_valid_size(str.length()));
     p_append -= sizeof(string_size_t);
-    assert(str.length() < std::numeric_limits<string_size_t>::max());
     string_size_t len = str.length();
-    assert(len != 0);
     std::memcpy(p_append, &len, sizeof(string_size_t));
     p_append -= len;
     std::memcpy(p_append, str.data(), len);
@@ -221,11 +230,11 @@ struct string_key_view_t {
     p_append -= sizeof(string_size_t);
     string_size_t len;
     if (dedup_type == Type::MIN) {
-      len = 0u;
+      len = MIN;
     } else if (dedup_type == Type::MAX) {
-      len = std::numeric_limits<string_size_t>::max();
+      len = MAX;
     } else {
-      assert(false);
+      ceph_abort("impossible path");
     }
     std::memcpy(p_append, &len, sizeof(string_size_t));
   }
@@ -246,6 +255,7 @@ struct string_key_view_t {
  */
 class string_view_masked_t {
  public:
+  using string_size_t = string_key_view_t::string_size_t;
   using Type = string_key_view_t::Type;
   explicit string_view_masked_t(const string_key_view_t& index)
       : type{index.type()} {
@@ -254,15 +264,18 @@ class string_view_masked_t {
     }
   }
   explicit string_view_masked_t(std::string_view str)
-      : type{Type::STR}, view{str} {}
+      : type{Type::STR}, view{str} {
+    assert(string_key_view_t::is_valid_size(view.size()));
+  }
 
   Type get_type() const { return type; }
   std::string_view to_string_view() const {
     assert(get_type() == Type::STR);
     return view;
   }
-  size_t size() const {
+  string_size_t size() const {
     assert(get_type() == Type::STR);
+    assert(string_key_view_t::is_valid_size(view.size()));
     return view.size();
   }
   bool operator==(const string_view_masked_t& x) const {
