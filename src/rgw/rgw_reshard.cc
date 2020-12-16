@@ -273,6 +273,24 @@ static int set_resharding_status(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
+                                       const rgw_bucket& bucket,
+                                       const DoutPrefixProvider* dpp)
+{
+  RGWBucketInfo info;
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
+  int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, info,
+                                                      nullptr, nullptr, null_yield, dpp);
+  if (r < 0) {
+    return r;
+  }
+
+  // delete its shard objects (ignore errors)
+  store->svc()->bi->clean_index(dpp, info, info.layout.current_index);
+  // delete the bucket instance metadata
+  return store->ctl()->bucket->remove_bucket_instance_info(bucket, info, null_yield, dpp);
+}
+
 // initialize a target index layout, create its bucket index shard objects, and
 // write the target layout to the bucket instance metadata
 static int init_target_layout(rgw::sal::RadosStore* store,
@@ -282,6 +300,20 @@ static int init_target_layout(rgw::sal::RadosStore* store,
                               const DoutPrefixProvider* dpp)
 {
   uint64_t gen = bucket_info.layout.current_index.gen + 1;
+
+  if (bucket_info.reshard_status == cls_rgw_reshard_status::IN_PROGRESS) {
+    // backward-compatible cleanup of old reshards, where the target was in a
+    // different bucket instance
+    if (!bucket_info.new_bucket_instance_id.empty()) {
+      rgw_bucket new_bucket = bucket_info.bucket;
+      new_bucket.bucket_id = bucket_info.new_bucket_instance_id;
+      ldout(store->ctx(), 10) << __func__ << " removing target bucket instance "
+          "from a previous reshard attempt" << dendl;
+      // ignore errors
+      remove_old_reshard_instance(store, new_bucket, dpp);
+    }
+    bucket_info.reshard_status = cls_rgw_reshard_status::NOT_RESHARDING;
+  }
 
   auto& target = bucket_info.layout.target_index;
   if (target) {
