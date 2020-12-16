@@ -45,6 +45,13 @@ class DashboardException(Exception):
         return str(abs(self.errno)) if self.errno is not None else 'Error'
 
 
+class InvalidCredentialsError(DashboardException):
+    def __init__(self):
+        super().__init__(msg='Invalid credentials',
+                         code='invalid_credentials',
+                         component='auth')
+
+
 # access control module exceptions
 class RoleAlreadyExists(Exception):
     def __init__(self, name):
