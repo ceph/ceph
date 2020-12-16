@@ -32,11 +32,7 @@ USER = 'tester'
 DISPLAY_NAME = 'Testing'
 ACCESS_KEY = 'NX5QOQKC6BH2IDN8HC7A'
 SECRET_KEY = 'LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn'
-BUCKET_NAME1 = 'a-bucket'
-BUCKET_NAME2 = 'b-bucket'
-BUCKET_NAME3 = 'c-bucket'
-BUCKET_NAME4 = 'd-bucket'
-BUCKET_NAME5 = 'e-bucket'
+BUCKET_NAME = 'a-bucket'
 VER_BUCKET_NAME = 'myver'
 INDEX_POOL = 'default.rgw.buckets.index'
 
@@ -94,17 +90,55 @@ def get_bucket_num_shards(bucket_name, bucket_id):
     num_shards = json_op['data']['bucket_info']['num_shards']
     return num_shards
 
-def run_bucket_reshard_cmd(bucket_name, num_shards, **location):
+def run_bucket_reshard_cmd(bucket_name, num_shards, **kwargs):
+    cmd = 'radosgw-admin bucket reshard --bucket {} --num-shards {}'.format(bucket_name, num_shards)
+    cmd += ' --rgw-reshard-bucket-lock-duration 30' # reduce to minimum
+    if 'error_at' in kwargs:
+        cmd += ' --inject-error-at {}'.format(kwargs.pop('error_at'))
+    elif 'abort_at' in kwargs:
+        cmd += ' --inject-abort-at {}'.format(kwargs.pop('abort_at'))
+    return exec_cmd(cmd, **kwargs)
 
-    # TODO: Get rid of duplication. use list
-    if ('error_location' in location):
-        return exec_cmd('radosgw-admin bucket reshard --bucket {} --num-shards {} --inject-error-at {}'.format(bucket_name,
-                        num_shards, location.get('error_location', None)))
-    elif ('abort_location' in location):
-        return exec_cmd('radosgw-admin bucket reshard --bucket {} --num-shards {} --inject-abort-at {}'.format(bucket_name,
-                        num_shards, location.get('abort_location', None)))
-    else:
-        return exec_cmd('radosgw-admin bucket reshard --bucket {} --num-shards {}'.format(bucket_name, num_shards))
+def test_bucket_reshard(conn, name, **fault):
+    bucket = conn.create_bucket(Bucket=name)
+    objs = []
+    try:
+        # create objs
+        for i in range(0, 20):
+            objs += [bucket.put_object(Key='key' + str(i), Body=b"some_data")]
+
+        old_shard_count = get_bucket_stats(name).num_shards
+        num_shards_expected = old_shard_count + 1
+
+        # try reshard with fault injection
+        _, ret = run_bucket_reshard_cmd(name, num_shards_expected, check_retcode=False, **fault)
+        assert(ret != 0 and ret != errno.EBUSY)
+
+        # check shard count
+        cur_shard_count = get_bucket_stats(name).num_shards
+        assert(cur_shard_count == old_shard_count)
+
+        # verify that the bucket is writeable by deleting an object
+        objs.pop().delete()
+
+        # retry reshard without fault injection. if radosgw-admin aborted,
+        # we'll have to retry until the reshard lock expires
+        while True:
+            _, ret = run_bucket_reshard_cmd(name, num_shards_expected, check_retcode=False)
+            if ret == errno.EBUSY:
+                log.info('waiting 30 seconds for reshard lock to expire...')
+                time.sleep(30)
+                continue
+            assert(ret == 0)
+            break
+
+        # recheck shard count
+        final_shard_count = get_bucket_stats(name).num_shards
+        assert(final_shard_count == num_shards_expected)
+    finally:
+        # cleanup on resharded bucket must succeed
+        bucket.delete_objects(Delete={'Objects':[{'Key':o.key} for o in objs]})
+        bucket.delete()
 
 
 def main():
@@ -143,28 +177,22 @@ def main():
             connection = boto_connect('443', True, 'https')
 
     # create a bucket
-    bucket1 = connection.create_bucket(Bucket=BUCKET_NAME1)
-    bucket2 = connection.create_bucket(Bucket=BUCKET_NAME2)
-    bucket3 = connection.create_bucket(Bucket=BUCKET_NAME3)
-    bucket4 = connection.create_bucket(Bucket=BUCKET_NAME4)
-    bucket5 = connection.create_bucket(Bucket=BUCKET_NAME5)
+    bucket = connection.create_bucket(Bucket=BUCKET_NAME)
     ver_bucket = connection.create_bucket(Bucket=VER_BUCKET_NAME)
     connection.BucketVersioning('ver_bucket')
 
-    bucket1_acl = connection.BucketAcl(BUCKET_NAME1).load()
-    bucket2_acl = connection.BucketAcl(BUCKET_NAME2).load()
+    bucket_acl = connection.BucketAcl(BUCKET_NAME).load()
     ver_bucket_acl = connection.BucketAcl(VER_BUCKET_NAME).load()
 
     # TESTCASE 'reshard-add','reshard','add','add bucket to resharding queue','succeeds'
     log.debug('TEST: reshard add\n')
 
-    num_shards_expected = get_bucket_stats(BUCKET_NAME1).num_shards + 1
-    cmd = exec_cmd('radosgw-admin reshard add --bucket {} --num-shards {}'.format(BUCKET_NAME1, num_shards_expected))
-
+    num_shards_expected = get_bucket_stats(BUCKET_NAME).num_shards + 1
+    cmd = exec_cmd('radosgw-admin reshard add --bucket {} --num-shards {}'.format(BUCKET_NAME, num_shards_expected))
     cmd = exec_cmd('radosgw-admin reshard list')
     json_op = json.loads(cmd)
     log.debug('bucket name {}'.format(json_op[0]['bucket_name']))
-    assert json_op[0]['bucket_name'] == BUCKET_NAME1
+    assert json_op[0]['bucket_name'] == BUCKET_NAME
     assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard-process','reshard','','process bucket resharding','succeeds'
@@ -172,190 +200,52 @@ def main():
     cmd = exec_cmd('radosgw-admin reshard process')
     time.sleep(5)
     # check bucket shards num
-    bucket_stats1 = get_bucket_stats(BUCKET_NAME1)
+    bucket_stats1 = get_bucket_stats(BUCKET_NAME)
     if bucket_stats1.num_shards != num_shards_expected:
-        log.error("Resharding failed on bucket {}. Expected number of shards are not created\n".format(BUCKET_NAME1))
+        log.error("Resharding failed on bucket {}. Expected number of shards are not created\n".format(BUCKET_NAME))
 
     # TESTCASE 'reshard-add','reshard','add','add non empty bucket to resharding queue','succeeds'
     log.debug('TEST: reshard add non empty bucket\n')
     # create objs
     num_objs = 8
     for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME1, ('key'+str(i))).put(Body=b"some_data")
+        connection.Object(BUCKET_NAME, ('key'+str(i))).put(Body=b"some_data")
 
-    num_shards_expected = get_bucket_stats(BUCKET_NAME1).num_shards + 1
-    cmd = exec_cmd('radosgw-admin reshard add --bucket {} --num-shards {}'.format(BUCKET_NAME1, num_shards_expected))
+    num_shards_expected = get_bucket_stats(BUCKET_NAME).num_shards + 1
+    cmd = exec_cmd('radosgw-admin reshard add --bucket {} --num-shards {}'.format(BUCKET_NAME, num_shards_expected))
     cmd = exec_cmd('radosgw-admin reshard list')
     json_op = json.loads(cmd)
-    assert json_op[0]['bucket_name'] == BUCKET_NAME1
+    assert json_op[0]['bucket_name'] == BUCKET_NAME
     assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard process ,'reshard','process','reshard non empty bucket','succeeds'
     log.debug('TEST: reshard process non empty bucket\n')
     cmd = exec_cmd('radosgw-admin reshard process')
     # check bucket shards num
-    bucket_stats1 = get_bucket_stats(BUCKET_NAME1)
+    bucket_stats1 = get_bucket_stats(BUCKET_NAME)
     if bucket_stats1.num_shards != num_shards_expected:
-        log.error("Resharding failed on bucket {}. Expected number of shards are not created\n".format(BUCKET_NAME1))
+        log.error("Resharding failed on bucket {}. Expected number of shards are not created\n".format(BUCKET_NAME))
 
     # TESTCASE 'manual bucket resharding','inject error','fail','check bucket accessibility', 'retry reshard'
-    log.debug('TEST: reshard bucket with error injection\n')
-    # create objs
-    num_objs = 11
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME2, ('key' + str(i))).put(Body=b"some_data")
+    log.debug('TEST: reshard bucket with EIO injected at set_target_layout\n')
+    test_bucket_reshard(connection, 'error-at-set-target-layout', error_at='set_target_layout')
+    log.debug('TEST: reshard bucket with abort at set_target_layout\n')
+    test_bucket_reshard(connection, 'abort-at-set-target-layout', abort_at='set_target_layout')
 
-    time.sleep(5)
-    old_shard_count = get_bucket_stats(BUCKET_NAME2).num_shards
-    num_shards_expected = old_shard_count + 1
-    run_bucket_reshard_cmd(BUCKET_NAME2, num_shards_expected, error_location = "before_target_shard_entry")
+    log.debug('TEST: reshard bucket with EIO injected at block_writes\n')
+    test_bucket_reshard(connection, 'error-at-block-writes', error_at='block_writes')
+    log.debug('TEST: reshard bucket with abort at block_writes\n')
+    test_bucket_reshard(connection, 'abort-at-block-writes', abort_at='block_writes')
 
-    # check bucket shards num
-    cur_shard_count = get_bucket_stats(BUCKET_NAME2).num_shards
-    assert(cur_shard_count == old_shard_count)
+    log.debug('TEST: reshard bucket with EIO injected at commit_target_layout\n')
+    test_bucket_reshard(connection, 'error-at-commit-target-layout', error_at='commit_target_layout')
+    log.debug('TEST: reshard bucket with abort at commit_target_layout\n')
+    test_bucket_reshard(connection, 'abort-at-commit-target-layout', abort_at='commit_target_layout')
 
-    #verify if bucket is accessible
-    log.info('List objects from bucket: {}'.format(BUCKET_NAME2))
-    for key in bucket2.objects.all():
-        print(key.key)
-
-    #verify if new objects can be added
-    num_objs = 5
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME2, ('key' + str(i))).put(Body=b"some_data")
-
-    #retry reshard
-    run_bucket_reshard_cmd(BUCKET_NAME2, num_shards_expected)
-
-    #TESTCASE 'manual bucket resharding','inject error','fail','check bucket accessibility', 'retry reshard'
-    log.debug('TEST: reshard bucket with error injection')
-    # create objs
-    num_objs = 11
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME3, ('key' + str(i))).put(Body=b"some_data")
-
-    time.sleep(5)
-    old_shard_count = get_bucket_stats(BUCKET_NAME3).num_shards
-    num_shards_expected = old_shard_count + 1
-    run_bucket_reshard_cmd(BUCKET_NAME3, num_shards_expected, error_location = "after_target_shard_entry")
-    # check bucket shards num
-    bucket_stats3 = get_bucket_stats(BUCKET_NAME3)
-    cur_shard_count = bucket_stats3.num_shards
-    assert(cur_shard_count == old_shard_count)
-
-    #verify if bucket is accessible
-    log.info('List objects from bucket: {}'.format(BUCKET_NAME3))
-    for key in bucket3.objects.all():
-        print(key.key)
-
-    #verify if new objects can be added
-    num_objs = 5
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME3, ('key' + str(i))).put(Body=b"some_data")
-
-    #retry reshard
-    run_bucket_reshard_cmd(BUCKET_NAME3, num_shards_expected)
-    
-    #TESTCASE 'manual bucket resharding','inject error','fail','check bucket accessibility', 'retry reshard'
-    log.debug('TEST: reshard bucket with error injection')
-    # create objs
-    num_objs = 11
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME4, ('key' + str(i))).put(Body=b"some_data")
-
-    time.sleep(10)
-    old_shard_count = get_bucket_stats(BUCKET_NAME4).num_shards
-    num_shards_expected = old_shard_count + 1
-    run_bucket_reshard_cmd(BUCKET_NAME4, num_shards_expected, error_location = "before_layout_overwrite")
-
-    # check bucket shards num
-    cur_shard_count = get_bucket_stats(BUCKET_NAME4).num_shards
-    assert(cur_shard_count == old_shard_count)
-
-    #verify if bucket is accessible
-    log.info('List objects from bucket: {}'.format(BUCKET_NAME3))
-    for key in bucket4.objects.all():
-        print(key.key)
-
-    #verify if new objects can be added
-    num_objs = 5
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME4, ('key' + str(i))).put(Body=b"some_data")
-
-    #retry reshard
-    run_bucket_reshard_cmd(BUCKET_NAME4, num_shards_expected)
-
-    # TESTCASE 'manual bucket resharding','inject crash','fail','check bucket accessibility', 'retry reshard'
-    log.debug('TEST: reshard bucket with crash injection\n')
-
-    old_shard_count = get_bucket_stats(BUCKET_NAME2).num_shards
-    num_shards_expected = old_shard_count + 1
-    run_bucket_reshard_cmd(BUCKET_NAME2, num_shards_expected, abort_location = "before_target_shard_entry")
-
-    # check bucket shards num
-    cur_shard_count = get_bucket_stats(BUCKET_NAME2).num_shards
-    assert(cur_shard_count == old_shard_count)
-
-    #verify if bucket is accessible
-    log.info('List objects from bucket: {}'.format(BUCKET_NAME2))
-    for key in bucket2.objects.all():
-        print(key.key)
-
-    #verify if new objects can be added
-    num_objs = 5
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME2, ('key' + str(i))).put(Body=b"some_data")
-
-    #retry reshard
-    run_bucket_reshard_cmd(BUCKET_NAME2, num_shards_expected)
-
-    #TESTCASE 'manual bucket resharding','inject crash','fail','check bucket accessibility', 'retry reshard'
-    log.debug('TEST: reshard bucket with error injection')
-
-    old_shard_count = get_bucket_stats(BUCKET_NAME3).num_shards
-    num_shards_expected = old_shard_count + 1
-    run_bucket_reshard_cmd(BUCKET_NAME3, num_shards_expected, abort_location = "after_target_shard_entry")
-
-    # check bucket shards num
-    cur_shard_count = get_bucket_stats(BUCKET_NAME3).num_shards
-    assert(cur_shard_count == old_shard_count)
-
-    #verify if bucket is accessible
-    log.info('List objects from bucket: {}'.format(BUCKET_NAME3))
-    for key in bucket3.objects.all():
-        print(key.key)
-
-    #verify if new objects can be added
-    num_objs = 5
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME3, ('key' + str(i))).put(Body=b"some_data")
-
-    #retry reshard
-    run_bucket_reshard_cmd(BUCKET_NAME3, num_shards_expected)
-
-    #TESTCASE 'manual bucket resharding','inject error','fail','check bucket accessibility', 'retry reshard'
-    log.debug('TEST: reshard bucket with error injection')
-
-    old_shard_count = get_bucket_stats(BUCKET_NAME4).num_shards
-    num_shards_expected = old_shard_count + 1
-    run_bucket_reshard_cmd(BUCKET_NAME4, num_shards_expected, abort_location = "before_layout_overwrite")
-    # check bucket shards num
-    bucket_stats4 = get_bucket_stats(BUCKET_NAME4)
-    cur_shard_count = bucket_stats4.num_shards
-    assert(cur_shard_count == old_shard_count)
-
-    #verify if bucket is accessible
-    log.info('List objects from bucket: {}'.format(BUCKET_NAME3))
-    for key in bucket4.objects.all():
-        print(key.key)
-
-    #verify if new objects can be added
-    num_objs = 5
-    for i in range(0, num_objs):
-        connection.Object(BUCKET_NAME4, ('key' + str(i))).put(Body=b"some_data")
-
-    #retry reshard
-    run_bucket_reshard_cmd(BUCKET_NAME4, num_shards_expected)
+    log.debug('TEST: reshard bucket with EIO injected at do_reshard\n')
+    test_bucket_reshard(connection, 'error-at-do-reshard', error_at='do_reshard')
+    log.debug('TEST: reshard bucket with abort at do_reshard\n')
+    test_bucket_reshard(connection, 'abort-at-do-reshard', abort_at='do_reshard')
 
     # TESTCASE 'versioning reshard-','bucket', reshard','versioning reshard','succeeds'
     log.debug(' test: reshard versioned bucket')
@@ -367,10 +257,8 @@ def main():
     assert ver_bucket_stats.num_shards == num_shards_expected
 
     # TESTCASE 'check acl'
-    new_bucket1_acl = connection.BucketAcl(BUCKET_NAME1).load()
-    assert new_bucket1_acl == bucket1_acl
-    new_bucket2_acl = connection.BucketAcl(BUCKET_NAME2).load()
-    assert new_bucket2_acl == bucket2_acl
+    new_bucket_acl = connection.BucketAcl(BUCKET_NAME).load()
+    assert new_bucket_acl == bucket_acl
     new_ver_bucket_acl = connection.BucketAcl(VER_BUCKET_NAME).load()
     assert new_ver_bucket_acl == ver_bucket_acl
 
@@ -404,12 +292,9 @@ def main():
     assert len(json_op) == 0
 
     # Clean up
-    log.debug("Deleting bucket {}".format(BUCKET_NAME1))
-    bucket1.objects.all().delete()
-    bucket1.delete()
-    log.debug("Deleting bucket {}".format(BUCKET_NAME2))
-    bucket2.objects.all().delete()
-    bucket2.delete()
+    log.debug("Deleting bucket {}".format(BUCKET_NAME))
+    bucket.objects.all().delete()
+    bucket.delete()
     log.debug("Deleting bucket {}".format(VER_BUCKET_NAME))
     ver_bucket.delete()
 
