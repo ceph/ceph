@@ -18,6 +18,9 @@ Inode::~Inode()
   dirty_cap_item.remove_myself(); 
   snaprealm_item.remove_myself();
 
+  for (auto &m : open_by_mode)
+    ceph_assert(!m);
+
   if (snapdir_parent) {
     snapdir_parent->flags &= ~I_SNAPDIR_OPEN;
     snapdir_parent.reset();
@@ -42,9 +45,19 @@ ostream& operator<<(ostream &out, const Inode &in)
       << "faked_ino=" << in.faked_ino
       << " ref=" << in._ref
       << " ll_ref=" << in.ll_ref
-      << " cap_refs=" << in.cap_refs
-      << " open=" << in.open_by_mode
-      << " mode=" << oct << in.mode << dec
+      << " cap_refs=" << in.cap_refs;
+  out << " open=[";
+  {
+    bool first = true;
+    for (auto &m : in.open_by_mode) {
+      if (!first)
+	out << ',';
+      out << m;
+      first = false;
+    }
+  }
+  out << "]";
+  out << " mode=" << oct << in.mode << dec
       << " size=" << in.size << "/" << in.max_size
       << " nlink=" << in.nlink
       << " btime=" << in.btime
@@ -137,18 +150,72 @@ void Inode::make_nosnap_relative_path(filepath& p)
 
 void Inode::get_open_ref(int mode)
 {
-  open_by_mode[mode]++;
+  if (snapid != CEPH_NOSNAP)
+    return;
+
+  int bits = (mode << 1) | 1;
+  for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
+    if (bits & (1 << i))
+	open_by_mode[i]++;
+  }
+
+  touch_open_ref(mode);
+
   break_deleg(!(mode & CEPH_FILE_MODE_WR));
 }
 
 bool Inode::put_open_ref(int mode)
 {
-  //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
-  auto& ref = open_by_mode.at(mode);
-  ceph_assert(ref > 0);
-  if (--ref == 0)
-    return true;
-  return false;
+  if (snapid != CEPH_NOSNAP)
+    return false;
+
+  bool last = false;
+  int bits = (mode << 1) | 1;
+  for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
+    if (bits & (1 << i)) {
+      auto &ref = open_by_mode[i];
+      ceph_assert(ref > 0);
+      if (--ref == 0)
+	last = true;
+    }
+  }
+  return last;
+}
+
+void Inode::touch_open_ref(int mode)
+{
+  auto now = ceph_clock_now();
+  if (mode & CEPH_FILE_MODE_RD)
+    last_rd = now;
+  if (mode & CEPH_FILE_MODE_WR)
+    last_wr = now;
+
+  if (snapid == CEPH_NOSNAP &&
+      (!delay_cap_item.is_on_list() || hold_caps_until <= now))
+    client->cap_delay_requeue(this);
+}
+
+
+void Inode::inc_cap_waiter(int cap)
+{
+  if (cap & CEPH_CAP_FILE_RD)
+    open_by_mode[ffs(CEPH_FILE_MODE_RD)] += FMODE_WAIT_BIAS;
+  if (cap & CEPH_CAP_FILE_WR)
+    open_by_mode[ffs(CEPH_FILE_MODE_WR)] += FMODE_WAIT_BIAS;
+}
+
+void Inode::dec_cap_waiter(int cap)
+{
+  if (cap & CEPH_CAP_FILE_RD) {
+    auto& ref = open_by_mode[ffs(CEPH_FILE_MODE_RD)];
+    ceph_assert(ref >= FMODE_WAIT_BIAS);
+    ref -= FMODE_WAIT_BIAS;
+  }
+  if (cap & CEPH_CAP_FILE_WR) {
+    auto& ref = open_by_mode[ffs(CEPH_FILE_MODE_WR)];
+    ceph_assert(ref >= FMODE_WAIT_BIAS);
+    ref -= FMODE_WAIT_BIAS;
+  }
 }
 
 void Inode::get_cap_ref(int cap)
@@ -309,19 +376,63 @@ int Inode::caps_used()
 
 int Inode::caps_file_wanted()
 {
-  int want = 0;
-  for (map<int,int>::iterator p = open_by_mode.begin();
-       p != open_by_mode.end();
-       ++p)
-    if (p->second)
-      want |= ceph_caps_for_mode(p->first);
-  return want;
+  const int PIN_SHIFT = ffs(CEPH_FILE_MODE_PIN);
+  const int RD_SHIFT = ffs(CEPH_FILE_MODE_RD);
+  const int WR_SHIFT = ffs(CEPH_FILE_MODE_WR);
+  const int LAZY_SHIFT = ffs(CEPH_FILE_MODE_LAZY);
+  auto now = ceph_clock_now();
+  auto used_cutoff = now - client->get_caps_wanted_delay_max();
+  auto idle_cutoff = now - client->get_caps_wanted_delay_min();
+
+  if (is_dir()) {
+    int want = 0;
+
+    /* use used_cutoff here, to keep dir's wanted caps longer */
+    if (open_by_mode[RD_SHIFT] > 0 || last_rd > used_cutoff)
+      want |= CEPH_CAP_ANY_SHARED;
+
+    if (open_by_mode[WR_SHIFT] > 0 || last_wr > used_cutoff) {
+      want |= CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_EXCL;
+      want |= client->get_caps_dirop_wanted();
+    }
+
+    if (want || open_by_mode[PIN_SHIFT] > 0)
+      want |= CEPH_CAP_PIN;
+
+    return want;
+  } else {
+    int bits = 0;
+
+    if (open_by_mode[RD_SHIFT] > 0) {
+      if (open_by_mode[RD_SHIFT] >= FMODE_WAIT_BIAS ||
+	  last_rd > used_cutoff)
+	bits |= 1 << RD_SHIFT;
+    } else if (last_rd > idle_cutoff) {
+      bits |= 1 << RD_SHIFT;
+    }
+
+    if (open_by_mode[WR_SHIFT] > 0) {
+      if (open_by_mode[WR_SHIFT] >= FMODE_WAIT_BIAS ||
+	  last_wr > used_cutoff)
+	bits |= 1 << WR_SHIFT;
+    } else if (last_wr > idle_cutoff) {
+      bits |= 1 << WR_SHIFT;
+    }
+
+    /* check lazyio only when read/write is wanted */
+    if ((bits & (CEPH_FILE_MODE_RDWR << 1)) &&
+	open_by_mode[LAZY_SHIFT] > 0)
+      bits |= 1 << LAZY_SHIFT;
+
+    return bits ? ceph_caps_for_mode(bits >> 1) : 0;
+  }
 }
 
 int Inode::caps_wanted()
 {
-  int want = caps_file_wanted() | caps_used();
-  if (want & CEPH_CAP_FILE_BUFFER)
+  int want = caps_file_wanted();
+  int used = caps_used();
+  if (is_file() && (used & CEPH_CAP_FILE_BUFFER))
     want |= CEPH_CAP_FILE_EXCL;
   return want;
 }
@@ -330,7 +441,10 @@ int Inode::caps_mds_wanted()
 {
   int want = 0;
   for (const auto &pair : caps) {
-    want |= pair.second.wanted;
+    if (auth_cap == &pair.second)
+      want |= pair.second.wanted;
+    else
+      want |= pair.second.wanted & ~CEPH_CAP_ANY_WR;
   }
   return want;
 }
@@ -530,12 +644,14 @@ void Inode::dump(Formatter *f) const
   }
 
   // open
-  if (!open_by_mode.empty()) {
+  if (!is_opened()) {
     f->open_array_section("open_by_mode");
-    for (map<int,int>::const_iterator p = open_by_mode.begin(); p != open_by_mode.end(); ++p) {
+    for (int i = 0; i < CEPH_FILE_MODE_BITS; i++) {
+      if (!open_by_mode[i])
+	continue;
       f->open_object_section("ref");
-      f->dump_int("mode", p->first);
-      f->dump_int("refs", p->second);
+      f->dump_int("mode", (1 << i) >> 1);
+      f->dump_int("refs", open_by_mode[i]);
       f->close_section();
     }
     f->close_section();
@@ -708,14 +824,14 @@ int Inode::set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv)
   // check vs. currently open files on this inode
   switch (type) {
   case CEPH_DELEGATION_RD:
-    if (open_count_for_write()) {
+    if (is_opened_for_write()) {
       lsubdout(client->cct, client, 10) << __func__ <<
 	    ": open for write" << dendl;
       return -EAGAIN;
     }
     break;
   case CEPH_DELEGATION_WR:
-    if (open_count() > 1) {
+    if (is_opened()) {
       lsubdout(client->cct, client, 10) << __func__ << ": open" << dendl;
       return -EAGAIN;
     }

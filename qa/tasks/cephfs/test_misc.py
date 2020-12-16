@@ -1,7 +1,10 @@
 
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
+from textwrap import dedent
+import os
 import errno
 import time
 import json
@@ -197,6 +200,185 @@ class TestMisc(CephFSTestCase):
         assert type(ino) is int
         info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
         assert info['path'] == "/foo"
+
+    def test_open_file_timeout(self):
+        """
+        Check if client clears wanted caps after open file has been idle
+        for 'client_caps_wanted_delay_max' seconds.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client")
+
+        self.mount_a.umount_wait()
+
+        timeout = 30
+        self.config_set('client', 'client caps wanted delay max', timeout)
+
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+        mount_a_client_id = self.mount_a.get_global_id()
+
+        filename = "testfile"
+        path = os.path.join(self.mount_a.mountpoint, filename)
+        pyscript = dedent("""
+            import os
+            import sys
+
+            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0O666)
+            os.write(fd, b'content')
+
+            print("write done")
+            sys.stdout.flush()
+
+            sys.stdin.readline()
+
+            os.write(fd, b'content')
+            """).format(path=path)
+
+        rproc = self.mount_a.client_remote.run(
+                    args=['sudo', 'python3', '-c', pyscript],
+                    wait=False, stdin=run.PIPE, stdout=run.PIPE)
+
+        rproc.stdout.readline()
+
+        ino = self.mount_a.path_to_ino(filename)
+
+        info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+        caps = list(filter(lambda c: c['client_id'] == mount_a_client_id, info['client_caps']))[0]
+        log.info("caps = {}".format(caps))
+        self.assertNotEqual(caps['wanted'], '-')
+
+        time.sleep(timeout * 2)
+
+        info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+        caps = list(filter(lambda c: c['client_id'] == mount_a_client_id, info['client_caps']))[0]
+        log.info("caps = {}".format(caps))
+        self.assertEqual(caps['wanted'], '-')
+
+        rproc.stdin.writelines(['continue\n'])
+        rproc.stdin.flush()
+
+        rproc.wait()
+        self.assertEqual(rproc.exitstatus, 0)
+
+class TestAsyncDirOps(CephFSTestCase):
+    CLIENTS_REQUIRED = 2
+
+    def _setup(self):
+        # enable async dirops on mount_a. mount_b is for checking the results.
+        if isinstance(self.mount_a, FuseMount):
+            self.mount_a.umount_wait()
+            self.mount_a.mount(mount_options=['--client_async_dirop_mask=3'])
+            self.mount_a.wait_until_mounted()
+            # prevent lookup request from changing target inode's lock state.
+            self.mount_b.umount_wait()
+            self.mount_b.mount(mount_options=['--client_debug_stat_cap_mask=0'])
+            self.mount_b.wait_until_mounted()
+        else:
+            self.mount_a.umount_wait()
+            try:
+                self.mount_a.mount(mount_options=['nowsync'])
+            except CommandFailedError:
+                self.mount_a.kill_cleanup()
+                self.skipTest("Async dirop is not implemented in current kernel")
+
+    def test_create(self):
+        self._setup()
+
+        self.mount_a.run_shell(['mkdir', 'testdir'])
+        self.mount_a.run_shell(['touch', 'testdir/file1'])
+
+        self.fs.mds_asok(["config", "set", "mds_early_reply", "0"])
+        self.fs.mds_asok(["config", "set", "mds_log_pause", "1"])
+
+        proc_a = self.mount_a.run_shell(['touch', 'testdir/file2'], wait=False)
+        self.wait_until_true(lambda: proc_a.finished, timeout=10)
+
+        proc_b = self.mount_b.stat('testdir/file2', wait=False)
+        time.sleep(10)
+        self.assertFalse(proc_b.finished)
+
+        self.fs.mds_asok(["config", "set", "mds_log_pause", "0"])
+
+        self.wait_until_true(lambda: proc_b.finished, timeout=30)
+        self.assertEqual(proc_b.exitstatus, 0)
+
+    def test_unlink(self):
+        self._setup()
+
+        self.mount_a.run_shell(['mkdir', 'testdir'])
+        self.mount_a.run_shell(['touch', 'testdir/file1'])
+        self.mount_a.run_shell(['touch', 'testdir/file2'])
+
+        self.mount_a.run_shell(['rm', '-f', 'testdir/file1'])
+
+        self.fs.mds_asok(["config", "set", "mds_early_reply", "0"])
+        self.fs.mds_asok(["config", "set", "mds_log_pause", "1"])
+
+        proc_a = self.mount_a.run_shell(['rm', '-f', 'testdir/file2'], wait=False)
+        self.wait_until_true(lambda: proc_a.finished, timeout=10)
+
+        proc_b = self.mount_b.stat('testdir/file2', wait=False)
+        time.sleep(10)
+        self.assertFalse(proc_b.finished)
+        self.fs.mds_asok(["config", "set", "mds_log_pause", "0"])
+
+        self.wait_until_true(lambda: proc_b.finished, timeout=30)
+        self.assertEqual(proc_b.exitstatus, errno.ENOENT)
+
+    def test_clientreplay(self):
+        self._setup()
+
+        self.mount_a.run_shell(['mkdir', 'testdir1'])
+        self.mount_a.run_shell(['touch', 'testdir1/file1'])
+
+        self.mount_a.run_shell(['mkdir', 'testdir2'])
+        self.mount_a.run_shell(['touch', 'testdir2/file1'])
+        self.mount_a.run_shell(['touch', 'testdir2/file2'])
+        self.mount_a.run_shell(['rm', '-f', 'testdir2/file1'])
+
+        self.fs.mds_asok(["config", "set", "mds_early_reply", "0"])
+        self.fs.mds_asok(["config", "set", "mds_log_pause", "1"])
+
+        proc_a = self.mount_a.run_shell(['touch', 'testdir1/file2'], wait=False)
+        proc_b = self.mount_a.run_shell(['rm', '-f', 'testdir2/file2'], wait=False)
+        self.wait_until_true(lambda: proc_a.finished and proc_b.finished, timeout=10)
+
+        proc_c = self.mount_b.stat('testdir1/file2', wait=False)
+        proc_d = self.mount_b.stat('testdir2/file2', wait=False)
+        time.sleep(10)
+        self.assertFalse(proc_c.finished)
+        self.assertFalse(proc_d.finished)
+
+        self.fs.mds_restart()
+
+        self.wait_until_true(lambda: proc_c.finished and proc_d.finished, timeout=30)
+        self.assertEqual(proc_c.exitstatus, 0)
+        self.assertEqual(proc_d.exitstatus, errno.ENOENT)
+
+    def test_evict_loner(self):
+        self._setup()
+
+        mount_a_gid = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'config', '%s' % mount_a_gid, 'timeout', '300'])
+
+        self.mount_a.run_shell(['mkdir', 'testdir'])
+        self.mount_a.run_shell(['touch', 'testdir/file1'])
+
+        self.mount_a.kill();
+        self.mount_a.kill_cleanup();
+
+        proc_b = self.mount_b.stat('testdir/file1', wait=False)
+        proc_c = self.mount_b.stat('testdir/file2', wait=False)
+        time.sleep(30)
+        self.assertFalse(proc_b.finished)
+        self.assertFalse(proc_c.finished)
+
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_gid])
+
+        self.wait_until_true(lambda: proc_b.finished and proc_c.finished, timeout=30)
+        self.assertEqual(proc_b.exitstatus, 0)
+        self.assertEqual(proc_c.exitstatus, errno.ENOENT)
 
 
 class TestCacheDrop(CephFSTestCase):

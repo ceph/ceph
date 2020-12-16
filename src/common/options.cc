@@ -8670,9 +8670,17 @@ std::vector<Option> get_mds_client_options() {
     .set_default(30)
     .set_description(""),
 
-    Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_DEV)
+    Option("client_caps_wanted_delay_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(5)
-    .set_description(""),
+    .set_min_max(1, 30)
+    .set_description("delay to clear wanted caps that are not used by any open file"),
+
+    Option("client_caps_wanted_delay_max", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(60)
+    .set_min(30)
+    .set_description("delay to clear wanted caps that are only used by idle open file"),
 
     Option("client_quota_df", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -8704,6 +8712,11 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_debug_getattr_caps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .set_description(""),
+
+    Option("client_debug_stat_cap_mask", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(-1)
     .set_description(""),
 
     Option("client_debug_force_sync_read", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -8832,6 +8845,11 @@ std::vector<Option> get_mds_client_options() {
     Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
+
+    Option("client_async_dirop_mask", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_default(255)
+    .set_description("bit mask of enabled types of async dir operations. 1: unlink; 2: create"),
 
     Option("client_fs", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_STARTUP)
