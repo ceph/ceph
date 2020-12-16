@@ -72,6 +72,9 @@
 #include <utility>
 
 #include <errno.h>
+#ifdef HAVE_JAEGER
+#include "common/tracer.h"
+#endif
 
 #include <common/CDC.h>
 
@@ -1714,7 +1717,12 @@ void PrimaryLogPG::do_request(
     op->pg_trace.init("pg op", &trace_endpoint, &op->osd_trace);
     op->pg_trace.event("do request");
   }
-  // make sure we have a new enough map
+#ifdef HAVE_JAEGER
+  if (op->osd_parent_span) {
+    auto do_req_span = jaeger_tracing::child_span(__func__, op->osd_parent_span);
+  }
+#endif
+// make sure we have a new enough map
   auto p = waiting_for_map.find(op->get_source());
   if (p != waiting_for_map.end()) {
     // preserve ordering
@@ -1744,7 +1752,6 @@ void PrimaryLogPG::do_request(
     auto session = ceph::ref_cast<Session>(m->get_connection()->get_priv());
     if (!session)
       return;  // drop it.
-
     if (msg_type == CEPH_MSG_OSD_OP) {
       if (session->check_backoff(cct, info.pgid,
 				 info.pgid.pgid.get_hobj_start(), m)) {
@@ -2073,6 +2080,11 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
 
+#ifdef HAVE_JAEGER
+  if (op->osd_parent_span) {
+    auto do_op_span = jaeger_tracing::child_span(__func__, op->osd_parent_span);
+  }
+#endif
   // missing object?
   if (is_unreadable_object(head)) {
     if (!is_primary()) {
@@ -3940,6 +3952,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     tracepoint(osd, prepare_tx_enter, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
+#ifdef HAVE_JAEGER
+  if (ctx->op->osd_parent_span) {
+    auto execute_span = jaeger_tracing::child_span(__func__, ctx->op->osd_parent_span);
+  }
+#endif
 
   int result = prepare_transaction(ctx);
 
@@ -5706,6 +5723,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   PGTransaction* t = ctx->op_t.get();
 
   dout(10) << "do_osd_op " << soid << " " << ops << dendl;
+#ifdef HAVE_JAEGER
+  if (ctx->op->osd_parent_span) {
+    auto do_osd_op_span = jaeger_tracing::child_span(__func__, ctx->op->osd_parent_span);
+  }
+#endif
 
   ctx->current_osd_subop_num = 0;
   for (auto p = ops.begin(); p != ops.end(); ++p, ctx->current_osd_subop_num++, ctx->processed_subop_count++) {
@@ -8595,6 +8617,11 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
 	   << dendl;
   utime_t now = ceph_clock_now();
 
+#ifdef HAVE_JAEGER
+  if (ctx->op->osd_parent_span) {
+    auto finish_ctx_span = jaeger_tracing::child_span(__func__, ctx->op->osd_parent_span);
+  }
+#endif
   // Drop the reference if deduped chunk is modified
   if (ctx->new_obs.oi.is_dirty() &&
     (ctx->obs->oi.has_manifest() && ctx->obs->oi.manifest.is_chunked()) &&
@@ -10847,6 +10874,11 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
+  #ifdef HAVE_JAEGER
+  if (repop->op->osd_parent_span) {
+    auto eval_span = jaeger_tracing::child_span(__func__, repop->op->osd_parent_span);
+  }
+ #endif
   dout(10) << "eval_repop " << *repop
     << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)") << dendl;
 
@@ -10901,6 +10933,11 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   dout(7) << "issue_repop rep_tid " << repop->rep_tid
           << " o " << soid
           << dendl;
+#ifdef HAVE_JAEGER
+  if (ctx->op->osd_parent_span) {
+    auto issue_repop_span = jaeger_tracing::child_span(__func__, ctx->op->osd_parent_span);
+  }
+#endif
 
   repop->v = ctx->at_version;
 
