@@ -1,8 +1,8 @@
-=======================
- RBD Persistent Cache
-=======================
+===============================
+ RBD Persistent Read-only Cache
+===============================
 
-.. index:: Ceph Block Device; Persistent Cache
+.. index:: Ceph Block Device; Persistent Read-only Cache
 
 Shared, Read-only Parent Image Cache
 ====================================
