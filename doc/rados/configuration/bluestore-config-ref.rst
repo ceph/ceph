@@ -360,18 +360,18 @@ set with::
   ceph osd pool set <pool-name> compression_min_blob_size <size>
   ceph osd pool set <pool-name> compression_max_blob_size <size>
 
-``bluestore compression algorithm``
+``bluestore_compression_algorithm``
 
 :Description: The default compressor to use (if any) if the per-pool property
-              ``compression_algorithm`` is not set. Note that zstd is *not*
-              recommended for bluestore due to high CPU overhead when
+              ``compression_algorithm`` is not set. Note that ``zstd`` is *not*
+              recommended for BlueStore due to high CPU overhead when
               compressing small amounts of data.
 :Type: String
 :Required: No
 :Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
 :Default: ``snappy``
 
-``bluestore compression mode``
+``bluestore_compression_mode``
 
 :Description: The default policy for using compression if the per-pool property
               ``compression_mode`` is not set. ``none`` means never use
@@ -386,7 +386,7 @@ set with::
 :Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
 :Default: ``none``
 
-``bluestore compression required ratio``
+``bluestore_compression_required_ratio``
 
 :Description: The ratio of the size of the data chunk after
               compression relative to the original size must be at
@@ -397,7 +397,7 @@ set with::
 :Required: No
 :Default: .875
 
-``bluestore compression min blob size``
+``bluestore_compression_min_blob_size``
 
 :Description: Chunks smaller than this are never compressed.
               The per-pool property ``compression_min_blob_size`` overrides
@@ -407,7 +407,7 @@ set with::
 :Required: No
 :Default: 0
 
-``bluestore compression min blob size hdd``
+``bluestore_compression_min_blob_size_hdd``
 
 :Description: Default value of ``bluestore compression min blob size``
               for rotational media.
@@ -416,7 +416,7 @@ set with::
 :Required: No
 :Default: 128K
 
-``bluestore compression min blob size ssd``
+``bluestore_compression_min_blob_size_ssd``
 
 :Description: Default value of ``bluestore compression min blob size``
               for non-rotational (solid state) media.
@@ -425,10 +425,10 @@ set with::
 :Required: No
 :Default: 8K
 
-``bluestore compression max blob size``
+``bluestore_compression_max_blob_size``
 
-:Description: Chunks larger than this are broken into smaller blobs sizing
-              ``bluestore compression max blob size`` before being compressed.
+:Description: Chunks larger than this value are broken into smaller blobs of at most
+              ``bluestore_compression_max_blob_size`` bytes before being compressed.
               The per-pool property ``compression_max_blob_size`` overrides
               this setting.
 
@@ -436,7 +436,7 @@ set with::
 :Required: No
 :Default: 0
 
-``bluestore compression max blob size hdd``
+``bluestore_compression_max_blob_size_hdd``
 
 :Description: Default value of ``bluestore compression max blob size``
               for rotational media.
@@ -445,10 +445,10 @@ set with::
 :Required: No
 :Default: 512K
 
-``bluestore compression max blob size ssd``
+``bluestore_compression_max_blob_size_ssd``
 
 :Description: Default value of ``bluestore compression max blob size``
-              for non-rotational (solid state) media.
+              for non-rotational (SSD, NVMe) media.
 
 :Type: Unsigned Integer
 :Required: No
@@ -457,8 +457,8 @@ set with::
 SPDK Usage
 ==================
 
-If you want to use SPDK driver for NVME SSD, you need to ready your system.
-Please refer to `SPDK document`__ for more details.
+If you want to use the SPDK driver for NVMe devices, you must prepare your system.
+Refer to `SPDK document`__ for more details.
 
 .. __: http://www.spdk.io/doc/getting_started.html#getting_started_examples
 
@@ -467,10 +467,10 @@ script as root::
 
   $ sudo src/spdk/scripts/setup.sh
 
-Then you need to specify NVMe device's device selector here with "spdk:" prefix for
-``bluestore_block_path``.
+You will need to specify the subject NVMe device's device selector with
+the "spdk:" prefix for ``bluestore_block_path``.
 
-For example, users can find the device selector of an Intel PCIe SSD with::
+For example, you can find the device selector of an Intel PCIe SSD with::
 
   $ lspci -mm -n -D -d 8086:0953
 
@@ -478,23 +478,23 @@ The device selector always has the form of ``DDDD:BB:DD.FF`` or ``DDDD.BB.DD.FF`
 
 and then set::
 
-  bluestore block path = spdk:0000:01:00.0
+  bluestore_block_path = spdk:0000:01:00.0
 
 Where ``0000:01:00.0`` is the device selector found in the output of ``lspci``
 command above.
 
-If you want to run multiple SPDK instances per node, you must specify the
-amount of dpdk memory size in MB each instance will use, to make sure each
+To run multiple SPDK instances per node, you must specify the
+amount of dpdk memory in MB that each instance will use, to make sure each
 instance uses its own dpdk memory
 
-In most cases, we only need one device to serve as data, db, db wal purposes.
-We need to make sure configurations below to make sure all IOs issued under
-SPDK.::
+In most cases, a single device can be used for data, DB, and WAL.  We describe
+this strategy as *colocating* these components. Be sure to enter the below
+settings to ensure that all IOs are issued through SPDK.::
 
   bluestore_block_db_path = ""
   bluestore_block_db_size = 0
   bluestore_block_wal_path = ""
   bluestore_block_wal_size = 0
 
-Otherwise, the current implementation will setup symbol file to kernel
-file system location and uses kernel driver to issue DB/WAL IO.
+Otherwise, the current implementation will populate the SPDK map files with
+kernel file system symbols and will use the kernel driver to issue DB/WAL IO.

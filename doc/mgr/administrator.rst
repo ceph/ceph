@@ -119,7 +119,7 @@ this to your ``ceph.conf``:
 ::
 
     [mon]
-        mgr initial modules = dashboard balancer
+        mgr_initial_modules = dashboard balancer
 
 Calling module commands
 -----------------------
@@ -134,26 +134,26 @@ the module.::
 Configuration
 -------------
 
-``mgr module path``
+``mgr_module_path``
 
 :Description: Path to load modules from
 :Type: String
 :Default: ``"<library dir>/mgr"``
 
-``mgr data``
+``mgr_data``
 
 :Description: Path to load daemon data (such as keyring)
 :Type: String
 :Default: ``"/var/lib/ceph/mgr/$cluster-$id"``
 
-``mgr tick period``
+``mgr_tick_period``
 
 :Description: How many seconds between mgr beacons to monitors, and other
               periodic checks.
 :Type: Integer
 :Default: ``5``
 
-``mon mgr beacon grace``
+``mon_mgr_beacon_grace``
 
 :Description: How long after last beacon should a mgr be considered failed
 :Type: Integer
