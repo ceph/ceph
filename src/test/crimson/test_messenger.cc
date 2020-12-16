@@ -261,8 +261,11 @@ static seastar::future<> test_echo(unsigned rounds,
   }).then([server2] {
     logger().info("server2 shutdown...");
     return server2->shutdown();
-  }).then([server1, server2, client1, client2] {
+  }).then([] {
     logger().info("test_echo() done!\n");
+  }).handle_exception([server1, server2, client1, client2] (auto eptr) {
+    logger().error("test_echo() failed: got exception {}", eptr);
+    throw;
   });
 }
 
@@ -366,8 +369,11 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
     logger().info("server shutdown...");
     server->msgr->stop();
     return server->msgr->shutdown();
-  }).then([server, client] {
+  }).then([] {
     logger().info("test_concurrent_dispatch() done!\n");
+  }).handle_exception([server, client] (auto eptr) {
+    logger().error("test_concurrent_dispatch() failed: got exception {}", eptr);
+    throw;
   });
 }
 
@@ -480,8 +486,11 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
   }).then([server] {
     logger().info("server shutdown...");
     return server->shutdown();
-  }).then([server, client] {
+  }).then([] {
     logger().info("test_preemptive_shutdown() done!\n");
+  }).handle_exception([server, client] (auto eptr) {
+    logger().error("test_preemptive_shutdown() failed: got exception {}", eptr);
+    throw;
   });
 }
 
@@ -3471,7 +3480,7 @@ test_v2_protocol(entity_addr_t test_addr,
         return peer->wait().then([peer = std::move(peer)] {});
       });
     }).handle_exception([] (auto eptr) {
-      logger().error("FailoverTestPeer: got exception {}", eptr);
+      logger().error("FailoverTestPeer failed: got exception {}", eptr);
       throw;
     });
   }
@@ -3567,7 +3576,7 @@ test_v2_protocol(entity_addr_t test_addr,
       return test->shutdown().then([test] {});
     });
   }).handle_exception([] (auto eptr) {
-    logger().error("FailoverTest: got exception {}", eptr);
+    logger().error("FailoverTest failed: got exception {}", eptr);
     throw;
   });
 }
@@ -3628,7 +3637,7 @@ int main(int argc, char** argv)
       }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
         return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
       }).then([] {
-        std::cout << "All tests succeeded" << std::endl;
+        logger().info("All tests succeeded");
         // Seastar has bugs to have events undispatched during shutdown,
         // which will result in memory leak and thus fail LeakSanitizer.
         return seastar::sleep(100ms);
@@ -3636,8 +3645,8 @@ int main(int argc, char** argv)
     }).then([] {
       return crimson::common::sharded_conf().stop();
     }).handle_exception([] (auto eptr) {
-      std::cout << "Test failure" << std::endl;
-      return seastar::make_exception_future<>(eptr);
+      logger().error("Test failed: got exception {}", eptr);
+      throw;
     });
   });
 }
