@@ -48,7 +48,7 @@ class item_iterator_t {
   // container type system
   using key_get_type = const ns_oid_view_t&;
   static constexpr auto CONTAINER_TYPE = ContainerType::ITERATIVE;
-  size_t index() const { return _index; }
+  index_t index() const { return _index; }
   key_get_type get_key() const {
     if (!key.has_value()) {
       key = ns_oid_view_t(item_range.p_end);
@@ -123,7 +123,7 @@ class item_iterator_t {
   mutable memory_range_t item_range;
   mutable node_offset_t back_offset;
   mutable std::optional<ns_oid_view_t> key;
-  mutable size_t _index = 0u;
+  mutable index_t _index = 0u;
 };
 
 template <node_type_t NODE_TYPE>
@@ -132,7 +132,7 @@ class item_iterator_t<NODE_TYPE>::Appender {
  public:
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {}
-  bool append(const item_iterator_t<NODE_TYPE>& src, size_t& items);
+  bool append(const item_iterator_t<NODE_TYPE>& src, index_t& items);
   char* wrap() { return p_append; }
   std::tuple<NodeExtentMutable*, char*> open_nxt(const key_get_type&);
   std::tuple<NodeExtentMutable*, char*> open_nxt(const full_key_t<KT>&);

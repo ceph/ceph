@@ -31,7 +31,7 @@ void node_header_t::update_is_level_tail(
 
 template <typename SlotType>
 void F013_T::update_size_at(
-    NodeExtentMutable& mut, const me_t& node, size_t index, int change) {
+    NodeExtentMutable& mut, const me_t& node, index_t index, int change) {
   assert(index <= node.num_keys);
   for (const auto* p_slot = &node.slots[index];
        p_slot < &node.slots[node.num_keys];
@@ -61,7 +61,7 @@ template <typename SlotType>
 template <KeyT KT>
 void F013_T::insert_at(
     NodeExtentMutable& mut, const full_key_t<KT>& key,
-    const me_t& node, size_t index, node_offset_t size_right) {
+    const me_t& node, index_t index, node_offset_t size_right) {
   assert(index <= node.num_keys);
   update_size_at(mut, node, index, size_right);
   auto p_insert = const_cast<char*>(fields_start(node)) +
@@ -74,7 +74,7 @@ void F013_T::insert_at(
 }
 #define IA_TEMPLATE(ST, KT) template void F013_INST(ST)::      \
     insert_at<KT>(NodeExtentMutable&, const full_key_t<KT>&, \
-                  const F013_INST(ST)&, size_t, node_offset_t)
+                  const F013_INST(ST)&, index_t, node_offset_t)
 IA_TEMPLATE(slot_0_t, KeyT::VIEW);
 IA_TEMPLATE(slot_1_t, KeyT::VIEW);
 IA_TEMPLATE(slot_3_t, KeyT::VIEW);

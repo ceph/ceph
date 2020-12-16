@@ -28,7 +28,7 @@ const char* NODE_T::p_left_bound() const {
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-node_offset_t NODE_T::size_to_nxt_at(size_t index) const {
+node_offset_t NODE_T::size_to_nxt_at(index_t index) const {
   assert(index < keys());
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
@@ -42,7 +42,7 @@ node_offset_t NODE_T::size_to_nxt_at(size_t index) const {
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
-memory_range_t NODE_T::get_nxt_container(size_t index) const {
+memory_range_t NODE_T::get_nxt_container(index_t index) const {
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
     ceph_abort("N3 internal node doesn't have the right part");
   } else {
@@ -83,7 +83,7 @@ template <typename FieldType, node_type_t NODE_TYPE>
 template <KeyT KT>
 memory_range_t NODE_T::insert_prefix_at(
     NodeExtentMutable& mut, const node_extent_t& node, const full_key_t<KT>& key,
-    size_t index, node_offset_t size, const char* p_left_bound) {
+    index_t index, node_offset_t size, const char* p_left_bound) {
   if constexpr (FIELD_TYPE == field_type_t::N0 ||
                 FIELD_TYPE == field_type_t::N1) {
     assert(index <= node.keys());
@@ -106,7 +106,7 @@ memory_range_t NODE_T::insert_prefix_at(
 #define IPA_TEMPLATE(FT, NT, KT)                                         \
   template memory_range_t NODE_INST(FT, NT)::insert_prefix_at<KT>(       \
       NodeExtentMutable&, const node_extent_t&, const full_key_t<KT>&, \
-      size_t, node_offset_t, const char*)
+      index_t, node_offset_t, const char*)
 IPA_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::VIEW);
 IPA_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::VIEW);
 IPA_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::VIEW);
@@ -122,14 +122,14 @@ IPA_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::HOBJ);
 
 template <typename FieldType, node_type_t NODE_TYPE>
 void NODE_T::update_size_at(
-    NodeExtentMutable& mut, const node_extent_t& node, size_t index, int change) {
+    NodeExtentMutable& mut, const node_extent_t& node, index_t index, int change) {
   assert(index < node.keys());
   FieldType::update_size_at(mut, node.fields(), index, change);
 }
 
 template <typename FieldType, node_type_t NODE_TYPE>
 node_offset_t NODE_T::trim_until(
-    NodeExtentMutable& mut, const node_extent_t& node, size_t index) {
+    NodeExtentMutable& mut, const node_extent_t& node, index_t index) {
   assert(!node.is_level_tail());
   auto keys = node.keys();
   assert(index <= keys);
@@ -149,7 +149,7 @@ node_offset_t NODE_T::trim_until(
 template <typename FieldType, node_type_t NODE_TYPE>
 node_offset_t NODE_T::trim_at(
     NodeExtentMutable& mut, const node_extent_t& node,
-    size_t index, node_offset_t trimmed) {
+    index_t index, node_offset_t trimmed) {
   assert(!node.is_level_tail());
   assert(index < node.keys());
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
@@ -181,7 +181,7 @@ NODE_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF);
 
 template <typename FieldType, node_type_t NODE_TYPE>
 template <KeyT KT>
-void APPEND_T::append(const node_extent_t& src, size_t from, size_t items) {
+void APPEND_T::append(const node_extent_t& src, index_t from, index_t items) {
   assert(from <= src.keys());
   if (p_src == nullptr) {
     p_src = &src;

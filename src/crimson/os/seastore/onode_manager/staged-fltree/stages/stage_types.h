@@ -140,7 +140,7 @@ struct staged_position_t {
       return false;
     }
   }
-  size_t& index_by_stage(match_stage_t stage) {
+  index_t& index_by_stage(match_stage_t stage) {
     assert(stage <= STAGE);
     if (STAGE == stage) {
       return index;
@@ -183,7 +183,7 @@ struct staged_position_t {
     return {INDEX_END, nxt_t::end()};
   }
 
-  size_t index;
+  index_t index;
   nxt_t nxt;
 };
 template <match_stage_t STAGE>
@@ -210,7 +210,7 @@ struct staged_position_t<STAGE_BOTTOM> {
       return false;
     }
   }
-  size_t& index_by_stage(match_stage_t stage) {
+  index_t& index_by_stage(match_stage_t stage) {
     assert(stage == STAGE_BOTTOM);
     return index;
   }
@@ -244,7 +244,7 @@ struct staged_position_t<STAGE_BOTTOM> {
   static me_t begin() { return {0u}; }
   static me_t end() { return {INDEX_END}; }
 
-  size_t index;
+  index_t index;
 };
 template <>
 inline std::ostream& operator<<(std::ostream& os, const staged_position_t<STAGE_BOTTOM>& pos) {
@@ -350,7 +350,7 @@ struct staged_result_t {
   }
   template <typename T = me_t>
   static std::enable_if_t<STAGE != STAGE_BOTTOM, T> from_nxt(
-      size_t index, const staged_result_t<NODE_TYPE, STAGE - 1>& nxt_stage_result) {
+      index_t index, const staged_result_t<NODE_TYPE, STAGE - 1>& nxt_stage_result) {
     return {{index, nxt_stage_result.position},
             nxt_stage_result.p_value,
             nxt_stage_result.mstat};
