@@ -288,12 +288,36 @@ class string_view_masked_t {
     return (memcmp(view.data(), x.view.data(), size()) == 0);
   }
   bool operator!=(const string_view_masked_t& x) const { return !(*this == x); }
+  void encode(ceph::bufferlist& bl) const {
+    if (get_type() == Type::MIN) {
+      ceph::encode(string_key_view_t::MIN, bl);
+    } else if (get_type() == Type::MAX) {
+      ceph::encode(string_key_view_t::MAX, bl);
+    } else {
+      ceph::encode(size(), bl);
+      ceph::encode_nohead(view, bl);
+    }
+  }
   static auto min() { return string_view_masked_t{Type::MIN}; }
   static auto max() { return string_view_masked_t{Type::MAX}; }
+  static string_view_masked_t decode(
+      std::string& str_storage, ceph::bufferlist::const_iterator& delta) {
+    string_size_t size;
+    ceph::decode(size, delta);
+    if (size == string_key_view_t::MIN) {
+      return min();
+    } else if (size == string_key_view_t::MAX) {
+      return max();
+    } else {
+      ceph::decode_nohead(size, str_storage, delta);
+      return string_view_masked_t(str_storage);
+    }
+  }
 
  private:
   explicit string_view_masked_t(Type type)
       : type{type} {}
+
   Type type;
   std::string_view view;
 };
@@ -438,10 +462,20 @@ class key_hobj_t {
     return ghobj.hobj.get_hash();
   }
   std::string_view nspace() const {
+    // TODO(cross-node string dedup)
     return ghobj.hobj.nspace;
   }
+  string_view_masked_t nspace_masked() const {
+    // TODO(cross-node string dedup)
+    return string_view_masked_t{nspace()};
+  }
   std::string_view oid() const {
+    // TODO(cross-node string dedup)
     return ghobj.hobj.oid.name;
+  }
+  string_view_masked_t oid_masked() const {
+    // TODO(cross-node string dedup)
+    return string_view_masked_t{oid()};
   }
   ns_oid_view_t::Type dedup_type() const {
     return _dedup_type;
@@ -469,6 +503,29 @@ class key_hobj_t {
        << string_view_masked_t{oid()} << "; "
        << snap() << "," << gen() << ")";
     return os;
+  }
+
+  static key_hobj_t decode(ceph::bufferlist::const_iterator& delta) {
+    shard_t shard;
+    ceph::decode(shard, delta);
+    pool_t pool;
+    ceph::decode(pool, delta);
+    crush_hash_t crush;
+    ceph::decode(crush, delta);
+    std::string nspace;
+    auto nspace_masked = string_view_masked_t::decode(nspace, delta);
+    // TODO(cross-node string dedup)
+    assert(nspace_masked.get_type() == string_view_masked_t::Type::STR);
+    std::string oid;
+    auto oid_masked = string_view_masked_t::decode(oid, delta);
+    // TODO(cross-node string dedup)
+    assert(oid_masked.get_type() == string_view_masked_t::Type::STR);
+    snap_t snap;
+    ceph::decode(snap, delta);
+    gen_t gen;
+    ceph::decode(gen, delta);
+    return key_hobj_t(ghobject_t(
+        shard_id_t(shard), pool, crush, nspace, oid, snap, gen));
   }
 
  private:
@@ -500,10 +557,20 @@ class key_view_t {
     return crush_packed().crush;
   }
   std::string_view nspace() const {
+    // TODO(cross-node string dedup)
     return ns_oid_view().nspace.to_string_view();
   }
+  string_view_masked_t nspace_masked() const {
+    // TODO(cross-node string dedup)
+    return string_view_masked_t{ns_oid_view().nspace};
+  }
   std::string_view oid() const {
+    // TODO(cross-node string dedup)
     return ns_oid_view().oid.to_string_view();
+  }
+  string_view_masked_t oid_masked() const {
+    // TODO(cross-node string dedup)
+    return string_view_masked_t{ns_oid_view().oid};
   }
   ns_oid_view_t::Type dedup_type() const {
     return ns_oid_view().type();
@@ -563,15 +630,9 @@ class key_view_t {
   }
 
   ghobject_t to_ghobj() const {
-    ghobject_t ghobj;
-    ghobj.shard_id.id = shard();
-    ghobj.hobj.pool = pool();
-    ghobj.hobj.set_hash(crush());
-    ghobj.hobj.nspace = nspace();
-    ghobj.hobj.oid.name = oid();
-    ghobj.hobj.snap = snap();
-    ghobj.generation = gen();
-    return ghobj;
+    return ghobject_t(
+        shard_id_t(shard()), pool(), crush(),
+        std::string(nspace()), std::string(oid()), snap(), gen());
   }
 
   void replace(const crush_t& key) { p_crush = &key; }
@@ -627,6 +688,17 @@ class key_view_t {
   std::optional<ns_oid_view_t> p_ns_oid;
   const snap_gen_t* p_snap_gen = nullptr;
 };
+
+template <KeyT KT>
+void encode_key(const full_key_t<KT>& key, ceph::bufferlist& bl) {
+  ceph::encode(key.shard(), bl);
+  ceph::encode(key.pool(), bl);
+  ceph::encode(key.crush(), bl);
+  key.nspace_masked().encode(bl);
+  key.oid_masked().encode(bl);
+  ceph::encode(key.snap(), bl);
+  ceph::encode(key.gen(), bl);
+}
 
 inline MatchKindCMP compare_to(std::string_view l, std::string_view r) {
   return toMatchKindCMP(l, r);

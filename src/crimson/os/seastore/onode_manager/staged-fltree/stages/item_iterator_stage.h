@@ -28,17 +28,20 @@ class NodeExtentMutable;
  * #   # next-stage | ns-oid  | back_  #   #
  * #   #  contaner  | strings | offset #   #
  * #...#   range    |         |        #...#
- * ^   ^                           |
- * |   |                           |
- * |   +---------------------------+
- * + p_items_start
+ * ^   ^                           |       ^
+ * |   |                           |       |
+ * |   +---------------------------+       |
+ * + p_items_start             p_items_end +
  */
 template <node_type_t NODE_TYPE>
 class item_iterator_t {
   using value_t = value_type_t<NODE_TYPE>;
  public:
   item_iterator_t(const memory_range_t& range)
-    : p_items_start(range.p_start) { next_item_range(range.p_end); }
+      : p_items_start(range.p_start), p_items_end(range.p_end) {
+    assert(p_items_start < p_items_end);
+    next_item_range(p_items_end);
+  }
 
   const char* p_start() const { return item_range.p_start; }
   const char* p_end() const { return item_range.p_end + sizeof(node_offset_t); }
@@ -83,6 +86,35 @@ class item_iterator_t {
     ++_index;
     return *this;
   }
+  void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
+    int start_offset = p_items_start - p_node_start;
+    int end_offset = p_items_end - p_node_start;
+    assert(start_offset > 0 && start_offset < NODE_BLOCK_SIZE);
+    assert(end_offset > 0 && end_offset <= NODE_BLOCK_SIZE);
+    ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
+    ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
+    ceph::encode(_index, encoded);
+  }
+
+  static item_iterator_t decode(const char* p_node_start,
+                                ceph::bufferlist::const_iterator& delta) {
+    node_offset_t start_offset;
+    ceph::decode(start_offset, delta);
+    node_offset_t end_offset;
+    ceph::decode(end_offset, delta);
+    assert(start_offset < end_offset);
+    assert(end_offset <= NODE_BLOCK_SIZE);
+    index_t index;
+    ceph::decode(index, delta);
+
+    item_iterator_t ret({p_node_start + start_offset,
+                         p_node_start + end_offset});
+    while (index > 0) {
+      ++ret;
+      --index;
+    }
+    return ret;
+  }
 
   static node_offset_t header_size() { return 0u; }
 
@@ -120,6 +152,7 @@ class item_iterator_t {
   }
 
   const char* p_items_start;
+  const char* p_items_end;
   mutable memory_range_t item_range;
   mutable node_offset_t back_offset;
   mutable std::optional<ns_oid_view_t> key;

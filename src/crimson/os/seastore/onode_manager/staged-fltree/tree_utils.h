@@ -50,6 +50,7 @@ class Onodes {
     ceph_assert(size >= sizeof(onode_t) + sizeof(uint32_t));
     uint32_t target = size * 137;
     auto p_mem = (char*)std::malloc(size);
+    std::memset(p_mem, 0, size);
     auto p_onode = (onode_t*)p_mem;
     tracked_onodes.push_back(p_onode);
     p_onode->size = size;

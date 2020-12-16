@@ -25,6 +25,10 @@ extent_len_t NodeExtentMutable::get_length() const {
   return extent.get_length();
 }
 
+laddr_t NodeExtentMutable::get_laddr() const {
+  return extent.get_laddr();
+}
+
 const char* NodeExtentMutable::buf_upper_bound() const {
   return get_read() + get_length();
 }

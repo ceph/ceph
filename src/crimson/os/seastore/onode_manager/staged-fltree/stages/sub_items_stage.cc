@@ -24,9 +24,12 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
   mut.copy_in_absolute(p_insert, item);
   return &reinterpret_cast<internal_sub_item_t*>(p_insert)->value;
 }
-template const laddr_packed_t* internal_sub_items_t::insert_at<KeyT::VIEW>(
-    NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KeyT::VIEW>&,
-    const laddr_packed_t&, index_t, node_offset_t, const char*);
+#define IA_TEMPLATE(KT)                                                     \
+  template const laddr_packed_t* internal_sub_items_t::insert_at<KT>(       \
+    NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KT>&, \
+    const laddr_packed_t&, index_t, node_offset_t, const char*)
+IA_TEMPLATE(KeyT::VIEW);
+IA_TEMPLATE(KeyT::HOBJ);
 
 node_offset_t internal_sub_items_t::trim_until(
     NodeExtentMutable&, internal_sub_items_t& items, index_t index) {
