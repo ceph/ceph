@@ -58,7 +58,7 @@ vc.disconnect()
     def _configure_guest_auth(self, volumeclient_mount, guest_mount,
                               guest_entity, mount_path,
                               namespace_prefix=None, readonly=False,
-                              tenant_id=None):
+                              tenant_id=None, allow_existing_id=False):
         """
         Set up auth credentials for the guest client to mount a volume.
 
@@ -83,14 +83,16 @@ vc.disconnect()
         key = self._volume_client_python(volumeclient_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             auth_result = vc.authorize(vp, "{guest_entity}", readonly={readonly},
-                                       tenant_id="{tenant_id}")
+                                       tenant_id="{tenant_id}",
+                                       allow_existing_id="{allow_existing_id}")
             print(auth_result['auth_key'])
         """.format(
             group_id=group_id,
             volume_id=volume_id,
             guest_entity=guest_entity,
             readonly=readonly,
-            tenant_id=tenant_id)), volume_prefix, namespace_prefix
+            tenant_id=tenant_id,
+            allow_existing_id=allow_existing_id)), volume_prefix, namespace_prefix
         )
 
         # CephFSVolumeClient's authorize() does not return the secret
@@ -858,6 +860,209 @@ vc.disconnect()
         )))
         self.assertNotIn(vol_metadata_filename, self.mounts[0].ls("volumes"))
 
+    def test_authorize_auth_id_not_created_by_ceph_volume_client(self):
+        """
+        If the auth_id already exists and is not created by
+        ceph_volume_client, it's not allowed to authorize
+        the auth-id by default.
+        """
+        volumeclient_mount = self.mounts[1]
+        volumeclient_mount.umount_wait()
+
+        # Configure volumeclient_mount as the handle for driving volumeclient.
+        self._configure_vc_auth(volumeclient_mount, "manila")
+
+        group_id = "groupid"
+        volume_id = "volumeid"
+
+        # Create auth_id
+        out = self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "get-or-create", "client.guest1",
+            "mds", "allow *",
+            "osd", "allow rw",
+            "mon", "allow *"
+        )
+
+        auth_id = "guest1"
+        guestclient_1 = {
+            "auth_id": auth_id,
+            "tenant_id": "tenant1",
+        }
+
+        # Create a volume.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.create_volume(vp, 1024*1024*10)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )))
+
+        # Cannot authorize 'guestclient_1' to access the volume.
+        # It uses auth ID 'guest1', which already exists and not
+        # created by ceph_volume_client
+        with self.assertRaises(CommandFailedError):
+            self._volume_client_python(volumeclient_mount, dedent("""
+                vp = VolumePath("{group_id}", "{volume_id}")
+                vc.authorize(vp, "{auth_id}", tenant_id="{tenant_id}")
+            """.format(
+                group_id=group_id,
+                volume_id=volume_id,
+                auth_id=guestclient_1["auth_id"],
+                tenant_id=guestclient_1["tenant_id"]
+            )))
+
+        # Delete volume
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.delete_volume(vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )))
+
+    def test_authorize_allow_existing_id_option(self):
+        """
+        If the auth_id already exists and is not created by
+        ceph_volume_client, it's not allowed to authorize
+        the auth-id by default but is allowed with option
+        allow_existing_id.
+        """
+        volumeclient_mount = self.mounts[1]
+        volumeclient_mount.umount_wait()
+
+        # Configure volumeclient_mount as the handle for driving volumeclient.
+        self._configure_vc_auth(volumeclient_mount, "manila")
+
+        group_id = "groupid"
+        volume_id = "volumeid"
+
+        # Create auth_id
+        out = self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "get-or-create", "client.guest1",
+            "mds", "allow *",
+            "osd", "allow rw",
+            "mon", "allow *"
+        )
+
+        auth_id = "guest1"
+        guestclient_1 = {
+            "auth_id": auth_id,
+            "tenant_id": "tenant1",
+        }
+
+        # Create a volume.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.create_volume(vp, 1024*1024*10)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )))
+
+        # Cannot authorize 'guestclient_1' to access the volume
+        # by default, which already exists and not created by
+        # ceph_volume_client but is allowed with option 'allow_existing_id'.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.authorize(vp, "{auth_id}", tenant_id="{tenant_id}",
+                         allow_existing_id="{allow_existing_id}")
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            auth_id=guestclient_1["auth_id"],
+            tenant_id=guestclient_1["tenant_id"],
+            allow_existing_id=True
+        )))
+
+        # Delete volume
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.delete_volume(vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )))
+
+    def test_deauthorize_auth_id_after_out_of_band_update(self):
+        """
+        If the auth_id authorized by ceph_volume_client is updated
+        out of band, the auth_id should not be deleted after a
+        deauthorize. It should only remove caps associated it.
+        """
+        volumeclient_mount = self.mounts[1]
+        volumeclient_mount.umount_wait()
+
+        # Configure volumeclient_mount as the handle for driving volumeclient.
+        self._configure_vc_auth(volumeclient_mount, "manila")
+
+        group_id = "groupid"
+        volume_id = "volumeid"
+
+
+        auth_id = "guest1"
+        guestclient_1 = {
+            "auth_id": auth_id,
+            "tenant_id": "tenant1",
+        }
+
+        # Create a volume.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.create_volume(vp, 1024*1024*10)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )))
+
+        # Authorize 'guestclient_1' to access the volume.
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.authorize(vp, "{auth_id}", tenant_id="{tenant_id}")
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            auth_id=guestclient_1["auth_id"],
+            tenant_id=guestclient_1["tenant_id"]
+        )))
+
+        # Update caps for guestclient_1 out of band
+        out = self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "caps", "client.guest1",
+            "mds", "allow rw path=/volumes/groupid, allow rw path=/volumes/groupid/volumeid",
+            "osd", "allow rw pool=cephfs_data namespace=fsvolumens_volumeid",
+            "mon", "allow r",
+            "mgr", "allow *"
+        )
+
+        # Deauthorize guestclient_1
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.deauthorize(vp, "{guest_entity}")
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+            guest_entity=guestclient_1["auth_id"]
+        )))
+
+        # Validate the caps of guestclient_1 after deauthorize. It should not have deleted
+        # guestclient_1. The mgr and mds caps should be present which was updated out of band.
+        out = json.loads(self.fs.mon_manager.raw_cluster_cmd("auth", "get", "client.guest1", "--format=json-pretty"))
+
+        self.assertEqual("client.guest1", out[0]["entity"])
+        self.assertEqual("allow rw path=/volumes/groupid", out[0]["caps"]["mds"])
+        self.assertEqual("allow *", out[0]["caps"]["mgr"])
+        self.assertNotIn("osd", out[0]["caps"])
+
+        # Delete volume
+        self._volume_client_python(volumeclient_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.delete_volume(vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )))
+
     def test_recover_metadata(self):
         """
         That volume client can recover from partial auth updates using
@@ -1078,7 +1283,7 @@ vc.disconnect()
         guest_mount.umount_wait()
 
         # Set auth caps for the auth ID using the volumeclient
-        self._configure_guest_auth(vc_mount, guest_mount, guest_id, mount_path)
+        self._configure_guest_auth(vc_mount, guest_mount, guest_id, mount_path, allow_existing_id=True)
 
         # Mount the volume in the guest using the auth ID to assert that the
         # auth caps are valid

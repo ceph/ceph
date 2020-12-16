@@ -215,6 +215,7 @@ CEPHFSVOLUMECLIENT_VERSION_HISTORY = """
     * 2 - Added get_object, put_object, delete_object methods to CephFSVolumeClient
     * 3 - Allow volumes to be created without RADOS namespace isolation
     * 4 - Added get_object_and_version, put_object_versioned method to CephFSVolumeClient
+    * 5 - Disallow authorize API for users not created by CephFSVolumeClient
 """
 
 
@@ -238,7 +239,7 @@ class CephFSVolumeClient(object):
     """
 
     # Current version
-    version = 4
+    version = 5
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
@@ -355,7 +356,7 @@ class CephFSVolumeClient(object):
                 continue
 
             (group_id, volume_id) = volume.split('/')
-            group_id = group_id if group_id is not 'None' else None
+            group_id = group_id if group_id != 'None' else None
             volume_path = VolumePath(group_id, volume_id)
             access_level = volume_data['access_level']
 
@@ -378,8 +379,19 @@ class CephFSVolumeClient(object):
                 if vol_meta['auths'][auth_id] == want_auth:
                     continue
 
-                readonly = True if access_level is 'r' else False
-                self._authorize_volume(volume_path, auth_id, readonly)
+                readonly = access_level == 'r'
+                client_entity = "client.{0}".format(auth_id)
+                try:
+                    existing_caps = self._rados_command(
+                        'auth get',
+                        {
+                            'entity': client_entity
+                        }
+                    )
+                    # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
+                except rados.Error:
+                    existing_caps = None
+                self._authorize_volume(volume_path, auth_id, readonly, existing_caps)
 
             # Recovered from partial auth updates for the auth ID's access
             # to a volume.
@@ -961,7 +973,27 @@ class CephFSVolumeClient(object):
         data['version'] = self.version
         return self._metadata_set(self._volume_metadata_path(volume_path), data)
 
-    def authorize(self, volume_path, auth_id, readonly=False, tenant_id=None):
+    def _prepare_updated_caps_list(self, existing_caps, mds_cap_str, osd_cap_str, authorize=True):
+        caps_list = []
+        for k, v in existing_caps['caps'].items():
+            if k == 'mds' or k == 'osd':
+                continue
+            elif k == 'mon':
+                if not authorize and v == 'allow r':
+                    continue
+            caps_list.extend((k,v))
+
+        if mds_cap_str:
+            caps_list.extend(('mds', mds_cap_str))
+        if osd_cap_str:
+            caps_list.extend(('osd', osd_cap_str))
+
+        if authorize and 'mon' not in caps_list:
+            caps_list.extend(('mon', 'allow r'))
+
+        return caps_list
+
+    def authorize(self, volume_path, auth_id, readonly=False, tenant_id=None, allow_existing_id=False):
         """
         Get-or-create a Ceph auth identity for `auth_id` and grant them access
         to
@@ -971,10 +1003,24 @@ class CephFSVolumeClient(object):
         :param tenant_id: Optionally provide a stringizable object to
                           restrict any created cephx IDs to other callers
                           passing the same tenant ID.
+        :allow_existing_id: Optionally authorize existing auth-ids not
+                            created by ceph_volume_client
         :return:
         """
 
         with self._auth_lock(auth_id):
+            client_entity = "client.{0}".format(auth_id)
+            try:
+                existing_caps = self._rados_command(
+                    'auth get',
+                    {
+                        'entity': client_entity
+                    }
+                )
+                # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
+            except rados.Error:
+                existing_caps = None
+
             # Existing meta, or None, to be updated
             auth_meta = self._auth_metadata_get(auth_id)
 
@@ -988,7 +1034,14 @@ class CephFSVolumeClient(object):
                     'dirty': True,
                 }
             }
+
             if auth_meta is None:
+                if not allow_existing_id and existing_caps is not None:
+                    msg = "auth ID: {0} exists and not created by ceph_volume_client. Not allowed to modify".format(auth_id)
+                    log.error(msg)
+                    raise CephFSVolumeClientError(msg)
+
+                # non-existent auth IDs
                 sys.stderr.write("Creating meta for ID {0} with tenant {1}\n".format(
                     auth_id, tenant_id
                 ))
@@ -998,14 +1051,6 @@ class CephFSVolumeClient(object):
                     'tenant_id': tenant_id.__str__() if tenant_id else None,
                     'volumes': volume
                 }
-
-                # Note: this is *not* guaranteeing that the key doesn't already
-                # exist in Ceph: we are allowing VolumeClient tenants to
-                # 'claim' existing Ceph keys.  In order to prevent VolumeClient
-                # tenants from reading e.g. client.admin keys, you need to
-                # have configured your VolumeClient user (e.g. Manila) to
-                # have mon auth caps that prevent it from accessing those keys
-                # (e.g. limit it to only access keys with a manila.* prefix)
             else:
                 # Disallow tenants to share auth IDs
                 if auth_meta['tenant_id'].__str__() != tenant_id.__str__():
@@ -1025,7 +1070,7 @@ class CephFSVolumeClient(object):
             self._auth_metadata_set(auth_id, auth_meta)
 
             with self._volume_lock(volume_path):
-                key = self._authorize_volume(volume_path, auth_id, readonly)
+                key = self._authorize_volume(volume_path, auth_id, readonly, existing_caps)
 
             auth_meta['dirty'] = False
             auth_meta['volumes'][volume_path_str]['dirty'] = False
@@ -1042,7 +1087,7 @@ class CephFSVolumeClient(object):
                     'auth_key': None
                 }
 
-    def _authorize_volume(self, volume_path, auth_id, readonly):
+    def _authorize_volume(self, volume_path, auth_id, readonly, existing_caps):
         vol_meta = self._volume_metadata_get(volume_path)
 
         access_level = 'r' if readonly else 'rw'
@@ -1061,14 +1106,14 @@ class CephFSVolumeClient(object):
             vol_meta['auths'].update(auth)
             self._volume_metadata_set(volume_path, vol_meta)
 
-        key = self._authorize_ceph(volume_path, auth_id, readonly)
+        key = self._authorize_ceph(volume_path, auth_id, readonly, existing_caps)
 
         vol_meta['auths'][auth_id]['dirty'] = False
         self._volume_metadata_set(volume_path, vol_meta)
 
         return key
 
-    def _authorize_ceph(self, volume_path, auth_id, readonly):
+    def _authorize_ceph(self, volume_path, auth_id, readonly, existing_caps):
         path = self._get_path(volume_path)
         log.debug("Authorizing Ceph id '{0}' for path '{1}'".format(
             auth_id, path
@@ -1096,15 +1141,7 @@ class CephFSVolumeClient(object):
             want_osd_cap = 'allow {0} pool={1}'.format(want_access_level,
                                                        pool_name)
 
-        try:
-            existing = self._rados_command(
-                'auth get',
-                {
-                    'entity': client_entity
-                }
-            )
-            # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
-        except rados.Error:
+        if existing_caps is None:
             caps = self._rados_command(
                 'auth get-or-create',
                 {
@@ -1116,11 +1153,11 @@ class CephFSVolumeClient(object):
                 })
         else:
             # entity exists, update it
-            cap = existing[0]
+            cap = existing_caps[0]
 
             # Construct auth caps that if present might conflict with the desired
             # auth caps.
-            unwanted_access_level = 'r' if want_access_level is 'rw' else 'rw'
+            unwanted_access_level = 'r' if want_access_level == 'rw' else 'rw'
             unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
             if namespace:
                 unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
@@ -1136,8 +1173,8 @@ class CephFSVolumeClient(object):
                 if not orig_mds_caps:
                     return want_mds_cap, want_osd_cap
 
-                mds_cap_tokens = orig_mds_caps.split(",")
-                osd_cap_tokens = orig_osd_caps.split(",")
+                mds_cap_tokens = [x.strip() for x in orig_mds_caps.split(",")]
+                osd_cap_tokens = [x.strip() for x in orig_osd_caps.split(",")]
 
                 if want_mds_cap in mds_cap_tokens:
                     return orig_mds_caps, orig_osd_caps
@@ -1158,15 +1195,14 @@ class CephFSVolumeClient(object):
                 orig_mds_caps, orig_osd_caps, want_mds_cap, want_osd_cap,
                 unwanted_mds_cap, unwanted_osd_cap)
 
+            caps_list = self._prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str)
             caps = self._rados_command(
                 'auth caps',
                 {
                     'entity': client_entity,
-                    'caps': [
-                        'mds', mds_cap_str,
-                        'osd', osd_cap_str,
-                        'mon', cap['caps'].get('mon', 'allow r')]
+                    'caps': caps_list
                 })
+
             caps = self._rados_command(
                 'auth get',
                 {
@@ -1291,8 +1327,8 @@ class CephFSVolumeClient(object):
             )
 
             def cap_remove(orig_mds_caps, orig_osd_caps, want_mds_caps, want_osd_caps):
-                mds_cap_tokens = orig_mds_caps.split(",")
-                osd_cap_tokens = orig_osd_caps.split(",")
+                mds_cap_tokens = [x.strip() for x in orig_mds_caps.split(",")]
+                osd_cap_tokens = [x.strip() for x in orig_osd_caps.split(",")]
 
                 for want_mds_cap, want_osd_cap in zip(want_mds_caps, want_osd_caps):
                     if want_mds_cap in mds_cap_tokens:
@@ -1308,17 +1344,15 @@ class CephFSVolumeClient(object):
             mds_cap_str, osd_cap_str = cap_remove(orig_mds_caps, orig_osd_caps,
                                                   want_mds_caps, want_osd_caps)
 
-            if not mds_cap_str:
+            caps_list = self._prepare_updated_caps_list(cap, mds_cap_str, osd_cap_str, authorize=False)
+            if not caps_list:
                 self._rados_command('auth del', {'entity': client_entity}, decode=False)
             else:
                 self._rados_command(
                     'auth caps',
                     {
                         'entity': client_entity,
-                        'caps': [
-                            'mds', mds_cap_str,
-                            'osd', osd_cap_str,
-                            'mon', cap['caps'].get('mon', 'allow r')]
+                        'caps': caps_list
                     })
 
         # FIXME: rados raising Error instead of ObjectNotFound in auth get failure
