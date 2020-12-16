@@ -151,6 +151,7 @@ string RGWSI_Notify::get_control_oid(int i)
   return string(buf);
 }
 
+// do not call pick_obj_control before init_watch
 RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
 {
   uint32_t r = ceph_str_hash_linux(key.c_str(), key.size());
@@ -360,11 +361,20 @@ void RGWSI_Notify::_set_enabled(bool status)
 int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
                              optional_yield y)
 {
-  RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
+  /* The RGW uses the control pool to store the watch notify objects.
+    The precedence in RGWSI_Notify::do_start is to call to zone_svc->start and later to init_watch().
+    The first time, RGW starts in the cluster, the RGW will try to create zone and zonegroup system object.
+    In that case RGW will try to distribute the cache before it ran init_watch,
+    which will lead to division by 0 in pick_obj_control (num_watchers is 0).
+  */
+  if (num_watchers > 0) {
+    RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
 
-  ldout(cct, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
-      << " bl.length()=" << bl.length() << dendl;
-  return robust_notify(notify_obj, bl, y);
+    ldout(cct, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
+        << " bl.length()=" << bl.length() << dendl;
+    return robust_notify(notify_obj, bl, y);
+  }
+  return 0;
 }
 
 int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
