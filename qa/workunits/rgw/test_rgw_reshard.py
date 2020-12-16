@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import errno
 import logging as log
 import time
 import subprocess
@@ -35,21 +36,17 @@ BUCKET_NAME4 = 'd-bucket'
 BUCKET_NAME5 = 'e-bucket'
 VER_BUCKET_NAME = 'myver'
 
-def exec_cmd(cmd):
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        out, err = proc.communicate()
-        log.info(proc.args)
-        if proc.returncode == 0:
-            if out is not None: log.debug('{} \n {}'.format(out.decode('utf-8'), err.decode('utf-8')))
-            return out
-        else:
-            raise Exception("error: {} \nreturncode: {}".format(err, proc.returncode))
-    except Exception as e:
-        log.error('command failed\n')
-        log.error(e)
-        return False
-
+def exec_cmd(cmd, **kwargs):
+    check_retcode = kwargs.pop('check_retcode', True)
+    kwargs['shell'] = True
+    kwargs['stdout'] = subprocess.PIPE
+    proc = subprocess.Popen(cmd, **kwargs)
+    log.info(proc.args)
+    out, _ = proc.communicate()
+    if check_retcode:
+        assert(proc.returncode == 0)
+        return out
+    return (out, proc.returncode)
 
 def get_radosgw_port():
     out = exec_cmd('sudo netstat -nltp | grep radosgw')
@@ -119,7 +116,8 @@ def main():
     execute manual and dynamic resharding commands
     """
     # create user
-    exec_cmd('radosgw-admin user create --uid {} --display-name {} --access-key {} --secret {}'.format(USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY))
+    _, ret = exec_cmd('radosgw-admin user create --uid {} --display-name {} --access-key {} --secret {}'.format(USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY), check_retcode=False)
+    assert(ret == 0 or errno.EEXIST)
 
     def boto_connect(portnum, ssl, proto):
         endpoint = proto + '://localhost:' + portnum
