@@ -7603,8 +7603,9 @@ next:
     } else if (inject_abort_at) {
       fault.inject(*inject_abort_at, InjectAbort{});
     }
-    return br.execute(num_shards, fault, max_entries, dpp(),
-                      verbose, &cout, formatter.get());
+    ret = br.execute(num_shards, fault, max_entries, dpp(),
+                     verbose, &cout, formatter.get());
+    return -ret;
   }
 
   if (opt_cmd == OPT::RESHARD_ADD) {
