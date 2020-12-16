@@ -63,12 +63,13 @@ class NodeExtentMutable {
     assert((const char*)&updated + sizeof(T) <= buf_upper_bound());
   }
 
+  const char* get_read() const;
   char* get_write();
   extent_len_t get_length() const;
+  laddr_t get_laddr() const;
 
  private:
   explicit NodeExtentMutable(NodeExtent&);
-  const char* get_read() const;
   const char* buf_upper_bound() const;
 
   NodeExtent& extent;

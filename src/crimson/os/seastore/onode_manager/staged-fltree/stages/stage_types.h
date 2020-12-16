@@ -178,6 +178,18 @@ struct staged_position_t {
     return *this;
   }
 
+  void encode(ceph::bufferlist& encoded) const {
+    ceph::encode(index, encoded);
+    nxt.encode(encoded);
+  }
+
+  static me_t decode(ceph::bufferlist::const_iterator& delta) {
+    me_t ret;
+    ceph::decode(ret.index, delta);
+    ret.nxt = nxt_t::decode(delta);
+    return ret;
+  }
+
   static me_t begin() { return {0u, nxt_t::begin()}; }
   static me_t end() {
     return {INDEX_END, nxt_t::end()};
@@ -239,6 +251,16 @@ struct staged_position_t<STAGE_BOTTOM> {
       index -= o.index;
     }
     return *this;
+  }
+
+  void encode(ceph::bufferlist& encoded) const {
+    ceph::encode(index, encoded);
+  }
+
+  static me_t decode(ceph::bufferlist::const_iterator& delta) {
+    me_t ret;
+    ceph::decode(ret.index, delta);
+    return ret;
   }
 
   static me_t begin() { return {0u}; }

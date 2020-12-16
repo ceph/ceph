@@ -105,6 +105,17 @@ class node_extent_t {
     }
   }
 
+  void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
+    assert(p_node_start == p_start());
+    // nothing to encode as the container range is the entire extent
+  }
+
+  static node_extent_t decode(const char* p_node_start,
+                              ceph::bufferlist::const_iterator& delta) {
+    // nothing to decode
+    return node_extent_t(reinterpret_cast<const FieldType*>(p_node_start));
+  }
+
   static void validate(const FieldType& fields) {
 #ifndef NDEBUG
     assert(fields.header.get_node_type() == NODE_TYPE);

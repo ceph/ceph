@@ -212,6 +212,8 @@ struct staged {
     *   (IS_BOTTOM) get_p_value(index_t) const -> const value_t*
     *   (!IS_BOTTOM) size_to_nxt_at(index_t) const -> node_offset_t
     *   (!IS_BOTTOM) get_nxt_container(index_t) const
+    *   encode(p_node_start, encoded)
+    *   decode(p_node_start, delta) -> container_t
     * static:
     *   header_size() -> node_offset_t
     *   estimate_insert(key, value) -> node_offset_t
@@ -444,6 +446,21 @@ struct staged {
       return container_t::trim_at(mut, container, _index, trimmed);
     }
 
+    void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
+      container.encode(p_node_start, encoded);
+      ceph::encode(_index, encoded);
+    }
+
+    static me_t decode(const char* p_node_start,
+                       ceph::bufferlist::const_iterator& delta) {
+      auto container = container_t::decode(p_node_start, delta);
+      auto ret = me_t(container);
+      index_t index;
+      ceph::decode(index, delta);
+      ret.seek_till_end(index);
+      return ret;
+    }
+
     static node_offset_t header_size() {
       return container_t::header_size();
     }
@@ -471,6 +488,8 @@ struct staged {
      *   size_overhead() const -> node_offset_t
      *   get_nxt_container() const
      *   has_next() const -> bool
+     *   encode(p_node_start, encoded)
+     *   decode(p_node_start, delta) -> container_t
      *   operator++()
      * static:
      *   header_size() -> node_offset_t
@@ -486,9 +505,7 @@ struct staged {
    public:
     using me_t = _iterator_t<CTYPE>;
 
-    _iterator_t(const container_t& container) : container{container} {
-      assert(index() == 0);
-    }
+    _iterator_t(const container_t& container) : container{container} {}
 
     index_t index() const {
       if (is_end()) {
@@ -743,6 +760,24 @@ struct staged {
       return container_t::trim_at(mut, container, trimmed);
     }
 
+    void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
+      container.encode(p_node_start, encoded);
+      uint8_t is_end = _is_end;
+      ceph::encode(is_end, encoded);
+    }
+
+    static me_t decode(const char* p_node_start,
+                       ceph::bufferlist::const_iterator& delta) {
+      auto container = container_t::decode(p_node_start, delta);
+      auto ret = me_t(container);
+      uint8_t is_end;
+      ceph::decode(is_end, delta);
+      if (is_end) {
+        ret.set_end();
+      }
+      return ret;
+    }
+
     static node_offset_t header_size() {
       return container_t::header_size();
     }
@@ -782,7 +817,7 @@ struct staged {
    *   (IS_BOTTOM) insert(mut, key, value, size, p_left_bound) -> p_value
    *   (!IS_BOTTOM) insert_prefix(mut, key, size, p_left_bound) -> memory_range_t
    *   (!IS_BOTTOM) update_size(mut, size)
-   * split;
+   * split:
    *   seek_split_inserted<bool is_exclusive>(
    *       start_size, extra_size, target_size, insert_index, insert_size,
    *       std::optional<bool>& is_insert_left)
@@ -793,6 +828,9 @@ struct staged {
    *   copy_out_until(appender, to_index) (can be end)
    *   trim_until(mut) -> trim_size
    *   (!IS_BOTTOM) trim_at(mut, trimmed) -> trim_size
+   * denc:
+   *   encode(p_node_start, encoded)
+   *   decode(p_node_start, delta) -> iterator_t
    * static:
    *   header_size() -> node_offset_t
    *   estimate_insert(key, value) -> node_offset_t
@@ -1511,6 +1549,29 @@ struct staged {
       } else {
         return position_t::begin();
       }
+    }
+    void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
+      uint8_t present = static_cast<bool>(iter);
+      ceph::encode(present, encoded);
+      if (iter.has_value()) {
+        iter->encode(p_node_start, encoded);
+        if constexpr (!IS_BOTTOM) {
+          this->_nxt.encode(p_node_start, encoded);
+        }
+      }
+    }
+    static StagedIterator decode(const char* p_node_start,
+                                 ceph::bufferlist::const_iterator& delta) {
+      StagedIterator ret;
+      uint8_t present;
+      ceph::decode(present, delta);
+      if (present) {
+        ret.iter = iterator_t::decode(p_node_start, delta);
+        if constexpr (!IS_BOTTOM) {
+          ret._nxt = NXT_STAGE_T::StagedIterator::decode(p_node_start, delta);
+        }
+      }
+      return ret;
     }
     friend std::ostream& operator<<(std::ostream& os, const StagedIterator& iter) {
       return iter.print(os, true);
