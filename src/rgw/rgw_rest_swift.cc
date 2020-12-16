@@ -2813,7 +2813,7 @@ int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
     s->object = store->get_object(rgw_obj_key());
   }
 
-  dout(10) << "s->object=" <<
+  ldpp_dout(s, 10) << "s->object=" <<
     (!s->object->empty() ? s->object->get_key() : rgw_obj_key("<NULL>"))
            << " s->bucket="
 	   << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name)

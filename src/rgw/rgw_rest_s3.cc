@@ -4682,7 +4682,7 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
     s->bucket_tenant = s->auth.identity->get_role_tenant();
   }
 
-  dout(10) << "s->object=" << s->object
+  ldpp_dout(s, 10) << "s->object=" << s->object
            << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
 
   int ret;
@@ -5223,7 +5223,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 						client_signature,
 						date,
 						session_token,
-						using_qs);
+						using_qs,
+                                                s);
   if (ret < 0) {
     throw ret;
   }
@@ -5288,20 +5289,23 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                          std::move(canonical_qs),
                                          std::move(*canonical_headers),
                                          signed_hdrs,
-                                         exp_payload_hash);
+                                         exp_payload_hash,
+                                         s);
 
   auto string_to_sign = \
     rgw::auth::s3::get_v4_string_to_sign(s->cct,
                                          AWS4_HMAC_SHA256_STR,
                                          date,
                                          credential_scope,
-                                         std::move(canonical_req_hash));
+                                         std::move(canonical_req_hash),
+                                         s);
 
   const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
                                      credential_scope,
                                      std::placeholders::_1,
                                      std::placeholders::_2,
-                                     std::placeholders::_3);
+                                     std::placeholders::_3,
+                                     s);
 
   /* Requests authenticated with the Query Parameters are treated as unsigned.
    * From "Authenticating Requests: Using Query Parameters (AWS Signature
@@ -5542,17 +5546,18 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
   /* grab access key id */
   const size_t pos = credential.find("/");
   const std::string_view access_key_id = credential.substr(0, pos);
-  dout(10) << "access key id = " << access_key_id << dendl;
+  ldpp_dout(s, 10) << "access key id = " << access_key_id << dendl;
 
   /* grab credential scope */
   const std::string_view credential_scope = credential.substr(pos + 1);
-  dout(10) << "credential scope = " << credential_scope << dendl;
+  ldpp_dout(s, 10) << "credential scope = " << credential_scope << dendl;
 
   const auto sig_factory = std::bind(rgw::auth::s3::get_v4_signature,
                                      credential_scope,
                                      std::placeholders::_1,
                                      std::placeholders::_2,
-                                     std::placeholders::_3);
+                                     std::placeholders::_3,
+                                     s);
 
   return {
     access_key_id,

@@ -373,7 +373,8 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
                                        std::string_view& signedheaders,  /* out */
                                        std::string_view& signature,      /* out */
                                        std::string_view& date,           /* out */
-                                       std::string_view& sessiontoken)   /* out */
+                                       std::string_view& sessiontoken,   /* out */
+                                       const DoutPrefixProvider *dpp)
 {
   std::string_view input(info.env->get("HTTP_AUTHORIZATION", ""));
   try {
@@ -381,7 +382,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   } catch (std::out_of_range&) {
     /* We should never ever run into this situation as the presence of
      * AWS4_HMAC_SHA256_STR had been verified earlier. */
-    dout(10) << "credentials string is too short" << dendl;
+    ldpp_dout(dpp, 10) << "credentials string is too short" << dendl;
     return -EINVAL;
   }
 
@@ -391,7 +392,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
     if (parsed_pair) {
       kv[parsed_pair->first] = parsed_pair->second;
     } else {
-      dout(10) << "NOTICE: failed to parse auth header (s=" << s << ")"
+      ldpp_dout(dpp, 10) << "NOTICE: failed to parse auth header (s=" << s << ")"
                << dendl;
       return -EINVAL;
     }
@@ -406,7 +407,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   /* Ensure that the presigned required keys are really there. */
   for (const auto& k : required_keys) {
     if (kv.find(k) == std::end(kv)) {
-      dout(10) << "NOTICE: auth header missing key: " << k << dendl;
+      ldpp_dout(dpp, 10) << "NOTICE: auth header missing key: " << k << dendl;
       return -EINVAL;
     }
   }
@@ -416,7 +417,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   signature = kv["Signature"];
 
   /* sig hex str */
-  dout(10) << "v4 signature format = " << signature << dendl;
+  ldpp_dout(dpp, 10) << "v4 signature format = " << signature << dendl;
 
   /* ------------------------- handle x-amz-date header */
 
@@ -425,7 +426,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   const char *d = info.env->get("HTTP_X_AMZ_DATE");
   struct tm t;
   if (!parse_iso8601(d, &t, NULL, false)) {
-    dout(10) << "error reading date via http_x_amz_date" << dendl;
+    ldpp_dout(dpp, 10) << "error reading date via http_x_amz_date" << dendl;
     return -EACCES;
   }
   date = d;
@@ -448,7 +449,8 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 			 std::string_view& signature,            /* out */
 			 std::string_view& date,                 /* out */
 			 std::string_view& session_token,        /* out */
-			 const bool using_qs)                      /* in */
+			 const bool using_qs,                    /* in */
+                         const DoutPrefixProvider *dpp)
 {
   std::string_view credential;
   int ret;
@@ -457,7 +459,7 @@ int parse_v4_credentials(const req_info& info,                     /* in */
                                 signature, date, session_token);
   } else {
     ret = parse_v4_auth_header(info, credential, signedheaders,
-                               signature, date, session_token);
+                               signature, date, session_token, dpp);
   }
 
   if (ret < 0) {
@@ -465,7 +467,7 @@ int parse_v4_credentials(const req_info& info,                     /* in */
   }
 
   /* access_key/YYYYMMDD/region/service/aws4_request */
-  dout(10) << "v4 credential format = " << credential << dendl;
+  ldpp_dout(dpp, 10) << "v4 credential format = " << credential << dendl;
 
   if (std::count(credential.begin(), credential.end(), '/') != 4) {
     return -EINVAL;
@@ -479,11 +481,11 @@ int parse_v4_credentials(const req_info& info,                     /* in */
   /* grab access key id */
   const size_t pos = credential.find("/");
   access_key_id = credential.substr(0, pos);
-  dout(10) << "access key id = " << access_key_id << dendl;
+  ldpp_dout(dpp, 10) << "access key id = " << access_key_id << dendl;
 
   /* grab credential scope */
   credential_scope = credential.substr(pos + 1);
-  dout(10) << "credential scope = " << credential_scope << dendl;
+  ldpp_dout(dpp, 10) << "credential scope = " << credential_scope << dendl;
 
   return 0;
 }
@@ -629,9 +631,10 @@ get_v4_canon_req_hash(CephContext* cct,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
                       const std::string_view& signed_hdrs,
-                      const std::string_view& request_payload_hash)
+                      const std::string_view& request_payload_hash,
+                      const DoutPrefixProvider *dpp)
 {
-  ldout(cct, 10) << "payload request hash = " << request_payload_hash << dendl;
+  ldpp_dout(dpp, 10) << "payload request hash = " << request_payload_hash << dendl;
 
   const auto canonical_req = string_join_reserve("\n",
     http_verb,
@@ -644,8 +647,8 @@ get_v4_canon_req_hash(CephContext* cct,
   const auto canonical_req_hash = calc_hash_sha256(canonical_req);
 
   using sanitize = rgw::crypt_sanitize::log_content;
-  ldout(cct, 10) << "canonical request = " << sanitize{canonical_req} << dendl;
-  ldout(cct, 10) << "canonical request hash = "
+  ldpp_dout(dpp, 10) << "canonical request = " << sanitize{canonical_req} << dendl;
+  ldpp_dout(dpp, 10) << "canonical request hash = "
                  << canonical_req_hash << dendl;
 
   return canonical_req_hash;
@@ -661,7 +664,8 @@ get_v4_string_to_sign(CephContext* const cct,
                       const std::string_view& algorithm,
                       const std::string_view& request_date,
                       const std::string_view& credential_scope,
-                      const sha256_digest_t& canonreq_hash)
+                      const sha256_digest_t& canonreq_hash,
+                      const DoutPrefixProvider *dpp)
 {
   const auto hexed_cr_hash = canonreq_hash.to_str();
   const std::string_view hexed_cr_hash_str(hexed_cr_hash);
@@ -672,7 +676,7 @@ get_v4_string_to_sign(CephContext* const cct,
     credential_scope,
     hexed_cr_hash_str);
 
-  ldout(cct, 10) << "string to sign = "
+  ldpp_dout(dpp, 10) << "string to sign = "
                  << rgw::crypt_sanitize::log_content{string_to_sign}
                  << dendl;
 
@@ -730,7 +734,8 @@ transform_secret_key(const std::string_view& secret_access_key)
 static sha256_digest_t
 get_v4_signing_key(CephContext* const cct,
                    const std::string_view& credential_scope,
-                   const std::string_view& secret_access_key)
+                   const std::string_view& secret_access_key,
+                   const DoutPrefixProvider *dpp)
 {
   std::string_view date, region, service;
   std::tie(date, region, service) = parse_cred_scope(credential_scope);
@@ -744,10 +749,10 @@ get_v4_signing_key(CephContext* const cct,
   const auto signing_key = calc_hmac_sha256(service_k,
                                             std::string_view("aws4_request"));
 
-  ldout(cct, 10) << "date_k    = " << date_k << dendl;
-  ldout(cct, 10) << "region_k  = " << region_k << dendl;
-  ldout(cct, 10) << "service_k = " << service_k << dendl;
-  ldout(cct, 10) << "signing_k = " << signing_key << dendl;
+  ldpp_dout(dpp, 10) << "date_k    = " << date_k << dendl;
+  ldpp_dout(dpp, 10) << "region_k  = " << region_k << dendl;
+  ldpp_dout(dpp, 10) << "service_k = " << service_k << dendl;
+  ldpp_dout(dpp, 10) << "signing_k = " << signing_key << dendl;
 
   return signing_key;
 }
@@ -765,9 +770,10 @@ AWSEngine::VersionAbstractor::server_signature_t
 get_v4_signature(const std::string_view& credential_scope,
                  CephContext* const cct,
                  const std::string_view& secret_key,
-                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign)
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign,
+                 const DoutPrefixProvider *dpp)
 {
-  auto signing_key = get_v4_signing_key(cct, credential_scope, secret_key);
+  auto signing_key = get_v4_signing_key(cct, credential_scope, secret_key, dpp);
 
   /* The server-side generated digest for comparison. */
   const auto digest = calc_hmac_sha256(signing_key, string_to_sign);
@@ -779,7 +785,7 @@ get_v4_signature(const std::string_view& credential_scope,
                             digest.SIZE * 2);
   buf_to_hex(digest.v, digest.SIZE, signature.begin());
 
-  ldout(cct, 10) << "generated signature = " << signature << dendl;
+  ldpp_dout(dpp, 10) << "generated signature = " << signature << dendl;
 
   return signature;
 }
@@ -1072,7 +1078,7 @@ AWSv4ComplMulti::create(const req_state* const s,
   }
 
   const auto signing_key = \
-    rgw::auth::s3::get_v4_signing_key(s->cct, credential_scope, *secret_key);
+    rgw::auth::s3::get_v4_signing_key(s->cct, credential_scope, *secret_key, s);
 
   return std::make_shared<AWSv4ComplMulti>(s,
                                            std::move(date),

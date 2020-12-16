@@ -263,7 +263,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
     goto done;
   }
   req->op = op;
-  dout(10) << "op=" << typeid(*op).name() << dendl;
+  ldpp_dout(op, 10) << "op=" << typeid(*op).name() << dendl;
 
   s->op_type = op->get_type();
 
