@@ -11,7 +11,7 @@ template <KeyT KT>
 const laddr_packed_t* internal_sub_items_t::insert_at(
     NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
     const full_key_t<KT>& key, const laddr_packed_t& value,
-    size_t index, node_offset_t size, const char* p_left_bound) {
+    index_t index, node_offset_t size, const char* p_left_bound) {
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
   const char* p_shift_start = p_left_bound;
@@ -26,10 +26,10 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
 }
 template const laddr_packed_t* internal_sub_items_t::insert_at<KeyT::VIEW>(
     NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KeyT::VIEW>&,
-    const laddr_packed_t&, size_t, node_offset_t, const char*);
+    const laddr_packed_t&, index_t, node_offset_t, const char*);
 
 node_offset_t internal_sub_items_t::trim_until(
-    NodeExtentMutable&, internal_sub_items_t& items, size_t index) {
+    NodeExtentMutable&, internal_sub_items_t& items, index_t index) {
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
@@ -40,7 +40,7 @@ node_offset_t internal_sub_items_t::trim_until(
 
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
-    const internal_sub_items_t& src, size_t from, size_t items) {
+    const internal_sub_items_t& src, index_t from, index_t items) {
   assert(from <= src.keys());
   if (items == 0) {
     return;
@@ -66,7 +66,7 @@ template <KeyT KT>
 const onode_t* leaf_sub_items_t::insert_at(
     NodeExtentMutable& mut, const leaf_sub_items_t& sub_items,
     const full_key_t<KT>& key, const onode_t& value,
-    size_t index, node_offset_t size, const char* p_left_bound) {
+    index_t index, node_offset_t size, const char* p_left_bound) {
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
   // a. [... item(index)] << size
@@ -109,17 +109,17 @@ const onode_t* leaf_sub_items_t::insert_at(
 }
 template const onode_t* leaf_sub_items_t::insert_at<KeyT::HOBJ>(
     NodeExtentMutable&, const leaf_sub_items_t&, const full_key_t<KeyT::HOBJ>&,
-    const onode_t&, size_t, node_offset_t, const char*);
+    const onode_t&, index_t, node_offset_t, const char*);
 
 node_offset_t leaf_sub_items_t::trim_until(
-    NodeExtentMutable& mut, leaf_sub_items_t& items, size_t index) {
+    NodeExtentMutable& mut, leaf_sub_items_t& items, index_t index) {
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
   if (index == keys) {
     return 0;
   }
-  size_t trim_items = keys - index;
+  index_t trim_items = keys - index;
   const char* p_items_start = items.p_start();
   const char* p_shift_start = items.get_item_end(index);
   const char* p_shift_end = items.get_item_end(0);

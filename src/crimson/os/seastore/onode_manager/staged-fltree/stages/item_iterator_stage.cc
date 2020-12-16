@@ -86,7 +86,7 @@ ITER_TEMPLATE(node_type_t::INTERNAL);
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
-bool APPEND_T::append(const ITER_T& src, size_t& items) {
+bool APPEND_T::append(const ITER_T& src, index_t& items) {
   auto p_end = src.p_end();
   bool append_till_end = false;
   if (is_valid_index(items)) {
