@@ -133,13 +133,10 @@ class KVPool {
       : str_sizes{str_sizes}, onodes{onode_sizes} {
     ceph_assert(range2.first < range2.second);
     ceph_assert(range2.second - 1 <= (unsigned)std::numeric_limits<shard_t>::max());
-    ceph_assert(range2.second - 1 <= std::numeric_limits<pool_t>::max());
     ceph_assert(range2.second - 1 <= std::numeric_limits<crush_hash_t>::max());
     ceph_assert(range1.first < range1.second);
     ceph_assert(range1.second - 1 <= 9);
     ceph_assert(range0.first < range0.second);
-    ceph_assert(range0.second - 1 <= std::numeric_limits<snap_t>::max());
-    ceph_assert(range0.second - 1 <= std::numeric_limits<gen_t>::max());
     std::random_device rd;
     for (unsigned i = range2.first; i < range2.second; ++i) {
       for (unsigned j = range1.first; j < range1.second; ++j) {
