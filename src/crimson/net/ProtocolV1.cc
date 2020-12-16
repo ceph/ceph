@@ -316,6 +316,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   set_write_state(write_state_t::delay);
 
   ceph_assert(!socket);
+  ceph_assert(!gate.is_closed());
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
   conn.set_peer_name(_peer_name);
@@ -326,7 +327,8 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
       return Socket::connect(conn.peer_addr)
         .then([this](SocketRef sock) {
           socket = std::move(sock);
-          if (state == state_t::closing) {
+          if (state != state_t::connecting) {
+            assert(state == state_t::closing);
             return socket->close().then([] {
               throw std::system_error(make_error_code(error::protocol_aborted));
             });
@@ -352,6 +354,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
                 make_error_code(crimson::net::error::bad_peer_address));
           }
           if (state != state_t::connecting) {
+            assert(state == state_t::closing);
             throw std::system_error(make_error_code(error::protocol_aborted));
           }
           socket->learn_ephemeral_port_as_connector(caddr.get_port());
@@ -374,6 +377,10 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
             return repeat_connect();
           });
         }).then([this] {
+          if (state != state_t::connecting) {
+            assert(state == state_t::closing);
+            throw std::system_error(make_error_code(error::protocol_aborted));
+          }
           execute_open(open_t::connected);
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
@@ -683,6 +690,10 @@ void ProtocolV1::start_accept(SocketRef&& sock,
             return repeat_handle_connect();
           });
         }).then([this] {
+          if (state != state_t::accepting) {
+            assert(state == state_t::closing);
+            throw std::system_error(make_error_code(error::protocol_aborted));
+          }
           messenger.register_conn(
             seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
           messenger.unaccept_conn(
@@ -951,6 +962,9 @@ void ProtocolV1::trigger_close()
 {
   logger().trace("{} trigger closing, was {}",
                  conn, static_cast<int>(state));
+  messenger.closing_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
 
   if (state == state_t::accepting) {
     messenger.unaccept_conn(seastar::static_pointer_cast<SocketConnection>(
@@ -968,6 +982,13 @@ void ProtocolV1::trigger_close()
   }
 
   state = state_t::closing;
+}
+
+void ProtocolV1::on_closed()
+{
+  messenger.closed_conn(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()));
 }
 
 seastar::future<> ProtocolV1::fault()
