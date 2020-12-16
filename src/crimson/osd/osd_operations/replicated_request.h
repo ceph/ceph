@@ -5,6 +5,7 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osdmap_gate.h"
 #include "crimson/common/type_helpers.h"
 
 class MOSDRepOp;
@@ -18,7 +19,7 @@ namespace crimson::osd {
 class OSD;
 class PG;
 
-class RepRequest final : public OperationT<RepRequest> {
+class RepRequest final : public BlockingOperationT<RepRequest> {
 public:
   class ConnectionPipeline {
     OrderedPipelinePhase await_map = {
@@ -38,6 +39,11 @@ public:
     };
     friend RepRequest;
   };
+
+  std::tuple<
+             OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr
+  > blockers;
+
   static constexpr OperationTypeCode type = OperationTypeCode::replicated_request;
   RepRequest(OSD&, crimson::net::ConnectionRef&&, Ref<MOSDRepOp>&&);
 

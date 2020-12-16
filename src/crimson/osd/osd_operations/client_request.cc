@@ -60,11 +60,14 @@ seastar::future<> ClientRequest::start()
   return crimson::common::handle_system_shutdown(
     [this, opref=std::move(opref)]() mutable {
     return seastar::repeat([this, opref]() mutable {
-      return with_blocking_future(handle.enter(cp().await_map))
+      return enter_phase(cp().await_map2)
       .then([this]() {
-	return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_min_epoch()));
+        using OSDMapBlocker = OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker;
+	return with_blocker<OSDMapBlocker>([this] (auto& bhandle) {
+          return osd.osdmap_gate.wait_for_map(bhandle, m->get_min_epoch());
+        });
       }).then([this](epoch_t epoch) {
-	return with_blocking_future(handle.enter(cp().get_pg));
+	return enter_phase(cp().get_pg2);
       }).then([this] {
 	return with_blocking_future(osd.wait_for_pg(m->get_spg()));
       }).then([this, opref](Ref<PG> pgref) {
@@ -75,8 +78,10 @@ seastar::future<> ClientRequest::start()
 	return with_blocking_future(
 	  handle.enter(pp(pg).await_map)
 	).then([this, &pg]() mutable {
-	  return with_blocking_future(
-	    pg.osdmap_gate.wait_for_map(m->get_min_epoch()));
+          using OSDMapBlockerPG = OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker;
+	  return with_blocker<OSDMapBlockerPG>([this, &pg] (auto& bhandle) {
+            return pg.osdmap_gate.wait_for_map(bhandle, m->get_min_epoch());
+          });
 	}).then([this, &pg](auto map) mutable {
 	  return with_blocking_future(
 	    handle.enter(pp(pg).wait_for_active));

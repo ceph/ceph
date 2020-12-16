@@ -6,6 +6,7 @@
 #include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osdmap_gate.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDOp.h"
 
@@ -13,7 +14,7 @@ namespace crimson::osd {
 class PG;
 class OSD;
 
-class ClientRequest final : public OperationT<ClientRequest> {
+class ClientRequest final : public BlockingOperationT<ClientRequest> {
   OSD &osd;
   crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
@@ -22,12 +23,16 @@ class ClientRequest final : public OperationT<ClientRequest> {
 
 public:
   class ConnectionPipeline {
-    OrderedPipelinePhase await_map = {
-      "ClientRequest::ConnectionPipeline::await_map"
-    };
-    OrderedPipelinePhase get_pg = {
-      "ClientRequest::ConnectionPipeline::get_pg"
-    };
+    struct AwaitMap : OrderedPipelinePhaseT<AwaitMap> {
+      constexpr static auto name =
+        "ClientRequest::ConnectionPipeline::await_map";
+    } await_map2;
+
+    struct GetPG : OrderedPipelinePhaseT<GetPG> {
+      constexpr static auto name =
+        "ClientRequest::ConnectionPipeline::get_pg";
+    } get_pg2;
+
     friend class ClientRequest;
   };
   class PGPipeline {
@@ -48,6 +53,14 @@ public:
     };
     friend class ClientRequest;
   };
+
+
+  std::tuple<
+    ConnectionPipeline::AwaitMap::TimedPtr,
+    OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr,
+    ConnectionPipeline::GetPG::TimedPtr,
+    OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker::TimedPtr
+  > blockers;
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
 

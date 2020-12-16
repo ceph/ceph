@@ -21,8 +21,16 @@ namespace crimson::osd {
 
 class ShardServices;
 
+enum class OSDMapGateType {
+  OSD,
+  PG,
+  last_item
+};
+
+template <OSDMapGateType GateTypeV>
 class OSDMapGate {
-  struct OSDMapBlocker : public Blocker {
+public:
+  struct OSDMapBlocker : public TimedBlocker<OSDMapBlocker> {
     const char * type_name;
     epoch_t epoch;
 
@@ -36,9 +44,9 @@ class OSDMapGate {
 
     seastar::shared_promise<epoch_t> promise;
 
-    void dump_detail(Formatter *f) const final;
+    void dump_detail(Formatter *f) const ;
   private:
-    const char *get_type_name() const final {
+    const char *get_type_name() const {
       return type_name;
     }
   };
@@ -48,19 +56,18 @@ class OSDMapGate {
   // than or equal to a given epoch
   using waiting_peering_t = std::map<epoch_t,
 				     OSDMapBlocker>;
-  const char *blocker_type;
   waiting_peering_t waiting_peering;
   epoch_t current = 0;
   std::optional<std::reference_wrapper<ShardServices>> shard_services;
   bool stopping = false;
 public:
   OSDMapGate(
-    const char *blocker_type,
     std::optional<std::reference_wrapper<ShardServices>> shard_services)
-    : blocker_type(blocker_type), shard_services(shard_services) {}
+    : shard_services(shard_services) {}
 
   // wait for an osdmap whose epoch is greater or equal to given epoch
-  blocking_future<epoch_t> wait_for_map(epoch_t epoch);
+  seastar::future<epoch_t> wait_for_map(typename OSDMapBlocker::TimedPtr& handle,
+                                        epoch_t epoch);
   void got_map(epoch_t epoch);
   seastar::future<> stop();
 };

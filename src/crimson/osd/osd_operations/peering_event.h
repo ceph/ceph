@@ -7,6 +7,7 @@
 #include <seastar/core/future.hh>
 
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osdmap_gate.h"
 #include "osd/osd_types.h"
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
@@ -21,7 +22,7 @@ class OSD;
 class ShardServices;
 class PG;
 
-class PeeringEvent : public OperationT<PeeringEvent> {
+class PeeringEvent : public BlockingOperationT<PeeringEvent> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
@@ -35,6 +36,11 @@ public:
     friend class PeeringEvent;
     friend class PGAdvanceMap;
   };
+
+  std::tuple<
+             OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr,
+             OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker::TimedPtr
+  > blockers;
 
 protected:
   OrderedPipelinePhase::Handle handle;

@@ -559,7 +559,7 @@ private:
 				       const osd_op_params_t& oop);
 
 private:
-  OSDMapGate osdmap_gate;
+  OSDMapGate<OSDMapGateType::PG> osdmap_gate;
   ShardServices &shard_services;
 
   cached_map_t osdmap;

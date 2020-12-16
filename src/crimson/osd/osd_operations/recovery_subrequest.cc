@@ -15,8 +15,10 @@ seastar::future<> RecoverySubRequest::start() {
   logger().debug("{}: start", *this);
 
   IRef opref = this;
-  return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_min_epoch()))
-  .then([this] (epoch_t epoch) {
+  using OSDMapBlocker = OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker;
+  return with_blocker<OSDMapBlocker>([this] (auto& bhandle) {
+    return osd.osdmap_gate.wait_for_map(bhandle, m->get_min_epoch());
+  }).then([this] (epoch_t epoch) {
     return with_blocking_future(osd.wait_for_pg(m->get_spg()));
   }).then([this, opref=std::move(opref)] (Ref<PG> pgref) {
     return seastar::do_with(std::move(pgref), std::move(opref),

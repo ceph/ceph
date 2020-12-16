@@ -64,6 +64,10 @@ class Blocker;
  * Provides an abstraction for registering and unregistering a blocker
  * for the duration of a future becoming available.
  */
+// TODO: make blocking_future a thin wrapper over seastar::future but
+// ONLY in the debug builds; for production this be nothing more than
+// alias. The idea is to verify types but without paying the price in
+// no production.
 template <typename Fut>
 class blocking_future_detail {
   friend class Operation;
@@ -117,6 +121,7 @@ make_exception_blocking_future(Exception&& e) {
  * Provides an interface for dumping diagnostic information about
  * why a particular op is not making progress.
  */
+// TODO: replace with TimedBlocker.
 class Blocker {
 public:
   template <typename T>
@@ -372,6 +377,28 @@ private:
   void release_throttle();
 };
 
+// TODO: replace Blocker with TimedBlocker
+template <class T>
+struct TimedBlocker {
+  struct TimedPtr {
+    T* blocker = nullptr;
+    std::uint64_t timestamp = 0;
+  };
+
+  // having a dedicated `blocking_future` enforces type safety but imposes
+  // extra moving (mempcy + a bunch of conditionals). The idea here is to
+  // alias `blocking_future<T>` to `seastar::future<T>` but only in production
+  // builds.
+  template <typename U>
+  decltype(auto) make_blocking_future2(TimedPtr& handle,
+                                      seastar::future<U> &&f) {
+    handle.timestamp++;
+    handle.blocker = static_cast<T*>(this);
+    return std::move(f);
+  }
+};
+
+
 /**
  * Ensures that at most one op may consider itself in the phase at a time.
  * Ops will see enter() unblock in the order in which they tried to enter
@@ -409,6 +436,10 @@ public:
      */
     blocking_future<> enter(OrderedPipelinePhase &phase);
 
+    template <class NewPhaseT>
+    seastar::future<> enter(NewPhaseT &new_phase,
+                            typename NewPhaseT::TimedPtr& new_timedref);
+
     /**
      * Releases the current phase if there is one.  Called in ~Handle().
      */
@@ -423,5 +454,65 @@ private:
   const char * name;
   seastar::shared_mutex mutex;
 };
+
+
+// TODO: this will be dropped after migrating phases.
+template <class T>
+struct OrderedPipelinePhaseT : public OrderedPipelinePhase,
+                               public TimedBlocker<T> {
+  OrderedPipelinePhaseT() : OrderedPipelinePhase(T::name) {}
+};
+
+template <class T>
+// TODO: class BlockingPhasedOperationT : public OperationT<T> {
+class BlockingOperationT : public OperationT<T> {
+  T* that() {
+    return static_cast<T*>(this);
+  }
+
+  // TODO: drop thr `2` after transitioning to `with_blocker<T>()`.
+  friend class ClientRequest;
+  OrderedPipelinePhase::Handle handle2;
+
+public:
+  using OperationT<T>::OperationT;
+
+  template <class BlockerT, class Func>
+  auto with_blocker(Func&& f) {
+    using HandleT = typename BlockerT::TimedPtr;
+    HandleT new_timedref;
+    auto fut = std::forward<Func>(f)(new_timedref);
+    // mimic the with_blocking_future's behaviour exactly; don't worry
+    // about correct timestamping yet.
+    if (fut.available()) {
+      return fut;
+    } else {
+      std::get<HandleT>(that()->blockers) = std::move(new_timedref);
+      return std::move(fut).then_wrapped([this] (auto&& arg) {
+        std::get<HandleT>(that()->blockers).blocker = nullptr;
+        return std::move(arg);
+      });
+    }
+  }
+
+  template <class PhaseT>
+  seastar::future<> enter_phase(PhaseT& new_phase) {
+    // yes, every phase is a blocker
+    return with_blocker<PhaseT>([this, &new_phase] (auto& new_timedref) {
+      return handle2.enter(new_phase, new_timedref);
+    });
+  }
+};
+
+template <class NewPhaseT>
+inline seastar::future<> OrderedPipelinePhase::Handle::enter(
+  NewPhaseT &new_phase,
+  typename NewPhaseT::TimedPtr& new_timedref)
+{
+  auto fut = new_phase.mutex.lock();
+  exit();
+  phase = &new_phase;
+  return new_phase.make_blocking_future2(new_timedref, std::move(fut));
+}
 
 }

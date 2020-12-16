@@ -72,8 +72,10 @@ seastar::future<> PeeringEvent::start()
       logger().debug("{}: pg present", *this);
       return with_blocking_future(handle.enter(pp(*pg).await_map)
       ).then([this, pg] {
-	return with_blocking_future(
-	  pg->osdmap_gate.wait_for_map(evt.get_epoch_sent()));
+	using OSDMapBlockerPG = OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker;
+	return with_blocker<OSDMapBlockerPG>([this, pg] (auto& bhandle) {
+	  return pg->osdmap_gate.wait_for_map(bhandle, evt.get_epoch_sent());
+	});
       }).then([this, pg](auto) {
 	return with_blocking_future(handle.enter(pp(*pg).process));
       }).then([this, pg] {
@@ -152,8 +154,10 @@ seastar::future<Ref<PG>> RemotePeeringEvent::get_pg()
   return with_blocking_future(
     handle.enter(cp().await_map)
   ).then([this] {
-    return with_blocking_future(
-      osd.osdmap_gate.wait_for_map(evt.get_epoch_sent()));
+    using OSDMapBlocker = OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker;
+    return with_blocker<OSDMapBlocker>([this] (auto& bhandle) {
+      return osd.osdmap_gate.wait_for_map(bhandle, evt.get_epoch_sent());
+    });
   }).then([this](auto epoch) {
     logger().debug("{}: got map {}", *this, epoch);
     return with_blocking_future(handle.enter(cp().get_pg));
