@@ -12159,6 +12159,8 @@ void BlueStore::_deferred_queue(TransContext *txc)
     txc->osr->deferred_lock.lock();
     ++deferred_queue_size;
     txc->osr->deferred_pending = tmp;
+    // condition "tmp->txcs.size() == 1" mean deferred_pending was originally empty.
+    // So we should add osr into deferred_queue.
     if (!txc->osr->deferred_running && (tmp->txcs.size() == 1)) {
       deferred_lock.lock();
       deferred_queue.push_back(*txc->osr);
