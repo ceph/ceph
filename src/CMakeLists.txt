@@ -386,9 +386,49 @@ set(libcommon_files
   osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
+if(WITH_JAEGER)
+  list(APPEND libcommon_files common/tracer.cc)
+endif()
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
+
+if(WITH_JAEGER)
+  find_package(yaml-cpp 0.6.0)
+  if(NOT yaml-cpp_FOUND)
+    set(jaeger_libs ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so
+		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6
+		    ${CMAKE_BINARY_DIR}/external/lib/libyaml-cpp.so.0.6.2)
+    #customize libjaeger.install
+    execute_process(COMMAND bash -c "sed -i 's/#//' debian/libjaeger.install"
+		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+    execute_process(COMMAND bash -c "grep -q 'yaml-cpp' debian/libjaeger.install || echo 'usr/lib/libyaml-cpp.so.*' >> debian/libjaeger.install"
+		    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  endif()
+  include(IncludeJaeger)
+  add_library(jaeger-base INTERFACE)
+  add_dependencies(common-objs
+  yaml-cpp::yaml-cpp
+  opentracing::libopentracing
+  thrift::libthrift
+  jaegertracing::libjaegertracing)
+  target_link_libraries(jaeger-base INTERFACE
+  yaml-cpp::yaml-cpp
+  opentracing::libopentracing
+  thrift::libthrift
+  jaegertracing::libjaegertracing)
+  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
+  #with CMake 3.12+ the following can be replaced by:
+  #target_link_libraries(common-objs jaeger-base)
+   list(APPEND jaeger_libs
+    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0
+    ${CMAKE_BINARY_DIR}/external/lib/libjaegertracing.so.0.6.1
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1
+    ${CMAKE_BINARY_DIR}/external/lib/libopentracing.so.1.6.0
+    ${CMAKE_BINARY_DIR}/external/lib/libthrift.so.0.13.0)
+  install(FILES ${jaeger_libs}
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
@@ -448,6 +488,10 @@ endif()
 
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
+endif()
+
+if(WITH_JAEGER)
+  list(APPEND ceph_common_deps jaeger-base)
 endif()
 
 if(WIN32)
@@ -595,6 +639,9 @@ set(ceph_osd_srcs
   osd/objclass.cc
   objclass/class_api.cc
   ceph_osd.cc)
+if(WITH_JAEGER)
+  list(APPEND ceph_osd_srcs common/tracer.cc)
+endif()
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
