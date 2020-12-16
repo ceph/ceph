@@ -492,7 +492,7 @@ struct staged {
 
     index_t index() const {
       if (is_end()) {
-        return end_index;
+        return container.index() + 1;
       } else {
         return container.index();
       }
@@ -513,7 +513,14 @@ struct staged {
       assert(!is_end());
       return !container.has_next();
     }
-    bool is_end() const { return _is_end; }
+    bool is_end() const {
+#ifndef NDEBUG
+      if (_is_end) {
+        assert(!container.has_next());
+      }
+#endif
+      return _is_end;
+    }
     node_offset_t size() const {
       assert(!is_end());
       return container.size();
@@ -562,7 +569,6 @@ struct staged {
       assert(!is_end());
       assert(is_last());
       _is_end = true;
-      end_index = container.index() + 1;
     }
     // Note: possible to return an end iterator
     MatchKindBS seek(const full_key_t<KeyT::HOBJ>& key, bool exclude_last) {
@@ -749,7 +755,6 @@ struct staged {
    private:
     container_t container;
     bool _is_end = false;
-    index_t end_index;
   };
 
   /*
