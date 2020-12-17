@@ -123,6 +123,23 @@ def service_inactive(spec_name: str) -> Callable:
         return wrapper
     return inner
 
+def host_exists(hostname_position: int = 1) -> Callable:
+    """Check that a hostname exists in the inventory"""
+    def inner(func: Callable) -> Callable:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            this = args[0]  # self object
+            hostname = args[hostname_position]
+            if hostname not in this.cache.get_hosts():
+                candidates = ','.join([h for h in this.cache.get_hosts() if h.startswith(hostname)])
+                help_msg = f"Did you mean {candidates}?" if candidates else ""
+                raise OrchestratorError(f"Cannot find host '{hostname}' in the inventory. {help_msg}")
+
+            return func(*args, **kwargs)
+        return wrapper
+    return inner
+
+
 
 class ContainerInspectInfo(NamedTuple):
     image_id: str
@@ -1281,7 +1298,7 @@ To check that the host is reachable:
 
     def _hosts_with_daemon_inventory(self) -> List[HostSpec]:
         """
-        Returns all hosts that went through _refresh_host_daemons().
+        Returns all usable hosts that went through _refresh_host_daemons().
 
         This mitigates a potential race, where new host was added *after*
         ``_refresh_host_daemons()`` was called, but *before*
@@ -1290,7 +1307,8 @@ To check that the host is reachable:
         """
         return [
             h for h in self.inventory.all_specs()
-            if self.cache.host_had_daemon_refresh(h.hostname)
+            if self.cache.host_had_daemon_refresh(h.hostname) and \
+                h.status.lower() not in ['maintenance', 'offline']
         ]
 
     def _add_host(self, spec):
@@ -1366,11 +1384,8 @@ To check that the host is reachable:
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
 
-    @trivial_completion
-    def host_ok_to_stop(self, hostname: str) -> str:
-        if hostname not in self.cache.get_hosts():
-            raise OrchestratorError(f'Cannot find host "{hostname}"')
-
+    def _host_ok_to_stop(self, hostname: str) -> Tuple[int, str]:
+        self.log.debug("running host-ok-to-stop checks")
         daemons = self.cache.get_daemons()
         daemon_map = defaultdict(lambda: [])
         for dd in daemons:
@@ -1381,13 +1396,150 @@ To check that the host is reachable:
             r = self.cephadm_services[daemon_type].ok_to_stop(daemon_ids)
             if r.retval:
                 self.log.error(f'It is NOT safe to stop host {hostname}')
-                raise orchestrator.OrchestratorError(
-                    r.stderr,
-                    errno=r.retval)
+                return r.retval, r.stderr
 
-        msg = f'It is presumed safe to stop host {hostname}'
+        return 0, f'It is presumed safe to stop host {hostname}'
+
+    @trivial_completion
+    def host_ok_to_stop(self, hostname: str) -> str:
+        if hostname not in self.cache.get_hosts():
+            raise OrchestratorError(f'Cannot find host "{hostname}"')
+
+        rc, msg = self._host_ok_to_stop(hostname)
+        if rc:
+            raise OrchestratorError(msg, errno=rc)
+
         self.log.info(msg)
         return msg
+
+    def _set_maintenance_healthcheck(self):
+        """Raise/update or clear the maintenance health check as needed"""
+
+        in_maintenance = self.inventory.get_host_with_state("maintenance")
+        if not in_maintenance:
+            self.set_health_checks({
+                "HOST_IN_MAINTENANCE": {}
+            })
+        else:
+            s = "host is" if len(in_maintenance) == 1 else "hosts are"
+            self.set_health_checks({
+                "HOST_IN_MAINTENANCE": {
+                    "severity": "warning",
+                    "summary": f"{len(in_maintenance)} {s} in maintenance mode",
+                    "detail": [f"{h} is in maintenance" for h in in_maintenance],
+                }
+            })
+
+    @trivial_completion
+    @host_exists()
+    def enter_host_maintenance(self, hostname: str) -> str:
+        """ Attempt to place a cluster host in maintenance
+
+        Placing a host into maintenance disables the cluster's ceph target in systemd
+        and stops all ceph daemons. If the host is an osd host we apply the noout flag
+        for the host subtree in crush to prevent data movement during a host maintenance 
+        window.
+        
+        :param hostname: (str) name of the host (must match an inventory hostname)
+
+        :raises OrchestratorError: Hostname is invalid, host is already in maintenance
+        """
+        if len(self.cache.get_hosts()) == 1:
+            raise OrchestratorError(f"Maintenance feature is not supported on single node clusters")
+
+        # if upgrade is active, deny
+        if self.upgrade.upgrade_state:
+            raise OrchestratorError(f"Unable to place {hostname} in maintenance with upgrade active/paused")
+
+        tgt_host = self.inventory._inventory[hostname]
+        if tgt_host.get("status", "").lower() == "maintenance":
+            raise OrchestratorError(f"Host {hostname} is already in maintenance")
+
+        host_daemons = self.cache.get_daemon_types(hostname)
+        self.log.debug("daemons on host {}".format(','.join(host_daemons)))
+        if host_daemons:
+            # daemons on this host, so check the daemons can be stopped
+            # and if so, place the host into maintenance by disabling the target
+            rc, msg = self._host_ok_to_stop(hostname)
+            if rc:
+                raise OrchestratorError(msg, errno=rc)
+
+            # call the host-maintenance function
+            out, _err, _code = self._run_cephadm(hostname, cephadmNoImage, "host-maintenance",
+                                        ["enter"],
+                                        error_ok=True)
+            if out:
+                raise OrchestratorError(f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
+            
+            if "osd" in host_daemons:
+                crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
+                rc, out, err = self.mon_command({
+                    'prefix': 'osd set-group',
+                    'flags': 'noout',
+                    'who': [crush_node],
+                    'format': 'json'
+                })
+                if rc:
+                    self.log.warning(f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc})")
+                    raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})")
+                else:
+                    self.log.info(f"maintenance mode request for {hostname} has SET the noout group")
+
+        # update the host status in the inventory            
+        tgt_host["status"] = "maintenance"
+        self.inventory._inventory[hostname] = tgt_host
+        self.inventory.save()
+
+        self._set_maintenance_healthcheck()        
+
+        return f"Ceph cluster {self._cluster_fsid} on {hostname} moved to maintenance"
+
+    @trivial_completion
+    @host_exists()
+    def exit_host_maintenance(self, hostname: str) -> str:
+        """Exit maintenance mode and return a host to an operational state
+
+        Returning from maintnenance will enable the clusters systemd target and
+        start it, and remove any noout that has been added for the host if the 
+        host has osd daemons
+
+        :param hostname: (str) host name
+    
+        :raises OrchestratorError: Unable to return from maintenance, or unset the
+                                   noout flag
+        """
+        tgt_host = self.inventory._inventory[hostname]
+        if tgt_host['status'] != "maintenance":
+            raise OrchestratorError(f"Host {hostname} is not in maintenance mode")
+
+        out, _err, _code = self._run_cephadm(hostname, cephadmNoImage, 'host-maintenance',
+                                    ['exit'],
+                                    error_ok=True)
+        if out:
+            raise OrchestratorError(f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
+
+        if "osd" in self.cache.get_daemon_types(hostname):
+            crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
+            rc, _out, _err = self.mon_command({
+                    'prefix': 'osd unset-group',
+                    'flags': 'noout',
+                    'who': [crush_node],
+                    'format': 'json'
+            })
+            if rc:
+                self.log.warning(f"exit maintenance request failed to UNSET the noout group for {hostname}, (rc={rc})")
+                raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})")
+            else:
+                self.log.info(f"exit maintenance request has UNSET for the noout group on host {hostname}")
+
+        # update the host record status
+        tgt_host['status'] = ""
+        self.inventory._inventory[hostname] = tgt_host
+        self.inventory.save()
+        
+        self._set_maintenance_healthcheck()        
+
+        return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
 
     def get_minimal_ceph_conf(self) -> str:
         _, config, _ = self.check_mon_command({
@@ -2302,6 +2454,9 @@ To check that the host is reachable:
 
     @trivial_completion
     def upgrade_check(self, image: str, version: str) -> str:
+        if self.inventory.get_host_with_state("maintenance"):
+            raise OrchestratorError("check aborted - you have hosts in maintenance state")
+
         if version:
             target_name = self.container_image_base + ':v' + version
         elif image:
@@ -2339,6 +2494,8 @@ To check that the host is reachable:
 
     @trivial_completion
     def upgrade_start(self, image: str, version: str) -> str:
+        if self.inventory.get_host_with_state("maintenance"):
+            raise OrchestratorError("upgrade aborted - you have host(s) in maintenance state")
         return self.upgrade.upgrade_start(image, version)
 
     @trivial_completion
