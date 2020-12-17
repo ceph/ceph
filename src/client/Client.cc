@@ -8413,6 +8413,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 
   string dn_name;
   while (true) {
+    int mask = caps;
     if (!dirp->inode->is_complete_and_ordered())
       return -EAGAIN;
     if (pd == dir->readdir_cache.end())
@@ -8430,7 +8431,10 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     }
 
     int idx = pd - dir->readdir_cache.begin();
-    int r = _getattr(dn->inode, caps, dirp->perms);
+    if (dn->inode->is_dir()) {
+      mask |= CEPH_STAT_RSTAT;
+    }
+    int r = _getattr(dn->inode, mask, dirp->perms);
     if (r < 0)
       return r;
     
@@ -8515,7 +8519,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     uint64_t next_off = 1;
 
     int r;
-    r = _getattr(diri, caps, dirp->perms);
+    r = _getattr(diri, caps | CEPH_STAT_RSTAT, dirp->perms);
     if (r < 0)
       return r;
 
@@ -8548,7 +8552,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
       in = diri->get_first_parent()->dir->parent_inode;
 
     int r;
-    r = _getattr(in, caps, dirp->perms);
+    r = _getattr(in, caps | CEPH_STAT_RSTAT, dirp->perms);
     if (r < 0)
       return r;
 
@@ -8614,7 +8618,11 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 
       int r;
       if (check_caps) {
-	r = _getattr(entry.inode, caps, dirp->perms);
+	int mask = caps;
+	if(entry.inode->is_dir()){
+          mask |= CEPH_STAT_RSTAT;
+	}
+	r = _getattr(entry.inode, mask, dirp->perms);
 	if (r < 0)
 	  return r;
       }
