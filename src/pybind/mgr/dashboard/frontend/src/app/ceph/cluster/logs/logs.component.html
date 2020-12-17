@@ -13,14 +13,13 @@
              *ngIf="clog">
           <div class="btn-group"
                role="group"
-               (click)="logToText(clog)"
                *ngIf="clog.length">
             <cd-download-button [objectItem]="clog"
-                                [textItem]="logText"
+                                [textItem]="clogText"
                                 fileName="cluster_log">
             </cd-download-button>
             <cd-copy-2-clipboard-button
-                    [source]="logText"
+                    [source]="clogText"
                     [byId]="false">
             </cd-copy-2-clipboard-button>
           </div>
@@ -44,14 +43,13 @@
              *ngIf="audit_log">
           <div class="btn-group"
                role="group"
-               (click)="logToText(audit_log)"
                *ngIf="audit_log.length">
             <cd-download-button [objectItem]="audit_log"
-                                [textItem]="logText"
+                                [textItem]="auditLogText"
                                 fileName="audit_log">
             </cd-download-button>
             <cd-copy-2-clipboard-button
-                    [source]="logText"
+                    [source]="auditLogText"
                     [byId]="false">
             </cd-copy-2-clipboard-button>
           </div>
