@@ -27,23 +27,21 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   assert(is_recovering(soid));
   // start tracking the recovery of soid
   return maybe_pull_missing_obj(soid, need).then([this, soid, need] {
-    return seastar::do_with(get_shards_to_push(soid),
-      [this, soid, need](auto& shards) {
-        return maybe_push_shards(soid, need, shards);
-      });
+    return maybe_push_shards(soid, need);
   });
 }
 
 seastar::future<>
 ReplicatedRecoveryBackend::maybe_push_shards(
   const hobject_t& soid,
-  eversion_t need,
-  std::vector<pg_shard_t>& shards)
+  eversion_t need)
 {
-  auto push_func = [this, soid, need, &shards] {
+  auto push_func = [this, soid, need] {
     auto prepare_pops = seastar::now();
-    if (!shards.empty()) {
-      prepare_pops = seastar::parallel_for_each(shards, [this, need, soid](auto shard) {
+    if (auto shards = get_shards_to_push(soid);
+	!shards.empty()) {
+      prepare_pops = seastar::parallel_for_each(std::move(shards),
+						[this, need, soid](auto shard) {
 	return prep_push(soid, need, shard).then([this, soid, shard](auto push) {
           auto msg = make_message<MOSDPGPush>();
           msg->from = pg.get_pg_whoami();
