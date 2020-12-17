@@ -140,7 +140,7 @@ seastar::future<> ReplicatedRecoveryBackend::push_delete(
     if (iter == pg.get_shard_missing().end())
       return seastar::make_ready_future<>();
     if (iter->second.is_missing(soid)) {
-      logger().debug("{} will remove {} from {}", __func__, soid, shard);
+      logger().debug("push_delete: will remove {} from {}", soid, shard);
       pg.begin_peer_recover(shard, soid);
       spg_t target_pg = spg_t(pg.get_info().pgid.pgid, shard.shard);
       auto msg = make_message<MOSDPGRecoveryDelete>(
@@ -244,10 +244,8 @@ seastar::future<> ReplicatedRecoveryBackend::recover_delete(
 	  if (shard == pg.get_pg_whoami())
 	    continue;
 	  if (pg.get_shard_missing(shard)->is_missing(soid)) {
-	    logger().debug("{}: soid {} needs to deleted from replca {}",
-			   __func__,
-			   soid,
-			   shard);
+	    logger().debug("recover_delete: soid {} needs to deleted from replca {}",
+			   soid, shard);
 	    object_missing = true;
 	    break;
 	  }
