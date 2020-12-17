@@ -23,6 +23,11 @@
 
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;
+  uint32_t format_ver;
+  bool truncated;
+  uint64_t gen; // next generation number output from log list
+  uint32_t num_shards; // num shards corresponding to next generation number
+
 public:
   RGWOp_BILog_List() : sent_header(false) {}
   ~RGWOp_BILog_List() override {}
@@ -34,7 +39,7 @@ public:
     return check_caps(s->user->get_caps());
   }
   void send_response() override;
-  virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker, uint64_t generation);
+  virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
   virtual void send_response_end();
   void execute(optional_yield y) override;
   const char* name() const override {
