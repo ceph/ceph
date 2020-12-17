@@ -320,6 +320,20 @@ target_link_libraries(ceph_test_librgw_file_marker
   )
   target_link_libraries(ceph_test_librgw_file_marker spawn)
 
+# ceph_test_librgw_file_xattr (attribute ops)
+add_executable(ceph_test_librgw_file_xattr
+  librgw_file_xattr.cc
+  )
+target_include_directories(ceph_test_librgw_file_xattr SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(ceph_test_librgw_file_xattr
+  rgw
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+target_link_libraries(ceph_test_librgw_file_xattr spawn)
+
 # ceph_test_rgw_token
 add_executable(ceph_test_rgw_token
   test_rgw_token.cc
