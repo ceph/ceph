@@ -243,6 +243,9 @@ TEST(LibRGW, PUT_OBJECT) {
 			(void*) data.c_str(), RGW_WRITE_FLAG_NONE);
     ASSERT_EQ(ret, 0);
     ASSERT_EQ(nbytes, data.length());
+    /* commit write transaction */
+    ret = rgw_close(fs, object_fh, 0 /* flags */);
+    ASSERT_EQ(ret, 0);
   }
 }
 
@@ -366,6 +369,14 @@ TEST(LibRGW, READV_AFTER_WRITEV)
 TEST(LibRGW, DELETE_OBJECT) {
   if (do_delete) {
     int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+}
+
+TEST(LibRGW, DELETE_BUCKET) {
+  if (do_delete) {
+    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
 			 RGW_UNLINK_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
