@@ -827,6 +827,7 @@ Depends: ceph-common (= ${binary:Version}),
          mime-support,
          ${misc:Depends},
          ${shlibs:Depends},
+Suggests: gawk,
 Recommends: ntp | time-daemon,
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
