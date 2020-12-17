@@ -68,6 +68,29 @@ void ImageUpdatedPayload::dump(Formatter *f) const {
   f->dump_string("global_image_id", global_image_id);
 }
 
+void GroupUpdatedPayload::encode(bufferlist &bl) const {
+  using ceph::encode;
+  encode(static_cast<uint32_t>(mirror_group_state), bl);
+  encode(group_id, bl);
+  encode(global_group_id, bl);
+}
+
+void GroupUpdatedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  uint32_t mirror_group_state_decode;
+  decode(mirror_group_state_decode, iter);
+  mirror_group_state = static_cast<cls::rbd::MirrorGroupState>(
+    mirror_group_state_decode);
+  decode(group_id, iter);
+  decode(global_group_id, iter);
+}
+
+void GroupUpdatedPayload::dump(Formatter *f) const {
+  f->dump_stream("mirror_group_state") << mirror_group_state;
+  f->dump_string("group_id", group_id);
+  f->dump_string("global_group_id", global_group_id);
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
@@ -98,6 +121,9 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   case NOTIFY_OP_IMAGE_UPDATED:
     payload = ImageUpdatedPayload();
     break;
+  case NOTIFY_OP_GROUP_UPDATED:
+    payload = GroupUpdatedPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -116,6 +142,8 @@ std::list<NotifyMessage> NotifyMessage::generate_test_instances() {
   o.push_back(NotifyMessage(ModeUpdatedPayload(cls::rbd::MIRROR_MODE_DISABLED)));
   o.push_back(NotifyMessage(ImageUpdatedPayload(cls::rbd::MIRROR_IMAGE_STATE_DISABLING,
 					       "image id", "global image id")));
+  o.push_back(NotifyMessage(GroupUpdatedPayload(cls::rbd::MIRROR_GROUP_STATE_DISABLING,
+                                                "group id", "global group id")));
   return o;
 }
 
@@ -126,6 +154,9 @@ std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
     break;
   case NOTIFY_OP_IMAGE_UPDATED:
     out << "ImageUpdated";
+    break;
+  case NOTIFY_OP_GROUP_UPDATED:
+    out << "GroupUpdated";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";
