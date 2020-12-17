@@ -438,6 +438,11 @@ void usage()
   cout << "   --context                 context in which the script runs. one of: preRequest, postRequest\n";
   cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
   cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
+  cout << "\nradoslist options:\n";
+  cout << "   --rgw-obj-fs              the field separator that will separate the rados\n";
+  cout << "                             object name from the rgw object name;\n";
+  cout << "                             additionally rados objects for incomplete\n";
+  cout << "                             multipart uploads will not be output\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -3227,6 +3232,8 @@ int main(int argc, const char **argv)
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
 
+  std::optional<std::string> rgw_obj_fs; // radoslist field separator
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -3650,6 +3657,8 @@ int main(int argc, const char **argv)
       script_package = val;
     } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--rgw-obj-fs", (char*)NULL)) {
+      rgw_obj_fs = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -6101,6 +6110,10 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
     RGWRadosList lister(store,
 			max_concurrent_ios, orphan_stale_secs, tenant);
+    if (rgw_obj_fs) {
+      lister.set_field_separator(*rgw_obj_fs);
+    }
+
     if (bucket_name.empty()) {
       ret = lister.run();
     } else {
