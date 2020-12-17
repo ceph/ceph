@@ -115,6 +115,7 @@ def task(ctx, config):
             # ignore failure since more than one client may
             # be run on a host, and the client dir should be
             # non-empty if the test failed
+            clone_dir = '{tdir}/clone.{role}'.format(tdir=testdir, role=client)
             remote.run(
                 args=[
                     'rm', '-rf', '--',
