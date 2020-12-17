@@ -650,12 +650,12 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
 	pg.get_recovery_handler()->on_local_recover(
 	    pop.soid, recovering.at(pop.soid).pi->recovery_info,
 	    false, *t);
-	return seastar::make_ready_future<bool>(true);
+	return true;
       } else {
         response->soid = pop.soid;
         response->recovery_info = pi.recovery_info;
         response->recovery_progress = pi.recovery_progress;
-        return seastar::make_ready_future<bool>(false);
+        return false;
       }
     });
   });
