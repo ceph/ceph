@@ -829,6 +829,18 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def enter_host_maintenance(self, hostname: str) -> Completion:
+        """
+        Place a host in maintenance, stopping daemons and disabling it's systemd target
+        """
+        raise NotImplementedError()
+
+    def exit_host_maintenance(self, hostname: str) -> Completion:
+        """
+        Return a host from maintenance, restarting the clusters systemd target
+        """
+        raise NotImplementedError()
+
     def get_inventory(self, host_filter: Optional['InventoryFilter'] = None, refresh: bool = False) -> Completion[List['InventoryHost']]:
         """
         Returns something that was created by `ceph-volume inventory`.
