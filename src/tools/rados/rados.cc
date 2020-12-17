@@ -2386,25 +2386,29 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
 
-    if (wildcard)
+    if (wildcard) {
       io_ctx.set_namespace(all_nspaces);
+    }
     bool use_stdout = (!output && (nargs.size() < 2 || (strcmp(nargs[1], "-") == 0)));
     if (!use_stdout && !output) {
       cerr << "Please use --output to specify the output file name" << std::endl;
       return 1;
     }
+
     ostream *outstream;
-    if(use_stdout)
+    if (use_stdout) {
       outstream = &cout;
-    else
+    } else {
       outstream = new ofstream(output);
+    }
 
     {
-      if (formatter)
+      if (formatter) {
         formatter->open_array_section("objects");
+      }
       try {
 	librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
-	librados::NObjectIterator i_end = io_ctx.nobjects_end();
+	const librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
 #ifdef WITH_LIBRADOSSTRIPER
 	  if (use_striper) {
@@ -2413,33 +2417,42 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    // each, without its suffix '.000...000'
 	    size_t l = i->get_oid().length();
 	    if (l <= 17 ||
-		(0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) continue;
+		(0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) {
+	      continue;
+	    }
 	  }
 #endif // WITH_LIBRADOSSTRIPER
           if (pgid) {
             uint32_t ps;
-            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps)
+            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps) {
               break;
+	    }
           }
 	  if (!formatter) {
 	    // Only include namespace in output when wildcard specified
-	    if (wildcard)
+	    if (wildcard) {
 	      *outstream << i->get_nspace() << "\t";
-      
-        *outstream << detail::get_oid(i, use_striper);
-
-	    if (i->get_locator().size())
+	    }
+	    *outstream << detail::get_oid(i, use_striper);
+	    if (i->get_locator().size()) {
 	      *outstream << "\t" << i->get_locator();
+	    }
 	    *outstream << std::endl;
 	  } else {
 	    formatter->open_object_section("object");
 	    formatter->dump_string("namespace", i->get_nspace());
 
-        detail::dump_name(formatter.get(), i, use_striper);
+	    detail::dump_name(formatter.get(), i, use_striper);
 
-	    if (i->get_locator().size())
+	    if (i->get_locator().size()) {
 	      formatter->dump_string("locator", i->get_locator());
+	    }
 	    formatter->close_section(); //object
+
+	    constexpr int TARGET_BYTES_PER_FLUSH = 4096;
+	    if (formatter->get_len() >= TARGET_BYTES_PER_FLUSH) {
+	      formatter->flush(*outstream);
+	    }
 	  }
 	}
       }
@@ -2451,12 +2464,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (formatter) {
       formatter->close_section(); //objects
       formatter->flush(*outstream);
-      if (pretty_format)
+      if (pretty_format) {
 	*outstream << std::endl;
+      }
       formatter->flush(*outstream);
     }
-    if (!stdout)
+    if (!stdout) {
       delete outstream;
+    }
   }
   else if (strcmp(nargs[0], "mapext") == 0) {
     if (!pool_name || nargs.size() < 2) {

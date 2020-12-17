@@ -403,7 +403,7 @@ class Filesystem(MDSCluster):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fscid=None, name=None, create=False,
+    def __init__(self, ctx, fs_config=None, fscid=None, name=None, create=False,
                  ec_profile=None):
         super(Filesystem, self).__init__(ctx)
 
@@ -414,6 +414,7 @@ class Filesystem(MDSCluster):
         self.metadata_overlay = False
         self.data_pool_name = None
         self.data_pools = None
+        self.fs_config = fs_config
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
@@ -514,6 +515,9 @@ class Filesystem(MDSCluster):
     def set_max_mds(self, max_mds):
         self.set_var("max_mds", "%d" % max_mds)
 
+    def set_session_timeout(self, timeout):
+        self.set_var("session_timeout", "%d" % timeout)
+
     def set_allow_standby_replay(self, yes):
         self.set_var("allow_standby_replay", str(yes).lower())
 
@@ -575,6 +579,16 @@ class Filesystem(MDSCluster):
                 pass
             else:
                 raise
+
+        if self.fs_config is not None:
+            max_mds = self.fs_config.get('max_mds', 1)
+            if max_mds > 1:
+                self.set_max_mds(max_mds)
+
+            # If absent will use the default value (60 seconds)
+            session_timeout = self.fs_config.get('session_timeout', 60)
+            if session_timeout != 60:
+                self.set_session_timeout(session_timeout)
 
         self.getinfo(refresh = True)
 

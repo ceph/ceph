@@ -433,6 +433,7 @@ public:
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
   void dump(ceph::Formatter *f) const;
+  void dump_summary(ceph::Formatter *f) const;
 
   static void generate_test_instances(list<MonMap*>& o);
 protected:
