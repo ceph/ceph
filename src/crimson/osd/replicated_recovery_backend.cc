@@ -666,7 +666,7 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
     bool complete = pi.is_complete();
     bool clear_omap = !pop.before_progress.omap_complete;
     return submit_push_data(pi.recovery_info, first, complete, clear_omap,
-	  data_zeros, usable_intervals, data, pop.omap_header,
+	  std::move(data_zeros), usable_intervals, data, pop.omap_header,
 	  pop.attrset, pop.omap_entries, t).then(
       [this, response, &pi, &pop, complete, t, bytes_recovered=data.length()] {
       pi.stat.num_keys_recovered += pop.omap_entries.size();
@@ -745,29 +745,29 @@ seastar::future<> ReplicatedRecoveryBackend::_handle_push(
 {
   logger().debug("{}", __func__);
 
-  return seastar::do_with(interval_set<uint64_t>(),
-			  bufferlist(),
-    [this, &pop, t, response](auto& data_zeros, auto& data) {
-    data = pop.data;
-    bool first = pop.before_progress.first;
-    bool complete = pop.after_progress.data_complete
-      && pop.after_progress.omap_complete;
-    bool clear_omap = !pop.before_progress.omap_complete;
-    uint64_t z_offset = pop.before_progress.data_recovered_to;
-    uint64_t z_length = pop.after_progress.data_recovered_to
-      - pop.before_progress.data_recovered_to;
-    if (z_length)
-      data_zeros.insert(z_offset, z_length);
-    response->soid = pop.recovery_info.soid;
+  bool first = pop.before_progress.first;
+  interval_set<uint64_t> data_zeros;
+  {
+    uint64_t offset = pop.before_progress.data_recovered_to;
+    uint64_t length = (pop.after_progress.data_recovered_to -
+                       pop.before_progress.data_recovered_to);
+    if (length) {
+      data_zeros.insert(offset, length);
+    }
+  }
+  bool complete = (pop.after_progress.data_complete &&
+		   pop.after_progress.omap_complete);
+  bool clear_omap = !pop.before_progress.omap_complete;
+  response->soid = pop.recovery_info.soid;
 
-    return submit_push_data(pop.recovery_info, first, complete, clear_omap,
-	data_zeros, pop.data_included, data, pop.omap_header, pop.attrset,
-	pop.omap_entries, t).then([this, complete, &pop, t] {
-      if (complete) {
-	pg.get_recovery_handler()->on_local_recover(pop.recovery_info.soid,
-			    pop.recovery_info, false, *t);
-      }
-    });
+  return submit_push_data(pop.recovery_info, first, complete, clear_omap,
+        std::move(data_zeros), pop.data_included, pop.data, pop.omap_header,
+        pop.attrset, pop.omap_entries, t).then([this, complete, &pop, t] {
+    if (complete) {
+      pg.get_recovery_handler()->on_local_recover(
+        pop.recovery_info.soid, pop.recovery_info,
+        false, *t);
+    }
   });
 }
 
@@ -904,7 +904,7 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
   bool first,
   bool complete,
   bool clear_omap,
-  interval_set<uint64_t> &data_zeros,
+  interval_set<uint64_t> data_zeros,
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
   bufferlist omap_header,
@@ -986,8 +986,9 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
       });
     }
     return seastar::make_ready_future<>();
-  }().then([this, &data_zeros, &recovery_info, &intervals_included, t, target_oid,
-    &omap_entries, &attrs, data_included, complete, first] {
+  }().then([this, data_zeros=std::move(data_zeros),
+	    &recovery_info, &intervals_included, t, target_oid,
+	    &omap_entries, &attrs, data_included, complete, first]() mutable {
     uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
     // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
     if (!data_zeros.empty()) {

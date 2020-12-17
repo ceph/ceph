@@ -73,7 +73,7 @@ protected:
     bool first,
     bool complete,
     bool clear_omap,
-    interval_set<uint64_t> &data_zeros,
+    interval_set<uint64_t> data_zeros,
     const interval_set<uint64_t> &intervals_included,
     ceph::bufferlist data_included,
     ceph::bufferlist omap_header,
