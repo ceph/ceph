@@ -187,7 +187,7 @@ def run_tasks(tasks, ctx):
                         exc_info = sys.exc_info()
 
                     if ctx.config.get('interactive-on-error'):
-                        from tuethology.task import interactive
+                        from teuthology.task import interactive
                         log.warning(
                             'Saw failure during task cleanup, going into interactive mode...')
                         interactive.task(ctx=ctx, config=None)
