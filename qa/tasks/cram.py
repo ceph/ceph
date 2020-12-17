@@ -65,7 +65,7 @@ def task(ctx, config):
 
     try:
         for client, tests in clients.items():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            (remote,) = (ctx.cluster.only(client).remotes.keys())
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             remote.run(
                 args=[
@@ -97,7 +97,7 @@ def task(ctx, config):
                 _run_tests(ctx, role)
     finally:
         for client, tests in clients.items():
-            (remote,) = ctx.cluster.only(client).remotes.keys()
+            (remote,) = (ctx.cluster.only(client).remotes.keys())
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             test_files = set([test.rsplit('/', 1)[1] for test in tests])
 
@@ -115,6 +115,7 @@ def task(ctx, config):
             # ignore failure since more than one client may
             # be run on a host, and the client dir should be
             # non-empty if the test failed
+            clone_dir = '{tdir}/clone.{role}'.format(tdir=testdir, role=client)
             remote.run(
                 args=[
                     'rm', '-rf', '--',
@@ -134,9 +135,11 @@ def _run_tests(ctx, role):
     """
     assert isinstance(role, str)
     PREFIX = 'client.'
-    assert role.startswith(PREFIX)
-    id_ = role[len(PREFIX):]
-    (remote,) = ctx.cluster.only(role).remotes.keys()
+    if role.startswith(PREFIX):
+        id_ = role[len(PREFIX):]
+    else:
+        id_ = role
+    (remote,) = (ctx.cluster.only(role).remotes.keys())
     ceph_ref = ctx.summary.get('ceph-sha1', 'master')
 
     testdir = teuthology.get_testdir(ctx)
