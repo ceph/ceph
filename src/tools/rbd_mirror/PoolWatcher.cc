@@ -63,6 +63,14 @@ public:
                                          enabled);
   }
 
+  void handle_group_updated(cls::rbd::MirrorGroupState state,
+                            const std::string &group_id,
+                            const std::string &global_group_id) override {
+    bool enabled = (state == cls::rbd::MIRROR_GROUP_STATE_ENABLED);
+    m_pool_watcher->handle_group_updated(group_id, global_group_id,
+                                         enabled);
+  }
+
 private:
   PoolWatcher *m_pool_watcher;
 };
@@ -351,6 +359,17 @@ void PoolWatcher<I>::handle_image_updated(const std::string &id,
     m_pending_removed_image_ids.insert(image_id);
     schedule_listener();
   }
+}
+
+template <typename I>
+void PoolWatcher<I>::handle_group_updated(const std::string &id,
+                                          const std::string &global_group_id,
+                                          bool enabled) {
+  dout(10) << "group_id=" << id << ", "
+           << "global_group_id=" << global_group_id << ", "
+           << "enabled=" << enabled << dendl;
+
+  // TODO
 }
 
 template <typename I>
