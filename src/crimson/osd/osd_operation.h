@@ -73,10 +73,10 @@ class blocking_future_detail {
   blocking_future_detail(Blocker *b, Fut &&f)
     : blocker(b), fut(std::move(f)) {}
 
-  template <typename... V, typename... U>
-  friend blocking_future_detail<seastar::future<V...>> make_ready_blocking_future(U&&... args);
-  template <typename... V, typename Exception>
-  friend blocking_future_detail<seastar::future<V...>>
+  template <typename V, typename U>
+  friend blocking_future_detail<seastar::future<V>> make_ready_blocking_future(U&& args);
+  template <typename V, typename Exception>
+  friend blocking_future_detail<seastar::future<V>>
   make_exception_blocking_future(Exception&& e);
 
   template <typename U>
@@ -95,22 +95,22 @@ public:
   }
 };
 
-template <typename... T>
-using blocking_future = blocking_future_detail<seastar::future<T...>>;
+template <typename T=void>
+using blocking_future = blocking_future_detail<seastar::future<T>>;
 
-template <typename... V, typename... U>
-blocking_future_detail<seastar::future<V...>> make_ready_blocking_future(U&&... args) {
-  return blocking_future<V...>(
+template <typename V, typename U>
+blocking_future_detail<seastar::future<V>> make_ready_blocking_future(U&& args) {
+  return blocking_future<V>(
     nullptr,
-    seastar::make_ready_future<V...>(std::forward<U>(args)...));
+    seastar::make_ready_future<V>(std::forward<U>(args)));
 }
 
-template <typename... V, typename Exception>
-blocking_future_detail<seastar::future<V...>>
+template <typename V, typename Exception>
+blocking_future_detail<seastar::future<V>>
 make_exception_blocking_future(Exception&& e) {
-  return blocking_future<V...>(
+  return blocking_future<V>(
     nullptr,
-    seastar::make_exception_future<V...>(e));
+    seastar::make_exception_future<V>(e));
 }
 
 /**
@@ -119,9 +119,9 @@ make_exception_blocking_future(Exception&& e) {
  */
 class Blocker {
 public:
-  template <typename... T>
-  blocking_future<T...> make_blocking_future(seastar::future<T...> &&f) {
-    return blocking_future<T...>(this, std::move(f));
+  template <typename T>
+  blocking_future<T> make_blocking_future(seastar::future<T> &&f) {
+    return blocking_future<T>(this, std::move(f));
   }
   void dump(ceph::Formatter *f) const;
   virtual ~Blocker() = default;
@@ -187,8 +187,8 @@ class Operation : public boost::intrusive_ref_counter<
   virtual const char *get_type_name() const = 0;
   virtual void print(std::ostream &) const = 0;
 
-  template <typename... T>
-  seastar::future<T...> with_blocking_future(blocking_future<T...> &&f) {
+  template <typename T>
+  seastar::future<T> with_blocking_future(blocking_future<T> &&f) {
     if (f.fut.available()) {
       return std::move(f.fut);
     }
