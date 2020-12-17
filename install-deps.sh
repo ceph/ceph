@@ -295,11 +295,9 @@ else
                 $SUDO apt-get install -y nlohmann-json-dev
                 ;;
             *Disco*)
-                [ ! $NO_BOOST_PKGS ] && $SUDO apt-get install -y libboost1.67-all-dev
                 $SUDO apt-get install -y nlohmann-json-dev
                 ;;
             *Focal*)
-                [ ! $NO_BOOST_PKGS ] && $SUDO apt-get install -y libboost1.71-all-dev
                 $SUDO apt-get install -y nlohmann-json3-dev
                 ;;
             *)
