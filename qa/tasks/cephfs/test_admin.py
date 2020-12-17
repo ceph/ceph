@@ -213,7 +213,7 @@ class TestRequiredClientFeatures(CephFSTestCase):
         self.assertGreater(len(features), 0);
 
         for f in features:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', str(f['index']))
+            self.fs.required_client_features('rm', str(f['index']))
 
         for f in features:
             index = f['index']
@@ -223,14 +223,46 @@ class TestRequiredClientFeatures(CephFSTestCase):
 
             if index % 3 == 0:
                 continue;
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'add', feature)
+            self.fs.required_client_features('add', feature)
             self.assertTrue(is_required(index))
 
             if index % 2 == 0:
                 continue;
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'required_client_features', self.fs.name, 'rm', feature)
+            self.fs.required_client_features('rm', feature)
             self.assertFalse(is_required(index))
 
+    def test_required_client_feature_add_reserved(self):
+        """
+        That `ceph fs required_client_features X add reserved` fails.
+        """
+
+        p = self.fs.required_client_features('add', 'reserved', check_status=False, stderr=StringIO())
+        self.assertIn('Invalid feature name', p.stderr.getvalue())
+
+    def test_required_client_feature_rm_reserved(self):
+        """
+        That `ceph fs required_client_features X rm reserved` fails.
+        """
+
+        p = self.fs.required_client_features('rm', 'reserved', check_status=False, stderr=StringIO())
+        self.assertIn('Invalid feature name', p.stderr.getvalue())
+
+    def test_required_client_feature_add_reserved_bit(self):
+        """
+        That `ceph fs required_client_features X add <reserved_bit>` passes.
+        """
+
+        p = self.fs.required_client_features('add', '1', stderr=StringIO())
+        self.assertIn("added feature 'reserved' to required_client_features", p.stderr.getvalue())
+
+    def test_required_client_feature_rm_reserved_bit(self):
+        """
+        That `ceph fs required_client_features X rm <reserved_bit>` passes.
+        """
+
+        self.fs.required_client_features('add', '1')
+        p = self.fs.required_client_features('rm', '1', stderr=StringIO())
+        self.assertIn("removed feature 'reserved' from required_client_features", p.stderr.getvalue())
 
 class TestConfigCommands(CephFSTestCase):
     """
