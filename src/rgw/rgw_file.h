@@ -2517,10 +2517,7 @@ public:
 
     // in ctr this is not a virtual call
     // invoking this classes's header_init()
-    int ret = RGWWriteRequest::header_init();
-    if (ret == 0) {
-      ret = init_from_header(store, get_state());
-    }
+    (void) RGWWriteRequest::header_init();
     op = this;
   }
 
@@ -2637,9 +2634,6 @@ public:
 
     src_bucket_name = src_parent->bucket_name();
     // need s->src_bucket_name?
-    src_object->set_name(src_parent->format_child_name(src_name, false));
-    // need s->src_object?
-
     dest_bucket_name = dst_parent->bucket_name();
     // need s->bucket.name?
     dest_obj_name = dst_parent->format_child_name(dst_name, false);
@@ -2673,6 +2667,10 @@ public:
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
     dest_policy = s3policy;
+    /* src_object required before RGWCopyObj::verify_permissions() */
+    rgw_obj_key k = rgw_obj_key(src_name);
+    src_object = rgwlib.get_store()->get_object(k);
+    s->object = src_object->clone(); // needed to avoid trap at rgw_op.cc:5150
     return ret;
   }
 
