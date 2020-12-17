@@ -35,6 +35,9 @@ std::string_view cephfs_feature_name(size_t id)
 
 int cephfs_feature_from_name(std::string_view name)
 {
+  if (name == "reserved"sv) {
+    return -1;
+  }
   for (size_t i = 0; i < feature_names.size(); ++i) {
     if (name == feature_names[i])
       return i;
