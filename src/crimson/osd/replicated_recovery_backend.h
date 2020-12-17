@@ -44,10 +44,10 @@ protected:
     Ref<MOSDPGRecoveryDelete> m);
   seastar::future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<std::map<pg_shard_t, PushOp>> prep_push(
+  seastar::future<PushOp> prep_push(
     const hobject_t& soid,
     eversion_t need,
-    const std::vector<pg_shard_t>& shards);
+    pg_shard_t pg_shard);
   void prepare_pull(
     PullOp& po,
     PullInfo& pi,
