@@ -65,6 +65,9 @@ struct MirroringWatcher<MockTestImageCtx> {
   virtual void handle_image_updated(cls::rbd::MirrorImageState state,
                                     const std::string &remote_image_id,
                                     const std::string &global_image_id) = 0;
+  virtual void handle_group_updated(cls::rbd::MirrorGroupState state,
+                                    const std::string &remote_group_id,
+                                    const std::string &global_group_id) = 0;
 
   bool is_unregistered() const {
     return MockMirroringWatcher::get_instance().is_unregistered();
