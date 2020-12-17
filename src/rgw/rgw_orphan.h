@@ -13,8 +13,7 @@
  * 
  */
 
-#ifndef CEPH_RGW_ORPHAN_H
-#define CEPH_RGW_ORPHAN_H
+#pragma once
 
 #include "common/config.h"
 #include "common/Formatter.h"
@@ -258,7 +257,12 @@ class RGWRadosList {
   uint64_t stale_secs;
   std::string tenant_name;
 
+  bool include_rgw_obj_name;
+  std::string field_separator;
+
   int handle_stat_result(RGWRados::Object::Stat::Result& result,
+			 std::string& bucket_name,
+			 rgw_obj_key& obj_key,
 			 std::set<string>& obj_oids);
   int pop_and_handle_stat_op(RGWObjectCtx& obj_ctx,
 			     std::deque<RGWRados::Object::Stat>& ops);
@@ -272,7 +276,8 @@ public:
     store(_store),
     max_concurrent_ios(_max_ios),
     stale_secs(_stale_secs),
-    tenant_name(_tenant_name)
+    tenant_name(_tenant_name),
+    include_rgw_obj_name(false)
   {}
 
   int process_bucket(const DoutPrefixProvider *dpp, 
@@ -288,6 +293,11 @@ public:
 
   int run(const DoutPrefixProvider *dpp, const std::string& bucket_id);
   int run(const DoutPrefixProvider *dpp);
-}; // class RGWRadosList
 
-#endif
+  // if there's a non-empty field separator, that means we'll display
+  // bucket and object names
+  void set_field_separator(const std::string& fs) {
+    field_separator = fs;
+    include_rgw_obj_name = !field_separator.empty();
+  }
+}; // class RGWRadosList
