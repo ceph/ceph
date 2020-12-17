@@ -292,13 +292,6 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
-                $SUDO apt-get install -y nlohmann-json-dev
-                ;;
-            *Disco*)
-                $SUDO apt-get install -y nlohmann-json-dev
-                ;;
-            *Focal*)
-                $SUDO apt-get install -y nlohmann-json3-dev
                 ;;
             *)
                 $SUDO apt-get install -y gcc
