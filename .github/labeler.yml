@@ -1,5 +1,5 @@
 build/ops:
-  - **/CMakeLists.txt
+  - "**/CMakeLists.txt"
   - admin/**
   - ceph.spec.in
   - cmake/**
