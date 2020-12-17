@@ -9,4 +9,4 @@ tasks:
     - echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_18.04/ /" | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list
     - sudo apt update
     - sudo apt -y install podman
-    - echo -e "[registries.search]\nregistries = ['docker.io']" | sudo tee /etc/containers/registries.conf
+    - echo -e "[[registry]]\nlocation = 'docker.io'\n\n[[registry.mirror]]\nlocation='docker-mirror.front.sepia.ceph.com:5000'\n" | sudo tee /etc/containers/registries.conf
