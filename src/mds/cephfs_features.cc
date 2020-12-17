@@ -29,7 +29,7 @@ static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 std::string_view cephfs_feature_name(size_t id)
 {
   if (id > feature_names.size())
-    return "unknown";
+    return "unknown"sv;
   return feature_names[id];
 }
 
