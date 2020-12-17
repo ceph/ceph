@@ -11,7 +11,7 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::MirroringWatcher: "
+#define dout_prefix *_dout << "librbd::MirroringWatcher: " << __func__ << ": "
 
 namespace librbd {
 
@@ -45,7 +45,8 @@ void MirroringWatcher<I>::notify_mode_updated(librados::IoCtx &io_ctx,
                                               cls::rbd::MirrorMode mirror_mode,
                                               Context *on_finish) {
   CephContext *cct = reinterpret_cast<CephContext*>(io_ctx.cct());
-  ldout(cct, 20) << dendl;
+  ldout(cct, 20) << "pool_name: " << io_ctx.get_pool_name()
+                 << ", mirror_mode: " << mirror_mode << dendl;
 
   bufferlist bl;
   encode(NotifyMessage{ModeUpdatedPayload{mirror_mode}}, bl);
@@ -74,7 +75,10 @@ void MirroringWatcher<I>::notify_image_updated(
     Context *on_finish) {
 
   CephContext *cct = reinterpret_cast<CephContext*>(io_ctx.cct());
-  ldout(cct, 20) << dendl;
+  ldout(cct, 20) << "pool_name: " << io_ctx.get_pool_name()
+                 << ", image_id: " << image_id
+                 << ", global_image_id: " << global_image_id
+                 << ", mirror_image_state: " << mirror_image_state << dendl;
 
   bufferlist bl;
   encode(NotifyMessage{ImageUpdatedPayload{
@@ -89,11 +93,44 @@ void MirroringWatcher<I>::notify_image_updated(
 }
 
 template <typename I>
+int MirroringWatcher<I>::notify_group_updated(
+    librados::IoCtx &io_ctx, cls::rbd::MirrorGroupState mirror_group_state,
+    const std::string &group_id, const std::string &global_group_id) {
+  C_SaferCond ctx;
+  notify_group_updated(io_ctx, mirror_group_state, group_id, global_group_id,
+                       &ctx);
+  return ctx.wait();
+}
+
+template <typename I>
+void MirroringWatcher<I>::notify_group_updated(
+    librados::IoCtx &io_ctx, cls::rbd::MirrorGroupState mirror_group_state,
+    const std::string &group_id, const std::string &global_group_id,
+    Context *on_finish) {
+
+  CephContext *cct = reinterpret_cast<CephContext*>(io_ctx.cct());
+  ldout(cct, 20) << "pool_name: " << io_ctx.get_pool_name()
+                 << ", group_id: " << group_id << " "
+                 << ", global_group_id: " << global_group_id
+                 << ", mirror_image_state: " << mirror_group_state << dendl;
+
+  bufferlist bl;
+  encode(NotifyMessage{GroupUpdatedPayload{
+      mirror_group_state, group_id, global_group_id}}, bl);
+
+  librados::AioCompletion *comp = create_rados_callback(on_finish);
+  int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
+                            nullptr);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
 void MirroringWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
                                         uint64_t notifier_id, bufferlist &bl) {
   CephContext *cct = this->m_cct;
-  ldout(cct, 15) << ": notify_id=" << notify_id << ", "
-                 << "handle=" << handle << dendl;
+  ldout(cct, 15) << "notify_id: " << notify_id
+                 << ", handle: " << handle << dendl;
 
 
   NotifyMessage notify_message;
@@ -116,7 +153,7 @@ template <typename I>
 bool MirroringWatcher<I>::handle_payload(const ModeUpdatedPayload &payload,
                                          Context *on_notify_ack) {
   CephContext *cct = this->m_cct;
-  ldout(cct, 20) << ": mode updated: " << payload.mirror_mode << dendl;
+  ldout(cct, 20) << "mode updated: " << payload.mirror_mode << dendl;
   handle_mode_updated(payload.mirror_mode);
   return true;
 }
@@ -125,9 +162,19 @@ template <typename I>
 bool MirroringWatcher<I>::handle_payload(const ImageUpdatedPayload &payload,
                                          Context *on_notify_ack) {
   CephContext *cct = this->m_cct;
-  ldout(cct, 20) << ": image state updated" << dendl;
+  ldout(cct, 20) << "image state updated" << dendl;
   handle_image_updated(payload.mirror_image_state, payload.image_id,
                        payload.global_image_id);
+  return true;
+}
+
+template <typename I>
+bool MirroringWatcher<I>::handle_payload(const GroupUpdatedPayload &payload,
+                                         Context *on_notify_ack) {
+  CephContext *cct = this->m_cct;
+  ldout(cct, 20) << "group state updated" << dendl;
+  handle_group_updated(payload.mirror_group_state, payload.group_id,
+                       payload.global_group_id);
   return true;
 }
 
