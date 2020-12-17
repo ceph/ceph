@@ -374,9 +374,8 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
 	  pop->omap_header.claim_append(bl);
 	  return store->get_attrs(coll, ghobject_t(recovery_info.soid));
 	}).safe_then([&oi, pop, &new_progress, &v](auto attrs) mutable {
-	  //pop->attrset = attrs;
-	  for (auto p : attrs) {
-	    pop->attrset[p.first].push_back(p.second);
+	  for (auto& [key, val] : attrs) {
+	    pop->attrset[std::move(key)].push_back(std::move(val));
 	  }
 	  logger().debug("build_push_op: {}", pop->attrset[OI_ATTR]);
 	  oi.decode(pop->attrset[OI_ATTR]);
