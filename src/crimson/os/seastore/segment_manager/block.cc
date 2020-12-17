@@ -36,7 +36,7 @@ static write_ertr::future<> do_write(
 	"do_write: dma_write got error {}",
 	e);
       return crimson::ct_error::input_output_error::make();
-  }).then([&device, length=bptr.length()](auto result)
+  }).then([length=bptr.length()](auto result)
 	       -> write_ertr::future<> {
     if (result != length) {
       return crimson::ct_error::input_output_error::make();

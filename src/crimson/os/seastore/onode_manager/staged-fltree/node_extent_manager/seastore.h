@@ -83,6 +83,8 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
                      e->get_length(), e->get_laddr());
       assert(e->get_laddr() == addr);
       assert(e->get_length() == len);
+      std::ignore = addr;
+      std::ignore = len;
       return NodeExtentRef(e);
     });
   }
@@ -95,6 +97,7 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
       logger().debug("OTree::Seastore: allocated {}B at {:#x}",
                      extent->get_length(), extent->get_laddr());
       assert(extent->get_length() == len);
+      std::ignore = len;
       return NodeExtentRef(extent);
     });
   }
