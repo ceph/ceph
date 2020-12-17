@@ -1,3 +1,20 @@
+build/ops:
+  - **/CMakeLists.txt
+  - admin/**
+  - ceph.spec.in
+  - cmake/**
+  - debian/**
+  - do_cmake.sh
+  - do_freebsd.sh
+  - install-deps.sh
+  - keys/**
+  - make-debs.sh
+  - make-dist
+  - make-srpm.sh
+  - run-make-check.sh
+  - win32_build.sh
+  - win32_deps_build.sh
+
 documentation:
   - AUTHORS
   - CONTRIBUTING.rst
