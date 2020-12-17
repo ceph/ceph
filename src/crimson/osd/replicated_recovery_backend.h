@@ -115,8 +115,7 @@ private:
 
   seastar::future<> maybe_push_shards(
     const hobject_t& soid,
-    eversion_t need,
-    std::vector<pg_shard_t>& shards);
+    eversion_t need);
 
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
