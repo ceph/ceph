@@ -972,20 +972,22 @@ def test_ps_s3_notification_on_master():
     # create s3 topic
     endpoint_address = 'amqp://127.0.0.1:7001'
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
-    topic_conf = PSTopicS3(master_zone.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
-    topic_arn = topic_conf.set_config()
+    topic_conf1 = PSTopicS3(master_zone.conn, topic_name+'_1', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+    topic_conf2 = PSTopicS3(master_zone.conn, topic_name+'_2', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     topic_conf_list = [{'Id': notification_name+'_1',
-                        'TopicArn': topic_arn,
+                        'TopicArn': topic_arn1,
                         'Events': ['s3:ObjectCreated:*']
                        },
                        {'Id': notification_name+'_2',
-                        'TopicArn': topic_arn,
+                        'TopicArn': topic_arn1,
                         'Events': ['s3:ObjectRemoved:*']
                        },
                        {'Id': notification_name+'_3',
-                        'TopicArn': topic_arn,
+                        'TopicArn': topic_arn1,
                         'Events': []
                        }]
     s3_notification_conf = PSNotificationS3(master_zone.conn, bucket_name, topic_conf_list)
@@ -995,7 +997,7 @@ def test_ps_s3_notification_on_master():
     # get notifications on a bucket
     response, status = s3_notification_conf.get_config(notification=notification_name+'_1')
     assert_equal(status/100, 2)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
+    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn1)
 
     # delete specific notifications
     _, status = s3_notification_conf.del_config(notification=notification_name+'_1')
@@ -1005,20 +1007,44 @@ def test_ps_s3_notification_on_master():
     response, status = s3_notification_conf.get_config()
     assert_equal(status/100, 2)
     assert_equal(len(response['TopicConfigurations']), 2)
-    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
-    assert_equal(response['TopicConfigurations'][1]['TopicArn'], topic_arn)
+    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn1)
+    assert_equal(response['TopicConfigurations'][1]['TopicArn'], topic_arn1)
 
     # delete remaining notifications
     _, status = s3_notification_conf.del_config()
     assert_equal(status/100, 2)
 
     # make sure that the notifications are now deleted
-    _, status = s3_notification_conf.get_config()
+    response, status = s3_notification_conf.get_config()
+    try:
+        dummy = response['TopicConfigurations']
+    except:
+        print('"TopicConfigurations" is not in response')
+    else:
+        assert False, '"TopicConfigurations" should not be in response'
 
-    # cleanup
-    topic_conf.del_config()
+    # create another s3 notification
+    topic_conf_list = [{'Id': notification_name+'_1',
+                        'TopicArn': topic_arn1,
+                        'Events': ['s3:ObjectCreated:*']
+                       }]
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # make sure the notification and auto-genrated topic are deleted
+    response, status = topic_conf1.get_list()
+    topics = response['ListTopicsResponse']['ListTopicsResult']['Topics']['member']
+    before_delete = len(topics)
     # delete the bucket
     master_zone.delete_bucket(bucket_name)
+    response, status = topic_conf2.get_list()
+    topics = response['ListTopicsResponse']['ListTopicsResult']['Topics']['member']
+    after_delete = len(topics)
+    assert_equal(before_delete - after_delete, 3)
+
+    # cleanup
+    topic_conf1.del_config()
+    topic_conf2.del_config()
 
 
 def ps_s3_notification_filter(on_master):

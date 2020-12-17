@@ -612,6 +612,35 @@ int RGWPubSub::Bucket::remove_notification(const string& topic_name, optional_yi
   return 0;
 }
 
+int RGWPubSub::Bucket::remove_notifications(optional_yield y)
+{
+  // get all topics on a bucket
+  rgw_pubsub_bucket_topics bucket_topics;
+  auto ret  = get_topics(&bucket_topics);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(ps->store->ctx(), 1) << "ERROR: failed to get list of topics from bucket '" << bucket.name << "', ret=" << ret << dendl;
+    return ret ;
+  }
+
+  // remove all auto-genrated topics
+  for (const auto& topic : bucket_topics.topics) {
+    const auto& topic_name = topic.first;
+    ret = ps->remove_topic(topic_name, y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(ps->store->ctx(), 5) << "WARNING: failed to remove auto-generated topic '" << topic_name << "', ret=" << ret << dendl;
+    }
+  }
+
+  // delete all notification of on a bucket
+  ret = ps->remove(bucket_meta_obj, nullptr, y);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(ps->store->ctx(), 1) << "ERROR: failed to remove bucket topics: ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 int RGWPubSub::create_topic(const string& name, optional_yield y) {
   return create_topic(name, rgw_pubsub_sub_dest(), "", "", y);
 }

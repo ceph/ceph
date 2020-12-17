@@ -35,6 +35,8 @@
 #include "services/svc_tier_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 
+#include "rgw_pubsub.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::sal {
@@ -145,6 +147,15 @@ int RGWRadosBucket::remove_bucket(bool delete_children, std::string prefix, std:
     lderr(store->ctx()) << "ERROR: could not remove bucket " <<
       info.bucket.name << dendl;
     return ret;
+  }
+
+  // if bucket has notification definitions associated with it
+  // they should be removed (note that any pending notifications on the bucket are still going to be sent)
+  RGWPubSub ps(store, info.owner.tenant);
+  RGWPubSub::Bucket ps_bucket(&ps, info.bucket);
+  const auto ps_ret = ps_bucket.remove_notifications(y);
+  if (ps_ret < 0 && ps_ret != -ENOENT) {
+    lderr(store->ctx()) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
   }
 
   ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, y, false);

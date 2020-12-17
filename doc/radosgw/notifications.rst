@@ -84,7 +84,7 @@ The same counters are shared between the pubsub sync module and the bucket notif
 .. note::
 
     ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, while:
-    ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per push action on each notification.
+    ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per push action on each notification
 
 Bucket Notification REST API
 ----------------------------
@@ -303,7 +303,12 @@ Delete Topic
    Action=DeleteTopic
    &TopicArn=<topic-arn>
 
-Delete the specified topic. Note that deleting a deleted topic should result with no-op and not a failure.
+Delete the specified topic.
+
+.. note::
+
+  - Deleting an unknown notification (e.g. double delete) is not considered an error
+  - Deleting a topic does not automatically delete all notifications associated with it
 
 The response will have the following format:
 
@@ -362,7 +367,6 @@ Detailed under: `Bucket Operations`_.
 
     - "Abort Multipart Upload" request does not emit a notification
     - Both "Initiate Multipart Upload" and "POST Object" requests will emit an ``s3:ObjectCreated:Post`` notification
-
 
 Events
 ~~~~~~
