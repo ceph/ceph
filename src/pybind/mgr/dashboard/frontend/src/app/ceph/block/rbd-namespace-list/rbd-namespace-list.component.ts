@@ -55,8 +55,7 @@ export class RbdNamespaceListComponent implements OnInit {
       icon: Icons.destroy,
       click: () => this.deleteModal(),
       name: this.actionLabels.DELETE,
-      disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
-      disableDesc: () => this.getDeleteDisableDesc()
+      disable: () => this.getDeleteDisableDesc()
     };
     this.tableActions = [createAction, deleteAction];
   }
@@ -153,14 +152,14 @@ export class RbdNamespaceListComponent implements OnInit {
     });
   }
 
-  getDeleteDisableDesc(): string | undefined {
+  getDeleteDisableDesc(): string | boolean {
     const first = this.selection.first();
     if (first) {
       if (first.num_images > 0) {
         return this.i18n('Namespace contains images');
       }
+      return false;
     }
-
-    return undefined;
+    return true;
   }
 }

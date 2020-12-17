@@ -224,7 +224,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	mds_metric_summary(metric.type),
 	1);
       ostringstream ss;
-      ss << "mds" << info.name << "(mds." << rank << "): " << metric.message;
+      ss << "mds." << info.name << "(mds." << rank << "): " << metric.message;
       bool first = true;
       for (auto &p : metric.metadata) {
 	if (first) {
@@ -392,6 +392,10 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   }
   dout(10) << __func__ << ": GID exists in map: " << gid << dendl;
   info = fsmap.get_info_gid(gid);
+
+  if (state == MDSMap::STATE_DNE) {
+    return false;
+  }
 
   // old seq?
   if (info.state_seq > seq) {

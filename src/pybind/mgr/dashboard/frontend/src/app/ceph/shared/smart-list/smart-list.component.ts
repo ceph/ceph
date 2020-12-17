@@ -1,7 +1,8 @@
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
+import { TabsetComponent } from 'ngx-bootstrap/tabs';
 
 import { HostService } from '../../../shared/api/host.service';
 import { OsdService } from '../../../shared/api/osd.service';
@@ -20,6 +21,9 @@ import {
   styleUrls: ['./smart-list.component.scss']
 })
 export class SmartListComponent implements OnInit, OnChanges {
+  @ViewChild('innerTabset', { static: false })
+  innerTabset: TabsetComponent;
+
   @Input()
   osdId: number = null;
   @Input()
@@ -32,6 +36,8 @@ export class SmartListComponent implements OnInit, OnChanges {
   data: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
 
   smartDataColumns: CdTableColumn[];
+
+  isEmpty = _.isEmpty;
 
   constructor(
     private i18n: I18n,

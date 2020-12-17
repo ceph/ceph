@@ -9,8 +9,7 @@ import { configureTestBed, i18nProviders } from '../../../../../testing/unit-tes
 import { OsdService } from '../../../../shared/api/osd.service';
 import { SharedModule } from '../../../../shared/shared.module';
 import { TablePerformanceCounterComponent } from '../../../performance-counter/table-performance-counter/table-performance-counter.component';
-import { DeviceListComponent } from '../../../shared/device-list/device-list.component';
-import { SmartListComponent } from '../../../shared/smart-list/smart-list.component';
+import { CephSharedModule } from '../../../shared/ceph-shared.module';
 import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
 import { OsdDetailsComponent } from './osd-details.component';
 
@@ -22,11 +21,9 @@ describe('OsdDetailsComponent', () => {
   let getDetailsSpy: jasmine.Spy;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, TabsModule.forRoot(), SharedModule],
+    imports: [HttpClientTestingModule, TabsModule.forRoot(), SharedModule, CephSharedModule],
     declarations: [
       OsdDetailsComponent,
-      DeviceListComponent,
-      SmartListComponent,
       TablePerformanceCounterComponent,
       OsdPerformanceHistogramComponent
     ],

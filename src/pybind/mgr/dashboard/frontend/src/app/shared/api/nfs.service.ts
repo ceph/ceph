@@ -75,8 +75,8 @@ export class NfsService {
     });
   }
 
-  lsDir(root_dir: string) {
-    return this.http.get(`${this.uiApiPath}/lsdir?root_dir=${root_dir}`);
+  lsDir(fs_name: string, root_dir: string) {
+    return this.http.get(`${this.uiApiPath}/lsdir/${fs_name}?root_dir=${root_dir}`);
   }
 
   buckets(user_id: string) {

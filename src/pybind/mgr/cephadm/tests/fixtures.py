@@ -5,6 +5,7 @@ from contextlib import contextmanager
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm.module import CEPH_DATEFMT
+from cephadm.serve import CephadmServe
 
 try:
     from typing import Any, Iterator, List
@@ -118,14 +119,14 @@ def with_host(m: CephadmOrchestrator, name, refresh_hosts=True):
     # type: (CephadmOrchestrator, str) -> None
     wait(m, m.add_host(HostSpec(hostname=name)))
     if refresh_hosts:
-        m._refresh_hosts_and_daemons()
+        CephadmServe(m)._refresh_hosts_and_daemons()
     yield
     wait(m, m.remove_host(name))
 
 
 def assert_rm_service(cephadm, srv_name):
     assert wait(cephadm, cephadm.remove_service(srv_name)) == f'Removed service {srv_name}'
-    cephadm._apply_all_services()
+    CephadmServe(cephadm)._apply_all_services()
 
 
 @contextmanager
@@ -137,7 +138,7 @@ def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, h
     specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
     assert spec in specs
 
-    cephadm_module._apply_all_services()
+    CephadmServe(cephadm_module)._apply_all_services()
 
     dds = wait(cephadm_module, cephadm_module.list_daemons())
     own_dds = [dd for dd in dds if dd.service_name() == spec.service_name()]

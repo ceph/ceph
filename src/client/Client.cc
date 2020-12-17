@@ -6423,9 +6423,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
       int r = make_request(req, perms, &tmptarget, NULL, rand() % mdsmap->get_num_in_mds());
 
       if (r == 0) {
-	Inode *tempino = tmptarget.get();
-	_ll_get(tempino);
-	*target = tempino;
+	*target = std::move(tmptarget);
 	ldout(cct, 8) << __func__ << " found target " << (*target)->ino << dendl;
       } else {
 	*target = dir;
@@ -14744,7 +14742,7 @@ mds_rank_t Client::_get_random_up_mds() const
 
 
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc)
-    : Client(m, mc, new Objecter(m->cct, m, mc, NULL, 0, 0))
+    : Client(m, mc, new Objecter(m->cct, m, mc, nullptr))
 {
   monclient->set_messenger(m);
   objecter->set_client_incarnation(0);

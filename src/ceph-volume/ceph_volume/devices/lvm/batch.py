@@ -175,28 +175,28 @@ class Batch(object):
             'devices',
             metavar='DEVICES',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs',
         )
         parser.add_argument(
             '--db-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs db volumes',
         )
         parser.add_argument(
             '--wal-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs wal volumes',
         )
         parser.add_argument(
             '--journal-devices',
             nargs='*',
-            type=arg_validators.ValidDevice(),
+            type=arg_validators.ValidBatchDevice(),
             default=[],
             help='Devices to provision OSDs journal volumes',
         )
@@ -369,6 +369,9 @@ class Batch(object):
         ssd = []
         for d in self.args.devices:
             rotating.append(d) if d.rotational else ssd.append(d)
+        if ssd and not rotating:
+            # no need for additional sorting, we'll only deploy standalone on ssds
+            return
         self.args.devices = rotating
         if self.args.filestore:
             self.args.journal_devices = ssd

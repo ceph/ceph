@@ -1323,7 +1323,8 @@ void MonClient::start_mon_command(const std::vector<string>& cmd,
   r->poutbl = outbl;
   r->prs = outs;
   r->onfinish = onfinish;
-  if (cct->_conf->rados_mon_op_timeout > 0) {
+  auto timeout = cct->_conf.get_val<std::chrono::seconds>("rados_mon_op_timeout");
+  if (timeout.count() > 0) {
     class C_CancelMonCommand : public Context
     {
       uint64_t tid;
@@ -1335,7 +1336,7 @@ void MonClient::start_mon_command(const std::vector<string>& cmd,
       }
     };
     r->ontimeout = new C_CancelMonCommand(r->tid, this);
-    timer.add_event_after(cct->_conf->rados_mon_op_timeout, r->ontimeout);
+    timer.add_event_after(static_cast<double>(timeout.count()), r->ontimeout);
   }
   mon_commands[r->tid] = r;
   _send_command(r);
@@ -1668,13 +1669,8 @@ int MonClient::handle_auth_request(
   }
 
   auto ac = &auth_meta->authorizer_challenge;
-  if (!HAVE_FEATURE(con->get_features(), CEPHX_V2)) {
-    if (cct->_conf->cephx_service_require_version >= 2) {
-      ldout(cct,10) << __func__ << " client missing CEPHX_V2 ("
-		    << "cephx_service_requre_version = "
-		    << cct->_conf->cephx_service_require_version << ")" << dendl;
-      return -EACCES;
-    }
+  if (auth_meta->skip_authorizer_challenge) {
+    ldout(cct, 10) << __func__ << " skipping challenge on " << con << dendl;
     ac = nullptr;
   }
 

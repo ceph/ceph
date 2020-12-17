@@ -2127,16 +2127,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
-  /* garbage collection related handling */
-  utime_t start_time = ceph_clock_now();
-  if (start_time > gc_invalidate_time) {
-    int r = store->getRados()->defer_gc(s->obj_ctx, s->bucket_info, obj, s->yield);
-    if (r < 0) {
-      ldpp_dout(this, 0) << "WARNING: could not defer gc entry for obj" << dendl;
-    }
-    gc_invalidate_time = start_time;
-    gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
-  }
+  /* garbage collection related handling:
+   * defer_gc disabled for https://tracker.ceph.com/issues/47866 */
   return send_response_data(bl, bl_ofs, bl_len);
 }
 

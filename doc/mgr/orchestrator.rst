@@ -189,10 +189,6 @@ If you want to avoid this behavior (disable automatic creation of OSD on availab
 
     ceph orch apply osd --all-available-devices --unmanaged=true
 
-If you have already created the OSDs using the ``all-available-devices`` service, you can change the automatic OSD creation using the following command::
-
-    ceph orch osd spec --service-name osd.all-available-devices --unmanaged
-
 Remove an OSD
 -------------
 ::
@@ -386,6 +382,9 @@ where ``name`` is the name of the CephFS and ``placement`` is a
 This command will create the required Ceph pools, create the new
 CephFS, and deploy mds servers.
 
+
+.. _orchestrator-cli-stateless-services:
+
 Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
 =================================================
 
@@ -447,8 +446,9 @@ A corresponding :ref:`orchestrator-cli-service-spec` must look like:
       - CONFIG_DIR
     files:
       CONFIG_DIR/foo.conf:
-          - refresh=true
-          - username=xyz
+        - refresh=true
+        - username=xyz
+        - "port: 1234"
 
 where the properties of a service specification are:
 
@@ -483,9 +483,11 @@ where the properties of a service specification are:
 * ``files``
     A dictionary, where the key is the relative path of the file and the
     value the file content. The content must be double quoted when using
-    a string. Use '\n' for line breaks in that case. Otherwise define
+    a string. Use '\\n' for line breaks in that case. Otherwise define
     multi-line content as list of strings. The given files will be created
     below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+    The absolute path of the directory where the file will be created must
+    exist. Use the `dirs` property to create them if necessary.
 
 .. _orchestrator-cli-service-spec:
 
@@ -757,10 +759,10 @@ This is an overview of the current implementation status of the orchestrators.
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
  iscsi add                           ⚪     ✔
- mds add                             ✔      ✔
+ mds add                             ⚪      ✔
  nfs add                             ✔      ✔
  rbd-mirror add                      ⚪      ✔
- rgw add                             ✔      ✔
+ rgw add                             ⚪     ✔
  ps                                  ✔      ✔
 =================================== ====== =========
 

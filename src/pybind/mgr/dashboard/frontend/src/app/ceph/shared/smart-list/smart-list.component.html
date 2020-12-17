@@ -7,60 +7,79 @@
                   i18n>The data received has the JSON format version 2.x and is currently incompatible with the dashboard.</cd-alert-panel>
 
   <ng-container *ngIf="!error && !incompatible">
-    <cd-alert-panel *ngIf="!(data | keyvalue).length"
+    <cd-alert-panel *ngIf="data | pipeFunction:isEmpty"
                     type="info"
                     i18n>No SMART data available.</cd-alert-panel>
 
-    <tabset *ngFor="let device of data | keyvalue">
-      <tab [heading]="device.value.device + ' (' + device.value.identifier + ')'">
-        <ng-container *ngIf="device.value.error; else noError">
-          <cd-alert-panel id="alert-error"
-                          type="warning">{{ device.value.userMessage }}</cd-alert-panel>
-        </ng-container>
-        <ng-template #noError>
-          <!-- HDD/NVMe self test -->
-          <ng-container *ngIf="device.value.info.smart_status.passed; else selfTestFailed">
-            <cd-alert-panel id="alert-self-test-passed"
-                            size="slim"
-                            type="info"
-                            i18n-title
-                            title="SMART overall-health self-assessment test result"
-                            i18n>passed</cd-alert-panel>
+    <ng-container *ngIf="!(data | pipeFunction:isEmpty)">
+      <tabset>
+        <tab *ngFor="let device of data | keyvalue"
+             [heading]="device.value.device + ' (' + device.value.identifier + ')'">
+          <ng-container *ngIf="device.value.error; else noError">
+            <cd-alert-panel id="alert-error"
+                            type="warning">{{ device.value.userMessage }}</cd-alert-panel>
           </ng-container>
-          <ng-template #selfTestFailed>
-            <cd-alert-panel id="alert-self-test-failed"
+
+          <ng-template #noError>
+            <cd-alert-panel *ngIf="device.value.info?.smart_status | pipeFunction:isEmpty; else hasSmartStatus"
+                            id="alert-self-test-unknown"
                             size="slim"
                             type="warning"
                             i18n-title
                             title="SMART overall-health self-assessment test result"
-                            i18n>failed</cd-alert-panel>
+                            i18n>unknown</cd-alert-panel>
+            <ng-template #hasSmartStatus>
+              <!-- HDD/NVMe self test -->
+              <ng-container *ngIf="device.value.info.smart_status.passed; else selfTestFailed">
+                <cd-alert-panel id="alert-self-test-passed"
+                                size="slim"
+                                type="info"
+                                i18n-title
+                                title="SMART overall-health self-assessment test result"
+                                i18n>passed</cd-alert-panel>
+              </ng-container>
+              <ng-template #selfTestFailed>
+                <cd-alert-panel id="alert-self-test-failed"
+                                size="slim"
+                                type="warning"
+                                i18n-title
+                                title="SMART overall-health self-assessment test result"
+                                i18n>failed</cd-alert-panel>
+              </ng-template>
+            </ng-template>
           </ng-template>
 
-          <tabset>
+          <tabset #innerTabset
+                  *ngIf="!(device.value.info | pipeFunction:isEmpty) || !(device.value.smart | pipeFunction:isEmpty)">
             <tab i18n-heading
                  heading="Device Information">
-              <cd-table-key-value [renderObjects]="true"
+              <cd-table-key-value *ngIf="!(device.value.info | pipeFunction:isEmpty)"
+                                  [renderObjects]="true"
                                   [data]="device.value.info"></cd-table-key-value>
+              <cd-alert-panel *ngIf="(device.value.info | pipeFunction:isEmpty)"
+                              id="alert-device-info-unavailable"
+                              type="info"
+                              i18n>No device information available for this device.</cd-alert-panel>
             </tab>
-
             <tab i18n-heading
                  heading="SMART">
-              <cd-table *ngIf="device.value.smart.attributes"
+              <cd-table *ngIf="device.value.smart?.attributes"
                         [data]="device.value.smart.attributes.table"
                         updateSelectionOnRefresh="never"
                         [columns]="smartDataColumns"></cd-table>
-              <cd-table-key-value *ngIf="device.value.smart.nvmeData"
+              <cd-table-key-value *ngIf="device.value.smart?.nvmeData"
                                   [renderObjects]="true"
                                   [data]="device.value.smart.nvmeData"
                                   updateSelectionOnRefresh="never"></cd-table-key-value>
-              <cd-alert-panel *ngIf="!device.value.smart.attributes && !device.value.smart.nvmeData"
+              <cd-alert-panel *ngIf="!device.value.smart?.attributes && !device.value.smart?.nvmeData"
+                              id="alert-device-smart-data-unavailable"
                               type="info"
                               i18n>No SMART data available for this device.</cd-alert-panel>
             </tab>
           </tabset>
-        </ng-template>
-      </tab>
-    </tabset>
+        </tab>
+      </tabset>
+    </ng-container>
   </ng-container>
 </ng-container>
 <ng-template #isLoading>
