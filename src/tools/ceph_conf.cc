@@ -55,6 +55,7 @@ FLAGS
   [--format plain|json|json-pretty]
                                   dump variables in plain text, json or pretty
                                   json
+  [--pid <pid>]                   Override the $pid when expanding options
 
 If there is no action given, the action will default to --lookup.
 
@@ -163,45 +164,15 @@ static int dump_all(const string& format)
   }
 }
 
-bool is_name_pid(std::string name, std::string& id)
-{
-  if (id.empty()) {
-    return false;
-  }
-  static const char* daemon_types[] = {"mon", "osd", "mds", "mgr"};
-  if (std::find(std::begin(daemon_types), std::end(daemon_types), name) !=
-      std::end(daemon_types)) {
-    // only override name and pid for non-daemon names
-    return false;
-  }
-  try {
-    std::stoi(id);
-  } catch (const std::logic_error&) {
-    // only override pid for $id which looks like pid
-    return false;
-  }
-  return true;
-}
-
-std::pair<std::string, std::string>
-maybe_override_name_pid(vector<const char*> args)
+static void maybe_override_pid(vector<const char*>& args)
 {
   for (auto i = args.begin(); i != args.end(); ++i) {
     string val;
-    if (ceph_argparse_witharg(args, i, &val, "--name", "-n", (char*)NULL)) {
-      size_t dot_pos = val.rfind('.');
-      if (dot_pos != val.npos) {
-	string name = val.substr(0, dot_pos);
-	string id = val.substr(dot_pos + 1);
-        if (is_name_pid(name, id)) {
-          // override name
-          return {name, id};
-        }
-      }
-      return {val, ""};
+    if (ceph_argparse_witharg(args, i, &val, "--pid", (char*)NULL)) {
+      setenv("PID", val.c_str(), 1);
+      break;
     }
   }
-  return {};
 }
 
 int main(int argc, const char **argv)
@@ -220,16 +191,8 @@ int main(int argc, const char **argv)
 
   auto orig_args = args;
   auto cct = [&args] {
-    // override the name and PID for non-daemon names
-    auto [name, pid] = maybe_override_name_pid(args);
-    if (!name.empty()) {
-      // push the name option back
-      args.push_back("--name");
-      args.push_back(name.c_str());
-    }
-    if (!pid.empty()) {
-      setenv("PID", pid.c_str(), 1);
-    }
+    // override the PID before options are expanded
+    maybe_override_pid(args);
     std::map<std::string,std::string> defaults = {{"log_to_file", "false"}};
     return global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 		       CODE_ENVIRONMENT_DAEMON,

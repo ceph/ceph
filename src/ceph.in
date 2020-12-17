@@ -20,11 +20,11 @@ Foundation.  See file COPYING.
 """
 
 from time import sleep
-import codecs
 import grp
 import os
 import pwd
 import shutil
+import stat
 import sys
 import time
 import platform
@@ -495,7 +495,7 @@ def format_help(cmddict, partial=None):
     return fullusage
 
 
-def ceph_conf(parsed_args, field, name):
+def ceph_conf(parsed_args, field, name, pid=None):
     cmd = 'ceph-conf'
     bindir = os.path.dirname(__file__)
     if shutil.which(cmd):
@@ -507,6 +507,8 @@ def ceph_conf(parsed_args, field, name):
 
     if name:
         args.extend(['--name', name])
+    if pid:
+        args.extend(['--pid', pid])
 
     # add any args in GLOBAL_ARGS
     for key, val in GLOBAL_ARGS.items():
@@ -525,6 +527,7 @@ def ceph_conf(parsed_args, field, name):
     if p.returncode != 0:
         raise RuntimeError('unable to get conf option %s for %s: %s' % (field, name, errdata))
     return outdata.rstrip()
+
 
 PROMPT = 'ceph> '
 
@@ -730,6 +733,23 @@ def ping_monitor(cluster_handle, name, timeout):
     return 0
 
 
+def get_admin_socket(parsed_args, name):
+    path = ceph_conf(parsed_args, 'admin_socket', name)
+    try:
+        if stat.S_ISSOCK(os.stat(path).st_mode):
+            return path
+    except OSError:
+        pass
+    # try harder, probably the "name" option is in the form of
+    # "${name}.${pid}"?
+    parts = name.rsplit('.', 1)
+    if len(parts) > 1 and parts[-1].isnumeric():
+        name, pid = parts
+        return ceph_conf(parsed_args, 'admin_socket', name, pid)
+    else:
+        return path
+
+
 def maybe_daemon_command(parsed_args, childargs):
     """
     Check if --admin-socket, daemon, or daemonperf command
@@ -751,8 +771,7 @@ def maybe_daemon_command(parsed_args, childargs):
             else:
                 # try resolve daemon name
                 try:
-                    sockpath = ceph_conf(parsed_args, 'admin_socket',
-                                         childargs[1])
+                    sockpath = get_admin_socket(parsed_args, childargs[1])
                 except Exception as e:
                     print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
                     return True, errno.EINVAL
