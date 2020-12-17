@@ -33,9 +33,11 @@ framework`_.
 While it is possible to run ``ctest`` directly, it can be tricky to correctly
 set up your environment. Fortunately, a script is provided to make it easier
 run the unit tests on your code. It can be run from the top-level directory of
-the Ceph source tree by invoking::
+the Ceph source tree by invoking:
 
-.. prompt:: bash $
+  .. prompt:: bash $
+
+     ./run-make-check.sh
 
 You will need a minimum of 8GB of RAM and 32GB of free drive space for this
 command to complete successfully on x86_64; other architectures may have
