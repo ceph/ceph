@@ -53,28 +53,24 @@ ReplicatedRecoveryBackend::maybe_push_shards(
   const hobject_t& soid,
   eversion_t need)
 {
-  auto prepare_pops = seastar::now();
-  if (auto shards = get_shards_to_push(soid); !shards.empty()) {
-    prepare_pops = seastar::parallel_for_each(std::move(shards),
-      [this, need, soid](auto shard) {
-      return prep_push(soid, need, shard).then([this, soid, shard](auto push) {
-        auto msg = make_message<MOSDPGPush>();
-        msg->from = pg.get_pg_whoami();
-        msg->pgid = pg.get_pgid();
-        msg->map_epoch = pg.get_osdmap_epoch();
-        msg->min_epoch = pg.get_last_peering_reset();
-        msg->pushes.push_back(std::move(push));
-        msg->set_priority(pg.get_recovery_op_priority());
-        return shard_services.send_to_osd(shard.osd,
-					  std::move(msg),
-					  pg.get_osdmap_epoch()).then(
-          [this, soid, shard] {
-          return recovering.at(soid).wait_for_pushes(shard);
-        });
+  return seastar::parallel_for_each(get_shards_to_push(soid),
+    [this, need, soid](auto shard) {
+    return prep_push(soid, need, shard).then([this, soid, shard](auto push) {
+      auto msg = make_message<MOSDPGPush>();
+      msg->from = pg.get_pg_whoami();
+      msg->pgid = pg.get_pgid();
+      msg->map_epoch = pg.get_osdmap_epoch();
+      msg->min_epoch = pg.get_last_peering_reset();
+      msg->pushes.push_back(std::move(push));
+      msg->set_priority(pg.get_recovery_op_priority());
+      return shard_services.send_to_osd(shard.osd,
+                                        std::move(msg),
+                                        pg.get_osdmap_epoch()).then(
+        [this, soid, shard] {
+        return recovering.at(soid).wait_for_pushes(shard);
       });
     });
-  }
-  return prepare_pops.then([this, soid] {
+  }).then([this, soid] {
     auto &recovery = recovering.at(soid);
     auto push_info = recovery.pushing.begin();
     object_stat_sum_t stat = {};
