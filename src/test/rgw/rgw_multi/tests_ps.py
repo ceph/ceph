@@ -3817,7 +3817,7 @@ def test_ps_s3_tags_on_master():
         return SkipTest("PubSub push tests don't run in teuthology")
     hostname = get_ip()
     proc = init_rabbitmq()
-    if proc is  None:
+    if proc is None:
         return SkipTest('end2end amqp tests require rabbitmq-server installed')
     master_zone, _ = init_env(require_ps=False)
     realm = get_realm()
@@ -3869,19 +3869,25 @@ def test_ps_s3_tags_on_master():
     time.sleep(5)
     expected_tags = [{'val': 'world', 'key': 'hello'}, {'val': 'boom', 'key': 'ka'}]
     # check amqp receiver
+    filtered_count = 0
     for event in receiver.get_and_reset_events():
         obj_tags =  event['Records'][0]['s3']['object']['tags']
         assert_equal(obj_tags[0], expected_tags[0])
-
+        filtered_count += 1
+    assert_equal(filtered_count, 2)
+    
     # delete the objects
     for key in bucket.list():
         key.delete()
     print('wait for 5sec for the messages...')
     time.sleep(5)
     # check amqp receiver
+    filtered_count = 0
     for event in receiver.get_and_reset_events():
         obj_tags =  event['Records'][0]['s3']['object']['tags']
         assert_equal(obj_tags[0], expected_tags[0])
+        filtered_count += 1
+    assert_equal(filtered_count, 2)
 
     # cleanup
     stop_amqp_receiver(receiver, task)
