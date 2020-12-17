@@ -51,6 +51,17 @@ struct omap_inner_key_t {
   omap_inner_key_t() = default;
   omap_inner_key_t(uint16_t off, uint16_t len, laddr_t addr)
   : key_off(off), key_len(len), laddr(addr) {}
+
+  inline bool operator==(const omap_inner_key_t b) const {
+    return key_off == b.key_off && key_len == b.key_len && laddr == b.laddr;
+  }
+  DENC(omap_inner_key_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.key_off, p);
+    denc(v.key_len, p);
+    denc(v.laddr, p);
+    DENC_FINISH(p);
+  }
 };
 
 struct omap_inner_key_le_t {
@@ -90,6 +101,20 @@ struct omap_leaf_key_t {
   omap_leaf_key_t() = default;
   omap_leaf_key_t(uint16_t k_off, uint16_t k_len, uint16_t v_off, uint16_t v_len)
   : key_off(k_off), key_len(k_len), val_off(v_off), val_len(v_len) {}
+
+  inline bool operator==(const omap_leaf_key_t b) const {
+    return key_off == b.key_off && key_len == b.key_len &&
+           val_off == b.val_off && val_len == b.val_len;
+  }
+
+  DENC(omap_leaf_key_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.key_off, p);
+    denc(v.key_len, p);
+    denc(v.val_off, p);
+    denc(v.val_len, p);
+    DENC_FINISH(p);
+  }
 };
 
 struct omap_leaf_key_le_t {
@@ -126,3 +151,5 @@ struct omap_leaf_key_le_t {
 };
 
 }
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::omap_manager::omap_inner_key_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::omap_manager::omap_leaf_key_t)
