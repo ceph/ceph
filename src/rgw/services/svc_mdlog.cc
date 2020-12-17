@@ -27,8 +27,11 @@ RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync) : RGWServiceInstance(
 RGWSI_MDLog::~RGWSI_MDLog() {
 }
 
-int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_Cls *_cls_svc)
+int RGWSI_MDLog::init(rgw::sal::RGWRadosStore* _store, RGWSI_RADOS *_rados_svc,
+		      RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
+		      RGWSI_Cls *_cls_svc)
 {
+  store = _store;
   svc.zone = _zone_svc;
   svc.sysobj = _sysobj_svc;
   svc.mdlog = this;
@@ -380,7 +383,9 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   // construct the period's log in place if it doesn't exist
   auto insert = md_logs.emplace(std::piecewise_construct,
                                 std::forward_as_tuple(period),
-                                std::forward_as_tuple(cct, svc.zone, svc.cls, period));
+                                std::forward_as_tuple(cct, store, svc.zone,
+						      svc.cls, svc.rados,
+						      period));
   return &insert.first->second;
 }
 
@@ -390,10 +395,10 @@ int RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const 
   return current_log->add_entry(hash_key, section, key, bl);
 }
 
-int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
+int RGWSI_MDLog::get_shard_id(const string& hash_key)
 {
   ceph_assert(current_log); // must have called init()
-  return current_log->get_shard_id(hash_key, shard_id);
+  return current_log->get_shard_id(hash_key);
 }
 
 int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period,
@@ -401,4 +406,3 @@ int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period,
 {
   return period_puller->pull(period_id, period, y);
 }
-

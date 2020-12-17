@@ -3,6 +3,10 @@
 
 #include <errno.h>
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "librados/librados_asio.h"
@@ -109,30 +113,44 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 
 void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
 {
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  char buf[16];
-  if (shard_id) {
-    *shard_id = val % max_shards;
-  }
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
+  int s = 0;
+  if (!shard_id) shard_id = &s;
+  std::tie(name, *shard_id) = rgw_shard_name(prefix, max_shards, key);
 }
 
-void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
+void rgw_shard_name(const string& prefix, unsigned max_shards,
+		    const string& section, const string& key, string& name)
 {
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  val ^= ceph_str_hash_linux(section.c_str(), section.size());
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
+  name = rgw_shard_name(prefix, max_shards, section, key);
 }
 
 void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
 {
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", shard_id);
-  name = prefix + buf;
+  name = rgw_shard_name(prefix, shard_id);
 }
+
+std::pair<std::string, int> rgw_shard_name(std::string_view prefix,
+					   unsigned max_shards,
+					   std::string_view key)
+{
+  uint32_t val = ceph_str_hash_linux(key.data(), key.size());
+  auto shard_id = val % max_shards;
+  return {rgw_shard_name(prefix, shard_id), shard_id};
+}
+
+std::string rgw_shard_name(std::string_view prefix, unsigned max_shards,
+			   std::string_view section, std::string_view key)
+{
+  uint32_t val = ceph_str_hash_linux(key.data(), key.size());
+  val ^= ceph_str_hash_linux(section.data(), section.size());
+  return rgw_shard_name(prefix, val);
+}
+
+std::string rgw_shard_name(std::string_view prefix, unsigned shard_id)
+{
+  return fmt::format("{}{}", prefix, unsigned(shard_id));
+}
+
 
 int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 			    const string& str, uint32_t *perm)

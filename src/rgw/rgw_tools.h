@@ -63,6 +63,13 @@ void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key
 void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
 void rgw_shard_name(const string& prefix, unsigned shard_id, string& name);
 
+std::pair<std::string, int> rgw_shard_name(std::string_view prefix,
+					   unsigned max_shards,
+					   std::string_view key);
+std::string rgw_shard_name(std::string_view prefix, unsigned max_shards,
+			   std::string_view section, std::string_view key);
+std::string rgw_shard_name(std::string_view prefix, unsigned shard_id);
+
 struct rgw_name_to_flag {
   const char *type_name;
   uint32_t flag;
