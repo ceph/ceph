@@ -13,6 +13,10 @@ if(WITH_RADOSGW_KAFKA_ENDPOINT)
   add_library(kafka_stub STATIC ${kafka_stub_src})
 endif()
 
+if(WITH_RADOSGW_LUA_PACKAGES)
+  list(APPEND rgw_libs Boost::filesystem)
+endif()
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)

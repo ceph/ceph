@@ -226,6 +226,7 @@ int process_request(rgw::sal::RGWRadosStore* const store,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
   rgw::dmclock::SchedulerCompleter c;
+
   if (init_error != 0) {
     abort_early(s, nullptr, init_error, nullptr, yield);
     goto done;

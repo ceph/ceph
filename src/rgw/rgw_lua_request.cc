@@ -4,6 +4,7 @@
 #include "common/dout.h"
 #include "services/svc_zone.h"
 #include "rgw_lua_utils.h"
+#include "rgw_lua.h"
 #include "rgw_common.h"
 #include "rgw_log.h"
 #include "rgw_process.h"
@@ -773,12 +774,16 @@ int execute(
     OpsLogSocket* olog,
     req_state* s, 
     const char* op_name,
-    const std::string& script) 
+    const std::string& script)
+
 {
   auto L = luaL_newstate();
   lua_state_guard lguard(L);
 
-  luaL_openlibs(L);
+  open_standard_libs(L);
+  set_package_path(L, store ?
+      store->get_luarocks_path() : 
+      "");
 
   create_debug_action(L, s->cct);  
 

@@ -274,6 +274,10 @@ endif()
 
 list(APPEND rgw_libs ${LUA_LIBRARIES})
 
+if(WITH_RADOSGW_LUA_PACKAGES)
+  list(APPEND rgw_libs Boost::filesystem)
+endif()
+
 set(rgw_schedulers_srcs
   rgw_dmclock_scheduler_ctx.cc
   rgw_dmclock_sync_scheduler.cc)

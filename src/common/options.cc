@@ -7264,6 +7264,16 @@ std::vector<Option> get_rgw_options() {
 	"but will default to FIFO if there isn't an existing log. Either of "
 	"the explicit options will cause startup to fail if the other log is "
 	"still around."),
+   
+   Option("rgw_luarocks_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+     .set_flag(Option::FLAG_STARTUP)
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    .set_default("/tmp/luarocks")
+#else
+    // if set to empty string, system default luarocks package location (if exist) will be used
+    .set_default("")
+#endif
+    .set_description("Directory where luarocks install packages from allowlist"),
   });
 }
 

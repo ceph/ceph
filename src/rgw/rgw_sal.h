@@ -110,6 +110,11 @@ class RGWStore : public DoutPrefixProvider {
     virtual void finalize(void)=0;
 
     virtual CephContext *ctx(void)=0;
+    
+    // get the location of where lua packages are installed
+    virtual const std::string& get_luarocks_path() const = 0;
+    // set the location of where lua packages are installed
+    virtual void set_luarocks_path(const std::string& path) = 0;
 };
 
 class RGWUser {

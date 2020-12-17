@@ -283,6 +283,9 @@ void usage()
   cout << "  script put                 upload a lua script to a context\n";
   cout << "  script get                 get the lua script of a context\n";
   cout << "  script rm                  remove the lua scripts of a context\n";
+  cout << "  script-package add         add a lua package to the scripts allowlist\n";
+  cout << "  script-package rm          remove a lua package from the scripts allowlist\n";
+  cout << "  script-package list        get the lua packages allowlist\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -434,6 +437,8 @@ void usage()
   cout << "   --event-id                event id in a pubsub subscription\n";
   cout << "\nScript options:\n";
   cout << "   --context                 context in which the script runs. one of: preRequest, postRequest\n";
+  cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
+  cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -768,6 +773,9 @@ enum class OPT {
   SCRIPT_PUT,
   SCRIPT_GET,
   SCRIPT_RM,
+  SCRIPT_PACKAGE_ADD,
+  SCRIPT_PACKAGE_RM,
+  SCRIPT_PACKAGE_LIST
 };
 
 }
@@ -984,6 +992,9 @@ static SimpleCmd::Commands all_cmds = {
   { "script put", OPT::SCRIPT_PUT },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
+  { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
+  { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
+  { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3173,6 +3184,8 @@ int main(int argc, const char **argv)
   string event_id;
 
   std::optional<std::string> str_script_ctx;
+  std::optional<std::string> script_package;
+  int allow_compilation = false;
 
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
@@ -3634,6 +3647,10 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--context", (char*)NULL)) {
       str_script_ctx = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--package", (char*)NULL)) {
+      script_package = val;
+    } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
+      // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -9285,7 +9302,7 @@ next:
     auto rc = read_input(infile, bl);
     if (rc < 0) {
       cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
-      return rc;
+      return -rc;
     }
     const std::string script = bl.to_str();
     std::string err_msg;
@@ -9301,7 +9318,7 @@ next:
     rc = rgw::lua::write_script(store, tenant, null_yield, script_ctx, script);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
-      return rc;
+      return -rc;
     }
   }
 
@@ -9322,7 +9339,7 @@ next:
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
     } else if (rc < 0) {
       cerr << "ERROR: failed to read script. error: " << rc << std::endl;
-      return rc;
+      return -rc;
     } else {
       std::cout << script << std::endl;
     }
@@ -9341,8 +9358,66 @@ next:
     const auto rc = rgw::lua::delete_script(store, tenant, null_yield, script_ctx);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
-      return rc;
+      return -rc;
     }
+  }
+
+  if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    if (!script_package) {
+      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      return EINVAL;
+    }
+    const auto rc = rgw::lua::add_package(store, null_yield, *script_package, bool(allow_compilation));
+    if (rc < 0) {
+      cerr << "ERROR: failed to add lua package: " << script_package << " .error: " << rc << std::endl;
+      return -rc;
+    }
+#else
+    cerr << "ERROR: adding lua packages is not permitted" << std::endl;
+    return EPERM;
+#endif
+  }
+
+  if (opt_cmd == OPT::SCRIPT_PACKAGE_RM) {
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    if (!script_package) {
+      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      return EINVAL;
+    }
+    const auto rc = rgw::lua::remove_package(store, null_yield, *script_package);
+    if (rc == -ENOENT) {
+      cerr << "WARNING: package " << script_package << " did not exists or already removed" << std::endl;
+      return 0;
+    }
+    if (rc < 0) {
+      cerr << "ERROR: failed to remove lua package: " << script_package << " .error: " << rc << std::endl;
+      return -rc;
+    }
+#else
+    cerr << "ERROR: removing lua packages in not permitted" << std::endl;
+    return EPERM;
+#endif
+  }
+
+  if (opt_cmd == OPT::SCRIPT_PACKAGE_LIST) {
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    rgw::lua::packages_t packages;
+    const auto rc = rgw::lua::list_packages(store, null_yield, packages);
+    if (rc == -ENOENT) {
+      std::cout << "no lua packages in allowlist" << std::endl;
+    } else if (rc < 0) {
+      cerr << "ERROR: failed to read lua packages allowlist. error: " << rc << std::endl;
+      return rc;
+    } else {
+      for (const auto& package : packages) {
+          std::cout << package << std::endl;
+      }
+    }
+#else
+    cerr << "ERROR: listing lua packages in not permitted" << std::endl;
+    return EPERM;
+#endif
   }
 
   return 0;
