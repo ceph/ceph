@@ -142,10 +142,9 @@ seastar::future<> ReplicatedRecoveryBackend::push_delete(
     if (iter->second.is_missing(soid)) {
       logger().debug("push_delete: will remove {} from {}", soid, shard);
       pg.begin_peer_recover(shard, soid);
-      spg_t target_pg = spg_t(pg.get_info().pgid.pgid, shard.shard);
+      spg_t target_pg(pg.get_info().pgid.pgid, shard.shard);
       auto msg = make_message<MOSDPGRecoveryDelete>(
 	  pg.get_pg_whoami(), target_pg, pg.get_osdmap_epoch(), min_epoch);
-
       msg->set_priority(pg.get_recovery_op_priority());
       msg->objects.push_back(std::make_pair(soid, need));
       return shard_services.send_to_osd(shard.osd, std::move(msg),
