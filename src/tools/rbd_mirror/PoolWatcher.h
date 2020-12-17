@@ -147,6 +147,9 @@ private:
   void handle_image_updated(const std::string &image_id,
                             const std::string &global_image_id,
                             bool enabled);
+  void handle_group_updated(const std::string &group_id,
+                            const std::string &global_group_id,
+                            bool enabled);
 
   void schedule_listener();
   void notify_listener();

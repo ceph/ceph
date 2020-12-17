@@ -20,7 +20,8 @@ namespace mirroring_watcher {
 
 enum NotifyOp {
   NOTIFY_OP_MODE_UPDATED  = 0,
-  NOTIFY_OP_IMAGE_UPDATED = 1
+  NOTIFY_OP_IMAGE_UPDATED = 1,
+  NOTIFY_OP_GROUP_UPDATED = 2,
 };
 
 struct ModeUpdatedPayload {
@@ -61,6 +62,28 @@ struct ImageUpdatedPayload {
   void dump(Formatter *f) const;
 };
 
+struct GroupUpdatedPayload {
+  static const NotifyOp NOTIFY_OP = NOTIFY_OP_GROUP_UPDATED;
+
+  cls::rbd::MirrorGroupState mirror_group_state =
+    cls::rbd::MIRROR_GROUP_STATE_ENABLED;
+  std::string group_id;
+  std::string global_group_id;
+
+  GroupUpdatedPayload() {
+  }
+  GroupUpdatedPayload(cls::rbd::MirrorGroupState mirror_group_state,
+                      const std::string &group_id,
+                      const std::string &global_group_id)
+    : mirror_group_state(mirror_group_state), group_id(group_id),
+      global_group_id(global_group_id) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::const_iterator &iter);
+  void dump(Formatter *f) const;
+};
+
 struct UnknownPayload {
   static const NotifyOp NOTIFY_OP = static_cast<NotifyOp>(-1);
 
@@ -74,6 +97,7 @@ struct UnknownPayload {
 
 typedef boost::variant<ModeUpdatedPayload,
                        ImageUpdatedPayload,
+                       GroupUpdatedPayload,
                        UnknownPayload> Payload;
 
 struct NotifyMessage {
