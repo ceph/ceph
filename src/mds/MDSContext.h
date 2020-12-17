@@ -118,7 +118,7 @@ private:
 /**
  * Completion for an log operation, takes big MDSRank lock
  * before executing finish function. Update log's safe pos
- * after finish functuon return.
+ * after finish function return.
  */
 class MDSLogContextBase : public MDSIOContextBase
 {
