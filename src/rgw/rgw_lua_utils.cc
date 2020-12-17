@@ -3,6 +3,7 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "rgw_lua_utils.h"
+#include "rgw_lua_version.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -39,6 +40,37 @@ void stack_dump(lua_State* L) {
     lua_pop(L, 1);
   }
   std::cout << "--------------- Stack Dump Finished ---------------" << std::endl;
+}
+
+void set_package_path(lua_State* L, const std::string& install_dir) {
+  if (install_dir.empty()) {
+    return;
+  }
+  lua_getglobal(L, "package");
+  if (!lua_istable(L, -1)) {
+    return;
+  }
+  const auto path = install_dir+"/share/lua/"+CEPH_LUA_VERSION+"/?.lua";  
+  pushstring(L, path);
+  lua_setfield(L, -2, "path");
+  
+  const auto cpath = install_dir+"/lib/lua/"+CEPH_LUA_VERSION+"/?.so";
+  pushstring(L, cpath);
+  lua_setfield(L, -2, "cpath");
+}
+
+void open_standard_libs(lua_State* L) {
+  luaL_openlibs(L);
+  unsetglobal(L, "load");
+  unsetglobal(L, "loadfile");
+  unsetglobal(L, "loadstring");
+  unsetglobal(L, "dofile");
+  unsetglobal(L, "debug");
+  // remove os.exit()
+  lua_getglobal(L, "os");
+  lua_pushstring(L, "exit");
+  lua_pushnil(L);
+  lua_settable(L, -3);
 }
 
 }
