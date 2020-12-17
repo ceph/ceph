@@ -146,7 +146,7 @@ class Device(object):
             sys_info.devices = disk.get_devices()
         # check if we are a symlink
         if os.path.islink(self.abspath):
-                realpath = os.path.join(os.path.dirname(self.abspath),
+            self.abspath = os.path.join(os.path.dirname(self.abspath),
                                         os.readlink(self.abspath))
         self.sys_api = sys_info.devices.get(self.abspath, {})
         if not self.sys_api:
