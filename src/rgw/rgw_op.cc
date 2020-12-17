@@ -2187,6 +2187,10 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   total_len = (ofs <= end ? end + 1 - ofs : 0);
 
+  ofs_x = ofs;
+  end_x = end;
+  filter->fixup_range(ofs_x, end_x);
+
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
   if (need_object_expiration() && s->object->is_expired()) {
@@ -2204,6 +2208,11 @@ void RGWGetObj::execute(optional_yield y)
                                     attr_iter != attrs.end() ? &(attr_iter->second) : nullptr);
   if (decrypt != nullptr) {
     filter = decrypt.get();
+    uint64_t crypt_len = (ofs_x < end_x ? end_x + 1 - ofs_x : 0);
+    if (read_op.range_to_ofs(crypt_len, ofs_x, end_x) < 0)
+      goto done_err;
+
+    filter->fixup_range(ofs_x, end_x);
   }
   if (op_ret < 0) {
     goto done_err;
@@ -2216,9 +2225,6 @@ void RGWGetObj::execute(optional_yield y)
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  ofs_x = ofs;
-  end_x = end;
-  filter->fixup_range(ofs_x, end_x);
   op_ret = read_op->iterate(ofs_x, end_x, filter, s->yield);
 
   if (op_ret >= 0)
@@ -3901,7 +3907,8 @@ void RGWPutObj::execute(optional_yield y)
     }
     if (encrypt != nullptr) {
       filter = &*encrypt;
-    } else if (compression_type != "none") {
+    }
+    if (compression_type != "none") {
       plugin = get_compressor_plugin(s, compression_type);
       if (!plugin) {
         ldpp_dout(this, 1) << "Cannot load plugin for compression type "
