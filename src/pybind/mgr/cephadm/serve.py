@@ -111,6 +111,10 @@ class CephadmServe:
         @forall_hosts
         def refresh(host: str) -> None:
 
+            # skip hosts that are in maintenance - they could be powered off
+            if self.mgr.inventory._inventory[host].get("status", "").lower() == "maintenance":
+                return
+
             if self.mgr.cache.host_needs_check(host):
                 r = self._check_host(host)
                 if r is not None:
