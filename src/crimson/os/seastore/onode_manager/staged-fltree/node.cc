@@ -191,6 +191,8 @@ node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracke
                  &root_tracker](auto root) mutable {
       assert(root->impl->field_type() == field_type_t::N0);
       root->as_root(std::move(_super));
+      std::ignore = c; // as only used in an assert
+      std::ignore = root_tracker;
       assert(root == root_tracker.get_root(c.t));
       return node_ertr::make_ready_future<Ref<Node>>(root);
     });
@@ -309,7 +311,7 @@ node_future<> InternalNode::apply_child_split(
     return InternalNode::allocate(
         c, impl->field_type(), impl->is_level_tail(), impl->level());
   }).safe_then([this_ref, this, c, left_key, left_child, right_child,
-                insert_pos, insert_stage, insert_size](auto fresh_right) mutable {
+                insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
     auto left_child_addr = left_child->impl->laddr();
     auto left_child_addr_packed = laddr_packed_t{left_child_addr};
@@ -472,6 +474,8 @@ node_future<Ref<Node>> InternalNode::get_or_track_child(
   ).safe_then([this_ref, this, position, child_addr] (auto child) {
     assert(child_addr == child->impl->laddr());
     assert(position == child->parent_info().position);
+    std::ignore = position;
+    std::ignore = child_addr;
     validate_child(*child);
     return child;
   });
@@ -683,8 +687,8 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   return (is_root() ? upgrade_root(c) : node_ertr::now()
   ).safe_then([this, c] {
     return LeafNode::allocate(c, impl->field_type(), impl->is_level_tail());
-  }).safe_then([this_ref, this, c, &key, &value, &history,
-                insert_pos, insert_stage, insert_size](auto fresh_right) mutable {
+  }).safe_then([this_ref, this, c, &key, &value,
+                insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
     // no need to bump version for right node, as it is fresh
     on_layout_change();
