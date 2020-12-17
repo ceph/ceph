@@ -34,6 +34,7 @@ class CmdException(Exception):
 
 
 def exec_dashboard_cmd(command_handler, cmd, **kwargs):
+    inbuf = kwargs['inbuf'] if 'inbuf' in kwargs else None
     cmd_dict = {'prefix': 'dashboard {}'.format(cmd)}
     cmd_dict.update(kwargs)
     if cmd_dict['prefix'] not in CLICommand.COMMANDS:
@@ -45,8 +46,7 @@ def exec_dashboard_cmd(command_handler, cmd, **kwargs):
         except ValueError:
             return out
 
-    ret, out, err = CLICommand.COMMANDS[cmd_dict['prefix']].call(mgr, cmd_dict,
-                                                                 None)
+    ret, out, err = CLICommand.COMMANDS[cmd_dict['prefix']].call(mgr, cmd_dict, inbuf)
     if ret < 0:
         raise CmdException(ret, err)
     try:
