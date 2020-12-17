@@ -261,7 +261,7 @@ peer_add()
             peer_uuid=$(rbd mirror pool info --cluster ${cluster} --pool ${pool} --format xml | \
                 xmlstarlet sel -t -v "//peers/peer[site_name='${remote_cluster}']/uuid")
 
-            rbd --cluster ${cluster} --pool ${pool} mirror pool peer remove ${peer_uuid}
+            CEPH_ARGS='' rbd --cluster ${cluster} --pool ${pool} mirror pool peer remove ${peer_uuid}
         else
             test $error_code -eq 0
             if [ -n "$uuid_var_name" ]; then
