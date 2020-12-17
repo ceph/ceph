@@ -441,5 +441,7 @@ if(WITH_TESTS)
     DESTINATION bin)
 endif(WITH_TESTS)
 
-install(PROGRAMS rgw-orphan-list
+install(PROGRAMS
+  rgw-gap-list
+  rgw-orphan-list
   DESTINATION bin)
