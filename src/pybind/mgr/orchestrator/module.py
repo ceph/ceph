@@ -71,14 +71,26 @@ def to_format(what, format: str, many: bool, cls):
         raise OrchestratorError(f'unsupported format type: {format}')
 
 
-def generate_preview_tables(data):
+def generate_preview_tables(data, osd_only=False):
     error = [x.get('error') for x in data if x.get('error')]
     if error:
         return json.dumps(error)
     warning = [x.get('warning') for x in data if x.get('warning')]
     osd_table = preview_table_osd(data)
     service_table = preview_table_services(data)
-    tables = f"""
+
+    if osd_only:
+        tables = f"""
+{''.join(warning)}
+
+################
+OSDSPEC PREVIEWS
+################
+{osd_table}
+"""
+        return tables
+    else:
+        tables = f"""
 {''.join(warning)}
 
 ####################
@@ -91,7 +103,7 @@ OSDSPEC PREVIEWS
 ################
 {osd_table}
 """
-    return tables
+        return tables
 
 
 def preview_table_osd(data):
@@ -706,7 +718,7 @@ Examples:
                 raise_if_exception(completion)
                 data = completion.result
                 if format == 'plain':
-                    out = preview_table_osd(data)
+                    out = generate_preview_tables(data, True)
                 else:
                     out = to_format(data, format, many=True, cls=None)
             return HandleCommandResult(stdout=out)
@@ -733,7 +745,7 @@ Examples:
                 self._orchestrator_wait([completion])
                 data = completion.result
                 if format == 'plain':
-                    out = preview_table_osd(data)
+                    out = generate_preview_tables(data , True)
                 else:
                     out = to_format(data, format, many=True, cls=None)
             return HandleCommandResult(stdout=out)
