@@ -503,7 +503,7 @@ public:
       tm->create_transaction(),
       [this, offset, size](auto &t) {
 	return tm->read_extents<TestBlock>(*t, offset, size
-	).safe_then([=, &t](auto ext_list) mutable {
+	).safe_then([=](auto ext_list) mutable {
 	  size_t cur = offset;
 	  bufferlist bl;
 	  for (auto &i: ext_list) {
