@@ -1,0 +1,9 @@
+# renamed tasks: to upgrade-sequence:
+upgrade-sequence:
+   sequential:
+   - print: "**** done start upgrade"
+   - cephadm.shell:
+       env: [sha1]
+       mon.a:
+         - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+   - print: "**** done end upgrade"
