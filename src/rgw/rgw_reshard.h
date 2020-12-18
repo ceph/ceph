@@ -88,7 +88,8 @@ private:
 
   int set_target_layout(int new_num_shards);
   int update_bucket(rgw::BucketReshardState s);
-  int do_reshard(int num_shards,
+  int do_reshard(const rgw::bucket_index_layout_generation& current,
+                 const rgw::bucket_index_layout_generation& target,
                  int max_entries,
                  bool verbose,
                  ostream *os,
