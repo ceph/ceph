@@ -21,6 +21,7 @@ from mgr_util import ServerConfigException, create_self_signed_cert, \
 
 from . import mgr
 from .controllers import generate_routes, json_error_page
+from .controllers.auth import Auth
 from .grafana import push_local_dashboards
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
@@ -240,6 +241,17 @@ class Module(MgrModule, CherryPyConfig):
             "desc": "Push dashboards to Grafana",
             "perm": "w",
         },
+        {
+            "cmd": 'dashboard set-account-lockout-attempts '
+                   'name=attempts,type=CephInt',
+            "desc": "Set the maximum lockout attempt",
+            "perm": "w",
+        },
+        {
+            'cmd': 'dashboard get-account-lockout-attempts',
+            'desc': 'Get the maximum lockout attempt',
+            'perm': 'r'
+        },
     ]
     COMMANDS.extend(options_command_list())
     COMMANDS.extend(SSO_COMMANDS)
@@ -250,6 +262,7 @@ class Module(MgrModule, CherryPyConfig):
         Option(name='server_port', type='int', default=8080),
         Option(name='ssl_server_port', type='int', default=8443),
         Option(name='jwt_token_ttl', type='int', default=28800),
+        Option(name='account-lockout-attempts', type='int', default=10),
         Option(name='password', type='str', default=''),
         Option(name='url_prefix', type='str', default=''),
         Option(name='username', type='str', default=''),
@@ -396,6 +409,13 @@ class Module(MgrModule, CherryPyConfig):
         if cmd['prefix'] == 'dashboard get-jwt-token-ttl':
             ttl = self.get_module_option('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
             return 0, str(ttl), ''
+        if cmd['prefix'] == 'dashboard set-account-lockout-attempts':
+            self.set_module_option('account-lockout-attempts', str(cmd['attempts']))
+            return 0, 'Maximum number of lock-out attempts updated', ''
+        if cmd['prefix'] == 'dashboard get-account-lockout-attempts':
+            max_attempt = self.get_module_option('account-lockout-attempts',
+                                                 Auth.ACCOUNT_LOCKOUT_ATTEMPTS)
+            return 0, str(max_attempt), ''
         if cmd['prefix'] == 'dashboard create-self-signed-cert':
             self.create_self_signed_cert()
             return 0, 'Self-signed certificate created', ''

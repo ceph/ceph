@@ -8,7 +8,6 @@ import cherrypy
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
 from ..services.auth import AuthManager, JwtManager
-from ..settings import Settings
 from . import ApiController, ControllerDoc, EndpointDoc, RESTController, allow_empty_body
 
 logger = logging.getLogger('controllers.auth')
@@ -29,10 +28,14 @@ class Auth(RESTController):
     """
     Provide authenticates and returns JWT token.
     """
+    # AUTHENTICATION ATTEMPTS
+    ACCOUNT_LOCKOUT_ATTEMPTS = 10
+
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
-        max_attempt = Settings.ACCOUNT_LOCKOUT_ATTEMPTS
+        max_attempt = mgr.get_module_option('account-lockout-attempts',
+                                            self.ACCOUNT_LOCKOUT_ATTEMPTS)
         if max_attempt == 0 or mgr.ACCESS_CTRL_DB.get_attempt(username) < max_attempt:
             if user_data:
                 user_perms = user_data.get('permissions')
