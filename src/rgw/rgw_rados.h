@@ -648,12 +648,11 @@ public:
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj,
-	     RGWBucketInfo* out, const DoutPrefixProvider *dpp);
-    int init(const rgw_bucket& _bucket, int sid,
-	     std::optional<rgw::bucket_index_layout_generation> current_layout,
-	     RGWBucketInfo* out, const DoutPrefixProvider *dpp);
+             RGWBucketInfo* out, const DoutPrefixProvider *dpp);
     int init(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
-    int init(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int sid);
+    int init(const DoutPrefixProvider *dpp,
+	     const RGWBucketInfo& bucket_info,
+	     const rgw::bucket_index_layout_generation& index, int sid);
 
     friend std::ostream& operator<<(std::ostream& out, const BucketShard& bs) {
       out << "BucketShard:{ bucket=" << bs.bucket <<
