@@ -1506,10 +1506,6 @@ class Filesystem(MDSCluster):
     def is_full(self):
         return self.is_pool_full(self.get_data_pool_name())
 
-    def enable_multifs(self):
-        self.mon_manager.raw_cluster_cmd('fs', 'flag', 'set',
-            'enable_multiple', 'true', '--yes-i-really-mean-it')
-
     def authorize(self, client_id, caps=('/', 'rw')):
         """
         Run "ceph fs authorize" and run "ceph auth get" to get and returnt the
