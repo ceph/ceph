@@ -467,7 +467,6 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
     lderr(cct) << "librbd does not support requested features" << dendl;
     return -ENOSYS;
   }
-  features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
   uint64_t order = src_image_ctx->order;
@@ -510,8 +509,6 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
   Migration migration(src_image_ctx, dst_image_ctx, dst_migration_spec,
                       opts, nullptr);
   r = migration.prepare();
-
-  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
   return r;
 }
