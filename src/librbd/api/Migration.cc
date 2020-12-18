@@ -427,7 +427,6 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
     return -ENOSYS;
   }
   features &= ~RBD_FEATURES_INTERNAL;
-  features |= RBD_FEATURE_MIGRATING;
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
   uint64_t order = image_ctx->order;
@@ -460,7 +459,6 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
                       cls::rbd::MIGRATION_STATE_PREPARING, "", nullptr);
   r = migration.prepare();
 
-  features &= ~RBD_FEATURE_MIGRATING;
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
   return r;
