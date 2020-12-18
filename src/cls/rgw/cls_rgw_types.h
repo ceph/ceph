@@ -1282,7 +1282,7 @@ struct cls_rgw_reshard_entry
     decode(bucket_name, bl);
     decode(bucket_id, bl);
     if (struct_v < 2) {
-      std::string new_instance_id;
+      std::string new_instance_id; // removed in v2
       decode(new_instance_id, bl);
     }
     decode(old_num_shards, bl);
