@@ -108,8 +108,7 @@ public:
   {
     num_shard = (bucket_info.layout.target_index->layout.normal.num_shards > 0 ? _num_shard : -1);
 
-    bs.init(bucket_info.bucket, num_shard, bucket_info.layout.target_index,
-            nullptr /* no RGWBucketInfo */);
+    bs.init(bucket_info, *bucket_info.layout.target_index, shard_id);
 
     max_aio_completions =
       store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_max_aio");
