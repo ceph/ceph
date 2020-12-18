@@ -15115,6 +15115,11 @@ const char** Client::get_tracked_conf_keys() const
     "client_acl_type",
     "client_deleg_timeout",
     "client_deleg_break_on_open",
+    "client_oc_size",
+    "client_oc_max_objects",
+    "client_oc_max_dirty",
+    "client_oc_target_dirty",
+    "client_oc_max_dirty_age",
     NULL
   };
   return keys;
@@ -15132,6 +15137,21 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     acl_type = NO_ACL;
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
+  }
+  if (changed.count("client_oc_size")) {
+    objectcacher->set_max_size(cct->_conf->client_oc_size);
+  }
+  if (changed.count("client_oc_max_objects")) {
+    objectcacher->set_max_objects(cct->_conf->client_oc_max_objects);
+  }
+  if (changed.count("client_oc_max_dirty")) {
+    objectcacher->set_max_dirty(cct->_conf->client_oc_max_dirty);
+  }
+  if (changed.count("client_oc_target_dirty")) {
+    objectcacher->set_target_dirty(cct->_conf->client_oc_target_dirty);
+  }
+  if (changed.count("client_oc_max_dirty_age")) {
+    objectcacher->set_max_dirty_age(cct->_conf->client_oc_max_dirty_age);
   }
 }
 
