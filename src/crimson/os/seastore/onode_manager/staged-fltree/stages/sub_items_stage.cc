@@ -38,9 +38,6 @@ node_offset_t internal_sub_items_t::trim_until(
   return ret;
 }
 
-template class internal_sub_items_t::Appender<KeyT::VIEW>;
-template class internal_sub_items_t::Appender<KeyT::HOBJ>;
-
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
     const internal_sub_items_t& src, size_t from, size_t items) {
@@ -135,13 +132,13 @@ node_offset_t leaf_sub_items_t::trim_until(
   return ret;
 }
 
+template class internal_sub_items_t::Appender<KeyT::VIEW>;
+template class internal_sub_items_t::Appender<KeyT::HOBJ>;
+
 // helper type for the visitor
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 // explicit deduction guide
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
-template class leaf_sub_items_t::Appender<KeyT::VIEW>;
-template class leaf_sub_items_t::Appender<KeyT::HOBJ>;
 
 template <KeyT KT>
 char* leaf_sub_items_t::Appender<KT>::wrap() {
@@ -201,5 +198,8 @@ char* leaf_sub_items_t::Appender<KT>::wrap() {
   }
   return p_cur;
 }
+
+template class leaf_sub_items_t::Appender<KeyT::VIEW>;
+template class leaf_sub_items_t::Appender<KeyT::HOBJ>;
 
 }

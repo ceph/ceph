@@ -28,10 +28,6 @@ void node_header_t::update_is_level_tail(
 
 #define F013_T _node_fields_013_t<SlotType>
 #define F013_INST(ST) _node_fields_013_t<ST>
-#define F013_TEMPLATE(ST) template struct F013_INST(ST)
-F013_TEMPLATE(slot_0_t);
-F013_TEMPLATE(slot_1_t);
-F013_TEMPLATE(slot_3_t);
 
 template <typename SlotType>
 void F013_T::update_size_at(
@@ -85,6 +81,11 @@ IA_TEMPLATE(slot_3_t, KeyT::VIEW);
 IA_TEMPLATE(slot_0_t, KeyT::HOBJ);
 IA_TEMPLATE(slot_1_t, KeyT::HOBJ);
 IA_TEMPLATE(slot_3_t, KeyT::HOBJ);
+
+#define F013_TEMPLATE(ST) template struct F013_INST(ST)
+F013_TEMPLATE(slot_0_t);
+F013_TEMPLATE(slot_1_t);
+F013_TEMPLATE(slot_3_t);
 
 void node_fields_2_t::append_offset(
     NodeExtentMutable& mut, node_offset_t offset_to_right, char*& p_append) {
