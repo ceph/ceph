@@ -51,10 +51,16 @@ private:
    * GET_MIRROR_IMAGE
    *    |
    *    v
+   * GET_GROUP
+   *    |
+   *    v
+   * GET_MIRROR_GROUP (skip if no group)
+   *    |
+   *    v
    * SET_MIRROR_IMAGE
    *    |
    *    v
-   * NOTIFY_MIRRORING_WATCHER
+   * NOTIFY_MIRRORING_WATCHER (skip if not needed)
    *    |
    *    v
    * <finish>
@@ -70,9 +76,18 @@ private:
 
   CephContext* m_cct;
   bufferlist m_out_bl;
+  librados::IoCtx m_group_io_ctx;
+  cls::rbd::GroupSpec m_group_spec;
+  cls::rbd::MirrorGroup m_mirror_group;
 
   void get_mirror_image();
   void handle_get_mirror_image(int r);
+
+  void get_group();
+  void handle_get_group(int r);
+
+  void get_mirror_group();
+  void handle_get_mirror_group(int r);
 
   void set_mirror_image();
   void handle_set_mirror_image(int r);
