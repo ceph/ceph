@@ -11,6 +11,8 @@ To build the Ceph documentation set, you must:
 3. Build the documents
 4. Demo the documents (Optional)
 
+.. highlight:: bash
+
 Clone the Ceph Repository
 -------------------------
 
@@ -61,12 +63,12 @@ But you can just rebuild the document on changes using::
 
   admin/build-doc livehtml
 
-This feature uses `sphinx-autobuild` under the hood. You can also pass options to it. For
+This feature uses ``sphinx-autobuild`` under the hood. You can also pass options to it. For
 instance, to open the browser after building the documentation::
 
   admin/build-doc livehtml -- --open-browser
 
-Please see `sphinx-autobuild <https://pypi.org/project/sphinx-autobuild/>` for more details.
+Please see `sphinx-autobuild <https://pypi.org/project/sphinx-autobuild/>`_ for more details.
 
 Demo the Documents
 -------------------
