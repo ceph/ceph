@@ -86,10 +86,8 @@ private:
   // allocated in at once
   static const std::initializer_list<uint16_t> reshard_primes;
 
-  int set_target_layout(int new_num_shards, const DoutPrefixProvider *dpp);
-  int update_bucket(rgw::BucketReshardState s, const DoutPrefixProvider* dpp);
-
-  int do_reshard(int num_shards,
+  int do_reshard(const rgw::bucket_index_layout_generation& current,
+                 const rgw::bucket_index_layout_generation& target,
                  int max_entries,
                  bool verbose,
                  std::ostream *os,
