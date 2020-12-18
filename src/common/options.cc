@@ -8693,22 +8693,27 @@ std::vector<Option> get_mds_client_options() {
     .set_description("enable object caching"),
 
     Option("client_oc_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(200_M)
     .set_description("maximum size of object cache"),
 
     Option("client_oc_max_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(100_M)
     .set_description("maximum size of dirty pages in object cache"),
 
     Option("client_oc_target_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(8_M)
     .set_description("target size of dirty pages object cache"),
 
     Option("client_oc_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(5.0)
     .set_description("maximum age of dirty pages in object cache (seconds)"),
 
     Option("client_oc_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(1000)
     .set_description("maximum number of objects in cache"),
 
