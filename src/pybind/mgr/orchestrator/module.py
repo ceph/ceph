@@ -318,7 +318,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table.left_padding_width = 0
             table.right_padding_width = 2
             for host in sorted(completion.result, key=lambda h: h.hostname):
-                table.add_row((host.hostname, host.addr, ' '.join(host.labels), host.status.capitalize()))
+                table.add_row((host.hostname, host.addr, ' '.join(
+                    host.labels), host.status.capitalize()))
             output = table.get_string()
         return HandleCommandResult(stdout=output)
 
@@ -364,7 +365,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         raise_if_exception(completion)
 
         return HandleCommandResult(stdout=completion.result_str())
-    
+
     @_cli_write_command(
         'orch host maintenance exit',
         'name=hostname,type=CephString',
@@ -625,7 +626,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             remove_column = 'CONTAINER ID'
             if table.get_string(fields=[remove_column], border=False,
-                    header=False).count('<unknown>') == len(daemons):
+                                header=False).count('<unknown>') == len(daemons):
                 try:
                     table.del_column(remove_column)
                 except AttributeError as e:

@@ -123,6 +123,7 @@ def service_inactive(spec_name: str) -> Callable:
         return wrapper
     return inner
 
+
 def host_exists(hostname_position: int = 1) -> Callable:
     """Check that a hostname exists in the inventory"""
     def inner(func: Callable) -> Callable:
@@ -133,12 +134,12 @@ def host_exists(hostname_position: int = 1) -> Callable:
             if hostname not in this.cache.get_hosts():
                 candidates = ','.join([h for h in this.cache.get_hosts() if h.startswith(hostname)])
                 help_msg = f"Did you mean {candidates}?" if candidates else ""
-                raise OrchestratorError(f"Cannot find host '{hostname}' in the inventory. {help_msg}")
+                raise OrchestratorError(
+                    f"Cannot find host '{hostname}' in the inventory. {help_msg}")
 
             return func(*args, **kwargs)
         return wrapper
     return inner
-
 
 
 class ContainerInspectInfo(NamedTuple):
@@ -1307,8 +1308,8 @@ To check that the host is reachable:
         """
         return [
             h for h in self.inventory.all_specs()
-            if self.cache.host_had_daemon_refresh(h.hostname) and \
-                h.status.lower() not in ['maintenance', 'offline']
+            if self.cache.host_had_daemon_refresh(h.hostname) and
+            h.status.lower() not in ['maintenance', 'offline']
         ]
 
     def _add_host(self, spec):
@@ -1412,7 +1413,7 @@ To check that the host is reachable:
         self.log.info(msg)
         return msg
 
-    def _set_maintenance_healthcheck(self):
+    def _set_maintenance_healthcheck(self) -> None:
         """Raise/update or clear the maintenance health check as needed"""
 
         in_maintenance = self.inventory.get_host_with_state("maintenance")
@@ -1439,7 +1440,7 @@ To check that the host is reachable:
         and stops all ceph daemons. If the host is an osd host we apply the noout flag
         for the host subtree in crush to prevent data movement during a host maintenance 
         window.
-        
+
         :param hostname: (str) name of the host (must match an inventory hostname)
 
         :raises OrchestratorError: Hostname is invalid, host is already in maintenance
@@ -1449,7 +1450,8 @@ To check that the host is reachable:
 
         # if upgrade is active, deny
         if self.upgrade.upgrade_state:
-            raise OrchestratorError(f"Unable to place {hostname} in maintenance with upgrade active/paused")
+            raise OrchestratorError(
+                f"Unable to place {hostname} in maintenance with upgrade active/paused")
 
         tgt_host = self.inventory._inventory[hostname]
         if tgt_host.get("status", "").lower() == "maintenance":
@@ -1466,11 +1468,12 @@ To check that the host is reachable:
 
             # call the host-maintenance function
             out, _err, _code = self._run_cephadm(hostname, cephadmNoImage, "host-maintenance",
-                                        ["enter"],
-                                        error_ok=True)
+                                                 ["enter"],
+                                                 error_ok=True)
             if out:
-                raise OrchestratorError(f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
-            
+                raise OrchestratorError(
+                    f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
+
             if "osd" in host_daemons:
                 crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
                 rc, out, err = self.mon_command({
@@ -1480,17 +1483,20 @@ To check that the host is reachable:
                     'format': 'json'
                 })
                 if rc:
-                    self.log.warning(f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc})")
-                    raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})")
+                    self.log.warning(
+                        f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc})")
+                    raise OrchestratorError(
+                        f"Unable to set the osds on {hostname} to noout (rc={rc})")
                 else:
-                    self.log.info(f"maintenance mode request for {hostname} has SET the noout group")
+                    self.log.info(
+                        f"maintenance mode request for {hostname} has SET the noout group")
 
-        # update the host status in the inventory            
+        # update the host status in the inventory
         tgt_host["status"] = "maintenance"
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
 
-        self._set_maintenance_healthcheck()        
+        self._set_maintenance_healthcheck()
 
         return f"Ceph cluster {self._cluster_fsid} on {hostname} moved to maintenance"
 
@@ -1504,7 +1510,7 @@ To check that the host is reachable:
         host has osd daemons
 
         :param hostname: (str) host name
-    
+
         :raises OrchestratorError: Unable to return from maintenance, or unset the
                                    noout flag
         """
@@ -1513,31 +1519,34 @@ To check that the host is reachable:
             raise OrchestratorError(f"Host {hostname} is not in maintenance mode")
 
         out, _err, _code = self._run_cephadm(hostname, cephadmNoImage, 'host-maintenance',
-                                    ['exit'],
-                                    error_ok=True)
+                                             ['exit'],
+                                             error_ok=True)
         if out:
-            raise OrchestratorError(f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
+            raise OrchestratorError(
+                f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
 
         if "osd" in self.cache.get_daemon_types(hostname):
             crush_node = hostname if '.' not in hostname else hostname.split('.')[0]
             rc, _out, _err = self.mon_command({
-                    'prefix': 'osd unset-group',
-                    'flags': 'noout',
-                    'who': [crush_node],
-                    'format': 'json'
+                'prefix': 'osd unset-group',
+                'flags': 'noout',
+                'who': [crush_node],
+                'format': 'json'
             })
             if rc:
-                self.log.warning(f"exit maintenance request failed to UNSET the noout group for {hostname}, (rc={rc})")
+                self.log.warning(
+                    f"exit maintenance request failed to UNSET the noout group for {hostname}, (rc={rc})")
                 raise OrchestratorError(f"Unable to set the osds on {hostname} to noout (rc={rc})")
             else:
-                self.log.info(f"exit maintenance request has UNSET for the noout group on host {hostname}")
+                self.log.info(
+                    f"exit maintenance request has UNSET for the noout group on host {hostname}")
 
         # update the host record status
         tgt_host['status'] = ""
         self.inventory._inventory[hostname] = tgt_host
         self.inventory.save()
-        
-        self._set_maintenance_healthcheck()        
+
+        self._set_maintenance_healthcheck()
 
         return f"Ceph cluster {self._cluster_fsid} on {hostname} has exited maintenance mode"
 
