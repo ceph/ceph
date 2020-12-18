@@ -1,0 +1,29 @@
+tasks:
+
+#- install:
+#    branch: nautilus
+
+- cephadm:
+    image: docker.io/ceph/ceph:v15.2.0
+    cephadm_branch: v15.2.0
+
+- cephadm.shell:
+    #repo_digest
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+    #start upgrade
+    env: [sha1]
+    mon.a:
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+    #wait
+    mon.a:
+      - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
+
+#- parallel:
+#    - workload
+#    - upgrade-sequence
+
