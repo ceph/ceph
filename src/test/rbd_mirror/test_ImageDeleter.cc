@@ -66,8 +66,7 @@ public:
 
     m_local_image_id = librbd::util::generate_image_id(m_local_io_ctx);
     librbd::ImageOptions image_opts;
-    image_opts.set(RBD_IMAGE_OPTION_FEATURES,
-                   (RBD_FEATURES_ALL & ~RBD_FEATURES_IMPLICIT_ENABLE));
+    image_opts.set(RBD_IMAGE_OPTION_FEATURES, RBD_FEATURES_ALL);
     EXPECT_EQ(0, librbd::create(m_local_io_ctx, m_image_name, m_local_image_id,
                                 1 << 20, image_opts, GLOBAL_IMAGE_ID,
                                 m_remote_mirror_uuid, true));
