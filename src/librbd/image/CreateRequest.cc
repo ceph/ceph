@@ -38,7 +38,7 @@ int validate_features(CephContext *cct, uint64_t features) {
     lderr(cct) << "librbd does not support requested features." << dendl;
     return -ENOSYS;
   }
-  if ((features & RBD_FEATURE_OPERATIONS) != 0) {
+  if ((features & RBD_FEATURES_INTERNAL) != 0) {
     lderr(cct) << "cannot use internally controlled features" << dendl;
     return -EINVAL;
   }
