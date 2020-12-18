@@ -1135,7 +1135,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self._reset_con(host)
 
             user = self.ssh_user if self.mode == 'root' else 'cephadm'
-            msg = f'''Failed to connect to {host} ({addr}).
+            if str(e).startswith("Can't communicate"):
+                msg = str(e)
+            else:
+                msg = f'''Failed to connect to {host} ({addr}).
 Please make sure that the host is reachable and accepts connections using the cephadm SSH key
 
 To add the cephadm SSH key to the host:
