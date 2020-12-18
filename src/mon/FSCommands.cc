@@ -47,13 +47,6 @@ using ceph::make_message;
 using ceph::mono_clock;
 using ceph::mono_time;
 
-static const string EXPERIMENTAL_WARNING("Warning! This feature is experimental."
-"It may cause problems up to and including data loss."
-"Consult the documentation at ceph.com, and if unsure, do not proceed."
-"Add --yes-i-really-mean-it if you are certain.");
-
-
-
 class FlagSetHandler : public FileSystemCommandHandler
 {
   public:
@@ -86,9 +79,6 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      if (!sure) {
-	ss << EXPERIMENTAL_WARNING;
-      }
       fsmap.set_enable_multiple(flag_bool);
       return 0;
     } else {
