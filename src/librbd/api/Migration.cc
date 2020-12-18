@@ -468,7 +468,6 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
     return -ENOSYS;
   }
   features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
-  features |= RBD_FEATURE_MIGRATING;
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
   uint64_t order = src_image_ctx->order;
@@ -512,7 +511,6 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
                       opts, nullptr);
   r = migration.prepare();
 
-  features &= ~RBD_FEATURE_MIGRATING;
   opts.set(RBD_IMAGE_OPTION_FEATURES, features);
 
   return r;
@@ -559,10 +557,6 @@ int Migration<I>::prepare_import(
                << dendl;
     return -EINVAL;
   }
-
-  uint64_t features_set = 0;
-  opts.get(RBD_IMAGE_OPTION_FEATURES_SET, &features_set);
-  opts.set(RBD_IMAGE_OPTION_FEATURES_SET, features_set | RBD_FEATURE_MIGRATING);
 
   ldout(cct, 20) << "updated opts=" << opts << dendl;
 
