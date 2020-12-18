@@ -1853,6 +1853,191 @@ class TestVolumes(CephFSTestCase):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_subvolume_inherited_snapshot_ls(self):
+        # tests the scenario where 'fs subvolume snapshot ls' command
+        # should not list inherited snapshots created as part of snapshot
+        # at ancestral level
+
+        snapshots = []
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        snap_count = 3
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+
+        # create subvolume snapshots
+        snapshots = self._generate_random_snapshot_name(snap_count)
+        for snapshot in snapshots:
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot, group)
+
+        # Create snapshot at ancestral level
+        ancestral_snappath1 = os.path.join(".", "volumes", group, ".snap", "ancestral_snap_1")
+        ancestral_snappath2 = os.path.join(".", "volumes", group, ".snap", "ancestral_snap_2")
+        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1, ancestral_snappath2])
+
+        subvolsnapshotls = json.loads(self._fs_cmd('subvolume', 'snapshot', 'ls', self.volname, subvolume, group))
+        self.assertEqual(len(subvolsnapshotls), snap_count)
+
+        # remove ancestral snapshots
+        self.mount_a.run_shell(['rmdir', ancestral_snappath1, ancestral_snappath2])
+
+        # remove snapshot
+        for snapshot in snapshots:
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot, group)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_inherited_snapshot_info(self):
+        """
+        tests the scenario where 'fs subvolume snapshot info' command
+        should fail for inherited snapshots created as part of snapshot
+        at ancestral level
+        """
+
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+
+        # Create snapshot at ancestral level
+        ancestral_snap_name = "ancestral_snap_1"
+        ancestral_snappath1 = os.path.join(".", "volumes", group, ".snap", ancestral_snap_name)
+        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1])
+
+        # Validate existence of inherited snapshot
+        group_path = os.path.join(".", "volumes", group)
+        inode_number_group_dir = int(self.mount_a.run_shell(['stat', '-c' '%i', group_path]).stdout.getvalue().strip())
+        inherited_snap = "_{0}_{1}".format(ancestral_snap_name, inode_number_group_dir)
+        inherited_snappath = os.path.join(".", "volumes", group, subvolume,".snap", inherited_snap)
+        self.mount_a.run_shell(['ls', inherited_snappath])
+
+        # snapshot info on inherited snapshot
+        try:
+            self._get_subvolume_snapshot_info(self.volname, subvolume, inherited_snap, group)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL, "invalid error code on snapshot info of inherited snapshot")
+        else:
+            self.fail("expected snapshot info of inherited snapshot to fail")
+
+        # remove ancestral snapshots
+        self.mount_a.run_shell(['rmdir', ancestral_snappath1])
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_inherited_snapshot_rm(self):
+        """
+        tests the scenario where 'fs subvolume snapshot rm' command
+        should fail for inherited snapshots created as part of snapshot
+        at ancestral level
+        """
+
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+
+        # Create snapshot at ancestral level
+        ancestral_snap_name = "ancestral_snap_1"
+        ancestral_snappath1 = os.path.join(".", "volumes", group, ".snap", ancestral_snap_name)
+        self.mount_a.run_shell(['mkdir', '-p', ancestral_snappath1])
+
+        # Validate existence of inherited snap
+        group_path = os.path.join(".", "volumes", group)
+        inode_number_group_dir = int(self.mount_a.run_shell(['stat', '-c' '%i', group_path]).stdout.getvalue().strip())
+        inherited_snap = "_{0}_{1}".format(ancestral_snap_name, inode_number_group_dir)
+        inherited_snappath = os.path.join(".", "volumes", group, subvolume,".snap", inherited_snap)
+        self.mount_a.run_shell(['ls', inherited_snappath])
+
+        # inherited snapshot should not be deletable
+        try:
+            self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, inherited_snap, "--group_name", group)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL, msg="invalid error code when removing inherited snapshot")
+        else:
+            self.fail("expected removing inheirted snapshot to fail")
+
+        # remove ancestral snapshots
+        self.mount_a.run_shell(['rmdir', ancestral_snappath1])
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_subvolumegroup_snapshot_name_conflict(self):
+        """
+        tests the scenario where creation of subvolume snapshot name
+        with same name as it's subvolumegroup snapshot name. This should
+        fail.
+        """
+
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        group_snapshot = self._generate_random_snapshot_name()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+
+        # Create subvolumegroup snapshot
+        group_snapshot_path = os.path.join(".", "volumes", group, ".snap", group_snapshot)
+        self.mount_a.run_shell(['mkdir', '-p', group_snapshot_path])
+
+        # Validate existence of subvolumegroup snapshot
+        self.mount_a.run_shell(['ls', group_snapshot_path])
+
+        # Creation of subvolume snapshot with it's subvolumegroup snapshot name should fail
+        try:
+            self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, group_snapshot, "--group_name", group)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL, msg="invalid error code when creating subvolume snapshot with same name as subvolume group snapshot")
+        else:
+            self.fail("expected subvolume snapshot creation with same name as subvolumegroup snapshot to fail")
+
+        # remove subvolumegroup snapshot
+        self.mount_a.run_shell(['rmdir', group_snapshot_path])
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
     @unittest.skip("skipping subvolumegroup snapshot tests")
     def test_subvolume_group_snapshot_create_and_rm(self):
         subvolume = self._generate_random_subvolume_name()

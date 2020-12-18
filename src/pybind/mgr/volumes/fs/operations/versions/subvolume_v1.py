@@ -16,7 +16,7 @@ from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
 from ..access import allow_access, deny_access
 from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException
-from ...fs_util import listdir
+from ...fs_util import listsnaps, is_inherited_snap
 from ..template import SubvolumeOpType
 
 from ..clone_index import open_clone_index, create_clone_index
@@ -344,8 +344,19 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         return self._resize(subvol_path, newsize, noshrink)
 
     def create_snapshot(self, snapname):
-        snappath = self.snapshot_path(snapname)
-        mksnap(self.fs, snappath)
+        try:
+            group_snapshot_path = os.path.join(self.group.path,
+                                               self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
+                                               snapname.encode('utf-8'))
+            self.fs.stat(group_snapshot_path)
+        except cephfs.Error as e:
+            if e.args[0] == errno.ENOENT:
+                snappath = self.snapshot_path(snapname)
+                mksnap(self.fs, snappath)
+            else:
+                raise VolumeException(-e.args[0], e.args[1])
+        else:
+            raise VolumeException(-errno.EINVAL, "subvolumegroup and subvolume snapshot name can't be same")
 
     def has_pending_clones(self, snapname):
         try:
@@ -362,6 +373,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         rmsnap(self.fs, snappath)
 
     def snapshot_info(self, snapname):
+        if is_inherited_snap(snapname):
+            raise VolumeException(-errno.EINVAL,
+                                  "snapshot name '{0}' is invalid".format(snapname))
         snappath = self.snapshot_data_path(snapname)
         snap_info = {}
         try:
@@ -382,7 +396,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def list_snapshots(self):
         try:
             dirpath = self.snapshot_base_path()
-            return listdir(self.fs, dirpath)
+            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
