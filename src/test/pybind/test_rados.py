@@ -5,7 +5,7 @@ from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
-                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData)
+                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData, ObjectVerMismatch)
 from datetime import timedelta
 import time
 import threading
@@ -485,6 +485,17 @@ class TestIoctx(object):
             eq(comp.get_return_value(), 0)
             next(iter)
             eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
+    
+    def test_assert_version_op(self):
+        object_id = 'test'
+        self.ioctx.write(object_id, b'12345')
+        ver = self.ioctx.get_last_version()
+        with ReadOpCtx() as read_op:
+            read_op.assert_version(ver)
+            self.ioctx.operate_read_op(read_op, object_id)
+            read_op.assert_version(ver+1)
+            with assert_raises(ObjectVerMismatch):
+                self.ioctx.operate_read_op(read_op, object_id)       
 
     def test_write_ops(self):
         with WriteOpCtx() as write_op:
