@@ -10,15 +10,6 @@ namespace crimson::os::seastore::onode {
 
 #define NODE_T node_extent_t<FieldType, NODE_TYPE>
 #define NODE_INST(FT, NT) node_extent_t<FT, NT>
-#define NODE_TEMPLATE(FT, NT) template class NODE_INST(FT, NT)
-NODE_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL);
-NODE_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL);
-NODE_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL);
-NODE_TEMPLATE(internal_fields_3_t, node_type_t::INTERNAL);
-NODE_TEMPLATE(node_fields_0_t, node_type_t::LEAF);
-NODE_TEMPLATE(node_fields_1_t, node_type_t::LEAF);
-NODE_TEMPLATE(node_fields_2_t, node_type_t::LEAF);
-NODE_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF);
 
 template <typename FieldType, node_type_t NODE_TYPE>
 const char* NODE_T::p_left_bound() const {
@@ -176,24 +167,17 @@ node_offset_t NODE_T::trim_at(
   return 0;
 }
 
+#define NODE_TEMPLATE(FT, NT) template class NODE_INST(FT, NT)
+NODE_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL);
+NODE_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL);
+NODE_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL);
+NODE_TEMPLATE(internal_fields_3_t, node_type_t::INTERNAL);
+NODE_TEMPLATE(node_fields_0_t, node_type_t::LEAF);
+NODE_TEMPLATE(node_fields_1_t, node_type_t::LEAF);
+NODE_TEMPLATE(node_fields_2_t, node_type_t::LEAF);
+NODE_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF);
+
 #define APPEND_T node_extent_t<FieldType, NODE_TYPE>::Appender<KT>
-#define APPEND_TEMPLATE(FT, NT, KT) template class node_extent_t<FT, NT>::Appender<KT>
-APPEND_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::VIEW);
-APPEND_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::VIEW);
-APPEND_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::VIEW);
-APPEND_TEMPLATE(internal_fields_3_t, node_type_t::INTERNAL, KeyT::VIEW);
-APPEND_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::VIEW);
-APPEND_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::VIEW);
-APPEND_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::VIEW);
-APPEND_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF, KeyT::VIEW);
-APPEND_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::HOBJ);
-APPEND_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::HOBJ);
-APPEND_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::HOBJ);
-APPEND_TEMPLATE(internal_fields_3_t, node_type_t::INTERNAL, KeyT::HOBJ);
-APPEND_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::HOBJ);
-APPEND_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::HOBJ);
-APPEND_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::HOBJ);
-APPEND_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF, KeyT::HOBJ);
 
 template <typename FieldType, node_type_t NODE_TYPE>
 template <KeyT KT>
@@ -312,5 +296,23 @@ char* APPEND_T::wrap() {
   p_mut->copy_in_absolute(p_start + offsetof(FieldType, num_keys), num_keys);
   return p_append_left;
 }
+
+#define APPEND_TEMPLATE(FT, NT, KT) template class node_extent_t<FT, NT>::Appender<KT>
+APPEND_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::VIEW);
+APPEND_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::VIEW);
+APPEND_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::VIEW);
+APPEND_TEMPLATE(internal_fields_3_t, node_type_t::INTERNAL, KeyT::VIEW);
+APPEND_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::VIEW);
+APPEND_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::VIEW);
+APPEND_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::VIEW);
+APPEND_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF, KeyT::VIEW);
+APPEND_TEMPLATE(node_fields_0_t, node_type_t::INTERNAL, KeyT::HOBJ);
+APPEND_TEMPLATE(node_fields_1_t, node_type_t::INTERNAL, KeyT::HOBJ);
+APPEND_TEMPLATE(node_fields_2_t, node_type_t::INTERNAL, KeyT::HOBJ);
+APPEND_TEMPLATE(internal_fields_3_t, node_type_t::INTERNAL, KeyT::HOBJ);
+APPEND_TEMPLATE(node_fields_0_t, node_type_t::LEAF, KeyT::HOBJ);
+APPEND_TEMPLATE(node_fields_1_t, node_type_t::LEAF, KeyT::HOBJ);
+APPEND_TEMPLATE(node_fields_2_t, node_type_t::LEAF, KeyT::HOBJ);
+APPEND_TEMPLATE(leaf_fields_3_t, node_type_t::LEAF, KeyT::HOBJ);
 
 }

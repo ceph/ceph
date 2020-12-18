@@ -9,9 +9,6 @@ namespace crimson::os::seastore::onode {
 
 #define ITER_T item_iterator_t<NODE_TYPE>
 #define ITER_INST(NT) item_iterator_t<NT>
-#define ITER_TEMPLATE(NT) template class ITER_INST(NT)
-ITER_TEMPLATE(node_type_t::LEAF);
-ITER_TEMPLATE(node_type_t::INTERNAL);
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
@@ -81,11 +78,11 @@ node_offset_t ITER_T::trim_at(
   return trim_size;
 }
 
+#define ITER_TEMPLATE(NT) template class ITER_INST(NT)
+ITER_TEMPLATE(node_type_t::LEAF);
+ITER_TEMPLATE(node_type_t::INTERNAL);
+
 #define APPEND_T ITER_T::Appender<KT>
-template class ITER_INST(node_type_t::LEAF)::Appender<KeyT::VIEW>;
-template class ITER_INST(node_type_t::INTERNAL)::Appender<KeyT::VIEW>;
-template class ITER_INST(node_type_t::LEAF)::Appender<KeyT::HOBJ>;
-template class ITER_INST(node_type_t::INTERNAL)::Appender<KeyT::HOBJ>;
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
@@ -158,5 +155,11 @@ void APPEND_T::wrap_nxt(char* _p_append) {
       p_offset_while_open, node_offset_t(p_offset_while_open - _p_append));
   p_append = _p_append;
 }
+
+#define APPEND_TEMPLATE(NT, KT) template class ITER_INST(NT)::Appender<KT>
+APPEND_TEMPLATE(node_type_t::LEAF, KeyT::VIEW);
+APPEND_TEMPLATE(node_type_t::INTERNAL, KeyT::VIEW);
+APPEND_TEMPLATE(node_type_t::LEAF, KeyT::HOBJ);
+APPEND_TEMPLATE(node_type_t::INTERNAL, KeyT::HOBJ);
 
 }
