@@ -459,8 +459,6 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
                       cls::rbd::MIGRATION_STATE_PREPARING, "", nullptr);
   r = migration.prepare();
 
-  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-
   return r;
 }
 
