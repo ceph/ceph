@@ -155,6 +155,7 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
   m_features |= features_set;
   m_features &= ~features_clear;
 
+  m_features &= ~RBD_FEATURES_IMPLICIT_ENABLE;
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == RBD_FEATURE_OBJECT_MAP) {
       m_features |= RBD_FEATURE_FAST_DIFF;
   }
@@ -200,14 +201,11 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
     m_features |= RBD_FEATURE_DATA_POOL;
   } else {
     m_data_pool.clear();
-    m_features &= ~RBD_FEATURE_DATA_POOL;
   }
 
   if ((m_stripe_unit != 0 && m_stripe_unit != (1ULL << m_order)) ||
       (m_stripe_count != 0 && m_stripe_count != 1)) {
     m_features |= RBD_FEATURE_STRIPINGV2;
-  } else {
-    m_features &= ~RBD_FEATURE_STRIPINGV2;
   }
 
   ldout(m_cct, 10) << "name=" << m_image_name << ", "
