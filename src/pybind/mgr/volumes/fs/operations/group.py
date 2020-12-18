@@ -7,7 +7,7 @@ import cephfs
 
 from .snapshot_util import mksnap, rmsnap
 from .template import GroupTemplate
-from ..fs_util import listdir, get_ancestor_xattr
+from ..fs_util import listdir, listsnaps, get_ancestor_xattr
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class Group(GroupTemplate):
         try:
             dirpath = os.path.join(self.path,
                                    self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
-            return listdir(self.fs, dirpath)
+            return listsnaps(self.fs, self.vol_spec, dirpath, filter_inherited_snaps=True)
         except VolumeException as ve:
             if ve.errno == -errno.ENOENT:
                 return []
