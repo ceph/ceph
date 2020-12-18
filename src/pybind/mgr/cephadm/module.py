@@ -1793,9 +1793,9 @@ To check that the host is reachable:
         if not matching_hosts:
             return {'n/a': [{'error': True,
                              'message': 'No OSDSpec or matching hosts found.'}]}
-        # Is any host still loading previews
+        # Is any host still loading previews or still in the queue to be previewed
         pending_hosts = {h for h in self.cache.loading_osdspec_preview if h in matching_hosts}
-        if pending_hosts:
+        if pending_hosts or any(item in self.cache.osdspec_previews_refresh_queue for item in matching_hosts):
             # Report 'pending' when any of the matching hosts is still loading previews (flag is True)
             return {'n/a': [{'error': True,
                              'message': 'Preview data is being generated.. '
