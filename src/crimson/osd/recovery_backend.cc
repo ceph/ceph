@@ -104,9 +104,7 @@ seastar::future<> RecoveryBackend::handle_backfill_progress(
     t);
   return shard_services.get_store().do_transaction(
     pg.get_collection_ref(), std::move(t)
-  ).handle_exception([] (auto) {
-    ceph_assert("this transaction shall not fail" == nullptr);
-  });
+  ).or_terminate();
 }
 
 seastar::future<> RecoveryBackend::handle_backfill_finish_ack(
@@ -152,9 +150,7 @@ seastar::future<> RecoveryBackend::handle_backfill_remove(
   }
   return shard_services.get_store().do_transaction(
     pg.get_collection_ref(), std::move(t)
-  ).handle_exception([] (auto) {
-    ceph_abort_msg("this transaction shall not fail");
-  });
+  ).or_terminate();
 }
 
 seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
