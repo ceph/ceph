@@ -2140,7 +2140,7 @@ void OSDMonitor::count_metadata(const string& field, Formatter *f)
   f->close_section();
 }
 
-void OSDMonitor::get_versions(std::map<string, list<string> > &versions)
+void OSDMonitor::get_versions(std::map<string, list<string>> &versions)
 {
   for (int osd = 0; osd < osdmap.get_max_osd(); ++osd) {
     if (osdmap.is_up(osd)) {
