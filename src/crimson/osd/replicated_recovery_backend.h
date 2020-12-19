@@ -59,9 +59,11 @@ protected:
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
     object_stat_sum_t* stat);
+  /// @returns true if this push op is the last push op for
+  ///          recovery @c pop.soid
   seastar::future<bool> _handle_pull_response(
     pg_shard_t from,
-    PushOp& pop,
+    const PushOp& pop,
     PullOp* response,
     ceph::os::Transaction* t);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
