@@ -15,6 +15,7 @@
 #ifndef CEPH_MMONCOMMANDACK_H
 #define CEPH_MMONCOMMANDACK_H
 
+#include "common/cmdparse.h"
 #include "messages/PaxosServiceMessage.h"
 
 class MMonCommandAck : public MessageInstance<MMonCommandAck, PaxosServiceMessage> {
@@ -35,7 +36,28 @@ private:
 public:
   std::string_view get_type_name() const override { return "mon_command"; }
   void print(ostream& o) const override {
-    o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
+    cmdmap_t cmdmap;
+    stringstream ss;
+    string prefix;
+    cmdmap_from_json(cmd, &cmdmap, ss);
+    cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+    // Some config values contain sensitive data, so don't log them
+    o << "mon_command_ack(";
+    if (prefix == "config set") {
+      string name;
+      cmd_getval(g_ceph_context, cmdmap, "name", name);
+      o << "[{prefix=" << prefix
+        << ", name=" << name << "}]"
+        << "=" << r << " " << rs << " v" << version << ")";
+    } else if (prefix == "config-key set") {
+      string key;
+      cmd_getval(g_ceph_context, cmdmap, "key", key);
+      o << "[{prefix=" << prefix << ", key=" << key << "}]"
+        << "=" << r << " " << rs << " v" << version << ")";
+    } else {
+      o << cmd;
+    }
+    o << "=" << r << " " << rs << " v" << version << ")";
   }
   
   void encode_payload(uint64_t features) override {
