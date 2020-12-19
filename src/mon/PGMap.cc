@@ -916,7 +916,13 @@ void PGMapDigest::dump_object_stat_sum(
   }
 
   uint64_t used_data_bytes = pool_stat.get_allocated_data_bytes(per_pool);
+  if (!per_pool) {
+    used_data_bytes *= raw_used_rate;
+  }
   uint64_t used_omap_bytes = pool_stat.get_allocated_omap_bytes(per_pool_omap);
+  if (!per_pool_omap) {
+    used_omap_bytes *= raw_used_rate;
+  }
   uint64_t used_bytes = used_data_bytes + used_omap_bytes;
 
   float used = 0.0;
