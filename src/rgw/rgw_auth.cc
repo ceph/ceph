@@ -227,7 +227,7 @@ strategy_handle_granted(rgw::auth::Engine::result_t&& engine_result,
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
+rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const
 {
   result_t strategy_result = result_t::deny();
 
@@ -239,7 +239,7 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
 
     result_t engine_result = result_t::deny();
     try {
-      engine_result = engine.authenticate(dpp, s);
+      engine_result = engine.authenticate(dpp, s, y);
     } catch (const int err) {
       engine_result = result_t::deny(err);
     }
@@ -287,10 +287,10 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
 
 int
 rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strategy& auth_strategy,
-                           req_state* const s) noexcept
+                           req_state* const s, optional_yield y) noexcept
 {
   try {
-    auto result = auth_strategy.authenticate(dpp, s);
+    auto result = auth_strategy.authenticate(dpp, s, y);
     if (result.get_status() != decltype(result)::Status::GRANTED) {
       /* Access denied is acknowledged by returning a std::unique_ptr with
        * nullptr inside. */
@@ -323,10 +323,17 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
     } catch (const int err) {
       ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
       return err;
+    } catch (const std::exception& e) {
+      ldpp_dout(dpp, 5) << "applier throwed unexpected err: " << e.what()
+                        << dendl;
+      return -EPERM;
     }
   } catch (const int err) {
     ldpp_dout(dpp, 5) << "auth engine throwed err=" << err << dendl;
     return err;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 5) << "auth engine throwed unexpected err: " << e.what()
+                      << dendl;
   }
 
   /* We never should be here. */
@@ -384,9 +391,34 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
+  //Check in oidc namespace
   if (ctl->user->get_info_by_uid(federated_user, &user_info, null_yield) >= 0) {
     /* Succeeded. */
     return;
+  }
+
+  federated_user.ns.clear();
+  //Check for old users which wouldn't have been created in oidc namespace
+  if (ctl->user->get_info_by_uid(federated_user, &user_info, null_yield) >= 0) {
+    /* Succeeded. */
+    return;
+  }
+
+  //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
+  RGWStorageStats stats;
+  int ret = ctl->user->read_stats(federated_user, &stats, null_yield);
+  if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
+    return;
+  }
+  if (ret == -ENOENT) { /* in case of ENOENT, which means user doesnt have buckets */
+    //In this case user will be created in oidc namespace
+    ldpp_dout(dpp, 5) << "NOTICE: incoming user has no buckets " << federated_user << dendl;
+    federated_user.ns = "oidc";
+  } else {
+    //User already has buckets associated, hence wont be created in oidc namespace.
+    ldpp_dout(dpp, 5) << "NOTICE: incoming user already has buckets associated " << federated_user << ", won't be created in oidc namespace"<< dendl;
+    federated_user.ns = "";
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map oidc federated user " << federated_user << dendl;
@@ -786,6 +818,8 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   string value = role.id + ":" + role_session_name;
   s->env.emplace(condition, value);
 
+  s->env.emplace("aws:TokenIssueTime", token_issued_at);
+
   s->token_claims.emplace_back("sts");
   for (auto& it : token_claims) {
     s->token_claims.emplace_back(it);
@@ -793,7 +827,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const
+rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const
 {
   if (! is_applicable(s)) {
     return result_t::deny(-EPERM);

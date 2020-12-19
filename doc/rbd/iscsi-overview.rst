@@ -4,21 +4,22 @@
 Ceph iSCSI Gateway
 ==================
 
-The iSCSI gateway is integrating Ceph Storage with the iSCSI standard to provide
+The iSCSI Gateway presents
 a Highly Available (HA) iSCSI target that exports RADOS Block Device (RBD) images
 as SCSI disks. The iSCSI protocol allows clients (initiators) to send SCSI commands
-to SCSI storage devices (targets) over a TCP/IP network. This allows for heterogeneous
-clients, such as Microsoft Windows, to access the Ceph Storage cluster.
+to storage devices (targets) over a TCP/IP network, enabling clients without
+native Ceph client support to access Ceph block storage.  These include
+Microsoft Windows and even BIOS.
 
-Each iSCSI gateway runs the Linux IO target kernel subsystem (LIO) to provide the
-iSCSI protocol support. LIO utilizes a userspace passthrough (TCMU) to interact
+Each iSCSI gateway exploits the Linux IO target kernel subsystem (LIO) to provide
+iSCSI protocol support. LIO utilizes userspace passthrough (TCMU) to interact
 with Ceph's librbd library and expose RBD images to iSCSI clients. With Ceph’s
-iSCSI gateway you can effectively run a fully integrated block-storage
+iSCSI gateway you can provision a fully integrated block-storage
 infrastructure with all the features and benefits of a conventional Storage Area
 Network (SAN).
 
 .. ditaa::
-                  Cluster Network
+                  Cluster Network (optional)
                  +-------------------------------------------+
                  |             |               |             |
              +-------+     +-------+       +-------+     +-------+

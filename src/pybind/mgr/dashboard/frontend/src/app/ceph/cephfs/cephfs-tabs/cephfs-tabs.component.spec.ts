@@ -2,17 +2,17 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { TreeModule } from 'angular-tree-component';
 import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { SharedModule } from '../../../shared/shared.module';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsClientsComponent } from '../cephfs-clients/cephfs-clients.component';
 import { CephfsDetailComponent } from '../cephfs-detail/cephfs-detail.component';
 import { CephfsDirectoriesComponent } from '../cephfs-directories/cephfs-directories.component';

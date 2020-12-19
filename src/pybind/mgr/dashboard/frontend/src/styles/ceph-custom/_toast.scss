@@ -1,4 +1,4 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 #toast-container {
   margin-top: 2vw;
@@ -7,7 +7,7 @@
     margin-top: 2.5vw;
   }
 
-  @media (max-width: bd.$screen-md-max) {
+  @media (max-width: vv.$screen-md-max) {
     margin-top: 9vw;
   }
 

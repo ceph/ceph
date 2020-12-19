@@ -36,8 +36,8 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
 				     uint64_t align)
 {
   const auto compare = t.key_comp();
-  for (auto rs = t.lower_bound(range_t{*cursor, size}, compare);
-       rs != t.end(); ++rs) {
+  auto rs_start = t.lower_bound(range_t{*cursor, size}, compare);
+  for (auto rs = rs_start; rs != t.end(); ++rs) {
     uint64_t offset = p2roundup(rs->start, align);
     if (offset + size <= rs->end) {
       *cursor = offset + size;
@@ -48,7 +48,7 @@ uint64_t AvlAllocator::_block_picker(const Tree& t,
    * If we know we've searched the whole tree (*cursor == 0), give up.
    * Otherwise, reset the cursor to the beginning and try again.
    */
-   if (*cursor == 0) {
+   if (*cursor == 0 || rs_start == t.begin()) {
      return -1ULL;
    }
    *cursor = 0;
@@ -240,7 +240,15 @@ int AvlAllocator::_allocate(
       max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
     *cursor = 0;
-    start = _block_picker(range_size_tree, cursor, size, unit);
+    do {
+      start = _block_picker(range_size_tree, cursor, size, unit);
+      if (start != -1ULL || !force_range_size_alloc) {
+        break;
+      }
+      // try to collect smaller extents as we could fail to retrieve
+      // that large block due to misaligned extents
+      size = p2align(size >> 1, unit);
+    } while (size >= unit);
   } else {
     start = _block_picker(range_tree, cursor, size, unit);
   }
@@ -289,7 +297,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
                            int64_t block_size,
                            uint64_t max_mem,
                            const std::string& name) :
-  Allocator(name),
+  Allocator(name, device_size, block_size),
   num_total(device_size),
   block_size(block_size),
   range_size_alloc_threshold(
@@ -304,7 +312,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
 			   int64_t device_size,
 			   int64_t block_size,
 			   const std::string& name) :
-  Allocator(name),
+  Allocator(name, device_size, block_size),
   num_total(device_size),
   block_size(block_size),
   range_size_alloc_threshold(

@@ -42,15 +42,9 @@
         </div>
       </div>
       <div class="modal-footer">
-        <cd-submit-button #submitButton
-                          [form]="deletionForm"
-                          (submitAction)="callSubmitAction()">
-          <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
-        </cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="callSubmitAction()"
+                              [form]="deletionForm"
+                              [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

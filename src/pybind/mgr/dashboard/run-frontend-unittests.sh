@@ -33,7 +33,7 @@ else
   i18n_lint=`awk '/<source> |<source>$| <\/source>/,/<\/context-group>/ {printf "%-4s ", NR; print}' src/locale/messages.xlf`
   if [ "$i18n_lint" ]; then
     echo -e "\nThe following source translations in 'messages.xlf' need to be \
-  fixed, please check the I18N suggestions in 'HACKING.rst':\n"
+  fixed, please check the I18N suggestions on https://docs.ceph.com/en/latest/dev/developer_guide/dash-devel/#i18n:\n"
     echo "${i18n_lint}"
     failed=true
   fi

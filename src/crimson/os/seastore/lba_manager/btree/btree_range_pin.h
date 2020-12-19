@@ -219,6 +219,15 @@ public:
 
 class BtreeLBAPin : public LBAPin {
   friend class BtreeLBAManager;
+
+  /**
+   * parent
+   *
+   * populated until link_extent is called to ensure cache residence
+   * until add_pin is called.
+   */
+  CachedExtentRef parent;
+
   paddr_t paddr;
   btree_range_pin_t pin;
 
@@ -226,9 +235,10 @@ public:
   BtreeLBAPin() = default;
 
   BtreeLBAPin(
+    CachedExtentRef parent,
     paddr_t paddr,
     lba_node_meta_t &&meta)
-    : paddr(paddr) {
+    : parent(parent), paddr(paddr) {
     pin.set_range(std::move(meta));
   }
 

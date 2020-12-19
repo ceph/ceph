@@ -24,31 +24,19 @@
 #include "common/bit_str.h"
 #include "common/ceph_releases.h"
 
-#define PAXOS_MDSMAP     0
-#define PAXOS_OSDMAP     1
-#define PAXOS_LOG        2
-#define PAXOS_MONMAP     3
-#define PAXOS_AUTH       4
-#define PAXOS_MGR        5
-#define PAXOS_MGRSTAT    6
-#define PAXOS_HEALTH     7
-#define PAXOS_CONFIG     8
-#define PAXOS_NUM        9
-
-inline const char *get_paxos_name(int p) {
-  switch (p) {
-  case PAXOS_MDSMAP: return "mdsmap";
-  case PAXOS_MONMAP: return "monmap";
-  case PAXOS_OSDMAP: return "osdmap";
-  case PAXOS_LOG: return "logm";
-  case PAXOS_AUTH: return "auth";
-  case PAXOS_MGR: return "mgr";
-  case PAXOS_MGRSTAT: return "mgrstat";
-  case PAXOS_HEALTH: return "health";
-  case PAXOS_CONFIG: return "config";
-  default: ceph_abort(); return 0;
-  }
-}
+// use as paxos_service index
+enum {
+  PAXOS_MDSMAP,
+  PAXOS_OSDMAP,
+  PAXOS_LOG,
+  PAXOS_MONMAP,
+  PAXOS_AUTH,
+  PAXOS_MGR,
+  PAXOS_MGRSTAT,
+  PAXOS_HEALTH,
+  PAXOS_CONFIG,
+  PAXOS_NUM
+};
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
 
@@ -641,22 +629,31 @@ inline std::ostream& operator<<(std::ostream& out, const mon_feature_t& f) {
 struct ProgressEvent {
   std::string message;                  ///< event description
   float progress;                  ///< [0..1]
-
+  bool add_to_ceph_s;
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(message, bl);
     encode(progress, bl);
+    encode(add_to_ceph_s, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& p) {
-    DECODE_START(1, p);
+    DECODE_START(2, p);
     decode(message, p);
     decode(progress, p);
+    if (struct_v >= 2){
+	decode(add_to_ceph_s, p);
+    } else {
+      if (!message.empty()) {
+	add_to_ceph_s = true;
+      }
+    }
     DECODE_FINISH(p);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_string("message", message);
     f->dump_float("progress", progress);
+    f->dump_bool("add_to_ceph_s", add_to_ceph_s);
   }
 };
 WRITE_CLASS_ENCODER(ProgressEvent)

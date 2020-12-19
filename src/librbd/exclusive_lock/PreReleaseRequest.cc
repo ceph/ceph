@@ -5,7 +5,6 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
@@ -18,6 +17,7 @@
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/Types.h"
+#include "librbd/PluginRegistry.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -84,6 +84,12 @@ void PreReleaseRequest<I>::handle_cancel_op_requests(int r) {
 
 template <typename I>
 void PreReleaseRequest<I>::send_set_require_lock() {
+  if (!m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    // exclusive-lock was disabled, no need to block IOs
+    send_wait_for_ops();
+    return;
+  }
+
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
@@ -137,7 +143,7 @@ void PreReleaseRequest<I>::handle_wait_for_ops(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_prepare_lock() {
   if (m_shutting_down) {
-    send_shut_down_image_cache();
+    send_process_plugin_release_lock();
     return;
   }
 
@@ -155,36 +161,29 @@ void PreReleaseRequest<I>::handle_prepare_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  send_shut_down_image_cache();
+  send_process_plugin_release_lock();
 }
 
 template <typename I>
-void PreReleaseRequest<I>::send_shut_down_image_cache() {
+void PreReleaseRequest<I>::send_process_plugin_release_lock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  /* Shut down existing image cache whether the feature bit is on or not */
-  if (!m_image_ctx.image_cache) {
-     send_invalidate_cache();
-    return;
-  }
   std::shared_lock owner_lock{m_image_ctx.owner_lock};
   Context *ctx = create_async_context_callback(m_image_ctx, create_context_callback<
       PreReleaseRequest<I>,
-      &PreReleaseRequest<I>::handle_shut_down_image_cache>(this));
-  cache::pwl::ShutdownRequest<I> *req = cache::pwl::ShutdownRequest<I>::create(
-    m_image_ctx, ctx);
-  req->send();
+      &PreReleaseRequest<I>::handle_process_plugin_release_lock>(this));
+  m_image_ctx.plugin_registry->prerelease_exclusive_lock(ctx);
 }
 
 template <typename I>
-void PreReleaseRequest<I>::handle_shut_down_image_cache(int r) {
+void PreReleaseRequest<I>::handle_process_plugin_release_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to shut down image cache: " << cpp_strerror(r)
-               << dendl;
+    lderr(cct) << "failed to handle plugins before releasing lock: "
+               << cpp_strerror(r) << dendl;
     m_image_dispatch->unset_require_lock(io::DIRECTION_BOTH);
     save_result(r);
     finish();
@@ -199,11 +198,10 @@ void PreReleaseRequest<I>::send_invalidate_cache() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  std::shared_lock owner_lock{m_image_ctx.owner_lock};
   Context *ctx = create_context_callback<
       PreReleaseRequest<I>,
       &PreReleaseRequest<I>::handle_invalidate_cache>(this);
-  m_image_ctx.io_object_dispatcher->invalidate_cache(ctx);
+  m_image_ctx.io_image_dispatcher->invalidate_cache(ctx);
 }
 
 template <typename I>

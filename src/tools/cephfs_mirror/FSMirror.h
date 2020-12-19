@@ -22,7 +22,7 @@ class MirrorAdminSocketHook;
 
 class FSMirror {
 public:
-  FSMirror(CephContext *cct, std::string_view fs_name, uint64_t pool_id,
+  FSMirror(CephContext *cct, const Filesystem &filesystem, uint64_t pool_id,
            std::vector<const char*> args, ContextWQ *work_queue);
   ~FSMirror();
 
@@ -32,14 +32,46 @@ public:
   void add_peer(const Peer &peer);
   void remove_peer(const Peer &peer);
 
-  bool is_stopping() const {
+  bool is_stopping() {
+    std::scoped_lock locker(m_lock);
     return m_stopping;
+  }
+
+  bool is_failed() {
+    std::scoped_lock locker(m_lock);
+    return m_init_failed;
+  }
+
+  bool is_blocklisted() {
+    std::scoped_lock locker(m_lock);
+    return is_blocklisted(locker);
+  }
+
+  Peers get_peers() {
+    Peers peers;
+    std::scoped_lock locker(m_lock);
+    for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
+      peers.emplace(peer);
+    }
+    return peers;
   }
 
   // admin socket helpers
   void mirror_status(Formatter *f);
 
 private:
+  bool is_blocklisted(const std::scoped_lock<ceph::mutex> &locker) const {
+    bool blocklisted = false;
+    if (m_instance_watcher) {
+      blocklisted = m_instance_watcher->is_blocklisted();
+    }
+    if (m_mirror_watcher) {
+      blocklisted |= m_mirror_watcher->is_blocklisted();
+    }
+
+    return blocklisted;
+  }
+
   struct SnapListener : public InstanceWatcher::Listener {
     FSMirror *fs_mirror;
 
@@ -47,31 +79,44 @@ private:
       : fs_mirror(fs_mirror) {
     }
 
-    void acquire_directory(string_view dir_name) override {
-      fs_mirror->handle_acquire_directory(dir_name);
+    void acquire_directory(string_view dir_path) override {
+      fs_mirror->handle_acquire_directory(dir_path);
     }
 
-    void release_directory(string_view dir_name) override {
-      fs_mirror->handle_release_directory(dir_name);
+    void release_directory(string_view dir_path) override {
+      fs_mirror->handle_release_directory(dir_path);
     }
   };
 
-  class SnapshotReplayer : public Thread {
+  struct PeerReplayer;
+  class SnapshotReplayerThread : public Thread {
   public:
-    SnapshotReplayer(FSMirror *fs_mirror)
-      : m_fs_mirror(fs_mirror) {
+    SnapshotReplayerThread(FSMirror *fs_mirror, PeerReplayer *peer_replayer)
+      : m_fs_mirror(fs_mirror),
+        m_peer_replayer(peer_replayer) {
     }
 
     void *entry() override {
-      m_fs_mirror->run();
+      m_fs_mirror->run(m_peer_replayer);
       return 0;
     }
 
   private:
     FSMirror *m_fs_mirror;
+    PeerReplayer *m_peer_replayer;
   };
 
-  std::string m_fs_name;
+  typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
+  struct PeerReplayer {
+    SnapshotReplayers replayers;
+    bool stopping = false;
+
+    bool is_stopping() {
+      return stopping;
+    }
+  };
+
+  Filesystem m_filesystem;
   uint64_t m_pool_id;
   std::vector<const char *> m_args;
   ContextWQ *m_work_queue;
@@ -79,9 +124,8 @@ private:
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::fs_mirror");
   ceph::condition_variable m_cond;
   SnapListener m_snap_listener;
-  std::set<Peer> m_peers;
   std::set<std::string, std::less<>> m_directories;
-  std::vector<std::unique_ptr<SnapshotReplayer>> m_snapshot_replayers;
+  std::map<Peer, PeerReplayer> m_peer_replayers;
 
   RadosRef m_cluster;
   std::string m_addrs;
@@ -91,14 +135,16 @@ private:
 
   int m_retval = 0;
   bool m_stopping = false;
+  bool m_init_failed = false;
   Context *m_on_init_finish = nullptr;
   Context *m_on_shutdown_finish = nullptr;
 
   MirrorAdminSocketHook *m_asok_hook = nullptr;
 
-  void run();
-  void init_replayers();
-  void wait_for_replayers();
+  void run(PeerReplayer *peer_replayer);
+  void init_replayers(PeerReplayer *peer_replayer);
+  void shutdown_replayers(PeerReplayer *peer_replayer,
+                          std::unique_lock<ceph::mutex> &locker);
 
   int connect(std::string_view cluster_name, std::string_view client_name,
               RadosRef *cluster);
@@ -115,8 +161,8 @@ private:
   void shutdown_instance_watcher();
   void handle_shutdown_instance_watcher(int r);
 
-  void handle_acquire_directory(string_view dir_name);
-  void handle_release_directory(string_view dir_name);
+  void handle_acquire_directory(string_view dir_path);
+  void handle_release_directory(string_view dir_path);
 };
 
 } // namespace mirror

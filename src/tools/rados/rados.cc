@@ -132,6 +132,7 @@ void usage(ostream& out)
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "   unset-manifest <obj-name>	     unset redirect or chunked object\n"
 "   tier-flush <obj-name>	     flush the chunked object\n"
+"   tier-evict <obj-name>	     evict the chunked object\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
@@ -444,7 +445,7 @@ static int dump_data(std::string const &filename, bufferlist const &data)
   if (filename == "-") {
     fd = STDOUT_FILENO;
   } else {
-    fd = TEMP_FAILURE_RETRY(::open(filename.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    fd = TEMP_FAILURE_RETRY(::open(filename.c_str(), O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0644));
     if (fd < 0) {
       int err = errno;
       cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
@@ -470,7 +471,7 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
   if (strcmp(outfile, "-") == 0) {
     fd = STDOUT_FILENO;
   } else {
-    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0644));
     if (fd < 0) {
       int err = errno;
       cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
@@ -567,7 +568,7 @@ static int do_put(IoCtx& io_ctx,
   int ret = 0;
   int fd = STDIN_FILENO;
   if (!stdio)
-    fd = open(infile, O_RDONLY);
+    fd = open(infile, O_RDONLY|O_BINARY);
   if (fd < 0) {
     cerr << "error reading input file " << infile << ": " << cpp_strerror(errno) << std::endl;
     return 1;
@@ -628,7 +629,7 @@ static int do_append(IoCtx& io_ctx,
   int ret = 0;
   int fd = STDIN_FILENO;
   if (!stdio)
-    fd = open(infile, O_RDONLY);
+    fd = open(infile, O_RDONLY|O_BINARY);
   if (fd < 0) {
     cerr << "error reading input file " << infile << ": " << cpp_strerror(errno) << std::endl;
     return 1;
@@ -2402,25 +2403,29 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
 
-    if (wildcard)
+    if (wildcard) {
       io_ctx.set_namespace(all_nspaces);
+    }
     bool use_stdout = (!output && (nargs.size() < 2 || (strcmp(nargs[1], "-") == 0)));
     if (!use_stdout && !output) {
       cerr << "Please use --output to specify the output file name" << std::endl;
       return 1;
     }
+
     ostream *outstream;
-    if(use_stdout)
+    if (use_stdout) {
       outstream = &cout;
-    else
+    } else {
       outstream = new ofstream(output);
+    }
 
     {
-      if (formatter)
+      if (formatter) {
         formatter->open_array_section("objects");
+      }
       try {
 	librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
-	librados::NObjectIterator i_end = io_ctx.nobjects_end();
+	const librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
 #ifdef WITH_LIBRADOSSTRIPER
 	  if (use_striper) {
@@ -2429,33 +2434,42 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    // each, without its suffix '.000...000'
 	    size_t l = i->get_oid().length();
 	    if (l <= 17 ||
-		(0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) continue;
+		(0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) {
+	      continue;
+	    }
 	  }
 #endif // WITH_LIBRADOSSTRIPER
           if (pgid) {
             uint32_t ps;
-            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps)
+            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps) {
               break;
+	    }
           }
 	  if (!formatter) {
 	    // Only include namespace in output when wildcard specified
-	    if (wildcard)
+	    if (wildcard) {
 	      *outstream << i->get_nspace() << "\t";
-      
-        *outstream << detail::get_oid(i, use_striper);
-
-	    if (i->get_locator().size())
+	    }
+	    *outstream << detail::get_oid(i, use_striper);
+	    if (i->get_locator().size()) {
 	      *outstream << "\t" << i->get_locator();
+	    }
 	    *outstream << std::endl;
 	  } else {
 	    formatter->open_object_section("object");
 	    formatter->dump_string("namespace", i->get_nspace());
 
-        detail::dump_name(formatter.get(), i, use_striper);
+	    detail::dump_name(formatter.get(), i, use_striper);
 
-	    if (i->get_locator().size())
+	    if (i->get_locator().size()) {
 	      formatter->dump_string("locator", i->get_locator());
+	    }
 	    formatter->close_section(); //object
+
+	    constexpr int TARGET_BYTES_PER_FLUSH = 4096;
+	    if (formatter->get_len() >= TARGET_BYTES_PER_FLUSH) {
+	      formatter->flush(*outstream);
+	    }
 	  }
 	}
       }
@@ -2467,12 +2481,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (formatter) {
       formatter->close_section(); //objects
       formatter->flush(*outstream);
-      if (pretty_format)
+      if (pretty_format) {
 	*outstream << std::endl;
+      }
       formatter->flush(*outstream);
     }
-    if (!stdout)
+    if (!stdout) {
       delete outstream;
+    }
   }
   else if (strcmp(nargs[0], "mapext") == 0) {
     if (!pool_name || nargs.size() < 2) {
@@ -3820,6 +3836,29 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
+  } else if (strcmp(nargs[0], "tier-evict") == 0) {
+    if (!pool_name || nargs.size() < 2) {
+      usage(cerr);
+      return 1;
+    }
+    string oid(nargs[1]);
+
+    ObjectReadOperation op;
+    op.tier_evict();
+    librados::AioCompletion *completion =
+      librados::Rados::aio_create_completion();
+    io_ctx.aio_operate(oid.c_str(), completion, &op,
+		       librados::OPERATION_IGNORE_CACHE |
+		       librados::OPERATION_IGNORE_OVERLAY,
+		       NULL);
+    completion->wait_for_complete();
+    ret = completion->get_return_value();
+    completion->release();
+    if (ret < 0) {
+      cerr << "error tier-evict " << pool_name << "/" << oid << " : " 
+	   << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
   } else if (strcmp(nargs[0], "export") == 0) {
     // export [filename]
     if (!pool_name || nargs.size() > 2) {
@@ -3831,7 +3870,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (nargs.size() < 2 || std::string(nargs[1]) == "-") {
       file_fd = STDOUT_FILENO;
     } else {
-      file_fd = open(nargs[1], O_WRONLY|O_CREAT|O_TRUNC, 0666);
+      file_fd = open(nargs[1], O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0666);
       if (file_fd < 0) {
         cerr << "Error opening '" << nargs[1] << "': "
           << cpp_strerror(file_fd) << std::endl;
@@ -3880,7 +3919,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (filename == "-") {
       file_fd = STDIN_FILENO;
     } else {
-      file_fd = open(filename.c_str(), O_RDONLY);
+      file_fd = open(filename.c_str(), O_RDONLY|O_BINARY);
       if (file_fd < 0) {
         cerr << "Error opening '" << filename << "': "
           << cpp_strerror(file_fd) << std::endl;

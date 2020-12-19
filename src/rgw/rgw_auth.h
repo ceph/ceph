@@ -293,7 +293,7 @@ public:
    *    interface.
    *
    * On error throws rgw::auth::Exception containing the reason. */
-  virtual result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const = 0;
+  virtual result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s, optional_yield y) const = 0;
 };
 
 
@@ -336,13 +336,13 @@ public:
     FALLBACK,
   };
 
-  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s, optional_yield y) const override final;
 
   bool is_empty() const {
     return auth_stack.empty();
   }
 
-  static int apply(const DoutPrefixProvider* dpp, const Strategy& auth_strategy, req_state* s) noexcept;
+  static int apply(const DoutPrefixProvider* dpp, const Strategy& auth_strategy, req_state* s, optional_yield y) noexcept;
 
 private:
   /* Using the reference wrapper here to explicitly point out we are not
@@ -649,6 +649,7 @@ protected:
   string token_policy;
   string role_session_name;
   std::vector<string> token_claims;
+  string token_issued_at;
 
 public:
 
@@ -657,12 +658,14 @@ public:
                const rgw_user& user_id,
                const string& token_policy,
                const string& role_session_name,
-               const std::vector<string>& token_claims)
+               const std::vector<string>& token_claims,
+               const string& token_issued_at)
     : role(role),
       user_id(user_id),
       token_policy(token_policy),
       role_session_name(role_session_name),
-      token_claims(token_claims) {}
+      token_claims(token_claims),
+      token_issued_at(token_issued_at) {}
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
@@ -671,7 +674,7 @@ public:
     return false;
   }
   bool is_owner_of(const rgw_user& uid) const override {
-    return (this->user_id.id == uid.id && this->user_id.tenant == uid.tenant && this->user_id.ns == this->user_id.ns);
+    return (this->user_id.id == uid.id && this->user_id.tenant == uid.tenant && this->user_id.ns == uid.ns);
   }
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
@@ -689,11 +692,12 @@ public:
     virtual ~Factory() {}
     virtual aplptr_t create_apl_role( CephContext* cct,
                                       const req_state* s,
-                                      const rgw::auth::RoleApplier::Role& role_name,
+                                      const rgw::auth::RoleApplier::Role& role,
                                       const rgw_user& user_id,
                                       const std::string& token_policy,
                                       const std::string& role_session,
-                                      const std::vector<string>& token_claims) const = 0;
+                                      const std::vector<string>& token_claims,
+                                      const std::string& token_issued_at) const = 0;
     };
 };
 
@@ -713,7 +717,7 @@ public:
     return "rgw::auth::AnonymousEngine";
   }
 
-  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s, optional_yield y) const override final;
 
 protected:
   virtual bool is_applicable(const req_state*) const noexcept {

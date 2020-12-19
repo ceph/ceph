@@ -1,26 +1,25 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
+
 import json
 import logging
 import time
+from typing import Any, Dict, List, Optional, Union
 
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError  # type: ignore
 from mgr_util import get_most_recent_rate
 
-from . import ApiController, RESTController, Endpoint, Task
-from . import CreatePermission, ReadPermission, UpdatePermission, DeletePermission, \
-    allow_empty_body, ControllerDoc, EndpointDoc
-from .orchestrator import raise_if_no_orchestrator
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
-from ..services.exception import handle_send_command_error, handle_orchestrator_error
+from ..services.exception import handle_orchestrator_error, handle_send_command_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import str_to_bool
-
-from typing import Any, Dict, List, Union  # pylint: disable=C0411
-
+from . import ApiController, ControllerDoc, CreatePermission, \
+    DeletePermission, Endpoint, EndpointDoc, ReadPermission, RESTController, \
+    Task, UpdatePermission, allow_empty_body
+from .orchestrator import raise_if_no_orchestrator
 
 logger = logging.getLogger('controllers.osd')
 
@@ -34,6 +33,17 @@ SAFE_TO_DESTROY_SCHEMA = {
 
 EXPORT_FLAGS_SCHEMA = {
     "list_of_flags": ([str], "")
+}
+
+EXPORT_INDIV_FLAGS_SCHEMA = {
+    "added": ([str], "List of added flags"),
+    "removed": ([str], "List of removed flags"),
+    "ids": ([int], "List of updated OSDs")
+}
+
+EXPORT_INDIV_FLAGS_GET_SCHEMA = {
+    "osd": (int, "OSD ID"),
+    "flags": ([str], "List of active flags")
 }
 
 
@@ -64,7 +74,9 @@ class Osd(RESTController):
                 if osd_id >= 0 and osd_id in osds:
                     osds[osd_id]['host'] = host
 
-        # Extending by osd histogram data
+        removing_osd_ids = self.get_removing_osds()
+
+        # Extending by osd histogram and orchestrator data
         for osd_id, osd in osds.items():
             osd['stats'] = {}
             osd['stats_history'] = {}
@@ -79,8 +91,22 @@ class Osd(RESTController):
             # Gauge stats
             for stat in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 osd['stats'][stat.split('.')[1]] = mgr.get_latest('osd', osd_spec, stat)
-
+            osd['operational_status'] = self._get_operational_status(osd_id, removing_osd_ids)
         return list(osds.values())
+
+    def _get_operational_status(self, osd_id: int, removing_osd_ids: Optional[List[int]]):
+        if removing_osd_ids is None:
+            return 'unmanaged'
+        if osd_id in removing_osd_ids:
+            return 'deleting'
+        return 'working'
+
+    @staticmethod
+    def get_removing_osds() -> Optional[List[int]]:
+        orch = OrchClient.instance()
+        if orch.available(features=[OrchFeature.OSD_GET_REMOVE_STATUS]):
+            return [osd.osd_id for osd in orch.osds.removing_status()]
+        return None
 
     @staticmethod
     def get_osd_map(svc_id=None):
@@ -99,6 +125,7 @@ class Osd(RESTController):
     def _get_smart_data(osd_id):
         # type: (str) -> dict
         """Returns S.M.A.R.T data for the given OSD ID."""
+        logger.debug('[SMART] retrieving data from OSD with ID %s', osd_id)
         return CephService.get_smart_data_by_daemon('osd', osd_id)
 
     @RESTController.Resource('GET')
@@ -116,6 +143,8 @@ class Osd(RESTController):
         return {
             'osd_map': self.get_osd_map(svc_id),
             'osd_metadata': mgr.get_metadata('osd', svc_id),
+            'operational_status': self._get_operational_status(int(svc_id),
+                                                               self.get_removing_osds())
         }
 
     @RESTController.Resource('GET')
@@ -198,7 +227,7 @@ class Osd(RESTController):
         while True:
             removal_osds = orch.osds.removing_status()
             logger.info('Current removing OSDs %s', removal_osds)
-            pending = [osd for osd in removal_osds if osd.osd_id == svc_id]
+            pending = [osd for osd in removal_osds if osd.osd_id == int(svc_id)]
             if not pending:
                 break
             logger.info('Wait until osd.%s is removed...', svc_id)
@@ -287,7 +316,7 @@ class Osd(RESTController):
 
     @CreatePermission
     @osd_task('create', {'tracking_id': '{tracking_id}'})
-    def create(self, method, data, tracking_id):  # pylint: disable=W0622
+    def create(self, method, data, tracking_id):  # pylint: disable=unused-argument
         if method == 'bare':
             return self._create_bare(data)
         if method == 'drive_groups':
@@ -382,11 +411,29 @@ class OsdFlagsController(RESTController):
                 set(enabled_flags) - {'pauserd', 'pausewr'} | {'pause'})
         return sorted(enabled_flags)
 
+    @staticmethod
+    def _update_flags(action, flags, ids=None):
+        if ids:
+            if flags:
+                ids = list(map(str, ids))
+                CephService.send_command('mon', 'osd ' + action, who=ids,
+                                         flags=','.join(flags))
+        else:
+            for flag in flags:
+                CephService.send_command('mon', 'osd ' + action, '', key=flag)
+
     @EndpointDoc("Display OSD Flags",
                  responses={200: EXPORT_FLAGS_SCHEMA})
     def list(self):
         return self._osd_flags()
 
+    @EndpointDoc('Sets OSD flags for the entire cluster.',
+                 parameters={
+                     'flags': ([str], 'List of flags to set. The flags `recovery_deletes`, '
+                                      '`sortbitwise` and `pglog_hardlimit` cannot be unset. '
+                                      'Additionally `purged_snapshots` cannot even be set.')
+                 },
+                 responses={200: EXPORT_FLAGS_SCHEMA})
     def bulk_set(self, flags):
         """
         The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit` flags cannot be unset.
@@ -399,10 +446,71 @@ class OsdFlagsController(RESTController):
         data = set(flags)
         added = data - enabled_flags
         removed = enabled_flags - data
-        for flag in added:
-            CephService.send_command('mon', 'osd set', '', key=flag)
-        for flag in removed:
-            CephService.send_command('mon', 'osd unset', '', key=flag)
+
+        self._update_flags('set', added)
+        self._update_flags('unset', removed)
+
         logger.info('Changed OSD flags: added=%s removed=%s', added, removed)
 
         return sorted(enabled_flags - removed | added)
+
+    @Endpoint('PUT', 'individual')
+    @UpdatePermission
+    @EndpointDoc('Sets OSD flags for a subset of individual OSDs.',
+                 parameters={
+                     'flags': ({'noout': (bool, 'Sets/unsets `noout`', True, None),
+                                'noin': (bool, 'Sets/unsets `noin`', True, None),
+                                'noup': (bool, 'Sets/unsets `noup`', True, None),
+                                'nodown': (bool, 'Sets/unsets `nodown`', True, None)},
+                               'Directory of flags to set or unset. The flags '
+                               '`noin`, `noout`, `noup` and `nodown` are going to '
+                               'be considered only.'),
+                     'ids': ([int], 'List of OSD ids the flags should be applied '
+                                    'to.')
+                 },
+                 responses={200: EXPORT_INDIV_FLAGS_SCHEMA})
+    def set_individual(self, flags, ids):
+        """
+        Updates flags (`noout`, `noin`, `nodown`, `noup`) for an individual
+        subset of OSDs.
+        """
+        assert isinstance(flags, dict)
+        assert isinstance(ids, list)
+        assert all(isinstance(id, int) for id in ids)
+
+        # These are to only flags that can be applied to an OSD individually.
+        all_flags = {'noin', 'noout', 'nodown', 'noup'}
+        added = set()
+        removed = set()
+        for flag, activated in flags.items():
+            if flag in all_flags:
+                if activated is not None:
+                    if activated:
+                        added.add(flag)
+                    else:
+                        removed.add(flag)
+
+        self._update_flags('set-group', added, ids)
+        self._update_flags('unset-group', removed, ids)
+
+        logger.error('Changed individual OSD flags: added=%s removed=%s for ids=%s',
+                     added, removed, ids)
+
+        return {'added': sorted(added),
+                'removed': sorted(removed),
+                'ids': ids}
+
+    @Endpoint('GET', 'individual')
+    @ReadPermission
+    @EndpointDoc('Displays individual OSD flags',
+                 responses={200: EXPORT_INDIV_FLAGS_GET_SCHEMA})
+    def get_individual(self):
+        osd_map = mgr.get('osd_map')['osds']
+        resp = []
+
+        for osd in osd_map:
+            resp.append({
+                'osd': osd['osd'],
+                'flags': osd['state']
+            })
+        return resp

@@ -21,7 +21,8 @@ public:
     return new CryptoObjectDispatch(image_ctx, nullptr);
   }
 
-  CryptoObjectDispatch(ImageCtxT* image_ctx, CryptoInterface *crypto);
+  CryptoObjectDispatch(ImageCtxT* image_ctx,
+                       ceph::ref_t<CryptoInterface> crypto);
 
   io::ObjectDispatchLayer get_dispatch_layer() const override {
     return io::OBJECT_DISPATCH_LAYER_CRYPTO;
@@ -32,10 +33,9 @@ public:
   void shut_down(Context* on_finish) override;
 
   bool read(
-      uint64_t object_no, const io::Extents &extents,
-      IOContext io_context, int op_flags, int read_flags,
-      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      io::Extents* extent_map, uint64_t* version, int* object_dispatch_flags,
+      uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
+      int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+      uint64_t* version, int* object_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
@@ -98,10 +98,14 @@ public:
           uint64_t journal_tid, uint64_t new_journal_tid) override {
   }
 
+  int prepare_copyup(
+      uint64_t object_no,
+      io::SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override;
+
 private:
 
   ImageCtxT* m_image_ctx;
-  CryptoInterface *m_crypto;
+  ceph::ref_t<CryptoInterface> m_crypto;
 
 };
 

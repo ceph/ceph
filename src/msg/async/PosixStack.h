@@ -40,8 +40,12 @@ class PosixWorker : public Worker {
 class PosixNetworkStack : public NetworkStack {
   std::vector<std::thread> threads;
 
+  virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
+    return new PosixWorker(c, worker_id);
+  }
+
  public:
-  explicit PosixNetworkStack(CephContext *c, const std::string &t);
+  explicit PosixNetworkStack(CephContext *c);
 
   void spawn_worker(unsigned i, std::function<void ()> &&func) override {
     threads.resize(i+1);

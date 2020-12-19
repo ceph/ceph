@@ -25,6 +25,7 @@ set(rbd_srcs
   action/Flatten.cc
   action/Ggate.cc
   action/Group.cc
+  action/ImageCache.cc
   action/ImageMeta.cc
   action/Import.cc
   action/Info.cc
@@ -50,7 +51,8 @@ set(rbd_srcs
   action/Status.cc
   action/TrashPurgeSchedule.cc
   action/Trash.cc
-  action/Watch.cc)
+  action/Watch.cc
+  action/Wnbd.cc)
 
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)

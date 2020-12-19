@@ -13,7 +13,7 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 
 from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
-from mgr_module import MgrModule, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
@@ -107,18 +107,12 @@ def preview_table_osd(data):
                 if spec.get('error'):
                     return spec.get('message')
                 dg_name = spec.get('osdspec')
-                for osd in spec.get('data', {}).get('osds', []):
-                    db_path = '-'
-                    wal_path = '-'
-                    block_db = osd.get('block.db', {}).get('path')
-                    block_wal = osd.get('block.wal', {}).get('path')
-                    block_data = osd.get('data', {}).get('path', '')
+                for osd in spec.get('data', []):
+                    db_path = osd.get('block_db', '-')
+                    wal_path = osd.get('block_wal', '-')
+                    block_data = osd.get('data', '')
                     if not block_data:
                         continue
-                    if block_db:
-                        db_path = spec.get('data', {}).get('vg', {}).get('devices', [])
-                    if block_wal:
-                        wal_path = spec.get('data', {}).get('wal_vg', {}).get('devices', [])
                     table.add_row(('osd', dg_name, host, block_data, db_path, wal_path))
     return table.get_string()
 
@@ -141,15 +135,14 @@ def preview_table_services(data):
 class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                       metaclass=CLICommandMeta):
     MODULE_OPTIONS = [
-        {
-            'name': 'orchestrator',
-            'type': 'str',
-            'default': None,
-            'desc': 'Orchestrator backend',
-            'enum_allowed': ['cephadm', 'rook',
-                             'test_orchestrator'],
-            'runtime': True,
-        },
+        Option(
+            'orchestrator',
+            type='str',
+            default=None,
+            desc='Orchestrator backend',
+            enum_allowed=['cephadm', 'rook', 'test_orchestrator'],
+            runtime=True,
+        )
     ]
     NATIVE_OPTIONS = []  # type: List[dict]
 
@@ -411,7 +404,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for host_ in completion.result:  # type: InventoryHost
+            for host_ in sorted(completion.result, key=lambda h: h.name):  # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
 
                     led_ident = 'N/A'
@@ -607,6 +600,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
 
+            remove_column = 'CONTAINER ID'
+            if table.get_string(fields=[remove_column], border=False,
+                    header=False).count('<unknown>') == len(daemons):
+                try:
+                    table.del_column(remove_column)
+                except AttributeError as e:
+                    # del_column method was introduced in prettytable 2.0
+                    if str(e) != "del_column":
+                        raise
+                    table.field_names.remove(remove_column)
+                    table._rows = [row[:-1] for row in table._rows]
+
             return HandleCommandResult(stdout=table.get_string())
 
     @_cli_write_command(
@@ -627,38 +632,38 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 usage:
   ceph orch apply osd -i <json_file/yaml_file> [--dry-run]
   ceph orch apply osd --all-available-devices [--dry-run] [--unmanaged]
-  
+
 Restrictions:
-  
+
   Mutexes:
   * -i, --all-available-devices
   * -i, --unmanaged (this would overwrite the osdspec loaded from a file)
-  
+
   Parameters:
-  
+
   * --unmanaged
      Only works with --all-available-devices.
-  
+
 Description:
-  
+
   * -i
     An inbuf object like a file or a json/yaml blob containing a valid OSDSpec
-    
+
   * --all-available-devices
     The most simple OSDSpec there is. Takes all as 'available' marked devices
     and creates standalone OSDs on them.
-    
+
   * --unmanaged
     Set a the unmanaged flag for all--available-devices (default is False)
-    
+
 Examples:
 
    # ceph orch apply osd -i <file.yml|json>
-   
+
    Applies one or more OSDSpecs found in <file>
-   
+
    # ceph orch osd apply --all-available-devices --unmanaged=true
-   
+
    Creates and applies simple OSDSpec with the unmanaged flag set to <true>
 """
 
@@ -673,34 +678,36 @@ Examples:
         if inbuf:
             if unmanaged is not None:
                 return HandleCommandResult(-errno.EINVAL, stderr=usage)
+
             try:
-                drivegroups = yaml.safe_load_all(inbuf)
+                drivegroups = [_dg for _dg in yaml.safe_load_all(inbuf)]
+            except yaml.scanner.ScannerError as e:
+                msg = f"Invalid YAML received : {str(e)}"
+                self.log.exception(e)
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-                dg_specs = []
-                for dg in drivegroups:
-                    spec = DriveGroupSpec.from_json(dg)
-                    if dry_run:
-                        spec.preview_only = True
-                    dg_specs.append(spec)
+            dg_specs = []
+            for dg in drivegroups:
+                spec = DriveGroupSpec.from_json(dg)
+                if dry_run:
+                    spec.preview_only = True
+                dg_specs.append(spec)
 
-                completion = self.apply(dg_specs)
+            completion = self.apply(dg_specs)
+            self._orchestrator_wait([completion])
+            raise_if_exception(completion)
+            out = completion.result_str()
+            if dry_run:
+                completion = self.plan(dg_specs)
                 self._orchestrator_wait([completion])
                 raise_if_exception(completion)
-                out = completion.result_str()
-                if dry_run:
-                    completion = self.plan(dg_specs)
-                    self._orchestrator_wait([completion])
-                    raise_if_exception(completion)
-                    data = completion.result
-                    if format == 'plain':
-                        out = preview_table_osd(data)
-                    else:
-                        out = to_format(data, format, many=True, cls=None)
-                return HandleCommandResult(stdout=out)
+                data = completion.result
+                if format == 'plain':
+                    out = preview_table_osd(data)
+                else:
+                    out = to_format(data, format, many=True, cls=None)
+            return HandleCommandResult(stdout=out)
 
-            except ValueError as e:
-                msg = 'Failed to read JSON/YAML input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
         if all_available_devices:
             if unmanaged is None:
                 unmanaged = False
@@ -815,7 +822,7 @@ Usage:
 
     @_cli_write_command(
         'orch daemon add',
-        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=daemon_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus|cephadm-exporter,req=false '
         'name=placement,type=CephString,req=false',
         'Add daemon(s)')
     def _daemon_add_misc(self,
@@ -860,6 +867,8 @@ Usage:
             completion = self.add_nfs(spec)
         elif daemon_type == 'iscsi':
             completion = self.add_iscsi(spec)
+        elif daemon_type == 'cephadm-exporter':
+            completion = self.add_cephadm_exporter(spec)
         else:
             raise OrchestratorValidationError(f'unknown daemon type `{daemon_type}`')
 
@@ -1054,7 +1063,7 @@ Usage:
 
     @_cli_write_command(
         'orch apply',
-        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus,req=false '
+        'name=service_type,type=CephChoices,strings=mon|mgr|rbd-mirror|crash|alertmanager|grafana|node-exporter|prometheus|cephadm-exporter,req=false '
         'name=placement,type=CephString,req=false '
         'name=dry_run,type=CephBool,req=false '
         'name=format,type=CephChoices,strings=plain|json|json-pretty|yaml,req=false '
@@ -1069,7 +1078,7 @@ Usage:
                     inbuf: Optional[str] = None) -> HandleCommandResult:
         usage = """Usage:
   ceph orch apply -i <yaml spec> [--dry-run]
-  ceph orch apply <service_type> <placement> [--unmanaged]
+  ceph orch apply <service_type> [--placement=<placement_string>] [--unmanaged]
         """
         if inbuf:
             if service_type or placement or unmanaged:

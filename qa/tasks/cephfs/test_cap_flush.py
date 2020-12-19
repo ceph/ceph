@@ -2,7 +2,6 @@
 import os
 import time
 from textwrap import dedent
-from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 class TestCapFlush(CephFSTestCase):
@@ -14,9 +13,6 @@ class TestCapFlush(CephFSTestCase):
         corresponding inode does not exist because the client request which
         creates inode hasn't been replayed.
         """
-
-        if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("Require FUSE client to inject client release failure")
 
         dir_path = os.path.join(self.mount_a.mountpoint, "testdir")
         py_script = dedent("""

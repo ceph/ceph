@@ -5,17 +5,17 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
-import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { CdForm } from '../../../shared/forms/cd-form';
-import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators, isEmptyInputValue } from '~/app/shared/forms/cd-validators';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
@@ -61,6 +61,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     this.subuserLabel = $localize`subuser`;
     this.s3keyLabel = $localize`S3 Key`;
     this.capabilityLabel = $localize`capability`;
+    this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.createForm();
   }
 
@@ -70,7 +72,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       uid: [
         null,
         [Validators.required],
-        [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
+        this.editing ? [] : [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
       ],
       display_name: [null, [Validators.required]],
       email: [
@@ -148,8 +150,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
@@ -378,7 +378,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       // Add
       // Create an observable to add the capability when the form is submitted.
       this.submitObservables.push(this.rgwUserService.addCapability(uid, cap.type, cap.perm));
-      this.capabilities.push(cap);
+      this.capabilities = [...this.capabilities, cap]; // Notify Angular CD
     }
     // Mark the form as dirty to be able to submit it.
     this.userForm.markAsDirty();
@@ -398,12 +398,13 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     );
     // Remove the capability to update the UI.
     this.capabilities.splice(index, 1);
+    this.capabilities = [...this.capabilities]; // Notify Angular CD
     // Mark the form as dirty to be able to submit it.
     this.userForm.markAsDirty();
   }
 
-  hasAllCapabilities() {
-    return !_.difference(RgwUserCapabilities.getAll(), _.map(this.capabilities, 'type')).length;
+  hasAllCapabilities(capabilities: RgwUserCapability[]) {
+    return !_.difference(RgwUserCapabilities.getAll(), _.map(capabilities, 'type')).length;
   }
 
   /**

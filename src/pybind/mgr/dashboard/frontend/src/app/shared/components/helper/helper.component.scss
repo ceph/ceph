@@ -1,7 +1,7 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 i {
-  color: bd.$primary;
+  color: vv.$primary;
   cursor: pointer;
   padding-left: 4px;
 }

@@ -12,12 +12,13 @@ namespace crimson::net {
 
 class ProtocolV1 final : public Protocol {
  public:
-  ProtocolV1(ChainedDispatchersRef& dispatcher,
+  ProtocolV1(ChainedDispatchers& dispatchers,
              SocketConnection& conn,
              SocketMessenger& messenger);
   ~ProtocolV1() override;
   void print(std::ostream&) const final;
  private:
+  void on_closed() override;
   bool is_connected() const override;
 
   void start_connect(const entity_addr_t& peer_addr,
@@ -103,6 +104,7 @@ class ProtocolV1 final : public Protocol {
   seastar::future<stop_t> handle_connect_with_existing(
       SocketConnectionRef existing, bufferlist&& authorizer_reply);
   bool require_auth_feature() const;
+  bool require_cephx_v2_feature() const;
   seastar::future<stop_t> repeat_handle_connect();
 
   // open

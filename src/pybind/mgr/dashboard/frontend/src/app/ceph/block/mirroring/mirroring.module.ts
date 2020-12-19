@@ -4,9 +4,8 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbProgressbarModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 
-import { SharedModule } from '../../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
 import { BootstrapCreateModalComponent } from './bootstrap-create-modal/bootstrap-create-modal.component';
 import { BootstrapImportModalComponent } from './bootstrap-import-modal/bootstrap-import-modal.component';
 import { DaemonListComponent } from './daemon-list/daemon-list.component';
@@ -26,8 +25,7 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     RouterModule,
     FormsModule,
     ReactiveFormsModule,
-    NgbProgressbarModule,
-    NgBootstrapFormValidationModule
+    NgbProgressbarModule
   ],
   declarations: [
     BootstrapCreateModalComponent,

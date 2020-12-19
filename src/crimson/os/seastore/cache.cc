@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/extentmap_manager/btree/extentmap_btree_node_impl.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node_impl.h"
 #include "crimson/os/seastore/onode_manager/simple-fltree/onode_block.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "test/crimson/seastore/test_block.h"
 
 namespace {
@@ -131,6 +132,10 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length);
   case extent_types_t::ONODE_BLOCK:
     return alloc_new_extent<OnodeBlock>(t, length);
+  case extent_types_t::EXTMAP_INNER:
+    return alloc_new_extent<extentmap_manager::ExtMapInnerNode>(t, length);
+  case extent_types_t::EXTMAP_LEAF:
+    return alloc_new_extent<extentmap_manager::ExtMapLeafNode>(t, length);
   case extent_types_t::TEST_BLOCK:
     return alloc_new_extent<TestBlock>(t, length);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
@@ -164,6 +169,7 @@ CachedExtentRef Cache::duplicate_for_write(
 
   ret->version++;
   ret->state = CachedExtent::extent_state_t::MUTATION_PENDING;
+  logger().debug("Cache::duplicate_for_write: {} -> {}", *i, *ret);
   return ret;
 }
 
@@ -248,7 +254,15 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
     if (i->get_type() == extent_types_t::ROOT) {
       assert(0 == "ROOT never gets written as a fresh block");
     }
-    record.extents.push_back(extent_t{std::move(bl)});
+
+    assert(bl.length() == i->get_length());
+    record.extents.push_back(extent_t{
+	i->get_type(),
+	i->is_logical()
+	? i->cast<LogicalCachedExtent>()->get_laddr()
+	: L_ADDR_NULL,
+	std::move(bl)
+      });
   }
 
   return std::make_optional<record_t>(std::move(record));
@@ -257,7 +271,8 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 void Cache::complete_commit(
   Transaction &t,
   paddr_t final_block_start,
-  journal_seq_t seq)
+  journal_seq_t seq,
+  SegmentCleaner *cleaner)
 {
   if (t.root) {
     remove_extent(root);
@@ -269,10 +284,8 @@ void Cache::complete_commit(
     logger().debug("complete_commit: new root {}", *t.root);
   }
 
-  paddr_t cur = final_block_start;
   for (auto &i: t.fresh_block_list) {
-    i->set_paddr(cur);
-    cur.offset += i->get_length();
+    i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     i->last_committed_crc = i->get_crc32c();
     i->on_initial_write();
 
@@ -284,6 +297,11 @@ void Cache::complete_commit(
     i->state = CachedExtent::extent_state_t::CLEAN;
     logger().debug("complete_commit: fresh {}", *i);
     add_extent(i);
+    if (cleaner) {
+      cleaner->mark_space_used(
+	i->get_paddr(),
+	i->get_length());
+    }
   }
 
   // Add new copy of mutated blocks, set_io_wait to block until written
@@ -299,6 +317,14 @@ void Cache::complete_commit(
     i->state = CachedExtent::extent_state_t::DIRTY;
     if (i->version == 1) {
       i->dirty_from = seq;
+    }
+  }
+
+  if (cleaner) {
+    for (auto &i: t.retired_set) {
+      cleaner->mark_space_free(
+	i->get_paddr(),
+	i->get_length());
     }
   }
 
@@ -442,6 +468,8 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   }
 }
 
+using StagedOnodeBlock = crimson::os::seastore::onode::SeastoreNodeExtent;
+
 Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
   extent_types_t type,
   paddr_t offset,
@@ -475,6 +503,11 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       });
     case extent_types_t::ONODE_BLOCK:
       return get_extent<OnodeBlock>(offset, length
+      ).safe_then([](auto extent) {
+	return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::ONODE_BLOCK_STAGED:
+      return get_extent<StagedOnodeBlock>(offset, length
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });

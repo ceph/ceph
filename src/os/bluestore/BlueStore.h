@@ -140,7 +140,10 @@ enum {
   l_bluestore_omap_upper_bound_lat,
   l_bluestore_omap_lower_bound_lat,
   l_bluestore_omap_next_lat,
+  l_bluestore_omap_get_keys_lat,
+  l_bluestore_omap_get_values_lat,
   l_bluestore_clist_lat,
+  l_bluestore_remove_lat,
   l_bluestore_last
 };
 
@@ -297,11 +300,13 @@ public:
       ceph_assert(writing.empty());
     }
 
-    void _add_buffer(BufferCacheShard* cache, Buffer *b, int level, Buffer *near) {
+    void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-	b->data.reassign_to_mempool(mempool::mempool_bluestore_writing);
+        // we might get already cached data for which resetting mempool is inppropriate
+        // hence calling try_assign_to_mempool
+        b->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
         if (writing.empty() || writing.rbegin()->seq <= b->seq) {
           writing.push_back(*b);
         } else {
@@ -316,8 +321,8 @@ public:
           writing.insert(it, *b);
         }
       } else {
-	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-	cache->_add(b, level, near);
+        b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+        cache->_add(b, level, near);
       }
       cache->_audit("_add_buffer end");
     }
@@ -1153,7 +1158,7 @@ public:
     // are laid out contiguously on disk, which is not the case in general.
     // Also, it should always be called after calling extent_map.fault_range(),
     // so that the extent map is loaded.
-    int64_t get_ondisk_starting_offset() const {
+    int64_t zoned_get_ondisk_starting_offset() const {
       return extent_map.extent_map.begin()->blob->
 	  get_blob().calc_offset(0, nullptr);
     }
@@ -1672,12 +1677,12 @@ public:
 
     void zoned_note_new_object(OnodeRef &o) {
       auto [_, ok] = zoned_onode_to_offset_map.emplace(
-	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->get_ondisk_starting_offset()}));
+	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->zoned_get_ondisk_starting_offset()}));
       ceph_assert(ok);
     }
 
     void zoned_note_updated_object(OnodeRef &o, int64_t prev_offset) {
-      int64_t new_offset = o->get_ondisk_starting_offset();
+      int64_t new_offset = o->zoned_get_ondisk_starting_offset();
       auto [it, ok] = zoned_onode_to_offset_map.emplace(
 	  std::pair<OnodeRef, std::vector<int64_t>>(o, {-prev_offset, new_offset}));
       if (!ok) {
@@ -1989,9 +1994,17 @@ public:
   struct KVFinalizeThread : public Thread {
     BlueStore *store;
     explicit KVFinalizeThread(BlueStore *s) : store(s) {}
-    void *entry() {
+    void *entry() override {
       store->_kv_finalize_thread();
       return NULL;
+    }
+  };
+  struct ZonedCleanerThread : public Thread {
+    BlueStore *store;
+    explicit ZonedCleanerThread(BlueStore *s) : store(s) {}
+    void *entry() override {
+      store->_zoned_cleaner_thread();
+      return nullptr;
     }
   };
 
@@ -2107,6 +2120,13 @@ private:
   std::deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
   std::deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
   bool kv_finalize_in_progress = false;
+
+  ZonedCleanerThread zoned_cleaner_thread;
+  ceph::mutex zoned_cleaner_lock = ceph::make_mutex("BlueStore::zoned_cleaner_lock");
+  ceph::condition_variable zoned_cleaner_cond;
+  bool zoned_cleaner_started = false;
+  bool zoned_cleaner_stop = false;
+  std::deque<uint64_t> zoned_cleaner_queue;
 
   PerfCounters *logger = nullptr;
 
@@ -2393,6 +2413,8 @@ private:
   // Functions related to zoned storage.
   uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
   int _zoned_check_config_settings();
+  void _zoned_update_cleaning_metadata(TransContext *txc);
+  std::string _zoned_get_prefix(uint64_t offset);
 
 public:
   utime_t get_deferred_last_submitted() {
@@ -2462,6 +2484,11 @@ private:
   void _kv_stop();
   void _kv_sync_thread();
   void _kv_finalize_thread();
+
+  void _zoned_cleaner_start();
+  void _zoned_cleaner_stop();
+  void _zoned_cleaner_thread();
+  void _zoned_clean_zone(uint64_t zone_num);
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
   void _deferred_queue(TransContext *txc);
@@ -2944,6 +2971,9 @@ public:
   }
   const PerfCounters* get_bluefs_perf_counters() const {
     return bluefs->get_perf_counters();
+  }
+  KeyValueDB* get_kv() {
+    return db;
   }
 
   int queue_transactions(
@@ -3432,10 +3462,6 @@ private:
 
   void _fsck_check_objects(FSCKDepth depth,
     FSCK_ObjectCtx& ctx);
-
-  // Zoned storage related stuff
-  void zoned_update_cleaning_metadata(TransContext *txc);
-  std::string zoned_get_prefix(uint64_t offset);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_statfs& s) {

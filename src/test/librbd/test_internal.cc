@@ -679,7 +679,7 @@ TEST_F(TestInternal, SnapshotCopyup)
       BOOST_SCOPE_EXIT(ictx3) {
         ictx3->state->close();
       } BOOST_SCOPE_EXIT_END;
-      std::map<uint64_t, uint64_t> expected_m;
+      std::vector<std::pair<uint64_t, uint64_t>> expected_m;
       bufferlist expected_bl;
       if (ictx3->enable_sparse_copyup && sparse_read_supported) {
         if (snap_name == NULL) {
@@ -701,7 +701,7 @@ TEST_F(TestInternal, SnapshotCopyup)
           expected_bl.append(std::string(256 * 1, '1'));
         }
       }
-      std::map<uint64_t, uint64_t> read_m;
+      std::vector<std::pair<uint64_t, uint64_t>> read_m;
       librbd::io::ReadResult sparse_read_result{&read_m, &read_bl};
       EXPECT_EQ(1024 + 256,
                 api::Io<>::read(*ictx3, 0, 1024 + 256,

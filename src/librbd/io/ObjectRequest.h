@@ -93,20 +93,19 @@ template <typename ImageCtxT = ImageCtx>
 class ObjectReadRequest : public ObjectRequest<ImageCtxT> {
 public:
   static ObjectReadRequest* create(
-      ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
+      ImageCtxT *ictx, uint64_t objectno, ReadExtents* extents,
       IOContext io_context, int op_flags, int read_flags,
-      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      Extents* extent_map, uint64_t* version, Context *completion) {
+      const ZTracer::Trace &parent_trace, uint64_t* version,
+      Context *completion) {
     return new ObjectReadRequest(ictx, objectno, extents, io_context, op_flags,
-                                 read_flags, parent_trace, read_data,
-                                 extent_map, version, completion);
+                                 read_flags, parent_trace, version, completion);
   }
 
   ObjectReadRequest(
-      ImageCtxT *ictx, uint64_t objectno, const Extents &extents,
+      ImageCtxT *ictx, uint64_t objectno, ReadExtents* extents,
       IOContext io_context, int op_flags, int read_flags,
-      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-      Extents* extent_map, uint64_t* version, Context *completion);
+      const ZTracer::Trace &parent_trace, uint64_t* version,
+      Context *completion);
 
   void send() override;
 
@@ -136,16 +135,9 @@ private:
    * @endverbatim
    */
 
-  const Extents m_extents;
-
-  typedef std::pair<ceph::bufferlist, Extents> ExtentResult;
-  typedef std::vector<ExtentResult> ExtentResults;
-  ExtentResults m_extent_results;
+  ReadExtents* m_extents;
   int m_op_flags;
   int m_read_flags;
-
-  ceph::bufferlist* m_read_data;
-  Extents* m_extent_map;
   uint64_t* m_version;
 
   void read_object();
@@ -205,6 +197,10 @@ protected:
 
   virtual int filter_write_result(int r) const {
     return r;
+  }
+
+  virtual Extents get_copyup_overwrite_extents() const {
+    return {{m_object_off, m_object_len}};
   }
 
 private:
@@ -312,7 +308,6 @@ public:
         } else {
           m_discard_action = DISCARD_ACTION_TRUNCATE;
         }
-        this->m_object_len = 0;
       } else {
         m_discard_action = DISCARD_ACTION_REMOVE;
       }
@@ -433,6 +428,10 @@ protected:
   void add_write_ops(neorados::WriteOp *wr) override;
 
   int filter_write_result(int r) const override;
+
+  Extents get_copyup_overwrite_extents() const override {
+    return {};
+  }
 
 private:
   ceph::bufferlist m_cmp_bl;

@@ -22,21 +22,23 @@ By default, monitors now bind to the new IANA-assigned port ``3300``
 (ce4h or 0xce4) for the new v2 protocol, while also binding to the
 old default port ``6789`` for the legacy v1 protocol.
 
+.. _address_formats:
+
 Address formats
 ---------------
 
-Prior to nautilus, all network addresses were rendered like
+Prior to Nautilus, all network addresses were rendered like
 ``1.2.3.4:567/89012`` where there was an IP address, a port, and a
 nonce to uniquely identify a client or daemon on the network.
-Starting with nautilus, we now have three different address types:
+Starting with Nautilus, we now have three different address types:
 
 * **v2**: ``v2:1.2.3.4:578/89012`` identifies a daemon binding to a
   port speaking the new v2 protocol
 * **v1**: ``v1:1.2.3.4:578/89012`` identifies a daemon binding to a
   port speaking the legacy v1 protocol.  Any address that was
   previously shown with any prefix is now shown as a ``v1:`` address.
-* **TYPE_ANY** addresses identify a client that can speak either
-  version of the protocol.  Prior to nautilus, clients would appear as
+* **TYPE_ANY** ``any:1.2.3.4:578/89012`` identifies a client that can
+  speak either version of the protocol. Prior to nautilus, clients would appear as
   ``1.2.3.4:0/123456``, where the port of 0 indicates they are clients
   and do not accept incoming connections.  Starting with Nautilus,
   these clients are now internally represented by a **TYPE_ANY**
@@ -88,7 +90,7 @@ Similarly, two options control whether IPv4 and IPv6 addresses are used:
   * ``ms_bind_ipv6`` [default: false] controls whether a daemon binds
     to an IPv6 address
 
-.. note: The ability to bind to multiple ports has paved the way for
+.. note:: The ability to bind to multiple ports has paved the way for
    dual-stack IPv4 and IPv6 support.  That said, dual-stack support is
    not yet tested as of Nautilus v14.2.0 and likely needs some
    additional code changes to work correctly.

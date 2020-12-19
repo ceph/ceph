@@ -34,6 +34,9 @@ using TCachedExtentRef = boost::intrusive_ptr<T>;
 /**
  * CachedExtent
  */
+namespace onode {
+  class DummyNodeExtent;
+}
 class ExtentIndex;
 class CachedExtent : public boost::intrusive_ref_counter<
   CachedExtent, boost::thread_unsafe_counter> {
@@ -47,6 +50,8 @@ class CachedExtent : public boost::intrusive_ref_counter<
     INVALID                // Part of no ExtentIndex set
   } state = extent_state_t::INVALID;
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
+  // allow a dummy onode extent to pretend it is a fresh block
+  friend class onode::DummyNodeExtent;
 
   uint32_t last_committed_crc = 0;
 

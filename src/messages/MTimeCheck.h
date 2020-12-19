@@ -15,7 +15,7 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
-class MTimeCheck : public Message {
+class MTimeCheck final : public Message {
 public:
   static constexpr int HEAD_VERSION = 1;
 
@@ -40,7 +40,7 @@ public:
   {}
 
 private:
-  ~MTimeCheck() override {}
+  ~MTimeCheck() final {}
 
 public:
   std::string_view get_type_name() const override { return "time_check"; }

@@ -124,7 +124,7 @@ static ceph::spinlock debug_lock;
 
     static void operator delete(void *ptr) {
       raw_combined *raw = (raw_combined *)ptr;
-      ::free((void *)raw->data);
+      aligned_free((void *)raw->data);
     }
   };
 
@@ -176,7 +176,7 @@ static ceph::spinlock debug_lock;
 	    << " l=" << l << ", align=" << align << bendl;
     }
     ~raw_posix_aligned() override {
-      ::free(data);
+      aligned_free(data);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << bendl;
     }
     raw* clone_empty() override {
@@ -1286,15 +1286,6 @@ static ceph::spinlock debug_lock;
     bl.clear();
   }
 
-  void buffer::list::claim_append_piecewise(list& bl)
-  {
-    // steal the other guy's buffers
-    for (const auto& node : bl.buffers()) {
-      append(node, 0, node.length());
-    }
-    bl.clear();
-  }
-
   void buffer::list::append(char c)
   {
     // put what we can into the existing append_buffer.
@@ -1317,7 +1308,7 @@ static ceph::spinlock debug_lock;
     _len++;
   }
 
-  buffer::ptr buffer::list::always_empty_bptr;
+  buffer::ptr_node buffer::list::always_empty_bptr;
 
   buffer::ptr_node& buffer::list::refill_append_space(const unsigned len)
   {
@@ -1382,6 +1373,7 @@ static ceph::spinlock debug_lock;
       _carriage = new_back;
       return { new_back->c_str(), &new_back->_len, &_len };
     } else {
+      ceph_assert(!_buffers.empty());
       if (unlikely(_carriage != &_buffers.back())) {
         auto bptr = ptr_node::create(*_carriage, _carriage->length(), 0);
 	_carriage = bptr.get();
@@ -1561,7 +1553,7 @@ static ceph::spinlock debug_lock;
       // partial?
       if (off + len < curbuf->length()) {
 	//cout << "copying partial of " << *curbuf << std::endl;
-	_buffers.push_back(*ptr_node::create( *curbuf, off, len ).release());
+	_buffers.push_back(*ptr_node::create(*curbuf, off, len).release());
 	_len += len;
         _num += 1;
 	break;
@@ -1570,7 +1562,7 @@ static ceph::spinlock debug_lock;
       // through end
       //cout << "copying end (all?) of " << *curbuf << std::endl;
       unsigned howmuch = curbuf->length() - off;
-      _buffers.push_back(*ptr_node::create( *curbuf, off, howmuch ).release());
+      _buffers.push_back(*ptr_node::create(*curbuf, off, howmuch).release());
       _len += howmuch;
       _num += 1;
       len -= howmuch;
@@ -1609,8 +1601,8 @@ static ceph::spinlock debug_lock;
     }
     
     if (off) {
-      // add a reference to the front bit
-      //  insert it before curbuf (which we'll hose)
+      // add a reference to the front bit, insert it before curbuf (which
+      // we'll lose).
       //cout << "keeping front " << off << " of " << *curbuf << std::endl;
       _buffers.insert_after(curbuf_prev,
 			    *ptr_node::create(*curbuf, 0, off).release());
@@ -1619,33 +1611,39 @@ static ceph::spinlock debug_lock;
       ++curbuf_prev;
     }
     
-    _carriage = &always_empty_bptr;
-
     while (len > 0) {
-      // partial?
-      if (off + len < (*curbuf).length()) {
+      // partial or the last (appendable) one?
+      if (const auto to_drop = off + len; to_drop < curbuf->length()) {
 	//cout << "keeping end of " << *curbuf << ", losing first " << off+len << std::endl;
 	if (claim_by) 
-	  claim_by->append( *curbuf, off, len );
-	(*curbuf).set_offset( off+len + (*curbuf).offset() );    // ignore beginning big
-	(*curbuf).set_length( (*curbuf).length() - (len+off) );
-	_len -= off+len;
+	  claim_by->append(*curbuf, off, len);
+	curbuf->set_offset(to_drop + curbuf->offset());    // ignore beginning big
+	curbuf->set_length(curbuf->length() - to_drop);
+	_len -= to_drop;
 	//cout << " now " << *curbuf << std::endl;
 	break;
       }
-      
+
       // hose though the end
-      unsigned howmuch = (*curbuf).length() - off;
+      unsigned howmuch = curbuf->length() - off;
       //cout << "discarding " << howmuch << " of " << *curbuf << std::endl;
       if (claim_by) 
-	claim_by->append( *curbuf, off, howmuch );
-      _len -= (*curbuf).length();
-      _num -= 1;
-      curbuf = _buffers.erase_after_and_dispose(curbuf_prev);
+	claim_by->append(*curbuf, off, howmuch);
+      _len -= curbuf->length();
+      if (curbuf == _carriage) {
+        // no need to reallocate, shrinking and relinking is enough.
+        curbuf = _buffers.erase_after(curbuf_prev);
+	_carriage->set_offset(_carriage->offset() + _carriage->length());
+	_carriage->set_length(0);
+	_buffers.push_back(*_carriage);
+      } else {
+	curbuf = _buffers.erase_after_and_dispose(curbuf_prev);
+	_num -= 1;
+      }
       len -= howmuch;
       off = 0;
     }
-      
+
     // splice in *replace (implement me later?)
   }
 
@@ -1685,7 +1683,7 @@ void buffer::list::decode_base64(buffer::list& e)
 
 ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1745,7 +1743,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC|O_BINARY));
   if (fd < 0) {
     int err = errno;
     std::ostringstream oss;
@@ -1799,9 +1797,20 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
   return ret;
 }
 
+ssize_t buffer::list::recv_fd(int fd, size_t len)
+{
+  auto bp = ptr_node::create(buffer::create(len));
+  ssize_t ret = safe_recv(fd, (void*)bp->c_str(), len);
+  if (ret >= 0) {
+    bp->set_length(ret);
+    push_back(std::move(bp));
+  }
+  return ret;
+}
+
 int buffer::list::write_file(const char *fn, int mode)
 {
-  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, mode));
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC|O_BINARY, mode));
   if (fd < 0) {
     int err = errno;
     cerr << "bufferlist::write_file(" << fn << "): failed to open file: "
@@ -1916,6 +1925,10 @@ int buffer::list::write_fd(int fd) const
   return 0;
 }
 
+int buffer::list::send_fd(int fd) const {
+  return buffer::list::write_fd(fd);
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   iovec iov[IOV_MAX];
@@ -1959,11 +1972,37 @@ int buffer::list::write_fd(int fd) const
 
       written += r;
     }
+
+    left_pbrs--;
+    p++;
   }
 
   return 0;
-
 }
+
+int buffer::list::send_fd(int fd) const
+{
+  // There's no writev on Windows. WriteFileGather may be an option,
+  // but it has strict requirements in terms of buffer size and alignment.
+  auto p = std::cbegin(_buffers);
+  uint64_t left_pbrs = get_num_buffers();
+  while (left_pbrs) {
+    int written = 0;
+    while (written < p->length()) {
+      int r = ::send(fd, p->c_str(), p->length() - written, 0);
+      if (r < 0)
+        return -ceph_sock_errno();
+
+      written += r;
+    }
+
+    left_pbrs--;
+    p++;
+  }
+
+  return 0;
+}
+
 int buffer::list::write_fd(int fd, uint64_t offset) const
 {
   int r = ::lseek64(fd, offset, SEEK_SET);
@@ -2226,6 +2265,15 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_claimed_char, buffer_raw_claimed_char,
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
 			      buffer_meta);
 
+
+void ceph::buffer::list::page_aligned_appender::_refill(size_t len) {
+  const size_t alloc = \
+    std::max((size_t)min_alloc, (len + CEPH_PAGE_SIZE - 1) & CEPH_PAGE_MASK);
+  auto new_back = \
+    ptr_node::create(buffer::create_page_aligned(alloc));
+  new_back->set_length(0);   // unused, so far.
+  bl.push_back(std::move(new_back));
+}
 
 namespace ceph::buffer {
 inline namespace v15_2_0 {

@@ -54,8 +54,9 @@
 <div [ngbNavOutlet]="nav"></div>
 
 <ng-template #markOsdConfirmationTpl
-             let-markActionDescription="markActionDescription">
-  <ng-container i18n><strong>OSD(s) {{  getSelectedOsdIds() | join }}</strong> will be marked
+             let-markActionDescription="markActionDescription"
+             let-osdIds="osdIds">
+  <ng-container i18n><strong>OSD(s) {{ osdIds | join }}</strong> will be marked
   <strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
 
@@ -72,6 +73,14 @@
   </div>
   <ng-container i18n><strong>OSD {{ osdIds | join }}</strong> will be
   <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+</ng-template>
+
+<ng-template #flagsTpl
+             let-row="row">
+  <span *ngFor="let flag of row.cdClusterFlags;"
+        class="badge badge-hdd mr-1">{{ flag }}</span>
+  <span *ngFor="let flag of row.cdIndivFlags;"
+        class="badge badge-info mr-1">{{ flag }}</span>
 </ng-template>
 
 <ng-template #osdUsageTpl

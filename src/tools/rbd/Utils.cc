@@ -45,7 +45,7 @@ static std::string mgr_command_args_to_str(
 int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
   if (progress) {
     int pc = total ? (offset * 100ull / total) : 0;
-    if (pc != last_pc) {
+    if (pc > last_pc) {
       cerr << "\r" << operation << ": "
            << pc << "% complete...";
       cerr.flush();
@@ -960,7 +960,7 @@ std::string timestr(time_t t) {
   localtime_r(&t, &tm);
 
   char buf[32];
-  strftime(buf, sizeof(buf), "%F %T", &tm);
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
 
   return buf;
 }

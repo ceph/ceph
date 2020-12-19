@@ -1,8 +1,8 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
+import { CephReleaseNamePipe } from '~/app/shared/pipes/ceph-release-name.pipe';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { DocComponent } from './doc.component';
 
 describe('DocComponent', () => {

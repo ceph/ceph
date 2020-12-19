@@ -145,6 +145,8 @@
 #include "messages/MMDSOpenIno.h"
 #include "messages/MMDSOpenInoReply.h"
 #include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSScrub.h"
+#include "messages/MMDSScrubStats.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -283,7 +285,7 @@ void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
       snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x",
 	       abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status),
 	       getpid(), i++);
-      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);
+      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC|O_BINARY, 0644);
       if (fd >= 0) {
 	bl.write_fd(fd);
 	::close(fd);
@@ -758,6 +760,14 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_FRAGMENTNOTIFYACK:
     m = make_message<MMDSFragmentNotifyAck>();
+    break;
+
+  case MSG_MDS_SCRUB:
+    m = make_message<MMDSScrub>();
+    break;
+
+  case MSG_MDS_SCRUB_STATS:
+    m = make_message<MMDSScrubStats>();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:

@@ -27,10 +27,10 @@ using ceph::bufferlist;
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string service_name,
+static ostream& _prefix(std::ostream *_dout, Monitor &mon, Paxos &paxos, string service_name,
 			version_t fc, version_t lc) {
-  return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< "(" << mon->get_state_name()
+  return *_dout << "mon." << mon.name << "@" << mon.rank
+		<< "(" << mon.get_state_name()
 		<< ").paxosservice(" << service_name << " " << fc << ".." << lc << ") ";
 }
 
@@ -44,15 +44,15 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 	   << " from " << m->get_orig_source_inst()
 	   << " con " << m->get_connection() << dendl;
 
-  if (mon->is_shutdown()) {
+  if (mon.is_shutdown()) {
     return true;
   }
 
   // make sure this message isn't forwarded from a previous election epoch
   if (m->rx_election_epoch &&
-      m->rx_election_epoch < mon->get_epoch()) {
+      m->rx_election_epoch < mon.get_epoch()) {
     dout(10) << " discarding forwarded message from previous election epoch "
-	     << m->rx_election_epoch << " < " << mon->get_epoch() << dendl;
+	     << m->rx_election_epoch << " < " << mon.get_epoch() << dendl;
     return true;
   }
 
@@ -61,7 +61,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   // those.  also ignore loopback (e.g., log) messages.
   if (m->get_connection() &&
       !m->get_connection()->is_connected() &&
-      m->get_connection() != mon->con_self &&
+      m->get_connection() != mon.con_self &&
       m->get_connection()->get_messenger() != NULL) {
     dout(10) << " discarding message from disconnected client "
 	     << m->get_source_inst() << " " << *m << dendl;
@@ -80,8 +80,8 @@ bool PaxosService::dispatch(MonOpRequestRef op)
     return true;  // easy!
 
   // leader?
-  if (!mon->is_leader()) {
-    mon->forward_request_leader(op);
+  if (!mon.is_leader()) {
+    mon.forward_request_leader(op);
     return true;
   }
   
@@ -122,7 +122,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
        * Callback class used to propose the pending value once the proposal_timer
        * fires up.
        */
-    auto do_propose = new C_MonContext{mon, [this](int r) {
+    auto do_propose = new C_MonContext{&mon, [this](int r) {
         proposal_timer = 0;
         if (r >= 0) {
           propose_pending();
@@ -134,7 +134,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
     }};
     dout(10) << " setting proposal_timer " << do_propose
              << " with delay of " << delay << dendl;
-    proposal_timer = mon->timer.add_event_after(delay, do_propose);
+    proposal_timer = mon.timer.add_event_after(delay, do_propose);
   } else {
     dout(10) << " proposal_timer already set" << dendl;
   }
@@ -144,8 +144,8 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 void PaxosService::refresh(bool *need_bootstrap)
 {
   // update cached versions
-  cached_first_committed = mon->store->get(get_service_name(), first_committed_name);
-  cached_last_committed = mon->store->get(get_service_name(), last_committed_name);
+  cached_first_committed = mon.store->get(get_service_name(), first_committed_name);
+  cached_last_committed = mon.store->get(get_service_name(), last_committed_name);
 
   version_t new_format = get_value("format_version");
   if (new_format != format_version) {
@@ -165,7 +165,7 @@ void PaxosService::post_refresh()
 
   post_paxos_update();
 
-  if (mon->is_peon() && !waiting_for_finished_proposal.empty()) {
+  if (mon.is_peon() && !waiting_for_finished_proposal.empty()) {
     finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
   }
 }
@@ -177,10 +177,10 @@ bool PaxosService::should_propose(double& delay)
     delay = 0.0;
   } else {
     utime_t now = ceph_clock_now();
-    if ((now - paxos->last_commit_time) > g_conf()->paxos_propose_interval)
+    if ((now - paxos.last_commit_time) > g_conf()->paxos_propose_interval)
       delay = (double)g_conf()->paxos_min_wait;
     else
-      delay = (double)(g_conf()->paxos_propose_interval + paxos->last_commit_time
+      delay = (double)(g_conf()->paxos_propose_interval + paxos.last_commit_time
 		       - now);
   }
   return true;
@@ -192,12 +192,12 @@ void PaxosService::propose_pending()
   dout(10) << __func__ << dendl;
   ceph_assert(have_pending);
   ceph_assert(!proposing);
-  ceph_assert(mon->is_leader());
+  ceph_assert(mon.is_leader());
   ceph_assert(is_active());
 
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
-    mon->timer.cancel_event(proposal_timer);
+    mon.timer.cancel_event(proposal_timer);
     proposal_timer = NULL;
   }
 
@@ -210,7 +210,7 @@ void PaxosService::propose_pending()
    *	   bufferlist, so we can then propose that as a value through
    *	   Paxos.
    */
-  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
 
   if (should_stash_full())
     encode_full(t);
@@ -248,8 +248,8 @@ void PaxosService::propose_pending()
 	ceph_abort_msg("bad return value for C_Committed");
     }
   };
-  paxos->queue_pending_finisher(new C_Committed(this));
-  paxos->trigger_propose();
+  paxos.queue_pending_finisher(new C_Committed(this));
+  paxos.trigger_propose();
 }
 
 bool PaxosService::should_stash_full()
@@ -270,7 +270,7 @@ void PaxosService::restart()
   dout(10) << __func__ << dendl;
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
-    mon->timer.cancel_event(proposal_timer);
+    mon.timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
 
@@ -326,7 +326,7 @@ void PaxosService::_active()
   dout(10) << __func__ << dendl;
 
   // create pending state?
-  if (mon->is_leader()) {
+  if (mon.is_leader()) {
     dout(7) << __func__ << " creating new pending" << dendl;
     if (!have_pending) {
       create_pending();
@@ -348,7 +348,7 @@ void PaxosService::_active()
   // on this list; it is on Paxos's.
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, 0);
 
-  if (mon->is_leader())
+  if (mon.is_leader())
     upgrade_format();
 
   // NOTE: it's possible that this will get called twice if we commit
@@ -363,7 +363,7 @@ void PaxosService::shutdown()
 
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
-    mon->timer.cancel_event(proposal_timer);
+    mon.timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
 
@@ -378,8 +378,11 @@ void PaxosService::maybe_trim()
     return;
 
   version_t trim_to = get_trim_to();
-  if (trim_to < get_first_committed())
+  if (trim_to < get_first_committed()) {
+    dout(10) << __func__ << " trim_to " << trim_to << " < first_committed"
+	     << get_first_committed() << dendl;
     return;
+  }
 
   version_t to_remove = trim_to - get_first_committed();
   if (g_conf()->paxos_service_trim_min > 0 &&
@@ -399,7 +402,7 @@ void PaxosService::maybe_trim()
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
-  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
   trim(t, get_first_committed(), trim_to);
   put_first_committed(t, trim_to);
   cached_first_committed = trim_to;
@@ -407,7 +410,7 @@ void PaxosService::maybe_trim()
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to);
 
-  paxos->trigger_propose();
+  paxos.trigger_propose();
 }
 
 void PaxosService::trim(MonitorDBStore::TransactionRef t,
@@ -420,8 +423,8 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
     dout(20) << __func__ << " " << v << dendl;
     t->erase(get_service_name(), v);
 
-    string full_key = mon->store->combine_strings("full", v);
-    if (mon->store->exists(get_service_name(), full_key)) {
+    string full_key = mon.store->combine_strings("full", v);
+    if (mon.store->exists(get_service_name(), full_key)) {
       dout(20) << __func__ << " " << full_key << dendl;
       t->erase(get_service_name(), full_key);
     }
@@ -430,15 +433,15 @@ void PaxosService::trim(MonitorDBStore::TransactionRef t,
     dout(20) << " compacting prefix " << get_service_name() << dendl;
     t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
     t->compact_range(get_service_name(),
-		     mon->store->combine_strings(full_prefix_name, from - 1),
-		     mon->store->combine_strings(full_prefix_name, to));
+		     mon.store->combine_strings(full_prefix_name, from - 1),
+		     mon.store->combine_strings(full_prefix_name, to));
   }
 }
 
 void PaxosService::load_health()
 {
   bufferlist bl;
-  mon->store->get("health", service_name, bl);
+  mon.store->get("health", service_name, bl);
   if (bl.length()) {
     auto p = bl.cbegin();
     using ceph::decode;

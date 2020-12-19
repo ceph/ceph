@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, NgForm, ReactiveFormsModule } from '@angular/forms';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { SharedModule } from '../../../shared/shared.module';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { IscsiSettingComponent } from './iscsi-setting.component';
 
 describe('IscsiSettingComponent', () => {

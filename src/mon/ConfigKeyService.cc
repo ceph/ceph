@@ -58,18 +58,28 @@ using ceph::mono_time;
 using ceph::parse_timespan;
 using ceph::timespan_str;
 
-static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
-                        const ConfigKeyService *service) {
-  return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< "(" << mon->get_state_name() << ")." << service->get_name()
-                << "(" << service->get_epoch() << ") ";
+static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
+                        const ConfigKeyService *service)
+{
+  return *_dout << "mon." << mon.name << "@" << mon.rank
+		<< "(" << mon.get_state_name() << ").config_key";
 }
 
 const string CONFIG_PREFIX = "mon_config_key";
 
+ConfigKeyService::ConfigKeyService(Monitor &m, Paxos &p)
+  : mon(m),
+    paxos(p)
+{}
+
+bool ConfigKeyService::in_quorum() const
+{
+  return (mon.is_leader() || mon.is_peon());
+}
+
 int ConfigKeyService::store_get(const string &key, bufferlist &bl)
 {
-  return mon->store->get(CONFIG_PREFIX, key, bl);
+  return mon.store->get(CONFIG_PREFIX, key, bl);
 }
 
 void ConfigKeyService::get_store_prefixes(set<string>& s) const
@@ -79,20 +89,20 @@ void ConfigKeyService::get_store_prefixes(set<string>& s) const
 
 void ConfigKeyService::store_put(const string &key, bufferlist &bl, Context *cb)
 {
-  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
   t->put(CONFIG_PREFIX, key, bl);
   if (cb)
-    paxos->queue_pending_finisher(cb);
-  paxos->trigger_propose();
+    paxos.queue_pending_finisher(cb);
+  paxos.trigger_propose();
 }
 
 void ConfigKeyService::store_delete(const string &key, Context *cb)
 {
-  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
   store_delete(t, key);
   if (cb)
-    paxos->queue_pending_finisher(cb);
-  paxos->trigger_propose();
+    paxos.queue_pending_finisher(cb);
+  paxos.trigger_propose();
 }
 
 void ConfigKeyService::store_delete(
@@ -104,13 +114,13 @@ void ConfigKeyService::store_delete(
 
 bool ConfigKeyService::store_exists(const string &key)
 {
-  return mon->store->exists(CONFIG_PREFIX, key);
+  return mon.store->exists(CONFIG_PREFIX, key);
 }
 
 void ConfigKeyService::store_list(stringstream &ss)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(CONFIG_PREFIX);
+    mon.store->get_iterator(CONFIG_PREFIX);
 
   JSONFormatter f(true);
   f.open_array_section("keys");
@@ -127,7 +137,7 @@ void ConfigKeyService::store_list(stringstream &ss)
 bool ConfigKeyService::store_has_prefix(const string &prefix)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(CONFIG_PREFIX);
+    mon.store->get_iterator(CONFIG_PREFIX);
 
   while (iter->valid()) {
     string key(iter->key());
@@ -154,7 +164,7 @@ static bool is_binary_string(const string& s)
 void ConfigKeyService::store_dump(stringstream &ss, const string& prefix)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(CONFIG_PREFIX);
+    mon.store->get_iterator(CONFIG_PREFIX);
 
   dout(10) << __func__ << " prefix '" << prefix << "'" << dendl;
   if (prefix.size()) {
@@ -188,7 +198,7 @@ void ConfigKeyService::store_delete_prefix(
     const string &prefix)
 {
   KeyValueDB::Iterator iter =
-    mon->store->get_iterator(CONFIG_PREFIX);
+    mon.store->get_iterator(CONFIG_PREFIX);
 
   while (iter->valid()) {
     string key(iter->key());
@@ -201,7 +211,7 @@ void ConfigKeyService::store_delete_prefix(
   }
 }
 
-bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
+bool ConfigKeyService::dispatch(MonOpRequestRef op)
 {
   Message *m = op->get_req();
   ceph_assert(m != NULL);
@@ -209,7 +219,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- waiting" << dendl;
-    paxos->wait_for_readable(op, new Monitor::C_RetryMessage(mon, op));
+    paxos.wait_for_readable(op, new Monitor::C_RetryMessage(&mon, op));
     return false;
   }
 
@@ -245,8 +255,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
   } else if (prefix == "config-key put" ||
 	     prefix == "config-key set") {
-    if (!mon->is_leader()) {
-      mon->forward_request_leader(op);
+    if (!mon.is_leader()) {
+      mon.forward_request_leader(op);
       // we forward the message; so return now.
       return true;
     }
@@ -278,8 +288,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 
   } else if (prefix == "config-key del" ||
              prefix == "config-key rm") {
-    if (!mon->is_leader()) {
-      mon->forward_request_leader(op);
+    if (!mon.is_leader()) {
+      mon.forward_request_leader(op);
       return true;
     }
 
@@ -323,7 +333,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 out:
   if (!cmd->get_source().is_mon()) {
     string rs = ss.str();
-    mon->reply_command(op, ret, rs, rdata, 0);
+    mon.reply_command(op, ret, rs, rdata, 0);
   }
 
   return (ret == 0);
@@ -355,12 +365,12 @@ void ConfigKeyService::do_osd_destroy(int32_t id, uuid_d& uuid)
   string daemon_prefix =
     "daemon-private/osd." + stringify(id) + "/";
 
-  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  MonitorDBStore::TransactionRef t = paxos.get_pending_transaction();
   for (auto p : { dmcrypt_prefix, daemon_prefix }) {
     store_delete_prefix(t, p);
   }
 
-  paxos->trigger_propose();
+  paxos.trigger_propose();
 }
 
 int ConfigKeyService::validate_osd_new(
@@ -394,7 +404,7 @@ void ConfigKeyService::do_osd_new(
     const uuid_d& uuid,
     const string& dmcrypt_key)
 {
-  ceph_assert(paxos->is_plugged());
+  ceph_assert(paxos.is_plugged());
 
   string dmcrypt_key_prefix = _get_dmcrypt_prefix(uuid, "luks");
   bufferlist dmcrypt_key_value;

@@ -53,8 +53,11 @@ public:
   virtual bool is_writing_op() const {
     return false;
   }
-  virtual void copy_bl_to_pmem_buffer() {};
+  #ifdef WITH_RBD_RWL
+  virtual void copy_bl_to_pmem_buffer(
+      std::vector<WriteBufferAllocation>::iterator allocation) {};
   virtual void flush_pmem_buf_to_cache(PMEMobjpool *log_pool) {};
+  #endif
 };
 
 class SyncPointLogOperation : public GenericLogOperation {
@@ -143,8 +146,11 @@ public:
   }
 
   void complete(int r) override;
-  void copy_bl_to_pmem_buffer() override;
+  #ifdef WITH_RBD_RWL
+  void copy_bl_to_pmem_buffer(
+      std::vector<WriteBufferAllocation>::iterator allocation) override;
   void flush_pmem_buf_to_cache(PMEMobjpool *log_pool) override;
+  #endif
 };
 
 

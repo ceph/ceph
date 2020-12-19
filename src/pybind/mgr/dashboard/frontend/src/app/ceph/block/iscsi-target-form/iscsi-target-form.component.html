@@ -248,10 +248,8 @@
                           class="btn btn-light"
                           cdPasswordButton="target_password">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="target_password">
-                  </button>
+                  <cd-copy-2-clipboard-button source="target_password">
+                  </cd-copy-2-clipboard-button>
                 </span>
               </div>
 
@@ -311,10 +309,8 @@
                           class="btn btn-light"
                           cdPasswordButton="target_mutual_password">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="target_mutual_password">
-                  </button>
+                  <cd-copy-2-clipboard-button source="target_mutual_password">
+                  </cd-copy-2-clipboard-button>
                 </span>
               </div>
 
@@ -418,10 +414,8 @@
                                   class="btn btn-light"
                                   [cdPasswordButton]="'password' + ii">
                           </button>
-                          <button type="button"
-                                  class="btn btn-light"
-                                  [cdCopy2ClipboardButton]="'password' + ii">
-                          </button>
+                          <cd-copy-2-clipboard-button [source]="'password' + ii">
+                          </cd-copy-2-clipboard-button>
                         </span>
                       </div>
                       <span class="invalid-feedback"
@@ -478,10 +472,8 @@
                                   class="btn btn-light"
                                   [cdPasswordButton]="'mutual_password' + ii">
                           </button>
-                          <button type="button"
-                                  class="btn btn-light"
-                                  [cdCopy2ClipboardButton]="'mutual_password' + ii">
-                          </button>
+                          <cd-copy-2-clipboard-button [source]="'mutual_password' + ii">
+                          </cd-copy-2-clipboard-button>
                         </span>
                       </div>
                       <span class="invalid-feedback"
@@ -572,7 +564,7 @@
                 <ng-container i18n>Group</ng-container>: {{ group.getValue('group_id') }}
                 <button type="button"
                         class="close"
-                        (click)="groups.removeAt(gi)">
+                        (click)="removeGroup(gi)">
                   <i [ngClass]="[icons.destroy]"></i>
                 </button>
               </div>
@@ -618,7 +610,7 @@
                         <cd-select [data]="group.getValue('members')"
                                    [options]="groupMembersSelections[gi]"
                                    [messages]="messages.groupInitiator"
-                                   (selection)="onGroupMemberSelection($event)"
+                                   (selection)="onGroupMemberSelection($event, gi)"
                                    elemClass="btn btn-light float-right">
                           <i [ngClass]="[icons.add]"></i>
                           <ng-container i18n>Add initiator</ng-container>
@@ -690,12 +682,10 @@
 
       </div>
       <div class="card-footer">
-        <div class="text-right">
-          <cd-submit-button (submitAction)="submit()"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="targetForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>

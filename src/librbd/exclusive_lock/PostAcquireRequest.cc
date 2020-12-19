@@ -7,8 +7,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/stringify.h"
-#include "librbd/cache/pwl/InitRequest.h"
-#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -18,6 +16,7 @@
 #include "librbd/Utils.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/journal/Policy.h"
+#include "librbd/PluginRegistry.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -116,7 +115,7 @@ void PostAcquireRequest<I>::send_open_journal() {
   }
   if (!journal_enabled) {
     apply();
-    send_open_image_cache();
+    send_process_plugin_acquire_lock();
     return;
   }
 
@@ -174,33 +173,30 @@ void PostAcquireRequest<I>::handle_allocate_journal_tag(int r) {
     return;
   }
 
-  send_open_image_cache();
+  send_process_plugin_acquire_lock();
 }
 
 template <typename I>
-void PostAcquireRequest<I>::send_open_image_cache() {
+void PostAcquireRequest<I>::send_process_plugin_acquire_lock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
-  Context *ctx = create_async_context_callback(
-    m_image_ctx, create_context_callback<
-    klass, &klass::handle_open_image_cache>(this));
-  cache::pwl::InitRequest<I> *req = cache::pwl::InitRequest<I>::create(
-    m_image_ctx, ctx);
-  req->send();
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_process_plugin_acquire_lock>(this);
+  m_image_ctx.plugin_registry->acquired_exclusive_lock(ctx);
 }
 
 template <typename I>
-void PostAcquireRequest<I>::handle_open_image_cache(int r) {
+void PostAcquireRequest<I>::handle_process_plugin_acquire_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
   save_result(r);
   if (r < 0) {
-    lderr(cct) << "failed to open image cache: " << cpp_strerror(r)
+    lderr(cct) << "failed to process plugins: " << cpp_strerror(r)
                << dendl;
-    send_close_image_cache();
+    send_process_plugin_release_lock();
     return;
   }
 
@@ -208,29 +204,26 @@ void PostAcquireRequest<I>::handle_open_image_cache(int r) {
 }
 
 template <typename I>
-void PostAcquireRequest<I>::send_close_image_cache() {
-  if (m_image_ctx.image_cache == nullptr) {
-    send_close_journal();
-  }
+void PostAcquireRequest<I>::send_process_plugin_release_lock() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
 
   using klass = PostAcquireRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_close_image_cache>(
-    this);
-  cache::pwl::ShutdownRequest<I> *req = cache::pwl::ShutdownRequest<I>::create(
-    m_image_ctx, ctx);
-  req->send();
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_process_plugin_release_lock>(this);
+  m_image_ctx.plugin_registry->prerelease_exclusive_lock(ctx);
 }
 
 template <typename I>
-void PostAcquireRequest<I>::handle_close_image_cache(int r) {
+void PostAcquireRequest<I>::handle_process_plugin_release_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
   save_result(r);
   if (r < 0) {
-    lderr(cct) << "failed to close image_cache: " << cpp_strerror(r) << dendl;
+    lderr(cct) << "failed to release plugins: " << cpp_strerror(r)
+               << dendl;
   }
-
   send_close_journal();
 }
 

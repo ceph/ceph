@@ -11,8 +11,8 @@
 #include "common/ceph_argparse.h"
 
 #include "DirectMessenger.h"
-#include "msg/FastStrategy.h"
-#include "msg/QueueStrategy.h"
+#include "FastStrategy.h"
+#include "QueueStrategy.h"
 #include "messages/MPing.h"
 
 

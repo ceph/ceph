@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from datetime import datetime
 import json
+from datetime import datetime
+
 import requests
 
-from . import Controller, ApiController, BaseController, RESTController, Endpoint, ControllerDoc
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
-from ..exceptions import DashboardException
+from . import ApiController, BaseController, Controller, ControllerDoc, Endpoint, RESTController
 
 
 @Controller('/api/prometheus_receiver', secure=False)
@@ -29,20 +30,23 @@ class PrometheusRESTController(RESTController):
     def prometheus_proxy(self, method, path, params=None, payload=None):
         # type (str, str, dict, dict)
         return self._proxy(self._get_api_url(Settings.PROMETHEUS_API_HOST),
-                           method, path, 'Prometheus', params, payload)
+                           method, path, 'Prometheus', params, payload,
+                           verify=Settings.PROMETHEUS_API_SSL_VERIFY)
 
     def alert_proxy(self, method, path, params=None, payload=None):
         # type (str, str, dict, dict)
         return self._proxy(self._get_api_url(Settings.ALERTMANAGER_API_HOST),
-                           method, path, 'Alertmanager', params, payload)
+                           method, path, 'Alertmanager', params, payload,
+                           verify=Settings.ALERTMANAGER_API_SSL_VERIFY)
 
     def _get_api_url(self, host):
         return host.rstrip('/') + '/api/v1'
 
-    def _proxy(self, base_url, method, path, api_name, params=None, payload=None):
-        # type (str, str, str, str, dict, dict)
+    def _proxy(self, base_url, method, path, api_name, params=None, payload=None, verify=True):
+        # type (str, str, str, str, dict, dict, bool)
         try:
-            response = requests.request(method, base_url + path, params=params, json=payload)
+            response = requests.request(method, base_url + path, params=params,
+                                        json=payload, verify=verify)
         except Exception:
             raise DashboardException(
                 "Could not reach {}'s API on {}".format(api_name, base_url),

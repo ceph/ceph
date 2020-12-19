@@ -11,23 +11,24 @@ import {
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
-import { TableComponent } from '../../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CdTableColumnFiltersChange } from '../../../../shared/models/cd-table-column-filters-change';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
-import { OrchestratorStatus } from '../../../../shared/models/orchestrator.interface';
-import { Permission } from '../../../../shared/models/permissions';
-import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
+import { Permission } from '~/app/shared/models/permissions';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { InventoryDevice } from './inventory-device.model';
 
 @Component({
@@ -80,7 +81,8 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
     private dimlessBinary: DimlessBinaryPipe,
     private modalService: ModalService,
     private notificationService: NotificationService,
-    private orchService: OrchestratorService
+    private orchService: OrchestratorService,
+    private hostService: HostService
   ) {}
 
   ngOnInit() {
@@ -223,7 +225,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
       ],
       submitButtonText: $localize`Execute`,
       onSubmit: (values: any) => {
-        this.orchService.identifyDevice(hostname, device, values.duration).subscribe(() => {
+        this.hostService.identifyDevice(hostname, device, values.duration).subscribe(() => {
           this.notificationService.show(
             NotificationType.success,
             $localize`Identifying '${device}' started on host '${hostname}'`

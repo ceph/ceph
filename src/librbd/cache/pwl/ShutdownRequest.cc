@@ -8,9 +8,10 @@
 #include "common/errno.h"
 #include "librbd/Operations.h"
 #include "librbd/asio/ContextWQ.h"
-#include "librbd/cache/ImageCache.h"
 #include "librbd/cache/Types.h"
 
+#include "librbd/cache/pwl/AbstractWriteLog.h"
+#include "librbd/plugin/Api.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
@@ -25,14 +26,23 @@ using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 
 template <typename I>
-ShutdownRequest<I>* ShutdownRequest<I>::create(I &image_ctx,
-                                       Context *on_finish) {
-  return new ShutdownRequest(image_ctx, on_finish);
+ShutdownRequest<I>* ShutdownRequest<I>::create(
+    I &image_ctx,
+    AbstractWriteLog<I> *image_cache,
+    plugin::Api<I>& plugin_api,
+    Context *on_finish) {
+  return new ShutdownRequest(image_ctx, image_cache, plugin_api, on_finish);
 }
 
 template <typename I>
-ShutdownRequest<I>::ShutdownRequest(I &image_ctx, Context *on_finish)
+ShutdownRequest<I>::ShutdownRequest(
+    I &image_ctx,
+    AbstractWriteLog<I> *image_cache,
+    plugin::Api<I>& plugin_api,
+    Context *on_finish)
   : m_image_ctx(image_ctx),
+    m_image_cache(image_cache),
+    m_plugin_api(plugin_api),
     m_on_finish(create_async_context_callback(image_ctx, on_finish)),
     m_error_result(0) {
 }
@@ -47,7 +57,7 @@ void ShutdownRequest<I>::send_shutdown_image_cache() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  if (m_image_ctx.image_cache == nullptr) {
+  if (m_image_cache == nullptr) {
     finish();
     return;
   }
@@ -56,7 +66,7 @@ void ShutdownRequest<I>::send_shutdown_image_cache() {
   Context *ctx = create_context_callback<klass, &klass::handle_shutdown_image_cache>(
     this);
 
-  m_image_ctx.image_cache->shut_down(ctx);
+  m_image_cache->shut_down(ctx);
 }
 
 template <typename I>
@@ -71,8 +81,8 @@ void ShutdownRequest<I>::handle_shutdown_image_cache(int r) {
     finish();
     return;
   } else {
-    delete m_image_ctx.image_cache;
-    m_image_ctx.image_cache = nullptr;
+    delete m_image_cache;
+    m_image_cache = nullptr;
   }
   send_remove_feature_bit();
 }
@@ -122,7 +132,7 @@ void ShutdownRequest<I>::send_remove_image_cache_state() {
   Context *ctx = create_context_callback<klass, &klass::handle_remove_image_cache_state>(
     this);
   std::shared_lock owner_lock{m_image_ctx.owner_lock};
-  m_image_ctx.operations->execute_metadata_remove(IMAGE_CACHE_STATE, ctx);
+  m_plugin_api.execute_image_metadata_remove(&m_image_ctx, IMAGE_CACHE_STATE, ctx);
 }
 
 template <typename I>

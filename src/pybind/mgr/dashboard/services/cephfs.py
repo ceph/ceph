@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from contextlib import contextmanager
-import logging
-
 import datetime
+import logging
 import os
+from contextlib import contextmanager
+
 import cephfs
 
 from .. import mgr
-
 
 logger = logging.getLogger('cephfs')
 

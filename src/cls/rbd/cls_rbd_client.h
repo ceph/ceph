@@ -643,7 +643,7 @@ int copyup(librados::IoCtx *ioctx, const std::string &oid,
            ceph::buffer::list data);
 
 void sparse_copyup(neorados::WriteOp* op,
-                   const std::map<uint64_t, uint64_t> &extent_map,
+                   const std::vector<std::pair<uint64_t, uint64_t>>& extent_map,
                    ceph::buffer::list data);
 void sparse_copyup(librados::ObjectWriteOperation *op,
                    const std::map<uint64_t, uint64_t> &extent_map,

@@ -13,8 +13,12 @@ start_ceph() {
     # Set the user-id
     ./bin/ceph dashboard set-rgw-api-user-id dev
     # Obtain and set access and secret key for the previously created user. $() is safer than backticks `..`
-    ./bin/ceph dashboard set-rgw-api-access-key $(./bin/radosgw-admin user info --uid=dev | jq -r .keys[0].access_key)
-    ./bin/ceph dashboard set-rgw-api-secret-key $(./bin/radosgw-admin user info --uid=dev | jq -r .keys[0].secret_key)
+    RGW_ACCESS_KEY_FILE="/tmp/rgw-user-access-key.txt"
+    printf "$(./bin/radosgw-admin user info --uid=dev | jq -r .keys[0].access_key)" > "${RGW_ACCESS_KEY_FILE}"
+    ./bin/ceph dashboard set-rgw-api-access-key -i "${RGW_ACCESS_KEY_FILE}"
+    RGW_SECRET_KEY_FILE="/tmp/rgw-user-secret-key.txt"
+    printf "$(./bin/radosgw-admin user info --uid=dev | jq -r .keys[0].secret_key)" > "${RGW_SECRET_KEY_FILE}"
+    ./bin/ceph dashboard set-rgw-api-secret-key -i "${RGW_SECRET_KEY_FILE}"
     # Set SSL verify to False
     ./bin/ceph dashboard set-rgw-api-ssl-verify False
 
@@ -93,6 +97,9 @@ fi
 
 cd $DASH_DIR/frontend
 
+# Remove existing XML results
+rm -f cypress/reports/results-*.xml || true
+
 case "$DEVICE" in
     docker)
         failed=0
@@ -104,7 +111,7 @@ case "$DEVICE" in
             --env CYPRESS_LOGIN_PWD \
             --name=e2e \
             --network=host \
-            cypress/included:4.4.0 || failed=1
+            cypress/included:5.1.0 || failed=1
         stop $failed
         ;;
     *)

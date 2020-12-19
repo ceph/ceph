@@ -6,7 +6,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
-#include "librbd/Operations.h"
 #include "librbd/TaskFinisher.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
@@ -89,13 +88,15 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
 
   cancel_async_requests();
 
+  // flush the task finisher queue before completing
+  on_finish = create_async_context_callback(m_task_finisher, on_finish);
+
   on_finish = new LambdaContext([this, on_finish](int r) {
+    cancel_quiesce_requests();
+    m_task_finisher->cancel_all();
     m_async_op_tracker.wait_for_ops(on_finish);
   });
-  auto ctx = new LambdaContext([this, on_finish](int r) {
-    m_task_finisher->cancel_all(on_finish);
-  });
-  Watcher::unregister_watch(ctx);
+  Watcher::unregister_watch(on_finish);
 }
 
 template <typename I>
@@ -113,9 +114,11 @@ void ImageWatcher<I>::block_notifies(Context *on_finish) {
 template <typename I>
 void ImageWatcher<I>::schedule_async_progress(const AsyncRequestId &request,
 					      uint64_t offset, uint64_t total) {
-  auto ctx = new LambdaContext(
-    boost::bind(&ImageWatcher<I>::notify_async_progress, this, request, offset,
-                total));
+  auto ctx = new LambdaContext([this, request, offset, total](int r) {
+    if (r != -ECANCELED) {
+      notify_async_progress(request, offset, total);
+    }
+  });
   m_task_finisher->queue(Task(TASK_CODE_ASYNC_PROGRESS, request), ctx);
 }
 
@@ -134,8 +137,11 @@ template <typename I>
 void ImageWatcher<I>::schedule_async_complete(const AsyncRequestId &request,
                                               int r) {
   m_async_op_tracker.start_op();
-  auto ctx = new LambdaContext(
-    boost::bind(&ImageWatcher<I>::notify_async_complete, this, request, r));
+  auto ctx = new LambdaContext([this, request, ret_val=r](int r) {
+    if (r != -ECANCELED) {
+      notify_async_complete(request, ret_val);
+    }
+  });
   m_task_finisher->queue(ctx);
 }
 
@@ -167,7 +173,7 @@ void ImageWatcher<I>::handle_async_complete(const AsyncRequestId &request,
   }
 
   std::unique_lock async_request_locker{m_async_request_lock};
-  mark_async_request_complete(request);
+  mark_async_request_complete(request, r);
   m_async_op_tracker.finish_op();
 }
 
@@ -197,7 +203,7 @@ void ImageWatcher<I>::notify_resize(uint64_t request_id, uint64_t size,
   AsyncRequestId async_request_id(get_client_id(), request_id);
 
   notify_async_request(async_request_id,
-                       new ResizePayload(size, allow_shrink, async_request_id),
+                       new ResizePayload(async_request_id, size, allow_shrink),
                        prog_ctx, on_finish);
 }
 
@@ -221,51 +227,68 @@ void ImageWatcher<I>::notify_snap_create(uint64_t request_id,
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_rename(const snapid_t &src_snap_id,
+void ImageWatcher<I>::notify_snap_rename(uint64_t request_id,
+                                         const snapid_t &src_snap_id,
 				         const std::string &dst_snap_name,
 					 Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapRenamePayload(src_snap_id, dst_snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapRenamePayload(async_request_id, src_snap_id, dst_snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_remove(const cls::rbd::SnapshotNamespace &snap_namespace,
-					 const std::string &snap_name,
-                                         Context *on_finish) {
+void ImageWatcher<I>::notify_snap_remove(
+    uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
+    const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapRemovePayload(snap_namespace, snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapRemovePayload(async_request_id, snap_namespace, snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_protect(const cls::rbd::SnapshotNamespace &snap_namespace,
-					  const std::string &snap_name,
-                                          Context *on_finish) {
+void ImageWatcher<I>::notify_snap_protect(
+    uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
+    const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapProtectPayload(snap_namespace, snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapProtectPayload(async_request_id, snap_namespace, snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_snap_unprotect(const cls::rbd::SnapshotNamespace &snap_namespace,
-					    const std::string &snap_name,
-                                            Context *on_finish) {
+void ImageWatcher<I>::notify_snap_unprotect(
+    uint64_t request_id, const cls::rbd::SnapshotNamespace &snap_namespace,
+    const std::string &snap_name, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new SnapUnprotectPayload(snap_namespace, snap_name),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new SnapUnprotectPayload(async_request_id, snap_namespace, snap_name),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
@@ -284,23 +307,33 @@ void ImageWatcher<I>::notify_rebuild_object_map(uint64_t request_id,
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_rename(const std::string &image_name,
+void ImageWatcher<I>::notify_rename(uint64_t request_id,
+                                    const std::string &image_name,
                                     Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new RenamePayload(image_name), on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(async_request_id,
+                       new RenamePayload(async_request_id, image_name),
+                       m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_update_features(uint64_t features, bool enabled,
+void ImageWatcher<I>::notify_update_features(uint64_t request_id,
+                                             uint64_t features, bool enabled,
                                              Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new UpdateFeaturesPayload(features, enabled), on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(async_request_id,
+      new UpdateFeaturesPayload(async_request_id, features, enabled),
+      m_no_op_prog_ctx, on_finish);
 }
 
 template <typename I>
@@ -353,7 +386,7 @@ template <typename I>
 void ImageWatcher<I>::notify_quiesce(uint64_t *request_id,
                                      ProgressContext &prog_ctx,
                                      Context *on_finish) {
-  *request_id = m_image_ctx.operations->reserve_async_request_id();
+  *request_id = util::reserve_async_request_id();
 
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": request_id="
                              << request_id << dendl;
@@ -439,33 +472,46 @@ void ImageWatcher<I>::notify_unquiesce(uint64_t request_id, Context *on_finish) 
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_metadata_set(const std::string &key,
+void ImageWatcher<I>::notify_metadata_set(uint64_t request_id,
+                                          const std::string &key,
                                           const std::string &value,
                                           Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new MetadataUpdatePayload(key,
-                    std::optional<std::string>{value}),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new MetadataUpdatePayload(async_request_id, key,
+                                std::optional<std::string>{value}),
+      m_no_op_prog_ctx,  on_finish);
 }
 
 template <typename I>
-void ImageWatcher<I>::notify_metadata_remove(const std::string &key,
+void ImageWatcher<I>::notify_metadata_remove(uint64_t request_id,
+                                             const std::string &key,
                                              Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   ceph_assert(m_image_ctx.exclusive_lock &&
               !m_image_ctx.exclusive_lock->is_lock_owner());
 
-  notify_lock_owner(new MetadataUpdatePayload(key, std::nullopt),
-                    on_finish);
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(
+      async_request_id,
+      new MetadataUpdatePayload(async_request_id, key, std::nullopt),
+      m_no_op_prog_ctx,  on_finish);
 }
 
 template <typename I>
 void ImageWatcher<I>::schedule_cancel_async_requests() {
-  auto ctx = new LambdaContext(
-    boost::bind(&ImageWatcher<I>::cancel_async_requests, this));
+  auto ctx = new LambdaContext([this](int r) {
+    if (r != -ECANCELED) {
+      cancel_async_requests();
+    }
+  });
   m_task_finisher->queue(TASK_CODE_CANCEL_ASYNC_REQUESTS, ctx);
 }
 
@@ -537,8 +583,12 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
   if (this->is_registered(this->m_watch_lock)) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
-    auto ctx = new LambdaContext(
-      boost::bind(&ImageWatcher<I>::notify_request_lock, this));
+    auto ctx = new LambdaContext([this](int r) {
+      if (r != -ECANCELED) {
+        notify_request_lock();
+      }
+    });
+
     if (use_timer) {
       if (timer_delay < 0) {
         timer_delay = RETRY_DELAY_SECONDS;
@@ -625,7 +675,8 @@ bool ImageWatcher<I>::is_new_request(const AsyncRequestId &id) const {
 }
 
 template <typename I>
-bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id) {
+bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id,
+                                                  int r) {
   ceph_assert(ceph_mutex_is_locked(m_async_request_lock));
 
   bool found = m_async_pending.erase(id);
@@ -638,11 +689,18 @@ bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id) {
     it = m_async_complete_expiration.erase(it);
   }
 
-  if (m_async_complete.insert(id).second) {
-    auto expiration_time = now;
-    expiration_time += 600;
-    m_async_complete_expiration.insert({expiration_time, id});
+  if (!m_async_complete.insert({id, r}).second) {
+    for (it = m_async_complete_expiration.begin();
+         it != m_async_complete_expiration.end(); it++) {
+      if (it->second == id) {
+        m_async_complete_expiration.erase(it);
+        break;
+      }
+    }
   }
+  auto expiration_time = now;
+  expiration_time += 600;
+  m_async_complete_expiration.insert({expiration_time, id});
 
   return found;
 }
@@ -650,6 +708,15 @@ bool ImageWatcher<I>::mark_async_request_complete(const AsyncRequestId &id) {
 template <typename I>
 Context *ImageWatcher<I>::remove_async_request(const AsyncRequestId &id) {
   std::unique_lock async_request_locker{m_async_request_lock};
+
+  return remove_async_request(id, m_async_request_lock);
+}
+
+template <typename I>
+Context *ImageWatcher<I>::remove_async_request(const AsyncRequestId &id,
+                                               ceph::shared_mutex &lock) {
+  ceph_assert(ceph_mutex_is_locked(lock));
+
   auto it = m_async_requests.find(id);
   if (it != m_async_requests.end()) {
     Context *on_complete = it->second.first;
@@ -664,8 +731,11 @@ void ImageWatcher<I>::schedule_async_request_timed_out(const AsyncRequestId &id)
   ldout(m_image_ctx.cct, 20) << "scheduling async request time out: " << id
                              << dendl;
 
-  Context *ctx = new LambdaContext(boost::bind(
-    &ImageWatcher<I>::async_request_timed_out, this, id));
+  auto ctx = new LambdaContext([this, id](int r) {
+    if (r != -ECANCELED) {
+      async_request_timed_out(id);
+    }
+  });
 
   Task task(TASK_CODE_ASYNC_REQUEST, id);
   m_task_finisher->cancel(task);
@@ -734,6 +804,13 @@ int ImageWatcher<I>::prepare_async_request(const AsyncRequestId& async_request_i
       *ctx = new RemoteContext(*this, async_request_id, *prog_ctx);
     } else {
       *new_request = false;
+      auto it = m_async_complete.find(async_request_id);
+      if (it != m_async_complete.end()) {
+        int r = it->second;
+        // reset complete request expiration time
+        mark_async_request_complete(async_request_id, r);
+        return r;
+      }
     }
   }
   return 0;
@@ -752,7 +829,11 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
       delete it->second.first;
       it->second.first = ack_ctx;
     } else {
-      m_task_finisher->queue(new C_ResponseMessage(ack_ctx));
+      auto it = m_async_complete.find(request);
+      ceph_assert(it != m_async_complete.end());
+      m_task_finisher->queue(new C_ResponseMessage(ack_ctx), it->second);
+      // reset complete request expiration time
+      mark_async_request_complete(request, it->second);
     }
     locker.unlock();
 
@@ -775,9 +856,8 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
           }
 
           auto on_finish = new LambdaContext(
-            [this, request](int r) {
-              std::unique_lock async_request_locker{m_async_request_lock};
-              mark_async_request_complete(request);
+            [this](int r) {
+              m_async_op_tracker.finish_op();
             });
 
           m_image_ctx.state->notify_unquiesce(on_finish);
@@ -786,38 +866,104 @@ Context *ImageWatcher<I>::prepare_quiesce_request(
       m_task_finisher->add_event_after(Task(TASK_CODE_QUIESCE, request),
                                        timeout, unquiesce_ctx);
 
-      auto ctx = remove_async_request(request);
-      ceph_assert(ctx != nullptr);
-      ctx = new C_ResponseMessage(static_cast<C_NotifyAck *>(ctx));
-      ctx->complete(r);
-      m_async_op_tracker.finish_op();
+      std::unique_lock async_request_locker{m_async_request_lock};
+      mark_async_request_complete(request, r);
+      auto ctx = remove_async_request(request, m_async_request_lock);
+      async_request_locker.unlock();
+      if (ctx != nullptr) {
+        ctx = new C_ResponseMessage(static_cast<C_NotifyAck *>(ctx));
+        ctx->complete(r);
+      } else {
+        m_task_finisher->cancel(Task(TASK_CODE_QUIESCE, request));
+      }
     });
 }
 
 template <typename I>
-Context *ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &request) {
+void ImageWatcher<I>::prepare_unquiesce_request(const AsyncRequestId &request) {
   {
     std::unique_lock async_request_locker{m_async_request_lock};
-    bool found = mark_async_request_complete(request);
-    if (!found) {
+    auto it = m_async_complete.find(request);
+    if (it == m_async_complete.end()) {
       ldout(m_image_ctx.cct, 20) << this << " " << request
-                                 << ": not found in pending" << dendl;
-      return nullptr;
+                                 << ": not found in complete" << dendl;
+      return;
     }
+    // reset complete request expiration time
+    mark_async_request_complete(request, it->second);
   }
 
   bool canceled = m_task_finisher->cancel(Task(TASK_CODE_QUIESCE, request));
   if (!canceled) {
     ldout(m_image_ctx.cct, 20) << this << " " << request
                                << ": timer task not found" << dendl;
-    return nullptr;
   }
+}
 
-  m_async_op_tracker.start_op();
-  return new LambdaContext(
-    [this](int r) {
-      m_async_op_tracker.finish_op();
-    });
+template <typename I>
+void ImageWatcher<I>::cancel_quiesce_requests() {
+  std::unique_lock l{m_async_request_lock};
+  for (auto it = m_async_requests.begin(); it != m_async_requests.end(); ) {
+    if (it->second.second == nullptr) {
+      // Quiesce notify request.
+      mark_async_request_complete(it->first, 0);
+      delete it->second.first;
+      it = m_async_requests.erase(it);
+    } else {
+      it++;
+    }
+  }
+}
+
+template <typename I>
+bool ImageWatcher<I>::handle_operation_request(
+    const AsyncRequestId& async_request_id,
+    exclusive_lock::OperationRequestType request_type, Operation operation,
+    std::function<void(ProgressContext &prog_ctx, Context*)> execute,
+    C_NotifyAck *ack_ctx) {
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
+
+  if (m_image_ctx.exclusive_lock != nullptr) {
+    int r = 0;
+    if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
+      bool new_request;
+      Context *ctx;
+      ProgressContext *prog_ctx;
+      bool complete;
+      if (async_request_id) {
+        r = prepare_async_request(async_request_id, &new_request, &ctx,
+                                  &prog_ctx);
+        encode(ResponseMessage(r), ack_ctx->out);
+        complete = true;
+      } else {
+        new_request = true;
+        ctx = new C_ResponseMessage(ack_ctx);
+        prog_ctx = &m_no_op_prog_ctx;
+        complete = false;
+      }
+      if (r == 0 && new_request) {
+        ctx = new LambdaContext(
+          [this, operation, ctx](int r) {
+            m_image_ctx.operations->finish_op(operation, r);
+            ctx->complete(r);
+          });
+        ctx = new LambdaContext(
+          [this, execute, prog_ctx, ctx](int r) {
+            if (r < 0) {
+              ctx->complete(r);
+              return;
+            }
+            std::shared_lock l{m_image_ctx.owner_lock};
+            execute(*prog_ctx, ctx);
+          });
+        m_image_ctx.operations->start_op(operation, ctx);
+      }
+      return complete;
+    } else if (r < 0) {
+      encode(ResponseMessage(r), ack_ctx->out);
+    }
+  }
+  return true;
 }
 
 template <typename I>
@@ -962,334 +1108,232 @@ bool ImageWatcher<I>::handle_payload(const AsyncCompletePayload &payload,
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const FlattenPayload &payload,
 				     C_NotifyAck *ack_ctx) {
+  ldout(m_image_ctx.cct, 10) << this << " remote flatten request: "
+                             << payload.async_request_id << dendl;
 
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      bool new_request;
-      Context *ctx;
-      ProgressContext *prog_ctx;
-      r = prepare_async_request(payload.async_request_id, &new_request,
-                                &ctx, &prog_ctx);
-      if (r == 0 && new_request) {
-        ldout(m_image_ctx.cct, 10) << this << " remote flatten request: "
-				   << payload.async_request_id << dendl;
-        m_image_ctx.operations->execute_flatten(*prog_ctx, ctx);
-      }
-
-      encode(ResponseMessage(r), ack_ctx->out);
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_FLATTEN, std::bind(&Operations<I>::execute_flatten,
+                                   m_image_ctx.operations,
+                                   std::placeholders::_1,
+                                   std::placeholders::_2),
+      ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const ResizePayload &payload,
 				     C_NotifyAck *ack_ctx) {
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      bool new_request;
-      Context *ctx;
-      ProgressContext *prog_ctx;
-      r = prepare_async_request(payload.async_request_id, &new_request,
-                                &ctx, &prog_ctx);
-      if (r == 0 && new_request) {
-        ldout(m_image_ctx.cct, 10) << this << " remote resize request: "
-				   << payload.async_request_id << " "
-				   << payload.size << " "
-				   << payload.allow_shrink << dendl;
-        m_image_ctx.operations->execute_resize(payload.size, payload.allow_shrink, *prog_ctx, ctx, 0);
-      }
+  ldout(m_image_ctx.cct, 10) << this << " remote resize request: "
+                             << payload.async_request_id << " "
+                             << payload.size << " "
+                             << payload.allow_shrink << dendl;
 
-      encode(ResponseMessage(r), ack_ctx->out);
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_RESIZE, std::bind(&Operations<I>::execute_resize,
+                                  m_image_ctx.operations, payload.size,
+                                  payload.allow_shrink, std::placeholders::_1,
+                                  std::placeholders::_2, 0), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const SnapCreatePayload &payload,
 			             C_NotifyAck *ack_ctx) {
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
+  ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
+                             << payload.async_request_id << " "
+                             << payload.snap_namespace << " "
+                             << payload.snap_name << " "
+                             << payload.flags << dendl;
 
-    // rbd-mirror needs to accept forced promotion orphan snap create requests
-    auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
-      &payload.snap_namespace);
-    if (mirror_ns != nullptr && mirror_ns->is_orphan()) {
-      request_type = exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION;
-    }
+  auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
 
-    if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
-      bool new_request;
-      Context *ctx;
-      ProgressContext *prog_ctx;
-      bool complete;
-      if (payload.async_request_id) {
-        r = prepare_async_request(payload.async_request_id, &new_request,
-                                  &ctx, &prog_ctx);
-        encode(ResponseMessage(r), ack_ctx->out);
-        complete = true;
-      } else {
-        new_request = true;
-        prog_ctx = new NoOpProgressContext();
-        ctx = new LambdaContext(
-          [prog_ctx, on_finish=new C_ResponseMessage(ack_ctx)](int r) {
-            delete prog_ctx;
-            on_finish->complete(r);
-          });
-        complete = false;
-      }
-      if (r == 0 && new_request) {
-        ldout(m_image_ctx.cct, 10) << this << " remote snap_create request: "
-				   << payload.async_request_id << " "
-                                   << payload.snap_namespace << " "
-                                   << payload.snap_name << " "
-                                   << payload.flags << dendl;
-
-        m_image_ctx.operations->execute_snap_create(payload.snap_namespace,
-                                                    payload.snap_name,
-                                                    ctx, 0, payload.flags,
-                                                    *prog_ctx);
-      }
-      return complete;
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
+  // rbd-mirror needs to accept forced promotion orphan snap create requests
+  auto mirror_ns = boost::get<cls::rbd::MirrorSnapshotNamespace>(
+    &payload.snap_namespace);
+  if (mirror_ns != nullptr && mirror_ns->is_orphan()) {
+    request_type = exclusive_lock::OPERATION_REQUEST_TYPE_FORCE_PROMOTION;
   }
-  return true;
+
+  return handle_operation_request(
+      payload.async_request_id, request_type,
+      OPERATION_SNAP_CREATE, std::bind(&Operations<I>::execute_snap_create,
+                                       m_image_ctx.operations,
+                                       payload.snap_namespace,
+                                       payload.snap_name, std::placeholders::_2,
+                                       0, payload.flags, std::placeholders::_1),
+      ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const SnapRenamePayload &payload,
 			             C_NotifyAck *ack_ctx) {
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_rename request: "
-			         << payload.snap_id << " to "
-			         << payload.snap_name << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " remote snap_rename request: "
+                             << payload.async_request_id << " "
+                             << payload.snap_id << " to "
+                             << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_rename(payload.snap_id,
-                                                  payload.snap_name,
-                                                  new C_ResponseMessage(ack_ctx));
-      return false;
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_SNAP_RENAME, std::bind(&Operations<I>::execute_snap_rename,
+                                       m_image_ctx.operations, payload.snap_id,
+                                       payload.snap_name,
+                                       std::placeholders::_2), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const SnapRemovePayload &payload,
 			             C_NotifyAck *ack_ctx) {
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
-    if (cls::rbd::get_snap_namespace_type(payload.snap_namespace) ==
-        cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
-      request_type = exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE;
-    }
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(request_type, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
-			         << payload.snap_name << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " remote snap_remove request: "
+                             << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_remove(payload.snap_namespace,
-						  payload.snap_name,
-                                                  new C_ResponseMessage(ack_ctx));
-      return false;
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
+  auto request_type = exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL;
+  if (cls::rbd::get_snap_namespace_type(payload.snap_namespace) ==
+      cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+    request_type = exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE;
   }
-  return true;
+
+  return handle_operation_request(
+      payload.async_request_id, request_type, OPERATION_SNAP_REMOVE,
+      std::bind(&Operations<I>::execute_snap_remove, m_image_ctx.operations,
+                payload.snap_namespace, payload.snap_name,
+                std::placeholders::_2), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const SnapProtectPayload& payload,
                                      C_NotifyAck *ack_ctx) {
-  std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
-                                 << payload.snap_name << dendl;
+    ldout(m_image_ctx.cct, 10) << this << " remote snap_protect request: "
+                               << payload.async_request_id << " "
+                               << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_protect(payload.snap_namespace,
-						   payload.snap_name,
-                                                   new C_ResponseMessage(ack_ctx));
-      return false;
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+    return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_SNAP_PROTECT, std::bind(&Operations<I>::execute_snap_protect,
+                                        m_image_ctx.operations,
+                                        payload.snap_namespace,
+                                        payload.snap_name,
+                                        std::placeholders::_2), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const SnapUnprotectPayload& payload,
                                      C_NotifyAck *ack_ctx) {
-  std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
-                                 << payload.snap_name << dendl;
+    ldout(m_image_ctx.cct, 10) << this << " remote snap_unprotect request: "
+                               << payload.async_request_id << " "
+                               << payload.snap_name << dendl;
 
-      m_image_ctx.operations->execute_snap_unprotect(payload.snap_namespace,
-						     payload.snap_name,
-                                                     new C_ResponseMessage(ack_ctx));
-      return false;
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+    return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_SNAP_UNPROTECT, std::bind(&Operations<I>::execute_snap_unprotect,
+                                          m_image_ctx.operations,
+                                          payload.snap_namespace,
+                                          payload.snap_name,
+                                          std::placeholders::_2), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const RebuildObjectMapPayload& payload,
                                      C_NotifyAck *ack_ctx) {
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      bool new_request;
-      Context *ctx;
-      ProgressContext *prog_ctx;
-      r = prepare_async_request(payload.async_request_id, &new_request,
-                                &ctx, &prog_ctx);
-      if (r == 0 && new_request) {
-        ldout(m_image_ctx.cct, 10) << this
-                                   << " remote rebuild object map request: "
-                                   << payload.async_request_id << dendl;
-        m_image_ctx.operations->execute_rebuild_object_map(*prog_ctx, ctx);
-      }
+  ldout(m_image_ctx.cct, 10) << this << " remote rebuild object map request: "
+                             << payload.async_request_id << dendl;
 
-      encode(ResponseMessage(r), ack_ctx->out);
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_REBUILD_OBJECT_MAP,
+      std::bind(&Operations<I>::execute_rebuild_object_map,
+                m_image_ctx.operations, std::placeholders::_1,
+                std::placeholders::_2), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const RenamePayload& payload,
                                      C_NotifyAck *ack_ctx) {
-  std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
-                                 << payload.image_name << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " remote rename request: "
+                             << payload.async_request_id << " "
+                             << payload.image_name << dendl;
 
-      m_image_ctx.operations->execute_rename(payload.image_name,
-                                             new C_ResponseMessage(ack_ctx));
-      return false;
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_RENAME, std::bind(&Operations<I>::execute_rename,
+                                  m_image_ctx.operations, payload.image_name,
+                                  std::placeholders::_2), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const UpdateFeaturesPayload& payload,
                                      C_NotifyAck *ack_ctx) {
-  std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      ldout(m_image_ctx.cct, 10) << this << " remote update_features request: "
-                                 << payload.features << " "
-                                 << (payload.enabled ? "enabled" : "disabled")
-                                 << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " remote update_features request: "
+                             << payload.async_request_id << " "
+                             << payload.features << " "
+                             << (payload.enabled ? "enabled" : "disabled")
+                             << dendl;
 
-      m_image_ctx.operations->execute_update_features(
-        payload.features, payload.enabled, new C_ResponseMessage(ack_ctx), 0);
-      return false;
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_UPDATE_FEATURES,
+      std::bind(&Operations<I>::execute_update_features, m_image_ctx.operations,
+                payload.features, payload.enabled, std::placeholders::_2, 0),
+      ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const MigratePayload &payload,
 				     C_NotifyAck *ack_ctx) {
+  ldout(m_image_ctx.cct, 10) << this << " remote migrate request: "
+                             << payload.async_request_id << dendl;
 
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      bool new_request;
-      Context *ctx;
-      ProgressContext *prog_ctx;
-      r = prepare_async_request(payload.async_request_id, &new_request,
-                                &ctx, &prog_ctx);
-      if (r == 0 && new_request) {
-        ldout(m_image_ctx.cct, 10) << this << " remote migrate request: "
-				   << payload.async_request_id << dendl;
-        m_image_ctx.operations->execute_migrate(*prog_ctx, ctx);
-      }
-
-      encode(ResponseMessage(r), ack_ctx->out);
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
-  return true;
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_MIGRATE, std::bind(&Operations<I>::execute_migrate,
+                                   m_image_ctx.operations,
+                                   std::placeholders::_1,
+                                   std::placeholders::_2), ack_ctx);
 }
 
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const SparsifyPayload &payload,
 				     C_NotifyAck *ack_ctx) {
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      bool new_request;
-      Context *ctx;
-      ProgressContext *prog_ctx;
-      r = prepare_async_request(payload.async_request_id, &new_request,
-                                &ctx, &prog_ctx);
-      if (r == 0 && new_request) {
-        ldout(m_image_ctx.cct, 10) << this << " remote sparsify request: "
-				   << payload.async_request_id << dendl;
-        m_image_ctx.operations->execute_sparsify(payload.sparse_size, *prog_ctx,
-                                                 ctx);
-      }
+  ldout(m_image_ctx.cct, 10) << this << " remote sparsify request: "
+                             << payload.async_request_id << dendl;
 
-      encode(ResponseMessage(r), ack_ctx->out);
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
+  return handle_operation_request(
+      payload.async_request_id, exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+      OPERATION_SPARSIFY, std::bind(&Operations<I>::execute_sparsify,
+                                    m_image_ctx.operations,
+                                    payload.sparse_size, std::placeholders::_1,
+                                    std::placeholders::_2), ack_ctx);
+}
+
+template <typename I>
+bool ImageWatcher<I>::handle_payload(const MetadataUpdatePayload &payload,
+                                     C_NotifyAck *ack_ctx) {
+  if (payload.value) {
+    ldout(m_image_ctx.cct, 10) << this << " remote metadata_set request: "
+                               << payload.async_request_id << " "
+                               << "key=" << payload.key << ", value="
+                               << *payload.value << dendl;
+
+    return handle_operation_request(
+        payload.async_request_id,
+        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+        OPERATION_METADATA_UPDATE,
+        std::bind(&Operations<I>::execute_metadata_set,
+                  m_image_ctx.operations, payload.key, *payload.value,
+                  std::placeholders::_2),
+        ack_ctx);
+  } else {
+    ldout(m_image_ctx.cct, 10) << this << " remote metadata_remove request: "
+                               << payload.async_request_id << " "
+                               << "key=" << payload.key << dendl;
+
+    return handle_operation_request(
+        payload.async_request_id,
+        exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+        OPERATION_METADATA_UPDATE,
+        std::bind(&Operations<I>::execute_metadata_remove,
+                  m_image_ctx.operations, payload.key, std::placeholders::_2),
+        ack_ctx);
   }
-  return true;
 }
 
 template <typename I>
@@ -1311,48 +1355,10 @@ bool ImageWatcher<I>::handle_payload(const QuiescePayload &payload,
 template <typename I>
 bool ImageWatcher<I>::handle_payload(const UnquiescePayload &payload,
 				     C_NotifyAck *ack_ctx) {
-  auto on_finish = prepare_unquiesce_request(payload.async_request_id);
-  if (on_finish == nullptr) {
-    ldout(m_image_ctx.cct, 10) << this
-                               << " duplicate or unknown unquiesce request: "
-                               << payload.async_request_id << dendl;
-    return true;
-  }
-
   ldout(m_image_ctx.cct, 10) << this << " unquiesce request: "
                              << payload.async_request_id << dendl;
-  m_image_ctx.state->notify_unquiesce(on_finish);
-  return true;
-}
 
-template <typename I>
-bool ImageWatcher<I>::handle_payload(const MetadataUpdatePayload &payload,
-                                     C_NotifyAck *ack_ctx) {
-  std::shared_lock l{m_image_ctx.owner_lock};
-  if (m_image_ctx.exclusive_lock != nullptr) {
-    int r;
-    if (m_image_ctx.exclusive_lock->accept_request(
-          exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &r)) {
-      if (payload.value) {
-        ldout(m_image_ctx.cct, 10) << this << " remote metadata_set request: key="
-                                   << payload.key << ", value="
-                                   << *payload.value << dendl;
-
-        m_image_ctx.operations->execute_metadata_set(payload.key, *payload.value,
-                                                     new C_ResponseMessage(ack_ctx));
-        return false;
-      } else {
-        ldout(m_image_ctx.cct, 10) << this << " remote metadata_remove request: key="
-                                   << payload.key << dendl;
-
-        m_image_ctx.operations->execute_metadata_remove(payload.key,
-                                                        new C_ResponseMessage(ack_ctx));
-        return false;
-      }
-    } else if (r < 0) {
-      encode(ResponseMessage(r), ack_ctx->out);
-    }
-  }
+  prepare_unquiesce_request(payload.async_request_id);
   return true;
 }
 

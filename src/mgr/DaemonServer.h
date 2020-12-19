@@ -207,8 +207,12 @@ public:
       const OSDPerfMetricQuery &query,
       const std::optional<OSDPerfMetricLimit> &limit);
   int remove_osd_perf_query(MetricQueryID query_id);
-  int get_osd_perf_counters(MetricQueryID query_id,
-                            std::map<OSDPerfMetricKey, PerformanceCounters> *c);
+  int get_osd_perf_counters(OSDPerfCollector *collector);
+
+  MetricQueryID add_mds_perf_query(const MDSPerfMetricQuery &query,
+                                   const std::optional<MDSPerfMetricLimit> &limit);
+  int remove_mds_perf_query(MetricQueryID query_id);
+  int get_mds_perf_counters(MDSPerfCollector *collector);
 
   virtual const char** get_tracked_conf_keys() const override;
   virtual void handle_conf_change(const ConfigProxy& conf,

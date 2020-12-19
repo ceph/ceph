@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-from typing import Any, Dict, Union
 
 import logging
+from typing import Any, Dict, List, Union
+
 import cherrypy
 
-from . import Controller, BaseController, Endpoint, ENDPOINT_MAP, \
-    allow_empty_body
-from .. import mgr
+from .. import DEFAULT_VERSION, mgr
+from ..api.doc import Schema, SchemaInput, SchemaType
+from . import ENDPOINT_MAP, BaseController, Controller, Endpoint, allow_empty_body
 
 NO_DESCRIPTION_AVAILABLE = "*No description available*"
 
@@ -71,35 +72,35 @@ class Docs(BaseController):
         param_name = param['name']
         def_value = param['default'] if 'default' in param else None
         if param_name.startswith("is_"):
-            return "boolean"
+            return str(SchemaType.BOOLEAN)
         if "size" in param_name:
-            return "integer"
+            return str(SchemaType.INTEGER)
         if "count" in param_name:
-            return "integer"
+            return str(SchemaType.INTEGER)
         if "num" in param_name:
-            return "integer"
+            return str(SchemaType.INTEGER)
         if isinstance(def_value, bool):
-            return "boolean"
+            return str(SchemaType.BOOLEAN)
         if isinstance(def_value, int):
-            return "integer"
-        return "string"
+            return str(SchemaType.INTEGER)
+        return str(SchemaType.STRING)
 
     @classmethod
     # isinstance doesn't work: input is always <type 'type'>.
     def _type_to_str(cls, type_as_type):
         """ Used if type is explicitly defined. """
         if type_as_type is str:
-            type_as_str = 'string'
+            type_as_str = str(SchemaType.STRING)
         elif type_as_type is int:
-            type_as_str = 'integer'
+            type_as_str = str(SchemaType.INTEGER)
         elif type_as_type is bool:
-            type_as_str = 'boolean'
+            type_as_str = str(SchemaType.BOOLEAN)
         elif type_as_type is list or type_as_type is tuple:
-            type_as_str = 'array'
+            type_as_str = str(SchemaType.ARRAY)
         elif type_as_type is float:
-            type_as_str = 'number'
+            type_as_str = str(SchemaType.NUMBER)
         else:
-            type_as_str = 'object'
+            type_as_str = str(SchemaType.OBJECT)
         return type_as_str
 
     @classmethod
@@ -143,13 +144,17 @@ class Docs(BaseController):
         return parameters
 
     @classmethod
-    def _gen_schema_for_content(cls, params):
+    def _gen_schema_for_content(cls, params: List[Any]) -> Dict[str, Any]:
         """
         Generates information to the content-object in OpenAPI Spec.
         Used to for request body and responses.
         """
         required_params = []
         properties = {}
+        schema_type = SchemaType.OBJECT
+        if isinstance(params, SchemaInput):
+            schema_type = params.type
+            params = params.params
 
         for param in params:
             if param['required']:
@@ -159,12 +164,12 @@ class Docs(BaseController):
             if 'type' in param:
                 props['type'] = cls._type_to_str(param['type'])
                 if 'nested_params' in param:
-                    if props['type'] == 'array':  # dict in array
+                    if props['type'] == str(SchemaType.ARRAY):  # dict in array
                         props['items'] = cls._gen_schema_for_content(param['nested_params'])
                     else:  # dict in dict
                         props = cls._gen_schema_for_content(param['nested_params'])
-                elif props['type'] == 'object':  # e.g. [int]
-                    props['type'] = 'array'
+                elif props['type'] == str(SchemaType.OBJECT):  # e.g. [int]
+                    props['type'] = str(SchemaType.ARRAY)
                     props['items'] = {'type': cls._type_to_str(param['type'][0])}
             else:
                 props['type'] = cls._gen_type(param)
@@ -174,13 +179,10 @@ class Docs(BaseController):
                 props['default'] = param['default']
             properties[param['name']] = props
 
-        schema = {
-            'type': 'object',
-            'properties': properties,
-        }
-        if required_params:
-            schema['required'] = required_params
-        return schema
+        schema = Schema(schema_type=schema_type, properties=properties,
+                        required=required_params)
+
+        return schema.as_dict()
 
     @classmethod
     def _gen_responses(cls, method, resp_object=None):
@@ -202,23 +204,34 @@ class Docs(BaseController):
             }
         }
         if method.lower() == 'get':
-            resp['200'] = {'description': "OK"}
+            resp['200'] = {'description': "OK",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() == 'post':
-            resp['201'] = {'description': "Resource created."}
+            resp['201'] = {'description': "Resource created.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() == 'put':
-            resp['200'] = {'description': "Resource updated."}
+            resp['200'] = {'description': "Resource updated.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() == 'delete':
-            resp['204'] = {'description': "Resource deleted."}
+            resp['204'] = {'description': "Resource deleted.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
         if method.lower() in ['post', 'put', 'delete']:
             resp['202'] = {'description': "Operation is still executing."
-                                          " Please check the task queue."}
+                                          " Please check the task queue.",
+                           'content': {'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION):
+                                       {'type': 'object'}}}
 
         if resp_object:
             for status_code, response_body in resp_object.items():
-                resp[status_code].update({
-                    'content': {
-                        'application/json': {
-                            'schema': cls._gen_schema_for_content(response_body)}}})
+                if status_code in resp:
+                    resp[status_code].update({
+                        'content': {
+                            'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION): {
+                                'schema': cls._gen_schema_for_content(response_body)}}})
 
         return resp
 
@@ -362,11 +375,11 @@ class Docs(BaseController):
 
         return spec
 
-    @Endpoint(path="api.json")
+    @Endpoint(path="api.json", version=None)
     def api_json(self):
         return self._gen_spec(False, "/")
 
-    @Endpoint(path="api-all.json")
+    @Endpoint(path="api-all.json", version=None)
     def api_all_json(self):
         return self._gen_spec(True, "/")
 
@@ -443,12 +456,12 @@ class Docs(BaseController):
 
         return page
 
-    @Endpoint(json_response=False)
+    @Endpoint(json_response=False, version=None)
     def __call__(self, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints)
 
     @Endpoint('POST', path="/", json_response=False,
-              query_params="{all_endpoints}")
+              query_params="{all_endpoints}", version=None)
     @allow_empty_body
     def _with_token(self, token, all_endpoints=False):
         return self._swagger_ui_page(all_endpoints, token)
@@ -456,7 +469,9 @@ class Docs(BaseController):
 
 if __name__ == "__main__":
     import sys
+
     import yaml
+
     from . import generate_routes
 
     def fix_null_descr(obj):

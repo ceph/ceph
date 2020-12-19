@@ -1,4 +1,4 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 // Angular2-Tree Component
 ::ng-deep cd-cephfs-directories tree-root {
@@ -8,10 +8,10 @@
 }
 
 .quota-origin {
-  color: bd.$primary;
+  color: vv.$primary;
   cursor: pointer;
 
   &:hover {
-    color: bd.$gray-900;
+    color: vv.$gray-900;
   }
 }

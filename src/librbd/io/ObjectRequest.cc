@@ -170,8 +170,8 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
     return false;
   }
 
-  Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no, 0,
-                          m_ictx->layout.object_size, *parent_extents);
+  io::util::extent_to_file(m_ictx, m_object_no, 0, m_ictx->layout.object_size,
+                           *parent_extents);
   uint64_t object_overlap = m_ictx->prune_parent_extents(*parent_extents,
                                                          parent_overlap);
   if (object_overlap > 0) {
@@ -200,14 +200,14 @@ void ObjectRequest<I>::finish(int r) {
 
 template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(
-    I *ictx, uint64_t objectno, const Extents &extents,
+    I *ictx, uint64_t objectno, ReadExtents* extents,
     IOContext io_context, int op_flags, int read_flags,
-    const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-    Extents* extent_map, uint64_t* version, Context *completion)
-  : ObjectRequest<I>(ictx, objectno, io_context, "read",
-                     parent_trace, completion),
-    m_extents(extents), m_op_flags(op_flags), m_read_flags(read_flags),
-    m_read_data(read_data), m_extent_map(extent_map), m_version(version) {
+    const ZTracer::Trace &parent_trace, uint64_t* version,
+    Context *completion)
+  : ObjectRequest<I>(ictx, objectno, io_context, "read", parent_trace,
+                     completion),
+    m_extents(extents), m_op_flags(op_flags),m_read_flags(read_flags),
+    m_version(version) {
 }
 
 template <typename I>
@@ -232,18 +232,15 @@ void ObjectReadRequest<I>::read_object() {
   }
   image_locker.unlock();
 
-  ldout(image_ctx->cct, 20) << dendl;
+  ldout(image_ctx->cct, 20) << "snap_id=" << read_snap_id << dendl;
 
   neorados::ReadOp read_op;
-  m_extent_results.reserve(this->m_extents.size());
-  for (auto [object_off, object_len]: this->m_extents) {
-    m_extent_results.emplace_back();
-    auto& extent_result = m_extent_results.back();
-    if (object_len >= image_ctx->sparse_read_threshold_bytes) {
-      read_op.sparse_read(object_off, object_len, &(extent_result.first),
-                          &(extent_result.second));
+  for (auto& extent: *this->m_extents) {
+    if (extent.length >= image_ctx->sparse_read_threshold_bytes) {
+      read_op.sparse_read(extent.offset, extent.length, &extent.bl,
+                          &extent.extent_map);
     } else {
-      read_op.read(object_off, object_len, &(extent_result.first));
+      read_op.read(extent.offset, extent.length, &extent.bl);
     }
   }
   util::apply_op_flags(
@@ -272,28 +269,6 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
     return;
   }
 
-  // merge ExtentResults to a single sparse bufferlist
-  int pos = 0;
-  uint64_t object_off = 0;
-  for (auto& [read_data, extent_map] : m_extent_results) {
-    if (extent_map.size() == 0) {
-      extent_map.push_back(std::make_pair(m_extents[pos].first,
-                                          read_data.length()));
-    }
-
-    uint64_t total_extents_len = 0;
-    for (auto& [extent_off, extent_len] : extent_map) {
-      ceph_assert(extent_off >= object_off);
-      object_off = extent_off + extent_len;
-      m_extent_map->push_back(std::make_pair(extent_off, extent_len));
-      total_extents_len += extent_len;
-    }
-    ceph_assert(total_extents_len == read_data.length());
-
-    m_read_data->claim_append(read_data);
-    ++pos;
-  }
-
   this->finish(0);
 }
 
@@ -313,7 +288,7 @@ void ObjectReadRequest<I>::read_parent() {
   io::util::read_parent<I>(
     image_ctx, this->m_object_no, this->m_extents,
     this->m_io_context->read_snap().value_or(CEPH_NOSNAP), this->m_trace,
-    m_read_data, ctx);
+    ctx);
 }
 
 template <typename I>
@@ -329,11 +304,6 @@ void ObjectReadRequest<I>::handle_read_parent(int r) {
                           << cpp_strerror(r) << dendl;
     this->finish(r);
     return;
-  }
-
-  if (this->m_extents.size() > 1) {
-    m_extent_map->insert(m_extent_map->end(),
-                         m_extents.begin(), m_extents.end());
   }
 
   copyup();
@@ -515,14 +485,16 @@ void AbstractObjectWriteRequest<I>::write_object() {
 
   neorados::WriteOp write_op;
   if (m_copyup_enabled) {
-    ldout(image_ctx->cct, 20) << "guarding write" << dendl;
     if (m_guarding_migration_write) {
+      auto snap_seq = (this->m_io_context->write_snap_context() ?
+          this->m_io_context->write_snap_context()->first : 0);
+      ldout(image_ctx->cct, 20) << "guarding write: snap_seq=" << snap_seq
+                                << dendl;
+
       cls_client::assert_snapc_seq(
-        &write_op,
-        (this->m_io_context->write_snap_context() ?
-          this->m_io_context->write_snap_context()->first : 0),
-        cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
+        &write_op, snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
     } else {
+      ldout(image_ctx->cct, 20) << "guarding write" << dendl;
       write_op.assert_exists();
     }
   }
@@ -594,13 +566,13 @@ void AbstractObjectWriteRequest<I>::copyup() {
     this->m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
-    new_req->append_request(this);
+    new_req->append_request(this, std::move(get_copyup_overwrite_extents()));
     image_ctx->copyup_list[this->m_object_no] = new_req;
 
     image_ctx->copyup_list_lock.unlock();
     new_req->send();
   } else {
-    it->second->append_request(this);
+    it->second->append_request(this, std::move(get_copyup_overwrite_extents()));
     image_ctx->copyup_list_lock.unlock();
   }
 }
@@ -734,9 +706,8 @@ int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
 
     // object extent compare mismatch
     uint64_t offset = -MAX_ERRNO - r;
-    Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
-                            this->m_object_no, offset, this->m_object_len,
-                            image_extents);
+    io::util::extent_to_file(image_ctx, this->m_object_no, offset,
+                             this->m_object_len, image_extents);
     ceph_assert(image_extents.size() == 1);
 
     if (m_mismatch_offset) {
@@ -875,7 +846,8 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
                    << "clone_end_snap_id=" << clone_end_snap_id << ", "
                    << "diff=" << diff << ", "
                    << "end_size=" << end_size << ", "
-                   << "exists=" << exists << dendl;
+                   << "exists=" << exists << ", "
+                   << "whole_object=" << read_whole_object << dendl;
     if (end_snap_id <= first_snap_id) {
       // don't include deltas from the starting snapshots, but we iterate over
       // it to track its existence and size
@@ -913,7 +885,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
           for (auto& interval : diff_interval) {
             snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
               interval.first, interval.second,
-              SnapshotExtent(SNAPSHOT_EXTENT_STATE_DATA, interval.second));
+              SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
             if (maybe_whiteout_detected) {
               initial_written_extents.union_insert(interval.first,
                                                    interval.second);
@@ -933,7 +905,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
           for (auto& interval : zero_interval) {
             snapshot_delta[{end_snap_id, end_snap_id}].insert(
               interval.first, interval.second,
-              SnapshotExtent(SNAPSHOT_EXTENT_STATE_ZEROED, interval.second));
+              SparseExtent(SPARSE_EXTENT_STATE_ZEROED, interval.second));
             if (maybe_whiteout_detected) {
               initial_written_extents.union_insert(interval.first,
                                                    interval.second);
@@ -981,8 +953,8 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
   // calculate reverse mapping onto the parent image
   Extents parent_image_extents;
   for (auto [object_off, object_len]: m_object_extents) {
-    Striper::extent_to_file(cct, &image_ctx->layout, this->m_object_no,
-                            object_off, object_len, parent_image_extents);
+    io::util::extent_to_file(image_ctx, this->m_object_no, object_off,
+                             object_len, parent_image_extents);
   }
 
   uint64_t parent_overlap = 0;
@@ -1044,8 +1016,8 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
 
       // map image-extents back to this object
       striper::LightweightObjectExtents object_extents;
-      Striper::file_to_extents(cct, &image_ctx->layout, image_extent.get_off(),
-                               image_extent.get_len(), 0, 0, &object_extents);
+      io::util::file_to_extents(image_ctx, image_extent.get_off(),
+                                image_extent.get_len(), 0, &object_extents);
       for (auto& object_extent : object_extents) {
         ceph_assert(object_extent.object_no == this->m_object_no);
         intervals.insert(
@@ -1087,8 +1059,8 @@ void ObjectListSnapsRequest<I>::zero_initial_extent(
                      << dendl;
       (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS].insert(
         offset, length,
-        SnapshotExtent(
-          (dne ? SNAPSHOT_EXTENT_STATE_DNE : SNAPSHOT_EXTENT_STATE_ZEROED),
+        SparseExtent(
+          (dne ? SPARSE_EXTENT_STATE_DNE : SPARSE_EXTENT_STATE_ZEROED),
           length));
     }
   }

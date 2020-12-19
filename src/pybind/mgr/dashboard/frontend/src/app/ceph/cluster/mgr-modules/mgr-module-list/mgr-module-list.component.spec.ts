@@ -7,12 +7,12 @@ import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../../testing/unit-test-helper';
-import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
-import { TableActionsComponent } from '../../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { SharedModule } from '../../../../shared/shared.module';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { MgrModuleDetailsComponent } from '../mgr-module-details/mgr-module-details.component';
 import { MgrModuleListComponent } from './mgr-module-list.component';
 
@@ -129,23 +129,27 @@ describe('MgrModuleListComponent', () => {
       expect(component.table.refreshBtn).toHaveBeenCalled();
     }));
 
-    it('should not disable module (1)', () => {
+    it.only('should not disable module without selecting one', () => {
+      expect(component.getTableActionDisabledDesc()).toBeTruthy();
+    });
+
+    it('should not disable dashboard module', () => {
       component.selection.selected = [
         {
           name: 'dashboard'
         }
       ];
-      expect(component.isTableActionDisabled('enabled')).toBeTruthy();
+      expect(component.getTableActionDisabledDesc()).toBeTruthy();
     });
 
-    it('should not disable module (2)', () => {
+    it('should not disable an always-on module', () => {
       component.selection.selected = [
         {
           name: 'bar',
           always_on: true
         }
       ];
-      expect(component.isTableActionDisabled('enabled')).toBeTruthy();
+      expect(component.getTableActionDisabledDesc()).toBe('This Manager module is always on.');
     });
   });
 });

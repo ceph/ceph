@@ -34,17 +34,17 @@ public:
                                    librados::snap_t src_snap_id_start,
                                    librados::snap_t dst_snap_id_start,
                                    const SnapMap &snap_map,
-                                   uint64_t object_number, bool flatten,
+                                   uint64_t object_number, uint32_t flags,
                                    Handler* handler, Context *on_finish) {
     return new ObjectCopyRequest(src_image_ctx, dst_image_ctx,
                                  src_snap_id_start, dst_snap_id_start, snap_map,
-                                 object_number, flatten, handler, on_finish);
+                                 object_number, flags, handler, on_finish);
   }
 
   ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
                     librados::snap_t src_snap_id_start,
                     librados::snap_t dst_snap_id_start, const SnapMap &snap_map,
-                    uint64_t object_number, bool flatten, Handler* handler,
+                    uint64_t object_number, uint32_t flags, Handler* handler,
                     Context *on_finish);
 
   void send();
@@ -74,13 +74,13 @@ private:
    *    |     /-----------\
    *    |     |           | (repeat for each snapshot)
    *    v     v           |
-   * WRITE_OBJECT --------/
-   *    |
+   * UPDATE_OBJECT_MAP ---/ (skip if object
+   *    |                    map disabled)
    *    |     /-----------\
    *    |     |           | (repeat for each snapshot)
    *    v     v           |
-   * UPDATE_OBJECT_MAP ---/ (skip if object
-   *    |                    map disabled)
+   * WRITE_OBJECT --------/
+   *    |
    *    v
    * <finish>
    *
@@ -89,39 +89,16 @@ private:
 
   enum WriteOpType {
     WRITE_OP_TYPE_WRITE,
-    WRITE_OP_TYPE_ZERO,
-    WRITE_OP_TYPE_TRUNC,
-    WRITE_OP_TYPE_REMOVE,
-    WRITE_OP_TYPE_REMOVE_TRUNC,
+    WRITE_OP_TYPE_ZERO
   };
-
-  typedef std::map<uint64_t, uint64_t> ExtentMap;
 
   struct ReadOp {
     interval_set<uint64_t> image_interval;
-    ExtentMap image_extent_map;
+    io::Extents image_extent_map;
     bufferlist out_bl;
   };
 
-  struct WriteOp {
-    WriteOp(WriteOpType type, uint64_t object_offset, uint64_t object_length)
-      : type(type), object_offset(object_offset), object_length(object_length) {
-    }
-    WriteOp(WriteOpType type, uint64_t object_offset, uint64_t object_length,
-            bufferlist&& bl)
-      : type(type), object_offset(object_offset), object_length(object_length),
-        bl(std::move(bl)) {
-    }
-
-    WriteOpType type;
-    uint64_t object_offset;
-    uint64_t object_length;
-
-    bufferlist bl;
-  };
-
   typedef std::pair<librados::snap_t, librados::snap_t> WriteReadSnapIds;
-  typedef std::list<WriteOp> WriteOps;
 
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
@@ -130,7 +107,7 @@ private:
   librados::snap_t m_dst_snap_id_start;
   SnapMap m_snap_map;
   uint64_t m_dst_object_number;
-  bool m_flatten;
+  uint32_t m_flags;
   Handler* m_handler;
   Context *m_on_finish;
 
@@ -144,7 +121,7 @@ private:
 
   std::map<WriteReadSnapIds, ReadOp> m_read_ops;
   std::list<WriteReadSnapIds> m_read_snaps;
-  std::map<librados::snap_t, WriteOps> m_write_ops;
+  io::SnapshotSparseBufferlist m_snapshot_sparse_bufferlist;
 
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_data_interval;
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_zero_interval;
@@ -159,11 +136,12 @@ private:
   void send_read();
   void handle_read(int r);
 
-  void send_write_object();
-  void handle_write_object(int r);
-
   void send_update_object_map();
   void handle_update_object_map(int r);
+
+  void process_copyup();
+  void send_write_object();
+  void handle_write_object(int r);
 
   Context *start_lock_op(ceph::shared_mutex &owner_lock, int* r);
 

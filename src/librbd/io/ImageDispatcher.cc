@@ -6,14 +6,13 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/Utils.h"
-#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatch.h"
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/QueueImageDispatch.h"
 #include "librbd/io/QosImageDispatch.h"
 #include "librbd/io/RefreshImageDispatch.h"
+#include "librbd/io/Utils.h"
 #include "librbd/io/WriteBlockImageDispatch.h"
 #include <boost/variant.hpp>
 
@@ -123,6 +122,59 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
 };
 
 template <typename I>
+struct ImageDispatcher<I>::PreprocessVisitor
+  : public boost::static_visitor<bool> {
+  ImageDispatcher<I>* image_dispatcher;
+  ImageDispatchSpec* image_dispatch_spec;
+
+  PreprocessVisitor(ImageDispatcher<I>* image_dispatcher,
+                    ImageDispatchSpec* image_dispatch_spec)
+    : image_dispatcher(image_dispatcher),
+      image_dispatch_spec(image_dispatch_spec) {
+  }
+
+  bool clip_request() const {
+    int r = util::clip_request(image_dispatcher->m_image_ctx,
+                               &image_dispatch_spec->image_extents);
+    if (r < 0) {
+      image_dispatch_spec->fail(r);
+      return true;
+    }
+    return false;
+  }
+
+  bool operator()(ImageDispatchSpec::Read& read) const {
+    if ((read.read_flags & READ_FLAG_DISABLE_CLIPPING) != 0) {
+      return false;
+    }
+    return clip_request();
+  }
+
+  bool operator()(ImageDispatchSpec::Flush&) const {
+    return clip_request();
+  }
+
+  bool operator()(ImageDispatchSpec::ListSnaps&) const {
+    return false;
+  }
+
+  template <typename T>
+  bool operator()(T&) const {
+    if (clip_request()) {
+      return true;
+    }
+
+    std::shared_lock image_locker{image_dispatcher->m_image_ctx->image_lock};
+    if (image_dispatcher->m_image_ctx->snap_id != CEPH_NOSNAP ||
+        image_dispatcher->m_image_ctx->read_only) {
+      image_dispatch_spec->fail(-EROFS);
+      return true;
+    }
+    return false;
+  }
+};
+
+template <typename I>
 ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
   : Dispatcher<I, ImageDispatcherInterface>(image_ctx) {
   // configure the core image dispatch handler on startup
@@ -143,6 +195,17 @@ ImageDispatcher<I>::ImageDispatcher(I* image_ctx)
 }
 
 template <typename I>
+void ImageDispatcher<I>::invalidate_cache(Context* on_finish) {
+  auto image_ctx = this->m_image_ctx;
+  auto cct = image_ctx->cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = new C_InvalidateCache(
+      this, IMAGE_DISPATCH_LAYER_NONE, on_finish);
+  ctx->complete(0);
+}
+
+template <typename I>
 void ImageDispatcher<I>::shut_down(Context* on_finish) {
   // TODO ensure all IOs are executed via a dispatcher
   // ensure read-ahead / copy-on-read ops are finished since they are
@@ -154,11 +217,11 @@ void ImageDispatcher<I>::shut_down(Context* on_finish) {
       delete async_op;
       on_finish->complete(0);
     });
-  on_finish = new LambdaContext([this, async_op, on_finish](int r) {
-      async_op->start_op(*this->m_image_ctx);
-      async_op->flush(on_finish);
+  on_finish = new LambdaContext([this, on_finish](int r) {
+      Dispatcher<I, ImageDispatcherInterface>::shut_down(on_finish);
     });
-  Dispatcher<I, ImageDispatcherInterface>::shut_down(on_finish);
+  async_op->start_op(*this->m_image_ctx);
+  async_op->flush(on_finish);
 }
 
 template <typename I>
@@ -198,15 +261,47 @@ void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
 }
 
 template <typename I>
+void ImageDispatcher<I>::remap_extents(Extents&& image_extents,
+                                       ImageExtentsMapType type) {
+  auto loop = [&image_extents, type](auto begin, auto end) {
+      for (auto it = begin; it != end; ++it) {
+        auto& image_dispatch_meta = it->second;
+        auto image_dispatch = image_dispatch_meta.dispatch;
+        image_dispatch->remap_extents(std::move(image_extents), type);
+      }
+  };
+
+  std::shared_lock locker{this->m_lock};
+  if (type == IMAGE_EXTENTS_MAP_TYPE_LOGICAL_TO_PHYSICAL) {
+    loop(this->m_dispatches.cbegin(), this->m_dispatches.cend());
+  } else if (type == IMAGE_EXTENTS_MAP_TYPE_PHYSICAL_TO_LOGICAL) {
+    loop(this->m_dispatches.crbegin(), this->m_dispatches.crend());
+  }
+}
+
+template <typename I>
 bool ImageDispatcher<I>::send_dispatch(
     ImageDispatchInterface* image_dispatch,
     ImageDispatchSpec* image_dispatch_spec) {
   if (image_dispatch_spec->tid == 0) {
     image_dispatch_spec->tid = ++m_next_tid;
+
+    bool finished = preprocess(image_dispatch_spec);
+    if (finished) {
+      return true;
+    }
   }
 
   return boost::apply_visitor(
     SendVisitor{image_dispatch, image_dispatch_spec},
+    image_dispatch_spec->request);
+}
+
+template <typename I>
+bool ImageDispatcher<I>::preprocess(
+    ImageDispatchSpec* image_dispatch_spec) {
+  return boost::apply_visitor(
+    PreprocessVisitor{this, image_dispatch_spec},
     image_dispatch_spec->request);
 }
 

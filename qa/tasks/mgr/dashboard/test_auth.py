@@ -5,8 +5,10 @@ from __future__ import absolute_import
 import time
 
 import jwt
+from teuthology.orchestra.run import \
+    CommandFailedError  # pylint: disable=import-error
 
-from .helper import DashboardTestCase, JObj, JLeaf
+from .helper import DashboardTestCase, JLeaf, JObj
 
 
 class AuthTest(DashboardTestCase):
@@ -28,6 +30,10 @@ class AuthTest(DashboardTestCase):
             self.assertIn('update', perms)
             self.assertIn('create', perms)
             self.assertIn('delete', perms)
+
+    def test_login_without_password(self):
+        with self.assertRaises(CommandFailedError):
+            self.create_user('admin2', '', ['administrator'], force_password=True)
 
     def test_a_set_login_credentials(self):
         self.create_user('admin2', 'admin2', ['administrator'])
@@ -60,16 +66,30 @@ class AuthTest(DashboardTestCase):
             "detail": "Invalid credentials"
         })
 
-    def test_login_without_password(self):
-        self.create_user('admin2', '', ['administrator'])
-        self._post("/api/auth", {'username': 'admin2', 'password': ''})
+    def test_lockout_user(self):
+        self._ceph_cmd(['dashboard', 'set-account-lockout-attempts', '3'])
+        for _ in range(3):
+            self._post("/api/auth", {'username': 'admin', 'password': 'inval'})
+        self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
         self.assertStatus(400)
         self.assertJsonBody({
             "component": "auth",
             "code": "invalid_credentials",
             "detail": "Invalid credentials"
         })
-        self.delete_user('admin2')
+        self._ceph_cmd(['dashboard', 'ac-user-enable', 'admin'])
+        self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
+        self.assertStatus(201)
+        data = self.jsonBody()
+        self.assertSchema(data, JObj(sub_elems={
+            'token': JLeaf(str),
+            'username': JLeaf(str),
+            'permissions': JObj(sub_elems={}, allow_unknown=True),
+            'sso': JLeaf(bool),
+            'pwdExpirationDate': JLeaf(int, none=True),
+            'pwdUpdateRequired': JLeaf(bool)
+        }, allow_unknown=False))
+        self._validate_jwt_token(data['token'], "admin", data['permissions'])
 
     def test_logout(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
@@ -134,8 +154,9 @@ class AuthTest(DashboardTestCase):
         self._get("/api/host")
         self.assertStatus(200)
         time.sleep(1)
-        self._ceph_cmd(['dashboard', 'ac-user-set-password', '--force-password',
-                        'user', 'user2'])
+        self._ceph_cmd_with_secret(['dashboard', 'ac-user-set-password', '--force-password',
+                                    'user'],
+                                   'user2')
         time.sleep(1)
         self._get("/api/host")
         self.assertStatus(401)

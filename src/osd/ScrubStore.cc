@@ -158,34 +158,31 @@ void Store::cleanup(ObjectStore::Transaction* t)
 }
 
 std::vector<bufferlist>
-Store::get_snap_errors(ObjectStore* store,
-		       int64_t pool,
+Store::get_snap_errors(int64_t pool,
 		       const librados::object_id_t& start,
-		       uint64_t max_return)
+		       uint64_t max_return) const
 {
   const string begin = (start.name.empty() ?
 			first_snap_key(pool) : to_snap_key(pool, start));
   const string end = last_snap_key(pool);
-  return get_errors(store, begin, end, max_return);     
+  return get_errors(begin, end, max_return);
 }
 
 std::vector<bufferlist>
-Store::get_object_errors(ObjectStore* store,
-			 int64_t pool,
+Store::get_object_errors(int64_t pool,
 			 const librados::object_id_t& start,
-			 uint64_t max_return)
+			 uint64_t max_return) const
 {
   const string begin = (start.name.empty() ?
 			first_object_key(pool) : to_object_key(pool, start));
   const string end = last_object_key(pool);
-  return get_errors(store, begin, end, max_return);
+  return get_errors(begin, end, max_return);
 }
 
 std::vector<bufferlist>
-Store::get_errors(ObjectStore* store,
-		  const string& begin,
+Store::get_errors(const string& begin,
 		  const string& end,
-		  uint64_t max_return)
+		  uint64_t max_return) const
 {
   vector<bufferlist> errors;
   auto next = std::make_pair(begin, bufferlist{});

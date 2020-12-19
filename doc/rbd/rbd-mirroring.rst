@@ -13,14 +13,14 @@ capability is available in two modes:
   actual image. The remote cluster will read from this associated journal and
   replay the updates to its local copy of the image. Since each write to the
   RBD image will result in two writes to the Ceph cluster, expect write
-  latencies to nearly double when using the RBD journaling image feature.
+  latencies to nearly double while using the RBD journaling image feature.
 
 * **Snapshot-based**: This mode uses periodically scheduled or manually
   created RBD image mirror-snapshots to replicate crash-consistent RBD images
   between clusters. The remote cluster will determine any data or metadata
   updates between two mirror-snapshots and copy the deltas to its local copy of
-  the image. With the help of the RBD fast-diff image feature, updated data
-  blocks can be quickly computed without the need to scan the full RBD image.
+  the image. With the help of the RBD ``fast-diff`` image feature, updated data
+  blocks can be quickly determined without the need to scan the full RBD image.
   Since this mode is not as fine-grained as journaling, the complete delta 
   between two snapshots will need to be synced prior to use during a failover
   scenario. Any partially applied set of deltas will be rolled back at moment
@@ -30,10 +30,10 @@ capability is available in two modes:
    snapshot-based mirroring requires the Ceph Octopus release or later.
 
 Mirroring is configured on a per-pool basis within peer clusters and can be
-configured on a specific subset of images within the pool or configured to
-automatically mirror all images within a pool when using journal-based
-mirroring only. Mirroring is configured using the ``rbd`` command. The
-``rbd-mirror`` daemon is responsible for pulling image updates from the remote,
+configured on a specific subset of images within the pool.  You can also mirror
+all images within a given pool when using journal-based
+mirroring. Mirroring is configured using the ``rbd`` command. The
+``rbd-mirror`` daemon is responsible for pulling image updates from the remote
 peer cluster and applying them to the image within the local cluster.
 
 Depending on the desired needs for replication, RBD mirroring can be configured
@@ -57,30 +57,35 @@ Pool Configuration
 
 The following procedures demonstrate how to perform the basic administrative
 tasks to configure mirroring using the ``rbd`` command. Mirroring is
-configured on a per-pool basis within the Ceph clusters.
+configured on a per-pool basis.
 
-The pool configuration steps should be performed on both peer clusters. These
-procedures assume two clusters, named "site-a" and "site-b", are accessible from
-a single host for clarity.
+These pool configuration steps should be performed on both peer clusters. These
+procedures assume that both clusters, named "site-a" and "site-b", are accessible
+from a single host for clarity.
 
 See the `rbd`_ manpage for additional details of how to connect to different
 Ceph clusters.
 
 .. note:: The cluster name in the following examples corresponds to a Ceph
    configuration file of the same name (e.g. /etc/ceph/site-b.conf).  See the
-   `ceph-conf`_ documentation for how to configure multiple clusters.
+   `ceph-conf`_ documentation for how to configure multiple clusters.  Note
+   that ``rbd-mirror`` does **not** require the source and destination clusters
+   to have unique internal names; both can and should call themselves ``ceph``.
+   The config `files` that ``rbd-mirror`` needs for local and remote clusters
+   can be named arbitrarily, and containerizing the daemon is one strategy
+   for maintaining them outside of ``/etc/ceph`` to avoid confusion.
 
 Enable Mirroring
 ----------------
 
-To enable mirroring on a pool with ``rbd``, specify the ``mirror pool enable``
-command, the pool name, and the mirroring mode::
+To enable mirroring on a pool with ``rbd``, issue the ``mirror pool enable``
+subcommand with the pool name, and the mirroring mode::
 
         rbd mirror pool enable {pool-name} {mode}
 
 The mirroring mode can either be ``image`` or ``pool``:
 
-* **image**: When configured in ``image`` mode, mirroring needs to be
+* **image**: When configured in ``image`` mode, mirroring must
   `explicitly enabled`_ on each image.
 * **pool** (default):  When configured in ``pool`` mode, all images in the pool
   with the journaling feature enabled are mirrored.
@@ -111,13 +116,13 @@ Bootstrap Peers
 ---------------
 
 In order for the ``rbd-mirror`` daemon to discover its peer cluster, the peer
-needs to be registered to the pool and a user account needs to be created.
+must be registered and a user account must be created.
 This process can be automated with ``rbd`` and the
 ``mirror pool peer bootstrap create`` and ``mirror pool peer bootstrap import``
 commands.
 
-To manually create a new bootstrap token with ``rbd``, specify the
-``mirror pool peer bootstrap create`` command, a pool name, along with an
+To manually create a new bootstrap token with ``rbd``, issue the
+``mirror pool peer bootstrap create`` subcommand, a pool name, and an
 optional friendly site name to describe the local cluster::
 
         rbd mirror pool peer bootstrap create [--site-name {local-site-name}] {pool-name}
@@ -288,6 +293,16 @@ For example::
 
 .. tip:: You can enable journaling on all new images by default by adding
    ``rbd default features = 125`` to your Ceph configuration file.
+
+.. tip:: ``rbd-mirror`` tunables are set by default to values suitable for
+   mirroring an entire pool.  When using ``rbd-mirror`` to migrate single
+   volumes been clusters you may achieve substantial performance gains
+   by setting ``rbd_mirror_journal_max_fetch_bytes=33554432`` and
+   ``rbd_journal_max_payload_bytes=8388608`` within the ``[client]`` config
+   section of the local or centralized configuration.  Note that these
+   settings may allow ``rbd-mirror`` to present a substantial write workload
+   to the destination cluster:  monitor cluster performance closely during
+   migrations and test carefuly before running multiple migrations in parallel.
 
 Create Image Mirror-Snapshots
 -----------------------------

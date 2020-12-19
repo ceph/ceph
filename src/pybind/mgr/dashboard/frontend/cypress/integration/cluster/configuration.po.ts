@@ -20,7 +20,7 @@ export class ConfigurationPageHelper extends PageHelper {
       cy.get(`#${i}`).clear();
     }
     // Clicks save button and checks that values are not present for the selected config
-    cy.contains('button', 'Save').click();
+    cy.get('[data-cy=submitBtn]').click();
 
     // Enter config setting name into filter box
     this.seachTable(name);
@@ -57,7 +57,7 @@ export class ConfigurationPageHelper extends PageHelper {
 
     // Clicks save button then waits until the desired config is visible, clicks it,
     // then checks that each desired value appears with the desired number
-    cy.contains('button', 'Save').click();
+    cy.get('[data-cy=submitBtn]').click();
 
     // Enter config setting name into filter box
     this.seachTable(name);

@@ -1,10 +1,15 @@
 import ceph_module  # noqa
 
-try:
-    from typing import Set, Tuple, Iterator, Any, Dict, Optional, Callable, List
-except ImportError:
-    # just for type checking
-    pass
+from typing import Set, Tuple, Iterator, Any, Dict, Optional, Callable, List, \
+    Union, TYPE_CHECKING, NamedTuple
+if TYPE_CHECKING:
+    import sys
+    if sys.version_info >= (3, 8):
+        from typing import Literal
+    else:
+        from typing_extensions import Literal
+
+
 import logging
 import errno
 import json
@@ -15,6 +20,8 @@ import re
 import time
 from mgr_util import profile_method
 
+ERROR_MSG_EMPTY_INPUT_FILE = 'Empty content: please add a password/secret to the file.'
+ERROR_MSG_NO_INPUT_FILE = 'Please specify the file containing the password/secret with "-i" option.'
 # Full list of strings in "osd_types.cc:pg_state_string()"
 PG_STATES = [
     "active",
@@ -351,34 +358,56 @@ def CLIWriteCommand(prefix, args="", desc=""):
     return CLICommand(prefix, args, desc, "w")
 
 
+def CLICheckNonemptyFileInput(func):
+    def check(*args, **kwargs):
+        if not 'inbuf' in kwargs:
+            return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
+        if not kwargs['inbuf'] or (isinstance(kwargs['inbuf'], str)
+                                   and not kwargs['inbuf'].strip('\n')):
+            return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
+        return func(*args, **kwargs)
+    return check
+
+
 def _get_localized_key(prefix, key):
     return '{}/{}'.format(prefix, key)
 
+"""
+MODULE_OPTIONS types and Option Class
+"""
+if TYPE_CHECKING:
+    OptionTypeLabel = Literal[
+        'uint', 'int', 'str', 'float', 'bool', 'addr', 'addrvec', 'uuid', 'size', 'secs']
 
-class Option(dict):
+
+# common/options.h: value_t
+OptionValue = Optional[Union[bool, int, float, str]]
+
+
+class Option(Dict):
     """
     Helper class to declare options for MODULE_OPTIONS list.
-
-    Caveat: it uses argument names matching Python keywords (type, min, max),
-    so any further processing should happen in a separate method.
-
-    TODO: type validation.
+    TODO: Replace with typing.TypedDict when in python_version >= 3.8
     """
 
     def __init__(
-            self, name,
-            default=None,
-            type='str',
-            desc=None, longdesc=None,
-            min=None, max=None,
-            enum_allowed=None,
-            see_also=None,
-            tags=None,
-            runtime=False,
+            self,
+            name: str,
+            default: OptionValue=None,
+            type: 'OptionTypeLabel'='str',
+            desc: Optional[str]=None,
+            long_desc: Optional[str]=None,
+            min: OptionValue=None,
+            max: OptionValue=None,
+            enum_allowed: Optional[List[str]]=None,
+            tags: Optional[List[str]]=None,
+            see_also: Optional[List[str]]=None,
+            runtime: bool=False,
     ):
         super(Option, self).__init__(
             (k, v) for k, v in vars().items()
             if k != 'self' and v is not None)
+
 
 class Command(dict):
     """
@@ -443,6 +472,7 @@ class CPlusPlusHandler(logging.Handler):
         if record.levelno >= self.level:
             self._module._ceph_log(self.format(record))
 
+
 class ClusterLogHandler(logging.Handler):
     def __init__(self, module_inst):
         super().__init__()
@@ -462,6 +492,7 @@ class ClusterLogHandler(logging.Handler):
             self._module.cluster_log(self._module.module_name,
                                      level,
                                      self.format(record))
+
 
 class FileHandler(logging.FileHandler):
     def __init__(self, module_inst):
@@ -500,7 +531,6 @@ class MgrModuleLoggingMixin(object):
 
         self._root_logger.setLevel(logging.NOTSET)
         self._set_log_level(mgr_level, module_level, cluster_level)
-
 
     def _unconfigure_logging(self):
         # remove existing handlers:
@@ -598,7 +628,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     from their active peer), and to configuration settings (read only).
     """
 
-    MODULE_OPTIONS = []  # type: List[Dict[str, Any]]
+    MODULE_OPTIONS: List[Option] = []
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     def __init__(self, module_name, capsule):
@@ -661,13 +691,11 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_mgr_id(self):
         return self._ceph_get_mgr_id()
 
-    def get_module_option(self, key, default=None):
+    def get_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
 
-        :param str key:
         :param default: the default value of the config if it is not found
-        :return: str
         """
         r = self._ceph_get_module_option(key)
         if r is None:
@@ -690,7 +718,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_active_uri(self):
         return self._ceph_get_active_uri()
 
-    def get_localized_module_option(self, key, default=None):
+    def get_localized_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
             return self.MODULE_OPTION_DEFAULTS.get(key, default)
@@ -700,7 +728,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
 
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     COMMANDS = []  # type: List[Any]
-    MODULE_OPTIONS = []  # type: List[dict]
+    MODULE_OPTIONS: List[Option] = []
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     # Priority definitions for perf counters
@@ -764,7 +792,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         # Keep a librados instance for those that need it.
         self._rados = None
-
 
     def __del__(self):
         self._unconfigure_logging()
@@ -1109,18 +1136,18 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
 
-    def check_mon_command(self, cmd_dict: dict) -> HandleCommandResult:
+    def check_mon_command(self, cmd_dict: dict, inbuf: Optional[str]=None) -> HandleCommandResult:
         """
         Wrapper around :func:`~mgr_module.MgrModule.mon_command`, but raises,
         if ``retval != 0``.
         """
 
-        r = HandleCommandResult(*self.mon_command(cmd_dict))
+        r = HandleCommandResult(*self.mon_command(cmd_dict, inbuf))
         if r.retval:
             raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr} retval: {r.retval}')
         return r
 
-    def mon_command(self, cmd_dict):
+    def mon_command(self, cmd_dict: dict, inbuf: Optional[str]=None):
         """
         Helper for modules that do simple, synchronous mon command
         execution.
@@ -1132,7 +1159,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         t1 = time.time()
         result = CommandResult()
-        self.send_command(result, "mon", "", json.dumps(cmd_dict), "")
+        self.send_command(result, "mon", "", json.dumps(cmd_dict), "", inbuf)
         r = result.wait()
         t2 = time.time()
 
@@ -1142,7 +1169,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return r
 
-    def send_command(self, *args, **kwargs):
+    def send_command(
+            self,
+            result: CommandResult,
+            svc_type: str,
+            svc_id: str,
+            command: str,
+            tag: str,
+            inbuf: Optional[str]=None):
         """
         Called by the plugin to send a command to the mon
         cluster.
@@ -1162,8 +1196,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             completes, the ``notify()`` callback on the MgrModule instance is
             triggered, with notify_type set to "command", and notify_id set to
             the tag of the command.
+        :param str inbuf: input buffer for sending additional data.
         """
-        self._ceph_send_command(*args, **kwargs)
+        self._ceph_send_command(result, svc_type, svc_id, command, tag, inbuf)
 
     def set_health_checks(self, checks):
         """
@@ -1247,28 +1282,23 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
-    def get_module_option(self, key, default=None):
+    def get_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
-
-        :param str key:
-        :param str default:
-        :return: str
         """
         self._validate_module_option(key)
         return self._get_module_option(key, default)
 
-    def get_module_option_ex(self, module, key, default=None):
+    def get_module_option_ex(self, module: str, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
         for the specified module.
 
-        :param str module: The name of the module, e.g. 'dashboard'
+        :param module: The name of the module, e.g. 'dashboard'
             or 'telemetry'.
-        :param str key: The configuration key, e.g. 'server_addr'.
-        :param str,None default: The default value to use when the
+        :param key: The configuration key, e.g. 'server_addr'.
+        :param default: The default value to use when the
             returned value is ``None``. Defaults to ``None``.
-        :return: str,int,bool,float,None
         """
         if module == self.module_name:
             self._validate_module_option(key)
@@ -1288,12 +1318,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def _set_localized(self, key, val, setter):
         return setter(_get_localized_key(self.get_mgr_id(), key), val)
 
-    def get_localized_module_option(self, key, default=None):
+    def get_localized_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
         """
         Retrieve localized configuration for this ceph-mgr instance
-        :param str key:
-        :param str default:
-        :return: str
         """
         self._validate_module_option(key)
         return self._get_module_option(key, default, self.get_mgr_id())
@@ -1491,10 +1518,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
-    def update_progress_event(self, evid, desc, progress):
+    def update_progress_event(self, evid, desc, progress, add_to_ceph_s):
         return self._ceph_update_progress_event(str(evid),
                                                 str(desc),
-                                                float(progress))
+                                                float(progress),
+                                                bool(add_to_ceph_s))
 
     def complete_progress_event(self, evid):
         return self._ceph_complete_progress_event(str(evid))
@@ -1602,6 +1630,51 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param int query_id: query ID
         """
         return self._ceph_get_osd_perf_counters(query_id)
+
+    def add_mds_perf_query(self, query):
+        """
+        Register an MDS perf query.  Argument is a
+        dict of the query parameters, in this form:
+
+        ::
+
+           {
+             'key_descriptor': [
+               {'type': subkey_type, 'regex': regex_pattern},
+               ...
+             ],
+             'performance_counter_descriptors': [
+               list, of, descriptor, types
+             ],
+           }
+
+        NOTE: 'limit' and 'order_by' are not supported (yet).
+
+        Valid subkey types:
+           'mds_rank', 'client_id'
+        Valid performance counter types:
+           'cap_hit_metric'
+
+        :param object query: query
+        :rtype: int (query id)
+        """
+        return self._ceph_add_mds_perf_query(query)
+
+    def remove_mds_perf_query(self, query_id):
+        """
+        Unregister an MDS perf query.
+
+        :param int query_id: query ID
+        """
+        return self._ceph_remove_mds_perf_query(query_id)
+
+    def get_mds_perf_counters(self, query_id):
+        """
+        Get stats collected for an MDS perf query.
+
+        :param int query_id: query ID
+        """
+        return self._ceph_get_mds_perf_counters(query_id)
 
     def is_authorized(self, arguments):
         """

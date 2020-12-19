@@ -27,6 +27,8 @@ for i in $(seq 3); do
     $SUDO truncate --size ${DISK_FILE_SIZE} ${DISK_FILE}
 
     $SUDO targetcli /backstores/fileio create "lun${i}" ${DISK_FILE}
+    # Workaround for https://tracker.ceph.com/issues/47758
+    $SUDO targetcli "/backstores/fileio/lun${i}" set attribute optimal_sectors=0
     $SUDO targetcli /iscsi/${TARGET_NAME}/tpg1/luns create "/backstores/fileio/lun${i}"
 done
 

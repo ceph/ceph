@@ -68,9 +68,10 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const rgw_user& user_id,
                             const std::string& token_policy,
                             const std::string& role_session_name,
-                            const std::vector<string>& token_claims) const override {
+                            const std::vector<string>& token_claims,
+                            const std::string& token_issued_at) const override {
     auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::RoleApplier(cct, role, user_id, token_policy, role_session_name, token_claims));
+      rgw::auth::RoleApplier(cct, role, user_id, token_policy, role_session_name, token_claims, token_issued_at));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 

@@ -2,7 +2,7 @@ import json
 from io import StringIO
 from os.path import join as os_path_join
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.orchestra.run import CommandFailedError, Raw
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.filesystem import FileLayout
@@ -121,6 +121,7 @@ class TestAdminCommands(CephFSTestCase):
         That a new file system warns/fails with an EC default data pool.
         """
 
+        self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec"
         self._setup_ec_pools(n)
@@ -139,6 +140,7 @@ class TestAdminCommands(CephFSTestCase):
         That a new file system succeeds with an EC default data pool with --force.
         """
 
+        self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
         self._setup_ec_pools(n)
@@ -149,6 +151,7 @@ class TestAdminCommands(CephFSTestCase):
         That a new file system fails with an EC default data pool without overwrite.
         """
 
+        self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_no_overwrite"
         self._setup_ec_pools(n, overwrites=False)
@@ -176,6 +179,7 @@ class TestAdminCommands(CephFSTestCase):
         """
         That the application metadata set on the pools of a newly created filesystem are as expected.
         """
+        self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         fs_name = "test_fs_new_pool_application"
         keys = ['metadata', 'data']
@@ -433,6 +437,25 @@ class TestSubCmdFsAuthorize(CapsHelper):
         self.run_mon_cap_tests(moncap, keyring)
         self.run_mds_cap_tests(filepaths, filedata, mounts, perm)
 
+    def test_single_path_rootsquash(self):
+        filedata, filename = 'some data on fs 1', 'file_on_fs1'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+
+        keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
+        keyring_path = self.create_keyring_file(self.mount_a.client_remote,
+                                                keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+
+        if filepath.find(self.mount_a.hostfs_mntpt) != -1:
+            # can read, but not write as root
+            contents = self.mount_a.read_file(filepath)
+            self.assertEqual(filedata, contents)
+            cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
+            self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
+
     def test_multiple_path_r(self):
         perm, paths = 'r', ('/dir1', '/dir2/dir22')
         filepaths, filedata, mounts, keyring = self.setup_test_env(perm, paths)
@@ -501,7 +524,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
             filepaths.append(filepath.replace(path, ''))
         filepaths = tuple(filepaths)
 
-        keyring = self.fs.authorize(self.client_id, (path[0], perm, path[1],
+        keyring = self.fs.authorize(self.client_id, (paths[0], perm, paths[1],
                                                      perm))
 
         return filepaths, filedata, keyring

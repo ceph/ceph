@@ -872,7 +872,7 @@ void sparse_copyup(O* op, const E& extent_map, ceph::buffer::list data) {
 }
 
 void sparse_copyup(neorados::WriteOp* op,
-                   const std::map<uint64_t, uint64_t> &extent_map,
+                   const std::vector<std::pair<uint64_t, uint64_t>>& extent_map,
                    ceph::buffer::list data) {
   sparse_copyup<neorados::WriteOp>(op, extent_map, data);
 }

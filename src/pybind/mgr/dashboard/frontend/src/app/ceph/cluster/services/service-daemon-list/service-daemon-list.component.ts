@@ -14,14 +14,15 @@ import {
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
 
-import { CephServiceService } from '../../../../shared/api/ceph-service.service';
-import { HostService } from '../../../../shared/api/host.service';
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { TableComponent } from '../../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
-import { Daemon } from '../../../../shared/models/daemon.interface';
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { Daemon } from '~/app/shared/models/daemon.interface';
+import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 
 @Component({
   selector: 'cd-service-daemon-list',
@@ -45,6 +46,7 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   columns: CdTableColumn[] = [];
 
   hasOrchestrator = false;
+  showDocPanel = false;
 
   private daemonsTable: TableComponent;
   private daemonsTableTplsSub: Subscription;
@@ -52,7 +54,8 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
   constructor(
     private hostService: HostService,
     private cephServiceService: CephServiceService,
-    private orchService: OrchestratorService
+    private orchService: OrchestratorService,
+    private relativeDatePipe: RelativeDatePipe
   ) {}
 
   ngOnInit() {
@@ -117,12 +120,14 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
       {
         name: $localize`Last Refreshed`,
         prop: 'last_refresh',
+        pipe: this.relativeDatePipe,
         flexGrow: 2
       }
     ];
 
     this.orchService.status().subscribe((data: { available: boolean }) => {
       this.hasOrchestrator = data.available;
+      this.showDocPanel = !data.available;
     });
   }
 
@@ -146,14 +151,14 @@ export class ServiceDaemonListComponent implements OnInit, OnChanges, AfterViewI
     }
   }
 
-  getStatusClass(status: number) {
+  getStatusClass(row: Daemon): string {
     return _.get(
       {
         '-1': 'badge-danger',
         '0': 'badge-warning',
         '1': 'badge-success'
       },
-      status,
+      row.status,
       'badge-dark'
     );
   }

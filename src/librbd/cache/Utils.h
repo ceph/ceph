@@ -6,7 +6,11 @@
 
 #include "acconfig.h"
 
+class Context;
+
 namespace librbd {
+
+struct ImageCtx;
 
 namespace cache {
 namespace util {

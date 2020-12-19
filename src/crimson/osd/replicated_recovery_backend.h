@@ -44,34 +44,30 @@ protected:
     Ref<MOSDPGRecoveryDelete> m);
   seastar::future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<> prep_push(
+  seastar::future<std::map<pg_shard_t, PushOp>> prep_push(
     const hobject_t& soid,
     eversion_t need,
-    std::map<pg_shard_t, PushOp>* pops,
-    const std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator>& shards);
+    const std::vector<pg_shard_t>& shards);
   void prepare_pull(
     PullOp& po,
     PullInfo& pi,
     const hobject_t& soid,
     eversion_t need);
-  std::list<std::map<pg_shard_t, pg_missing_t>::const_iterator> get_shards_to_push(
-    const hobject_t& soid);
-  seastar::future<ObjectRecoveryProgress> build_push_op(
+  std::vector<pg_shard_t> get_shards_to_push(
+    const hobject_t& soid) const;
+  seastar::future<PushOp> build_push_op(
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
-    object_stat_sum_t* stat,
-    PushOp* pop);
+    object_stat_sum_t* stat);
   seastar::future<bool> _handle_pull_response(
     pg_shard_t from,
     PushOp& pop,
     PullOp* response,
     ceph::os::Transaction* t);
-  void trim_pushed_data(
+  std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
     const interval_set<uint64_t> &copy_subset,
     const interval_set<uint64_t> &intervals_received,
-    ceph::bufferlist data_received,
-    interval_set<uint64_t> *intervals_usable,
-    bufferlist *data_usable);
+    ceph::bufferlist data_received);
   seastar::future<> submit_push_data(
     const ObjectRecoveryInfo &recovery_info,
     bool first,
@@ -92,10 +88,9 @@ protected:
     const PushOp &pop,
     PushReplyOp *response,
     ceph::os::Transaction *t);
-  seastar::future<bool> _handle_push_reply(
+  seastar::future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
-    const PushReplyOp &op,
-    PushOp *reply);
+    const PushReplyOp &op);
   seastar::future<> on_local_recover_persist(
     const hobject_t& soid,
     const ObjectRecoveryInfo& _recovery_info,
@@ -110,16 +105,18 @@ protected:
   }
 private:
   /// pull missing object from peer
-  ///
-  /// @return true if the object is pulled, false otherwise
-  seastar::future<bool> maybe_pull_missing_obj(
+  seastar::future<> maybe_pull_missing_obj(
     const hobject_t& soid,
     eversion_t need);
 
   /// load object context for recovery if it is not ready yet
-  seastar::future<> load_obc_for_recovery(
+  using load_obc_ertr = crimson::errorator<
+    crimson::ct_error::object_corrupted>;
+
+  seastar::future<> maybe_push_shards(
     const hobject_t& soid,
-    bool pulled);
+    eversion_t need,
+    std::vector<pg_shard_t>& shards);
 
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
@@ -132,6 +129,12 @@ private:
     const hobject_t& oid,
     const interval_set<uint64_t>& copy_subset,
     uint64_t offset,
+    uint64_t max_len,
+    PushOp* push_op);
+  seastar::future<> read_omap_for_push_op(
+    const hobject_t& oid,
+    const ObjectRecoveryProgress& progress,
+    ObjectRecoveryProgress& new_progress,
     uint64_t max_len,
     PushOp* push_op);
 };

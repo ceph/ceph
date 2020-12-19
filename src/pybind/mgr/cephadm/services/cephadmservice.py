@@ -1,7 +1,9 @@
 import json
 import re
 import logging
+import secrets
 import subprocess
+import collections
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic, \
     Optional, Dict, Any, Tuple, NewType
@@ -12,6 +14,7 @@ from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm import utils
+from mgr_util import create_self_signed_cert, ServerConfigException, verify_tls
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -24,7 +27,7 @@ AuthEntity = NewType('AuthEntity', str)
 
 class CephadmDaemonSpec(Generic[ServiceSpecs]):
     # typing.NamedTuple + Generic is broken in py36
-    def __init__(self, host: str, daemon_id,
+    def __init__(self, host: str, daemon_id: str,
                  spec: Optional[ServiceSpecs] = None,
                  network: Optional[str] = None,
                  keyring: Optional[str] = None,
@@ -67,7 +70,7 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
-    def config_get_files(self):
+    def config_get_files(self) -> Dict[str, Any]:
         files = self.extra_files
         if self.ceph_conf:
             files['config'] = self.ceph_conf
@@ -82,13 +85,16 @@ class CephadmService(metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def TYPE(self):
+    def TYPE(self) -> str:
         pass
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
-    def make_daemon_spec(self, host, daemon_id, netowrk, spec: ServiceSpecs) -> CephadmDaemonSpec:
+    def make_daemon_spec(self, host: str,
+                         daemon_id: str,
+                         netowrk: str,
+                         spec: ServiceSpecs) -> CephadmDaemonSpec:
         return CephadmDaemonSpec(
             host=host,
             daemon_id=daemon_id,
@@ -102,7 +108,7 @@ class CephadmService(metaclass=ABCMeta):
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
 
-    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]):
+    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """The post actions needed to be done after daemons are checked"""
         if self.mgr.config_dashboard:
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
@@ -110,7 +116,7 @@ class CephadmService(metaclass=ABCMeta):
             else:
                 logger.debug('Dashboard is not enabled. Skip configuration.')
 
-    def config_dashboard(self, daemon_descrs: List[DaemonDescription]):
+    def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         """Config dashboard settings."""
         raise NotImplementedError()
 
@@ -127,7 +133,7 @@ class CephadmService(metaclass=ABCMeta):
                                       service_name: str,
                                       get_mon_cmd: str,
                                       set_mon_cmd: str,
-                                      service_url: str):
+                                      service_url: str) -> None:
         """A helper to get and set service_url via Dashboard's MON command.
 
            If result of get_mon_cmd differs from service_url, set_mon_cmd will
@@ -149,7 +155,7 @@ class CephadmService(metaclass=ABCMeta):
     def _check_and_set_dashboard(self,
                                  service_name: str,
                                  get_cmd: str,
-                                 get_set_cmd_dicts: Callable[[str], List[dict]]):
+                                 get_set_cmd_dicts: Callable[[str], List[dict]]) -> None:
         """A helper to set configs in the Dashboard.
 
         The method is useful for the pattern:
@@ -194,8 +200,8 @@ class CephadmService(metaclass=ABCMeta):
         cmd_dicts = get_set_cmd_dicts(out.strip())
         for cmd_dict in list(cmd_dicts):
             try:
-                logger.info('Setting Dashboard config for %s: command: %s', service_name, cmd_dict)
-                _, out, _ = self.mgr.check_mon_command(cmd_dict)
+                inbuf = cmd_dict.pop('inbuf', None)
+                _, out, _ = self.mgr.check_mon_command(cmd_dict, inbuf)
             except MonCommandFailed as e:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 
@@ -235,6 +241,10 @@ class CephadmService(metaclass=ABCMeta):
         """
         assert self.TYPE == daemon.daemon_type
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
+
+    def purge(self) -> None:
+        """Called to carry out any purge tasks following service removal"""
+        logger.debug(f'Purge called for {self.TYPE} - no action taken')
 
 
 class CephService(CephadmService):
@@ -298,7 +308,7 @@ class CephService(CephadmService):
             'keyring': keyring,
         }
 
-    def remove_keyring(self, daemon: DaemonDescription):
+    def remove_keyring(self, daemon: DaemonDescription) -> None:
         daemon_id: str = daemon.daemon_id
         host: str = daemon.hostname
 
@@ -454,7 +464,7 @@ class MgrService(CephService):
         # if no active mgr found, return empty Daemon Desc
         return DaemonDescription()
 
-    def fail_over(self):
+    def fail_over(self) -> None:
         if not self.mgr_map_has_standby():
             raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
                 'daemon', 'mgr' + self.mgr.get_mgr_id()))
@@ -529,7 +539,7 @@ class MdsService(CephService):
 class RgwService(CephService):
     TYPE = 'rgw'
 
-    def config(self, spec: RGWSpec, rgw_id: str):
+    def config(self, spec: RGWSpec, rgw_id: str) -> None:
         assert self.TYPE == spec.service_type
 
         # create realm, zonegroup, and zone if needed
@@ -599,7 +609,7 @@ class RgwService(CephService):
 
         return daemon_spec
 
-    def get_keyring(self, rgw_id: str):
+    def get_keyring(self, rgw_id: str) -> str:
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': self.get_auth_entity(rgw_id),
@@ -609,9 +619,9 @@ class RgwService(CephService):
         })
         return keyring
 
-    def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str):
+    def create_realm_zonegroup_zone(self, spec: RGWSpec, rgw_id: str) -> None:
         if utils.get_cluster_health(self.mgr) != 'HEALTH_OK':
-            raise OrchestratorError('Health not ok, will try agin when health ok')
+            raise OrchestratorError('Health not ok, will try again when health ok')
 
         # get keyring needed to run rados commands and strip out just the keyring
         keyring = self.get_keyring(rgw_id).split('key = ', 1)[1].rstrip()
@@ -634,7 +644,7 @@ class RgwService(CephService):
             except Exception as e:
                 raise OrchestratorError('failed to parse realm info')
 
-        def create_realm():
+        def create_realm() -> None:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
                    '--user', 'rgw.%s' % rgw_id,
@@ -660,7 +670,7 @@ class RgwService(CephService):
             except Exception as e:
                 raise OrchestratorError('failed to parse zonegroup info')
 
-        def create_zonegroup():
+        def create_zonegroup() -> None:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
                    '--user', 'rgw.%s' % rgw_id,
@@ -670,7 +680,7 @@ class RgwService(CephService):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             self.mgr.log.info('created zonegroup: default')
 
-        def create_zonegroup_if_required():
+        def create_zonegroup_if_required() -> None:
             zonegroups = get_zonegroups()
             if 'default' not in zonegroups:
                 create_zonegroup()
@@ -691,7 +701,7 @@ class RgwService(CephService):
             except Exception as e:
                 raise OrchestratorError('failed to parse zone info')
 
-        def create_zone():
+        def create_zone() -> None:
             cmd = ['radosgw-admin',
                    '--key=%s' % keyring,
                    '--user', 'rgw.%s' % rgw_id,
@@ -762,3 +772,136 @@ class CrashService(CephService):
         daemon_spec.keyring = keyring
 
         return daemon_spec
+
+
+class CephadmExporterConfig:
+    required_keys = ['crt', 'key', 'token', 'port']
+    DEFAULT_PORT = '9443'
+
+    def __init__(self, mgr, crt="", key="", token="", port=""):
+        # type: (CephadmOrchestrator, str, str, str, str) -> None
+        self.mgr = mgr
+        self.crt = crt
+        self.key = key
+        self.token = token
+        self.port = port
+
+    @property
+    def ready(self) -> bool:
+        return all([self.crt, self.key, self.token, self.port])
+
+    def load_from_store(self) -> None:
+        cfg = self.mgr._get_exporter_config()
+
+        assert isinstance(cfg, dict)
+        self.crt = cfg.get('crt', "")
+        self.key = cfg.get('key', "")
+        self.token = cfg.get('token', "")
+        self.port = cfg.get('port', "")
+
+    def load_from_json(self, json_str: str) -> Tuple[int, str]:
+        try:
+            cfg = json.loads(json_str)
+        except ValueError:
+            return 1, "Invalid JSON provided - unable to load"
+
+        if not all([k in cfg for k in CephadmExporterConfig.required_keys]):
+            return 1, "JSON file must contain crt, key, token and port"
+
+        self.crt = cfg.get('crt')
+        self.key = cfg.get('key')
+        self.token = cfg.get('token')
+        self.port = cfg.get('port')
+
+        return 0, ""
+
+    def validate_config(self) -> Tuple[int, str]:
+        if not self.ready:
+            return 1, "Incomplete configuration. cephadm-exporter needs crt, key, token and port to be set"
+
+        for check in [self._validate_tls, self._validate_token, self._validate_port]:
+            rc, reason = check()
+            if rc:
+                return 1, reason
+
+        return 0, ""
+
+    def _validate_tls(self) -> Tuple[int, str]:
+
+        try:
+            verify_tls(self.crt, self.key)
+        except ServerConfigException as e:
+            return 1, str(e)
+
+        return 0, ""
+
+    def _validate_token(self) -> Tuple[int, str]:
+        if not isinstance(self.token, str):
+            return 1, "token must be a string"
+        if len(self.token) < 8:
+            return 1, "Token must be a string of at least 8 chars in length"
+
+        return 0, ""
+
+    def _validate_port(self) -> Tuple[int, str]:
+        try:
+            p = int(str(self.port))
+            if p <= 1024:
+                raise ValueError
+        except ValueError:
+            return 1, "Port must be a integer (>1024)"
+
+        return 0, ""
+
+
+class CephadmExporter(CephadmService):
+    TYPE = 'cephadm-exporter'
+
+    def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
+        assert self.TYPE == daemon_spec.daemon_type
+
+        cfg = CephadmExporterConfig(self.mgr)
+        cfg.load_from_store()
+
+        if cfg.ready:
+            rc, reason = cfg.validate_config()
+            if rc:
+                raise OrchestratorError(reason)
+        else:
+            logger.info(
+                "Incomplete/Missing configuration, applying defaults")
+            self.mgr._set_exporter_defaults()
+            cfg.load_from_store()
+
+        if not daemon_spec.ports:
+            daemon_spec.ports = [int(cfg.port)]
+
+        return daemon_spec
+
+    def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        assert daemon_spec.spec
+        deps: List[str] = []
+
+        cfg = CephadmExporterConfig(self.mgr)
+        cfg.load_from_store()
+
+        if cfg.ready:
+            rc, reason = cfg.validate_config()
+            if rc:
+                raise OrchestratorError(reason)
+        else:
+            logger.info("Using default configuration for cephadm-exporter")
+            self.mgr._set_exporter_defaults()
+            cfg.load_from_store()
+
+        config = {
+            "crt": cfg.crt,
+            "key": cfg.key,
+            "token": cfg.token
+        }
+        return config, deps
+
+    def purge(self) -> None:
+        logger.info("Purging cephadm-exporter settings from mon K/V store")
+        self.mgr._clear_exporter_config_settings()

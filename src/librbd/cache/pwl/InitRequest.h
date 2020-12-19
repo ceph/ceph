@@ -10,8 +10,18 @@ namespace librbd {
 
 class ImageCtx;
 
+namespace io { class ImageDispatchInterface; }
+
+namespace plugin { template <typename> struct Api; }
+
 namespace cache {
+
+class ImageWritebackInterface;
+
 namespace pwl {
+
+template<typename>
+class AbstractWriteLog;
 
 template<typename>
 class ImageCacheState;
@@ -19,7 +29,11 @@ class ImageCacheState;
 template <typename ImageCtxT = ImageCtx>
 class InitRequest {
 public:
-  static InitRequest* create(ImageCtxT &image_ctx, Context *on_finish);
+  static InitRequest* create(
+      ImageCtxT &image_ctx,
+      librbd::cache::ImageWritebackInterface& image_writeback,
+      plugin::Api<ImageCtxT>& plugin_api,
+      Context *on_finish);
 
   void send();
 
@@ -39,17 +53,23 @@ private:
    * INIT_IMAGE_CACHE
    *    |
    *    v
-   * SET_FEATURE_BIT
-   *    |
-   *    v
-   * <finish>
+   * SET_FEATURE_BIT * * * > CLOSE_IMAGE_CACHE
+   *    |                         |
+   *    v                         |
+   * <finish> <-------------------/
    *
    * @endverbatim
    */
 
-  InitRequest(ImageCtxT &image_ctx, Context *on_finish);
+  InitRequest(ImageCtxT &image_ctx,
+              librbd::cache::ImageWritebackInterface& image_writeback,
+	      plugin::Api<ImageCtxT>& plugin_api,
+              Context *on_finish);
 
   ImageCtxT &m_image_ctx;
+  librbd::cache::ImageWritebackInterface& m_image_writeback;
+  plugin::Api<ImageCtxT>& m_plugin_api;
+  AbstractWriteLog<ImageCtxT> *m_image_cache;
   Context *m_on_finish;
 
   int m_error_result;
@@ -63,6 +83,9 @@ private:
 
   void set_feature_bit();
   void handle_set_feature_bit(int r);
+
+  void shutdown_image_cache();
+  void handle_shutdown_image_cache(int r);
 
   void finish();
 

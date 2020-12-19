@@ -4,33 +4,29 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
-import {
-  configureTestBed,
-  expectItemTasks,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
-import { RbdService } from '../../../shared/api/rbd.service';
-import { ComponentsModule } from '../../../shared/components/components.module';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { DataTableModule } from '../../../shared/datatable/datatable.module';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { Permissions } from '../../../shared/models/permissions';
-import { PipesModule } from '../../../shared/pipes/pipes.module';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
+import { RbdService } from '~/app/shared/api/rbd.service';
+import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { Permissions } from '~/app/shared/models/permissions';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { RbdSnapshotFormModalComponent } from '../rbd-snapshot-form/rbd-snapshot-form-modal.component';
 import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
+import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
@@ -64,8 +60,7 @@ describe('RbdSnapshotListComponent', () => {
         RouterTestingModule,
         NgbNavModule,
         ToastrModule.forRoot(),
-        NgbModalModule,
-        NgBootstrapFormValidationModule.forRoot()
+        NgbModalModule
       ],
       providers: [
         { provide: AuthStorageService, useValue: fakeAuthStorageService },
@@ -112,7 +107,8 @@ describe('RbdSnapshotListComponent', () => {
         notificationService,
         null,
         null,
-        actionLabelsI18n
+        actionLabelsI18n,
+        null
       );
       spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();
@@ -228,6 +224,7 @@ describe('RbdSnapshotListComponent', () => {
   });
 
   it('should test all TableActions combinations', () => {
+    component.ngOnInit();
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
     const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
       component.tableActions
@@ -275,6 +272,34 @@ describe('RbdSnapshotListComponent', () => {
         actions: [],
         primary: { multiple: '', executing: '', single: '', no: '' }
       }
+    });
+  });
+
+  describe('clone button disable state', () => {
+    let actions: RbdSnapshotActionsModel;
+
+    beforeEach(() => {
+      fixture.detectChanges();
+      const rbdService = TestBed.inject(RbdService);
+      const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
+      actions = new RbdSnapshotActionsModel(actionLabelsI18n, [], rbdService);
+    });
+
+    it('should be disabled with version 1 and protected false', () => {
+      const selection = new CdTableSelection([{ name: 'someName', is_protected: false }]);
+      const disableDesc = actions.getCloneDisableDesc(selection, ['layering']);
+      expect(disableDesc).toBe('Snapshot must be protected in order to clone.');
+    });
+
+    it.each([
+      [1, true],
+      [2, true],
+      [2, false]
+    ])('should be enabled with version %d and protected %s', (version, is_protected) => {
+      actions.cloneFormatVersion = version;
+      const selection = new CdTableSelection([{ name: 'someName', is_protected: is_protected }]);
+      const disableDesc = actions.getCloneDisableDesc(selection, ['layering']);
+      expect(disableDesc).toBe(false);
     });
   });
 });

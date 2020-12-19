@@ -13,10 +13,10 @@ import * as Chart from 'chart.js';
 import _ from 'lodash';
 import { PluginServiceGlobalRegistrationAndOptions } from 'ng2-charts';
 
-import styles from '../../../../styles.scss';
-import { ChartTooltip } from '../../../shared/models/chart-tooltip';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
+import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import styles from '~/styles.scss';
 
 @Component({
   selector: 'cd-health-pie',

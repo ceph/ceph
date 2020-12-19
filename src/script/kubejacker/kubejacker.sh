@@ -49,6 +49,10 @@ cp $SCRIPTPATH/Dockerfile kubejacker
 #tar czf $BUILDPATH/kubejacker/lib.tar.gz $LIBS
 #popd
 
+pushd ../src/python-common/ceph
+tar --exclude=__pycache__ --exclude=tests -czf $BUILDPATH/kubejacker/python_common.tar.gz *
+popd
+
 pushd ../src/pybind/mgr
 find ./ -name "*.pyc" -exec rm -f {} \;
 # Exclude node_modules because it's the huge sources in dashboard/frontend
@@ -75,6 +79,8 @@ popd
 #docker tag $REPO/$IMAGE:$TAG $REPO/$IMAGE:latest
 docker push $REPO/ceph/ceph:latest
 #docker push $REPO/$IMAGE:$TAG
+# With a plain HTTP registry
+#podman push $REPO/ceph/ceph:latest --tls-verify=false
 
 # Finally, bounce the containers to pick up the new image
 kubectl -n $NAMESPACE delete pod -l app=rook-ceph-mds

@@ -46,10 +46,14 @@ class C_handle_notify : public EventCallback {
     char c[256];
     int r = 0;
     do {
+      #ifdef _WIN32
+      r = recv(fd_or_id, c, sizeof(c), 0);
+      #else
       r = read(fd_or_id, c, sizeof(c));
+      #endif
       if (r < 0) {
-        if (errno != EAGAIN)
-          ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << dendl;
+        if (ceph_sock_errno() != EAGAIN)
+          ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(ceph_sock_errno()) << dendl;
       }
     } while (r > 0);
   }
@@ -142,14 +146,20 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
     return 0;
 
   int fds[2];
+
+  #ifdef _WIN32
+  if (win_socketpair(fds) < 0) {
+  #else
   if (pipe_cloexec(fds, 0) < 0) {
-    int e = errno;
+  #endif
+    int e = ceph_sock_errno();
     lderr(cct) << __func__ << " can't create notify pipe: " << cpp_strerror(e) << dendl;
     return -e;
   }
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
+
   r = net.set_nonblock(notify_receive_fd);
   if (r < 0) {
     return r;
@@ -177,9 +187,9 @@ EventCenter::~EventCenter()
   //assert(time_events.empty());
 
   if (notify_receive_fd >= 0)
-    ::close(notify_receive_fd);
+    compat_closesocket(notify_receive_fd);
   if (notify_send_fd >= 0)
-    ::close(notify_send_fd);
+    compat_closesocket(notify_send_fd);
 
   delete driver;
   if (notify_handler)
@@ -327,10 +337,15 @@ void EventCenter::wakeup()
   ldout(cct, 20) << __func__ << dendl;
   char buf = 'c';
   // wake up "event_wait"
+  #ifdef _WIN32
+  int n = send(notify_send_fd, &buf, sizeof(buf), 0);
+  #else
   int n = write(notify_send_fd, &buf, sizeof(buf));
+  #endif
   if (n < 0) {
-    if (errno != EAGAIN) {
-      ldout(cct, 1) << __func__ << " write notify pipe failed: " << cpp_strerror(errno) << dendl;
+    if (ceph_sock_errno() != EAGAIN) {
+      ldout(cct, 1) << __func__ << " write notify pipe failed: "
+                    << cpp_strerror(ceph_sock_errno()) << dendl;
       ceph_abort();
     }
   }

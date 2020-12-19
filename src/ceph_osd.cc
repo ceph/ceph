@@ -20,11 +20,11 @@
 #include <iostream>
 #include <string>
 
+#include "auth/KeyRing.h"
 #include "osd/OSD.h"
 #include "os/ObjectStore.h"
 #include "mon/MonClient.h"
 #include "include/ceph_features.h"
-
 #include "common/config.h"
 
 #include "mon/MonMap.h"

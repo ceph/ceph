@@ -12,6 +12,14 @@
  *
  */
 
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
+
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
 #include "common/code_environment.h"
@@ -29,8 +37,10 @@
 #include "include/str_list.h"
 #include "mon/MonClient.h"
 
+#ifndef _WIN32
 #include <pwd.h>
 #include <grp.h>
+#endif
 #include <errno.h>
 
 #ifdef HAVE_SYS_PRCTL_H
@@ -68,6 +78,10 @@ static const char* c_str_or_null(const std::string &str)
 static int chown_path(const std::string &pathname, const uid_t owner, const gid_t group,
 		      const std::string &uid_str, const std::string &gid_str)
 {
+  #ifdef _WIN32
+  return 0;
+  #else
+
   const char *pathname_cstr = c_str_or_null(pathname);
 
   if (!pathname_cstr) {
@@ -83,6 +97,7 @@ static int chown_path(const std::string &pathname, const uid_t owner, const gid_
   }
 
   return r;
+  #endif
 }
 
 void global_pre_init(
@@ -144,7 +159,8 @@ void global_pre_init(
   }
   else if (ret) {
     cct->_log->flush();
-    cerr << "global_init: error reading config file." << std::endl;
+    cerr << "global_init: error reading config file. "
+         << conf.get_parse_error() << std::endl;
     _exit(1);
   }
 
@@ -153,11 +169,6 @@ void global_pre_init(
 
   // command line (as passed by caller)
   conf.parse_argv(args);
-
-  if (conf->log_early &&
-      !cct->_log->is_started()) {
-    cct->_log->start();
-  }
 
   if (!cct->_log->is_started()) {
     cct->_log->start();
@@ -194,9 +205,11 @@ global_init(const std::map<std::string,std::string> *defaults,
     g_ceph_context->set_init_flags(flags);
   }
 
+  #ifndef _WIN32
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
   block_signals(siglist, NULL);
+  #endif
 
   if (g_conf()->fatal_signal_handlers) {
     install_standard_sighandlers();
@@ -207,8 +220,9 @@ global_init(const std::map<std::string,std::string> *defaults,
     g_ceph_context->_log->set_flush_on_exit();
 
   // drop privileges?
-  std::ostringstream priv_ss;
- 
+  ostringstream priv_ss;
+
+  #ifndef _WIN32
   // consider --setuser root a no-op, even if we're not root
   if (getuid() != 0) {
     if (g_conf()->setuser.length()) {
@@ -318,6 +332,7 @@ global_init(const std::map<std::string,std::string> *defaults,
       priv_ss << "deferred set uid:gid to " << uid << ":" << gid << " (" << uid_string << ":" << gid_string << ")";
     }
   }
+  #endif /* _WIN32 */
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
@@ -361,9 +376,18 @@ global_init(const std::map<std::string,std::string> *defaults,
   if (g_conf()->run_dir.length() &&
       code_env == CODE_ENVIRONMENT_DAEMON &&
       !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
-    int r = ::mkdir(g_conf()->run_dir.c_str(), 0755);
-    if (r < 0 && errno != EEXIST) {
-      cerr << "warning: unable to create " << g_conf()->run_dir << ": " << cpp_strerror(errno) << std::endl;
+
+    if (!fs::exists(g_conf()->run_dir.c_str())) {
+      std::error_code ec;
+      if (!fs::create_directory(g_conf()->run_dir, ec)) {
+       cerr << "warning: unable to create " << g_conf()->run_dir
+            << ec.message() << std::endl;
+      }
+      fs::permissions(
+        g_conf()->run_dir.c_str(),
+        fs::perms::owner_all |
+        fs::perms::group_read | fs::perms::group_exec |
+        fs::perms::others_read | fs::perms::others_exec);
     }
   }
 
@@ -449,7 +473,7 @@ void global_init_daemonize(CephContext *cct)
   if (global_init_prefork(cct) < 0)
     return;
 
-#if !defined(_AIX)
+#if !defined(_AIX) && !defined(_WIN32)
   int ret = daemon(1, 1);
   if (ret) {
     ret = errno;
@@ -467,7 +491,7 @@ void global_init_daemonize(CephContext *cct)
 
 int reopen_as_null(CephContext *cct, int fd)
 {
-  int newfd = open("/dev/null", O_RDONLY|O_CLOEXEC);
+  int newfd = open(DEV_NULL, O_RDONLY | O_CLOEXEC);
   if (newfd < 0) {
     int err = errno;
     lderr(cct) << __func__ << " failed to open /dev/null: " << cpp_strerror(err)
@@ -491,6 +515,9 @@ int reopen_as_null(CephContext *cct, int fd)
 
 void global_init_postfork_start(CephContext *cct)
 {
+  // reexpand the meta in child process
+  cct->_conf.finalize_reexpand_meta();
+
   // restart log thread
   cct->_log->start();
   cct->notify_post_fork();

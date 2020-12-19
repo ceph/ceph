@@ -24,9 +24,9 @@ namespace {
 const std::string IMAGE_CACHE_STATE = ".librbd/image_cache_state";
 
 struct ImageCacheState {
-  bool present;
-  bool clean;
-  int size;
+  bool present = false;
+  bool clean = false;
+  int size = 0;
   std::string host;
   std::string path;
 };
@@ -43,14 +43,14 @@ bool image_cache_parse(const std::string& s, ImageCacheState &cache_state) {
     if (success && (success = f.exists("clean"))) {
       cache_state.present = (bool)f["clean"];
     }
-    if (success && (success = f.exists("rwl_size"))) {
-      cache_state.size = (int)f["rwl_size"];
+    if (success && (success = f.exists("pwl_size"))) {
+      cache_state.size = (int)f["pwl_size"];
     }
-    if (success && (success = f.exists("rwl_host"))) {
-      cache_state.host = (std::string)f["rwl_host"];
+    if (success && (success = f.exists("pwl_host"))) {
+      cache_state.host = (std::string)f["pwl_host"];
     }
-    if (success && (success = f.exists("rwl_path"))) {
-      cache_state.path = (std::string)f["rwl_path"];
+    if (success && (success = f.exists("pwl_path"))) {
+      cache_state.path = (std::string)f["pwl_path"];
     }
   }
   return success;
@@ -75,6 +75,7 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
   }
 
   librbd::image_migration_status_t migration_status;
+  std::string source_spec;
   std::string source_pool_name;
   std::string dest_pool_name;
   std::string migration_state;
@@ -87,12 +88,20 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
                 << std::endl;
       // not fatal
     } else {
-      librados::IoCtx src_io_ctx;
-      r = librados::Rados(io_ctx).ioctx_create2(migration_status.source_pool_id, src_io_ctx);
-      if (r < 0) {
-        source_pool_name = stringify(migration_status.source_pool_id);
+      if (migration_status.source_pool_id >= 0) {
+        librados::IoCtx src_io_ctx;
+        r = librados::Rados(io_ctx).ioctx_create2(migration_status.source_pool_id, src_io_ctx);
+        if (r < 0) {
+          source_pool_name = stringify(migration_status.source_pool_id);
+        } else {
+          source_pool_name = src_io_ctx.get_pool_name();
+        }
       } else {
-        source_pool_name = src_io_ctx.get_pool_name();
+        r = image.get_migration_source_spec(&source_spec);
+        if (r < 0) {
+          std::cerr << "rbd: getting migration source spec failed: "
+                    << cpp_strerror(r) << std::endl;
+        }
       }
 
       librados::IoCtx dst_io_ctx;
@@ -159,11 +168,15 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     f->close_section(); // watchers
     if (!migration_state.empty()) {
       f->open_object_section("migration");
-      f->dump_string("source_pool_name", source_pool_name);
-      f->dump_string("source_pool_namespace",
-                     migration_status.source_pool_namespace);
-      f->dump_string("source_image_name", migration_status.source_image_name);
-      f->dump_string("source_image_id", migration_status.source_image_id);
+      if (!source_spec.empty()) {
+        f->dump_string("source_spec", source_spec);
+      } else {
+        f->dump_string("source_pool_name", source_pool_name);
+        f->dump_string("source_pool_namespace",
+                       migration_status.source_pool_namespace);
+        f->dump_string("source_image_name", migration_status.source_image_name);
+        f->dump_string("source_image_id", migration_status.source_image_id);
+      }
       f->dump_string("dest_pool_name", dest_pool_name);
       f->dump_string("dest_pool_namespace",
                      migration_status.dest_pool_namespace);
@@ -174,12 +187,12 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       f->close_section(); // migration
     }
     if (cache_state.present) {
-        f->open_object_section("image_cache_state");
-        f->dump_bool("clean", cache_state.clean);
-        f->dump_int("size", cache_state.size);
-        f->dump_string("host", cache_state.host);
-        f->dump_string("path", cache_state.path);
-	f->close_section(); // image_cache_state
+      f->open_object_section("image_cache_state");
+      f->dump_bool("clean", cache_state.clean);
+      f->dump_int("size", cache_state.size);
+      f->dump_string("host", cache_state.host);
+      f->dump_string("path", cache_state.path);
+      f->close_section(); // image_cache_state
     }
   } else {
     if (watchers.size()) {
@@ -200,10 +213,15 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
       }
 
       std::cout << "Migration:" << std::endl;
-      std::cout << "\tsource: " << source_pool_name << "/"
-              << migration_status.source_image_name;
-      if (!migration_status.source_image_id.empty()) {
-        std::cout << " (" << migration_status.source_image_id <<  ")";
+      std::cout << "\tsource: ";
+      if (!source_spec.empty()) {
+        std::cout << source_spec;
+      } else {
+        std::cout << source_pool_name << "/"
+                  << migration_status.source_image_name;
+        if (!migration_status.source_image_id.empty()) {
+          std::cout << " (" << migration_status.source_image_id <<  ")";
+        }
       }
       std::cout << std::endl;
       std::cout << "\tdestination: " << dest_pool_name << "/"
@@ -217,11 +235,12 @@ static int do_show_status(librados::IoCtx& io_ctx, const std::string &image_name
     }
 
     if (cache_state.present) {
-        std::cout << "image cache state:" << std::endl;
+        std::cout << "Image cache state:" << std::endl;
         std::cout << "\tclean: " << (cache_state.clean ? "true" : "false")
-                  << "  size: " << byte_u_t(cache_state.size)
-                  << "  host: " << cache_state.host
-                  << "  path: "  << cache_state.path << std::endl;
+                  << std::endl
+                  << "\tsize: " << byte_u_t(cache_state.size) << std::endl
+                  << "\thost: " << cache_state.host << std::endl
+                  << "\tpath: " << cache_state.path << std::endl;
     }
   }
 

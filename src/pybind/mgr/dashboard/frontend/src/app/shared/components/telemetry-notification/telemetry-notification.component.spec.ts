@@ -5,14 +5,14 @@ import { NgbAlertModule } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { MgrModuleService } from '../../api/mgr-module.service';
-import { UserService } from '../../api/user.service';
-import { Permissions } from '../../models/permissions';
-import { PipesModule } from '../../pipes/pipes.module';
-import { AuthStorageService } from '../../services/auth-storage.service';
-import { NotificationService } from '../../services/notification.service';
-import { TelemetryNotificationService } from '../../services/telemetry-notification.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { UserService } from '~/app/shared/api/user.service';
+import { Permissions } from '~/app/shared/models/permissions';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { TelemetryNotificationComponent } from './telemetry-notification.component';
 
 describe('TelemetryActivationNotificationComponent', () => {

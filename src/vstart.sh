@@ -62,6 +62,7 @@ fi
 if [ -n "$CEPH_BUILD_ROOT" ]; then
     [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
     [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
+    [ -z "$CEPH_EXT_LIB" ] && CEPH_EXT_LIB=$CEPH_BUILD_ROOT/external/lib
     [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB/erasure-code
     [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
     # make install should install python extensions into PYTHONPATH
@@ -72,6 +73,7 @@ elif [ -n "$CEPH_ROOT" ]; then
     [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
     [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
     [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
+    [ -z "$CEPH_EXT_LIB" ] && CEPH_EXT_LIB=$CEPH_BUILD_DIR/external/lib
     [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
     [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
     [ -z "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON=$CEPH_ROOT/src/python-common
@@ -87,8 +89,8 @@ fi
 CYTHON_PYTHONPATH="$CEPH_LIB/cython_modules/lib.3"
 export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON$PYTHONPATH
 
-export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
-export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$CEPH_LIB:$CEPH_EXT_LIB:$LD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH=$CEPH_LIB:$CEPH_EXT_LIB:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
 # development version. vstart.sh is only used during testing and
 # development
@@ -163,6 +165,8 @@ rgw_compression=""
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 #disable SPDK by default
 zoned_enabled=0
+io_uring_enabled=0
+with_jaeger=0
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
@@ -229,9 +233,11 @@ usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
 usage=$usage"\t--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)\n"
+usage=$usage"\t--bluestore-io-uring: enable io_uring backend\n"
 usage=$usage"\t--inc-osd: append some more osds into existing vcluster\n"
 usage=$usage"\t--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]\n"
 usage=$usage"\t--no-parallel: dont start all OSDs in parallel\n"
+usage=$usage"\t--jaeger: use jaegertracing for tracing\n"
 
 usage_exit() {
     printf "$usage"
@@ -240,27 +246,27 @@ usage_exit() {
 
 while [ $# -ge 1 ]; do
 case $1 in
-    -d | --debug )
+    -d | --debug)
         debug=1
         ;;
     -s | --standby_mds)
         standby=1
         ;;
-    -l | --localhost )
+    -l | --localhost)
         ip="127.0.0.1"
         ;;
-    -i )
+    -i)
         [ -z "$2" ] && usage_exit
         ip="$2"
         shift
         ;;
-    -e )
+    -e)
         ec=1
         ;;
-    --new | -n )
+    --new | -n)
         new=1
         ;;
-    --inc-osd )
+    --inc-osd)
         new=0
         kill_all=0
         inc_osd_num=$2
@@ -270,103 +276,103 @@ case $1 in
             shift
         fi
         ;;
-    --short )
+    --short)
         short=1
         ;;
-    --crimson )
+    --crimson)
         ceph_osd=crimson-osd
         ;;
-    --osd-args )
+    --osd-args)
         extra_osd_args="$2"
         shift
         ;;
-    --msgr1 )
+    --msgr1)
         msgr="1"
         ;;
-    --msgr2 )
+    --msgr2)
         msgr="2"
         ;;
-    --msgr21 )
+    --msgr21)
         msgr="21"
         ;;
-    --cephadm )
+    --cephadm)
         cephadm=1
         ;;
-    --no-parallel )
+    --no-parallel)
         parallel=false
         ;;
-    --valgrind )
+    --valgrind)
         [ -z "$2" ] && usage_exit
         valgrind=$2
         shift
         ;;
-    --valgrind_args )
+    --valgrind_args)
         valgrind_args="$2"
         shift
         ;;
-    --valgrind_mds )
+    --valgrind_mds)
         [ -z "$2" ] && usage_exit
         valgrind_mds=$2
         shift
         ;;
-    --valgrind_osd )
+    --valgrind_osd)
         [ -z "$2" ] && usage_exit
         valgrind_osd=$2
         shift
         ;;
-    --valgrind_mon )
+    --valgrind_mon)
         [ -z "$2" ] && usage_exit
         valgrind_mon=$2
         shift
         ;;
-    --valgrind_mgr )
+    --valgrind_mgr)
         [ -z "$2" ] && usage_exit
         valgrind_mgr=$2
         shift
         ;;
-    --valgrind_rgw )
+    --valgrind_rgw)
         [ -z "$2" ] && usage_exit
         valgrind_rgw=$2
         shift
         ;;
-    --nodaemon )
+    --nodaemon)
         nodaemon=1
         ;;
     --redirect-output)
         redirect=1
         ;;
-    --smallmds )
+    --smallmds)
         smallmds=1
         ;;
-    --rgw_port )
+    --rgw_port)
         CEPH_RGW_PORT=$2
         shift
         ;;
-    --rgw_frontend )
+    --rgw_frontend)
         rgw_frontend=$2
         shift
         ;;
-    --rgw_compression )
+    --rgw_compression)
         rgw_compression=$2
         shift
         ;;
-    --kstore_path )
+    --kstore_path)
         kstore_path=$2
         shift
         ;;
-    --filestore_path )
+    --filestore_path)
         filestore_path=$2
         shift
         ;;
-    -m )
+    -m)
         [ -z "$2" ] && usage_exit
         MON_ADDR=$2
         shift
         ;;
-    -x )
+    -x)
         cephx=1 # this is on be default, flag exists for historical consistency
         ;;
-    -X )
+    -X)
         cephx=0
         ;;
 
@@ -377,36 +383,35 @@ case $1 in
         gssapi_authx=0
         ;;
 
-    -k )
+    -k)
         if [ ! -r $conf_fn ]; then
             echo "cannot use old configuration: $conf_fn not readable." >&2
             exit
         fi
         new=0
         ;;
-    --memstore )
+    --memstore)
         objectstore="memstore"
         ;;
-    -b | --bluestore )
+    -b | --bluestore)
         objectstore="bluestore"
         ;;
-    -f | --filestore )
+    -f | --filestore)
         objectstore="filestore"
         ;;
-    -K | --kstore )
+    -K | --kstore)
         objectstore="kstore"
         ;;
-    --hitset )
+    --hitset)
         hitset="$hitset $2 $3"
         shift
         shift
         ;;
-    -o )
-        extra_conf="$extra_conf	$2
-"
+    -o)
+        extra_conf="$extra_conf	$2"
         shift
         ;;
-    --cache )
+    --cache)
         if [ -z "$cache" ]; then
             cache="$2"
         else
@@ -414,7 +419,7 @@ case $1 in
         fi
         shift
         ;;
-    --nolockdep )
+    --nolockdep)
         lockdep=0
         ;;
     --multimds)
@@ -424,13 +429,13 @@ case $1 in
     --without-dashboard)
         with_mgr_dashboard=false
         ;;
-    --bluestore-spdk )
+    --bluestore-spdk)
         [ -z "$2" ] && usage_exit
         IFS=',' read -r -a bluestore_spdk_dev <<< "$2"
         spdk_enabled=1
         shift
         ;;
-    --bluestore-devs )
+    --bluestore-devs)
         IFS=',' read -r -a bluestore_dev <<< "$2"
         for dev in "${bluestore_dev[@]}"; do
             if [ ! -b $dev -o ! -w $dev ]; then
@@ -440,10 +445,18 @@ case $1 in
         done
         shift
         ;;
-    --bluestore-zoned )
+    --bluestore-zoned)
         zoned_enabled=1
         ;;
-    * )
+    --bluestore-io-uring)
+        io_uring_enabled=1
+        shift
+        ;;
+    --jaeger)
+        with_jaeger=1
+        echo "with_jaeger $with_jaeger"
+        ;;
+    *)
         usage_exit
 esac
 shift
@@ -644,12 +657,16 @@ EOF
         bluestore block wal create = true"
         fi
         if [ "$zoned_enabled" -eq 1 ]; then
-            BLUESTORE_OPTS="${BLUESTORE_OPTS}
+            BLUESTORE_OPTS+="
         bluestore min alloc size = 65536
         bluestore prefer deferred size = 0
         bluestore prefer deferred size hdd = 0
         bluestore prefer deferred size ssd = 0
         bluestore allocator = zoned"
+        fi
+        if [ "$io_uring_enabled" -eq 1 ]; then
+            BLUESTORE_OPTS+="
+        bdev ioring = true"
         fi
     fi
     wconf <<EOF
@@ -717,6 +734,40 @@ $extra_conf
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
 EOF
+}
+
+write_logrotate_conf() {
+    out_dir=$(pwd)"/out/*.log"
+
+    cat << EOF
+$out_dir
+{
+    rotate 5
+    size 1G
+    copytruncate
+    compress
+    notifempty
+    missingok
+    sharedscripts
+    postrotate
+        # NOTE: assuring that the absence of one of the following processes
+        # won't abort the logrotate command.
+        killall -u $USER -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror || echo ""
+    endscript
+}
+EOF
+}
+
+init_logrotate() {
+    logrotate_conf_path=$(pwd)"/logrotate.conf"
+    logrotate_state_path=$(pwd)"/logrotate.state"
+
+    if ! test -a $logrotate_conf_path; then
+        if test -a $logrotate_state_path; then
+            rm -f $logrotate_state_path
+        fi
+        write_logrotate_conf > $logrotate_conf_path
+    fi
 }
 
 start_mon() {
@@ -947,7 +998,10 @@ EOF
                 debug echo 'waiting for mgr dashboard module to start'
                 sleep 1
             done
-            ceph_adm dashboard ac-user-create --force-password admin admin administrator
+            DASHBOARD_ADMIN_SECRET_FILE="${CEPH_CONF_PATH}/dashboard-admin-secret.txt"
+            printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
+            ceph_adm dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}" \
+                administrator --force-password
             if [ "$ssl" != "0" ]; then
                 if ! ceph_adm dashboard create-self-signed-cert;  then
                     debug echo dashboard module not working correctly!
@@ -1347,7 +1401,7 @@ do
     [ $fs -eq $CEPH_NUM_FS ] && break
     fs=$(($fs + 1))
     if [ "$CEPH_MAX_MDS" -gt 1 ]; then
-        ceph_adm fs set "cephfs_${name}" max_mds "$CEPH_MAX_MDS"
+        ceph_adm fs set "${name}" max_mds "$CEPH_MAX_MDS"
     fi
 done
 
@@ -1493,6 +1547,7 @@ do_rgw()
             --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
             --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
             --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
+            --rgw_luarocks_location=${CEPH_OUT_DIR}/luarocks \
             ${RGWDEBUG} \
             -n ${rgw_name} \
             "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
@@ -1506,6 +1561,44 @@ do_rgw()
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then
     do_rgw
 fi
+
+
+ docker_service(){
+     local service=''
+     #prefer podman
+     if pgrep -f podman > /dev/null; then
+	 service="podman"
+     elif pgrep -f docker > /dev/null; then
+	 service="docker"
+     fi
+     if [ -n "$service" ]; then
+       echo "using $service for deploying jaeger..."
+       #check for exited container, remove them and restart container
+       if [ "$($service ps -aq -f status=exited -f name=jaeger)" ]; then
+	 $service rm jaeger
+       fi
+       if [ ! "$(podman ps -aq -f name=jaeger)" ]; then
+         $service "$@"
+       fi
+     else
+         echo "cannot find docker or podman, please restart service and rerun."
+     fi
+ }
+
+echo ""
+if [ $with_jaeger -eq 1 ]; then
+    debug echo "Enabling jaegertracing..."
+    docker_service run -d --name jaeger \
+  -p 5775:5775/udp \
+  -p 6831:6831/udp \
+  -p 6832:6832/udp \
+  -p 5778:5778 \
+  -p 16686:16686 \
+  -p 14268:14268 \
+  -p 14250:14250 \
+  jaegertracing/all-in-one:1.20
+fi
+
 
 debug echo "vstart cluster complete. Use stop.sh to stop. See out/* (e.g. 'tail -f out/????') for debug output."
 
@@ -1531,6 +1624,7 @@ echo ""
 {
     echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
+    echo "export PATH=$CEPH_DIR/bin:\$PATH"
 
     if [ "$CEPH_DIR" != "$PWD" ]; then
         echo "export CEPH_CONF=$conf_fn"
@@ -1557,3 +1651,5 @@ if [ -f "$STRAY_CONF_PATH" -a -n "$conf_fn" -a ! "$conf_fn" -ef "$STRAY_CONF_PAT
     echo "NOTE:"
     echo "    Remember to restart cluster after removing $STRAY_CONF_PATH"
 fi
+
+init_logrotate

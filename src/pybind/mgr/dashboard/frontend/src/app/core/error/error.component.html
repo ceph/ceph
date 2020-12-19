@@ -1,0 +1,36 @@
+<head>
+  <title>Error Page</title>
+  <base target="_blank">
+</head>
+<div class="dashboard row">
+  <div class="text-center content">
+    <br>
+    <div *ngIf="header && message; else elseBlock">
+    <i class="{{ icon }}"
+       aria-hidden="true"></i>
+    <br><br><br>
+    <h3><b>{{ header }}</b></h3>
+      <br>
+    <h4>{{ message }}</h4>
+    </div>
+    <ng-template #elseBlock>
+      <i class="fa fa-exclamation-triangle"
+         aria-hidden="true"></i>
+      <br><br><br>
+      <h3 i18n><b>Page not Found</b></h3>
+        <br>
+      <h4 i18n>Sorry, we couldn’t find what you were looking for.
+      The page you requested may have been changed or moved.</h4>
+    </ng-template>
+    <div *ngIf="section">
+      <h4 i18n>Please consult the <a href="{{ docUrl }}">documentation</a> on how to configure and enable
+        the {{ section_info }} management functionality.</h4>
+    </div>
+    <br><br>
+    <div>
+      <button class="btn btn-primary"
+              [routerLink]="'/dashboard'"
+              i18n>Go To Dashboard</button>
+    </div>
+  </div>
+</div>

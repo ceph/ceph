@@ -1557,6 +1557,10 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_TIER_FLUSH);
   }
 
+  void tier_evict() {
+    add_op(CEPH_OSD_OP_TIER_EVICT);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -2571,9 +2575,7 @@ private:
 			     cct->_conf->objecter_inflight_ops)};
  public:
   Objecter(CephContext *cct, Messenger *m, MonClient *mc,
-	   boost::asio::io_context& service,
-	   double mon_timeout,
-	   double osd_timeout);
+	   boost::asio::io_context& service);
   ~Objecter() override;
 
   void init();

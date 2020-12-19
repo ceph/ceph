@@ -40,8 +40,8 @@ public:
     return pgid;
   }
 
-  void take_pulls(std::vector<PullOp> *outpulls) {
-    outpulls->swap(pulls);
+  std::vector<PullOp> take_pulls() {
+    return std::move(pulls);
   }
   void set_pulls(std::vector<PullOp>&& pull_ops) {
     pulls = std::move(pull_ops);

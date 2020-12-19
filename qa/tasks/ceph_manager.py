@@ -1342,7 +1342,7 @@ class CephManager:
         testdir = teuthology.get_testdir(self.ctx)
         prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
                   f'{testdir}/archive/coverage', 'timeout', '120', 'ceph',
-                  '--cluster', self.cluster, '--log-early']
+                  '--cluster', self.cluster]
         kwargs['args'] = prefix + list(kwargs['args'])
         return self.controller.run(**kwargs)
 
@@ -2853,7 +2853,6 @@ class CephManager:
         """
         out = self.raw_cluster_cmd('quorum_status')
         j = json.loads(out)
-        self.log('quorum_status is %s' % out)
         return j['quorum']
 
     def wait_for_mon_quorum_size(self, size, timeout=300):

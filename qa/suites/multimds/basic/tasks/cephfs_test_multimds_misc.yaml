@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Scrub error on inode
+
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephfs.test_multimds_misc

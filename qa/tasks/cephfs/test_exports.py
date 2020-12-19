@@ -198,14 +198,10 @@ done
         """
 
         self._setup_tree(distributed=True)
-        subtrees = self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        subtrees = self._wait_distributed_subtrees(3 * 2, status=self.status, rank="all")
         for s in subtrees:
             path = s['dir']['path']
             if path == '/tree':
-                self.assertEqual(s['export_pin'], 0)
-                self.assertEqual(s['auth_first'], 0)
-            elif path.startswith('/tree/'):
-                self.assertEqual(s['export_pin'], -1)
                 self.assertTrue(s['distributed_ephemeral_pin'])
 
     def test_ephemeral_pin_dist_override_pin(self):
@@ -213,24 +209,16 @@ done
         That an export pin overrides an ephemerally pinned directory.
         """
 
-        self._setup_tree(distributed=True, export=0)
-        subtrees = self._wait_distributed_subtrees(100, status=self.status, rank="all", path="/tree/")
-        which = None
-        for s in subtrees:
-            if s['auth_first'] == 1:
-                path = s['dir']['path']
-                self.mount_a.setfattr(path[1:], "ceph.dir.pin", "0")
-                which = path
-                break
-        self.assertIsNotNone(which)
+        self._setup_tree(distributed=True)
+        subtrees = self._wait_distributed_subtrees(3 * 2, status=self.status, rank="all")
+        self.mount_a.setfattr("tree", "ceph.dir.pin", "0")
         time.sleep(15)
         subtrees = self._get_subtrees(status=self.status, rank=0)
         for s in subtrees:
             path = s['dir']['path']
-            if path == which:
+            if path == '/tree':
                 self.assertEqual(s['auth_first'], 0)
                 self.assertFalse(s['distributed_ephemeral_pin'])
-                return
         # it has been merged into /tree
 
     def test_ephemeral_pin_dist_off(self):
@@ -238,29 +226,40 @@ done
         That turning off ephemeral distributed pin merges subtrees.
         """
 
-        self._setup_tree(distributed=True, export=0)
-        self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        self._setup_tree(distributed=True)
+        self._wait_distributed_subtrees(3 * 2, status=self.status, rank="all")
         self.mount_a.setfattr("tree", "ceph.dir.pin.distributed", "0")
-        self._wait_subtrees([('/tree', 0)], status=self.status)
+        time.sleep(15)
+        subtrees = self._get_subtrees(status=self.status, rank=0)
+        for s in subtrees:
+            path = s['dir']['path']
+            if path == '/tree':
+                self.assertFalse(s['distributed_ephemeral_pin'])
+
 
     def test_ephemeral_pin_dist_conf_off(self):
         """
         That turning off ephemeral distributed pin config prevents distribution.
         """
 
-        self._setup_tree(export=0)
+        self._setup_tree()
         self.config_set('mds', 'mds_export_ephemeral_distributed', False)
         self.mount_a.setfattr("tree", "ceph.dir.pin.distributed", "1")
-        time.sleep(30)
-        self._wait_subtrees([('/tree', 0)], status=self.status)
+        time.sleep(15)
+        subtrees = self._get_subtrees(status=self.status, rank=0)
+        for s in subtrees:
+            path = s['dir']['path']
+            if path == '/tree':
+                self.assertFalse(s['distributed_ephemeral_pin'])
 
-    def test_ephemeral_pin_dist_conf_off_merge(self):
+    def _test_ephemeral_pin_dist_conf_off_merge(self):
         """
         That turning off ephemeral distributed pin config merges subtrees.
+        FIXME: who triggers the merge?
         """
 
-        self._setup_tree(distributed=True, export=0)
-        self._wait_distributed_subtrees(100, status=self.status)
+        self._setup_tree(distributed=True)
+        self._wait_distributed_subtrees(3 * 2, status=self.status, rank="all")
         self.config_set('mds', 'mds_export_ephemeral_distributed', False)
         self._wait_subtrees([('/tree', 0)], timeout=60, status=self.status)
 
@@ -277,7 +276,7 @@ done
             self.mount_a.setfattr(path, "ceph.dir.pin", "1")
             test.append(("/"+path, 1))
         self.mount_a.setfattr("tree", "ceph.dir.pin.distributed", "1")
-        time.sleep(10) # for something to not happen...
+        time.sleep(15) # for something to not happen...
         self._wait_subtrees(test, timeout=60, status=self.status, rank="all", path="/tree/")
 
     def test_ephemeral_pin_dist_override_after(self):
@@ -285,21 +284,14 @@ done
         That a conventional export pin overrides the distributed policy _after_ distributed policy is set.
         """
 
-        self._setup_tree(count=10, distributed=True)
-        subtrees = self._wait_distributed_subtrees(10, status=self.status, rank="all")
-        victim = None
+        self._setup_tree(distributed=True)
+        self._wait_distributed_subtrees(3 * 2, status=self.status, rank="all")
         test = []
-        for s in subtrees:
-            path = s['dir']['path']
-            auth = s['auth_first']
-            if auth in (0, 2) and victim is None:
-                victim = path
-                self.mount_a.setfattr(victim[1:], "ceph.dir.pin", "1")
-                test.append((victim, 1))
-            else:
-                test.append((path, auth))
-        self.assertIsNotNone(victim)
-        self._wait_subtrees(test, status=self.status, rank="all", path="/tree/")
+        for i in range(10):
+            path = f"tree/{i}"
+            self.mount_a.setfattr(path, "ceph.dir.pin", "1")
+            test.append(("/"+path, 1))
+        self._wait_subtrees(test, timeout=60, status=self.status, rank="all", path="/tree/")
 
     def test_ephemeral_pin_dist_failover(self):
         """
@@ -307,8 +299,8 @@ done
         """
 
         # pin /tree so it does not export during failover
-        self._setup_tree(distributed=True, export=0)
-        self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        self._setup_tree(distributed=True)
+        self._wait_distributed_subtrees(3 * 2, status=self.status, rank="all")
         #test = [(s['dir']['path'], s['auth_first']) for s in subtrees]
         before = self.fs.ranks_perf(lambda p: p['mds']['exported'])
         log.info(f"export stats: {before}")
@@ -327,9 +319,10 @@ done
         self.fs.set_max_mds(3)
         self.status = self.fs.wait_for_daemons()
 
-        count = 1000
-        self._setup_tree(count=count, distributed=True)
-        subtrees = self._wait_distributed_subtrees(count, status=self.status, rank="all")
+        self.config_set('mds', 'mds_export_ephemeral_distributed_factor', 63.0 / 3)
+        self._setup_tree(count=1000, distributed=True)
+
+        subtrees = self._wait_distributed_subtrees(64, status=self.status, rank="all")
         nsubtrees = len(subtrees)
 
         # Check if distribution is uniform
@@ -339,6 +332,7 @@ done
         self.assertGreaterEqual(len(rank0)/nsubtrees, 0.2)
         self.assertGreaterEqual(len(rank1)/nsubtrees, 0.2)
         self.assertGreaterEqual(len(rank2)/nsubtrees, 0.2)
+
 
     def test_ephemeral_random(self):
         """
@@ -379,12 +373,18 @@ done
 
     def test_ephemeral_random_dist(self):
         """
-        That ephemeral random and distributed can coexist with each other.
+        That ephemeral distributed pin overrides ephemeral random pin
         """
 
-        self._setup_tree(random=1.0, distributed=True, export=0)
-        self._wait_distributed_subtrees(100, status=self.status)
-        self._wait_random_subtrees(100, status=self.status)
+        self._setup_tree(random=1.0, distributed=True)
+        self._wait_distributed_subtrees(3 * 2, status=self.status)
+
+        time.sleep(15)
+        subtrees = self._get_subtrees(status=self.status, rank=0)
+        for s in subtrees:
+            path = s['dir']['path']
+            if path.startswith('/tree'):
+                self.assertFalse(s['random_ephemeral_pin'])
 
     def test_ephemeral_random_pin_override_before(self):
         """
@@ -440,19 +440,23 @@ done
 
         count = 100
         r = 0.5
-        self._setup_tree(count=count, random=r, export=0)
+        self._setup_tree(count=count, random=r)
         # wait for all random subtrees to be created, not a specific count
         time.sleep(30)
         subtrees = self._wait_random_subtrees(1, status=self.status, rank=1)
-        test = [(s['dir']['path'], s['auth_first']) for s in subtrees]
-        before = self.fs.ranks_perf(lambda p: p['mds']['exported'])
-        log.info(f"export stats: {before}")
+        before = [(s['dir']['path'], s['auth_first']) for s in subtrees]
+        before.sort();
+
         self.fs.rank_fail(rank=1)
         self.status = self.fs.wait_for_daemons()
+
         time.sleep(30) # waiting for something to not happen
-        self._wait_subtrees(test, status=self.status, rank=1)
-        after = self.fs.ranks_perf(lambda p: p['mds']['exported'])
-        log.info(f"export stats: {after}")
+        subtrees = self._wait_random_subtrees(1, status=self.status, rank=1)
+        after = [(s['dir']['path'], s['auth_first']) for s in subtrees]
+        after.sort();
+        log.info(f"subtrees before: {before}")
+        log.info(f"subtrees after: {after}")
+
         self.assertEqual(before, after)
 
     def test_ephemeral_pin_grow_mds(self):
@@ -463,8 +467,8 @@ done
         self.fs.set_max_mds(2)
         self.status = self.fs.wait_for_daemons()
 
-        self._setup_tree(distributed=True)
-        subtrees_old = self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        self._setup_tree(random=1.0)
+        subtrees_old = self._wait_random_subtrees(100, status=self.status, rank="all")
 
         self.fs.set_max_mds(3)
         self.status = self.fs.wait_for_daemons()
@@ -472,7 +476,7 @@ done
         # Sleeping for a while to allow the ephemeral pin migrations to complete
         time.sleep(30)
         
-        subtrees_new = self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        subtrees_new = self._wait_random_subtrees(100, status=self.status, rank="all")
         count = 0
         for old_subtree in subtrees_old:
             for new_subtree in subtrees_new:
@@ -492,14 +496,14 @@ done
         self.fs.set_max_mds(3)
         self.status = self.fs.wait_for_daemons()
 
-        self._setup_tree(distributed=True)
-        subtrees_old = self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        self._setup_tree(random=1.0)
+        subtrees_old = self._wait_random_subtrees(100, status=self.status, rank="all")
 
         self.fs.set_max_mds(2)
         self.status = self.fs.wait_for_daemons()
         time.sleep(30)
 
-        subtrees_new = self._wait_distributed_subtrees(100, status=self.status, rank="all")
+        subtrees_new = self._wait_random_subtrees(100, status=self.status, rank="all")
         count = 0
         for old_subtree in subtrees_old:
             for new_subtree in subtrees_new:

@@ -1,14 +1,14 @@
 Manually editing a CRUSH Map
 ============================
 
-.. note:: Manually editing the CRUSH map is considered an advanced
+.. note:: Manually editing the CRUSH map is an advanced
 	  administrator operation.  All CRUSH changes that are
 	  necessary for the overwhelming majority of installations are
 	  possible via the standard ceph CLI and do not require manual
 	  CRUSH map edits.  If you have identified a use case where
-	  manual edits *are* necessary, consider contacting the Ceph
-	  developers so that future versions of Ceph can make this
-	  unnecessary.
+	  manual edits *are* necessary with recent Ceph releases, consider
+	  contacting the Ceph developers so that future versions of Ceph
+	  can obviate your corner case.
 
 To edit an existing CRUSH map:
 
@@ -77,13 +77,12 @@ Sections
 
 There are six main sections to a CRUSH Map.
 
-#. **tunables:** The preamble at the top of the map described any *tunables*
-   for CRUSH behavior that vary from the historical/legacy CRUSH behavior. These
-   correct for old bugs, optimizations, or other changes in behavior that have
+#. **tunables:** The preamble at the top of the map describes any *tunables*
+   that differ from the historical / legacy CRUSH behavior. These
+   correct for old bugs, optimizations, or other changes that have
    been made over the years to improve CRUSH's behavior.
 
-#. **devices:** Devices are individual ``ceph-osd`` daemons that can
-   store data.
+#. **devices:** Devices are individual OSDs that store data.
 
 #. **types**: Bucket ``types`` define the types of buckets used in
    your CRUSH hierarchy. Buckets consist of a hierarchical aggregation
@@ -108,10 +107,10 @@ There are six main sections to a CRUSH Map.
 CRUSH Map Devices
 -----------------
 
-Devices are individual ``ceph-osd`` daemons that can store data.  You
-will normally have one defined here for each OSD daemon in your
-cluster.  Devices are identified by an id (a non-negative integer) and
-a name, normally ``osd.N`` where ``N`` is the device id.
+Devices are individual OSDs that store data.  Usually one is defined here for each
+OSD daemon in your
+cluster.  Devices are identified by an ``id`` (a non-negative integer) and
+a ``name``, normally ``osd.N`` where ``N`` is the device id.
 
 .. _crush-map-device-class:
 

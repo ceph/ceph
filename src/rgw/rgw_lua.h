@@ -1,0 +1,56 @@
+#pragma once
+
+#include <string>
+#include "common/async/yield_context.h"
+
+class lua_State;
+class rgw_user;
+namespace rgw::sal {
+  class RGWRadosStore;
+}
+
+namespace rgw::lua {
+
+enum class context {
+  preRequest,
+  postRequest,
+  none
+};
+
+// get context enum from string 
+// the expected string the same as the enum (case insensitive)
+// return "none" if not matched
+context to_context(const std::string& s);
+
+// verify a lua script
+bool verify(const std::string& script, std::string& err_msg);
+
+// store a lua script in a context
+int write_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script);
+
+// read the stored lua script from a context
+int read_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, optional_yield y, context ctx, std::string& script);
+
+// delete the stored lua script from a context
+int delete_script(rgw::sal::RGWRadosStore* store, const std::string& tenant, optional_yield y, context ctx);
+
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+#include <set>
+
+using packages_t = std::set<std::string>;
+
+// add a lua package to the allowlist
+int add_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::string& package_name, bool allow_compilation);
+
+// remove a lua package from the allowlist
+int remove_package(rgw::sal::RGWRadosStore* store, optional_yield y, const std::string& package_name);
+
+// list lua packages in the allowlist
+int list_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& packages);
+
+// install all packages from the allowlist
+// return the list of packages that failed to install and the output of the install command
+int install_packages(rgw::sal::RGWRadosStore* store, optional_yield y, packages_t& failed_packages, std::string& output);
+#endif
+}
+

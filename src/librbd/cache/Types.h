@@ -14,6 +14,7 @@ namespace cache {
 
 enum ImageCacheType {
   IMAGE_CACHE_TYPE_RWL = 1,
+  IMAGE_CACHE_TYPE_SSD,
 };
 
 typedef std::list<Context *> Contexts;

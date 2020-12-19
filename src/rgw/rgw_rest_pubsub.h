@@ -7,8 +7,8 @@
 // s3 compliant notification handler factory
 class RGWHandler_REST_PSNotifs_S3 : public RGWHandler_REST_S3 {
 protected:
-  int init_permissions(RGWOp* op) override {return 0;}
-  int read_permissions(RGWOp* op) override {return 0;}
+  int init_permissions(RGWOp* op, optional_yield y) override {return 0;}
+  int read_permissions(RGWOp* op, optional_yield y) override {return 0;}
   bool supports_quota() override {return false;}
   RGWOp* op_get() override;
   RGWOp* op_put() override;
@@ -27,7 +27,6 @@ class RGWHandler_REST_PSTopic_AWS : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
   const std::string& post_body;
   void rgw_topic_parse_input();
-  //static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 protected:
   RGWOp* op_post() override;
 public:
@@ -35,7 +34,6 @@ public:
       auth_registry(_auth_registry),
       post_body(_post_body) {}
   virtual ~RGWHandler_REST_PSTopic_AWS() = default;
-  int postauth_init() override { return 0; }
-  int authorize(const DoutPrefixProvider* dpp) override;
+  int postauth_init(optional_yield) override { return 0; }
+  int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
-

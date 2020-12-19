@@ -131,14 +131,14 @@ public:
     return new PostCR(json_format_pubsub_event(event), env, endpoint, ack_level, verify_ssl);
   }
 
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
-    return new PostCR(json_format_pubsub_event(record), env, endpoint, ack_level, verify_ssl);
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
+    return new PostCR(json_format_pubsub_event(event), env, endpoint, ack_level, verify_ssl);
   }
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
+  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
-    const auto post_data = json_format_pubsub_event(record);
+    const auto post_data = json_format_pubsub_event(event);
     request.set_post_data(post_data);
     request.set_send_length(post_data.length());
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
@@ -312,12 +312,12 @@ public:
     }
   }
   
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     } else {
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     }
   }
 
@@ -350,15 +350,13 @@ public:
       if (done) {
         return ret;
       }
-#ifdef HAVE_BOOST_CONTEXT
       if (y) {
-        auto& io_ctx = y.get_io_context();
+	auto& io_ctx = y.get_io_context();
         auto& yield_ctx = y.get_yield_context();
         boost::system::error_code ec;
         async_wait(io_ctx, yield_ctx[ec]);
         return -ec.value();
       }
-#endif
       std::unique_lock l(lock);
       cond.wait(l, [this]{return (done==true);});
       return ret;
@@ -377,17 +375,17 @@ public:
     }
   };
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
+  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return amqp::publish(conn, topic, json_format_pubsub_event(record));
+      return amqp::publish(conn, topic, json_format_pubsub_event(event));
     } else {
       // TODO: currently broker and routable are the same - this will require different flags but the same mechanism
       // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
       auto w = std::unique_ptr<Waiter>(new Waiter);
       const auto rc = amqp::publish_with_confirm(conn, 
         topic,
-        json_format_pubsub_event(record),
+        json_format_pubsub_event(event),
         std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
       if (rc < 0) {
         // failed to publish, does not wait for reply
@@ -584,12 +582,12 @@ public:
     }
   }
   
-  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) override {
+  RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     } else {
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(record));
+      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
     }
   }
 
@@ -622,7 +620,6 @@ public:
       if (done) {
         return ret;
       }
-#ifdef HAVE_BOOST_CONTEXT
       if (y) {
         auto& io_ctx = y.get_io_context();
         auto& yield_ctx = y.get_yield_context();
@@ -630,7 +627,6 @@ public:
         async_wait(io_ctx, yield_ctx[ec]);
         return -ec.value();
       }
-#endif
       std::unique_lock l(lock);
       cond.wait(l, [this]{return (done==true);});
       return ret;
@@ -649,16 +645,16 @@ public:
     }
   };
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) override {
+  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
     ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn, topic, json_format_pubsub_event(record));
+      return kafka::publish(conn, topic, json_format_pubsub_event(event));
     } else {
       // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
       auto w = std::unique_ptr<Waiter>(new Waiter);
       const auto rc = kafka::publish_with_confirm(conn, 
         topic,
-        json_format_pubsub_event(record),
+        json_format_pubsub_event(event),
         std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
       if (rc < 0) {
         // failed to publish, does not wait for reply

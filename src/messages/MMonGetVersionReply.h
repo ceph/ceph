@@ -24,7 +24,7 @@
  * MMonGetVersion. The latest version of the requested thing is sent
  * back.
  */
-class MMonGetVersionReply : public Message {
+class MMonGetVersionReply final : public Message {
 private:
   static constexpr int HEAD_VERSION = 2;
 
@@ -60,7 +60,7 @@ public:
   version_t oldest_version = 0;
 
 private:
-  ~MMonGetVersionReply() override {}
+  ~MMonGetVersionReply() final {}
 };
 
 #endif

@@ -1,5 +1,9 @@
 >=16.0.0
 --------
+* $pid expansion in config paths like `admin_socket` will now properly expand
+  to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
+  `ceph-fuse`/`rbd-nbd` expanded `$pid` with the actual daemon pid.
+
 * The allowable options for some "radosgw-admin" commands have been changed.
 
   * "mdlog-list", "datalog-list", "sync-error-list" no longer accepts
@@ -9,8 +13,44 @@
   * Similarly the date ranges and marker ranges have been removed on
     the RESTful DATALog and MDLog list and trim operations.
 
+* ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
+  a number of bugs and improves usability in terms of size specification and
+  calculation, as well as idempotency behaviour and disk replacement process.
+  Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
+  more detailed information.
+
+* Configuration variables for permitted scrub times have changed.  The legal
+  values for ``osd_scrub_begin_hour`` and ``osd_scrub_end_hour`` are 0 - 23.
+  The use of 24 is now illegal.  Specifying ``0`` for both values causes every
+  hour to be allowed.  The legal vaues for ``osd_scrub_begin_week_day`` and
+  ``osd_scrub_end_week_day`` are 0 - 6.  The use of 7 is now illegal.
+  Specifying ``0`` for both values causes every day of the week to be allowed.
+
+* Multiple file systems in a single Ceph cluster is now stable. New Ceph clusters
+  enable support for multiple file systems by default. Existing clusters
+  must still set the "enable_multiple" flag on the fs. Please see the CephFS
+  documentation for more information.
+
+* A new health check, DAEMON_OLD_VERSION, will warn if different versions of Ceph are running
+  on daemons. It will generate a health error if multiple versions are detected.
+  This condition must exist for over mon_warn_older_version_delay (set to 1 week by default) in order for the
+  health condition to be triggered.  This allows most upgrades to proceed
+  without falsely seeing the warning.  If upgrade is paused for an extended
+  time period, health mute can be used like this
+  "ceph health mute DAEMON_OLD_VERSION --sticky".  In this case after
+  upgrade has finished use "ceph health unmute DAEMON_OLD_VERSION".
+
+* MGR: progress module can now be turned on/off, using the commands:
+  ``ceph progress on`` and ``ceph progress off``.
+* An AWS-compliant API: "GetTopicAttributes" was added to replace the existing "GetTopic" API. The new API
+  should be used to fetch information about topics used for bucket notifications.
+
 >=15.0.0
 --------
+
+* MON: The cluster log now logs health detail every ``mon_health_to_clog_interval``,
+  which has been changed from 1hr to 10min. Logging of health detail will be
+  skipped if there is no change in health summary since last known.
 
 * The ``ceph df`` command now lists the number of pgs in each pool.
 
@@ -149,6 +189,17 @@
   - ``mds session blacklist on timeout`` is now ``mds session blocklist on timeout``
   - ``mds session blacklist on evict`` is now ``mds session blocklist on evict``
 
+* CephFS: Compatibility code for old on-disk format of snapshot has been removed.
+  Current on-disk format of snapshot was introduced by Mimic release. If there
+  are any snapshots created by Ceph release older than Mimic. Before upgrading,
+  either delete them all or scrub the whole filesystem:
+
+    ceph daemon <mds of rank 0> scrub_path / force recursive repair
+    ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
+
+* CephFS: Scrub is supported in multiple active mds setup. MDS rank 0 handles
+  scrub commands, and forward scrub to other mds if nessesary.
+
 * The following librados API calls have changed:
 
   - ``rados_blacklist_add`` is now ``rados_blocklist_add``; the former will issue a deprecation warning and be removed in a future release.
@@ -163,6 +214,10 @@
   and operate on specific Ceph file systems. The FS can be specificed using
   ``fsname`` in caps. This also affects subcommand ``fs authorize``, the caps
   produce by it will be specific to the FS name passed in its arguments.
+
+* fs: root_squash flag can be set in MDS caps. It disallows file system
+  operations that need write access for clients with uid=0 or gid=0. This
+  feature should prevent accidents such as an inadvertent `sudo rm -rf /<path>`.
 
 * fs: "fs authorize" now sets MON cap to "allow <perm> fsname=<fsname>"
       instead of setting it to "allow r" all the time.

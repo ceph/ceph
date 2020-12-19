@@ -78,10 +78,14 @@ void MetricAggregator::ms_fast_dispatch2(const ref_t<Message> &m) {
 }
 
 bool MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
-  if (m->get_type() == MSG_MDS_METRICS) {
-    if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {
-      handle_mds_metrics(ref_cast<MMDSMetrics>(m));
-    }
+  if (m->get_type() == MSG_MDS_METRICS &&
+      m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {
+    const Message *msg = m.get();
+    const MMDSOp *op = dynamic_cast<const MMDSOp*>(msg);
+    if (!op)
+      dout(0) << typeid(*msg).name() << " is not an MMDSOp type" << dendl;
+    ceph_assert(op);
+    handle_mds_metrics(ref_cast<MMDSMetrics>(m));
     return true;
   }
   return false;
@@ -111,16 +115,28 @@ void MetricAggregator::refresh_metrics_for_rank(const entity_inst_t &client,
       c->second = metrics.cap_hit_metric.misses;
       break;
     case MDSPerformanceCounterType::READ_LATENCY_METRIC:
-      c->first = metrics.read_latency_metric.lat.tv.tv_sec;
-      c->second = metrics.read_latency_metric.lat.tv.tv_nsec;
+      if (metrics.read_latency_metric.updated) {
+        c->first = metrics.read_latency_metric.lat.tv.tv_sec;
+        c->second = metrics.read_latency_metric.lat.tv.tv_nsec;
+      }
       break;
     case MDSPerformanceCounterType::WRITE_LATENCY_METRIC:
-      c->first = metrics.write_latency_metric.lat.tv.tv_sec;
-      c->second = metrics.write_latency_metric.lat.tv.tv_nsec;
+      if (metrics.write_latency_metric.updated) {
+        c->first = metrics.write_latency_metric.lat.tv.tv_sec;
+        c->second = metrics.write_latency_metric.lat.tv.tv_nsec;
+      }
       break;
     case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
-      c->first = metrics.metadata_latency_metric.lat.tv.tv_sec;
-      c->second = metrics.metadata_latency_metric.lat.tv.tv_nsec;
+      if (metrics.metadata_latency_metric.updated) {
+        c->first = metrics.metadata_latency_metric.lat.tv.tv_sec;
+        c->second = metrics.metadata_latency_metric.lat.tv.tv_nsec;
+      }
+      break;
+    case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
+      if (metrics.dentry_lease_metric.updated) {
+        c->first = metrics.dentry_lease_metric.hits;
+        c->second = metrics.dentry_lease_metric.misses;
+      }
       break;
     default:
       ceph_abort_msg("unknown counter type");
@@ -329,7 +345,6 @@ MetricPayload MetricAggregator::get_perf_reports() {
     query.get_performance_counter_descriptors(&report.performance_counter_descriptors);
 
     auto &descriptors = report.performance_counter_descriptors;
-    ceph_assert(descriptors.size() > 0);
 
     dout(20) << ": descriptors=" << descriptors << dendl;
 

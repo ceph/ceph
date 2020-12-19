@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import logging
 import json
+import logging
 
 import cherrypy
-from . import ApiController, BaseController, RESTController, Endpoint, \
-    ReadPermission, allow_empty_body, ControllerDoc, EndpointDoc
+
 from ..exceptions import DashboardException
 from ..rest_client import RequestException
-from ..security import Scope, Permission
+from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
 from ..tools import json_str_to_object, str_to_bool
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, allow_empty_body
 
 try:
     from typing import Any, List
@@ -48,9 +49,23 @@ class Rgw(BaseController):
     def status(self):
         status = {'available': False, 'message': None}
         try:
+            if not CephService.get_service_list('rgw'):
+                raise LookupError('No RGW service is running.')
             instance = RgwClient.admin_instance()
             # Check if the service is online.
-            if not instance.is_service_online():  # pragma: no cover - no complexity there
+            try:
+                is_online = instance.is_service_online()
+            except RequestException as e:
+                # Drop this instance because the RGW client seems not to
+                # exist anymore (maybe removed via orchestrator). Removing
+                # the instance from the cache will result in the correct
+                # error message next time when the backend tries to
+                # establish a new connection (-> 'No RGW found' instead
+                # of 'RGW REST API failed request ...').
+                # Note, this only applies to auto-detected RGW clients.
+                RgwClient.drop_instance(instance.userid)
+                raise e
+            if not is_online:
                 msg = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
                 raise RequestException(msg)
             # Ensure the API user ID is known by the RGW.
@@ -73,7 +88,7 @@ class Rgw(BaseController):
 @ControllerDoc("RGW Daemon Management API", "RgwDaemon")
 class RgwDaemon(RESTController):
     @EndpointDoc("Display RGW Daemons",
-                 responses={200: RGW_DAEMON_SCHEMA})
+                 responses={200: [RGW_DAEMON_SCHEMA]})
     def list(self):
         # type: () -> List[dict]
         daemons = []

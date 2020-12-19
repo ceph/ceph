@@ -2,9 +2,9 @@
 Partial Object Recovery
 =======================
 
-Partial Object Recovery devotes to improving the efficiency of
-log-based recovery rather than backfill. Original log-based recovery
-calculates missing_set based on the difference between pg_log.
+Partial Object Recovery improves the efficiency of log-based recovery (vs
+backfill). Original log-based recovery calculates missing_set based on pg_log
+differences.
 
 The whole object should be recovery from one OSD to another
 if the object is indicated modified by pg_log regardless of how much

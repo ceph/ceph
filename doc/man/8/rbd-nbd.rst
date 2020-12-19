@@ -9,9 +9,11 @@
 Synopsis
 ========
 
-| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--timeout *seconds*] map *image-spec* | *snap-spec*
-| **rbd-nbd** unmap *nbd device*
+| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] [--io-timeout *seconds*] [--reattach-timeout *seconds*] map *image-spec* | *snap-spec*
+| **rbd-nbd** unmap *nbd device* | *image-spec* | *snap-spec*
 | **rbd-nbd** list-mapped
+| **rbd-nbd** attach --device *nbd device* *image-spec* | *snap-spec*
+| **rbd-nbd** detach *nbd device* | *image-spec* | *snap-spec*
 
 Description
 ===========
@@ -45,10 +47,16 @@ Options
 
    Forbid writes by other clients.
 
-.. option:: --timeout *seconds*
+.. option:: --io-timeout *seconds*
 
    Override device timeout. Linux kernel will default to a 30 second request timeout.
    Allow the user to optionally specify an alternate timeout.
+
+.. option:: --reattach-timeout *seconds*
+
+   Specify timeout for the kernel to wait for a new rbd-nbd process is
+   attached after the old process is detached. The default is 30
+   second.
 
 Image and snap specs
 ====================

@@ -5,10 +5,12 @@ import { By } from '@angular/platform-browser';
 import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/testing';
 
 import { NgbModal, NgbNav, NgbNavItem } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 import { configureTestSuite } from 'ng-bullet';
 import { of } from 'rxjs';
 
 import { InventoryDevice } from '../app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
+import { Pool } from '../app/ceph/pool/pool';
 import { OrchestratorService } from '../app/shared/api/orchestrator.service';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
@@ -43,9 +45,18 @@ export function configureTestBed(configuration: any, entryComponents?: any) {
 export class PermissionHelper {
   tac: TableActionsComponent;
   permission: Permission;
+  selection: { single: object; multiple: object[] };
 
-  constructor(permission: Permission) {
+  /**
+   * @param permission The permissions used by this test.
+   * @param selection The selection used by this test. Configure this if
+   *   the table actions require a more complex selection object to perform
+   *   a correct test run.
+   *   Defaults to `{ single: {}, multiple: [{}, {}] }`.
+   */
+  constructor(permission: Permission, selection?: { single: object; multiple: object[] }) {
     this.permission = permission;
+    this.selection = _.defaultTo(selection, { single: {}, multiple: [{}, {}] });
   }
 
   setPermissionsAndGetActions(tableActions: CdTableAction[]): any {
@@ -89,11 +100,13 @@ export class PermissionHelper {
   testScenarios() {
     const result: any = {};
     // 'multiple selections'
-    result.multiple = this.testScenario([{}, {}]);
+    result.multiple = this.testScenario(this.selection.multiple);
     // 'select executing item'
-    result.executing = this.testScenario([{ cdExecuting: 'someAction' }]);
+    result.executing = this.testScenario([
+      _.merge({ cdExecuting: 'someAction' }, this.selection.single)
+    ]);
     // 'select non-executing item'
-    result.single = this.testScenario([{}]);
+    result.single = this.testScenario([this.selection.single]);
     // 'no selection'
     result.no = this.testScenario([]);
 
@@ -102,12 +115,13 @@ export class PermissionHelper {
 
   private testScenario(selection: object[]) {
     this.setSelection(selection);
-    const btn = this.tac.getCurrentButton();
-    return btn ? btn.name : '';
+    const action: CdTableAction = this.tac.currentAction;
+    return action ? action.name : '';
   }
 
   setSelection(selection: object[]) {
     this.tac.selection.selected = selection;
+    this.tac.onSelectionChange();
   }
 }
 
@@ -383,6 +397,18 @@ export class Mocks {
     return { name, type, type_id, id, children, device_class };
   }
 
+  static getPool = (name: string, id: number): Pool => {
+    return _.merge(new Pool(name), {
+      pool: id,
+      type: 'replicated',
+      pg_num: 256,
+      pg_placement_num: 256,
+      pg_num_target: 256,
+      pg_placement_num_target: 256,
+      size: 3
+    });
+  };
+
   /**
    * Create the following test crush map:
    * > default
@@ -625,7 +651,7 @@ export class TableActionHelper {
     const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
     const toClassName = TestBed.inject(TableActionsComponent).toClassName;
     const getActionElement = (action: CdTableAction) =>
-      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action.name)}`));
+      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action)}`));
 
     const actions = {};
     tableActions.forEach((action) => {

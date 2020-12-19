@@ -6,12 +6,13 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { OsdService } from '../../../shared/api/osd.service';
-import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '../../../shared/models/smart';
-import { SharedModule } from '../../../shared/shared.module';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { HddSmartDataV1, NvmeSmartDataV1, SmartDataResult } from '~/app/shared/models/smart';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SmartListComponent } from './smart-list.component';
 
 describe('OsdSmartListComponent', () => {
@@ -109,7 +110,13 @@ describe('OsdSmartListComponent', () => {
 
   configureTestBed({
     declarations: [SmartListComponent],
-    imports: [BrowserAnimationsModule, SharedModule, HttpClientTestingModule, NgbNavModule]
+    imports: [
+      BrowserAnimationsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      NgbNavModule,
+      NgxPipeFunctionModule
+    ]
   });
 
   beforeEach(() => {

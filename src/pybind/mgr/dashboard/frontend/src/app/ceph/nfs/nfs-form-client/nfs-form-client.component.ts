@@ -3,9 +3,9 @@ import { FormArray, FormControl, NgForm, Validators } from '@angular/forms';
 
 import _ from 'lodash';
 
-import { NfsService } from '../../../shared/api/nfs.service';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { NfsService } from '~/app/shared/api/nfs.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-nfs-form-client',

@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 
 import cherrypy
-
 import rbd
 
 from .. import mgr

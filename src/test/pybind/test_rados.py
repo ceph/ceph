@@ -5,7 +5,7 @@ from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
-                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO)
+                   LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData)
 from datetime import timedelta
 import time
 import threading
@@ -578,6 +578,26 @@ class TestIoctx(object):
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [])
 
+    def test_remove_omap_ramge2(self):
+        keys = ("1", "2", "3", "4")
+        values = (b"a", b"bb", b"ccc", b"dddd")
+        with WriteOpCtx() as write_op:
+            self.ioctx.set_omap(write_op, keys, values)
+            self.ioctx.operate_write_op(write_op, "test_obj")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "test_obj")
+            eq(list(iter), list(zip(keys, values)))
+        with WriteOpCtx() as write_op:
+            self.ioctx.remove_omap_range2(write_op, "1", "4")
+            self.ioctx.operate_write_op(write_op, "test_obj")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "test_obj")
+            eq(list(iter), [("4", b"dddd")])
+
     def test_xattrs_op(self):
         xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
         with WriteOpCtx() as write_op:
@@ -674,6 +694,25 @@ class TestIoctx(object):
             while count[0] < 1:
                 lock.wait()
         eq(comp.get_return_value(), 0)
+
+    def test_aio_rmxattr(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        self.ioctx.set_xattr("xyz", "key", b'value')
+        eq(self.ioctx.get_xattr("xyz", "key"), b'value')
+        comp = self.ioctx.aio_rmxattr("xyz", "key", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        with assert_raises(NoData):
+            self.ioctx.get_xattr("xyz", "key")
 
     def test_aio_write_no_comp_ref(self):
         lock = threading.Condition()
@@ -970,6 +1009,22 @@ class TestIoctx(object):
 
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_setxattr(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(blah):
+            with lock:
+                count[0] += 1
+                lock.notify()
+            return 0
+        comp = self.ioctx.aio_setxattr("obj", "key", b'value', cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+        eq(self.ioctx.get_xattr("obj", "key"), b'value')
+
     def test_applications(self):
         cmd = {"prefix":"osd dump", "format":"json"}
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'')
@@ -1248,6 +1303,10 @@ class TestWatchNotify(object):
         self.notify_cnt = {}
         self.notify_data = {}
         self.notify_error = {}
+        # aio related
+        self.ack_cnt = {}
+        self.ack_data = {}
+        self.instance_id = self.rados.get_instance_id()
 
     def tearDown(self):
         self.ioctx.close()
@@ -1323,3 +1382,71 @@ class TestWatchNotify(object):
             assert_raises(NotConnected, watch1.check)
 
             assert_raises(ObjectNotFound, self.ioctx.notify, self.OID, 'test')
+
+    def make_callback_reply(self):
+        def callback(notify_id, notifier_id, watch_id, data):
+            with self.lock:
+                return data
+        return callback
+
+    def notify_callback(self, _, r, ack_list, timeout_list):
+        eq(r, 0)
+        with self.lock:
+            for notifier_id, _, notifier_data in ack_list:
+                if notifier_id not in self.ack_cnt:
+                    self.ack_cnt[notifier_id] = 0
+                self.ack_cnt[notifier_id] += 1
+                self.ack_data[notifier_id] = notifier_data
+
+    def notify_callback_err(self, _, r, ack_list, timeout_list):
+        eq(r, -errno.ENOENT)
+
+    def test_aio_notify(self):
+        with self.ioctx.watch(self.OID, self.make_callback_reply(),
+                              self.make_error_callback()) as watch1:
+            watch_id1 = watch1.get_id()
+            ok(watch_id1 > 0)
+
+            with self.rados.open_ioctx('test_pool') as ioctx:
+                watch2 = ioctx.watch(self.OID, self.make_callback_reply(),
+                                     self.make_error_callback())
+            watch_id2 = watch2.get_id()
+            ok(watch_id2 > 0)
+
+            comp = self.ioctx.aio_notify(self.OID, self.notify_callback, msg='test')
+            comp.wait_for_complete_and_cb()
+            with self.lock:
+                ok(self.instance_id in self.ack_cnt)
+                eq(self.ack_cnt[self.instance_id], 2)
+                eq(self.ack_data[self.instance_id], b'test')
+
+            ok(watch1.check() >= timedelta())
+            ok(watch2.check() >= timedelta())
+
+            comp = self.ioctx.aio_notify(self.OID, self.notify_callback, msg='best')
+            comp.wait_for_complete_and_cb()
+            with self.lock:
+                eq(self.ack_cnt[self.instance_id], 4)
+                eq(self.ack_data[self.instance_id], b'best')
+
+            watch2.close()
+
+            comp = self.ioctx.aio_notify(self.OID, self.notify_callback, msg='rest')
+            comp.wait_for_complete_and_cb()
+            with self.lock:
+                eq(self.ack_cnt[self.instance_id], 5)
+                eq(self.ack_data[self.instance_id], b'rest')
+
+            assert(watch1.check() >= timedelta())
+            self.ioctx.remove_object(self.OID)
+
+            for i in range(10):
+                with self.lock:
+                    if watch_id1 in self.notify_error:
+                        break
+                time.sleep(1)
+            eq(self.notify_error[watch_id1], -errno.ENOTCONN)
+            assert_raises(NotConnected, watch1.check)
+
+            comp = self.ioctx.aio_notify(self.OID, self.notify_callback_err, msg='test')
+            comp.wait_for_complete_and_cb()

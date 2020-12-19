@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import abc
 
-from .pluggy import HookspecMarker, HookimplMarker, PluginManager
+from .pluggy import HookimplMarker, HookspecMarker, PluginManager
 
 
 class Interface(object, metaclass=abc.ABCMeta):
@@ -69,4 +69,4 @@ class DashboardPluginManager(object):
 PLUGIN_MANAGER = DashboardPluginManager("ceph-mgr.dashboard")
 
 # Load all interfaces and their hooks
-from . import interfaces  # noqa: F401 pylint: disable=wrong-import-position,cyclic-import
+from . import interfaces  # noqa pylint: disable=C0413,W0406

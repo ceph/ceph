@@ -240,18 +240,18 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     for (; (i + write_size) <= (uint64_t)max_size; i += write_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), write_size, i);
       if (ret < 0) {
-	free(buf);
+	aligned_free(buf);
 	return -errno;
       }
     }
     if (i < (uint64_t)max_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
       if (ret < 0) {
-	free(buf);
+	aligned_free(buf);
 	return -errno;
       }
     }
-    free(buf);
+    aligned_free(buf);
   }
 
 

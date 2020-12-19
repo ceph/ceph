@@ -4,12 +4,13 @@ from __future__ import absolute_import
 import errno
 import json
 
-from mgr_module import CLIReadCommand, CLIWriteCommand
+from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
 
-from .iscsi_client import IscsiClient
-from .iscsi_config import IscsiGatewaysConfig, IscsiGatewayAlreadyExists, InvalidServiceUrl, \
-    ManagedByOrchestratorException, IscsiGatewayDoesNotExist
 from ..rest_client import RequestException
+from .iscsi_client import IscsiClient
+from .iscsi_config import InvalidServiceUrl, IscsiGatewayAlreadyExists, \
+    IscsiGatewayDoesNotExist, IscsiGatewaysConfig, \
+    ManagedByOrchestratorException
 
 
 @CLIReadCommand('dashboard iscsi-gateway-list', desc='List iSCSI gateways')
@@ -18,10 +19,11 @@ def list_iscsi_gateways(_):
 
 
 @CLIWriteCommand('dashboard iscsi-gateway-add',
-                 'name=service_url,type=CephString '
                  'name=name,type=CephString,req=false',
-                 'Add iSCSI gateway configuration')
-def add_iscsi_gateway(_, service_url, name=None):
+                 'Add iSCSI gateway configuration. Gateway URL read from -i <file>')
+@CLICheckNonemptyFileInput
+def add_iscsi_gateway(_, inbuf, name=None):
+    service_url = inbuf
     try:
         IscsiGatewaysConfig.validate_service_url(service_url)
         if name is None:

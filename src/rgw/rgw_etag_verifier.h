@@ -17,14 +17,11 @@
 
 #include "rgw_putobj.h"
 #include "rgw_op.h"
+#include "common/static_ptr.h"
 
-enum SourceObjType {
-  OBJ_TYPE_UNINIT, /* Object type is not initialised yet */
-  OBJ_TYPE_ATOMIC,
-  OBJ_TYPE_MPU, /* Object at source was created through MPU */
-};
+namespace rgw::putobj {
 
-class RGWPutObj_ETagVerifier : public rgw::putobj::Pipe
+class ETagVerifier : public rgw::putobj::Pipe
 {
 protected:
   CephContext* cct;
@@ -32,26 +29,26 @@ protected:
   string calculated_etag;
 
 public:
-  RGWPutObj_ETagVerifier(CephContext* cct_, rgw::putobj::DataProcessor *next)
+  ETagVerifier(CephContext* cct_, rgw::putobj::DataProcessor *next)
     : Pipe(next), cct(cct_) {}
 
   virtual void calculate_etag() = 0;
   string get_calculated_etag() { return calculated_etag;}
 
-}; /* RGWPutObj_ETagVerifier */
+}; /* ETagVerifier */
 
-class RGWPutObj_ETagVerifier_Atomic : public RGWPutObj_ETagVerifier
+class ETagVerifier_Atomic : public ETagVerifier
 {
 public:
-  RGWPutObj_ETagVerifier_Atomic(CephContext* cct_, rgw::putobj::DataProcessor *next)
-    : RGWPutObj_ETagVerifier(cct_, next) {}
+  ETagVerifier_Atomic(CephContext* cct_, rgw::putobj::DataProcessor *next)
+    : ETagVerifier(cct_, next) {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
 
-}; /* RGWPutObj_ETagVerifier_Atomic */
+}; /* ETagVerifier_Atomic */
 
-class RGWPutObj_ETagVerifier_MPU : public RGWPutObj_ETagVerifier
+class ETagVerifier_MPU : public ETagVerifier
 {
   std::vector<uint64_t> part_ofs;
   uint64_t cur_part_index{0}, next_part_index{1};
@@ -60,13 +57,29 @@ class RGWPutObj_ETagVerifier_MPU : public RGWPutObj_ETagVerifier
   void process_end_of_MPU_part();
 
 public:
-  RGWPutObj_ETagVerifier_MPU(CephContext* cct_, rgw::putobj::DataProcessor *next)
-    : RGWPutObj_ETagVerifier(cct_, next) {}
+  ETagVerifier_MPU(CephContext* cct,
+                             std::vector<uint64_t> part_ofs,
+                             rgw::putobj::DataProcessor *next)
+    : ETagVerifier(cct, next),
+      part_ofs(std::move(part_ofs))
+  {}
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
   void calculate_etag() override;
-  void append_part_ofs(uint64_t ofs) { part_ofs.emplace_back(ofs); }
 
-}; /* RGWPutObj_ETagVerifier_MPU */
+}; /* ETagVerifier_MPU */
+
+constexpr auto max_etag_verifier_size = std::max(
+    sizeof(ETagVerifier_Atomic),
+    sizeof(ETagVerifier_MPU)
+  );
+using etag_verifier_ptr = ceph::static_ptr<ETagVerifier, max_etag_verifier_size>;
+
+int create_etag_verifier(CephContext* cct, DataProcessor* next,
+                         const bufferlist& manifest_bl,
+                         const std::optional<RGWCompressionInfo>& compression,
+                         etag_verifier_ptr& verifier);
+
+} // namespace rgw::putobj
 
 #endif /* CEPH_RGW_ETAG_VERIFIER_H */

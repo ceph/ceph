@@ -9,6 +9,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/lba_manager/btree/btree_range_pin.h"
+#include "crimson/os/seastore/lba_manager.h"
 
 namespace crimson::os::seastore::lba_manager::btree {
 
@@ -116,11 +117,34 @@ struct LBANode : CachedExtent {
     extent_len_t len) = 0;
 
   /**
+   * scan_mappings
+   *
+   * Call f for all mappings in [begin, end)
+   */
+  using scan_mappings_ertr = LBAManager::scan_mappings_ertr;
+  using scan_mappings_ret = LBAManager::scan_mappings_ret;
+  using scan_mappings_func_t = LBAManager::scan_mappings_func_t;
+  virtual scan_mappings_ret scan_mappings(
+    op_context_t c,
+    laddr_t begin,
+    laddr_t end,
+    scan_mappings_func_t &f) = 0;
+
+  using scan_mapped_space_ertr = LBAManager::scan_mapped_space_ertr;
+  using scan_mapped_space_ret = LBAManager::scan_mapped_space_ret;
+  using scan_mapped_space_func_t = LBAManager::scan_mapped_space_func_t;
+  virtual scan_mapped_space_ret scan_mapped_space(
+    op_context_t c,
+    scan_mapped_space_func_t &f) = 0;
+
+  /**
    * mutate_mapping
    *
    * Lookups up laddr, calls f on value. If f returns a value, inserts it.
    * If it returns nullopt, removes the value.
    * Caller must already have merged if at_min_capacity().
+   *
+   * Recursive calls use mutate_mapping_internal.
    *
    * Precondition: !at_min_capacity()
    */
@@ -136,6 +160,11 @@ struct LBANode : CachedExtent {
   virtual mutate_mapping_ret mutate_mapping(
     op_context_t c,
     laddr_t laddr,
+    mutate_func_t &&f) = 0;
+  virtual mutate_mapping_ret mutate_mapping_internal(
+    op_context_t c,
+    laddr_t laddr,
+    bool is_root,
     mutate_func_t &&f) = 0;
 
   /**

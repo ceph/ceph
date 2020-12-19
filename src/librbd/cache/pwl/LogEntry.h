@@ -157,19 +157,22 @@ public:
   WriteLogEntry(std::shared_ptr<SyncPointLogEntry> sync_point_entry,
                 const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericWriteLogEntry(sync_point_entry, image_offset_bytes, write_bytes),
-      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+      m_entry_bl_lock(ceph::make_mutex(pwl::unique_lock_name(
         "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
   WriteLogEntry(const uint64_t image_offset_bytes, const uint64_t write_bytes)
     : GenericWriteLogEntry(nullptr, image_offset_bytes, write_bytes),
-      m_entry_bl_lock(ceph::make_mutex(util::unique_lock_name(
+      m_entry_bl_lock(ceph::make_mutex(pwl::unique_lock_name(
         "librbd::cache::pwl::WriteLogEntry::m_entry_bl_lock", this)))
   { }
   ~WriteLogEntry() override {};
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
-  void init(bool has_data, std::vector<WriteBufferAllocation>::iterator allocation,
+  void init(bool has_data,
             uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush);
+  #ifdef WITH_RBD_RWL
+  void init_pmem_buffer(std::vector<WriteBufferAllocation>::iterator allocation);
+  #endif
   BlockExtent block_extent();
   unsigned int reader_count() const;
   /* Returns a ref to a bl containing bufferptrs to the entry pmem buffer */

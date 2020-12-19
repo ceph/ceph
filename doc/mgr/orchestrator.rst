@@ -6,9 +6,9 @@ Orchestrator CLI
 ================
 
 This module provides a command line interface (CLI) to orchestrator
-modules (ceph-mgr modules which interface with external orchestration services).
+modules (``ceph-mgr`` modules which interface with external orchestration services).
 
-As the orchestrator CLI unifies different external orchestrators, a common nomenclature
+As the orchestrator CLI unifies multiple external orchestrators, a common nomenclature
 for the orchestrator module is needed.
 
 +--------------------------------------+---------------------------------------+
@@ -58,6 +58,8 @@ Status
 Show current orchestrator mode and high-level status (whether the orchestrator
 plugin is available and operational)
 
+.. _orchestrator-cli-host-management:
+
 Host Management
 ===============
 
@@ -70,7 +72,7 @@ Add and remove hosts::
     ceph orch host add <hostname> [<addr>] [<labels>...]
     ceph orch host rm <hostname>
 
-For cephadm, see also :ref:`cephadm-fqdn`.
+For cephadm, see also :ref:`cephadm-fqdn` and :ref:`cephadm-removing-hosts`.
 
 Host Specification
 ------------------
@@ -188,10 +190,6 @@ That is, after using::
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter::
 
     ceph orch apply osd --all-available-devices --unmanaged=true
-
-If you have already created the OSDs using the ``all-available-devices`` service, you can change the automatic OSD creation using the following command::
-
-    ceph orch osd spec --service-name osd.all-available-devices --unmanaged
 
 Remove an OSD
 -------------
@@ -386,6 +384,9 @@ where ``name`` is the name of the CephFS and ``placement`` is a
 This command will create the required Ceph pools, create the new
 CephFS, and deploy mds servers.
 
+
+.. _orchestrator-cli-stateless-services:
+
 Stateless services (MDS/RGW/NFS/rbd-mirror/iSCSI)
 =================================================
 
@@ -447,8 +448,9 @@ A corresponding :ref:`orchestrator-cli-service-spec` must look like:
       - CONFIG_DIR
     files:
       CONFIG_DIR/foo.conf:
-          - refresh=true
-          - username=xyz
+        - refresh=true
+        - username=xyz
+        - "port: 1234"
 
 where the properties of a service specification are:
 
@@ -483,9 +485,11 @@ where the properties of a service specification are:
 * ``files``
     A dictionary, where the key is the relative path of the file and the
     value the file content. The content must be double quoted when using
-    a string. Use '\n' for line breaks in that case. Otherwise define
+    a string. Use '\\n' for line breaks in that case. Otherwise define
     multi-line content as list of strings. The given files will be created
     below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
+    The absolute path of the directory where the file will be created must
+    exist. Use the `dirs` property to create them if necessary.
 
 .. _orchestrator-cli-service-spec:
 
@@ -601,9 +605,9 @@ Or in YAML:
 
 MONs and other services may require some enhanced network specifications::
 
-  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3000,v1:1.2.3.4:6789]=name"
+  orch daemon add mon --placement="myhost:[v2:1.2.3.4:3300,v1:1.2.3.4:6789]=name"
 
-where ``[v2:1.2.3.4:3000,v1:1.2.3.4:6789]`` is the network address of the monitor
+where ``[v2:1.2.3.4:3300,v1:1.2.3.4:6789]`` is the network address of the monitor
 and ``=name`` specifies the name of the new monitor.
 
 Placement by labels
@@ -757,10 +761,10 @@ This is an overview of the current implementation status of the orchestrators.
  device {ident,fault}-(on,off}       ⚪      ✔
  device ls                           ✔      ✔
  iscsi add                           ⚪     ✔
- mds add                             ✔      ✔
- nfs add                             ✔      ✔
+ mds add                             ⚪      ✔
+ nfs add                             ⚪      ✔
  rbd-mirror add                      ⚪      ✔
- rgw add                             ✔      ✔
+ rgw add                             ⚪     ✔
  ps                                  ✔      ✔
 =================================== ====== =========
 

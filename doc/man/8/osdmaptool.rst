@@ -17,8 +17,8 @@ Synopsis
 | **osdmaptool** *mapfilename* [--export-crush *crushmap*]
 | **osdmaptool** *mapfilename* [--upmap *file*] [--upmap-max *max-optimizations*]
   [--upmap-deviation *max-deviation*] [--upmap-pool *poolname*]
-  [--upmap-save *file*] [--upmap-save *newosdmap*] [--upmap-active]
-| **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap-save *newosdmap*]
+  [--save] [--upmap-active]
+| **osdmaptool** *mapfilename* [--upmap-cleanup] [--upmap *file*]
 
 
 Description
@@ -123,6 +123,14 @@ Options
 
    mark an osd as out (but do not persist)
 
+.. option:: --mark-up <osdid>
+
+   mark an osd as up (but do not persist)
+
+.. option:: --mark-in <osdid>
+
+   mark an osd as in (but do not persist)
+
 .. option:: --tree
 
    Displays a hierarchical tree of the map.
@@ -163,14 +171,17 @@ Options
 
    restrict upmap balancing to 1 pool or the option can be repeated for multiple pools
 
-.. option:: --upmap-save
-
-   write modified OSDMap with upmap changes
-
 .. option:: --upmap-active
 
    Act like an active balancer, keep applying changes until balanced
 
+.. option:: --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>]
+
+   Change CRUSH weight of <osdid>
+
+.. option:: --save
+
+   write modified osdmap with upmap or crush-adjust changes
 
 Example
 =======

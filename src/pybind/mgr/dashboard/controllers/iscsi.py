@@ -4,26 +4,27 @@
 # pylint: disable=too-many-lines
 from __future__ import absolute_import
 
-from copy import deepcopy
-import re
 import json
-import cherrypy
+import re
+from copy import deepcopy
 
+import cherrypy
 import rados
 import rbd
 
-from . import ApiController, UiApiController, RESTController, BaseController, Endpoint,\
-    ReadPermission, UpdatePermission, Task, ControllerDoc, EndpointDoc
 from .. import mgr
+from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..security import Scope
-from ..services.iscsi_client import IscsiClient
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.iscsi_client import IscsiClient
 from ..services.iscsi_config import IscsiGatewayDoesNotExist
 from ..services.rbd import format_bitmask
 from ..services.tcmu_service import TcmuService
-from ..exceptions import DashboardException
-from ..tools import str_to_bool, TaskManager
+from ..tools import TaskManager, str_to_bool
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UiApiController, \
+    UpdatePermission
 
 try:
     from typing import Any, Dict, List, no_type_check

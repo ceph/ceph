@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_CACHE_RWL_REQUEST_H 
 
 #include "include/Context.h"
-#include "librbd/cache/ImageCache.h"
 #include "librbd/cache/pwl/Types.h"
 #include "librbd/cache/pwl/LogOperation.h"
 
@@ -66,6 +65,8 @@ public:
   virtual void deferred_handler() = 0;
 
   virtual void dispatch()  = 0;
+
+  virtual void copy_pmem() {};
 
   virtual const char *get_name() const {
     return "C_BlockIORequest";
@@ -152,6 +153,10 @@ public:
   void deferred_handler() override { }
 
   void dispatch() override;
+
+  #ifdef WITH_RBD_RWL
+  void copy_pmem() override;
+  #endif
 
   virtual std::shared_ptr<WriteLogOperation> create_operation(uint64_t offset, uint64_t len);
 

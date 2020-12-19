@@ -1,9 +1,12 @@
 import { Injectable } from '@angular/core';
 
+import { environment } from '~/environments/environment';
+
 export class AppConstants {
   public static readonly organization = 'ceph';
   public static readonly projectName = 'Ceph Dashboard';
   public static readonly license = 'Free software (LGPL 2.1).';
+  public static readonly copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
 }
 
 export enum URLVerbs {
@@ -80,6 +83,10 @@ export class ActionLabelsI18n {
   REMOVE: string;
   EDIT: string;
   CANCEL: string;
+  PREVIEW: string;
+  MOVE: string;
+  NEXT: string;
+  BACK: string;
   CHANGE: string;
   COPY: string;
   CLONE: string;
@@ -101,11 +108,13 @@ export class ActionLabelsI18n {
   ROLLBACK: string;
   SCRUB: string;
   SET: string;
+  SUBMIT: string;
   SHOW: string;
   TRASH: string;
   UNPROTECT: string;
   UNSET: string;
   UPDATE: string;
+  FLAGS: string;
 
   constructor() {
     /* Create a new item */
@@ -117,6 +126,7 @@ export class ActionLabelsI18n {
     /* Add an existing item to a container */
     this.ADD = $localize`Add`;
     this.SET = $localize`Set`;
+    this.SUBMIT = $localize`Submit`;
 
     /* Remove an item from a container WITHOUT deleting it */
     this.REMOVE = $localize`Remove`;
@@ -126,6 +136,12 @@ export class ActionLabelsI18n {
     this.EDIT = $localize`Edit`;
     this.UPDATE = $localize`Update`;
     this.CANCEL = $localize`Cancel`;
+    this.PREVIEW = $localize`Preview`;
+    this.MOVE = $localize`Move`;
+
+    /* Wizard wording */
+    this.NEXT = $localize`Next`;
+    this.BACK = $localize`Back`;
 
     /* Non-standard actions */
     this.CLONE = $localize`Clone`;
@@ -149,6 +165,7 @@ export class ActionLabelsI18n {
     this.TRASH = $localize`Move to Trash`;
     this.UNPROTECT = $localize`Unprotect`;
     this.CHANGE = $localize`Change`;
+    this.FLAGS = $localize`Flags`;
 
     /* Prometheus wording */
     this.RECREATE = $localize`Recreate`;
@@ -169,6 +186,8 @@ export class SucceededActionLabelsI18n {
   REMOVED: string;
   EDITED: string;
   CANCELED: string;
+  PREVIEWED: string;
+  MOVED: string;
   COPIED: string;
   CLONED: string;
   DEEP_SCRUBBED: string;
@@ -208,6 +227,8 @@ export class SucceededActionLabelsI18n {
     /* Make changes to an existing item */
     this.EDITED = $localize`Edited`;
     this.CANCELED = $localize`Canceled`;
+    this.PREVIEWED = $localize`Previewed`;
+    this.MOVED = $localize`Moved`;
 
     /* Non-standard actions */
     this.CLONED = $localize`Cloned`;

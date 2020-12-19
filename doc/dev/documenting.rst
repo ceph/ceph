@@ -51,6 +51,14 @@ functions should be grouped into logical categories. The `librados C
 API`_ provides a complete example. It is pulled into Sphinx by
 `librados.rst`_, which is rendered at :doc:`/rados/api/librados`.
 
+To generate the doxygen documentation in HTML format use:
+
+::
+
+   # make doxygen
+
+HTML output will be under: ``build-doc/doxygen/html`` 
+
 .. _`librados C API`: https://github.com/ceph/ceph/blob/master/src/include/rados/librados.h
 .. _`librados.rst`: https://github.com/ceph/ceph/raw/master/doc/rados/api/librados.rst
 

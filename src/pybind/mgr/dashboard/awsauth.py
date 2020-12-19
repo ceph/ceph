@@ -32,21 +32,20 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import hmac
-
+from email.utils import formatdate
 from hashlib import sha1 as sha
+
+from requests.auth import AuthBase
 
 py3k = False
 try:
-    from urlparse import urlparse, unquote
     from base64 import encodestring
+
+    from urlparse import unquote, urlparse
 except ImportError:
     py3k = True
-    from urllib.parse import urlparse, unquote
     from base64 import encodebytes as encodestring
-
-from email.utils import formatdate
-
-from requests.auth import AuthBase
+    from urllib.parse import unquote, urlparse
 
 
 class S3Auth(AuthBase):

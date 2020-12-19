@@ -81,6 +81,7 @@ struct ExtMapNode : LogicalCachedExtent {
 
   virtual bool at_max_capacity() const = 0;
   virtual bool at_min_capacity() const = 0;
+  virtual unsigned get_node_size() const = 0;
   virtual ~ExtMapNode() = default;
 
   using alloc_ertr = TransactionManager::alloc_extent_ertr;
@@ -97,10 +98,10 @@ struct ExtMapNode : LogicalCachedExtent {
   alloc_ertr::future<std::pair<TCachedExtentRef<T>, TCachedExtentRef<T>>>
   extmap_alloc_2extents(ext_context_t ec, extent_len_t len) {
     return seastar::do_with(std::pair<TCachedExtentRef<T>, TCachedExtentRef<T>>(),
-      [this, ec, len] (auto &extents) {
+      [ec, len] (auto &extents) {
       return crimson::do_for_each(boost::make_counting_iterator(0),
                                   boost::make_counting_iterator(2),
-                                  [this, ec, len, &extents] (auto i) {
+                                  [ec, len, &extents] (auto i) {
         return ec.tm.alloc_extent<T>(ec.t, L_ADDR_MIN, len).safe_then(
           [i, &extents](auto &&node) {
 	         if (i == 0)

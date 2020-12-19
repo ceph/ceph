@@ -39,10 +39,8 @@
                         class="btn btn-light"
                         cdPasswordButton="secret_key">
                 </button>
-                <button type="button"
-                        class="btn btn-light"
-                        cdCopy2ClipboardButton="secret_key">
-                </button>
+                <cd-copy-2-clipboard-button source="secret_key">
+                </cd-copy-2-clipboard-button>
               </span>
             </div>
           </div>
@@ -51,7 +49,7 @@
     </div>
 
     <div class="modal-footer">
-      <cd-back-button [back]="activeModal.close"></cd-back-button>
+      <cd-back-button (backAction)="activeModal.close()"></cd-back-button>
     </div>
   </ng-container>
 </cd-modal>

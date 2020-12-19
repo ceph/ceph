@@ -29,14 +29,9 @@
       </div>
 
       <div class="modal-footer">
-        <cd-submit-button [form]="snapshotForm"
-                          i18n="form action button|Example: Create rbdSnapshot@@formActionButton"
-                          (submitAction)="submit()">{{ action | titlecase }}
-          {{ resource | upperFirst }}</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"
-                        name="Close"
-                        i18n-name>
-        </cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="snapshotForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

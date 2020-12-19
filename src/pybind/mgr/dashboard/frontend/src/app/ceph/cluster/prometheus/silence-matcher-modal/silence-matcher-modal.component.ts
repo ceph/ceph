@@ -6,14 +6,15 @@ import _ from 'lodash';
 import { merge, Observable, Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
 
-import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import {
   AlertmanagerSilenceMatcher,
   AlertmanagerSilenceMatcherMatch
-} from '../../../../shared/models/alertmanager-silence';
-import { PrometheusRule } from '../../../../shared/models/prometheus-alerts';
-import { PrometheusSilenceMatcherService } from '../../../../shared/services/prometheus-silence-matcher.service';
+} from '~/app/shared/models/alertmanager-silence';
+import { PrometheusRule } from '~/app/shared/models/prometheus-alerts';
+import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 
 @Component({
   selector: 'cd-silence-matcher-modal',
@@ -54,7 +55,8 @@ export class SilenceMatcherModalComponent {
   constructor(
     private formBuilder: CdFormBuilder,
     private silenceMatcher: PrometheusSilenceMatcherService,
-    public activeModal: NgbActiveModal
+    public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.createForm();
     this.subscribeToChanges();
@@ -88,6 +90,10 @@ export class SilenceMatcherModalComponent {
     this.possibleValues = _.sortedUniq(
       this.rules.map((r) => _.get(r, this.silenceMatcher.getAttributePath(name))).filter((x) => x)
     );
+  }
+
+  getMode() {
+    return this.editMode ? this.actionLabels.EDIT : this.actionLabels.ADD;
   }
 
   preFillControls(matcher: AlertmanagerSilenceMatcher) {

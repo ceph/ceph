@@ -74,7 +74,6 @@ struct rgw_http_req_data : public RefCountedObject {
     if (done) {
       return ret;
     }
-#ifdef HAVE_BOOST_CONTEXT
     if (y) {
       auto& context = y.get_io_context();
       auto& yield = y.get_yield_context();
@@ -86,7 +85,6 @@ struct rgw_http_req_data : public RefCountedObject {
     if (is_asio_thread) {
       dout(20) << "WARNING: blocking http request" << dendl;
     }
-#endif
     std::unique_lock l{lock};
     cond.wait(l, [this]{return done==true;});
     return ret;

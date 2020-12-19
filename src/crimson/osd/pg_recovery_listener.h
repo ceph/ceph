@@ -35,4 +35,5 @@ public:
   virtual epoch_t get_last_peering_reset() const = 0;
   virtual const pg_info_t& get_info() const= 0;
   virtual seastar::future<> stop() = 0;
+  virtual void publish_stats_to_osd() = 0;
 };

@@ -39,10 +39,13 @@ struct CapHitMetric {
 
 struct ReadLatencyMetric {
   utime_t lat;
+  bool updated = false;
 
   DENC(ReadLatencyMetric, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.lat, p);
+    if (struct_v >= 2)
+      denc(v.updated, p);
     DENC_FINISH(p);
   }
 
@@ -58,10 +61,13 @@ struct ReadLatencyMetric {
 
 struct WriteLatencyMetric {
   utime_t lat;
+  bool updated = false;
 
   DENC(WriteLatencyMetric, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.lat, p);
+    if (struct_v >= 2)
+      denc(v.updated, p);
     DENC_FINISH(p);
   }
 
@@ -77,10 +83,13 @@ struct WriteLatencyMetric {
 
 struct MetadataLatencyMetric {
   utime_t lat;
+  bool updated = false;
 
   DENC(MetadataLatencyMetric, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.lat, p);
+    if (struct_v >= 2)
+      denc(v.updated, p);
     DENC_FINISH(p);
   }
 
@@ -94,10 +103,35 @@ struct MetadataLatencyMetric {
   }
 };
 
+struct DentryLeaseHitMetric {
+  uint64_t hits = 0;
+  uint64_t misses = 0;
+  bool updated = false;
+
+  DENC(DentryLeaseHitMetric, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.hits, p);
+    denc(v.misses, p);
+    denc(v.updated, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_unsigned("hits", hits);
+    f->dump_unsigned("misses", misses);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const DentryLeaseHitMetric &metric) {
+    os << "{hits=" << metric.hits << ", misses=" << metric.misses << "}";
+    return os;
+  }
+};
+
 WRITE_CLASS_DENC(CapHitMetric)
 WRITE_CLASS_DENC(ReadLatencyMetric)
 WRITE_CLASS_DENC(WriteLatencyMetric)
 WRITE_CLASS_DENC(MetadataLatencyMetric)
+WRITE_CLASS_DENC(DentryLeaseHitMetric)
 
 // metrics that are forwarded to the MDS by client(s).
 struct Metrics {
@@ -106,17 +140,21 @@ struct Metrics {
   ReadLatencyMetric read_latency_metric;
   WriteLatencyMetric write_latency_metric;
   MetadataLatencyMetric metadata_latency_metric;
+  DentryLeaseHitMetric dentry_lease_metric;
 
   // metric update type
   uint32_t update_type = UpdateType::UPDATE_TYPE_REFRESH;
 
   DENC(Metrics, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.update_type, p);
     denc(v.cap_hit_metric, p);
     denc(v.read_latency_metric, p);
     denc(v.write_latency_metric, p);
     denc(v.metadata_latency_metric, p);
+    if (struct_v >= 2) {
+      denc(v.dentry_lease_metric, p);
+    }
     DENC_FINISH(p);
   }
 
@@ -126,6 +164,7 @@ struct Metrics {
     f->dump_object("read_latency_metric", read_latency_metric);
     f->dump_object("write_latency_metric", write_latency_metric);
     f->dump_object("metadata_latency_metric", metadata_latency_metric);
+    f->dump_object("dentry_lease_metric", dentry_lease_metric);
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Metrics& metrics) {
@@ -134,6 +173,7 @@ struct Metrics {
        << ", read_latency=" << metrics.read_latency_metric
        << ", write_latency=" << metrics.write_latency_metric
        << ", metadata_latency=" << metrics.metadata_latency_metric
+       << ", dentry_lease =" << metrics.dentry_lease_metric
        << "}]";
     return os;
   }

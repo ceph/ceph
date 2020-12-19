@@ -131,9 +131,10 @@ TEST_F(TestMockIoSimpleSchedulerObjectDispatch, Read) {
 
   C_SaferCond cond;
   Context *on_finish = &cond;
+  io::ReadExtents extents = {{0, 4096}, {8192, 4096}};
   ASSERT_FALSE(mock_simple_scheduler_object_dispatch.read(
-      0, {{0, 4096}}, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr,
-      nullptr, nullptr, nullptr, nullptr, &on_finish, nullptr));
+      0, &extents, mock_image_ctx.get_data_io_context(), 0, 0, {}, nullptr,
+      nullptr, nullptr, &on_finish, nullptr));
   ASSERT_EQ(on_finish, &cond); // not modified
   on_finish->complete(0);
   ASSERT_EQ(0, cond.wait());

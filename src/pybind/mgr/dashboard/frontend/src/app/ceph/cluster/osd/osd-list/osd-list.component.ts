@@ -6,30 +6,31 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
-import { OrchestratorService } from '../../../../shared/api/orchestrator.service';
-import { OsdService } from '../../../../shared/api/osd.service';
-import { ListWithDetails } from '../../../../shared/classes/list-with-details.class';
-import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { FormModalComponent } from '../../../../shared/components/form-modal/form-modal.component';
-import { ActionLabelsI18n, URLVerbs } from '../../../../shared/constants/app.constants';
-import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../../shared/enum/icons.enum';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { CdTableAction } from '../../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { FinishedTask } from '../../../../shared/models/finished-task';
-import { OrchestratorFeature } from '../../../../shared/models/orchestrator.enum';
-import { OrchestratorStatus } from '../../../../shared/models/orchestrator.interface';
-import { Permissions } from '../../../../shared/models/permissions';
-import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
-import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../../shared/services/modal.service';
-import { NotificationService } from '../../../../shared/services/notification.service';
-import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
-import { URLBuilderService } from '../../../../shared/services/url-builder.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
+import { Permissions } from '~/app/shared/models/permissions';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { OsdFlagsIndivModalComponent } from '../osd-flags-indiv-modal/osd-flags-indiv-modal.component';
 import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
 import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
 import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
@@ -57,6 +58,8 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   safeToDestroyBodyTpl: TemplateRef<any>;
   @ViewChild('deleteOsdExtraTpl')
   deleteOsdExtraTpl: TemplateRef<any>;
+  @ViewChild('flagsTpl', { static: true })
+  flagsTpl: TemplateRef<any>;
 
   permissions: Permissions;
   tableActions: CdTableAction[];
@@ -67,6 +70,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
 
   selection = new CdTableSelection();
   osds: any[] = [];
+  disabledFlags: string[] = [
+    'sortbitwise',
+    'purged_snapdirs',
+    'recovery_deletes',
+    'pglog_hardlimit'
+  ];
+  indivFlagNames: string[] = ['noup', 'nodown', 'noin', 'noout'];
 
   orchStatus: OrchestratorStatus;
   actionOrchFeatures = {
@@ -114,6 +124,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         permission: 'update',
         icon: Icons.edit,
         click: () => this.editAction()
+      },
+      {
+        name: this.actionLabels.FLAGS,
+        permission: 'update',
+        icon: Icons.flag,
+        click: () => this.configureFlagsIndivAction(),
+        disable: () => !this.hasOsdSelected
       },
       {
         name: this.actionLabels.SCRUB,
@@ -250,8 +267,16 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
       }
     ];
     this.columns = [
+      {
+        prop: 'id',
+        name: $localize`ID`,
+        flexGrow: 1,
+        cellTransformation: CellTemplate.executing,
+        customTemplateConfig: {
+          valueClass: 'bold'
+        }
+      },
       { prop: 'host.name', name: $localize`Host` },
-      { prop: 'id', name: $localize`ID`, flexGrow: 1, cellTransformation: CellTemplate.bold },
       {
         prop: 'collectedStates',
         name: $localize`Status`,
@@ -290,6 +315,11 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
+      {
+        prop: 'state',
+        name: $localize`Flags`,
+        cellTemplate: this.flagsTpl
+      },
       { prop: 'stats.usage', name: $localize`Usage`, cellTemplate: this.osdUsageTpl },
       {
         prop: 'stats_history.out_bytes',
@@ -317,8 +347,19 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
-    if (action === 'delete' && !selection.hasSelection) {
-      return true;
+    if (action === 'delete') {
+      if (!selection.hasSelection) {
+        return true;
+      } else {
+        // Disable delete action if any selected OSDs are under deleting or unmanaged.
+        const deletingOSDs = _.some(this.getSelectedOsds(), (osd) => {
+          const status = _.get(osd, 'operational_status');
+          return status === 'deleting' || status === 'unmanaged';
+        });
+        if (deletingOSDs) {
+          return true;
+        }
+      }
     }
     return this.orchService.getTableActionDisableDesc(
       this.orchStatus,
@@ -332,7 +373,10 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
    */
   getSelectedOsdIds(): number[] {
     const osdIds = this.osds.map((osd) => osd.id);
-    return this.selection.selected.map((row) => row.id).filter((id) => osdIds.includes(id));
+    return this.selection.selected
+      .map((row) => row.id)
+      .filter((id) => osdIds.includes(id))
+      .sort();
   }
 
   getSelectedOsds(): any[] {
@@ -371,13 +415,20 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
   }
 
   getOsdList() {
-    this.osdService.getList().subscribe((data: any[]) => {
-      this.osds = data.map((osd) => {
+    const observables = [this.osdService.getList(), this.osdService.getFlags()];
+    observableForkJoin(observables).subscribe((resp: [any[], string[]]) => {
+      this.osds = resp[0].map((osd) => {
         osd.collectedStates = OsdListComponent.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i: string) => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i: string) => i[1]);
         osd.stats.usage = osd.stats.stat_bytes_used / osd.stats.stat_bytes;
         osd.cdIsBinary = true;
+        osd.cdIndivFlags = osd.state.filter((f: string) => this.indivFlagNames.includes(f));
+        osd.cdClusterFlags = resp[1].filter((f: string) => !this.disabledFlags.includes(f));
+        const deploy_state = _.get(osd, 'operational_status', 'unmanaged');
+        if (deploy_state !== 'unmanaged' && deploy_state !== 'working') {
+          osd.cdExecuting = deploy_state;
+        }
         return osd;
       });
     });
@@ -427,13 +478,22 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     this.bsModalRef = this.modalService.show(OsdFlagsModalComponent);
   }
 
+  configureFlagsIndivAction() {
+    const initialState = {
+      selected: this.getSelectedOsds()
+    };
+    this.bsModalRef = this.modalService.show(OsdFlagsIndivModalComponent, initialState);
+  }
+
   showConfirmationModal(markAction: string, onSubmit: (id: number) => Observable<any>) {
+    const osdIds = this.getSelectedOsdIds();
     this.bsModalRef = this.modalService.show(ConfirmationModalComponent, {
       titleText: $localize`Mark OSD ${markAction}`,
       buttonText: $localize`Mark ${markAction}`,
       bodyTpl: this.markOsdConfirmationTpl,
       bodyContext: {
-        markActionDescription: markAction
+        markActionDescription: markAction,
+        osdIds
       },
       onSubmit: () => {
         observableForkJoin(

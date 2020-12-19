@@ -20,7 +20,7 @@ export class DaemonsPageHelper extends PageHelper {
 
     // check details table is visible
     // check at least one field is present
-    this.getTableCell().should('visible').should('contain.text', 'ceph_version');
+    this.getTableCell().should('be.visible').should('contain.text', 'ceph_version');
 
     // click on performance counters tab and check table is loaded
     cy.contains('.nav-link', 'Performance Counters').click();

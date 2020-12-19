@@ -2,10 +2,10 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { DocService } from '../../../shared/services/doc.service';
-import { ModalService } from '../../../shared/services/modal.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { DocService } from '~/app/shared/services/doc.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { AboutComponent } from '../about/about.component';
 
 @Component({

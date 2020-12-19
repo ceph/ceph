@@ -22,7 +22,7 @@
 #include "include/types.h"
 
 
-class MMgrBeacon : public PaxosServiceMessage {
+class MMgrBeacon final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 10;
   static constexpr int COMPAT_VERSION = 8;
@@ -108,7 +108,7 @@ public:
   }
 
 private:
-  ~MMgrBeacon() override {}
+  ~MMgrBeacon() final {}
 
 public:
 

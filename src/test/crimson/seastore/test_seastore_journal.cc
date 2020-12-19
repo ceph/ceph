@@ -7,7 +7,7 @@
 
 #include "crimson/common/log.h"
 #include "crimson/os/seastore/journal.h"
-#include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/segment_manager/ephemeral.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -63,7 +63,7 @@ struct record_validator_t {
 };
 
 struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
-  std::unique_ptr<SegmentManager> segment_manager;
+  segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::unique_ptr<Journal> journal;
 
   std::vector<record_validator_t> records;
@@ -73,7 +73,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   const segment_off_t block_size;
 
   journal_test_t()
-    : segment_manager(create_ephemeral(segment_manager::DEFAULT_TEST_EPHEMERAL)),
+    : segment_manager(segment_manager::create_test_ephemeral()),
       block_size(segment_manager->get_block_size())
   {
   }
@@ -83,10 +83,6 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     return get_segment_ret(
       get_segment_ertr::ready_future_marker{},
       next++);
-  }
-
-  void put_segment(segment_id_t segment) final {
-    return;
   }
 
   journal_seq_t get_journal_tail_target() const final { return journal_seq_t{}; }
@@ -172,7 +168,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     char contents = distribution(generator);
     bufferlist bl;
     bl.append(buffer::ptr(buffer::create(blocks * block_size, contents)));
-    return extent_t{bl};
+    return extent_t{extent_types_t::TEST_BLOCK, L_ADDR_NULL, bl};
   }
 
   delta_info_t generate_delta(size_t bytes) {

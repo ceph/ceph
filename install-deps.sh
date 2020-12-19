@@ -36,6 +36,9 @@ function munge_ceph_spec_in {
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
+    if $with_jaeger; then
+        sed -i -e 's/%bcond_with jaeger/%bcond_without jaeger/g' $OUTFILE
+    fi
     if $with_zbd; then
         sed -i -e 's/%bcond_with zbd/%bcond_without zbd/g' $OUTFILE
     fi
@@ -60,6 +63,10 @@ function munge_debian_control {
     esac
     if $with_seastar; then
 	sed -i -e 's/^# Crimson[[:space:]]//g' $control
+    fi
+    if $with_jaeger; then
+	sed -i -e 's/^# Jaeger[[:space:]]//g' $control
+	sed -i -e 's/^# Crimson      libyaml-cpp-dev,/d' $control
     fi
     if $for_make_check; then
         sed -i 's/^# Make-Check[[:space:]]/             /g' $control
@@ -221,7 +228,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/gperf \
         devel/gmake \
         devel/cmake \
-        devel/yasm \
+        devel/nasm \
         devel/boost-all \
         devel/boost-python-libs \
         devel/valgrind \
@@ -272,6 +279,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
+    [ $WITH_JAEGER ] && with_jaeger=true || with_jaeger=false
     [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     source /etc/os-release
     case "$ID" in
@@ -284,9 +292,6 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
-                ;;
-            *Disco*)
-                [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.67-all-dev
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -328,7 +333,8 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
 		if test $ID = centos -a $MAJOR_VERSION = 8 ; then
-                    $SUDO dnf config-manager --set-enabled PowerTools
+                    # Enable 'powertools' or 'PowerTools' repo
+                    $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
 		    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
@@ -337,7 +343,6 @@ else
 		    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
 		    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                 fi
-                $SUDO dnf copr enable -y tchaikov/gcc-toolset-9 centos-stream-x86_64
                 ;;
         esac
         munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec

@@ -3,12 +3,13 @@
 from __future__ import absolute_import
 
 import unittest
+
 try:
     import mock
 except ImportError:
     import unittest.mock as mock
 
-from ..services.rbd import get_image_spec, parse_image_spec, RbdConfiguration
+from ..services.rbd import RbdConfiguration, get_image_spec, parse_image_spec
 
 
 class RbdServiceTest(unittest.TestCase):

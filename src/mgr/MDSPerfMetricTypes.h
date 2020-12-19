@@ -120,6 +120,7 @@ enum class MDSPerformanceCounterType : uint8_t {
   READ_LATENCY_METRIC = 1,
   WRITE_LATENCY_METRIC = 2,
   METADATA_LATENCY_METRIC = 3,
+  DENTRY_LEASE_METRIC = 4,
 };
 
 struct MDSPerformanceCounterDescriptor {
@@ -131,6 +132,7 @@ struct MDSPerformanceCounterDescriptor {
     case MDSPerformanceCounterType::READ_LATENCY_METRIC:
     case MDSPerformanceCounterType::WRITE_LATENCY_METRIC:
     case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
+    case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
       return true;
     default:
       return false;
@@ -301,6 +303,15 @@ struct MDSPerfMetricQuery {
 WRITE_CLASS_DENC(MDSPerfMetricQuery)
 
 std::ostream &operator<<(std::ostream &os, const MDSPerfMetricQuery &query);
+
+struct MDSPerfCollector : PerfCollector {
+  std::map<MDSPerfMetricKey, PerformanceCounters> counters;
+  std::set<mds_rank_t> delayed_ranks;
+
+  MDSPerfCollector(MetricQueryID query_id)
+    : PerfCollector(query_id) {
+  }
+};
 
 struct MDSPerfMetrics {
   MDSPerformanceCounterDescriptors performance_counter_descriptors;

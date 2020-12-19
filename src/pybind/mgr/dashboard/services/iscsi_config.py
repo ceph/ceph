@@ -57,8 +57,8 @@ class IscsiGatewaysConfig(object):
         """
         for gateway_name, gateway_config in config['gateways'].items():
             if '.' not in gateway_name:
-                from .iscsi_client import IscsiClient
                 from ..rest_client import RequestException
+                from .iscsi_client import IscsiClient  # pylint: disable=cyclic-import
                 try:
                     service_url = gateway_config['service_url']
                     new_gateway_name = IscsiClient.instance(

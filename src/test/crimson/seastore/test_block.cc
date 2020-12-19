@@ -8,7 +8,7 @@ namespace crimson::os::seastore {
 
 ceph::bufferlist TestBlock::get_delta() {
   ceph::bufferlist bl;
-  ::encode(delta, bl);
+  encode(delta, bl);
   return bl;
 }
 
@@ -16,7 +16,7 @@ ceph::bufferlist TestBlock::get_delta() {
 void TestBlock::apply_delta(const ceph::bufferlist &bl) {
   auto biter = bl.begin();
   decltype(delta) deltas;
-  ::decode(deltas, biter);
+  decode(deltas, biter);
   for (auto &&d : deltas) {
     set_contents(d.val, d.offset, d.len);
   }

@@ -17,9 +17,9 @@
 
 static string log_lock_name = "rgw_log_lock";
 
-int RGWSI_Cls::do_start()
+int RGWSI_Cls::do_start(optional_yield y)
 {
-  int r = mfa.do_start();
+  int r = mfa.do_start(y);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start mfa service" << dendl;
     return r;

@@ -231,6 +231,7 @@ private:
       dispatch_layer(image_dispatch_layer), aio_comp(aio_comp),
       image_extents(std::move(image_extents)), request(std::move(request)),
       io_context(io_context), op_flags(op_flags), parent_trace(parent_trace) {
+    ceph_assert(aio_comp->image_dispatcher_ctx == nullptr);
     aio_comp->image_dispatcher_ctx = &dispatcher_ctx;
     aio_comp->get();
   }

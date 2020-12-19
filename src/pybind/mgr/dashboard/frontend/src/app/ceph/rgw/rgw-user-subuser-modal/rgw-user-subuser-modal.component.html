@@ -1,7 +1,6 @@
 <cd-modal [modalRef]="bsModalRef">
   <ng-container i18n="form title|Example: Create Pool@@formTitle"
                 class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
-
   <ng-container class="modal-content">
     <form #frm="ngForm"
           [formGroup]="formGroup"
@@ -106,10 +105,8 @@
                           class="btn btn-light"
                           cdPasswordButton="secret_key">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="secret_key">
-                  </button>
+                  <cd-copy-2-clipboard-button source="secret_key">
+                  </cd-copy-2-clipboard-button>
                 </span>
               </div>
               <span class="invalid-feedback"
@@ -122,10 +119,9 @@
 
       </div>
       <div class="modal-footer">
-        <cd-submit-button (submitAction)="onSubmit()"
-                          i18n="form action button|Example: Create Pool@@formActionButton"
-                          [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-        <cd-back-button [back]="bsModalRef.close"></cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="formGroup"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

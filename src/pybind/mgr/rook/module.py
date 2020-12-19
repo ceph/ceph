@@ -30,7 +30,7 @@ except ImportError:
     client = None
     config = None
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option
 import orchestrator
 
 from .rook_cluster import RookCluster
@@ -98,9 +98,9 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     Right now, we are calling the k8s API synchronously.
     """
 
-    MODULE_OPTIONS = [
+    MODULE_OPTIONS: List[Option] = [
         # TODO: configure k8s API addr instead of assuming local
-    ]  # type: List[Dict[str, Any]]
+    ]
 
     def process(self, completions):
         # type: (List[RookCompletion]) -> None
@@ -265,26 +265,28 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         num_nodes = len(self.rook_cluster.get_node_names())
 
         spec = {}
-        spec['mon'] = orchestrator.ServiceDescription(
-            spec=ServiceSpec(
-                'mon',
-                placement=PlacementSpec(
-                    count=cl['spec'].get('mon', {}).get('count', 1),
-                ),
-            ),
-            size=cl['spec'].get('mon', {}).get('count', 1),
-            container_image_name=image_name,
-            last_refresh=now,
-        )
-        spec['mgr'] = orchestrator.ServiceDescription(
-            spec=ServiceSpec(
-                'mgr',
-                placement=PlacementSpec.from_string('count:1'),
-            ),
-            size=1,
-            container_image_name=image_name,
-            last_refresh=now,
-        )
+        if service_type == 'mon' or service_type is None:
+            spec['mon'] = orchestrator.ServiceDescription(
+                    spec=ServiceSpec(
+                        'mon',
+                        placement=PlacementSpec(
+                            count=cl['spec'].get('mon', {}).get('count', 1),
+                            ),
+                        ),
+                    size=cl['spec'].get('mon', {}).get('count', 1),
+                    container_image_name=image_name,
+                    last_refresh=now,
+                    )
+        if service_type == 'mgr' or service_type is None:
+            spec['mgr'] = orchestrator.ServiceDescription(
+                    spec=ServiceSpec(
+                        'mgr',
+                        placement=PlacementSpec.from_string('count:1'),
+                        ),
+                    size=1,
+                    container_image_name=image_name,
+                    last_refresh=now,
+                    )
         if not cl['spec'].get('crashCollector', {}).get('disable', False):
             spec['crash'] = orchestrator.ServiceDescription(
                 spec=ServiceSpec(
@@ -296,65 +298,99 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 last_refresh=now,
             )
 
-        # CephFilesystems
-        all_fs = self.rook_cluster.rook_api_get(
-            "cephfilesystems/")
-        self.log.debug('CephFilesystems %s' % all_fs)
-        for fs in all_fs.get('items', []):
-            svc = 'mds.' + fs['metadata']['name']
-            if svc in spec:
-                continue
-            # FIXME: we are conflating active (+ standby) with count
-            active = fs['spec'].get('metadataServer', {}).get('activeCount', 1)
-            total_mds = active
-            if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
-                total_mds = active * 2
-            spec[svc] = orchestrator.ServiceDescription(
-                spec=ServiceSpec(
-                    service_type='mds',
-                    service_id=fs['metadata']['name'],
-                    placement=PlacementSpec(count=active),
-                ),
-                size=total_mds,
-                container_image_name=image_name,
-                last_refresh=now,
-            )
+        if service_type == 'mds' or service_type is None:
+            # CephFilesystems
+            all_fs = self.rook_cluster.rook_api_get(
+                    "cephfilesystems/")
+            self.log.debug('CephFilesystems %s' % all_fs)
+            for fs in all_fs.get('items', []):
+                svc = 'mds.' + fs['metadata']['name']
+                if svc in spec:
+                    continue
+                # FIXME: we are conflating active (+ standby) with count
+                active = fs['spec'].get('metadataServer', {}).get('activeCount', 1)
+                total_mds = active
+                if fs['spec'].get('metadataServer', {}).get('activeStandby', False):
+                    total_mds = active * 2
+                    spec[svc] = orchestrator.ServiceDescription(
+                            spec=ServiceSpec(
+                                service_type='mds',
+                                service_id=fs['metadata']['name'],
+                                placement=PlacementSpec(count=active),
+                                ),
+                            size=total_mds,
+                            container_image_name=image_name,
+                            last_refresh=now,
+                            )
 
-        # CephObjectstores
-        all_zones = self.rook_cluster.rook_api_get(
-            "cephobjectstores/")
-        self.log.debug('CephObjectstores %s' % all_zones)
-        for zone in all_zones.get('items', []):
-            rgw_realm = zone['metadata']['name']
-            rgw_zone = rgw_realm
-            svc = 'rgw.' + rgw_realm + '.' + rgw_zone
-            if svc in spec:
-                continue
-            active = zone['spec']['gateway']['instances'];
-            if 'securePort' in zone['spec']['gateway']:
-                ssl = True
-                port = zone['spec']['gateway']['securePort']
-            else:
-                ssl = False
-                port = zone['spec']['gateway']['port'] or 80
-            spec[svc] = orchestrator.ServiceDescription(
-                spec=RGWSpec(
-                    service_id=rgw_realm + '.' + rgw_zone,
-                    rgw_realm=rgw_realm,
-                    rgw_zone=rgw_zone,
-                    ssl=ssl,
-                    rgw_frontend_port=port,
-                    placement=PlacementSpec(count=active),
-                ),
-                size=active,
-                container_image_name=image_name,
-                last_refresh=now,
-            )
+        if service_type == 'rgw' or service_type is None:
+            # CephObjectstores
+            all_zones = self.rook_cluster.rook_api_get(
+                    "cephobjectstores/")
+            self.log.debug('CephObjectstores %s' % all_zones)
+            for zone in all_zones.get('items', []):
+                rgw_realm = zone['metadata']['name']
+                rgw_zone = rgw_realm
+                svc = 'rgw.' + rgw_realm + '.' + rgw_zone
+                if svc in spec:
+                    continue
+                active = zone['spec']['gateway']['instances'];
+                if 'securePort' in zone['spec']['gateway']:
+                    ssl = True
+                    port = zone['spec']['gateway']['securePort']
+                else:
+                    ssl = False
+                    port = zone['spec']['gateway']['port'] or 80
+                spec[svc] = orchestrator.ServiceDescription(
+                        spec=RGWSpec(
+                            service_id=rgw_realm + '.' + rgw_zone,
+                            rgw_realm=rgw_realm,
+                            rgw_zone=rgw_zone,
+                            ssl=ssl,
+                            rgw_frontend_port=port,
+                            placement=PlacementSpec(count=active),
+                            ),
+                        size=active,
+                        container_image_name=image_name,
+                        last_refresh=now,
+                        )
+
+        if service_type == 'nfs' or service_type is None:
+            # CephNFSes
+            all_nfs = self.rook_cluster.rook_api_get(
+                    "cephnfses/")
+            self.log.warning('CephNFS %s' % all_nfs)
+            for nfs in all_nfs.get('items', []):
+                nfs_name = nfs['metadata']['name']
+                svc = 'nfs.' + nfs_name
+                if svc in spec:
+                    continue
+                active = nfs['spec'].get('server', {}).get('active')
+                spec[svc] = orchestrator.ServiceDescription(
+                        spec=NFSServiceSpec(
+                            service_id=nfs_name,
+                            pool=nfs['spec']['rados']['pool'],
+                            namespace=nfs['spec']['rados'].get('namespace', None),
+                            placement=PlacementSpec(count=active),
+                            ),
+                        size=active,
+                        last_refresh=now,
+                        )
 
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
                 continue
-            spec[dd.service_name()].running += 1
+            service = spec[dd.service_name()]
+            service.running += 1
+            if not service.container_image_id:
+                service.container_image_id = dd.container_image_id
+            if not service.container_image_name:
+                service.container_image_name = dd.container_image_name
+            if not service.last_refresh or not dd.last_refresh or dd.last_refresh < service.last_refresh:
+                service.last_refresh = dd.last_refresh
+            if not service.created or dd.created < service.created:
+                service.created = dd.created
+
         return [v for k, v in spec.items()]
 
     @deferred_read
@@ -374,7 +410,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for p in pods:
             sd = orchestrator.DaemonDescription()
             sd.hostname = p['hostname']
-            sd.container_id = p['name']
             sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
             status = {
                 'Pending': -1,
@@ -397,6 +432,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if service_name is not None and service_name != sd.service_name():
                 continue
             sd.container_image_name = p['container_image_name']
+            sd.container_image_id = p['container_image_id']
             sd.created = p['created']
             sd.last_configured = p['created']
             sd.last_deployed = p['created']
@@ -412,11 +448,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             message="Creating {} services for {}".format(typename, spec.service_id),
             mgr=self
         )
-
-    def add_nfs(self, spec):
-        # type: (NFSServiceSpec) -> RookCompletion
-        return self._service_add_decorate("NFS", spec,
-                                          self.rook_cluster.add_nfsgw)
 
     def _service_rm_decorate(self, typename, name, func):
         return write_completion(
@@ -463,12 +494,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def apply_nfs(self, spec):
         # type: (NFSServiceSpec) -> RookCompletion
-        num = spec.placement.count
-        return write_completion(
-            lambda: self.rook_cluster.update_nfs_count(spec.service_id, num),
-            "Updating NFS server count in {0} to {1}".format(spec.service_id, num),
-            mgr=self
-        )
+        return self._service_add_decorate("NFS", spec,
+                                          self.rook_cluster.apply_nfsgw)
 
     def remove_daemons(self, names):
         return write_completion(

@@ -29,11 +29,12 @@ class Gated {
       if (*eptr.__cxa_exception_type() == typeid(system_shutdown_exception)) {
 	gated_logger().debug(
 	    "{}, {} skipped, system shutdown", who, what);
-	return seastar::now();
+	return;
       }
       gated_logger().error(
           "{} dispatch() {} caught exception: {}", who, what, eptr);
-      ceph_abort("unexpected exception from dispatch()");
+      assert(*eptr.__cxa_exception_type()
+	== typeid(seastar::gate_closed_exception));
     });
   }
 

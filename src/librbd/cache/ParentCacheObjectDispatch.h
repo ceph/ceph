@@ -44,9 +44,8 @@ public:
   }
 
   bool read(
-      uint64_t object_no, const io::Extents &extents, IOContext io_context,
+      uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
       int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, io::Extents* extent_map,
       uint64_t* version, int* object_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
@@ -119,6 +118,12 @@ public:
       uint64_t journal_tid, uint64_t new_journal_tid) {
   }
 
+  int prepare_copyup(
+      uint64_t object_no,
+      io::SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override {
+    return 0;
+  }
+
   ImageCtxT* get_image_ctx() {
     return m_image_ctx;
   }
@@ -132,10 +137,9 @@ private:
   int read_object(std::string file_path, ceph::bufferlist* read_data,
                   uint64_t offset, uint64_t length, Context *on_finish);
   void handle_read_cache(ceph::immutable_obj_cache::ObjectCacheRequest* ack,
-                         uint64_t object_no, uint64_t read_off,
-                         uint64_t read_len, IOContext io_context,
+                         uint64_t object_no, io::ReadExtents* extents,
+                         IOContext io_context,
                          const ZTracer::Trace &parent_trace,
-                         ceph::bufferlist* read_data,
                          io::DispatchResult* dispatch_result,
                          Context* on_dispatched);
   int handle_register_client(bool reg);

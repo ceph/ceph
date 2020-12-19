@@ -25,11 +25,11 @@ public:
   public:
     AlienOmapIterator(ObjectMap::ObjectMapIterator& it,
 	AlienStore* store) : iter(it), store(store) {}
-    seastar::future<int> seek_to_first();
-    seastar::future<int> upper_bound(const std::string& after);
-    seastar::future<int> lower_bound(const std::string& to);
+    seastar::future<> seek_to_first();
+    seastar::future<> upper_bound(const std::string& after);
+    seastar::future<> lower_bound(const std::string& to);
     bool valid() const;
-    seastar::future<int> next();
+    seastar::future<> next();
     std::string key();
     seastar::future<std::string> tail_key();
     ceph::buffer::list value();
@@ -111,7 +111,6 @@ public:
     CollectionRef ch,
     const ghobject_t& oid) final;
 
-  static void configure_thread_memory();
 private:
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;

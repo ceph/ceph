@@ -2905,6 +2905,75 @@ extern "C" int _rados_notify2(rados_ioctx_t io, const char *o,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_notify2);
 
+extern "C" int _rados_decode_notify_response(char *reply_buffer, size_t reply_buffer_len,
+                                             struct notify_ack_t **acks, size_t *nr_acks,
+                                             struct notify_timeout_t **timeouts, size_t *nr_timeouts) {
+  if (!reply_buffer || !reply_buffer_len) {
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  bl.append(reply_buffer, reply_buffer_len);
+
+  map<pair<uint64_t,uint64_t>,bufferlist> acked;
+  set<pair<uint64_t,uint64_t>> missed;
+  auto iter = bl.cbegin();
+  decode(acked, iter);
+  decode(missed, iter);
+
+  *acks = nullptr;
+  *nr_acks = acked.size();
+  if (*nr_acks) {
+    *acks = new notify_ack_t[*nr_acks];
+    struct notify_ack_t *ack = *acks;
+    for (auto &[who, payload] : acked) {
+      ack->notifier_id = who.first;
+      ack->cookie = who.second;
+      ack->payload = nullptr;
+      ack->payload_len = payload.length();
+      if (ack->payload_len) {
+        ack->payload = (char *)malloc(ack->payload_len);
+        memcpy(ack->payload, payload.c_str(), ack->payload_len);
+      }
+
+      ack++;
+    }
+  }
+
+  *timeouts = nullptr;
+  *nr_timeouts = missed.size();
+  if (*nr_timeouts) {
+    *timeouts = new notify_timeout_t[*nr_timeouts];
+    struct notify_timeout_t *timeout = *timeouts;
+    for (auto &[notifier_id, cookie] : missed) {
+      timeout->notifier_id = notifier_id;
+      timeout->cookie = cookie;
+      timeout++;
+    }
+  }
+
+  return 0;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_decode_notify_response);
+
+
+extern "C" void _rados_free_notify_response(struct notify_ack_t *acks, size_t nr_acks,
+                                            struct notify_timeout_t *timeouts) {
+  for (uint64_t n = 0; n < nr_acks; ++n) {
+    assert(acks);
+    if (acks[n].payload) {
+      free(acks[n].payload);
+    }
+  }
+  if (acks) {
+    delete[] acks;
+  }
+  if (timeouts) {
+    delete[] timeouts;
+  }
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_free_notify_response);
+
 extern "C" int _rados_aio_notify(rados_ioctx_t io, const char *o,
                                  rados_completion_t completion,
                                  const char *buf, int buf_len,

@@ -3,7 +3,7 @@ import { FormControl, Validators } from '@angular/forms';
 
 import { of as observableOf } from 'rxjs';
 
-import { FormHelper } from '../../../testing/unit-test-helper';
+import { FormHelper } from '~/testing/unit-test-helper';
 import { CdFormGroup } from './cd-form-group';
 import { CdValidators } from './cd-validators';
 

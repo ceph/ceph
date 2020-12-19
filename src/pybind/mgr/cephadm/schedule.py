@@ -36,7 +36,7 @@ class SimpleScheduler(BaseScheduler):
     2) Select from list up to :count
     """
 
-    def __init__(self, spec):
+    def __init__(self, spec: ServiceSpec):
         super(SimpleScheduler, self).__init__(spec)
 
     def place(self, host_pool, count=None):
@@ -74,7 +74,7 @@ class HostAssignment(object):
     def get_hostnames(self) -> List[str]:
         return [h.hostname for h in self.hosts]
 
-    def validate(self):
+    def validate(self) -> None:
         self.spec.validate()
 
         if self.spec.placement.count == 0:
@@ -122,7 +122,29 @@ class HostAssignment(object):
         # If we don't have <count> the list of candidates is definitive.
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
+            # if asked to place even number of mons, deploy 1 less
+            if self.spec.service_type == 'mon' and (len(candidates) % 2) == 0:
+                logger.info("deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
+                    len(candidates) - 1, len(candidates)))
+                return candidates[0:len(candidates)-1]
             return candidates
+
+        # if asked to place even number of mons, deploy 1 less
+        if self.spec.service_type == 'mon':
+            # if count >= number of candidates then number of candidates
+            # is determining factor in how many mons will be placed
+            if count >= len(candidates):
+                if (len(candidates) % 2) == 0:
+                    logger.info("deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
+                        len(candidates) - 1, len(candidates)))
+                    count = len(candidates) - 1
+            # if count < number of candidates then count is determining
+            # factor in how many mons will get placed
+            else:
+                if (count % 2) == 0:
+                    logger.info(
+                        "deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (count - 1, count))
+                    count = count - 1
 
         # prefer hosts that already have services.
         # this avoids re-assigning to _new_ hosts
@@ -164,7 +186,7 @@ class HostAssignment(object):
         # remove duplicates before returning
         return list(dict.fromkeys(active_hosts))
 
-    def prefer_hosts_with_active_daemons(self, hosts: List[HostPlacementSpec], count) -> List[HostPlacementSpec]:
+    def prefer_hosts_with_active_daemons(self, hosts: List[HostPlacementSpec], count: int) -> List[HostPlacementSpec]:
         # try to prefer host with active daemon if possible
         active_hosts = self.get_hosts_with_active_daemon(hosts)
         if len(active_hosts) != 0 and count > 0:

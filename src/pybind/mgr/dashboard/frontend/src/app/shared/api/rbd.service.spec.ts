@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ImageSpec } from '../models/image-spec';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
 import { RbdService } from './rbd.service';
@@ -77,6 +77,12 @@ describe('RbdService', () => {
   it('should call defaultFeatures', () => {
     service.defaultFeatures().subscribe();
     const req = httpTesting.expectOne('api/block/image/default_features');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call cloneFormatVersion', () => {
+    service.cloneFormatVersion().subscribe();
+    const req = httpTesting.expectOne('api/block/image/clone_format_version');
     expect(req.request.method).toBe('GET');
   });
 

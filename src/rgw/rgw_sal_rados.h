@@ -17,6 +17,7 @@
 
 #include "rgw_sal.h"
 #include "rgw_rados.h"
+#include "cls/lock/cls_lock_client.h"
 
 namespace rgw { namespace sal {
 
@@ -33,7 +34,8 @@ class RGWRadosUser : public RGWUser {
     RGWRadosUser() {}
 
     int list_buckets(const std::string& marker, const std::string& end_marker,
-				uint64_t max, bool need_stats, RGWBucketList& buckets);
+		     uint64_t max, bool need_stats, RGWBucketList& buckets,
+		     optional_yield y) override;
     RGWBucket* create_bucket(rgw_bucket& bucket, ceph::real_time creation_time);
 
     /* Placeholders */
@@ -64,6 +66,21 @@ class RGWRadosObject : public RGWObject {
       virtual int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y) override;
       virtual int get_manifest(RGWObjManifest **pmanifest, optional_yield y) override;
       virtual int get_attr(const char *name, bufferlist& dest, optional_yield y) override;
+    };
+
+    struct RadosWriteOp : public WriteOp {
+    private:
+      RGWRadosObject* source;
+      RGWObjectCtx* rctx;
+      RGWRados::Object op_target;
+      RGWRados::Object::Write parent_op;
+
+    public:
+      RadosWriteOp(RGWRadosObject* _source, RGWObjectCtx* _rctx);
+
+      virtual int prepare(optional_yield y) override;
+      virtual int write_meta(uint64_t size, uint64_t accounted_size, optional_yield y) override;
+      //virtual int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive) override;
     };
 
     RGWRadosObject() = default;
@@ -114,17 +131,43 @@ class RGWRadosObject : public RGWObject {
     virtual int copy_obj_data(RGWObjectCtx& rctx, RGWBucket* dest_bucket, RGWObject* dest_obj, uint16_t olh_epoch, std::string* petag, const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
+    virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) override;
+    virtual void get_raw_obj(rgw_raw_obj* raw_obj) override;
     virtual std::unique_ptr<RGWObject> clone() {
       return std::unique_ptr<RGWObject>(new RGWRadosObject(*this));
     }
+    virtual MPSerializer* get_serializer(const std::string& lock_name) override;
+    virtual int transition(RGWObjectCtx& rctx,
+			   RGWBucket* bucket,
+			   const rgw_placement_rule& placement_rule,
+			   const real_time& mtime,
+			   uint64_t olh_epoch,
+			   const DoutPrefixProvider *dpp,
+			   optional_yield y) override;
+    virtual int get_max_chunk_size(rgw_placement_rule placement_rule,
+				   uint64_t *max_chunk_size,
+				   uint64_t *alignment = nullptr) override;
+    virtual void get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t *max_size) override;
+    virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
+
+    /* Swift versioning */
+    virtual int swift_versioning_restore(RGWObjectCtx* obj_ctx,
+					 bool& restored,
+					 const DoutPrefixProvider *dpp) override;
+    virtual int swift_versioning_copy(RGWObjectCtx* obj_ctx,
+				      const DoutPrefixProvider *dpp,
+				      optional_yield y) override;
 
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op(RGWObjectCtx *) override;
+    virtual std::unique_ptr<WriteOp> get_write_op(RGWObjectCtx *) override;
 
     /* OMAP */
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
 			      RGWAttrs *vals) override;
+    virtual int omap_set_val_by_key(const std::string& key, bufferlist& val,
+				    bool must_exist, optional_yield y) override;
 
   private:
     int read_attrs(RGWRados::Object::Read &read_op, optional_yield y, rgw_obj *target_obj = nullptr);
@@ -194,7 +237,7 @@ class RGWRadosBucket : public RGWBucket {
 				 std::string *max_marker = nullptr,
 				 bool *syncstopped = nullptr) override;
     virtual int read_bucket_stats(optional_yield y) override;
-    virtual int sync_user_stats() override;
+    virtual int sync_user_stats(optional_yield y) override;
     virtual int update_container_stats(void) override;
     virtual int check_bucket_shards(void) override;
     virtual int link(RGWUser* new_user, optional_yield y) override;
@@ -203,14 +246,14 @@ class RGWRadosBucket : public RGWBucket {
     virtual int put_instance_info(bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(RGWUser* user) override;
     virtual int check_empty(optional_yield y) override;
-    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false) override;
+    virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
     virtual int set_instance_attrs(RGWAttrs& attrs, optional_yield y) override;
     virtual int try_refresh_info(ceph::real_time *pmtime) override;
     virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool *is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual std::unique_ptr<RGWBucket> clone() {
-      return std::unique_ptr<RGWBucket>(new RGWRadosBucket(*this));
+      return std::make_unique<RGWRadosBucket>(*this);
     }
 
     friend class RGWRadosStore;
@@ -220,6 +263,7 @@ class RGWRadosStore : public RGWStore {
   private:
     RGWRados *rados;
     RGWUserCtl *user_ctl;
+    std::string luarocks_path;
 
   public:
     RGWRadosStore()
@@ -231,9 +275,9 @@ class RGWRadosStore : public RGWStore {
 
     virtual std::unique_ptr<RGWUser> get_user(const rgw_user& u);
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) override;
-    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket) override;
+    virtual int get_bucket(RGWUser* u, const rgw_bucket& b, std::unique_ptr<RGWBucket>* bucket, optional_yield y) override;
     virtual int get_bucket(RGWUser* u, const RGWBucketInfo& i, std::unique_ptr<RGWBucket>* bucket) override;
-    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket) override;
+    virtual int get_bucket(RGWUser* u, const std::string& tenant, const std::string&name, std::unique_ptr<RGWBucket>* bucket, optional_yield y) override;
     virtual int create_bucket(RGWUser& u, const rgw_bucket& b,
                             const std::string& zonegroup_id,
                             rgw_placement_rule& placement_rule,
@@ -247,15 +291,23 @@ class RGWRadosStore : public RGWStore {
 			    bool obj_lock_enabled,
 			    bool *existed,
 			    req_info& req_info,
-			    std::unique_ptr<RGWBucket>* bucket);
+			    std::unique_ptr<RGWBucket>* bucket,
+			    optional_yield y);
     virtual RGWBucketList* list_buckets(void) { return new RGWBucketList(); }
     virtual bool is_meta_master() override;
     virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
-				  bufferlist& in_data, JSONParser *jp, req_info& info) override;
+					  bufferlist& in_data, JSONParser *jp, req_info& info,
+					  optional_yield y) override;
     virtual int defer_gc(RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) override;
     virtual const RGWZoneGroup& get_zonegroup() override;
     virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) override;
+    virtual int cluster_stat(RGWClusterStat& stats) override;
+    virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+    virtual RGWLC* get_rgwlc(void) { return rados->get_lc(); }
+    virtual int delete_raw_obj(const rgw_raw_obj& obj) override;
+    virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) override;
+    virtual int get_raw_chunk_size(const rgw_raw_obj& obj, uint64_t* chunk_size) override;
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados *getRados(void) { return rados; }
@@ -280,6 +332,58 @@ class RGWRadosStore : public RGWStore {
     CephContext* get_cct() const override { return rados->ctx(); }
     unsigned get_subsys() const override { return ceph_subsys_rgw; }
 
+    const std::string& get_luarocks_path() const override {
+      return luarocks_path;
+    }
+
+    void set_luarocks_path(const std::string& path) override {
+      luarocks_path = path;
+    }
+};
+
+class MPRadosSerializer : public MPSerializer {
+  librados::IoCtx ioctx;
+  rados::cls::lock::Lock lock;
+  librados::ObjectWriteOperation op;
+
+public:
+  MPRadosSerializer(RGWRadosStore* store, RGWRadosObject* obj, const std::string& lock_name);
+
+  virtual int try_lock(utime_t dur, optional_yield y) override;
+  int unlock() {
+    return lock.unlock(&ioctx, oid);
+  }
+};
+
+class LCRadosSerializer : public LCSerializer {
+  librados::IoCtx* ioctx;
+  rados::cls::lock::Lock lock;
+  const std::string oid;
+
+public:
+  LCRadosSerializer(RGWRadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
+
+  virtual int try_lock(utime_t dur, optional_yield y) override;
+  int unlock() {
+    return lock.unlock(ioctx, oid);
+  }
+};
+
+class RadosLifecycle : public Lifecycle {
+  RGWRadosStore* store;
+
+public:
+  RadosLifecycle(RGWRadosStore* _st) : store(_st) {}
+
+  virtual int get_entry(const string& oid, const std::string& marker, LCEntry& entry) override;
+  virtual int get_next_entry(const string& oid, std::string& marker, LCEntry& entry) override;
+  virtual int set_entry(const string& oid, const LCEntry& entry) override;
+  virtual int list_entries(const string& oid, const string& marker,
+			   uint32_t max_entries, vector<LCEntry>& entries) override;
+  virtual int rm_entry(const string& oid, const LCEntry& entry) override;
+  virtual int get_head(const string& oid, LCHead& head) override;
+  virtual int put_head(const string& oid, const LCHead& head) override;
+  virtual LCSerializer* get_serializer(const std::string& lock_name, const std::string& oid, const std::string& cookie) override;
 };
 
 } } // namespace rgw::sal

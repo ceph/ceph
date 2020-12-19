@@ -37,7 +37,7 @@ if(WITH_BLUESTORE)
   )
 endif(WITH_BLUESTORE)
 
-if(WITH_LIBZBD)
+if(WITH_ZBD)
   list(APPEND libos_srcs
     bluestore/zoned_types.cc
     bluestore/ZonedFreelistManager.cc
@@ -89,6 +89,10 @@ endif()
 if(WITH_LTTNG)
   add_dependencies(os objectstore-tp)
   add_dependencies(os bluestore-tp)
+endif()
+
+if(WITH_JAEGER)
+  target_link_libraries(os jaeger-base)
 endif()
 
 target_link_libraries(os kv)

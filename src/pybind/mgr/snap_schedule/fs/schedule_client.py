@@ -104,6 +104,10 @@ class SnapSchedClient(CephfsClient):
         self.sqlite_connections = {}
         self.active_timers = {}
 
+    @property
+    def allow_minute_snaps(self):
+        return self.mgr.get_module_option('allow_m_granularity')
+
     def get_schedule_db(self, fs):
         if fs not in self.sqlite_connections:
             self.sqlite_connections[fs] = sqlite3.connect(
@@ -140,6 +144,18 @@ class SnapSchedClient(CephfsClient):
             ioctx.write_full(SNAP_DB_OBJECT_NAME,
                              '\n'.join(db_content).encode('utf-8'))
 
+    def _is_allowed_repeat(self, exec_row, path):
+        if Schedule.parse_schedule(exec_row['schedule'])[1] == 'M':
+            if self.allow_minute_snaps:
+                log.debug(f'Minute repeats allowed, scheduling snapshot on path {path}')
+                return True
+            else:
+                log.info(f'Minute repeats disabled, skipping snapshot on path {path}')
+                return False
+        else:
+            return True
+
+
     def refresh_snap_timers(self, fs, path):
         try:
             log.debug(f'SnapDB on {fs} changed for {path}, updating next Timer')
@@ -147,7 +163,8 @@ class SnapSchedClient(CephfsClient):
             rows = []
             with db:
                 cur = db.execute(Schedule.EXEC_QUERY, (path,))
-                rows = cur.fetchmany(1)
+                all_rows = cur.fetchall()
+                rows = [r for r in all_rows if self._is_allowed_repeat(r, path)][0:1]
             timers = self.active_timers.get((fs, path), [])
             for timer in timers:
                 timer.cancel()
@@ -175,14 +192,15 @@ class SnapSchedClient(CephfsClient):
             sched = Schedule.get_db_schedules(path,
                                               db,
                                               fs_name,
-                                              repeat,
-                                              start)[0]
+                                              repeat=repeat,
+                                              start=start)[0]
             time = datetime.now(timezone.utc)
             with open_filesystem(self, fs_name) as fs_handle:
                 snap_ts = time.strftime(SNAPSHOT_TS_FORMAT)
                 snap_name = f'{path}/.snap/{SNAPSHOT_PREFIX}-{snap_ts}'
                 fs_handle.mkdir(snap_name, 0o755)
             log.info(f'created scheduled snapshot of {path}')
+            log.debug(f'created scheduled snapshot {snap_name}')
             sched.update_last(time, db)
         except cephfs.Error:
             self._log_exception('create_scheduled_snapshot')
@@ -238,15 +256,19 @@ class SnapSchedClient(CephfsClient):
     # TODO improve interface
     def store_snap_schedule(self, fs, path_, args):
         sched = Schedule(*args)
+        log.debug(f'repeat is {sched.repeat}')
+        if sched.parse_schedule(sched.schedule)[1] == 'M' and not self.allow_minute_snaps:
+            log.error('not allowed')
+            raise ValueError('no minute snaps allowed')
         log.debug(f'attempting to add schedule {sched}')
         db = self.get_schedule_db(fs)
         sched.store_schedule(db)
         self.store_schedule_db(sched.fs)
 
     @updates_schedule_db
-    def rm_snap_schedule(self, fs, path, repeat, start):
+    def rm_snap_schedule(self, fs, path, schedule, start):
         db = self.get_schedule_db(fs)
-        Schedule.rm_schedule(db, path, repeat, start)
+        Schedule.rm_schedule(db, path, schedule, start)
 
     @updates_schedule_db
     def add_retention_spec(self,
@@ -273,13 +295,17 @@ class SnapSchedClient(CephfsClient):
         Schedule.rm_retention(db, path, retention_spec)
 
     @updates_schedule_db
-    def activate_snap_schedule(self, fs, path, repeat, start):
+    def activate_snap_schedule(self, fs, path, schedule, start):
         db = self.get_schedule_db(fs)
-        schedules = Schedule.get_db_schedules(path, db, fs, repeat, start)
+        schedules = Schedule.get_db_schedules(path, db, fs,
+                                              schedule=schedule,
+                                              start=start)
         [s.set_active(db) for s in schedules]
 
     @updates_schedule_db
-    def deactivate_snap_schedule(self, fs, path, repeat, start):
+    def deactivate_snap_schedule(self, fs, path, schedule, start):
         db = self.get_schedule_db(fs)
-        schedules = Schedule.get_db_schedules(path, db, fs, repeat, start)
+        schedules = Schedule.get_db_schedules(path, db, fs,
+                                              schedule=schedule,
+                                              start=start)
         [s.set_inactive(db) for s in schedules]

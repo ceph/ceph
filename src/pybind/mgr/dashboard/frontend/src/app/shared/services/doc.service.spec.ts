@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { Subscriber } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SharedModule } from '../shared.module';
 import { DocService } from './doc.service';
 
@@ -22,7 +22,13 @@ describe('DocService', () => {
 
   it('should return full URL', () => {
     expect(service.urlGenerator('iscsi', 'foo')).toBe(
-      'http://docs.ceph.com/docs/foo/mgr/dashboard/#enabling-iscsi-management'
+      'https://docs.ceph.com/en/foo/mgr/dashboard/#enabling-iscsi-management'
+    );
+  });
+
+  it('should return latest version URL for master', () => {
+    expect(service.urlGenerator('orch', 'master')).toBe(
+      'https://docs.ceph.com/en/latest/mgr/orchestrator'
     );
   });
 
@@ -60,7 +66,7 @@ describe('DocService', () => {
 
       nextSummary('foo');
       expect(result).toEqual(
-        'http://docs.ceph.com/docs/foo/mgr/dashboard/#enabling-prometheus-alerting'
+        'https://docs.ceph.com/en/foo/mgr/dashboard/#enabling-prometheus-alerting'
       );
       expect(i).toBe(1);
       expect(subscriber.closed).toBe(true);

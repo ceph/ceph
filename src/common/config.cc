@@ -60,9 +60,11 @@ using ceph::decode;
 using ceph::encode;
 using ceph::Formatter;
 
-static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, $home/.ceph/$cluster.conf, $cluster.conf"
+static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config,/etc/ceph/$cluster.conf,$home/.ceph/$cluster.conf,$cluster.conf"
 #if defined(__FreeBSD__)
-    ", /usr/local/etc/ceph/$cluster.conf"
+    ",/usr/local/etc/ceph/$cluster.conf"
+#elif defined(_WIN32)
+    ",$programdata/ceph/$cluster.conf"
 #endif
     ;
 
@@ -87,7 +89,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result)
 {
   list<string> ls;
-  get_str_list(filename_list, ls);
+  get_str_list(filename_list, ";,", ls);
 
   int ret = -ENOENT;
   list<string>::iterator iter;
@@ -440,7 +442,7 @@ md_config_t::get_conffile_paths(const ConfigValues& values,
   }
 
   std::list<std::string> paths;
-  get_str_list(conf_files_str, paths);
+  get_str_list(conf_files_str, ";,", paths);
   for (auto i = paths.begin(); i != paths.end(); ) {
     string& path = *i;
     if (path.find("$data_dir") != path.npos &&
@@ -461,7 +463,7 @@ std::string md_config_t::get_cluster_name(const char* conffile)
     // If cluster name is not set yet, use the prefix of the
     // basename of configuration file as cluster name.
     if (fs::path path{conffile}; path.extension() == ".conf") {
-      return path.stem();
+      return path.stem().string();
     } else {
       // If the configuration file does not follow $cluster.conf
       // convention, we do the last try and assign the cluster to
@@ -666,9 +668,6 @@ int md_config_t::parse_argv(ConfigValues& values,
     }
     else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
       values.no_mon_config = true;
-    }
-    else if (ceph_argparse_flag(args, i, "--log-early", (char*)NULL)) {
-      values.log_early = true;
     }
     else if (ceph_argparse_flag(args, i, "--mon-config", (char*)NULL)) {
       values.no_mon_config = false;
@@ -1125,17 +1124,19 @@ void md_config_t::early_expand_meta(
 bool md_config_t::finalize_reexpand_meta(ConfigValues& values,
 					 const ConfigTracker& tracker)
 {
-  for (auto& [name, value] : may_reexpand_meta) {
-    set_val(values, tracker, name, value);
+  std::vector<std::string> reexpands;
+  reexpands.swap(may_reexpand_meta);
+  for (auto& name : reexpands) {
+    // always refresh the options if they are in the may_reexpand_meta
+    // map, because the options may have already been expanded with old
+    // meta.
+    const auto &opt_iter = schema.find(name);
+    ceph_assert(opt_iter != schema.end());
+    const Option &opt = opt_iter->second;
+    _refresh(values, opt);
   }
-  
-  if (!may_reexpand_meta.empty()) {
-    // meta expands could have modified anything.  Copy it all out again.
-    update_legacy_vals(values);
-    return true;
-  } else {
-    return false;
-  }
+
+  return !may_reexpand_meta.empty();
 }
 
 Option::value_t md_config_t::_expand_meta(
@@ -1217,16 +1218,24 @@ Option::value_t md_config_t::_expand_meta(
       } else if (var == "id") {
 	out += values.name.get_id();
       } else if (var == "pid") {
-	out += stringify(getpid());
+        char *_pid = getenv("PID");
+        if (_pid) {
+          out += _pid;
+        } else {
+          out += stringify(getpid());
+        }
         if (o) {
-          may_reexpand_meta[o->name] = *str;
+          may_reexpand_meta.push_back(o->name);
         }
       } else if (var == "cctid") {
 	out += stringify((unsigned long long)this);
       } else if (var == "home") {
 	const char *home = getenv("HOME");
 	out = home ? std::string(home) : std::string();
-      } else {
+      } else if (var == "programdata") {
+        const char *home = getenv("ProgramData");
+        out = home ? std::string(home) : std::string();
+      }else {
 	if (var == "data_dir") {
 	  var = data_dir_option;
 	}

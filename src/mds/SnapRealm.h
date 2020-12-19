@@ -36,18 +36,9 @@ public:
     return false;
   }
 
-  bool _open_parents(MDSContext *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  bool open_parents(MDSContext *retryorfinish);
-  void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
-  bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP) const;
-  void add_open_past_parent(SnapRealm *parent, snapid_t last);
-  void remove_open_past_parent(inodeno_t ino, snapid_t last);
-  void close_parents();
-
-  void prune_past_parents();
-  bool has_past_parents() const {
-    return !srnode.past_parent_snaps.empty() ||
-	   !srnode.past_parents.empty();
+  void prune_past_parent_snaps();
+  bool has_past_parent_snaps() const {
+    return !srnode.past_parent_snaps.empty();
   }
 
   void build_snap_set() const;
@@ -133,24 +124,17 @@ public:
   MDCache *mdcache;
   CInode *inode;
 
-  bool past_parents_dirty = false;
-
   SnapRealm *parent = nullptr;
   std::set<SnapRealm*> open_children;    // active children that are currently open
-  std::set<SnapRealm*> open_past_children;  // past children who has pinned me
 
-  elist<CInode*> inodes_with_caps = 0;             // for efficient realm splits
+  elist<CInode*> inodes_with_caps;             // for efficient realm splits
   std::map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
 
 protected:
   void check_cache() const;
 
 private:
-  mutable bool open = false;                        // set to true once all past_parents are opened
   bool global;
-
-  std::map<inodeno_t, std::pair<SnapRealm*, std::set<snapid_t>>> open_past_parents;  // these are explicitly pinned.
-  unsigned num_open_past_parents = 0;
 
   // cache
   mutable snapid_t cached_seq;           // max seq over self and all past+present parents.

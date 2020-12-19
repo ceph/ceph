@@ -16,16 +16,16 @@ else()
 endif()
 install(TARGETS rados DESTINATION bin)
 
-if(WITH_BOOST_CONTEXT AND NOT WIN32)
+if(NOT WIN32)
 set(neorados_srcs
   neorados.cc)
 add_executable(neorados ${neorados_srcs})
 target_include_directories(neorados PRIVATE
   $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+endif()
 
 target_link_libraries(neorados libneorados spawn ${CMAKE_DL_LIBS})
 #install(TARGETS neorados DESTINATION bin)
-endif()
 
 if(WITH_TESTS)
 add_executable(ceph_scratchtool scratchtool.c)
@@ -136,6 +136,9 @@ if(WITH_RBD)
   add_subdirectory(rbd_mirror)
   if(LINUX)
     add_subdirectory(rbd_nbd)
+  endif()
+  if(WIN32)
+    add_subdirectory(rbd_wnbd)
   endif()
   if(FREEBSD)
     add_subdirectory(rbd_ggate)

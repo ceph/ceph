@@ -122,15 +122,14 @@ private:
     CephContext *cct = m_cct;
 
     // merge per-snapshot deltas into an aggregate
-    interval_map<uint64_t, io::SnapshotExtent, io::SnapshotExtentSplitMerge>
-      aggregate_snapshot_extents;
+    io::SparseExtents aggregate_snapshot_extents;
     for (auto& [key, snapshot_extents] : m_snapshot_delta) {
       for (auto& snapshot_extent : snapshot_extents) {
         auto state = snapshot_extent.get_val().state;
 
         // ignore DNE object (and parent)
         if (key == io::WriteReadSnapIds{0, 0} &&
-            state != io::SNAPSHOT_EXTENT_STATE_DATA) {
+            state != io::SPARSE_EXTENT_STATE_DATA) {
           continue;
         }
 
@@ -147,7 +146,7 @@ private:
                      << "state=" << snapshot_extent.get_val().state << dendl;
       diffs->emplace_back(
         snapshot_extent.get_off(), snapshot_extent.get_len(),
-        snapshot_extent.get_val().state == io::SNAPSHOT_EXTENT_STATE_DATA);
+        snapshot_extent.get_val().state == io::SPARSE_EXTENT_STATE_DATA);
     }
   }
 };

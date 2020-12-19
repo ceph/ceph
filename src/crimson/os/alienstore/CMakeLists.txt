@@ -1,9 +1,11 @@
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
-set(crimson_alien_srcs
-    alien_store.cc
-    thread_pool.cc)
 
-list(APPEND crimson_alien_srcs
+add_library(alien::cflags INTERFACE IMPORTED)
+set_target_properties(alien::cflags PROPERTIES
+  INTERFACE_COMPILE_DEFINITIONS "WITH_SEASTAR;WITH_ALIEN"
+  INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
+
+add_library(crimson-alien-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
@@ -19,6 +21,7 @@ list(APPEND crimson_alien_srcs
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters_collection.cc
   ${PROJECT_SOURCE_DIR}/src/common/RefCountedObj.cc
   ${PROJECT_SOURCE_DIR}/src/common/shared_mutex_debug.cc
+  ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
   ${PROJECT_SOURCE_DIR}/src/common/Throttle.cc
   ${PROJECT_SOURCE_DIR}/src/common/Timer.cc
   ${PROJECT_SOURCE_DIR}/src/common/TrackedOp.cc
@@ -26,6 +29,15 @@ list(APPEND crimson_alien_srcs
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
+  $<TARGET_OBJECTS:compressor_objs>
+  $<TARGET_OBJECTS:common_prioritycache_obj>)
+target_link_libraries(crimson-alien-common
+  crimson-common
+  alien::cflags)
+
+add_library(crimson-alienstore STATIC
+  alien_store.cc
+  thread_pool.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Allocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/AvlAllocator.cc
@@ -40,20 +52,17 @@ list(APPEND crimson_alien_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/HybridAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/StupidAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapAllocator.cc)
-
-add_library(crimson-alienstore STATIC ${crimson_alien_srcs}
-  $<TARGET_OBJECTS:compressor_objs>
-  $<TARGET_OBJECTS:common_prioritycache_obj>)
-
-target_compile_definitions(crimson-alienstore PRIVATE -DWITH_SEASTAR -DWITH_ALIEN)
-target_include_directories(crimson-alienstore PRIVATE
-  $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
+if(WITH_LTTNG)
+  add_dependencies(crimson-alienstore bluestore-tp)
+endif()
 target_link_libraries(crimson-alienstore
-  fmt::fmt
-  kv
-  heap_profiler
-  ${BLKID_LIBRARIES}
-  ${UDEV_LIBRARIES}
-  crimson-os
-  crimson
-  blk)
+  PRIVATE
+    alien::cflags
+    fmt::fmt
+    kv
+    heap_profiler
+    crimson-alien-common
+    ${BLKID_LIBRARIES}
+    ${UDEV_LIBRARIES}
+    crimson
+    blk)

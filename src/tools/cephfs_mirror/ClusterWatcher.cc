@@ -74,31 +74,42 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
   auto fsmap = m->get_fsmap();
   auto filesystems = fsmap.get_filesystems();
 
-  std::vector<std::string> mirroring_enabled;
-  std::vector<std::string> mirroring_disabled;
-  std::map<std::string, Peers> peers_added;
-  std::map<std::string, Peers> peers_removed;
-  std::map<std::string, uint64_t> fs_metadata_pools;
+  std::vector<Filesystem> mirroring_enabled;
+  std::vector<Filesystem> mirroring_disabled;
+  std::map<Filesystem, Peers> peers_added;
+  std::map<Filesystem, Peers> peers_removed;
+  std::map<Filesystem, uint64_t> fs_metadata_pools;
   {
     std::scoped_lock locker(m_lock);
+    // deleted filesystems are considered mirroring disabled
+    for (auto it = m_filesystem_peers.begin(); it != m_filesystem_peers.end();) {
+      if (!fsmap.filesystem_exists(it->first.fscid)) {
+        mirroring_disabled.emplace_back(it->first);
+        it = m_filesystem_peers.erase(it);
+        continue;
+      }
+      ++it;
+    }
+
     for (auto &filesystem : filesystems) {
-      auto fs_name = filesystem->mds_map.get_fs_name();
+      auto fs = Filesystem{filesystem->fscid,
+                           std::string(filesystem->mds_map.get_fs_name())};
       auto pool_id = filesystem->mds_map.get_metadata_pool();
       auto &mirror_info = filesystem->mirror_info;
 
       if (!mirror_info.is_mirrored()) {
-        auto it = m_filesystem_peers.find(fs_name);
+        auto it = m_filesystem_peers.find(fs);
         if (it != m_filesystem_peers.end()) {
-          mirroring_disabled.emplace_back(fs_name);
+          mirroring_disabled.emplace_back(fs);
           m_filesystem_peers.erase(it);
         }
       } else {
-        auto [fspeersit, enabled] = m_filesystem_peers.emplace(fs_name, Peers{});
+        auto [fspeersit, enabled] = m_filesystem_peers.emplace(fs, Peers{});
         auto &peers = fspeersit->second;
 
         if (enabled) {
-          mirroring_enabled.emplace_back(fs_name);
-          fs_metadata_pools.emplace(fs_name, pool_id);
+          mirroring_enabled.emplace_back(fs);
+          fs_metadata_pools.emplace(fs, pool_id);
         }
 
         // peers added
@@ -114,11 +125,11 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
 
         // update set
         if (!added.empty()) {
-          peers_added.emplace(fs_name, added);
+          peers_added.emplace(fs, added);
           peers.insert(added.begin(), added.end());
         }
         if (!removed.empty()) {
-          peers_removed.emplace(fs_name, removed);
+          peers_removed.emplace(fs, removed);
           for (auto &p : removed) {
             peers.erase(p);
           }
@@ -129,23 +140,23 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
 
   dout(5) << ": mirroring enabled=" << mirroring_enabled << ", mirroring_disabled="
           << mirroring_disabled << dendl;
-  for (auto &fs_name : mirroring_enabled) {
-    m_listener.handle_mirroring_enabled(FilesystemSpec(fs_name, fs_metadata_pools.at(fs_name)));
+  for (auto &fs : mirroring_enabled) {
+    m_listener.handle_mirroring_enabled(FilesystemSpec(fs, fs_metadata_pools.at(fs)));
   }
-  for (auto &fs_name : mirroring_disabled) {
-    m_listener.handle_mirroring_disabled(fs_name);
+  for (auto &fs : mirroring_disabled) {
+    m_listener.handle_mirroring_disabled(fs);
   }
 
   dout(5) << ": peers added=" << peers_added << ", peers removed=" << peers_removed << dendl;
 
-  for (auto &[fs_name, peers] : peers_added) {
+  for (auto &[fs, peers] : peers_added) {
     for (auto &peer : peers) {
-      m_listener.handle_peers_added(fs_name, peer);
+      m_listener.handle_peers_added(fs, peer);
     }
   }
-  for (auto &[fs_name, peers] : peers_removed) {
+  for (auto &[fs, peers] : peers_removed) {
     for (auto &peer : peers) {
-      m_listener.handle_peers_removed(fs_name, peer);
+      m_listener.handle_peers_removed(fs, peer);
     }
   }
 

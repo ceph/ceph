@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        osd_max_omap_entries_per_request: 10000

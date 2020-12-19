@@ -9,12 +9,15 @@ namespace io {
 
 const WriteReadSnapIds INITIAL_WRITE_READ_SNAP_IDS{0, 0};
 
-std::ostream& operator<<(std::ostream& os, SnapshotExtentState state) {
+std::ostream& operator<<(std::ostream& os, SparseExtentState state) {
   switch (state) {
-  case SNAPSHOT_EXTENT_STATE_ZEROED:
+  case SPARSE_EXTENT_STATE_DNE:
+    os << "dne";
+    break;
+  case SPARSE_EXTENT_STATE_ZEROED:
     os << "zeroed";
     break;
-  case SNAPSHOT_EXTENT_STATE_DATA:
+  case SPARSE_EXTENT_STATE_DATA:
     os << "data";
     break;
   default:
@@ -24,7 +27,7 @@ std::ostream& operator<<(std::ostream& os, SnapshotExtentState state) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const SnapshotExtent& se) {
+std::ostream& operator<<(std::ostream& os, const SparseExtent& se) {
   os << "["
      << "state=" << se.state << ", "
      << "length=" << se.length << "]";

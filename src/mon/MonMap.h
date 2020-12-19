@@ -493,11 +493,10 @@ protected:
    *
    * @param addrs  list of entity_addrvec_t's
    * @param prefix prefix to prepend to generated mon names
-   * @return 0 for success, -errno on error
    */
-  int init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
-        bool for_mkfs,
-        std::string_view prefix);
+  void init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
+                       bool for_mkfs,
+                       std::string_view prefix);
   /**
    * build a monmap from a list of ips
    *

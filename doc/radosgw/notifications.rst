@@ -9,11 +9,11 @@ Bucket Notifications
 Bucket notifications provide a mechanism for sending information out of the radosgw when certain events are happening on the bucket.
 Currently, notifications could be sent to: HTTP, AMQP0.9.1 and Kafka endpoints.
 
-Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint, 
+Note, that if the events should be stored in Ceph, in addition, or instead of being pushed to an endpoint,
 the `PubSub Module`_ should be used instead of the bucket notification mechanism.
 
-A user can create different topics. A topic entity is defined by its user and its name. A
-user can only manage its own topics, and can only associate them with buckets it owns.
+A user can create different topics. A topic entity is defined by its name and is per tenant. A
+user can only associate its topics (via notification configuration) with buckets it owns.
 
 In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
@@ -33,7 +33,7 @@ mechanism. This API is similar to the one defined as the S3-compatible API of th
 Notification Reliability
 ------------------------
 
-Notifications may be sent synchronously, as part of the operation that triggered them. 
+Notifications may be sent synchronously, as part of the operation that triggered them.
 In this mode, the operation is acked only after the notification is sent to the topic's configured endpoint, which means that the
 round trip time of the notification is added to the latency of the operation itself.
 
@@ -50,25 +50,25 @@ In this case, the only latency added to the original operation is of committing 
 Topic Management via CLI
 ------------------------
 
-Configuration of all topics of a user could be fetched using the following command:
-   
+Configuration of all topics, associated with a tenant, could be fetched using the following command:
+
 ::
-   
-   # radosgw-admin topic list --uid={user-id}
+
+   # radosgw-admin topic list [--tenant={tenant}]
 
 
 Configuration of a specific topic could be fetched using:
 
 ::
-   
-   # radosgw-admin topic get --uid={user-id} --topic={topic-name}
+
+   # radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
 And removed using:
 
 ::
-   
-   # radosgw-admin topic rm --uid={user-id} --topic={topic-name}
+
+   # radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
 
 Notification Performance Stats
@@ -81,10 +81,10 @@ The same counters are shared between the pubsub sync module and the bucket notif
 - ``pubsub_push_fail``: running counter, for all notifications, of events failed to be pushed to their endpoint
 - ``pubsub_push_pending``: gauge value of events pushed to an endpoint but not acked or nacked yet
 
-.. note:: 
+.. note::
 
-    ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, while: 
-    ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per push action on each notification.
+    ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, while:
+    ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per push action on each notification
 
 Bucket Notification REST API
 ----------------------------
@@ -92,7 +92,7 @@ Bucket Notification REST API
 Topics
 ~~~~~~
 
-.. note:: 
+.. note::
 
     In all topic actions, the parameters are URL encoded, and sent in the message body using ``application/x-www-form-urlencoded`` content type
 
@@ -104,7 +104,7 @@ when a notification is created.
 Upon a successful request, the response will include the topic ARN that could be later used to reference this topic in the notification request.
 To update a topic, use the same command used for topic creation, with the topic name of an existing topic and different endpoint values.
 
-.. tip:: Any notification already associated with the topic needs to be re-created for the topic update to take effect 
+.. tip:: Any notification already associated with the topic needs to be re-created for the topic update to take effect
 
 ::
 
@@ -128,7 +128,7 @@ Request parameters:
 - OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic
 - persistent: indication whether notifications to this endpoint are persistent (=asynchronous) or not ("false" by default)
 
-- HTTP endpoint 
+- HTTP endpoint
 
  - URI: ``http[s]://<fqdn>[:<port]``
  - port defaults to: 80/443 for HTTP/S accordingly
@@ -138,7 +138,7 @@ Request parameters:
 
  - URI: ``amqp://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
  - user/password defaults to: guest/guest
- - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
+ - user/password may only be provided over HTTPS. If not, topic creation request will be rejected.
  - port defaults to: 5672
  - vhost defaults to: "/"
  - amqp-exchange: the exchanges must exist and be able to route messages based on topics (mandatory parameter for AMQP0.9.1). Different topics pointing to the same endpoint must use the same exchange
@@ -150,20 +150,20 @@ Request parameters:
 
 .. tip:: The topic-name (see :ref:`radosgw-create-a-topic`) is used for the AMQP topic ("routing key" for a topic exchange)
 
-- Kafka endpoint 
+- Kafka endpoint
 
  - URI: ``kafka://[<user>:<password>@]<fqdn>[:<port]``
  - if ``use-ssl`` is set to "true", secure connection will be used for connecting with the broker ("false" by default)
  - if ``ca-location`` is provided, and secure connection is used, the specified CA will be used, instead of the default one, to authenticate the broker
- - user/password may only be provided over HTTPS. Topic creation request will be rejected if not
- - user/password may only be provided together with ``use-ssl``, connection to the broker would fail if not
+ - user/password may only be provided over HTTPS. If not, topic creation request will be rejected.
+ - user/password may only be provided together with ``use-ssl``, if not, the connection to the broker would fail.
  - port defaults to: 9092
  - kafka-ack-level: no end2end acking is required, as messages may persist in the broker before delivered into their final destination. Two ack methods exist:
 
   - "none": message is considered "delivered" if sent to broker
   - "broker": message is considered "delivered" if acked by broker (default)
 
-.. note:: 
+.. note::
 
     - The key/value of a specific parameter does not have to reside in the same line, or in any specific order, but must use the same index
     - Attribute indexing does not need to be sequential or start from any specific value
@@ -180,18 +180,76 @@ The response will have the following format:
         <ResponseMetadata>
             <RequestId></RequestId>
         </ResponseMetadata>
-    </CreateTopicResponse>    
+    </CreateTopicResponse>
 
 The topic ARN in the response will have the following format:
 
 ::
 
    arn:aws:sns:<zone-group>:<tenant>:<topic>
- 
+
+Get Topic Attributes
+````````````````````
+
+Returns information about a specific topic. This includes push-endpoint information, if provided.
+
+::
+
+   POST
+
+   Action=GetTopicAttributes
+   &TopicArn=<topic-arn>
+
+Response will have the following format:
+
+::
+
+    <GetTopicAttributesResponse>
+        <GetTopicAttributesRersult>
+            <Attributes>
+                <entry>
+                    <key>User</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>Name</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>EndPoint</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>TopicArn</key>
+                    <value></value>
+                </entry> 
+                <entry>
+                    <key>OpaqueData</key>
+                    <value></value>
+                </entry> 
+            </Attributes>
+        </GetTopicAttributesResult>
+        <ResponseMetadata>
+            <RequestId></RequestId>
+        </ResponseMetadata>
+    </GetTopicAttributesResponse>
+
+- User: name of the user that created the topic
+- Name: name of the topic
+- EndPoint: JSON formatted endpoint parameters, including:
+   - EndpointAddress: the push-endpoint URL
+   - EndpointArgs: the push-endpoint args
+   - EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
+   - HasStoredSecret: "true" if if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
+   - Persistent: "true" is topic is persistent
+- TopicArn: topic ARN
+- OpaqueData: the opaque data set on the topic
+
 Get Topic Information
 `````````````````````
 
 Returns information about specific topic. This includes push-endpoint information, if provided.
+Note that this API is now deprecated in favor of the AWS compliant `GetTopicAttributes` API.
 
 ::
 
@@ -213,6 +271,8 @@ Response will have the following format:
                     <EndpointAddress></EndpointAddress>
                     <EndpointArgs></EndpointArgs>
                     <EndpointTopic></EndpointTopic>
+                    <HasStoredSecret></HasStoredSecret>
+                    <Persistent></Persistent>
                 </EndPoint>
                 <TopicArn></TopicArn>
                 <OpaqueData></OpaqueData>
@@ -221,15 +281,17 @@ Response will have the following format:
         <ResponseMetadata>
             <RequestId></RequestId>
         </ResponseMetadata>
-    </GetTopicResponse>    
+    </GetTopicResponse>
 
 - User: name of the user that created the topic
 - Name: name of the topic
 - EndpointAddress: the push-endpoint URL
-- if endpoint URL contain user/password information, request must be made over HTTPS. Topic get request will be rejected if not 
 - EndpointArgs: the push-endpoint args
-- EndpointTopic: the topic name that should be sent to the endpoint (mat be different than the above topic name)
+- EndpointTopic: the topic name that should be sent to the endpoint (may be different than the above topic name)
+- HasStoredSecret: "true" if endpoint URL contain user/password information. In this case request must be made over HTTPS. If not, topic get request will be rejected 
+- Persistent: "true" is topic is persistent
 - TopicArn: topic ARN
+- OpaqueData: the opaque data set on the topic
 
 Delete Topic
 ````````````
@@ -241,7 +303,12 @@ Delete Topic
    Action=DeleteTopic
    &TopicArn=<topic-arn>
 
-Delete the specified topic. Note that deleting a deleted topic should result with no-op and not a failure.
+Delete the specified topic.
+
+.. note::
+
+  - Deleting an unknown notification (e.g. double delete) is not considered an error
+  - Deleting a topic does not automatically delete all notifications associated with it
 
 The response will have the following format:
 
@@ -251,19 +318,19 @@ The response will have the following format:
         <ResponseMetadata>
             <RequestId></RequestId>
         </ResponseMetadata>
-    </DeleteTopicResponse>    
+    </DeleteTopicResponse>
 
 List Topics
 ```````````
 
-List all topics that user defined.
+List all topics associated with a tenant.
 
 ::
 
    POST
 
    Action=ListTopics
- 
+
 Response will have the following format:
 
 ::
@@ -287,20 +354,19 @@ Response will have the following format:
         <ResponseMetadata>
             <RequestId></RequestId>
         </ResponseMetadata>
-    </ListTopicsResponse>    
+    </ListTopicsResponse>
 
-- if endpoint URL contain user/password information, in any of the topic, request must be made over HTTPS. Topic list request will be rejected if not 
+- if endpoint URL contain user/password information, in any of the topic, request must be made over HTTPS. If not, topic list request will be rejected.
 
 Notifications
 ~~~~~~~~~~~~~
 
 Detailed under: `Bucket Operations`_.
 
-.. note:: 
+.. note::
 
     - "Abort Multipart Upload" request does not emit a notification
     - Both "Initiate Multipart Upload" and "POST Object" requests will emit an ``s3:ObjectCreated:Post`` notification
-
 
 Events
 ~~~~~~
@@ -310,14 +376,14 @@ pushed or pulled using the pubsub sync module. For example:
 
 ::
 
-   {"Records":[  
+   {"Records":[
        {
            "eventVersion":"2.1",
            "eventSource":"ceph:s3",
            "awsRegion":"us-east-1",
            "eventTime":"2019-11-22T13:47:35.124724Z",
            "eventName":"s3:ObjectCreated:Put",
-           "userIdentity":{  
+           "userIdentity":{
                "principalId":"tester"
            },
            "requestParameters":{
@@ -358,8 +424,8 @@ pushed or pulled using the pubsub sync module. For example:
 - eventName: for list of supported events see: `S3 Notification Compatibility`_
 - userIdentity.principalId: user that triggered the change
 - requestParameters.sourceIPAddress: not supported
-- responseElements.x-amz-request-id: request ID of the original change 
-- responseElements.x_amz_id_2: RGW on which the change was made 
+- responseElements.x-amz-request-id: request ID of the original change
+- responseElements.x_amz_id_2: RGW on which the change was made
 - s3.configurationId: notification ID that created the event
 - s3.bucket.name: name of the bucket
 - s3.bucket.ownerIdentity.principalId: owner of the bucket
@@ -370,7 +436,7 @@ pushed or pulled using the pubsub sync module. For example:
 - s3.object.eTag: object etag
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
-- s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API) 
+- s3.object.metadata: any metadata set on the object sent as: ``x-amz-meta-`` (an extension to the S3 notification API)
 - s3.object.tags: any tags set on the object (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
 - s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic (an extension to the S3 notification API)

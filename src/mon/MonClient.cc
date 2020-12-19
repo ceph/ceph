@@ -21,6 +21,7 @@
 #include <boost/range/algorithm_ext/copy_n.hpp>
 #include "common/weighted_shuffle.h"
 
+#include "include/random.h"
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 
@@ -792,7 +793,7 @@ void MonClient::_add_conns(uint64_t global_id)
       auto rank_name = monmap.get_name(i);
       weights.push_back(monmap.get_weight(rank_name));
     }
-    std::random_device rd;
+    random_device_t rd;
     if (std::accumulate(begin(weights), end(weights), 0u) == 0) {
       std::shuffle(begin(ranks), end(ranks), std::mt19937{rd()});
     } else {
@@ -1583,13 +1584,8 @@ int MonClient::handle_auth_request(
   }
 
   auto ac = &auth_meta->authorizer_challenge;
-  if (!HAVE_FEATURE(con->get_features(), CEPHX_V2)) {
-    if (cct->_conf->cephx_service_require_version >= 2) {
-      ldout(cct,10) << __func__ << " client missing CEPHX_V2 ("
-		    << "cephx_service_requre_version = "
-		    << cct->_conf->cephx_service_require_version << ")" << dendl;
-      return -EACCES;
-    }
+  if (auth_meta->skip_authorizer_challenge) {
+    ldout(cct, 10) << __func__ << " skipping challenge on " << con << dendl;
     ac = nullptr;
   }
 

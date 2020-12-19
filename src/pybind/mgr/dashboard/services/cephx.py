@@ -22,7 +22,7 @@ class CephX(object):
 
     @classmethod
     def list_clients(cls):
-        return [client for client in cls._clients_map()]
+        return list(cls._clients_map())
 
     @classmethod
     def get_client_key(cls, client_id):

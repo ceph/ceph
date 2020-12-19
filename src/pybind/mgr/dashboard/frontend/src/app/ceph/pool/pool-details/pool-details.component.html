@@ -9,7 +9,7 @@
          i18n>Details</a>
       <ng-template ngbNavContent>
         <cd-table-key-value [renderObjects]="true"
-                            [data]="filterNonPoolData(selection)"
+                            [data]="poolDetails"
                             [autoReload]="false">
         </cd-table-key-value>
       </ng-template>
@@ -19,7 +19,7 @@
       <a ngbNavLink
          i18n>Performance Details</a>
       <ng-template ngbNavContent>
-        <cd-grafana [grafanaPath]="'ceph-pool-detail?var-pool_name='+ selection['pool_name']"
+        <cd-grafana grafanaPath="ceph-pool-detail?var-pool_name={{selection.pool_name}}"
                     uid="-xyV8KCiz"
                     grafanaStyle="three">
         </cd-grafana>

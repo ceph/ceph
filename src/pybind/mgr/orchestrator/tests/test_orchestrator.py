@@ -16,7 +16,7 @@ from tests import mock
 from orchestrator import raise_if_exception, Completion, ProgressReference
 from orchestrator import InventoryHost, DaemonDescription, ServiceDescription
 from orchestrator import OrchestratorValidationError
-from orchestrator.module import to_format, OrchestratorCli
+from orchestrator.module import to_format, OrchestratorCli, preview_table_osd
 
 
 def _test_resource(data, resource_class, extra=None):
@@ -308,3 +308,46 @@ def test_handle_command():
     r = m._handle_command(None, cmd)
     assert r == HandleCommandResult(
         retval=-2, stdout='', stderr='No orchestrator configured (try `ceph orch set backend`)')
+
+
+def test_preview_table_osd_smoke():
+    data = [
+        {
+            'service_type': 'osd',
+            'data':
+            {
+                'foo host':
+                [
+                    {
+                        'osdspec': 'foo',
+                        'error': '',
+                        'data':
+                        [
+                            {
+                                "block_db": "/dev/nvme0n1",
+                                "block_db_size": "66.67 GB",
+                                "data": "/dev/sdb",
+                                "data_size": "300.00 GB",
+                                "encryption": "None"
+                            },
+                            {
+                                "block_db": "/dev/nvme0n1",
+                                "block_db_size": "66.67 GB",
+                                "data": "/dev/sdc",
+                                "data_size": "300.00 GB",
+                                "encryption": "None"
+                            },
+                            {
+                                "block_db": "/dev/nvme0n1",
+                                "block_db_size": "66.67 GB",
+                                "data": "/dev/sdd",
+                                "data_size": "300.00 GB",
+                                "encryption": "None"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+    preview_table_osd(data)

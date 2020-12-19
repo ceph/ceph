@@ -230,8 +230,8 @@ groups:
       - alert: pool filling up
         expr: |
           (
-            predict_linear(ceph_pool_stored[2d], 3600 * 24 * 5) >=
-            ceph_pool_max_avail
+            predict_linear(ceph_pool_stored[2d], 3600 * 24 * 5)
+            >= ceph_pool_stored + ceph_pool_max_avail
           ) * on(pool_id) group_left(name) ceph_pool_metadata
         labels:
           severity: warning
@@ -241,3 +241,15 @@ groups:
           description: >
             Pool {{ $labels.name }} will be full in less than 5 days
             assuming the average fill-up rate of the past 48 hours.
+
+  - name: healthchecks
+    rules:
+      - alert: Slow OSD Ops
+        expr: ceph_healthcheck_slow_ops > 0
+        for: 30s
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: >
+            {{ $value }} OSD requests are taking too long to process (osd_op_complaint_time exceeded)

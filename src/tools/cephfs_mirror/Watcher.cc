@@ -114,7 +114,7 @@ void Watcher::handle_register_watch(int r, Context *on_finish) {
       m_state = STATE_REGISTERING;
       watch_error = true;
     } else {
-      m_watch_blacklisted = (r == -EBLACKLISTED);
+      m_watch_blocklisted = (r == -EBLOCKLISTED);
     }
   }
 
@@ -147,7 +147,7 @@ void Watcher::unregister_watch(Context *on_finish) {
       ceph_assert(r == 0);
       aio_comp->release();
       m_watch_handle = 0;
-      m_watch_blacklisted = false;
+      m_watch_blocklisted = false;
       return;
     }
   }
@@ -163,8 +163,8 @@ void Watcher::handle_error(uint64_t handle, int err) {
 
   if (is_registered()) {
     m_state = STATE_REWATCHING;
-    if (err == -EBLACKLISTED) {
-      m_watch_blacklisted = true;
+    if (err == -EBLOCKLISTED) {
+      m_watch_blocklisted = true;
     }
     m_work_queue->queue(new LambdaContext([this] {
                                             rewatch();
@@ -205,14 +205,14 @@ void Watcher::handle_rewatch(int r) {
     std::scoped_lock locker(m_lock);
     ceph_assert(m_state == STATE_REWATCHING);
 
-    m_watch_blacklisted = false;
+    m_watch_blocklisted = false;
     if (m_unregister_watch_ctx != nullptr) {
       dout(10) << ": skipping rewatch -- unregistering" << dendl;
       m_state = STATE_IDLE;
       std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
-    } else if (r == -EBLACKLISTED) {
-      m_watch_blacklisted = true;
-      derr << ": client blacklisted" << dendl;
+    } else if (r == -EBLOCKLISTED) {
+      m_watch_blocklisted = true;
+      derr << ": client blocklisted" << dendl;
     } else if (r == -ENOENT) {
       dout(5) << ": object " << m_oid << " does not exist" << dendl;
     } else if  (r < 0) {
@@ -249,7 +249,7 @@ void Watcher::handle_rewatch_callback(int r) {
     if (m_unregister_watch_ctx != nullptr) {
       m_state = STATE_IDLE;
       std::swap(unregister_watch_ctx, m_unregister_watch_ctx);
-    } else if (r == -EBLACKLISTED || r == -ENOENT) {
+    } else if (r == -EBLOCKLISTED || r == -ENOENT) {
       m_state = STATE_IDLE;
     } else if (r < 0 || m_watch_error) {
       watch_error = true;

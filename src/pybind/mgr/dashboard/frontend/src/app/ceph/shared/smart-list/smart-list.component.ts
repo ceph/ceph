@@ -3,16 +3,16 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges, ViewChild } from '@
 import { NgbNav } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
-import { HostService } from '../../../shared/api/host.service';
-import { OsdService } from '../../../shared/api/osd.service';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { HostService } from '~/app/shared/api/host.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
   HddSmartDataV1,
   NvmeSmartDataV1,
   SmartDataResult,
   SmartError,
   SmartErrorResult
-} from '../../../shared/models/smart';
+} from '~/app/shared/models/smart';
 
 @Component({
   selector: 'cd-smart-list',
@@ -35,6 +35,8 @@ export class SmartListComponent implements OnInit, OnChanges {
   data: { [deviceId: string]: SmartDataResult | SmartErrorResult } = {};
 
   smartDataColumns: CdTableColumn[];
+
+  isEmpty = _.isEmpty;
 
   constructor(private osdService: OsdService, private hostService: HostService) {}
 
@@ -143,10 +145,6 @@ smartmontools is required to successfully retrieve data.`;
         }
       });
     }
-  }
-
-  isEmpty(value: any) {
-    return _.isEmpty(value);
   }
 
   ngOnInit() {

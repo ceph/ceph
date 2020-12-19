@@ -49,9 +49,8 @@ public:
   void shut_down(Context* on_finish) override;
 
   bool read(
-      uint64_t object_no, const Extents &extents, IOContext io_context,
+      uint64_t object_no, ReadExtents* extents, IOContext io_context,
       int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
-      ceph::bufferlist* read_data, Extents* extent_map,
       uint64_t* version, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
@@ -111,6 +110,12 @@ public:
   void extent_overwritten(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
       uint64_t journal_tid, uint64_t new_journal_tid) override {
+  }
+
+  int prepare_copyup(
+      uint64_t object_no,
+      SnapshotSparseBufferlist* snapshot_sparse_bufferlist) override {
+    return 0;
   }
 
 private:

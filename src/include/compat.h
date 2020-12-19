@@ -14,6 +14,8 @@
 
 #include "acconfig.h"
 #include <sys/types.h>
+#include <errno.h>
+#include <unistd.h>
 
 #if defined(__linux__)
 #define PROCPREFIX
@@ -199,6 +201,12 @@ extern "C" {
 
 int pipe_cloexec(int pipefd[2], int flags);
 char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
+unsigned get_page_size();
+// On success, returns the number of bytes written to the buffer. On
+// failure, returns -1.
+ssize_t get_self_exe_path(char* path, int buff_length);
+
+int ceph_memzero_s(void *dest, size_t destsz, size_t count);
 
 #ifdef __cplusplus
 }
@@ -209,6 +217,9 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 #include "include/win32/winsock_compat.h"
 
 #include <windows.h>
+#include <time.h>
+
+#include "include/win32/win32_errno.h"
 
 // There are a few name collisions between Windows headers and Ceph.
 // Updating Ceph definitions would be the prefferable fix in order to avoid
@@ -219,6 +230,10 @@ char *ceph_strerror_r(int errnum, char *buf, size_t buflen);
 
 #define WIN32_ERROR 0
 #undef ERROR
+
+#ifndef uint
+typedef unsigned int uint;
+#endif
 
 typedef _sigset_t sigset_t;
 
@@ -256,15 +271,6 @@ struct iovec {
 #define SIGKILL 9
 #endif
 
-#ifndef ENODATA
-// mingw doesn't define this, the Windows SDK does.
-#define ENODATA 120
-#endif
-
-#define ESHUTDOWN ECONNABORTED
-#define ESTALE 256
-#define EREMOTEIO 257
-
 #define IOV_MAX 1024
 
 #ifdef __cplusplus
@@ -279,6 +285,7 @@ ssize_t pread(int fd, void *buf, size_t count, off_t offset);
 ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
 
 long int lrand48(void);
+int random();
 
 int pipe(int pipefd[2]);
 
@@ -289,11 +296,23 @@ char *strptime(const char *s, const char *format, struct tm *tm);
 int chown(const char *path, uid_t owner, gid_t group);
 int fchown(int fd, uid_t owner, gid_t group);
 int lchown(const char *path, uid_t owner, gid_t group);
+int setenv(const char *name, const char *value, int overwrite);
+#define unsetenv(name) _putenv_s(name, "")
+
+int win_socketpair(int socks[2]);
+
+#ifdef __MINGW32__
+extern _CRTIMP errno_t __cdecl _putenv_s(const char *_Name,const char *_Value);
+#endif
 
 #ifdef __cplusplus
 }
-
 #endif
+
+#define compat_closesocket closesocket
+// Use "aligned_free" when freeing memory allocated using posix_memalign or
+// _aligned_malloc. Using "free" will crash.
+#define aligned_free(ptr) _aligned_free(ptr)
 
 // O_CLOEXEC is not defined on Windows. Since handles aren't inherited
 // with subprocesses unless explicitly requested, we'll define this
@@ -301,10 +320,54 @@ int lchown(const char *path, uid_t owner, gid_t group);
 #define O_CLOEXEC 0
 #define SOCKOPT_VAL_TYPE char*
 
-#else
+#define DEV_NULL "nul"
+
+#else /* WIN32 */
 
 #define SOCKOPT_VAL_TYPE void*
 
+#define aligned_free(ptr) free(ptr)
+static inline int compat_closesocket(int fildes) {
+  return close(fildes);
+}
+
+#define DEV_NULL "/dev/null"
+
 #endif /* WIN32 */
+
+/* Supplies code to be run at startup time before invoking main().
+ * Use as:
+ *
+ *     CEPH_CONSTRUCTOR(my_constructor) {
+ *         ...some code...
+ *     }
+ */
+#ifdef _MSC_VER
+#pragma section(".CRT$XCU",read)
+#define CEPH_CONSTRUCTOR(f) \
+  static void __cdecl f(void); \
+  __declspec(allocate(".CRT$XCU")) static void (__cdecl*f##_)(void) = f; \
+  static void __cdecl f(void)
+#else
+#define CEPH_CONSTRUCTOR(f) \
+  static void f(void) __attribute__((constructor)); \
+  static void f(void)
+#endif
+
+/* This should only be used with the socket API. */
+static inline int ceph_sock_errno() {
+#ifdef _WIN32
+  return wsae_to_errno(WSAGetLastError());
+#else
+  return errno;
+#endif
+}
+
+// Needed on Windows when handling binary files. Without it, line
+// endings will be replaced and certain characters can be treated as
+// EOF.
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
 
 #endif /* !CEPH_COMPAT_H */

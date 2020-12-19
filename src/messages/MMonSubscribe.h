@@ -29,7 +29,7 @@ struct ceph_mon_subscribe_item_old {
 WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
 
 
-class MMonSubscribe : public Message {
+class MMonSubscribe final : public Message {
 public:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -39,7 +39,7 @@ public:
 
   MMonSubscribe() : Message{CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION} { }
 private:
-  ~MMonSubscribe() override {}
+  ~MMonSubscribe() final {}
 
 public:
   void sub_want(const char *w, version_t start, unsigned flags) {

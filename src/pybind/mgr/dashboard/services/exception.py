@@ -2,18 +2,16 @@
 from __future__ import absolute_import
 
 import json
-from contextlib import contextmanager
 import logging
+from contextlib import contextmanager
 
 import cherrypy
-
-from orchestrator import OrchestratorError
-import rbd
 import rados
+import rbd
+from orchestrator import OrchestratorError
 
+from ..exceptions import DashboardException, ViewCacheNoDataException
 from ..services.ceph_service import SendCommandError
-from ..exceptions import ViewCacheNoDataException, DashboardException
-
 
 logger = logging.getLogger('exception')
 

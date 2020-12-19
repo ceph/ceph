@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/migration/OpenSourceImageRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -112,6 +113,18 @@ void RefreshParentRequest<I>::send_open_parent() {
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
+  if (!m_migration_info.empty()) {
+    auto ctx = create_async_context_callback(
+      m_child_image_ctx, create_context_callback<
+        RefreshParentRequest<I>,
+        &RefreshParentRequest<I>::handle_open_parent, false>(this));
+    auto req = migration::OpenSourceImageRequest<I>::create(
+      m_child_image_ctx.md_ctx, &m_child_image_ctx, m_parent_md.spec.snap_id,
+      m_migration_info, &m_parent_image_ctx, ctx);
+    req->send();
+    return;
+  }
+
   librados::IoCtx parent_io_ctx;
   int r = util::create_ioctx(m_child_image_ctx.md_ctx, "parent image",
                              m_parent_md.spec.pool_id,
@@ -121,14 +134,7 @@ void RefreshParentRequest<I>::send_open_parent() {
     return;
   }
 
-  std::string image_name;
-  uint64_t flags = 0;
-  if (!m_migration_info.empty() && !m_migration_info.image_name.empty()) {
-    image_name = m_migration_info.image_name;
-    flags |= OPEN_FLAG_OLD_FORMAT;
-  }
-
-  m_parent_image_ctx = new I(image_name, m_parent_md.spec.image_id,
+  m_parent_image_ctx = new I("", m_parent_md.spec.image_id,
                              m_parent_md.spec.snap_id, parent_io_ctx, true);
   m_parent_image_ctx->child = &m_child_image_ctx;
 
@@ -143,7 +149,7 @@ void RefreshParentRequest<I>::send_open_parent() {
     m_child_image_ctx, create_context_callback<
       RefreshParentRequest<I>,
       &RefreshParentRequest<I>::handle_open_parent, false>(this));
-  m_parent_image_ctx->state->open(flags, ctx);
+  m_parent_image_ctx->state->open(0U, ctx);
 }
 
 template <typename I>

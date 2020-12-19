@@ -21,7 +21,7 @@
 #include "mon/MonMap.h"
 #include "mon/mon_types.h"
 
-class MMonElection : public Message {
+class MMonElection final : public Message {
 private:
   static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 5;
@@ -72,7 +72,7 @@ public:
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
   }
 private:
-  ~MMonElection() override {}
+  ~MMonElection() final {}
 
 public:
   std::string_view get_type_name() const override { return "election"; }

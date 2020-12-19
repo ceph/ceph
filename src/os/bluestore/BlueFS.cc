@@ -70,11 +70,14 @@ public:
     AdminSocket* admin_socket = bluefs->cct->get_admin_socket();
     if (admin_socket) {
       hook = new BlueFS::SocketHook(bluefs);
-      int r = admin_socket->register_command("bluestore bluefs available "
+      int r = admin_socket->register_command("bluestore bluefs device info "
                                              "name=alloc_size,type=CephInt,req=false",
                                              hook,
-                                             "Report available space for bluefs. "
-                                             "If alloc_size set, make simulation.");
+                                             "Shows space report for bluefs devices. "
+                                             "This also includes an estimation for space "
+                                             "available to bluefs at main device. "
+                                             "alloc_size, if set, specifies the custom bluefs "
+                                             "allocation unit size for the estimation above.");
       if (r != 0) {
         ldout(bluefs->cct, 1) << __func__ << " cannot register SocketHook" << dendl;
         delete hook;
@@ -104,7 +107,7 @@ private:
 	   Formatter *f,
 	   std::ostream& errss,
 	   bufferlist& out) override {
-    if (command == "bluestore bluefs available") {
+    if (command == "bluestore bluefs device info") {
       int64_t alloc_size = 0;
       cmd_getval(cmdmap, "alloc_size", alloc_size);
       if ((alloc_size & (alloc_size - 1)) != 0) {
@@ -112,8 +115,8 @@ private:
 	return -EINVAL;
       }
       if (alloc_size == 0)
-	alloc_size = bluefs->cct->_conf->bluefs_alloc_size;
-      f->open_object_section("bluefs_available_space");
+	alloc_size = bluefs->cct->_conf->bluefs_shared_alloc_size;
+      f->open_object_section("bluefs_device_info");
       for (unsigned dev = BDEV_WAL; dev <= BDEV_SLOW; dev++) {
 	if (bluefs->bdev[dev]) {
 	  f->open_object_section("dev");
@@ -126,9 +129,14 @@ private:
           f->dump_int("total", total);
           f->dump_int("free", free);
           f->dump_int("bluefs_used", used);
-	  f->close_section();
-	}
+          if (bluefs->is_shared_alloc(dev)) {
+            size_t avail = bluefs->probe_alloc_avail(dev, alloc_size);
+            f->dump_int("bluefs max available", avail);
+          }
+          f->close_section();
+        }
       }
+
       f->close_section();
     } else if (command == "bluefs stats") {
       std::stringstream ss;
@@ -554,9 +562,10 @@ void BlueFS::_init_alloc()
     ceph_assert(bdev[id]->get_size());
     ceph_assert(alloc_size[id]);
     if (is_shared_alloc(id)) {
-      dout(1) << __func__ << " shared, id " << id
-        << " alloc_size 0x" << std::hex << alloc_size[id]
-        << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
+      dout(1) << __func__ << " shared, id " << id << std::hex
+              << ", capacity 0x" << bdev[id]->get_size()
+              << ", block size 0x" << alloc_size[id]
+              << std::dec << dendl;
     } else {
       std::string name = "bluefs-";
       const char* devnames[] = { "wal","db","slow" };
@@ -564,9 +573,12 @@ void BlueFS::_init_alloc()
         name += devnames[id];
       else
         name += to_string(uintptr_t(this));
-      dout(1) << __func__ << " new, id " << id
-	       << " alloc_size 0x" << std::hex << alloc_size[id]
-	       << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
+      dout(1) << __func__ << " new, id " << id << std::hex
+              << ", allocator name " << name
+              << ", allocator type " << cct->_conf->bluefs_allocator
+              << ", capacity 0x" << bdev[id]->get_size()
+              << ", block size 0x" << alloc_size[id]
+              << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				    bdev[id]->get_size(),
 				    alloc_size[id], name);
@@ -2348,6 +2360,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   ceph_assert(!log_t.empty());
 
   // allocate some more space (before we run out)?
+  // BTW: this triggers `flush()` in the `page_aligned_appender` of `log_writer`.
   int64_t runway = log_writer->file->fnode.get_allocated() -
     log_writer->get_effective_write_pos();
   bool just_expanded_log = false;
@@ -2462,6 +2475,48 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
   return 0;
 }
 
+ceph::bufferlist BlueFS::FileWriter::flush_buffer(
+  CephContext* const cct,
+  const bool partial,
+  const unsigned length,
+  const bluefs_super_t& super)
+{
+  ceph::bufferlist bl;
+  if (partial) {
+    tail_block.splice(0, tail_block.length(), &bl);
+  }
+  const auto remaining_len = length - bl.length();
+  buffer.splice(0, remaining_len, &bl);
+  if (buffer.length()) {
+    dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
+             << " unflushed" << dendl;
+  }
+  if (const unsigned tail = bl.length() & ~super.block_mask(); tail) {
+    const auto padding_len = super.block_size - tail;
+    dout(20) << __func__ << " caching tail of 0x"
+             << std::hex << tail
+             << " and padding block with 0x" << padding_len
+             << " buffer.length() " << buffer.length()
+             << std::dec << dendl;
+    // We need to go through the `buffer_appender` to get a chance to
+    // preserve in-memory contiguity and not mess with the alignment.
+    // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
+    buffer_appender.append_zero(padding_len);
+    buffer.splice(buffer.length() - padding_len, padding_len, &bl);
+    // Deep copy the tail here. This allows to avoid costlier copy on
+    // bufferlist rebuild in e.g. `KernelDevice` and minimizes number
+    // of memory allocations.
+    // The alternative approach would be to place the entire tail and
+    // padding on a dedicated, 4 KB long memory chunk. This shouldn't
+    // trigger the rebuild while still being less expensive.
+    buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
+    buffer.splice(buffer.length() - tail, tail, &tail_block);
+  } else {
+    tail_block.clear();
+  }
+  return bl;
+}
+
 int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " " << h << " pos 0x" << std::hex << h->pos
@@ -2469,8 +2524,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " to " << h->file->fnode << dendl;
   ceph_assert(!h->file->deleted);
   ceph_assert(h->file->num_readers.load() == 0);
-
-  h->buffer_appender.flush();
 
   bool buffered;
   if (h->file->fnode.ino == 1)
@@ -2553,12 +2606,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
            << std::hex << x_off << std::dec << dendl;
 
   unsigned partial = x_off & ~super.block_mask();
-  bufferlist bl;
   if (partial) {
     dout(20) << __func__ << " using partial tail 0x"
              << std::hex << partial << std::dec << dendl;
-    ceph_assert(h->tail_block.length() == partial);
-    bl.claim_append_piecewise(h->tail_block);
     x_off -= partial;
     offset -= partial;
     length += partial;
@@ -2569,35 +2619,11 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       }
     }
   }
-  if (length == partial + h->buffer.length()) {
-    /* in case of inital allocation and need to zero, limited flush is unacceptable */
-    bl.claim_append_piecewise(h->buffer);
-  } else {
-    bufferlist t;
-    h->buffer.splice(0, length, &t);
-    bl.claim_append_piecewise(t);
-    t.substr_of(h->buffer, length, h->buffer.length() - length);
-    h->buffer.swap(t);
-    dout(20) << " leaving 0x" << std::hex << h->buffer.length() << std::dec
-             << " unflushed" << dendl;
-  }
-  ceph_assert(bl.length() == length);
 
+  auto bl = h->flush_buffer(cct, partial, length, super);
+  ceph_assert(bl.length() >= length);
   h->pos = offset + length;
-
-  unsigned tail = bl.length() & ~super.block_mask();
-  if (tail) {
-    dout(20) << __func__ << " caching tail of 0x"
-             << std::hex << tail
-             << " and padding block with 0x" << (super.block_size - tail)
-             << std::dec << dendl;
-    h->tail_block.substr_of(bl, bl.length() - tail, tail);
-    bl.append_zero(super.block_size - tail);
-    length += super.block_size - tail;
-  } else {
-    h->tail_block.clear();
-  }
-  ceph_assert(bl.length() == length);
+  length = bl.length();
 
   switch (h->writer_type) {
   case WRITER_WAL:
@@ -2691,8 +2717,7 @@ int BlueFS::_flush(FileWriter *h, bool force, std::unique_lock<ceph::mutex>& l)
 
 int BlueFS::_flush(FileWriter *h, bool force, bool *flushed)
 {
-  h->buffer_appender.flush();
-  uint64_t length = h->buffer.length();
+  uint64_t length = h->get_buffer_length();
   uint64_t offset = h->pos;
   if (flushed) {
     *flushed = false;
@@ -2732,19 +2757,14 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
   // we never truncate internal log files
   ceph_assert(h->file->fnode.ino > 1);
 
-  h->buffer_appender.flush();
-
   // truncate off unflushed data?
   if (h->pos < offset &&
-      h->pos + h->buffer.length() > offset) {
-    bufferlist t;
+      h->pos + h->get_buffer_length() > offset) {
     dout(20) << __func__ << " tossing out last " << offset - h->pos
 	     << " unflushed bytes" << dendl;
-    t.substr_of(h->buffer, 0, offset - h->pos);
-    h->buffer.swap(t);
     ceph_abort_msg("actually this shouldn't happen");
   }
-  if (h->buffer.length()) {
+  if (h->get_buffer_length()) {
     int r = _flush(h, true);
     if (r < 0)
       return r;
@@ -2846,22 +2866,23 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
     return -ENOENT;
   }
   extents->reserve(4);  // 4 should be (more than) enough for most allocations
-  uint64_t min_alloc_size = alloc_size[id];
-  uint64_t left = round_up_to(len, min_alloc_size);
-  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, 0, extents);
-  if (alloc_len < 0 || alloc_len < (int64_t)left) {
+  int64_t need = round_up_to(len, alloc_size[id]);
+  int64_t alloc_len = alloc[id]->allocate(need, alloc_size[id], 0, extents);
+  if (alloc_len < 0 || alloc_len < need) {
     if (alloc_len > 0) {
       alloc[id]->release(*extents);
     }
-    if (bdev[id])
-      derr << __func__ << " failed to allocate 0x" << std::hex << left
-	   << " on bdev " << (int)id
-	   << ", free 0x" << alloc[id]->get_free() << std::dec << dendl;
-    else
-      derr << __func__ << " failed to allocate 0x" << std::hex << left
-	   << " on bdev " << (int)id << ", dne" << std::dec << dendl;
-    if (alloc[id])
-      alloc[id]->dump();
+    derr << __func__ << " unable to allocate 0x" << std::hex << need
+	 << " on bdev " << (int)id
+         << ", allocator name " << alloc[id]->get_name()
+         << ", allocator type " << alloc[id]->get_type()
+         << ", capacity 0x" << alloc[id]->get_capacity()
+         << ", block size 0x" << alloc[id]->get_block_size()
+         << ", free 0x" << alloc[id]->get_free()
+         << ", fragmentation " << alloc[id]->get_fragmentation()
+         << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
+	 << std::dec << dendl;
+    alloc[id]->dump();
     return -ENOSPC;
   }
   if (is_shared_alloc(id)) {
@@ -2880,34 +2901,41 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   int64_t alloc_len = 0;
   PExtentVector extents;
   uint64_t hint = 0;
+  int64_t need = len;
   if (alloc[id]) {
+    need = round_up_to(len, alloc_size[id]);
     if (!node->extents.empty() && node->extents.back().bdev == id) {
       hint = node->extents.back().end();
     }   
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
-    alloc_len = alloc[id]->allocate(round_up_to(len, alloc_size[id]),
-				    alloc_size[id], hint, &extents);
+    alloc_len = alloc[id]->allocate(need, alloc_size[id], hint, &extents);
   }
-  if (!alloc[id] ||
-      alloc_len < 0 ||
-      alloc_len < (int64_t)round_up_to(len, alloc_size[id])) {
-    if (alloc_len > 0) {
-      alloc[id]->release(extents);
-    }
-    if (id != BDEV_SLOW) {
-      if (bdev[id]) {
-	dout(1) << __func__ << " failed to allocate 0x" << std::hex << len
-		<< " on bdev " << (int)id
-		<< ", free 0x" << alloc[id]->get_free()
-		<< "; fallback to bdev " << (int)id + 1
-		<< std::dec << dendl;
+  if (alloc_len < 0 || alloc_len < need) {
+    if (alloc[id]) {
+      if (alloc_len > 0) {
+        alloc[id]->release(extents);
       }
-      return _allocate(id + 1, len, node);
+      dout(1) << __func__ << " unable to allocate 0x" << std::hex << need
+	      << " on bdev " << (int)id
+              << ", allocator name " << alloc[id]->get_name()
+              << ", allocator type " << alloc[id]->get_type()
+              << ", capacity 0x" << alloc[id]->get_capacity()
+              << ", block size 0x" << alloc[id]->get_block_size()
+              << ", free 0x" << alloc[id]->get_free()
+              << ", fragmentation " << alloc[id]->get_fragmentation()
+              << ", allocated 0x" << (alloc_len > 0 ? alloc_len : 0)
+	      << std::dec << dendl;
     }
-    dout(1) << __func__ << " unable to allocate 0x" << std::hex << len
-	    << " on bdev " << (int)id << ", free 0x"
-	    << (alloc[id] ? alloc[id]->get_free() : (uint64_t)-1)
-	    << std::dec << dendl;
+
+    if (id != BDEV_SLOW) {
+      dout(20) << __func__ << " fallback to bdev "
+               << (int)id + 1
+	       << dendl;
+      return _allocate(id + 1, len, node);
+    } else {
+      derr << __func__ << " allocation failed, needed 0x" << std::hex << need
+           << dendl;
+    }
     return -ENOSPC;
   } else {
     uint64_t used = _get_used(id);
@@ -3089,7 +3117,7 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 void BlueFS::_close_writer(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " type " << h->writer_type << dendl;
-  h->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
+  //h->buffer.reassign_to_mempool(mempool::mempool_bluefs_file_writer);
   for (unsigned i=0; i<MAX_BDEV; ++i) {
     if (bdev[i]) {
       if (h->iocv[i]) {
@@ -3551,6 +3579,27 @@ int BlueFS::do_replay_recovery_read(FileReader *log_reader,
   return 0;
 }
 
+size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
+{
+  size_t total = 0;
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    //only count in size that is alloc_size aligned
+    size_t dist_to_alignment;
+    size_t offset_in_block = off & (alloc_size - 1);
+    if (offset_in_block == 0)
+      dist_to_alignment = 0;
+    else
+      dist_to_alignment = alloc_size - offset_in_block;
+    if (dist_to_alignment >= len)
+      return;
+    len -= dist_to_alignment;
+    total += p2align(len, alloc_size);
+  };
+  if (alloc[dev]) {
+    alloc[dev]->dump(iterated_allocation);
+  }
+  return total;
+}
 // ===============================================
 // OriginalVolumeSelector
 

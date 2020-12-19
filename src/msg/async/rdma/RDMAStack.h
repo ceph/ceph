@@ -326,8 +326,12 @@ class RDMAStack : public NetworkStack {
 
   std::atomic<bool> fork_finished = {false};
 
+  virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
+    return new RDMAWorker(c, worker_id);
+  }
+
  public:
-  explicit RDMAStack(CephContext *cct, const std::string &t);
+  explicit RDMAStack(CephContext *cct);
   virtual ~RDMAStack();
   virtual bool nonblock_connect_need_writable_event() const override { return false; }
 

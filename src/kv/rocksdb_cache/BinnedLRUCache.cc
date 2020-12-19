@@ -488,7 +488,7 @@ BinnedLRUCache::~BinnedLRUCache() {
   for (int i = 0; i < num_shards_; i++) {
     shards_[i].~BinnedLRUCacheShard();
   }
-  free(shards_);
+  aligned_free(shards_);
 }
 
 CacheShard* BinnedLRUCache::GetShard(int shard) {

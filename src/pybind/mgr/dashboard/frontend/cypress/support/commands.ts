@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-import { Permissions } from '../../src/app/shared/models/permissions';
+import { Permissions } from '~/app/shared/models/permissions';
 
 let auth: any;
 
@@ -28,6 +28,7 @@ Cypress.Commands.add('login', () => {
     cy.request({
       method: 'POST',
       url: 'api/auth',
+      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' },
       body: { username: username, password: password }
     }).then((resp) => {
       auth = resp.body;

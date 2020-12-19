@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/cache/pwl/ShutdownRequest.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/cache/MockImageCache.h"
@@ -40,31 +39,6 @@ struct ImageDispatch<MockTestImageCtx> {
 
 } // namespace exclusive_lock
 
-namespace cache {
-namespace pwl {
-template<>
-struct ShutdownRequest<librbd::MockTestImageCtx> {
-  static ShutdownRequest *s_instance;
-  Context *on_finish = nullptr;
-
-  static ShutdownRequest *create(librbd::MockTestImageCtx &image_ctx,
-                             Context *on_finish) {
-    ceph_assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  ShutdownRequest() {
-    s_instance = this;
-  }
-  MOCK_METHOD0(send, void());
-};
-
-ShutdownRequest<librbd::MockTestImageCtx> *ShutdownRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace pwl
-} // namespace cache
-
 namespace util {
 
 inline ImageCtx* get_image_ctx(MockTestImageCtx* image_ctx) {
@@ -102,7 +76,6 @@ class TestMockExclusiveLockPreReleaseRequest : public TestMockFixture {
 public:
   typedef ImageDispatch<MockTestImageCtx> MockImageDispatch;
   typedef PreReleaseRequest<MockTestImageCtx> MockPreReleaseRequest;
-  typedef librbd::cache::pwl::ShutdownRequest<MockTestImageCtx> MockShutdownRequest;
 
   void expect_complete_context(MockContext &mock_context, int r) {
     EXPECT_CALL(mock_context, complete(r));
@@ -125,8 +98,11 @@ public:
   void expect_set_require_lock(MockTestImageCtx &mock_image_ctx,
                                MockImageDispatch &mock_image_dispatch,
                                bool init_shutdown, int r) {
-    expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
-                         ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0));
+    expect_test_features(mock_image_ctx, RBD_FEATURE_EXCLUSIVE_LOCK, true);
+    if (!mock_image_ctx.clone_copy_on_read) {
+      expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING,
+                           ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0));
+    }
     if (mock_image_ctx.clone_copy_on_read ||
         (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
       expect_set_require_lock(mock_image_dispatch, init_shutdown,
@@ -159,15 +135,14 @@ public:
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_close_image_cache(MockTestImageCtx &mock_image_ctx,
-                                MockShutdownRequest &mock_shutdown_req, int r) {
-    EXPECT_CALL(mock_shutdown_req, send())
-                  .WillOnce(FinishRequest(&mock_shutdown_req, r, &mock_image_ctx));
+  void expect_prerelease_exclusive_lock(MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.plugin_registry, prerelease_exclusive_lock(_))
+                  .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_invalidate_cache(MockTestImageCtx &mock_image_ctx,
                                int r) {
-    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, invalidate_cache(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, invalidate_cache(_))
       .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
@@ -227,10 +202,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Success) {
 
   expect_prepare_lock(mock_image_ctx);
 
-  cache::MockImageCache mock_image_cache;
-  mock_image_ctx.image_cache = &mock_image_cache;
-  MockShutdownRequest mock_shutdown_request;
-  expect_close_image_cache(mock_image_ctx, mock_shutdown_request, 0);
+  expect_prerelease_exclusive_lock(mock_image_ctx, 0);
 
   expect_invalidate_cache(mock_image_ctx, 0);
 
@@ -271,10 +243,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessJournalDisabled) {
   expect_cancel_op_requests(mock_image_ctx, 0);
   expect_prepare_lock(mock_image_ctx);
 
-  cache::MockImageCache mock_image_cache;
-  mock_image_ctx.image_cache = &mock_image_cache;
-  MockShutdownRequest mock_shutdown_request;
-  expect_close_image_cache(mock_image_ctx, mock_shutdown_request, 0);
+  expect_prerelease_exclusive_lock(mock_image_ctx, 0);
 
   expect_invalidate_cache(mock_image_ctx, 0);
 
@@ -310,10 +279,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, SuccessObjectMapDisabled) {
   InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
 
-  cache::MockImageCache mock_image_cache;
-  mock_image_ctx.image_cache = &mock_image_cache;
-  MockShutdownRequest mock_shutdown_request;
-  expect_close_image_cache(mock_image_ctx, mock_shutdown_request, 0);
+  expect_prerelease_exclusive_lock(mock_image_ctx, 0);
 
   expect_invalidate_cache(mock_image_ctx, 0);
 
@@ -345,10 +311,7 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Blocklisted) {
                           -EBLOCKLISTED);
   expect_prepare_lock(mock_image_ctx);
 
-  cache::MockImageCache mock_image_cache;
-  mock_image_ctx.image_cache = &mock_image_cache;
-  MockShutdownRequest mock_shutdown_request;
-  expect_close_image_cache(mock_image_ctx, mock_shutdown_request, 0);
+  expect_prerelease_exclusive_lock(mock_image_ctx, 0);
 
   expect_invalidate_cache(mock_image_ctx, -EBLOCKLISTED);
 
@@ -359,6 +322,49 @@ TEST_F(TestMockExclusiveLockPreReleaseRequest, Blocklisted) {
   MockJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
   expect_close_journal(mock_image_ctx, mock_journal, -EBLOCKLISTED);
+
+  MockObjectMap mock_object_map;
+  mock_image_ctx.object_map = &mock_object_map;
+  expect_close_object_map(mock_image_ctx, mock_object_map);
+
+  expect_handle_prepare_lock_complete(mock_image_ctx);
+
+  C_SaferCond ctx;
+  MockPreReleaseRequest *req = MockPreReleaseRequest::create(
+    mock_image_ctx, &mock_image_dispatch, false, m_async_op_tracker, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockExclusiveLockPreReleaseRequest, Disabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+
+  expect_cancel_op_requests(mock_image_ctx, 0);
+  MockImageDispatch mock_image_dispatch;
+
+  expect_test_features(mock_image_ctx, RBD_FEATURE_EXCLUSIVE_LOCK, false);
+
+  expect_prepare_lock(mock_image_ctx);
+
+  expect_prerelease_exclusive_lock(mock_image_ctx, 0);
+
+  expect_invalidate_cache(mock_image_ctx, 0);
+
+  expect_flush_io(mock_image_ctx, 0);
+
+  expect_flush_notifies(mock_image_ctx);
+
+  MockJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+  expect_close_journal(mock_image_ctx, mock_journal, -EINVAL);
 
   MockObjectMap mock_object_map;
   mock_image_ctx.object_map = &mock_object_map;

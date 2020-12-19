@@ -57,7 +57,6 @@ namespace librbd {
   template <typename> class PluginRegistry;
 
   namespace asio { struct ContextWQ; }
-  namespace cache { template <typename> class ImageCache; }
   namespace exclusive_lock { struct Policy; }
   namespace io {
   class AioCompletion;
@@ -176,8 +175,6 @@ namespace librbd {
 
     file_layout_t layout;
 
-    cache::ImageCache<ImageCtx> *image_cache = nullptr;
-
     Readahead readahead;
     std::atomic<uint64_t> total_bytes_read = {0};
 
@@ -217,8 +214,8 @@ namespace librbd {
     bool non_blocking_aio;
     bool cache;
     uint64_t sparse_read_threshold_bytes;
-    uint64_t readahead_max_bytes;
-    uint64_t readahead_disable_after_bytes;
+    uint64_t readahead_max_bytes = 0;
+    uint64_t readahead_disable_after_bytes = 0;
     bool clone_copy_on_read;
     bool enable_alloc_hint;
     uint32_t alloc_hint_flags = 0U;

@@ -57,6 +57,8 @@ extern void rgw_parse_url_bucket(const string& bucket,
 // conforms to the type declaration of RGWRados::check_filter_t.
 extern bool rgw_bucket_object_check_filter(const string& oid);
 
+extern void init_default_bucket_layout(CephContext *cct, RGWBucketInfo& info, const RGWZone& zone);
+
 struct RGWBucketCompleteInfo {
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
@@ -227,7 +229,8 @@ extern int rgw_read_user_buckets(rgw::sal::RGWRadosStore *store,
                                  const string& marker,
                                  const string& end_marker,
                                  uint64_t max,
-                                 bool need_stats);
+                                 bool need_stats,
+				 optional_yield y);
 
 extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
@@ -236,7 +239,7 @@ extern int rgw_object_get_attr(rgw::sal::RGWRadosStore* store, const RGWBucketIn
                                const rgw_obj& obj, const char* attr_name,
                                bufferlist& out_bl, optional_yield y);
 
-extern void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, bool fix);
+extern void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, bool fix, optional_yield y);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
@@ -393,10 +396,10 @@ public:
 
   static int remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true);
   static int remove_object(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
-  static int info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
+  static int info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
   static int limit_check(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 			 const std::list<std::string>& user_ids,
-			 RGWFormatterFlusher& flusher,
+			 RGWFormatterFlusher& flusher, optional_yield y,
 			 bool warnings_only = false);
   static int set_quota(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
 
@@ -702,6 +705,7 @@ public:
 
   /* quota related */
   int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info,
+		      optional_yield y,
                       RGWBucketEnt* pent = nullptr);
 
   /* bucket sync */
@@ -738,15 +742,15 @@ private:
                      const rgw_user& user,
                      const rgw_bucket& bucket,
                      ceph::real_time creation_time,
-		     optional_yield y,
                      bool update_entrypoint,
-                     rgw_ep_info *pinfo);
+                     rgw_ep_info *pinfo,
+		     optional_yield y);
 
   int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                        const rgw_user& user_id,
                        const rgw_bucket& bucket,
-		       optional_yield y,
-                       bool update_entrypoint);
+                       bool update_entrypoint,
+		       optional_yield y);
 
 };
 

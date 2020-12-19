@@ -31,10 +31,10 @@
         </div>
       </div>
       <div class="modal-footer">
-        <cd-submit-button (submitAction)="onSubmit()"
-                          [form]="formGroup"
-                          [disabled]="!canSubmit || filteredDevices.length === 0">{{ action | titlecase }}</cd-submit-button>
-        <cd-back-button [back]="activeModal.close"></cd-back-button>
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="formGroup"
+                              [disabled]="!canSubmit || filteredDevices.length === 0"
+                              [submitText]="action | titlecase"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

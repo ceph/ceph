@@ -7,7 +7,9 @@ Vcs-Browser: https://github.com/ceph/ceph
 Maintainer: Ceph Maintainers <ceph-maintainers@lists.ceph.com>
 Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>,
-Build-Depends: cmake (>= 3.10.2),
+Build-Depends: automake,
+# Jaeger       bison,
+               cmake (>= 3.10.2),
                cpio,
                cryptsetup-bin | cryptsetup,
                cython,
@@ -17,6 +19,7 @@ Build-Depends: cmake (>= 3.10.2),
                dh-exec,
                dh-python,
                dh-systemd,
+# Jaeger       flex,
                git,
                gperf,
                g++ (>= 7),
@@ -29,10 +32,13 @@ Build-Depends: cmake (>= 3.10.2),
                libblkid-dev (>= 2.17),
 # Crimson      libc-ares-dev,
 # Crimson      libcrypto++-dev,
+               libcryptsetup-dev,
                libcap-ng-dev,
                libcunit1-dev,
                libcurl4-openssl-dev,
+# Jaeger       libevent-dev,
                libexpat1-dev,
+# Make-Check   libffi-dev [!amd64],
                libfuse-dev,
                libgoogle-perftools-dev [i386 amd64 arm64],
 # Crimson      libgnutls28-dev,
@@ -43,6 +49,7 @@ Build-Depends: cmake (>= 3.10.2),
                libldap2-dev,
                libleveldb-dev,
                liblttng-ust-dev,
+               liblua5.3-dev,
                liblz4-dev (>= 0.0~r131),
                libncurses-dev,
                libnss3-dev,
@@ -57,14 +64,16 @@ Build-Depends: cmake (>= 3.10.2),
                libudev-dev,
                libnl-genl-3-dev,
                libxml2-dev,
-# Crimson      libyaml-cpp-dev,
                librabbitmq-dev,
                librdkafka-dev,
+               luarocks,
 # Make-Check   libxmlsec1,
 # Make-Check   libxmlsec1-nss,
 # Make-Check   libxmlsec1-openssl,
 # Make-Check   libxmlsec1-dev,
+# Crimson      libyaml-cpp-dev,
                lsb-release,
+# Jaeger       nlohmann-json-dev | nlohmann-json3-dev,
                parted,
                patch,
                pkg-config,
@@ -96,8 +105,9 @@ Build-Depends: cmake (>= 3.10.2),
                xfslibs-dev,
 # Make-Check   xfsprogs,
 # Make-Check   xmlstarlet,
-               yasm [amd64],
+               nasm [amd64],
                zlib1g-dev,
+# Jaeger       Built-Using:   libyaml-cpp-dev (>= 0.6),
 Standards-Version: 4.4.0
 
 Package: ceph
@@ -361,6 +371,7 @@ Description: debugging symbols for ceph-mgr
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
+         libjaeger,
          ${misc:Depends},
          ${shlibs:Depends},
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
@@ -593,7 +604,8 @@ Description: debugging symbols for rbd-nbd
 
 Package: ceph-common
 Architecture: linux-any
-Depends: librbd1 (= ${binary:Version}),
+Depends: libjaeger (= ${binary:Version}),
+         librbd1 (= ${binary:Version}),
          python3-cephfs (= ${binary:Version}),
          python3-ceph-argparse (= ${binary:Version}),
          python3-ceph-common (= ${binary:Version}),
@@ -929,6 +941,13 @@ Description: debugging symbols for radosgw
  service as well as the OpenStack Object Storage ("Swift") API.
  .
  This package contains debugging symbols for radosgw.
+
+Package: libjaeger
+Architecture: linux-any
+Section: libs
+Depends: ${misc:Depends},
+         ${shlibs:Depends},
+Description: This package provides libraries needed for distributed tracing for Ceph.
 
 Package: ceph-test
 Architecture: linux-any

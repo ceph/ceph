@@ -41,7 +41,11 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   uint8_t v = 5;
   uint8_t min_v = 1;
   if (!crush_loc.empty()) {
-    min_v = 5;
+    // we added crush_loc in version 5, but need to let old clients decode it
+    // so just leave the min_v at version 4. Monitors are protected
+    // from misunderstandings about location because setting it is blocked
+    // on FEATURE_PINGING
+    min_v = 4;
   }
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 2;
@@ -197,7 +201,6 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  uint8_t new_compat_v = 0;
   ENCODE_START(9, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
@@ -215,10 +218,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
-  if (stretch_mode_enabled) {
-    new_compat_v = 9;
-  }
-  ENCODE_FINISH_NEW_COMPAT(blist, new_compat_v);
+  ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(ceph::buffer::list::const_iterator& p)
@@ -369,9 +369,18 @@ void MonMap::print(ostream& out) const
   out << "min_mon_release " << to_integer<unsigned>(min_mon_release)
       << " (" << min_mon_release << ")\n";
   out << "election_strategy: " << strategy << "\n";
+  if (disallowed_leaders.size()) {
+    out << "disallowed_leaders" << disallowed_leaders << "\n";
+  }
   unsigned i = 0;
   for (auto p = ranks.begin(); p != ranks.end(); ++p) {
-    out << i++ << ": " << get_addrs(*p) << " mon." << *p << "\n";
+    const auto &mi = mon_info.find(*p);
+    ceph_assert(mi != mon_info.end());
+    out << i++ << ": " << mi->second.public_addrs << " mon." << *p;
+    if (!mi->second.crush_loc.empty()) {
+      out << "; crush_location " << mi->second.crush_loc;
+    }
+    out << "\n";
   }
 }
 
@@ -384,7 +393,8 @@ void MonMap::dump(Formatter *f) const
   f->dump_unsigned("min_mon_release", to_integer<unsigned>(min_mon_release));
   f->dump_string("min_mon_release_name", to_string(min_mon_release));
   f->dump_int ("election_strategy", strategy);
-  f->dump_stream("disallowed_leaders") << disallowed_leaders;
+  f->dump_stream("disallowed_leaders: ") << disallowed_leaders;
+  f->dump_bool("stretch_mode", stretch_mode_enabled);
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
@@ -401,6 +411,9 @@ void MonMap::dump(Formatter *f) const
     f->dump_stream("public_addr") << get_addrs(*p).get_legacy_str();
     f->dump_unsigned("priority", get_priority(*p));
     f->dump_unsigned("weight", get_weight(*p));
+    const auto &mi = mon_info.find(*p);
+    // we don't need to assert this validity as all the get_* functions did
+    f->dump_stream("crush_location") << mi->second.crush_loc;
     f->close_section();
   }
   f->close_section();
@@ -501,10 +514,9 @@ void MonMap::_add_ambiguous_addr(const string& name,
   }
 }
 
-int
-MonMap::init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
-                        bool for_mkfs,
-                        std::string_view prefix)
+void MonMap::init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
+                             bool for_mkfs,
+                             std::string_view prefix)
 {
   char id = 'a';
   for (auto& addr : addrs) {
@@ -518,7 +530,6 @@ MonMap::init_with_addrs(const std::vector<entity_addrvec_t>& addrs,
       add(name, addr, 0);
     }
   }
-  return 0;
 }
 
 int MonMap::init_with_ips(const std::string& ips,
@@ -533,7 +544,8 @@ int MonMap::init_with_ips(const std::string& ips,
   }
   if (addrs.empty())
     return -ENOENT;
-  return init_with_addrs(addrs, for_mkfs, prefix);
+  init_with_addrs(addrs, for_mkfs, prefix);
+  return 0;
 }
 
 int MonMap::init_with_hosts(const std::string& hostlist,
@@ -554,9 +566,7 @@ int MonMap::init_with_hosts(const std::string& hostlist,
     return -EINVAL;
   if (addrs.empty())
     return -ENOENT;
-  if (!init_with_addrs(addrs, for_mkfs, prefix)) {
-    return -EINVAL;
-  }
+  init_with_addrs(addrs, for_mkfs, prefix);
   calc_legacy_ranks();
   return 0;
 }
@@ -901,7 +911,8 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
   // cct?
   auto addrs = cct->get_mon_addrs();
   if (addrs != nullptr && (addrs->size() > 0)) {
-    return init_with_addrs(*addrs, for_mkfs, "noname-");
+    init_with_addrs(*addrs, for_mkfs, "noname-");
+    return 0;
   }
 
   // file?

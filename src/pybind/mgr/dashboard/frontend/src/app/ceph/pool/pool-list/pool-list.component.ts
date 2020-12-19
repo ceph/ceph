@@ -1,31 +1,33 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { mergeMap } from 'rxjs/operators';
 
-import { ConfigurationService } from '../../../shared/api/configuration.service';
-import { PoolService } from '../../../shared/api/pool.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permissions } from '../../../shared/models/permissions';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ModalService } from '../../../shared/services/modal.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
-import { URLBuilderService } from '../../../shared/services/url-builder.service';
-import { PgCategoryService } from '../../shared/pg-category.service';
+import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Permissions } from '~/app/shared/models/permissions';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Pool } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 
@@ -52,17 +54,18 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
   pools: Pool[];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
-  modalRef: NgbModalRef;
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
   tableActions: CdTableAction[];
   tableStatus = new TableStatusViewCache();
   cacheTiers: any[] = [];
   monAllowPoolDelete = false;
+  ecProfileList: ErasureCodeProfile[];
 
   constructor(
     private poolService: PoolService,
     private taskWrapper: TaskWrapperService,
+    private ecpService: ErasureCodeProfileService,
     private authStorageService: AuthStorageService,
     public taskListService: TaskListService,
     private modalService: ModalService,
@@ -122,50 +125,42 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         cellTransformation: CellTemplate.executing
       },
       {
-        prop: 'type',
-        name: $localize`Type`,
-        flexGrow: 2
+        prop: 'data_protection',
+        name: $localize`Data Protection`,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          class: 'badge-background-gray'
+        },
+        flexGrow: 1.3
       },
       {
         prop: 'application_metadata',
         name: $localize`Applications`,
-        flexGrow: 3
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          class: 'badge-background-primary'
+        },
+        flexGrow: 1.5
       },
       {
         prop: 'pg_status',
         name: $localize`PG Status`,
-        flexGrow: 3,
+        flexGrow: 1.2,
         cellClass: ({ row, column, value }): any => {
           return this.getPgStatusCellClass(row, column, value);
         }
       },
       {
-        prop: 'size',
-        name: $localize`Replica Size`,
-        flexGrow: 2,
-        cellClass: 'text-right'
-      },
-      {
-        prop: 'last_change',
-        name: $localize`Last Change`,
-        flexGrow: 2,
-        cellClass: 'text-right'
-      },
-      {
-        prop: 'erasure_code_profile',
-        name: $localize`Erasure Coded Profile`,
-        flexGrow: 2
-      },
-      {
         prop: 'crush_rule',
         name: $localize`Crush Ruleset`,
-        flexGrow: 3
+        isHidden: true,
+        flexGrow: 2
       },
       {
         name: $localize`Usage`,
         prop: 'usage',
         cellTemplate: this.poolUsageTpl,
-        flexGrow: 3
+        flexGrow: 1.2
       },
       {
         prop: 'stats.rd_bytes.rates',
@@ -173,7 +168,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
           compare('stats.rd_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
-        flexGrow: 3
+        flexGrow: 1.5
       },
       {
         prop: 'stats.wr_bytes.rates',
@@ -181,7 +176,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
           compare('stats.wr_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
-        flexGrow: 3
+        flexGrow: 1.5
       },
       {
         prop: 'stats.rd.rate',
@@ -200,7 +195,13 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     ];
 
     this.taskListService.init(
-      () => this.poolService.getList(),
+      () =>
+        this.ecpService.list().pipe(
+          mergeMap((ecProfileList: ErasureCodeProfile[]) => {
+            this.ecProfileList = ecProfileList;
+            return this.poolService.getList();
+          })
+        ),
       undefined,
       (pools) => {
         this.pools = this.transformPoolsData(pools);
@@ -222,7 +223,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
 
   deletePoolModal() {
     const name = this.selection.first().pool_name;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Pool',
       itemNames: [name],
       submitActionObservable: () =>
@@ -238,6 +239,16 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       'text-right': true,
       [`pg-${this.pgCategoryService.getTypeByStates(value)}`]: true
     };
+  }
+
+  getErasureCodeProfile(erasureCodeProfile: string) {
+    let ecpInfo = '';
+    _.forEach(this.ecProfileList, (ecpKey) => {
+      if (ecpKey['name'] === erasureCodeProfile) {
+        ecpInfo = `EC: ${ecpKey['k']}+${ecpKey['m']}`;
+      }
+    });
+    return ecpInfo;
   }
 
   transformPoolsData(pools: any) {
@@ -273,6 +284,14 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
         pool.stats[stat].rates = pool.stats[stat].rates.map((point: any) => point[1]);
       });
       pool.cdIsBinary = true;
+
+      if (pool['type'] === 'erasure') {
+        const erasureCodeProfile = pool['erasure_code_profile'];
+        pool['data_protection'] = this.getErasureCodeProfile(erasureCodeProfile);
+      }
+      if (pool['type'] === 'replicated') {
+        pool['data_protection'] = `replica: ×${pool['size']}`;
+      }
     });
 
     return pools;

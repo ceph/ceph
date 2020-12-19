@@ -319,10 +319,8 @@
                           class="btn btn-light"
                           cdPasswordButton="api_password">
                   </button>
-                  <button type="button"
-                          class="btn btn-light"
-                          cdCopy2ClipboardButton="api_password">
-                  </button>
+                  <cd-copy-2-clipboard-button source="api_password">
+                  </cd-copy-2-clipboard-button>
                 </span>
                 <span class="invalid-feedback"
                       *ngIf="serviceForm.showError('api_password', frm, 'required')"
@@ -403,11 +401,9 @@
 
       <div class="card-footer">
         <div class="text-right">
-          <cd-submit-button (submitAction)="onSubmit()"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            [form]="serviceForm">{{ action | titlecase }} {{ resource | upperFirst }}
-          </cd-submit-button>
-          <cd-back-button></cd-back-button>
+          <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                                [form]="serviceForm"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
         </div>
       </div>
     </div>

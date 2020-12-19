@@ -14,6 +14,9 @@ namespace ceph {
 }
 
 namespace librbd {
+
+namespace plugin { template <typename> struct Api; }
+
 namespace cache {
 namespace pwl {
 
@@ -21,18 +24,20 @@ template <typename ImageCtxT = ImageCtx>
 class ImageCacheState {
 private:
   ImageCtxT* m_image_ctx;
+  plugin::Api<ImageCtxT>& m_plugin_api;
 public:
-  bool present = true;
+  bool present = false;
   bool empty = true;
   bool clean = true;
   std::string host;
   std::string path;
-  uint64_t size;
+  uint64_t size = 0;
   bool log_periodic_stats;
 
-  ImageCacheState(ImageCtxT* image_ctx);
+  ImageCacheState(ImageCtxT* image_ctx, plugin::Api<ImageCtxT>& plugin_api);
 
-  ImageCacheState(ImageCtxT* image_ctx, JSONFormattable& f);
+  ImageCacheState(ImageCtxT* image_ctx, JSONFormattable& f,
+                  plugin::Api<ImageCtxT>& plugin_api);
 
   ~ImageCacheState() {}
 
@@ -47,8 +52,11 @@ public:
 
   void dump(ceph::Formatter *f) const;
 
+  static ImageCacheState<ImageCtxT>* create_image_cache_state(
+    ImageCtxT* image_ctx, plugin::Api<ImageCtxT>& plugin_api, int &r);
+
   static ImageCacheState<ImageCtxT>* get_image_cache_state(
-      ImageCtxT* image_ctx, int &r);
+    ImageCtxT* image_ctx, plugin::Api<ImageCtxT>& plugin_api);
 
   bool is_valid();
 };

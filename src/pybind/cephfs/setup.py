@@ -138,10 +138,16 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
-if 'BUILD_DOC' in os.environ.keys():
-    pass
+if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
+    ext_args = {}
+    cython_constants = dict(BUILD_DOC=True)
+    cythonize_args = dict(compile_time_env=cython_constants)
 elif check_sanity():
-    pass
+    ext_args = get_python_flags(['cephfs'])
+    cython_constants = dict(BUILD_DOC=False)
+    include_path = [os.path.join(os.path.dirname(__file__), "..", "rados")]
+    cythonize_args = dict(compile_time_env=cython_constants,
+                          include_path=include_path)
 else:
     sys.exit(1)
 
@@ -192,14 +198,12 @@ setup(
             Extension(
                 "cephfs",
                 [source],
-                **get_python_flags(['cephfs'])
+                **ext_args
             )
         ],
         compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
-        include_path=[
-            os.path.join(os.path.dirname(__file__), "..", "rados")
-        ]
+        **cythonize_args
     ),
     classifiers=[
         'Intended Audience :: Developers',

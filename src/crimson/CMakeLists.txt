@@ -78,7 +78,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
   ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
-  ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
@@ -124,7 +123,13 @@ target_compile_definitions(crimson-common PRIVATE
 
 set(crimson_common_deps
   Boost::iostreams
-  Boost::random)
+  Boost::random
+  json_spirit)
+
+if(WITH_JAEGER)
+  include_directories(SYSTEM ${CMAKE_BINARY_DIR}/external/include)
+  list(APPEND crimson_common_deps jaeger-base)
+endif()
 
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND crimson_common_deps ${ZLIB_LIBRARIES})
@@ -132,7 +137,6 @@ endif()
 
 target_link_libraries(crimson-common
   PUBLIC
-    json_spirit
     crimson::cflags
   PRIVATE
     crc32
@@ -184,3 +188,4 @@ target_link_libraries(crimson
 add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)
+add_subdirectory(tools)

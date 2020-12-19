@@ -50,8 +50,7 @@ public:
   using Dispatcher::cct;
 private:
   std::unique_ptr<CephContext,
-		  std::function<void(CephContext*)> > cct_deleter{
-    cct, [](CephContext *p) {p->put();}};
+		  std::function<void(CephContext*)>> cct_deleter;
 
 public:
   const ConfigProxy& conf{cct->_conf};
@@ -92,6 +91,7 @@ private:
   bool service_daemon = false;
   string daemon_name, service_name;
   map<string,string> daemon_metadata;
+  ceph::timespan rados_mon_op_timeout{};
 
   int wait_for_osdmap();
 

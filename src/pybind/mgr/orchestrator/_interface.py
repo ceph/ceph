@@ -879,6 +879,7 @@ class Orchestrator(object):
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'host': self.add_host,
+            'cephadm-exporter': self.apply_cephadm_exporter,
         }
 
         def merge(ls, r):
@@ -1092,11 +1093,11 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_grafana(self, spec: ServiceSpec) -> Completion[List[str]]:
-        """Create a new Node-Exporter service"""
+        """Create a new grafana service"""
         raise NotImplementedError()
 
     def apply_grafana(self, spec: ServiceSpec) -> Completion[str]:
-        """Update existing a Node-Exporter daemon(s)"""
+        """Update existing a grafana service"""
         raise NotImplementedError()
 
     def add_alertmanager(self, spec: ServiceSpec) -> Completion[List[str]]:
@@ -1105,6 +1106,14 @@ class Orchestrator(object):
 
     def apply_alertmanager(self, spec: ServiceSpec) -> Completion[str]:
         """Update an existing AlertManager daemon(s)"""
+        raise NotImplementedError()
+
+    def add_cephadm_exporter(self, spec: ServiceSpec) -> Completion[List[str]]:
+        """Create a new cephadm exporter daemon"""
+        raise NotImplementedError()
+
+    def apply_cephadm_exporter(self, spec: ServiceSpec) -> Completion[str]:
+        """Update an existing cephadm exporter daemon"""
         raise NotImplementedError()
 
     def upgrade_check(self, image: Optional[str], version: Optional[str]) -> Completion[str]:

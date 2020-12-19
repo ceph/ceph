@@ -29,6 +29,7 @@ void MDSPerformanceCounterDescriptor::pack_counter(
   case MDSPerformanceCounterType::READ_LATENCY_METRIC:
   case MDSPerformanceCounterType::WRITE_LATENCY_METRIC:
   case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
+  case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -45,6 +46,7 @@ void MDSPerformanceCounterDescriptor::unpack_counter(
   case MDSPerformanceCounterType::READ_LATENCY_METRIC:
   case MDSPerformanceCounterType::WRITE_LATENCY_METRIC:
   case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
+  case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -64,6 +66,9 @@ std::ostream& operator<<(std::ostream &os, const MDSPerformanceCounterDescriptor
      break;
    case MDSPerformanceCounterType::METADATA_LATENCY_METRIC:
      os << "metadata_latency_metric";
+     break;
+   case MDSPerformanceCounterType::DENTRY_LEASE_METRIC:
+     os << "dentry_lease_metric";
      break;
    }
 

@@ -21,7 +21,7 @@
  * pass a ScrubMap from a shard back to the primary
  */
 
-class MOSDRepScrubMap : public MOSDFastDispatchOp {
+class MOSDRepScrubMap final : public MOSDFastDispatchOp {
 public:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -49,7 +49,7 @@ public:
       from(from) {}
 
 private:
-  ~MOSDRepScrubMap() {}
+  ~MOSDRepScrubMap() final {}
 
 public:
   std::string_view get_type_name() const override { return "rep_scrubmap"; }

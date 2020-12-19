@@ -13,10 +13,14 @@ class MDSPerfMetricCollector
                            MDSPerfMetrics> {
 private:
   std::set<mds_rank_t> delayed_ranks;
+
+  void get_delayed_ranks(std::set<mds_rank_t> *ranks);
+
 public:
   MDSPerfMetricCollector(MetricListener &listener);
 
   void process_reports(const MetricPayload &payload) override;
+  int get_counters(PerfCollector *collector) override;
 };
 
 #endif // CEPH_MGR_MDS_PERF_COLLECTOR_H

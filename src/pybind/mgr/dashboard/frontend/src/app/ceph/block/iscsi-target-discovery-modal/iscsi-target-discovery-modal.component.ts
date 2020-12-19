@@ -3,13 +3,14 @@ import { FormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-iscsi-target-discovery-modal',
@@ -27,6 +28,7 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private iscsiService: IscsiService,
     private notificationService: NotificationService
   ) {

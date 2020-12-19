@@ -5,9 +5,9 @@
 #define CEPH_MESSAGES_MMDSPING_H
 
 #include "include/types.h"
-#include "msg/Message.h"
+#include "messages/MMDSOp.h"
 
-class MMDSPing : public SafeMessage {
+class MMDSPing final : public MMDSOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -15,12 +15,12 @@ public:
   version_t seq;
 
 protected:
-  MMDSPing() : SafeMessage(MSG_MDS_PING, HEAD_VERSION, COMPAT_VERSION) {
+  MMDSPing() : MMDSOp(MSG_MDS_PING, HEAD_VERSION, COMPAT_VERSION) {
   }
   MMDSPing(version_t seq)
-    : SafeMessage(MSG_MDS_PING, HEAD_VERSION, COMPAT_VERSION), seq(seq) {
+    : MMDSOp(MSG_MDS_PING, HEAD_VERSION, COMPAT_VERSION), seq(seq) {
   }
-  ~MMDSPing() { }
+  ~MMDSPing() final {}
 
 public:
   std::string_view get_type_name() const override {

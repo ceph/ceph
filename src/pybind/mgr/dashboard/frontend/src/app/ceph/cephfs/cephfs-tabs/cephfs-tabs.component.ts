@@ -3,11 +3,11 @@ import { Component, Input, NgZone, OnChanges, OnDestroy } from '@angular/core';
 import _ from 'lodash';
 import { Subscription, timer } from 'rxjs';
 
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { TableStatusViewCache } from '../../../shared/classes/table-status-view-cache';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-cephfs-tabs',

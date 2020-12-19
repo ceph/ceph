@@ -149,11 +149,11 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGW
   return raw_obj;
 }
 
-rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados *store) const
+rgw_raw_obj rgw_obj_select::get_raw_obj(rgw::sal::RGWStore* store) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
-    store->obj_to_raw(placement_rule, obj, &r);
+    store->get_raw_obj(placement_rule, obj, &r);
     return r;
   }
   return raw_obj;
@@ -517,7 +517,7 @@ public:
   }
 
   int process() override {
-    sync.run();
+    sync.run(null_yield);
     return 0;
   }
 };
@@ -1334,10 +1334,10 @@ int RGWRados::init_complete()
 int RGWRados::init_svc(bool raw)
 {
   if (raw) {
-    return svc.init_raw(cct, use_cache);
+    return svc.init_raw(cct, use_cache, null_yield);
   }
 
-  return svc.init(cct, use_cache, run_sync_thread);
+  return svc.init(cct, use_cache, run_sync_thread, null_yield);
 }
 
 int RGWRados::init_ctl()
@@ -1785,13 +1785,13 @@ int RGWRados::Bucket::List::list_objects_ordered(
   // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.marker.ns);
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-			     params.end_marker.ns);
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
@@ -2070,13 +2070,13 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
   // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
 			 params.marker.instance,
-			 params.marker.ns);
+			 params.ns.empty() ? params.marker.ns : params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
   rgw_obj_key end_marker_obj(params.end_marker.name,
 			     params.end_marker.instance,
-			     params.end_marker.ns);
+			     params.ns.empty() ? params.end_marker.ns : params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
   const bool cur_end_marker_valid = !params.end_marker.empty();
@@ -2200,6 +2200,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             real_time creation_time,
                             rgw_bucket *pmaster_bucket,
                             uint32_t *pmaster_num_shards,
+			    optional_yield y,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -2209,7 +2210,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
     ret = svc.zone->select_bucket_placement(owner, zonegroup_id, placement_rule,
-                                            &selected_placement_rule, &rule_info);
+                                            &selected_placement_rule, &rule_info, y);
     if (ret < 0)
       return ret;
 
@@ -2235,15 +2236,22 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     info.owner = owner.user_id;
     info.zonegroup = zonegroup_id;
     info.placement_rule = selected_placement_rule;
-    info.layout.current_index.layout.type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
+    init_default_bucket_layout(cct, info, svc.zone->get_zone());
     if (pmaster_num_shards) {
+      // TODO: remove this once sync doesn't require the same shard count
       info.layout.current_index.layout.normal.num_shards = *pmaster_num_shards;
-    } else {
-      info.layout.current_index.layout.normal.num_shards = bucket_index_max_shards;
     }
     info.layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
+    info.layout.current_index.layout.type = rule_info.index_type;
+    if (info.layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
+      // use the same index layout for the bilog
+      const auto gen = info.layout.current_index.gen;
+      const auto& index = info.layout.current_index.layout.normal;
+      info.layout.logs.push_back(rgw::log_layout_from_index(gen, index));
+    }
+
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time)) {
       info.creation_time = ceph::real_clock::now();
@@ -2567,7 +2575,7 @@ int RGWRados::fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key
     RGWObjManifest::obj_iterator miter;
     RGWObjManifest& manifest = *astate->manifest;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(this);
+      rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
       rgw_obj loc;
       string oid;
       string locator;
@@ -3283,17 +3291,17 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   rgw_obj obj;
   rgw::putobj::DataProcessor *filter;
   boost::optional<RGWPutObj_Compress>& compressor;
-  boost::optional<RGWPutObj_ETagVerifier_Atomic> etag_verifier_atomic;
-  boost::optional<RGWPutObj_ETagVerifier_MPU> etag_verifier_mpu;
+  bool try_etag_verify;
+  rgw::putobj::etag_verifier_ptr etag_verifier;
   boost::optional<rgw::putobj::ChunkProcessor> buffering;
   CompressorRef& plugin;
   rgw::putobj::ObjectProcessor *processor;
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl, manifest_bl;
+  std::optional<RGWCompressionInfo> compression_info;
   uint64_t extra_data_left{0};
   bool need_to_process_attrs{true};
-  SourceObjType obj_type{OBJ_TYPE_UNINIT};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
@@ -3310,6 +3318,7 @@ public:
                        cct(cct),
                        filter(p),
                        compressor(compressor),
+                       try_etag_verify(cct->_conf->rgw_sync_obj_etag_verify),
                        plugin(plugin),
                        processor(p),
                        progress_cb(_progress_cb),
@@ -3326,9 +3335,28 @@ public:
 
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
-      src_attrs.erase(RGW_ATTR_COMPRESSION);
+      auto iter = src_attrs.find(RGW_ATTR_COMPRESSION);
+      if (iter != src_attrs.end()) {
+        const bufferlist bl = std::move(iter->second);
+        src_attrs.erase(iter); // don't preserve source compression info
+
+        if (try_etag_verify) {
+          // if we're trying to verify etags, we need to convert compressed
+          // ranges in the manifest back into logical multipart part offsets
+          RGWCompressionInfo info;
+          bool compressed = false;
+          int r = rgw_compression_info_from_attr(bl, compressed, info);
+          if (r < 0) {
+            ldout(cct, 4) << "failed to decode compression info, "
+                "disabling etag verification" << dendl;
+            try_etag_verify = false;
+          } else if (compressed) {
+            compression_info = std::move(info);
+          }
+        }
+      }
       /* We need the manifest to recompute the ETag for verification */
-      auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+      iter = src_attrs.find(RGW_ATTR_MANIFEST);
       if (iter != src_attrs.end()) {
         manifest_bl = std::move(iter->second);
         src_attrs.erase(iter);
@@ -3365,49 +3393,15 @@ public:
      * requested. We can enable simultaneous support once we have a mechanism
      * to know the sequence in which the filters must be applied.
      */
-    if (cct->_conf->rgw_sync_obj_etag_verify &&
-        src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
-
-      RGWObjManifest manifest;
-
-      auto miter = manifest_bl.cbegin();
-      try {
-        decode(manifest, miter);
-      } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
-        return -EIO;
-      }
-
-      RGWObjManifestRule rule;
-      bool found = manifest.get_rule(0, &rule);
-      if (!found) {
-        lderr(cct) << "ERROR: manifest->get_rule() could not find rule" << dendl;
-        return -EIO;
-      }
-
-      if (rule.part_size == 0) {
-        /* Atomic object */
-        obj_type = OBJ_TYPE_ATOMIC;
-        etag_verifier_atomic = boost::in_place(cct, filter);
-        filter = &*etag_verifier_atomic;
+    if (try_etag_verify && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+      ret = rgw::putobj::create_etag_verifier(cct, filter, manifest_bl,
+                                              compression_info,
+                                              etag_verifier);
+      if (ret < 0) {
+        ldout(cct, 4) << "failed to initial etag verifier, "
+            "disabling etag verification" << dendl;
       } else {
-        obj_type = OBJ_TYPE_MPU;
-        etag_verifier_mpu = boost::in_place(cct, filter);
-        uint64_t cur_part_ofs = UINT64_MAX;
-
-        /*
-         * We must store the offset of each part to calculate the ETAGs for each
-         * MPU part. These part ETags then become the input for the MPU object
-         * Etag.
-         */
-        for (auto mi = manifest.obj_begin(); mi != manifest.obj_end(); ++mi) {
-          if (cur_part_ofs == mi.get_part_ofs())
-            continue;
-          cur_part_ofs = mi.get_part_ofs();
-          ldout(cct, 20) << "MPU Part offset:" << cur_part_ofs << dendl;
-          etag_verifier_mpu->append_part_ofs(cur_part_ofs);
-        }
-        filter = &*etag_verifier_mpu;
+        filter = etag_verifier.get();
       }
     }
 
@@ -3478,20 +3472,13 @@ public:
     return data_len;
   }
 
-  string get_calculated_etag() {
-    if (obj_type == OBJ_TYPE_ATOMIC) {
-      etag_verifier_atomic->calculate_etag();
-      return etag_verifier_atomic->get_calculated_etag();
-    } else if (obj_type == OBJ_TYPE_MPU) {
-      etag_verifier_mpu->calculate_etag();
-      return etag_verifier_mpu->get_calculated_etag();
+  std::string get_verifier_etag() {
+    if (etag_verifier) {
+      etag_verifier->calculate_etag();
+      return etag_verifier->get_calculated_etag();
     } else {
       return "";
     }
-  }
-
-  SourceObjType get_obj_type() {
-    return obj_type;
   }
 };
 
@@ -3785,7 +3772,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                RGWObjCategory category,
                std::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
@@ -3811,7 +3798,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this->store, dest_bucket, nullptr, user_id,
-                                  obj_ctx, dest_obj->get_obj(), olh_epoch, tag, dpp, null_yield);
+                                  obj_ctx, std::move(dest_obj->clone()), olh_epoch,
+				  tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4030,17 +4018,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   /* Perform ETag verification is we have computed the object's MD5 sum at our end */
-  if (cb.get_obj_type() != OBJ_TYPE_UNINIT) {
+  if (const auto& verifier_etag = cb.get_verifier_etag();
+      !verifier_etag.empty()) {
     string trimmed_etag = etag;
 
     /* Remove the leading and trailing double quotes from etag */
     trimmed_etag.erase(std::remove(trimmed_etag.begin(), trimmed_etag.end(),'\"'),
       trimmed_etag.end());
 
-    if (cb.get_calculated_etag().compare(trimmed_etag)) {
+    if (verifier_etag != trimmed_etag) {
       ret = -EIO;
       ldout(cct, 0) << "ERROR: source and destination objects don't match. Expected etag:"
-        << trimmed_etag << " Computed etag:" << cb.get_calculated_etag() << dendl;
+        << trimmed_etag << " Computed etag:" << verifier_etag << dendl;
       goto set_err_state;
     }
   }
@@ -4167,7 +4156,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const char *if_nomatch,
                AttrsMod attrs_mod,
                bool copy_if_newer,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
 	       real_time delete_at,
@@ -4340,7 +4329,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   rgw_rados_ref ref;
-  ret = get_raw_obj_ref(miter.get_location().get_raw_obj(this), &ref);
+  ret = get_raw_obj_ref(miter.get_location().get_raw_obj(store), &ref);
   if (ret < 0) {
     return ret;
   }
@@ -4376,7 +4365,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       ObjectWriteOperation op;
       ref_tag = tag + '\0';
       cls_refcount_get(op, ref_tag, true);
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(this);
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
 
       auto& ioctx = ref.pool.ioctx();
       ioctx.locator_set_key(loc.loc);
@@ -4454,7 +4443,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                rgw::sal::RGWObject* dest_obj,
 	       real_time *mtime,
 	       real_time set_mtime,
-               map<string, bufferlist>& attrs,
+               rgw::sal::RGWAttrs& attrs,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
@@ -4470,7 +4459,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   // it causes crashes in the ragweed tests
   AtomicObjectProcessor processor(&aio, this->store, bucket, &dest_placement,
                                   bucket->get_info().owner, obj_ctx,
-                                  dest_obj->get_obj(), olh_epoch, tag, dpp, null_yield);
+                                  std::move(dest_obj->clone()), olh_epoch, tag,
+				  dpp, null_yield);
   int ret = processor.prepare(y);
   if (ret < 0)
     return ret;
@@ -4536,7 +4526,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              const DoutPrefixProvider *dpp,
                              optional_yield y)
 {
-  map<string, bufferlist> attrs;
+  rgw::sal::RGWAttrs attrs;
   real_time read_mtime;
   uint64_t obj_size;
 
@@ -4796,7 +4786,7 @@ void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_
   rgw_raw_obj raw_head;
   obj_to_raw(manifest.get_head_placement_rule(), head_obj, &raw_head);
   for (iter = manifest.obj_begin(); iter != manifest.obj_end(); ++iter) {
-    const rgw_raw_obj& mobj = iter.get_location().get_raw_obj(this);
+    const rgw_raw_obj& mobj = iter.get_location().get_raw_obj(store);
     if (mobj == raw_head)
       continue;
     cls_rgw_obj_key key(mobj.oid);
@@ -5245,7 +5235,7 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime)
   return index_op.complete_del(-1 /* pool */, 0, mtime, NULL);
 }
 
-static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
+static void generate_fake_tag(rgw::sal::RGWStore* store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
 {
   string tag;
 
@@ -5418,7 +5408,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
 	s->manifest->has_explicit_objs()) {
       RGWObjManifest::obj_iterator mi;
       for (mi = s->manifest->obj_begin(); mi != s->manifest->obj_end(); ++mi) {
-        ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(this) << dendl;
+        ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(store) << dendl;
       }
     }
 
@@ -5427,7 +5417,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
        * Uh oh, something's wrong, object with manifest should have tag. Let's
        * create one out of the manifest, would be unique
        */
-      generate_fake_tag(this, s->attrset, *s->manifest, manifest_bl, s->obj_tag);
+      generate_fake_tag(store, s->attrset, *s->manifest, manifest_bl, s->obj_tag);
       s->fake_tag = true;
     }
   }
@@ -6226,7 +6216,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, optio
     RGWObjManifest::obj_iterator iter = astate->manifest->obj_find(ofs);
 
     uint64_t stripe_ofs = iter.get_stripe_ofs();
-    read_obj = iter.get_location().get_raw_obj(store);
+    read_obj = iter.get_location().get_raw_obj(store->store);
     len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
     read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
     reading_from_head = (read_obj == state.head_obj);
@@ -6477,7 +6467,7 @@ int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx,
       off_t next_stripe_ofs = stripe_ofs + iter.get_stripe_size();
 
       while (ofs < next_stripe_ofs && ofs <= end) {
-        read_obj = iter.get_location().get_raw_obj(this);
+        read_obj = iter.get_location().get_raw_obj(store);
         uint64_t read_len = std::min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
         read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
 
@@ -8155,7 +8145,7 @@ int RGWRados::process_gc(bool expired_only)
 }
 
 int RGWRados::list_lc_progress(string& marker, uint32_t max_entries,
-			       vector<cls_rgw_lc_entry>& progress_map,
+			       vector<rgw::sal::Lifecycle::LCEntry>& progress_map,
 			       int& index)
 {
   return lc->list_lc_progress(marker, max_entries, progress_map, index);
@@ -8913,7 +8903,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
     RGWObjManifest::obj_iterator miter;
     RGWObjManifest& manifest = *astate->manifest;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& raw_loc = miter.get_location().get_raw_obj(this);
+      const rgw_raw_obj& raw_loc = miter.get_location().get_raw_obj(store);
       rgw_obj loc;
       RGWSI_Tier_RADOS::raw_obj_to_obj(manifest.get_obj().bucket, raw_loc, &loc);
 
@@ -9066,13 +9056,15 @@ int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t n
 }
 
 int RGWRados::check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
-                          RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only)
+                          RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
+			  uint64_t obj_size, optional_yield y,
+			  bool check_size_only)
 {
   // if we only check size, then num_objs will set to 0
   if(check_size_only)
-    return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 0, obj_size);
+    return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 0, obj_size, y);
 
-  return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 1, obj_size);
+  return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 1, obj_size, y);
 }
 
 int RGWRados::get_target_shard_id(const rgw::bucket_index_normal_layout& layout, const string& obj_key,

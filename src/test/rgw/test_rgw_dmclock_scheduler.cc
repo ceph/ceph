@@ -18,9 +18,7 @@
 #include "rgw/rgw_dmclock_async_scheduler.h"
 
 #include <optional>
-#ifdef HAVE_BOOST_CONTEXT
 #include <boost/asio/spawn.hpp>
-#endif
 #include <gtest/gtest.h>
 #include "acconfig.h"
 #include "global/global_context.h"
@@ -78,7 +76,6 @@ TEST(Queue, SyncRequest)
   EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 TEST(Queue, RateLimit)
 {
   boost::asio::io_context context;
@@ -427,7 +424,5 @@ TEST(Queue, SpawnAsyncRequest)
   context.poll();
   EXPECT_TRUE(context.stopped());
 }
-
-#endif
 
 } // namespace rgw::dmclock

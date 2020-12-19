@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { OsdService } from './osd.service';
 
 describe('OsdService', () => {
@@ -97,6 +97,15 @@ describe('OsdService', () => {
     const req = httpTesting.expectOne('api/osd/flags');
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ flags: ['foo'] });
+  });
+
+  it('should call updateIndividualFlags to update individual flags', () => {
+    const flags = { noin: true, noout: true };
+    const ids = [0, 1];
+    service.updateIndividualFlags(flags, ids).subscribe();
+    const req = httpTesting.expectOne('api/osd/flags/individual');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ flags: flags, ids: ids });
   });
 
   it('should mark the OSD out', () => {

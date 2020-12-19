@@ -45,6 +45,7 @@ protected:
   void clear() { tag_map.clear(); }
   bool empty() const noexcept { return tag_map.empty(); }
   const tag_map_t& get_tags() const {return tag_map;}
+  tag_map_t& get_tags() {return tag_map;}
 };
 WRITE_CLASS_ENCODER(RGWObjTags)
 

@@ -7,7 +7,6 @@ from shlex import split as shlex_split
 from io import StringIO
 
 from tasks.ceph_test_case import CephTestCase
-from tasks.cephfs.fuse_mount import FuseMount
 
 from teuthology import contextutil
 from teuthology.misc import sudo_write_file
@@ -107,13 +106,6 @@ class CephFSTestCase(CephTestCase):
                 len(self.mounts), self.CLIENTS_REQUIRED
             ))
 
-        if self.REQUIRE_KCLIENT_REMOTE:
-            if not isinstance(self.mounts[0], FuseMount) or not isinstance(self.mounts[1], FuseMount):
-                # kclient kill() power cycles nodes, so requires clients to each be on
-                # their own node
-                if self.mounts[0].client_remote.hostname == self.mounts[1].client_remote.hostname:
-                    self.skipTest("kclient clients must be on separate nodes")
-
         if self.REQUIRE_ONE_CLIENT_REMOTE:
             if self.mounts[0].client_remote.hostname in self.mds_cluster.get_mds_hostnames():
                 self.skipTest("Require first client to be on separate server from MDSs")
@@ -183,6 +175,7 @@ class CephFSTestCase(CephTestCase):
         if self.REQUIRE_RECOVERY_FILESYSTEM:
             if not self.REQUIRE_FILESYSTEM:
                 self.skipTest("Recovery filesystem requires a primary filesystem as well")
+            # After Octopus is EOL, we can remove this setting:
             self.fs.mon_manager.raw_cluster_cmd('fs', 'flag', 'set',
                                                 'enable_multiple', 'true',
                                                 '--yes-i-really-mean-it')
@@ -259,6 +252,9 @@ class CephFSTestCase(CephTestCase):
 
     def _session_by_id(self, session_ls):
         return dict([(s['id'], s) for s in session_ls])
+
+    def perf_dump(self, rank=None, status=None):
+        return self.fs.rank_asok(['perf', 'dump'], rank=rank, status=status)
 
     def wait_until_evicted(self, client_id, timeout=30):
         def is_client_evicted():
@@ -363,8 +359,8 @@ class CephFSTestCase(CephTestCase):
                     if filtered == test:
                         # Confirm export_pin in output is correct:
                         for s in subtrees:
-                            if s['export_pin'] >= 0:
-                                self.assertTrue(s['export_pin'] == s['auth_first'])
+                            if s['export_pin_target'] >= 0:
+                                self.assertTrue(s['export_pin_target'] == s['auth_first'])
                         return subtrees
                     if action is not None:
                         action()
@@ -384,7 +380,9 @@ class CephFSTestCase(CephTestCase):
             with contextutil.safe_while(sleep=5, tries=20) as proceed:
                 while proceed():
                     subtrees = self._get_subtrees(status=status, rank=rank, path=path)
-                    subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == True, subtrees))
+                    subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == True and
+                                                     s['auth_first'] == s['export_pin_target'],
+                                           subtrees))
                     log.info(f"len={len(subtrees)} {subtrees}")
                     if len(subtrees) >= count:
                         return subtrees
@@ -396,7 +394,9 @@ class CephFSTestCase(CephTestCase):
             with contextutil.safe_while(sleep=5, tries=20) as proceed:
                 while proceed():
                     subtrees = self._get_subtrees(status=status, rank=rank, path=path)
-                    subtrees = list(filter(lambda s: s['random_ephemeral_pin'] == True, subtrees))
+                    subtrees = list(filter(lambda s: s['random_ephemeral_pin'] == True and
+                                                     s['auth_first'] == s['export_pin_target'],
+                                           subtrees))
                     log.info(f"len={len(subtrees)} {subtrees}")
                     if len(subtrees) >= count:
                         return subtrees

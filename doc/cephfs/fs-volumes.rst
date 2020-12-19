@@ -173,6 +173,16 @@ The command resizes the subvolume quota using the size specified by 'new_size'.
 
 The subvolume can be resized to an infinite size by passing 'inf' or 'infinite' as the new_size.
 
+Authorize cephx auth IDs, the read/read-write access to fs subvolumes::
+
+    $ ceph fs subvolume authorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>] [--access_level=<access_level>]
+
+The 'access_level' takes 'r' or 'rw' as value.
+
+Deauthorize cephx auth IDs, the read/read-write access to fs subvolumes::
+
+    $ ceph fs subvolume deauthorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
+
 Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
@@ -290,6 +300,10 @@ Cloned subvolumes can be a part of a different group than the source snapshot (b
 Similar to specifying a pool layout when creating a subvolume, pool layout can be specified when creating a cloned subvolume. To create a cloned subvolume with a specific pool layout use::
 
   $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
+
+Configure maximum number of concurrent clones. The default is set to 4::
+
+  $ ceph config set mgr mgr/volumes/max_concurrent_clones <value>
 
 To check the status of a clone operation use::
 

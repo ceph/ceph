@@ -114,6 +114,8 @@ struct Mirror {
 
   static int image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
                                    uint64_t *snap_id);
+  static void image_snapshot_create(ImageCtxT *ictx, uint32_t flags,
+                                    uint64_t *snap_id, Context *on_finish);
 };
 
 } // namespace api

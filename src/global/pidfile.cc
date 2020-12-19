@@ -161,6 +161,9 @@ int pidfh::open(std::string_view pid_file)
   pf_dev = st.st_dev;
   pf_ino = st.st_ino;
 
+  // Default Windows file share flags prevent other processes from writing
+  // to this file.
+  #ifndef _WIN32
   struct flock l = {
     .l_type = F_WRLCK,
     .l_whence = SEEK_SET,
@@ -182,6 +185,7 @@ int pidfh::open(std::string_view pid_file)
     reset();
     return -lock_errno;
   }
+  #endif
   return 0;
 }
 

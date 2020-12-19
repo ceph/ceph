@@ -6,7 +6,10 @@ ceph dashboard module
 from __future__ import absolute_import
 
 import os
+
 import cherrypy
+
+DEFAULT_VERSION = '1.0'
 
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage  # pylint: disable=import-error

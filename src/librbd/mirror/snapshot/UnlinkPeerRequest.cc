@@ -35,7 +35,7 @@ void UnlinkPeerRequest<I>::send() {
 template <typename I>
 void UnlinkPeerRequest<I>::refresh_image() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     UnlinkPeerRequest<I>, &UnlinkPeerRequest<I>::handle_refresh_image>(this);
@@ -45,7 +45,7 @@ void UnlinkPeerRequest<I>::refresh_image() {
 template <typename I>
 void UnlinkPeerRequest<I>::handle_refresh_image(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
@@ -63,7 +63,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
   m_image_ctx->image_lock.lock_shared();
   int r = -ENOENT;
   cls::rbd::MirrorSnapshotNamespace* mirror_ns = nullptr;
-  bool newer_mirror_snapshots = false;
+  m_newer_mirror_snapshots = false;
   for (auto snap_it = m_image_ctx->snap_info.find(m_snap_id);
        snap_it != m_image_ctx->snap_info.end(); ++snap_it) {
     if (snap_it->first == m_snap_id) {
@@ -72,14 +72,14 @@ void UnlinkPeerRequest<I>::unlink_peer() {
         &snap_it->second.snap_namespace);
     } else if (boost::get<cls::rbd::MirrorSnapshotNamespace>(
                  &snap_it->second.snap_namespace) != nullptr) {
-      ldout(cct, 20) << "located newer mirror snapshot" << dendl;
-      newer_mirror_snapshots = true;
+      ldout(cct, 15) << "located newer mirror snapshot" << dendl;
+      m_newer_mirror_snapshots = true;
       break;
     }
   }
 
   if (r == -ENOENT) {
-    ldout(cct, 20) << "missing snapshot: snap_id=" << m_snap_id << dendl;
+    ldout(cct, 15) << "missing snapshot: snap_id=" << m_snap_id << dendl;
     m_image_ctx->image_lock.unlock_shared();
     finish(r);
     return;
@@ -95,14 +95,14 @@ void UnlinkPeerRequest<I>::unlink_peer() {
   // if there is or will be no more peers in the mirror snapshot and we have
   // a more recent mirror snapshot, remove the older one
   if ((mirror_ns->mirror_peer_uuids.count(m_mirror_peer_uuid) == 0) ||
-      (mirror_ns->mirror_peer_uuids.size() == 1U && newer_mirror_snapshots)) {
+      (mirror_ns->mirror_peer_uuids.size() <= 1U && m_newer_mirror_snapshots)) {
     m_image_ctx->image_lock.unlock_shared();
     remove_snapshot();
     return;
   }
   m_image_ctx->image_lock.unlock_shared();
 
-  ldout(cct, 20) << "snap_id=" << m_snap_id << ", "
+  ldout(cct, 15) << "snap_id=" << m_snap_id << ", "
                  << "mirror_peer_uuid=" << m_mirror_peer_uuid << dendl;
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_snapshot_unlink_peer(&op, m_snap_id,
@@ -117,7 +117,7 @@ void UnlinkPeerRequest<I>::unlink_peer() {
 template <typename I>
 void UnlinkPeerRequest<I>::handle_unlink_peer(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r == -ERESTART || r == -ENOENT) {
     refresh_image();
@@ -136,7 +136,7 @@ void UnlinkPeerRequest<I>::handle_unlink_peer(int r) {
 template <typename I>
 void UnlinkPeerRequest<I>::notify_update() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
     UnlinkPeerRequest<I>, &UnlinkPeerRequest<I>::handle_notify_update>(this);
@@ -146,9 +146,12 @@ void UnlinkPeerRequest<I>::notify_update() {
 template <typename I>
 void UnlinkPeerRequest<I>::handle_notify_update(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
-  if (r < 0 && r != -ENOENT) {
+  if (r == -ENOENT || r == -ETIMEDOUT) {
+    // non-fatel errors
+    lderr(cct) << "failed to notify update: " << cpp_strerror(r) << dendl;
+  } else if (r < 0) {
     lderr(cct) << "failed to notify update: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -160,7 +163,7 @@ void UnlinkPeerRequest<I>::handle_notify_update(int r) {
 template <typename I>
 void UnlinkPeerRequest<I>::remove_snapshot() {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
+  ldout(cct, 15) << dendl;
 
   cls::rbd::SnapshotNamespace snap_namespace;
   std::string snap_name;
@@ -178,21 +181,20 @@ void UnlinkPeerRequest<I>::remove_snapshot() {
   }
 
   if (r == -ENOENT) {
-    ldout(cct, 20) << "failed to locate snapshot " << m_snap_id << dendl;
+    ldout(cct, 15) << "failed to locate snapshot " << m_snap_id << dendl;
     finish(0);
     return;
   }
 
   auto info = boost::get<cls::rbd::MirrorSnapshotNamespace>(
-    &snap_namespace);
-  ceph_assert(info);
+    snap_namespace);
 
-  if (info->mirror_peer_uuids.size() > 1 ||
-      info->mirror_peer_uuids.count(m_mirror_peer_uuid) == 0) {
-    ldout(cct, 20) << "skipping removal of snapshot: "
+  info.mirror_peer_uuids.erase(m_mirror_peer_uuid);
+  if (!info.mirror_peer_uuids.empty() || !m_newer_mirror_snapshots) {
+    ldout(cct, 15) << "skipping removal of snapshot: "
                    << "snap_id=" << m_snap_id << ": "
                    << "mirror_peer_uuid=" << m_mirror_peer_uuid << ", "
-                   << "mirror_peer_uuids=" << info->mirror_peer_uuids << dendl;
+                   << "mirror_peer_uuids=" << info.mirror_peer_uuids << dendl;
     finish(0);
     return;
   }
@@ -205,7 +207,7 @@ void UnlinkPeerRequest<I>::remove_snapshot() {
 template <typename I>
 void UnlinkPeerRequest<I>::handle_remove_snapshot(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove snapshot: " << cpp_strerror(r) << dendl;
@@ -219,7 +221,7 @@ void UnlinkPeerRequest<I>::handle_remove_snapshot(int r) {
 template <typename I>
 void UnlinkPeerRequest<I>::finish(int r) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 20) << "r=" << r << dendl;
+  ldout(cct, 15) << "r=" << r << dendl;
 
   auto on_finish = m_on_finish;
   delete this;

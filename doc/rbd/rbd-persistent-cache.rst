@@ -7,14 +7,14 @@
 Shared, Read-only Parent Image Cache
 ====================================
 
-`Cloned RBD images`_ from a parent usually only modify a small portion of
-the image. For example, in a VDI workload, the VMs are cloned from the same
-base image and initially only differ by hostname and IP address. During the
-booting stage, all of these VMs would re-read portions of duplicate parent
-image data from the RADOS cluster. If we have a local cache of the parent
-image, this will help to speed up the read process on one host, as well as
-to save the client to cluster network traffic.
-RBD shared read-only parent image cache requires explicitly enabling in
+`Cloned RBD images`_ usually modify only a small fraction of the parent
+image. For example, in a VDI use-case, VMs are cloned from the same
+base image and initially differ only by hostname and IP address. During
+booting, all of these VMs read portions of the same parent
+image data. If we have a local cache of the parent
+image, this speeds up reads on the caching host.  We also achieve
+reduction of client-to-cluster network traffic.
+RBD cache must be explicitly enabled in
 ``ceph.conf``. The ``ceph-immutable-object-cache`` daemon is responsible for
 caching the parent content on the local disk, and future reads on that data
 will be serviced from the local cache.
@@ -64,14 +64,14 @@ The key components of the daemon are:
    RADOS cluster and stored in the local caching directory.
 
 On opening each cloned rbd image, ``librbd`` will try to connect to the
-cache daemon over its domain socket. If it's successfully connected,
-``librbd`` will automatically check with the daemon on the subsequent reads.
+cache daemon through its Unix domain socket. Once successfully connected,
+``librbd`` will coordinate with the daemon on the subsequent reads.
 If there's a read that's not cached, the daemon will promote the RADOS object
 to local caching directory, so the next read on that object will be serviced
-from local file. The daemon also maintains simple LRU statistics so if there's
-not enough capacity it will delete some cold cache files.
+from cache. The daemon also maintains simple LRU statistics so that under
+capacity pressure it will evict cold cache files as needed.
 
-Here are some important cache options correspond to the following settings:
+Here are some important cache configuration settings:
 
 - ``immutable_object_cache_sock`` The path to the domain socket used for
   communication between librbd clients and the ceph-immutable-object-cache
@@ -81,9 +81,9 @@ Here are some important cache options correspond to the following settings:
 
 - ``immutable_object_cache_max_size`` The max size for immutable cache.
 
-- ``immutable_object_cache_watermark`` The watermark for the cache. If the
-  capacity reaches to this watermark, the daemon will delete cold cache based
-  on the LRU statistics.
+- ``immutable_object_cache_watermark`` The high-water mark for the cache. If the
+  capacity reaches this threshold the daemon will delete cold cache based
+  on LRU statistics.
 
 The ``ceph-immutable-object-cache`` daemon is available within the optional
 ``ceph-immutable-object-cache`` distribution package.

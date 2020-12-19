@@ -1,13 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 
-import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
-import { RgwSiteService } from '../../../shared/api/rgw-site.service';
-import { ListWithDetails } from '../../../shared/classes/list-with-details.class';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { Permission } from '../../../shared/models/permissions';
-import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { Permission } from '~/app/shared/models/permissions';
+import { CephShortVersionPipe } from '~/app/shared/pipes/ceph-short-version.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-rgw-daemon-list',

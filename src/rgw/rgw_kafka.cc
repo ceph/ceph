@@ -64,7 +64,7 @@ struct connection_t {
   std::vector<rd_kafka_topic_t*> topics;
   bool marked_for_deletion = false;
   uint64_t delivery_tag = 1;
-  int status;
+  int status = STATUS_OK;
   mutable std::atomic<int> ref_count = 0;
   CephContext* const cct;
   CallbackList callbacks;
@@ -371,6 +371,7 @@ private:
       }
       conn->destroy(err);
       delete tag;
+      return;
     }
    
     if (tag) {

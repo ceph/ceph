@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <seastar/core/future.hh>
 #include "common/ceph_time.h"
-#include "crimson/net/chained_dispatchers.h"
+#include "crimson/common/gated.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 
@@ -48,19 +48,19 @@ public:
   void set_require_authorizer(bool);
 
   // Dispatcher methods
-  seastar::future<> ms_dispatch(crimson::net::Connection* conn,
-				MessageRef m) override;
+  std::optional<seastar::future<>> ms_dispatch(
+      crimson::net::ConnectionRef conn, MessageRef m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
   void ms_handle_connect(crimson::net::ConnectionRef conn) override;
   void ms_handle_accept(crimson::net::ConnectionRef conn) override;
 
   void print(std::ostream&) const;
 private:
-  seastar::future<> handle_osd_ping(crimson::net::Connection* conn,
+  seastar::future<> handle_osd_ping(crimson::net::ConnectionRef conn,
 				    Ref<MOSDPing> m);
-  seastar::future<> handle_ping(crimson::net::Connection* conn,
+  seastar::future<> handle_ping(crimson::net::ConnectionRef conn,
 				Ref<MOSDPing> m);
-  seastar::future<> handle_reply(crimson::net::Connection* conn,
+  seastar::future<> handle_reply(crimson::net::ConnectionRef conn,
 				 Ref<MOSDPing> m);
   seastar::future<> handle_you_died();
 
@@ -71,8 +71,7 @@ private:
   void add_reporter_peers(int whoami);
 
   seastar::future<> start_messenger(crimson::net::Messenger& msgr,
-				    const entity_addrvec_t& addrs,
-				    ChainedDispatchersRef);
+				    const entity_addrvec_t& addrs);
 private:
   const osd_id_t whoami;
   const crimson::osd::ShardServices& service;
@@ -183,10 +182,7 @@ class Heartbeat::Connection {
 
   ~Connection();
 
-  bool matches(crimson::net::Connection* _conn) const;
-  bool matches(crimson::net::ConnectionRef conn) const {
-    return matches(conn.get());
-  }
+  bool matches(crimson::net::ConnectionRef _conn) const;
   void connected() {
     set_connected();
   }
@@ -411,7 +407,7 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   }
   void send_heartbeat(
       clock::time_point, ceph::signedspan, std::vector<seastar::future<>>&);
-  seastar::future<> handle_reply(crimson::net::Connection*, Ref<MOSDPing>);
+  seastar::future<> handle_reply(crimson::net::ConnectionRef, Ref<MOSDPing>);
   void handle_reset(crimson::net::ConnectionRef conn, bool is_replace) {
     for_each_conn([&] (auto& _conn) {
       if (_conn.matches(conn)) {

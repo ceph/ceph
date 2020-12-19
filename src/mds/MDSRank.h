@@ -355,8 +355,6 @@ class MDSRank {
 		      const std::string& option, const std::string& value,
 		      std::ostream& ss);
 
-    void mark_base_recursively_scrubbed(inodeno_t ino);
-
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
@@ -455,7 +453,6 @@ class MDSRank {
      /**
      * Share MDSMap with clients
      */
-    void bcast_mds_map();  // to mounted clients
     void create_logger();
 
     void dump_clientreplay_status(Formatter *f) const;
@@ -582,8 +579,6 @@ class MDSRank {
     Beacon &beacon;
 
     int mds_slow_req_count = 0;
-
-    epoch_t last_client_mdsmap_bcast = 0;
 
     map<mds_rank_t,DecayCounter> export_targets; /* targets this MDS is exporting to or wants/tries to */
 

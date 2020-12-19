@@ -13,6 +13,7 @@
 
 #include "osd/object_state.h"
 
+class MOSDPGBackfillRemove;
 class PGBackend;
 
 class PGRecovery : public crimson::osd::BackfillState::BackfillListener {
@@ -39,7 +40,7 @@ private:
   std::vector<pg_shard_t> get_replica_recovery_order() const {
     return pg->get_replica_recovery_order();
   }
-  std::optional<crimson::osd::blocking_future<>> recover_missing(
+  crimson::osd::blocking_future<> recover_missing(
     const hobject_t &soid, eversion_t need);
   size_t prep_object_replica_deletes(
     const hobject_t& soid,
@@ -82,6 +83,8 @@ private:
 
   // backfill begin
   std::unique_ptr<crimson::osd::BackfillState> backfill_state;
+  std::map<pg_shard_t,
+           ceph::ref_t<MOSDPGBackfillRemove>> backfill_drop_requests;
 
   template <class EventT>
   void start_backfill_recovery(
@@ -93,17 +96,18 @@ private:
   void request_primary_scan(
     const hobject_t& begin) final;
   void enqueue_push(
-    const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) final;
   void enqueue_drop(
     const pg_shard_t& target,
     const hobject_t& obj,
     const eversion_t& v) final;
+  void maybe_flush() final;
   void update_peers_last_backfill(
     const hobject_t& new_last_backfill) final;
   bool budget_available() const final;
   void backfilled() final;
   friend crimson::osd::BackfillState::PGFacade;
+  friend crimson::osd::PG;
   // backfill end
 };

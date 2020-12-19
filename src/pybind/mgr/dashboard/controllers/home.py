@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import os
-import re
 import json
 import logging
+import os
+import re
+
 try:
     from functools import lru_cache
 except ImportError:
     from ..plugins.lru_cache import lru_cache
+
 import cherrypy
 from cherrypy.lib.static import serve_file
 
-from . import Controller, UiApiController, BaseController, Proxy, Endpoint
 from .. import mgr
-
+from . import BaseController, Controller, Endpoint, Proxy, UiApiController
 
 logger = logging.getLogger("controllers.home")
 
@@ -86,7 +87,7 @@ class HomeController(BaseController, LanguageMixin):
         result.sort(key=lambda l: l[0])
         result.sort(key=lambda l: l[1], reverse=True)
         logger.debug("language preference: %s", result)
-        return [l[0] for l in result]
+        return [r[0] for r in result]
 
     def _language_dir(self, langs):
         for lang in langs:

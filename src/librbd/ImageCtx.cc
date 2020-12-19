@@ -121,6 +121,10 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       asok_hook(nullptr),
       trace_endpoint("librbd")
   {
+    ldout(cct, 10) << this << " " << __func__ << ": "
+                   << "image_name=" << image_name << ", "
+                   << "image_id=" << image_id << dendl;
+
     if (snap)
       snap_name = snap;
 
@@ -147,6 +151,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   ImageCtx::~ImageCtx() {
+    ldout(cct, 10) << this << " " << __func__ << dendl;
+
     ceph_assert(config_watcher == nullptr);
     ceph_assert(image_watcher == NULL);
     ceph_assert(exclusive_lock == NULL);
@@ -723,14 +729,8 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     std::unique_lock image_locker(image_lock);
 
     // reset settings back to global defaults
-    for (auto& key : config_overrides) {
-      std::string value;
-      int r = cct->_conf.get_val(key, &value);
-      ceph_assert(r == 0);
-
-      config.set_val(key, value);
-    }
     config_overrides.clear();
+    config.set_config_values(cct->_conf.get_config_values());
 
     // extract config overrides
     for (auto meta_pair : meta) {
@@ -769,8 +769,6 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     ASSIGN_OPTION(non_blocking_aio, bool);
     ASSIGN_OPTION(cache, bool);
     ASSIGN_OPTION(sparse_read_threshold_bytes, Option::size_t);
-    ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
-    ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
     ASSIGN_OPTION(clone_copy_on_read, bool);
     ASSIGN_OPTION(enable_alloc_hint, bool);
     ASSIGN_OPTION(mirroring_replay_delay, uint64_t);
@@ -779,6 +777,12 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(discard_granularity_bytes, uint64_t);
     ASSIGN_OPTION(blkin_trace_all, bool);
+
+    auto cache_policy = config.get_val<std::string>("rbd_cache_policy");
+    if (cache_policy == "writethrough" || cache_policy == "writeback") {
+      ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
+      ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
+    }
 
 #undef ASSIGN_OPTION
 

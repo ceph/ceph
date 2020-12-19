@@ -3,13 +3,13 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { TreeModule } from 'angular-tree-component';
-import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
+import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
-import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
-import { FeatureTogglesGuardService } from '../../shared/services/feature-toggles-guard.service';
-import { SharedModule } from '../../shared/shared.module';
+import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
+import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { SharedModule } from '~/app/shared/shared.module';
 import { IscsiSettingComponent } from './iscsi-setting/iscsi-setting.component';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
@@ -46,10 +46,10 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     NgbNavModule,
     NgbPopoverModule,
     NgbTooltipModule,
+    NgxPipeFunctionModule,
     SharedModule,
     RouterModule,
-    NgBootstrapFormValidationModule,
-    TreeModule.forRoot()
+    TreeModule
   ],
   declarations: [
     RbdListComponent,

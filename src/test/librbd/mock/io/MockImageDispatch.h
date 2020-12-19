@@ -87,6 +87,10 @@ public:
     return false;
   }
 
+  bool invalidate_cache(Context* on_finish) override {
+    return false;
+  }
+
 };
 
 } // namespace io

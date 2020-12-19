@@ -17,7 +17,6 @@ import codecs
 import copy
 import json
 import os
-
 from html.parser import HTMLParser
 
 

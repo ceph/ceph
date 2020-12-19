@@ -27,6 +27,12 @@ add_executable(unittest_lockdep
 add_ceph_unittest(unittest_lockdep)
 target_link_libraries(unittest_lockdep ceph-common)
 
+# unittest_counter
+add_executable(unittest_counter
+  test_counter.cc)
+add_ceph_unittest(unittest_counter)
+target_link_libraries(unittest_counter ceph-common)
+
 # FreeBSD only has shims to support NUMA, no functional code.
 if(LINUX)
 # unittest_numa
@@ -134,6 +140,7 @@ add_executable(unittest_random
   test_random.cc
   )
 add_ceph_unittest(unittest_random)
+target_link_libraries(unittest_random Boost::random)
 
 # unittest_throttle
 add_executable(unittest_throttle

@@ -4,10 +4,11 @@ import { FormGroup } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { forkJoin } from 'rxjs';
 
-import { OsdService } from '../../../../shared/api/osd.service';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { JoinPipe } from '../../../../shared/pipes/join.pipe';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { OsdService } from '~/app/shared/api/osd.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { JoinPipe } from '~/app/shared/pipes/join.pipe';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-osd-scrub-modal',
@@ -21,6 +22,7 @@ export class OsdScrubModalComponent implements OnInit {
 
   constructor(
     public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private osdService: OsdService,
     private notificationService: NotificationService,
     private joinPipe: JoinPipe

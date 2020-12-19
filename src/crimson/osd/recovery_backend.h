@@ -12,6 +12,7 @@
 #include "crimson/osd/shard_services.h"
 
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGScan.h"
 #include "osd/recovery_types.h"
 #include "osd/osd_types.h"
@@ -30,6 +31,8 @@ class RecoveryBackend {
   seastar::future<> handle_backfill_finish_ack(
     MOSDPGBackfill& m);
   seastar::future<> handle_backfill(MOSDPGBackfill& m);
+
+  seastar::future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 
   seastar::future<> handle_scan_get_digest(
     MOSDPGScan& m);
@@ -142,6 +145,11 @@ protected:
     }
     seastar::future<> wait_for_recovered() {
       return recovered.get_shared_future();
+    }
+    crimson::osd::blocking_future<>
+    wait_for_recovered_blocking() {
+      return make_blocking_future(
+	  recovered.get_shared_future());
     }
     seastar::future<> wait_for_pull() {
       return pulled.get_shared_future();

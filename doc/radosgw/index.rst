@@ -71,11 +71,12 @@ you may write data with one API and retrieve it with the other.
    STS Lite <STSLite>
    Keycloak <keycloak>
    Role <role>
-   Orphan List and Associated Tooliing <orphans>
+   Orphan List and Associated Tooling <orphans>
    OpenID Connect Provider <oidc>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
    QAT Acceleration for Encryption and Compression <qat-accel>
    S3-select <s3select>
+   Lua Scripting <lua-scripting>
 

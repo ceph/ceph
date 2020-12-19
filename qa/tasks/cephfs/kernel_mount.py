@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from io import StringIO
 from textwrap import dedent
@@ -19,11 +20,15 @@ UMOUNT_TIMEOUT = 300
 class KernelMount(CephFSMount):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
-                 cephfs_name=None, cephfs_mntpt=None, brxnet=None):
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config={}):
         super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
+
+        self.rbytes = config.get('rbytes', False)
+        self.inst = None
+        self.addr = None
 
     def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
         self.update_attrs(**kwargs)
@@ -66,15 +71,19 @@ class KernelMount(CephFSMount):
         self.mounted = True
 
     def _run_mount_cmd(self, mntopts, check_status):
-        opts = 'norequire_active_mds,'
+        opts = 'norequire_active_mds'
         if self.client_id:
-            opts += 'name=' + self.client_id
+            opts += ',name=' + self.client_id
         if self.client_keyring_path and self.client_id:
             opts += ',secret=' + self.get_key_from_keyfile()
         if self.config_path:
             opts += ',conf=' + self.config_path
         if self.cephfs_name:
             opts += ",mds_namespace=" + self.cephfs_name
+        if self.rbytes:
+            opts += ",rbytes"
+        else:
+            opts += ",norbytes"
         if mntopts:
             opts += ',' + ','.join(mntopts)
 
@@ -190,7 +199,10 @@ class KernelMount(CephFSMount):
             ))
             raise
 
-    def _read_debug_file(self, filename):
+    def read_debug_file(self, filename):
+        """
+        Read the debug file "filename", return None if the file doesn't exist.
+        """
         debug_dir = self._find_debug_dir()
 
         pyscript = dedent("""
@@ -199,10 +211,17 @@ class KernelMount(CephFSMount):
             print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
-        output = self.client_remote.sh([
-            'sudo', 'python3', '-c', pyscript
-        ], timeout=(5*60))
-        return output
+        stderr = StringIO()
+        try:
+            output = self.client_remote.sh([
+                'sudo', 'python3', '-c', pyscript
+            ], stderr=stderr, timeout=(5*60))
+
+            return output
+        except CommandFailedError:
+            if 'no such file or directory' in stderr.getvalue().lower():
+                return None
+            raise
 
     def get_global_id(self):
         """
@@ -211,15 +230,57 @@ class KernelMount(CephFSMount):
 
         assert self.mounted
 
-        mds_sessions = self._read_debug_file("mds_sessions")
+        mds_sessions = self.read_debug_file("mds_sessions")
+        assert mds_sessions 
+
         lines = mds_sessions.split("\n")
         return int(lines[0].split()[1])
+
+    @property
+    def _global_addr(self):
+        if self.addr is not None:
+            return self.addr
+
+        # The first line of the "status" file's output will be something
+        # like:
+        #   "instance: client.4297 (0)10.72.47.117:0/1148470933"
+        # What we need here is only the string "10.72.47.117:0/1148470933"
+        status = self.read_debug_file("status")
+        if status is None:
+            return None
+
+        instance = re.findall(r'instance:.*', status)[0]
+        self.addr = instance.split()[2].split(')')[1]
+        return self.addr;
+
+    @property
+    def _global_inst(self):
+        if self.inst is not None:
+            return self.inst
+
+        client_gid = "client%d" % self.get_global_id()
+        self.inst = " ".join([client_gid, self._global_addr])
+        return self.inst
+
+    def get_global_inst(self):
+        """
+        Look up the CephFS client instance for this mount
+        """
+        return self._global_inst
+
+    def get_global_addr(self):
+        """
+        Look up the CephFS client addr for this mount
+        """
+        return self._global_addr
 
     def get_osd_epoch(self):
         """
         Return 2-tuple of osd_epoch, osd_epoch_barrier
         """
-        osd_map = self._read_debug_file("osdmap")
+        osd_map = self.read_debug_file("osdmap")
+        assert osd_map
+
         lines = osd_map.split("\n")
         first_line_tokens = lines[0].split()
         epoch, barrier = int(first_line_tokens[1]), int(first_line_tokens[3])

@@ -1,30 +1,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import collections
+import fnmatch
 import inspect
 import json
 import logging
-
-import collections
+import threading
+import time
+import urllib
 from datetime import datetime, timedelta
 from distutils.util import strtobool
-import fnmatch
-import time
-import threading
-import urllib
 
 import cherrypy
-
 from ceph.deployment.utils import wrap_ipv6
 
 from . import mgr
 from .exceptions import ViewCacheNoDataException
-from .settings import Settings
 from .services.auth import JwtManager
+from .settings import Settings
 
 try:
-    from typing import Any, AnyStr, Callable, DefaultDict, Deque,\
-        Dict, List, Set, Tuple, Union  # noqa pylint: disable=unused-import
+    from typing import Any, AnyStr, Callable, DefaultDict, Deque, Dict, List, \
+        Optional, Set, Tuple, Union
 except ImportError:
     pass  # For typing only
 
@@ -572,9 +570,9 @@ class Task(object):
         self.event = threading.Event()
         self.progress = None
         self.ret_value = None
-        self.begin_time = None
-        self.end_time = None
-        self.duration = 0
+        self._begin_time: Optional[float] = None
+        self._end_time: Optional[float] = None
+        self.duration = 0.0
         self.exception = None
         self.logger = logging.getLogger('task')
         self.lock = threading.Lock()
@@ -598,7 +596,7 @@ class Task(object):
             assert not self.running
             self.executor.init(self)
             self.set_progress(0, in_lock=True)
-            self.begin_time = time.time()
+            self._begin_time = time.time()
             self.running = True
         self.executor.start()
 
@@ -612,10 +610,10 @@ class Task(object):
                 exception = ex
         with self.lock:
             assert self.running, "_complete cannot be called before _run"
-            self.end_time = now
+            self._end_time = now
             self.ret_value = ret_value
             self.exception = exception
-            self.duration = now - self.begin_time  # type: ignore
+            self.duration = now - self.begin_time
             if not self.exception:
                 self.set_progress(100, True)
         NotificationQueue.new_notification('cd_task_finished', self)
@@ -663,6 +661,16 @@ class Task(object):
         self.progress = percentage
         if not in_lock:
             self.lock.release()
+
+    @property
+    def end_time(self) -> float:
+        assert self._end_time is not None
+        return self._end_time
+
+    @property
+    def begin_time(self) -> float:
+        assert self._begin_time is not None
+        return self._begin_time
 
 
 def build_url(host, scheme=None, port=None):

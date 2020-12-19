@@ -449,7 +449,7 @@ int do_import_diff(librados::Rados &rados, librbd::Image &image,
   if (strcmp(path, "-") == 0) {
     fd = STDIN_FILENO;
   } else {
-    fd = open(path, O_RDONLY);
+    fd = open(path, O_RDONLY|O_BINARY);
     if (fd < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << path << std::endl;
@@ -843,7 +843,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
     fd = STDIN_FILENO;
     size = 1ULL << order;
   } else {
-    if ((fd = open(path, O_RDONLY)) < 0) {
+    if ((fd = open(path, O_RDONLY|O_BINARY)) < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << path << std::endl;
       goto done2;
@@ -964,7 +964,7 @@ int execute(const po::variables_map &vm,
   if (vm.count(at::IMAGE_NAME)) {
     deprecated_image_name = vm[at::IMAGE_NAME].as<std::string>();
   } else {
-    deprecated_image_name = path.substr(path.find_last_of("/") + 1);
+    deprecated_image_name = path.substr(path.find_last_of("/\\") + 1);
   }
 
   std::string deprecated_snap_name;

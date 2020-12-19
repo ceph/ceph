@@ -120,6 +120,7 @@ function rados_get_data() {
     inject_$inject rep data $poolname $objname $dir 0 || return 1
     rados_get $dir $poolname $objname || return 1
 
+    wait_for_clean
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
     test "$COUNT" = "1" || return 1
     flush_pg_stats
@@ -142,6 +143,7 @@ function rados_get_data() {
     inject_$inject rep data $poolname $objname $dir 2 || return 1
     rados_get $dir $poolname $objname || return 1
 
+    wait_for_clean
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
     test "$COUNT" = "3" || return 1
     flush_pg_stats
@@ -153,6 +155,7 @@ function rados_get_data() {
     inject_$inject rep data $poolname $objname $dir 2 || return 1
     rados_get $dir $poolname $objname hang || return 1
 
+    wait_for_clean
     # After hang another repair couldn't happen, so count stays the same
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
     test "$COUNT" = "3" || return 1
@@ -185,7 +188,7 @@ function TEST_rados_repair_warning() {
     wait_for_clean || return 1
 
     local poolname=pool-rep
-    local obj-base=obj-warn-
+    local objbase=obj-warn
     local inject=eio
 
    for i in $(seq 1 $OBJS)
@@ -200,6 +203,7 @@ function TEST_rados_repair_warning() {
     local primary=${object_osds[0]}
     local bad_peer=${object_osds[1]}
 
+    wait_for_clean
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
     test "$COUNT" = "$OBJS" || return 1
     flush_pg_stats
@@ -224,6 +228,7 @@ function TEST_rados_repair_warning() {
        rados_get $dir $poolname ${objbase}-$i || return 1
     done
 
+    wait_for_clean
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
     test "$COUNT" = "$(expr $OBJS \* 2)" || return 1
     flush_pg_stats

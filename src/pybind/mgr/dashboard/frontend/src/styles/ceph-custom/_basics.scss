@@ -1,8 +1,8 @@
-@use './src/styles/defaults/bootstrap-defaults' as bd;
+@use './src/styles/vendor/variables' as vv;
 
 /* Basics */
 html {
-  background-color: bd.$body-bg;
+  background-color: vv.$body-bg;
 }
 
 html,
@@ -72,4 +72,16 @@ option {
 
 .text-pre {
   white-space: pre;
+}
+
+.border-danger {
+  border-left: 4px solid vv.$danger;
+}
+
+.border-info {
+  border-left: 4px solid vv.$info;
+}
+
+.border-success {
+  border-left: 4px solid vv.$success;
 }

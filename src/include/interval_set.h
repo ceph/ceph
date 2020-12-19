@@ -43,9 +43,15 @@ class interval_set {
 
   class const_iterator;
 
-  class iterator : public std::iterator <std::forward_iterator_tag, T>
+  class iterator
   {
     public:
+        using difference_type = ssize_t;
+        using value_type = typename Map::value_type;
+        using pointer = typename Map::value_type*;
+        using reference = typename Map::value_type&;
+        using iterator_category = std::forward_iterator_tag;
+
         explicit iterator(typename Map::iterator iter)
           : _iter(iter)
         { }
@@ -107,9 +113,15 @@ class interval_set {
     friend class interval_set;
   };
 
-  class const_iterator : public std::iterator <std::forward_iterator_tag, T>
+  class const_iterator
   {
     public:
+        using difference_type = ssize_t;
+        using value_type = const typename Map::value_type;
+        using pointer = const typename Map::value_type*;
+        using reference = const typename Map::value_type&;
+        using iterator_category = std::forward_iterator_tag;
+
         explicit const_iterator(typename Map::const_iterator iter)
           : _iter(iter)
         { }
@@ -130,7 +142,7 @@ class interval_set {
         }
 
         // Dereference this iterator to get a pair.
-        const_reference operator*() const {
+        reference operator*() const {
           return *_iter;
         }
 

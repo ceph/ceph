@@ -263,14 +263,14 @@ public:
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
     /// Notify that a scrub has been requested
-    virtual void scrub_requested(bool deep, bool repair, bool need_auto = false) = 0;
+    virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 
     /// Return current snap_trimq size
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
     virtual void send_cluster_message(
-      int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
+      int osd, MessageRef m, epoch_t epoch, bool share_map_update=false) = 0;
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
@@ -377,7 +377,8 @@ public:
     /// Notification of removal complete, t must be populated to complete removal
     virtual void on_removal(ObjectStore::Transaction &t) = 0;
     /// Perform incremental removal work
-    virtual void do_delete_work(ObjectStore::Transaction &t) = 0;
+    virtual ghobject_t do_delete_work(ObjectStore::Transaction &t,
+      ghobject_t _next) = 0;
 
     // ======================= PG Merge =========================
     virtual void clear_ready_to_merge() = 0;
@@ -501,12 +502,12 @@ public:
   };
 
   struct RequestScrub : boost::statechart::event<RequestScrub> {
-    bool deep;
-    bool repair;
-    explicit RequestScrub(bool d, bool r) : deep(d), repair(r) {}
+    scrub_level_t deep;
+    scrub_type_t repair;
+    explicit RequestScrub(bool d, bool r) : deep(scrub_level_t(d)), repair(scrub_type_t(r)) {}
     void print(std::ostream *out) const {
-      *out << "RequestScrub(" << (deep ? "deep" : "shallow")
-	   << (repair ? " repair" : "");
+      *out << "RequestScrub(" << ((deep==scrub_level_t::deep) ? "deep" : "shallow")
+	   << ((repair==scrub_type_t::do_repair) ? " repair)" : ")");
     }
   };
 
@@ -1242,6 +1243,8 @@ public:
       boost::statechart::custom_reaction< DeleteSome >,
       boost::statechart::transition<DeleteInterrupted, WaitDeleteReserved>
       > reactions;
+    ghobject_t next;
+    ceph::mono_clock::time_point start;
     explicit Deleting(my_context ctx);
     boost::statechart::result react(const DeleteSome &evt);
     void exit();

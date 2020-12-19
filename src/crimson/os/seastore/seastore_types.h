@@ -10,6 +10,7 @@
 #include "include/denc.h"
 #include "include/buffer.h"
 #include "include/cmp.h"
+#include "include/uuid.h"
 
 namespace crimson::os::seastore {
 
@@ -17,6 +18,17 @@ using depth_t = int32_t;
 using depth_le_t = ceph_les32;
 
 using checksum_t = uint32_t;
+
+// Immutable metadata for seastore to set at mkfs time
+struct seastore_meta_t {
+  uuid_d seastore_id;
+
+  DENC(seastore_meta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.seastore_id, p);
+    DENC_FINISH(p);
+  }
+};
 
 // Identifies segment location on disk, see SegmentManager,
 using segment_id_t = uint32_t;
@@ -269,6 +281,7 @@ enum class extent_types_t : uint8_t {
   ONODE_BLOCK = 3,
   EXTMAP_INNER = 4,
   EXTMAP_LEAF = 5,
+  ONODE_BLOCK_STAGED = 6,
 
   // Test Block Types
   TEST_BLOCK = 0xF0,
@@ -278,10 +291,23 @@ enum class extent_types_t : uint8_t {
   NONE = 0xFF
 };
 
+inline bool is_logical_type(extent_types_t type) {
+  switch (type) {
+  case extent_types_t::ROOT:
+  case extent_types_t::LADDR_INTERNAL:
+  case extent_types_t::LADDR_LEAF:
+    return false;
+  default:
+    return true;
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
 /* description of a new physical extent */
 struct extent_t {
+  extent_types_t type;  ///< type of extent
+  laddr_t addr;         ///< laddr of extent (L_ADDR_NULL for non-logical)
   ceph::bufferlist bl;  ///< payload, bl.length() == length, aligned
 };
 
@@ -337,6 +363,7 @@ struct record_t {
 
 }
 
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)

@@ -28,26 +28,23 @@ public:
   bool empty() const;
   void flush(ObjectStore::Transaction *);
   void cleanup(ObjectStore::Transaction *);
-  std::vector<ceph::buffer::list> get_snap_errors(ObjectStore* store,
-					  int64_t pool,
+  std::vector<ceph::buffer::list> get_snap_errors(int64_t pool,
 					  const librados::object_id_t& start,
-					  uint64_t max_return);
-  std::vector<ceph::buffer::list> get_object_errors(ObjectStore* store,
-					    int64_t pool,
+					  uint64_t max_return) const;
+  std::vector<ceph::buffer::list> get_object_errors(int64_t pool,
 					    const librados::object_id_t& start,
-					    uint64_t max_return);
+					    uint64_t max_return) const;
 private:
   Store(const coll_t& coll, const ghobject_t& oid, ObjectStore* store);
-  std::vector<ceph::buffer::list> get_errors(ObjectStore* store,
-				     const std::string& start, const std::string& end,
-				     uint64_t max_return);
+  std::vector<ceph::buffer::list> get_errors(const std::string& start, const std::string& end,
+				     uint64_t max_return) const;
 private:
   const coll_t coll;
   const ghobject_t hoid;
   // a temp object holding mappings from seq-id to inconsistencies found in
   // scrubbing
   OSDriver driver;
-  MapCacher::MapCacher<std::string, ceph::buffer::list> backend;
+  mutable MapCacher::MapCacher<std::string, ceph::buffer::list> backend;
   std::map<std::string, ceph::buffer::list> results;
 };
 }

@@ -2,7 +2,7 @@
  Storage Devices
 =================
 
-There are two Ceph daemons that store data on disk:
+There are two Ceph daemons that store data on devices:
 
 * **Ceph OSDs** (or Object Storage Daemons) are where most of the
   data is stored in Ceph.  Generally speaking, each OSD is backed by
@@ -26,7 +26,7 @@ OSD Backends
 There are two ways that OSDs can manage the data they store.  Starting
 with the Luminous 12.2.z release, the new default (and recommended) backend is
 *BlueStore*.  Prior to Luminous, the default (and only option) was
-*FileStore*.
+*Filestore*.
 
 BlueStore
 ---------

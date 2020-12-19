@@ -4,7 +4,7 @@
 #include "Request.h"
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/pwl/LogEntry.h"
-#include "librbd/cache/pwl/ReplicatedWriteLog.h"
+#include "librbd/cache/pwl/AbstractWriteLog.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
@@ -251,12 +251,19 @@ void C_WriteRequest<T>::setup_log_operations(DeferredContexts &on_exit) {
   op_set->extent_ops_appending->activate();
   op_set->extent_ops_persist->activate();
 
-  /* Write data */
-  for (auto &operation : op_set->operations) {
-    operation->copy_bl_to_pmem_buffer();
-  }
-  pwl.add_into_log_map(log_entries);
+  pwl.add_into_log_map(log_entries, this);
 }
+
+#ifdef WITH_RBD_RWL
+template <typename T>
+void C_WriteRequest<T>::copy_pmem() {
+  auto allocation = m_resources.buffers.begin();
+  for (auto &operation : op_set->operations) {
+    operation->copy_bl_to_pmem_buffer(allocation);
+    allocation++;
+  }
+}
+#endif
 
 template <typename T>
 bool C_WriteRequest<T>::append_write_request(std::shared_ptr<SyncPoint> sync_point) {
@@ -275,16 +282,7 @@ bool C_WriteRequest<T>::append_write_request(std::shared_ptr<SyncPoint> sync_poi
 template <typename T>
 void C_WriteRequest<T>::schedule_append() {
   ceph_assert(++m_appended == 1);
-  if (m_do_early_flush) {
-    /* This caller is waiting for persist, so we'll use their thread to
-     * expedite it */
-    pwl.flush_pmem_buffer(this->op_set->operations);
-    pwl.schedule_append(this->op_set->operations);
-  } else {
-    /* This is probably not still the caller's thread, so do the payload
-     * flushing/replicating later. */
-    pwl.schedule_flush_and_append(this->op_set->operations);
-  }
+  pwl.setup_schedule_append(this->op_set->operations, m_do_early_flush);
 }
 
 /**
@@ -464,7 +462,7 @@ void C_DiscardRequest<T>::setup_log_operations() {
       discard_req->release_cell();
     });
   op->init(current_sync_gen, persist_on_flush, pwl.get_last_op_sequence_num(), on_write_persist);
-  pwl.add_into_log_map(log_entries);
+  pwl.add_into_log_map(log_entries, this);
 }
 
 template <typename T>

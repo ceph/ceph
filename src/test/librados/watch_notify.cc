@@ -326,20 +326,19 @@ TEST_F(LibRadosWatchNotify, AioNotify) {
   ASSERT_EQ(0, rados_aio_get_return_value(comp));
   rados_aio_release(comp);
 
-  bufferlist reply;
-  reply.append(reply_buf, reply_buf_len);
-  std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
-  std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  auto reply_p = reply.cbegin();
-  decode(reply_map, reply_p);
-  decode(missed_map, reply_p);
-  ASSERT_EQ(1u, reply_map.size());
-  ASSERT_EQ(0u, missed_map.size());
+  size_t nr_acks, nr_timeouts;
+  notify_ack_t *acks = nullptr;
+  notify_timeout_t *timeouts = nullptr;
+  ASSERT_EQ(0, rados_decode_notify_response(reply_buf, reply_buf_len,
+                                            &acks, &nr_acks, &timeouts, &nr_timeouts));
+  ASSERT_EQ(1u, nr_acks);
+  ASSERT_EQ(0u, nr_timeouts);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1u, notify_cookies.count(handle));
-  ASSERT_EQ(5u, reply_map.begin()->second.length());
-  ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  ASSERT_EQ(5u, acks[0].payload_len);
+  ASSERT_EQ(0, strncmp("reply", acks[0].payload, acks[0].payload_len));
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
+  rados_free_notify_response(acks, nr_acks, timeouts);
   rados_buffer_free(reply_buf);
 
   // try it on a non-existent object ... our buffer pointers
