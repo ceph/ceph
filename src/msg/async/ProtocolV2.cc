@@ -1335,7 +1335,6 @@ CtPtr ProtocolV2::handle_message() {
 #if defined(WITH_EVENTTRACE)
   utime_t ltt_recv_stamp = ceph_clock_now();
 #endif
-  recv_stamp = ceph_clock_now();
 
   const size_t cur_msg_size = get_current_msg_size();
   auto msg_frame = MessageFrame::Decode(rx_segments_data);
@@ -1508,6 +1507,8 @@ CtPtr ProtocolV2::handle_message() {
 
 CtPtr ProtocolV2::throttle_message() {
   ldout(cct, 20) << __func__ << dendl;
+
+  recv_stamp = ceph_clock_now();
 
   if (connection->policy.throttler_messages) {
     ldout(cct, 10) << __func__ << " wants " << 1
