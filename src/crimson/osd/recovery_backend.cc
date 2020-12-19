@@ -159,54 +159,49 @@ seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
   const std::int64_t max)
 {
   logger().debug("{} starting from {}", __func__, start);
-  return seastar::do_with(
-    std::map<hobject_t, eversion_t>{},
-    [this, &start, max] (auto& version_map) {
-      return backend->list_objects(start, max).then(
-        [this, &start, &version_map] (auto&& ret) {
-          auto&& [objects, next] = std::move(ret);
-          return seastar::parallel_for_each(
-            std::move(objects),
-            [this, &version_map] (const hobject_t& object) {
-              crimson::osd::ObjectContextRef obc;
-              if (pg.is_primary()) {
-                obc = shard_services.obc_registry.maybe_get_cached_obc(object);
-              }
-              if (obc) {
-                if (obc->obs.exists) {
-                  logger().debug("scan_for_backfill found (primary): {}  {}",
-                                 object, obc->obs.oi.version);
-                  version_map[object] = obc->obs.oi.version;
-                } else {
-                  // if the object does not exist here, it must have been removed
-                  // between the collection_list_partial and here.  This can happen
-                  // for the first item in the range, which is usually last_backfill.
-                }
-                return seastar::now();
-              } else {
-                return backend->load_metadata(object).safe_then(
-                  [&version_map, object] (auto md) {
-                    if (md->os.exists) {
-                      logger().debug("scan_for_backfill found: {}  {}",
-                                     object, md->os.oi.version);
-                      version_map[object] = md->os.oi.version;
-                    }
-                    return seastar::now();
-                  }, PGBackend::load_metadata_ertr::assert_all{});
-              }
-          }).then(
-            [&version_map, &start, next=std::move(next), this] {
-              BackfillInterval bi;
-              bi.begin = start;
-              bi.end = std::move(next);
-              bi.version = pg.get_info().last_update;
-              bi.objects = std::move(version_map);
-              logger().debug("{} BackfillInterval filled, leaving",
-                             "scan_for_backfill");
-              return seastar::make_ready_future<BackfillInterval>(std::move(bi));
-            });
-        });
+  auto version_map = seastar::make_lw_shared<std::map<hobject_t, eversion_t>>();
+  return backend->list_objects(start, max).then(
+    [this, &start, version_map] (auto&& ret) {
+    auto&& [objects, next] = std::move(ret);
+    return seastar::parallel_for_each(std::move(objects),
+      [this, version_map] (const hobject_t& object) {
+      crimson::osd::ObjectContextRef obc;
+      if (pg.is_primary()) {
+        obc = shard_services.obc_registry.maybe_get_cached_obc(object);
+      }
+      if (obc) {
+        if (obc->obs.exists) {
+          logger().debug("scan_for_backfill found (primary): {}  {}",
+                         object, obc->obs.oi.version);
+          version_map->emplace(object, obc->obs.oi.version);
+        } else {
+          // if the object does not exist here, it must have been removed
+          // between the collection_list_partial and here.  This can happen
+          // for the first item in the range, which is usually last_backfill.
+        }
+        return seastar::now();
+      } else {
+        return backend->load_metadata(object).safe_then(
+          [version_map, object] (auto md) {
+          if (md->os.exists) {
+            logger().debug("scan_for_backfill found: {}  {}",
+                           object, md->os.oi.version);
+            version_map->emplace(object, md->os.oi.version);
+          }
+          return seastar::now();
+        }, PGBackend::load_metadata_ertr::assert_all{});
+      }
+    }).then([version_map, &start, next=std::move(next), this] {
+      BackfillInterval bi;
+      bi.begin = start;
+      bi.end = std::move(next);
+      bi.version = pg.get_info().last_update;
+      bi.objects = std::move(*version_map);
+      logger().debug("{} BackfillInterval filled, leaving",
+                     "scan_for_backfill");
+      return seastar::make_ready_future<BackfillInterval>(std::move(bi));
     });
+  });
 }
 
 seastar::future<> RecoveryBackend::handle_scan_get_digest(
