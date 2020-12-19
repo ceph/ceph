@@ -5881,7 +5881,7 @@ struct object_info_t {
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  void decode(ceph::buffer::list& bl) {
+  void decode(const ceph::buffer::list& bl) {
     auto p = std::cbegin(bl);
     decode(p);
   }
