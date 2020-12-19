@@ -188,7 +188,7 @@ protected:
   std::map<hobject_t, WaitForObjectRecovery> recovering;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
-    eversion_t version);
+    eversion_t version) const;
 
   boost::container::flat_set<hobject_t> temp_contents;
 

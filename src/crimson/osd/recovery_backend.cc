@@ -19,12 +19,14 @@ namespace {
 
 hobject_t RecoveryBackend::get_temp_recovery_object(
   const hobject_t& target,
-  eversion_t version)
+  eversion_t version) const
 {
-  ostringstream ss;
-  ss << "temp_recovering_" << pg.get_info().pgid << "_" << version
-    << "_" << pg.get_info().history.same_interval_since << "_" << target.snap;
-  hobject_t hoid = target.make_temp_hobject(ss.str());
+  hobject_t hoid =
+    target.make_temp_hobject(fmt::format("temp_recovering_{}_{}_{}_{}",
+                                         pg.get_info().pgid,
+                                         version,
+                                         pg.get_info().history.same_interval_since,
+                                         target.snap));
   logger().debug("{} {}", __func__, hoid);
   return hoid;
 }
