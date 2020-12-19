@@ -164,9 +164,9 @@ seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
     [this, &start, max] (auto& version_map) {
       return backend->list_objects(start, max).then(
         [this, &start, &version_map] (auto&& ret) {
-          auto& [objects, next] = ret;
-          return seastar::do_for_each(
-            objects,
+          auto&& [objects, next] = std::move(ret);
+          return seastar::parallel_for_each(
+            std::move(objects),
             [this, &version_map] (const hobject_t& object) {
               crimson::osd::ObjectContextRef obc;
               if (pg.is_primary()) {
