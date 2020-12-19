@@ -161,7 +161,7 @@ seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
   logger().debug("{} starting from {}", __func__, start);
   auto version_map = seastar::make_lw_shared<std::map<hobject_t, eversion_t>>();
   return backend->list_objects(start, max).then(
-    [this, &start, version_map] (auto&& ret) {
+    [this, start, version_map] (auto&& ret) {
     auto&& [objects, next] = std::move(ret);
     return seastar::parallel_for_each(std::move(objects),
       [this, version_map] (const hobject_t& object) {
@@ -191,9 +191,9 @@ seastar::future<BackfillInterval> RecoveryBackend::scan_for_backfill(
           return seastar::now();
         }, PGBackend::load_metadata_ertr::assert_all{});
       }
-    }).then([version_map, &start, next=std::move(next), this] {
+    }).then([version_map, start=std::move(start), next=std::move(next), this] {
       BackfillInterval bi;
-      bi.begin = start;
+      bi.begin = std::move(start);
       bi.end = std::move(next);
       bi.version = pg.get_info().last_update;
       bi.objects = std::move(*version_map);
