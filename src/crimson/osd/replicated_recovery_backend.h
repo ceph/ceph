@@ -44,10 +44,10 @@ protected:
     Ref<MOSDPGRecoveryDelete> m);
   seastar::future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  seastar::future<std::map<pg_shard_t, PushOp>> prep_push(
+  seastar::future<PushOp> prep_push(
     const hobject_t& soid,
     eversion_t need,
-    const std::vector<pg_shard_t>& shards);
+    pg_shard_t pg_shard);
   void prepare_pull(
     PullOp& po,
     PullInfo& pi,
@@ -73,7 +73,7 @@ protected:
     bool first,
     bool complete,
     bool clear_omap,
-    interval_set<uint64_t> &data_zeros,
+    interval_set<uint64_t> data_zeros,
     const interval_set<uint64_t> &intervals_included,
     ceph::bufferlist data_included,
     ceph::bufferlist omap_header,
@@ -115,8 +115,7 @@ private:
 
   seastar::future<> maybe_push_shards(
     const hobject_t& soid,
-    eversion_t need,
-    std::vector<pg_shard_t>& shards);
+    eversion_t need);
 
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
