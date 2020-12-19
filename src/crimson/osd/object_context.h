@@ -155,6 +155,7 @@ public:
     }
   }
   void wait_recovery_read() {
+    assert(lock.get_readers() > 0);
     recovery_read_marker = true;
   }
   void drop_recovery_read() {

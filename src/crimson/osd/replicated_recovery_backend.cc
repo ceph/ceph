@@ -27,24 +27,20 @@ seastar::future<> ReplicatedRecoveryBackend::recover_object(
   assert(is_recovering(soid));
   // start tracking the recovery of soid
   return maybe_pull_missing_obj(soid, need).then([this, soid, need] {
-    auto& recovery_waiter = recovering.at(soid);
-    if (recovery_waiter.obc) {
+    logger().debug("recover_object: loading obc: {}", soid);
+    return pg.with_head_obc<RWState::RWREAD>(soid,
+      [this, soid, need](auto obc) {
+      logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
+      auto& recovery_waiter = recovering.at(soid);
+      recovery_waiter.obc = obc;
+      recovery_waiter.obc->wait_recovery_read();
       return maybe_push_shards(soid, need);
-    } else {
-      logger().debug("recover_object: loading obc: {}", soid);
-      return pg.with_head_obc<RWState::RWREAD>(soid,
-        [this, soid, need, &recovery_waiter](auto obc) {
-        logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
-        recovery_waiter.obc = obc;
-        recovery_waiter.obc->wait_recovery_read();
-        return maybe_push_shards(soid, need);
-      }).handle_error(
-        crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
-        // TODO: may need eio handling?
-        logger().error("recover_object saw error code {}, ignoring object {}",
-                       code, soid);
-      }));
-    }
+    }).handle_error(
+      crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
+      // TODO: may need eio handling?
+      logger().error("recover_object saw error code {}, ignoring object {}",
+                     code, soid);
+    }));
   });
 }
 
