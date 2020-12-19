@@ -178,10 +178,10 @@ public:
     laddr_t offset);
 
   /// remove refcount for list of offset
-  using refs_ret = ref_ertr::future<std::list<unsigned>>;
+  using refs_ret = ref_ertr::future<std::vector<unsigned>>;
   refs_ret dec_ref(
     Transaction &t,
-    std::list<laddr_t> offsets);
+    std::vector<laddr_t> offsets);
 
   /**
    * alloc_extent

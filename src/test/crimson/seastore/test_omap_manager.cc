@@ -91,6 +91,7 @@ struct omap_manager_test_t :
         EXPECT_NE(it, test_omap_mappings.end());
         EXPECT_EQ(i, it->first);
       }
+      EXPECT_EQ(ret.next, std::nullopt);
     } else {
       size_t i =0;
       auto it = test_omap_mappings.find(start);
@@ -99,7 +100,7 @@ struct omap_manager_test_t :
         i++;
       }
       if (it == test_omap_mappings.end()) {
-        EXPECT_EQ(ret.next, "");
+        EXPECT_EQ(ret.next, std::nullopt);
       } else {
         EXPECT_EQ(ret.keys.size(), max);
         EXPECT_EQ(ret.next, it->first);
@@ -121,6 +122,7 @@ struct omap_manager_test_t :
         EXPECT_NE(it, test_omap_mappings.end());
         EXPECT_EQ(i.second, it->second);
       }
+      EXPECT_EQ(ret.next, std::nullopt);
     } else {
       size_t i = 0;
       auto it = test_omap_mappings.find(start);
@@ -129,7 +131,7 @@ struct omap_manager_test_t :
         i++;
       }
       if (it == test_omap_mappings.end()) {
-        EXPECT_EQ(ret.next, "");
+        EXPECT_EQ(ret.next, std::nullopt);
       } else {
         EXPECT_EQ(ret.kvs.size(), max);
         EXPECT_EQ(ret.next, it->first);
@@ -161,11 +163,7 @@ struct omap_manager_test_t :
 
   void replay() {
     logger().debug("{}: begin", __func__);
-    tm->close().unsafe_get();
-    destroy();
-    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
-    init();
-    tm->mount().unsafe_get();
+    restart();
     omap_manager = omap_manager::create_omap_manager(*tm);
     logger().debug("{}: end", __func__);
   }

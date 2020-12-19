@@ -25,8 +25,8 @@ namespace crimson::os::seastore::omap_manager {
 class BtreeOMapManager : public OMapManager {
   TransactionManager &tm;
 
-  omap_context_t get_omap_context(omap_root_t &omap_root, Transaction &t) {
-    return omap_context_t{omap_root, tm, t};
+  omap_context_t get_omap_context(Transaction &t) {
+    return omap_context_t{tm, t};
   }
 
   /* get_omap_root
@@ -35,7 +35,7 @@ class BtreeOMapManager : public OMapManager {
    */
   using get_root_ertr = TransactionManager::read_extent_ertr;
   using get_root_ret = get_root_ertr::future<OMapNodeRef>;
-  get_root_ret get_omap_root(omap_root_t &omap_root, Transaction &t);
+  get_root_ret get_omap_root(const omap_root_t &omap_root, Transaction &t);
 
   /* handle_root_split
    *
@@ -43,7 +43,7 @@ class BtreeOMapManager : public OMapManager {
    */
   using handle_root_split_ertr = TransactionManager::read_extent_ertr;
   using handle_root_split_ret = handle_root_split_ertr::future<bool>;
-  handle_root_split_ret handle_root_split(omap_context_t oc,
+  handle_root_split_ret handle_root_split(omap_root_t &omap_root, omap_context_t oc,
                                           OMapNode:: mutation_result_t mresult);
 
   /* handle_root_merge
@@ -52,7 +52,7 @@ class BtreeOMapManager : public OMapManager {
    */
   using handle_root_merge_ertr = TransactionManager::read_extent_ertr;
   using handle_root_merge_ret = handle_root_merge_ertr::future<bool>;
-  handle_root_merge_ret handle_root_merge(omap_context_t oc,
+  handle_root_merge_ret handle_root_merge(omap_root_t &omap_root, omap_context_t oc,
                                           OMapNode:: mutation_result_t mresult);
 
 public:
@@ -60,7 +60,7 @@ public:
 
   initialize_omap_ret initialize_omap(Transaction &t) final;
 
-  omap_get_value_ret omap_get_value(omap_root_t &omap_root, Transaction &t,
+  omap_get_value_ret omap_get_value(const omap_root_t &omap_root, Transaction &t,
                                     const std::string &key) final;
 
   omap_set_key_ret omap_set_key(omap_root_t &omap_root, Transaction &t,
@@ -69,11 +69,11 @@ public:
   omap_rm_key_ret omap_rm_key(omap_root_t &omap_root, Transaction &t,
                               const std::string &key) final;
 
-  omap_list_keys_ret omap_list_keys(omap_root_t &omap_root, Transaction &t,
+  omap_list_keys_ret omap_list_keys(const omap_root_t &omap_root, Transaction &t,
                                     std::string &start,
                                     size_t max_result_size = MAX_SIZE) final;
 
-  omap_list_ret omap_list(omap_root_t &omap_root, Transaction &t,
+  omap_list_ret omap_list(const omap_root_t &omap_root, Transaction &t,
                           std::string &start,
                           size_t max_result_size = MAX_SIZE) final;
 
