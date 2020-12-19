@@ -581,7 +581,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 
 seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
   pg_shard_t from,
-  PushOp& pop,
+  const PushOp& pop,
   PullOp* response,
   ceph::os::Transaction* t)
 {
@@ -607,7 +607,7 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
       pi.recovery_info.soid, [&pi, &recovery_waiter, &pop](auto obc) {
         pi.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode(pop.attrset[OI_ATTR]);
+        obc->obs.oi.decode(pop.attrset.at(OI_ATTR));
         pi.recovery_info.oi = obc->obs.oi;
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error(crimson::ct_error::assert_all{});
