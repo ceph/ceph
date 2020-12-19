@@ -16,14 +16,13 @@
 namespace crimson::os::seastore::omap_manager{
 
 struct omap_context_t {
-  omap_root_t &omap_root;
   TransactionManager &tm;
   Transaction &t;
 };
 
 enum class mutation_status_t : uint8_t {
   SUCCESS = 0,
-  SPLITTED = 1,
+  WAS_SPLIT = 1,
   NEED_MERGE = 2,
   FAIL = 3
 };
@@ -33,7 +32,7 @@ struct OMapNode : LogicalCachedExtent {
 
   struct mutation_result_t {
     mutation_status_t status;
-    /// Only populated if SPLITTED, indicates the newly created left and right nodes
+    /// Only populated if WAS_SPLIT, indicates the newly created left and right nodes
     /// from splitting the target entry during insertion.
     std::optional<std::tuple<OMapNodeRef, OMapNodeRef, std::string>> split_tuple;
     /// only sopulated if need merged, indicate which entry need be doing merge in upper layer.

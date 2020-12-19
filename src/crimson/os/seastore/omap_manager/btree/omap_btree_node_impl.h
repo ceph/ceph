@@ -100,6 +100,7 @@ struct OMapInnerNode
   }
 
   ceph::bufferlist get_delta() final {
+    assert(!delta_buffer.empty());
     ceph::bufferlist bl;
     delta_buffer.encode(bl);
     return bl;
@@ -183,6 +184,7 @@ struct OMapLeafNode
   }
 
   ceph::bufferlist get_delta() final {
+    assert(!delta_buffer.empty());
     ceph::bufferlist bl;
     delta_buffer.encode(bl);
     return bl;

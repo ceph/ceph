@@ -35,12 +35,12 @@ struct omap_root_t {
 
 struct list_keys_result_t {
   std::vector<std::string> keys;
-  std::string next;
+  std::optional<std::string> next;  // if return std::nullopt, means list all keys in omap tree.
 };
 
 struct list_kvs_result_t {
   std::vector<std::pair<std::string, std::string>> kvs;
-  std::string next;
+  std::optional<std::string> next;  // if return std::nullopt, means list all kv mapping in omap tree.
 };
 constexpr size_t MAX_SIZE = std::numeric_limits<size_t>::max();
 std::ostream &operator<<(std::ostream &out, const std::list<std::string> &rhs);
@@ -52,88 +52,95 @@ class OMapManager {
   * until these functions future resolved.
   */
 public:
-  /* allocate omap tree root node
+  /**
+   * allocate omap tree root node
    *
-   * input: Transaction &t, current transaction
-   * return: return the omap_root_t structure.
+   * @param Transaction &t, current transaction
+   * @retval return the omap_root_t structure.
    */
   using initialize_omap_ertr = TransactionManager::alloc_extent_ertr;
   using initialize_omap_ret = initialize_omap_ertr::future<omap_root_t>;
   virtual initialize_omap_ret initialize_omap(Transaction &t) = 0;
 
-  /*get value(string) by key(string)
+  /**
+   * get value(string) by key(string)
    *
-   * input: omap_root_t omap_root,  omap btree root information
-   * input: Transaction &t,  current transaction
-   * input: string &key, omap string key
-   * return: string key->string value mapping pair.
+   * @param omap_root_t &omap_root,  omap btree root information
+   * @param Transaction &t,  current transaction
+   * @param string &key, omap string key
+   * @retval return string key->string value mapping pair.
    */
   using omap_get_value_ertr = TransactionManager::read_extent_ertr;
   using omap_get_value_ret = omap_get_value_ertr::future<std::pair<std::string, std::string>>;
-  virtual omap_get_value_ret omap_get_value(omap_root_t &omap_root, Transaction &t,
+  virtual omap_get_value_ret omap_get_value(const omap_root_t &omap_root, Transaction &t,
 		                            const std::string &key) = 0;
 
-  /* set key value mapping in omap
+  /**
+   * set key value mapping in omap
    *
-   * input: omap_root_t &omap_root,  omap btree root information
-   * input: Transaction &t,  current transaction
-   * input: string &key, omap string key
-   * input: string &value, mapped value corresponding key
-   * return: mutation_result_t, status should be success.
+   * @param omap_root_t &omap_root,  omap btree root information
+   * @param Transaction &t,  current transaction
+   * @param string &key, omap string key
+   * @param string &value, mapped value corresponding key
+   * @retval mutation_result_t, status should be success.
    */
   using omap_set_key_ertr = TransactionManager::read_extent_ertr;
   using omap_set_key_ret = omap_set_key_ertr::future<bool>;
   virtual omap_set_key_ret omap_set_key(omap_root_t &omap_root, Transaction &t,
 		                        const std::string &key, const std::string &value) = 0;
 
-  /* remove key value mapping in omap tree
+  /**
+   * remove key value mapping in omap tree
    *
-   * input: omap_root_t &omap_root,  omap btree root information
-   * input: Transaction &t,  current transaction
-   * input: string &key, omap string key
-   * return: remove success return true, else return false.
+   * @param omap_root_t &omap_root,  omap btree root information
+   * @param Transaction &t,  current transaction
+   * @param string &key, omap string key
+   * @retval remove success return true, else return false.
    */
   using omap_rm_key_ertr = TransactionManager::read_extent_ertr;
   using omap_rm_key_ret = omap_rm_key_ertr::future<bool>;
   virtual omap_rm_key_ret omap_rm_key(omap_root_t &omap_root, Transaction &t,
 		                                    const std::string &key) = 0;
 
-  /* get all keys or partial keys in omap tree
+  /**
+   * get all keys or partial keys in omap tree
    *
-   * input: omap_root_t &omap_root,  omap btree root information
-   * input: Transaction &t,  current transaction
-   * input: string &start, the list keys range begin from start,
+   * @param omap_root_t &omap_root,  omap btree root information
+   * @param Transaction &t,  current transaction
+   * @param string &start, the list keys range begin from start,
    *        if start is "", list from the first omap key
-   * input: max_result_size, the number of list keys,
+   * @param max_result_size, the number of list keys,
    *        it it is not set, list all keys after string start
-   * return: list_keys_result_t, listed keys and next key
+   * @retval list_keys_result_t, listed keys and next key
    */
   using omap_list_keys_ertr = TransactionManager::read_extent_ertr;
   using omap_list_keys_ret = omap_list_keys_ertr::future<list_keys_result_t>;
-  virtual omap_list_keys_ret omap_list_keys(omap_root_t &omap_root, Transaction &t,
+  virtual omap_list_keys_ret omap_list_keys(const omap_root_t &omap_root, Transaction &t,
                              std::string &start,
                              size_t max_result_size = MAX_SIZE) = 0;
 
-  /* Get all or partial key-> value mapping in omap tree
+  /**
+   * Get all or partial key-> value mapping in omap tree
    *
-   * input: omap_root_t &omap_root,  omap btree root information
-   * input: Transaction &t,  current transaction
-   * input: string &start, the list keys range begin from start,
+   * @param omap_root_t &omap_root,  omap btree root information
+   * @param Transaction &t,  current transaction
+   * @param string &start, the list keys range begin from start,
    *        if start is "" , list from the first omap key
-   * input: max_result_size, the number of list keys,
+   * @param max_result_size, the number of list keys,
    *        it it is not set, list all keys after string start.
-   * return: list_kvs_result_t, listed key->value mapping and next key.
+   * @retval list_kvs_result_t, listed key->value mapping and next key.
    */
   using omap_list_ertr = TransactionManager::read_extent_ertr;
   using omap_list_ret = omap_list_ertr::future<list_kvs_result_t>;
-  virtual omap_list_ret omap_list(omap_root_t &omap_root, Transaction &t,
-                        std::string &start,
-                        size_t max_result_size = MAX_SIZE) = 0;
+  virtual omap_list_ret omap_list(const omap_root_t &omap_root, Transaction &t,
+                                  std::string &start,
+                                  size_t max_result_size = MAX_SIZE) = 0;
 
-  /* clear all omap tree key->value mapping
+  /**
+   * clear all omap tree key->value mapping
    *
-   * input: omap_root_t &omap_root,  omap btree root information
-   * input: Transaction &t,  current transaction
+   * @param omap_root_t &omap_root,  omap btree root information
+   * @param Transaction &t,  current transaction
    */
   using omap_clear_ertr = TransactionManager::read_extent_ertr;
   using omap_clear_ret = omap_clear_ertr::future<>;

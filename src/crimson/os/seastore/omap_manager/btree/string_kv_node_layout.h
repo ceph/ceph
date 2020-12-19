@@ -116,7 +116,7 @@ class StringKVInnerNodeLayout {
 
 public:
   template <bool is_const>
-  struct iter_t {
+  struct iter_t : public std::iterator<std::input_iterator_tag, StringKVInnerNodeLayout> {
     friend class StringKVInnerNodeLayout;
 
     template <typename iterator, typename const_iterator>
@@ -215,9 +215,9 @@ public:
       }
     }
 
-    void set_node_val(std::string_view val) {
+    void set_node_val(const std::string &val) {
       static_assert(!is_const);
-      std::strcpy((char*)get_node_val_ptr(), std::string(val).c_str()); //copy char* to char* include "\0"
+      std::strcpy((char*)get_node_val_ptr(), val.c_str()); //copy char* to char* include "\0"
     }
 
     std::string get_node_val(){
@@ -301,7 +301,7 @@ public:
   using iterator = iter_t<false>;
 
   struct delta_inner_t {
-    enum class op_t : uint8_t {
+    enum class op_t : uint_fast8_t {
       INSERT,
       UPDATE,
       REMOVE,
@@ -367,7 +367,7 @@ public:
        });
     }
     void update(
-      const omap_inner_key_t &key,
+      const omap_inner_key_t key,
       std::string_view val) {
       omap_inner_key_le_t k;
       k = key;
@@ -428,7 +428,7 @@ public:
   void journal_inner_insert(
     const_iterator _iter,
     const laddr_t laddr,
-    std::string_view key,
+    const std::string &key,
     delta_inner_buffer_t *recorder) {
     auto iter = iterator(this, _iter.index);
     omap_inner_key_t node_key;
@@ -461,7 +461,7 @@ public:
   void journal_inner_replace(
     const_iterator _iter,
     const laddr_t laddr,
-    std::string_view key,
+    const std::string &key,
     delta_inner_buffer_t *recorder) {
     auto iter = iterator(this, _iter.index);
     omap_inner_key_t node_key;
@@ -803,7 +803,7 @@ private:
   void inner_insert(
     iterator iter,
     const omap_inner_key_t key,
-    std::string_view val) {
+    const std::string &val) {
     if (VALIDATE_INVARIANTS) {
       if (iter != iter_begin()) {
         assert((iter - 1)->get_node_val() < val);
@@ -830,8 +830,8 @@ private:
 
   void inner_replace(
     iterator iter,
-    const omap_inner_key_t &key,
-    std::string_view val) {
+    const omap_inner_key_t key,
+    const std::string &val) {
     assert(iter != iter_end());
     if (VALIDATE_INVARIANTS) {
       if (iter != iter_begin()) {
@@ -986,9 +986,9 @@ public:
       return tail - static_cast<int>(get_node_key().val_off);
     }
 
-    void set_node_val(std::string_view val) const {
+    void set_node_val(const std::string &val) const {
       static_assert(!is_const);
-      std::strcpy((char*)get_node_val_ptr(), std::string(val).c_str()); //copy char* to char* include "\0"
+      std::strcpy((char*)get_node_val_ptr(), val.c_str()); //copy char* to char* include "\0"
     }
 
     std::string get_node_val() {
@@ -1000,9 +1000,9 @@ public:
       return s;
     }
 
-    void set_string_val(std::string_view val) {
+    void set_string_val(const std::string &val) {
       static_assert(!is_const);
-      std::strcpy((char*)get_string_val_ptr(), std::string(val).c_str()); //copy char* to char* include "\0"
+      std::strcpy((char*)get_string_val_ptr(), val.c_str()); //copy char* to char* include "\0"
     }
 
     std::string get_string_val() const {
@@ -1089,7 +1089,7 @@ public:
   using iterator = iter_t<false>;
 
   struct delta_leaf_t {
-    enum class op_t : uint8_t {
+    enum class op_t : uint_fast8_t {
       INSERT,
       UPDATE,
       REMOVE,
@@ -1211,8 +1211,8 @@ public:
 
   void journal_leaf_insert(
     const_iterator _iter,
-    std::string_view key,
-    std::string_view val,
+    const std::string &key,
+    const std::string &val,
     delta_leaf_buffer_t *recorder) {
     auto iter = iterator(this, _iter.index);
     if (recorder) {
@@ -1225,8 +1225,8 @@ public:
 
   void journal_leaf_update(
     const_iterator _iter,
-    std::string_view key,
-    std::string_view val,
+    const std::string &key,
+    const std::string &val,
     delta_leaf_buffer_t *recorder) {
     auto iter = iterator(this, _iter.index);
     if (recorder) {
@@ -1562,8 +1562,8 @@ public:
 private:
   void leaf_insert(
     iterator iter,
-    std::string_view key,
-    std::string_view val) {
+    const std::string &key,
+    const std::string &val) {
     if (VALIDATE_INVARIANTS) {
       if (iter != iter_begin()) {
         assert((iter - 1)->get_node_val() < key);
@@ -1596,8 +1596,8 @@ private:
 
   void leaf_update(
     iterator iter,
-    std::string_view key,
-    std::string_view val) {
+    const std::string &key,
+    const std::string &val) {
     assert(iter != iter_end());
     if (VALIDATE_INVARIANTS) {
       assert(is_overflow(0, val.size() + 1) == false);
