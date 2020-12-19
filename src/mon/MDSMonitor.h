@@ -125,11 +125,12 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   void remove_from_metadata(const FSMap &fsmap, MonitorDBStore::TransactionRef t);
   int load_metadata(std::map<mds_gid_t, Metadata>& m);
   void count_metadata(const std::string& field, ceph::Formatter *f);
+
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
-  void get_versions(std::map<string, list<string> > &versions);
-protected:
+  void get_versions(std::map<std::string, std::list<std::string>> &versions);
 
+protected:
   // MDS daemon GID to latest health state from that GID
   std::map<uint64_t, MDSHealth> pending_daemon_health;
   std::set<uint64_t> pending_daemon_health_rm;

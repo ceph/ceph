@@ -684,77 +684,101 @@ bool HealthMonitor::check_leader_health()
 
   health_check_map_t next;
 
-  static utime_t old_version_first_time;
-
  // DAEMON_OLD_VERSION
   if (g_conf().get_val<bool>("mon_warn_on_older_version")) {
-    utime_t now = ceph_clock_now();
-    if (old_version_first_time == utime_t())
-      old_version_first_time = now;
-    if ((now - old_version_first_time) > g_conf().get_val<double>("mon_warn_older_version_delay")) {
-  std::map<string, std::list<string> > all_versions;
-  mon.get_all_versions(all_versions);
-  if (all_versions.size() > 1) {
-    dout(20) << __func__ << " all_versions=" << all_versions << dendl;
-    // The last entry has the largest version
-    dout(20) << __func__ << " highest version daemon count "
-             << all_versions.rbegin()->second.size() << dendl;
-    // Erase last element (the highest version running)
-    all_versions.erase(all_versions.rbegin()->first);
-    ceph_assert(all_versions.size() > 0);
-    ostringstream ss;
-    unsigned daemon_count = 0;
-    for (auto& g:all_versions) {
-      daemon_count += g.second.size();
-    }
-    int ver_count = all_versions.size();
-    ceph_assert(!(daemon_count == 1 && ver_count != 1));
-    ss << "There " << (daemon_count == 1 ? "is a daemon" : "are daemons")
-       << " running " << (ver_count > 1 ? "multiple old versions" : "an older version")  << " of ceph";
-    health_status_t status;
-    if (ver_count > 1)
-      status = HEALTH_ERR;
-    else
-      status = HEALTH_WARN;
-    auto& d = next.add("DAEMON_OLD_VERSION", status, ss.str(), all_versions.size());
-    for (auto& g:all_versions) {
-      ostringstream ds;
-      for (auto& i : g.second) { // Daemon list
-        ds << i << " ";
-      }
-      ds << (g.second.size() == 1 ? "is" : "are")
-         << " running an older version of ceph: " << g.first;
-      d.detail.push_back(ds.str());
-    }
-  } else {
-    old_version_first_time = utime_t();
+    check_for_older_version(&next);
   }
-  }
-  }
-
   // MON_DOWN
-  {
-    int max = mon.monmap->size();
-    int actual = mon.get_quorum().size();
-    if (actual < max) {
+  check_for_mon_down(&next);
+  // MON_CLOCK_SKEW
+  check_for_clock_skew(&next);
+  // MON_MSGR2_NOT_ENABLED
+  if (g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled")) {
+    check_if_msgr2_enabled(&next);
+  }
+
+  if (next != leader_checks) {
+    changed = true;
+    leader_checks = next;
+  }
+  return changed;
+}
+
+void HealthMonitor::check_for_older_version(health_check_map_t *checks)
+{
+  static ceph::coarse_mono_time old_version_first_time =
+    ceph::coarse_mono_clock::zero();
+
+  auto now = ceph::coarse_mono_clock::now();
+  if (ceph::coarse_mono_clock::is_zero(old_version_first_time)) {
+    old_version_first_time = now;
+  }
+  const auto warn_delay = g_conf().get_val<std::chrono::seconds>("mon_warn_older_version_delay");
+  if (now - old_version_first_time > warn_delay) {
+    std::map<string, std::list<string> > all_versions;
+    mon.get_all_versions(all_versions);
+    if (all_versions.size() > 1) {
+      dout(20) << __func__ << " all_versions=" << all_versions << dendl;
+      // The last entry has the largest version
+      dout(20) << __func__ << " highest version daemon count "
+	       << all_versions.rbegin()->second.size() << dendl;
+      // Erase last element (the highest version running)
+      all_versions.erase(all_versions.rbegin()->first);
+      ceph_assert(all_versions.size() > 0);
       ostringstream ss;
-      ss << (max-actual) << "/" << max << " mons down, quorum "
-	 << mon.get_quorum_names();
-      auto& d = next.add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
-      set<int> q = mon.get_quorum();
-      for (int i=0; i<max; i++) {
-	if (q.count(i) == 0) {
-	  ostringstream ss;
-	  ss << "mon." << mon.monmap->get_name(i) << " (rank " << i
-	     << ") addr " << mon.monmap->get_addrs(i)
-	     << " is down (out of quorum)";
-	  d.detail.push_back(ss.str());
+      unsigned daemon_count = 0;
+      for (auto& g : all_versions) {
+	daemon_count += g.second.size();
+      }
+      int ver_count = all_versions.size();
+      ceph_assert(!(daemon_count == 1 && ver_count != 1));
+      ss << "There " << (daemon_count == 1 ? "is a daemon" : "are daemons")
+	 << " running " << (ver_count > 1 ? "multiple old versions" : "an older version")  << " of ceph";
+      health_status_t status;
+      if (ver_count > 1)
+	status = HEALTH_ERR;
+      else
+	status = HEALTH_WARN;
+      auto& d = checks->add("DAEMON_OLD_VERSION", status, ss.str(), all_versions.size());
+      for (auto& g : all_versions) {
+	ostringstream ds;
+	for (auto& i : g.second) { // Daemon list
+	  ds << i << " ";
 	}
+	ds << (g.second.size() == 1 ? "is" : "are")
+	   << " running an older version of ceph: " << g.first;
+	d.detail.push_back(ds.str());
+      }
+    } else {
+      old_version_first_time = ceph::coarse_mono_clock::zero();
+    }
+  }
+}
+
+void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
+{
+  int max = mon.monmap->size();
+  int actual = mon.get_quorum().size();
+  if (actual < max) {
+    ostringstream ss;
+    ss << (max-actual) << "/" << max << " mons down, quorum "
+       << mon.get_quorum_names();
+    auto& d = checks->add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
+    set<int> q = mon.get_quorum();
+    for (int i=0; i<max; i++) {
+      if (q.count(i) == 0) {
+	ostringstream ss;
+	ss << "mon." << mon.monmap->get_name(i) << " (rank " << i
+	   << ") addr " << mon.monmap->get_addrs(i)
+	   << " is down (out of quorum)";
+	d.detail.push_back(ss.str());
       }
     }
   }
+}
 
-  // MON_CLOCK_SKEW
+void HealthMonitor::check_for_clock_skew(health_check_map_t *checks)
+{
   if (!mon.timecheck_skews.empty()) {
     list<string> warns;
     list<string> details;
@@ -781,14 +805,15 @@ bool HealthMonitor::check_leader_health()
 	if (!warns.empty())
 	  ss << ",";
       }
-      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str(), details.size());
+      auto& d = checks->add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str(), details.size());
       d.detail.swap(details);
     }
   }
+}
 
-  // MON_MSGR2_NOT_ENABLED
+void HealthMonitor::check_if_msgr2_enabled(health_check_map_t *checks)
+{
   if (g_conf().get_val<bool>("ms_bind_msgr2") &&
-      g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled") &&
       mon.monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_NAUTILUS)) {
     list<string> details;
@@ -803,15 +828,9 @@ bool HealthMonitor::check_leader_health()
     if (!details.empty()) {
       ostringstream ss;
       ss << details.size() << " monitors have not enabled msgr2";
-      auto& d = next.add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str(),
-			 details.size());
+      auto &d = checks->add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str(),
+			    details.size());
       d.detail.swap(details);
     }
   }
-
-  if (next != leader_checks) {
-    changed = true;
-    leader_checks = next;
-  }
-  return changed;
 }
