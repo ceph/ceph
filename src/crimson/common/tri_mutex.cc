@@ -64,6 +64,11 @@ void excl_lock_from_excl::unlock()
 {
 }
 
+tri_mutex::~tri_mutex()
+{
+  assert(!is_acquired());
+}
+
 seastar::future<> tri_mutex::lock_for_read()
 {
   if (try_lock_for_read()) {
