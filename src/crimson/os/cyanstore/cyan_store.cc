@@ -295,18 +295,19 @@ CyanStore::omap_get_values(CollectionRef ch,
     std::make_tuple(true, std::move(values)));
 }
 
-seastar::future<ceph::bufferlist>
-CyanStore::omap_get_header(
-    CollectionRef ch,
-    const ghobject_t& oid
-  ) {
+auto
+CyanStore::omap_get_header(CollectionRef ch,
+			   const ghobject_t& oid)
+  -> read_errorator::future<ceph::bufferlist>
+{
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return crimson::ct_error::enoent::make();
   }
 
-  return seastar::make_ready_future<ceph::bufferlist>(o->omap_header);
+  return read_errorator::make_ready_future<ceph::bufferlist>(
+    o->omap_header);
 }
 
 seastar::future<> CyanStore::do_transaction(CollectionRef ch,

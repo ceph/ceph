@@ -362,8 +362,8 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
     return [this, &recovery_info, &progress, &new_progress, &oi, &v, pop=&pop] {
       v = recovery_info.version;
       if (progress.first) {
-	return backend->omap_get_header(coll, ghobject_t(recovery_info.soid))
-	  .then([this, &recovery_info, pop](auto bl) {
+	return backend->omap_get_header(coll, ghobject_t(recovery_info.soid)).safe_then(
+          [this, &recovery_info, pop](auto bl) {
 	  pop->omap_header.claim_append(bl);
 	  return store->get_attrs(coll, ghobject_t(recovery_info.soid));
 	}).safe_then([&oi, pop, &new_progress, &v](auto attrs) mutable {
@@ -377,7 +377,7 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
 	    v = oi.version;
 	  }
 	  return seastar::make_ready_future<>();
-	}, crimson::os::FuturizedStore::get_attrs_ertr::all_same_way(
+	}, crimson::os::FuturizedStore::read_errorator::all_same_way(
 	    [] (const std::error_code& e) {
 	    return seastar::make_exception_future<>(e);
 	  })
