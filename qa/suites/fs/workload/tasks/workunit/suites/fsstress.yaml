@@ -1,1 +1,6 @@
-.qa/cephfs/tasks/cfuse_workunit_suites_fsstress.yaml
+tasks:
+- workunit:
+    timeout: 6h
+    clients:
+      all:
+        - suites/fsstress.sh
