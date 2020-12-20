@@ -354,11 +354,10 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
   return seastar::do_with(ObjectRecoveryProgress(progress),
 			  uint64_t(crimson::common::local_conf()
 			    ->osd_recovery_max_chunk),
-			  eversion_t(),
+			  recovery_info.version,
 			  PushOp(),
     [this, &recovery_info, &progress, stat]
     (auto& new_progress, auto& available, auto& v, auto& pop) {
-    v = recovery_info.version;
     return read_metadata_for_push_op(recovery_info.soid,
                                      progress, new_progress,
                                      v, &pop).then([&](eversion_t local_ver) mutable {
