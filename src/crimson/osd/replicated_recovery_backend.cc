@@ -480,11 +480,11 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
     uint64_t max_len,
     PushOp* push_op)
 {
+  if (progress.omap_complete) {
+    return seastar::make_ready_future<>();
+  }
   return shard_services.get_store().get_omap_iterator(coll, ghobject_t{oid})
     .then([&progress, &new_progress, &max_len, push_op](auto omap_iter) {
-    if (progress.omap_complete) {
-      return seastar::make_ready_future<>();
-    }
     return omap_iter->lower_bound(progress.omap_recovered_to).then(
       [omap_iter, &new_progress, &max_len, push_op] {
       return seastar::do_until([omap_iter, &new_progress, max_len, push_op] {
