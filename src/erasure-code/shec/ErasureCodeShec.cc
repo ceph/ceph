@@ -693,7 +693,7 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
 
 
   if (mindup == k+1) {
-    fprintf(stderr, "shec_make_decoding_matrix(): can't find recover matrix.\n");
+    dout(10) << __func__ << ": can't find recover matrix." << dendl;
     return -1;
   }
 
