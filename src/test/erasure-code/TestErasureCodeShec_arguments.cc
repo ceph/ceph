@@ -310,7 +310,6 @@ TEST(ParameterTest, combination_all)
               EXPECT_EQ(-EIO, result);
 	      EXPECT_EQ(0u, minimum_chunks.size());
               EXPECT_EQ(-1, dresult);
-              EXPECT_EQ(shec->get_chunk_count(), decoded.size());
               if (result != -EIO || dresult != -1) {
                 ++unexpected_count;
               }
@@ -346,7 +345,6 @@ TEST(ParameterTest, combination_all)
                 EXPECT_EQ(-EIO, result);
 	        EXPECT_EQ(0u, minimum_chunks.size());
                 EXPECT_EQ(-1, dresult);
-                EXPECT_EQ(shec->get_chunk_count(), decoded.size());
                 if (result != -EIO || dresult != -1) {
                   ++unexpected_count;
                 }

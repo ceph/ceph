@@ -179,6 +179,10 @@ int ErasureCodeShec::_decode(const set<int> &want_to_read,
   if (!decoded || !decoded->empty()){
     return -EINVAL;
   }
+  if (!want_to_read.empty() && chunks.empty()) {
+    // i need to get the blocksize from the first element of chunks
+    return -1;
+  }
 
   have.reserve(chunks.size());
   for (map<int, bufferlist>::const_iterator i = chunks.begin();
