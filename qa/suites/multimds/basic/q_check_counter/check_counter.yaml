@@ -1,8 +1,0 @@
-
-tasks:
-- check-counter:
-    counters:
-      mds:
-        - "mds.exported"
-        - "mds.imported"
-
