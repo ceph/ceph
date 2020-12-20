@@ -99,7 +99,7 @@ public:
   seastar::future<struct stat> stat(
     CollectionRef,
     const ghobject_t&) final;
-  seastar::future<ceph::bufferlist> omap_get_header(
+  read_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef,
     const ghobject_t&) final;
   seastar::future<std::map<uint64_t, uint64_t>> fiemap(

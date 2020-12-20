@@ -451,16 +451,23 @@ seastar::future<struct stat> AlienStore::stat(
   });
 }
 
-seastar::future<ceph::bufferlist> AlienStore::omap_get_header(
-  CollectionRef ch,
-  const ghobject_t& oid)
+auto AlienStore::omap_get_header(CollectionRef ch,
+                                 const ghobject_t& oid)
+  -> read_errorator::future<ceph::bufferlist>
 {
   return seastar::do_with(ceph::bufferlist(), [=](auto& bl) {
     return tp->submit([=, &bl] {
       auto c = static_cast<AlienCollection*>(ch.get());
       return store->omap_get_header(c->collection, oid, &bl);
-    }).then([&bl] (int i) {
-      return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+    }).then([&bl] (int r) -> read_errorator::future<ceph::bufferlist> {
+      if (r == -ENOENT) {
+        return crimson::ct_error::enoent::make();
+      } else if (r < 0) {
+        logger().error("omap_get_header: {}", r);
+        return crimson::ct_error::input_output_error::make();
+      } else {
+        return read_errorator::make_ready_future<ceph::bufferlist>(std::move(bl));
+      }
     });
   });
 }
