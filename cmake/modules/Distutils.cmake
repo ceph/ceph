@@ -25,9 +25,9 @@ function(distutils_install_module name)
       list(APPEND options
         --root=\$ENV{DESTDIR}
         --single-version-externally-managed)
-      if(NOT \"${DU_INSTALL_SCRIPT}\" STREQUAL \"\")
-        list(APPEND options --install-script=${DU_INSTALL_SCRIPT})
-      endif()
+    endif()
+    if(NOT \"${DU_INSTALL_SCRIPT}\" STREQUAL \"\")
+      list(APPEND options --install-script=${DU_INSTALL_SCRIPT})
     endif()
     execute_process(
     COMMAND ${Python3_EXECUTABLE}
