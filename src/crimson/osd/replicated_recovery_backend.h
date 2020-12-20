@@ -119,6 +119,16 @@ private:
     const hobject_t& soid,
     eversion_t need);
 
+  /// read the data attached to given object. the size of them is supposed to
+  /// be relatively small.
+  ///
+  /// @return @c oi.version
+  seastar::future<eversion_t> read_metadata_for_push_op(
+    const hobject_t& oid,
+    const ObjectRecoveryProgress& progress,
+    ObjectRecoveryProgress& new_progress,
+    eversion_t ver,
+    PushOp* push_op);
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
   ///
