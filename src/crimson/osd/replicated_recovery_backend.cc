@@ -388,7 +388,7 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
       return read_omap_for_push_op(recovery_info.soid,
                                    progress,
                                    new_progress,
-                                   available, &pop);
+                                   &available, &pop);
     }).then([this, &recovery_info, &progress, &available, &pop]() mutable {
       logger().debug("build_push_op: available: {}, copy_subset: {}",
 		     available, recovery_info.copy_subset);
@@ -477,16 +477,16 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
     ObjectRecoveryProgress& new_progress,
-    uint64_t max_len,
+    uint64_t* max_len,
     PushOp* push_op)
 {
   if (progress.omap_complete) {
     return seastar::make_ready_future<>();
   }
   return shard_services.get_store().get_omap_iterator(coll, ghobject_t{oid})
-    .then([&progress, &new_progress, &max_len, push_op](auto omap_iter) {
+    .then([&progress, &new_progress, max_len, push_op](auto omap_iter) {
     return omap_iter->lower_bound(progress.omap_recovered_to).then(
-      [omap_iter, &new_progress, &max_len, push_op] {
+      [omap_iter, &new_progress, max_len, push_op] {
       return seastar::do_until([omap_iter, &new_progress, max_len, push_op] {
         if (!omap_iter->valid()) {
           new_progress.omap_complete = true;
@@ -502,20 +502,20 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
           new_progress.omap_recovered_to = omap_iter->key();
           return true;
         }
-        if (omap_iter->key().size() + omap_iter->value().length() > max_len) {
+        if (omap_iter->key().size() + omap_iter->value().length() > *max_len) {
           new_progress.omap_recovered_to = omap_iter->key();
           return true;
         }
         return false;
       },
-      [omap_iter, &max_len, push_op] {
+      [omap_iter, max_len, push_op] {
         push_op->omap_entries.emplace(omap_iter->key(), omap_iter->value());
         if (const uint64_t entry_size =
-	    omap_iter->key().size() + omap_iter->value().length();
-            entry_size > max_len) {
-          max_len -= entry_size;
+            omap_iter->key().size() + omap_iter->value().length();
+            entry_size > *max_len) {
+          *max_len -= entry_size;
         } else {
-          max_len = 0;
+          *max_len = 0;
         }
         return omap_iter->next();
       });

@@ -136,6 +136,6 @@ private:
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
     ObjectRecoveryProgress& new_progress,
-    uint64_t max_len,
+    uint64_t* max_len,
     PushOp* push_op);
 };
