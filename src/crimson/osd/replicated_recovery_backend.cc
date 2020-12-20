@@ -365,6 +365,10 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
       // If requestor didn't know the version, use ours
       if (v == eversion_t()) {
         v = local_ver;
+      } else if (v != local_ver) {
+        logger().error("build_push_op: {} push {} v{} failed because local copy is {}",
+                       pg.get_pgid(), recovery_info.soid, recovery_info.version, local_ver);
+        // TODO: bail out
       }
       return read_omap_for_push_op(recovery_info.soid,
                                    progress,
