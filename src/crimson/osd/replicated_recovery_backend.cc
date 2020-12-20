@@ -511,8 +511,8 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
       [omap_iter, &max_len, push_op] {
         push_op->omap_entries.emplace(omap_iter->key(), omap_iter->value());
         if (const uint64_t entry_size =
-            omap_iter->key().size() + omap_iter->value().length() > max_len;
-            entry_size >= max_len) {
+	    omap_iter->key().size() + omap_iter->value().length();
+            entry_size > max_len) {
           max_len -= entry_size;
         } else {
           max_len = 0;
