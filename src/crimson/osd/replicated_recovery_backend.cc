@@ -362,26 +362,31 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
     return [this, &recovery_info, &progress, &new_progress, &oi, &v, pop=&pop] {
       v = recovery_info.version;
       if (progress.first) {
-	return backend->omap_get_header(coll, ghobject_t(recovery_info.soid)).safe_then(
-          [this, &recovery_info, pop](auto bl) {
-	  pop->omap_header.claim_append(bl);
-	  return store->get_attrs(coll, ghobject_t(recovery_info.soid));
-	}).safe_then([&oi, pop, &new_progress, &v](auto attrs) mutable {
-	  for (auto& [key, val] : attrs) {
-	    pop->attrset[std::move(key)].push_back(std::move(val));
-	  }
-	  logger().debug("build_push_op: {}", pop->attrset[OI_ATTR]);
-	  oi.decode(pop->attrset[OI_ATTR]);
-	  new_progress.first = false;
-	  if (v == eversion_t()) {
-	    v = oi.version;
-	  }
-	  return seastar::make_ready_future<>();
-	}, crimson::os::FuturizedStore::read_errorator::all_same_way(
-	    [] (const std::error_code& e) {
-	    return seastar::make_exception_future<>(e);
-	  })
-	);
+        return seastar::when_all_succeed(
+          backend->omap_get_header(coll, ghobject_t(recovery_info.soid)).safe_then(
+            [&pop](auto bl) {
+            pop->omap_header.claim_append(bl);
+          }, crimson::os::FuturizedStore::read_errorator::all_same_way(
+            [] (const std::error_code& e) {
+            return seastar::make_exception_future<>(e);
+          })),
+          store->get_attrs(coll, ghobject_t(recovery_info.soid)).safe_then(
+            [&oi, pop, &v](auto attrs) mutable {
+            for (auto& [key, val] : attrs) {
+              pop->attrset[std::move(key)].push_back(std::move(val));
+            }
+            logger().debug("build_push_op: {}", pop->attrset[OI_ATTR]);
+            oi.decode(pop->attrset[OI_ATTR]);
+            if (v == eversion_t()) {
+              v = oi.version;
+            }
+          }, crimson::os::FuturizedStore::read_errorator::all_same_way(
+            [] (const std::error_code& e) {
+            return seastar::make_exception_future<>(e);
+          }))
+        ).then_unpack([&new_progress] {
+          new_progress.first = false;
+        });
       }
       return seastar::make_ready_future<>();
     }().then([this, &recovery_info, &progress, &new_progress, &available, &pop]() mutable {
