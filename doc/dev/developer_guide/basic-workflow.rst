@@ -224,14 +224,14 @@ Automated PR validation
 When you create or update your PR, the Ceph project's `Continuous Integration
 (CI) <https://en.wikipedia.org/wiki/Continuous_integration>`_ infrastructure
 automatically tests it. At the time of this writing (September 2020), the
-automated CI testing included five tests: 
+automated CI testing included five tests:
 
-#. a test to check that the commits are properly signed (see :ref:`submitting-patches`): 
+#. a test to check that the commits are properly signed (see :ref:`submitting-patches`):
 #. a test to check that the documentation builds
 #. a test to check that the submodules are unmodified
 #. a test to check that the API is in order
-#. a :ref:`make check<make-check>` test  
-   
+#. a :ref:`make check<make-check>` test
+
 Additional tests may be performed depending on which files your PR modifies.
 
 The :ref:`make check<make-check>` test builds the PR and runs it through a battery of
@@ -281,16 +281,16 @@ sub-directory`_ and are run via the `teuthology framework`_.
 .. _`teuthology repository`: https://github.com/ceph/teuthology
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
-The Ceph community has access to the `Sepia lab
-<https://wiki.sepia.ceph.com/doku.php>`_ where `Integration Testing` _ can be
-run on real hardware. Other developers may add tags like "needs-qa" to your
+The Ceph community has access to the `Sepia lab`_ where `Integration Testing`_
+can be run on physical hardware. Other developers may add tags like "needs-qa"
+to your
 PR. This allows PRs that need testing to be merged into a single branch and
 tested all at the same time. Since teuthology suites can take hours (even
 days in some cases) to run, this can save a lot of time.
 
 To request access to the Sepia lab, start `here <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
 
-Integration testing is discussed in more detail in the `Integration Testing` _
+Integration testing is discussed in more detail in the `Integration Testing`_
 chapter.
 
 Code review
@@ -387,4 +387,5 @@ the **ptl-tool** have the following form::
              client: add timer_lock support
      Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
 
-.. _Integration Testing: ./testing-integration-tests/tests-integration-testing-teuthology-intro.rst
+.. _Integration Testing: ../testing_integration_tests/tests-integration-testing-teuthology-intro
+.. _Sepia lab: https://wiki.sepia.ceph.com/doku.php
