@@ -18,9 +18,9 @@ Synopsis
 Description
 ===========
 
-**rbd-nbd** is a client for RADOS block device (rbd) images like rbd kernel module.
-It will map a rbd image to a nbd (Network Block Device) device, allowing access it
-as regular local block device.
+**rbd-nbd** is a client for RADOS block device (rbd) images, like the rbd kernel module.
+It will map a rbd image to a nbd (Network Block Device) device, allowing it to be accessed
+as a regular, local block device.
 
 Options
 =======
@@ -36,27 +36,26 @@ Options
 
 .. option:: --nbds_max *limit*
 
-   Override the parameter of NBD kernel module when modprobe, used to
-   limit the count of nbd device.
+   Override NBD kernel module parameters during modprobe. Used to
+   limit the maximum number of nbd devices.
 
 .. option:: --max_part *limit*
 
-    Override for module param nbds_max.
+    Override module parameter nbds_max.
 
 .. option:: --exclusive
 
-   Forbid writes by other clients.
+   Prevent other clients from writing to the image.
 
 .. option:: --io-timeout *seconds*
 
-   Override device timeout. Linux kernel will default to a 30 second request timeout.
-   Allow the user to optionally specify an alternate timeout.
+   Override device timeout. The Linux kernel defaults to a 30 second request timeout.
+   Allows the user to optionally specify an alternate timeout.
 
 .. option:: --reattach-timeout *seconds*
 
-   Specify timeout for the kernel to wait for a new rbd-nbd process is
-   attached after the old process is detached. The default is 30
-   second.
+   Specify timeout for the kernel to wait for a new rbd-nbd process to be
+   attached, after the old process is detached. The default is 30 seconds.
 
 Image and snap specs
 ====================
