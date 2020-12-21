@@ -6,6 +6,10 @@
   This improves out of the box performance of Ceph by allowing more PGs 
   to be created for a given pool.
 
+* New bluestore_rocksdb_options_annex config parameter. Complements
+  bluestore_rocksdb_options and allows setting rocksdb options without repeating
+  the existing defaults.
+
 15.2.8
 ------
 * $pid expansion in config paths like `admin_socket` will now properly expand
