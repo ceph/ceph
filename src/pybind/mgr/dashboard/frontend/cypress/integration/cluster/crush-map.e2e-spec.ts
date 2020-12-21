@@ -5,6 +5,7 @@ describe('CRUSH map page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     crushmap.navigateTo();
   });
 
