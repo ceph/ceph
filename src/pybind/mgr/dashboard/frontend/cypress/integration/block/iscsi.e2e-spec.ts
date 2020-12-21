@@ -5,6 +5,7 @@ describe('Iscsi Page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     iscsi.navigateTo();
   });
 

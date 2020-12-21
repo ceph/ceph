@@ -51,7 +51,6 @@ export class LoginComponent implements OnInit {
         } else {
           this.authStorageService.set(
             login.username,
-            token,
             login.permissions,
             login.sso,
             login.pwdExpirationDate
