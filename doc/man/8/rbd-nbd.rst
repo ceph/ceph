@@ -36,12 +36,12 @@ Options
 
 .. option:: --nbds_max *limit*
 
-   Override the parameter of NBD kernel module when modprobe, used to
+   Override the parameter nbds_max of NBD kernel module when modprobe, used to
    limit the count of nbd device.
 
 .. option:: --max_part *limit*
 
-    Override for module param nbds_max.
+    Override for module param max_part.
 
 .. option:: --exclusive
 
