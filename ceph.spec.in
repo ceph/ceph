@@ -717,6 +717,7 @@ Requires:	mailcap
 %if 0%{?weak_deps}
 Recommends:	gawk
 %endif
+Requires: ceph-aws-cpp-sdk = %{_epoch_prefix}%{version}-%{release}
 %description radosgw
 RADOS is a distributed object store used by the Ceph distributed
 storage system.  This package provides a REST gateway to the
@@ -1148,6 +1149,29 @@ BuildArch:      noarch
 Group:          System/Monitoring
 %description prometheus-alerts
 This package provides Ceph default alerts for Prometheus.
+
+%package -n ceph-aws-cpp-sdk
+Summary: Runtime libraries for AWS C++ SDK
+Provides: libaws-c-common.so()(64bit)
+Provides: libaws-c-common.so.1.0.0()(64bit)
+Provides: libaws-c-event-stream.so()(64bit)
+Provides: libaws-c-event-stream.so.1.0.0()(64bit)
+Provides: libaws-checksums.so()(64bit)
+Provides: libaws-cpp-sdk-access-management.so()(64bit)
+Provides: libaws-cpp-sdk-cognito-identity.so()(64bit)
+Provides: libaws-cpp-sdk-core.so()(64bit)
+Provides: libaws-cpp-sdk-iam.so()(64bit)
+Provides: libaws-cpp-sdk-kinesis.so()(64bit)
+Provides: libaws-cpp-sdk-lambda.so()(64bit)
+Provides: libaws-cpp-sdk-sns.so()(64bit)
+%files -n ceph-aws-cpp-sdk
+/usr/lib64/libaws*.so*
+%post -n ceph-aws-cpp-sdk -p /sbin/ldconfig
+%postun -n ceph-aws-cpp-sdk -p /sbin/ldconfig
+%description -n ceph-aws-cpp-sdk
+This package provides runtime libraries for AWS C++ SDK.
+These libraries enables sending bucket notifications from the
+radosgw to AWS SNS and Lambda.
 
 #################################################################################
 # common

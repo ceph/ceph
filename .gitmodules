@@ -79,6 +79,5 @@
 	branch = 0.13.0
 [submodule "src/aws-sdk-cpp"]
 	path = src/aws-sdk-cpp
-	url = https://github.com/ceph/aws-sdk-cpp
-	depth = 1
-	shallow = true
+	url = https://github.com/yuvalif/aws-sdk-cpp.git
+	branch = install_only_runtime

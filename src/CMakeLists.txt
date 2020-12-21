@@ -301,7 +301,6 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 if(WITH_RADOSGW AND WITH_RADOSGW_AWS_ENDPOINT)
-  set(AWS_DEPS_INSTALL_DIR "${CMAKE_BINARY_DIR}/.deps" )
   add_subdirectory(aws-sdk-cpp)
 endif()
 
