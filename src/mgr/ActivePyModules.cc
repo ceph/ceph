@@ -65,7 +65,9 @@ void ActivePyModules::dump_server(const std::string &hostname,
   std::string ceph_version;
 
   for (const auto &[key, state] : dmc) {
+    PyThreadState *tstate = PyEval_SaveThread();
     std::lock_guard l(state->lock);
+    PyEval_RestoreThread(tstate);
     // TODO: pick the highest version, and make sure that
     // somewhere else (during health reporting?) we are
     // indicating to the user if we see mixed versions
@@ -131,7 +133,9 @@ PyObject *ActivePyModules::get_metadata_python(
     Py_RETURN_NONE;
   }
 
+  PyThreadState *tstate = PyEval_SaveThread();
   std::lock_guard l(metadata->lock);
+  PyEval_RestoreThread(tstate);
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
   for (const auto &[key, val] : metadata->metadata) {
@@ -150,8 +154,9 @@ PyObject *ActivePyModules::get_daemon_status_python(
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
   }
-
+  PyThreadState *tstate = PyEval_SaveThread();
   std::lock_guard l(metadata->lock);
+  PyEval_RestoreThread(tstate);
   PyFormatter f;
   for (const auto &[daemon, status] : metadata->service_status) {
     f.dump_string(daemon, status);
@@ -195,7 +200,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     });
     return f.get();
   } else if (what == "modified_config_options") {
-    PyEval_RestoreThread(tstate);
     auto all_daemons = daemon_state.get_all();
     set<string> names;
     for (auto& [key, daemon] : all_daemons) {
@@ -204,6 +208,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 	names.insert(name);
       }
     }
+    PyEval_RestoreThread(tstate);
     f.open_array_section("options");
     for (auto& name : names) {
       f.dump_string("name", name);
@@ -236,31 +241,35 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else if (what == "osd_metadata") {
     auto dmc = daemon_state.get_by_service("osd");
-    PyEval_RestoreThread(tstate);
 
     for (const auto &[key, state] : dmc) {
       std::lock_guard l(state->lock);
+      PyEval_RestoreThread(tstate);
       f.open_object_section(key.name.c_str());
       f.dump_string("hostname", state->hostname);
       for (const auto &[name, val] : state->metadata) {
         f.dump_string(name.c_str(), val);
       }
       f.close_section();
+      tstate = PyEval_SaveThread();
     }
+    PyEval_RestoreThread(tstate);
     return f.get();
   } else if (what == "mds_metadata") {
     auto dmc = daemon_state.get_by_service("mds");
-    PyEval_RestoreThread(tstate);
 
     for (const auto &[key, state] : dmc) {
       std::lock_guard l(state->lock);
+      PyEval_RestoreThread(tstate);
       f.open_object_section(key.name.c_str());
       f.dump_string("hostname", state->hostname);
       for (const auto &[name, val] : state->metadata) {
         f.dump_string(name.c_str(), val);
       }
       f.close_section();
+      tstate = PyEval_SaveThread();
     }
+    PyEval_RestoreThread(tstate);
     return f.get();
   } else if (what == "pg_summary") {
     cluster_state.with_pgmap(
@@ -507,8 +516,8 @@ void ActivePyModules::notify_all(const std::string &notify_type,
     dout(15) << "queuing notify to " << name << dendl;
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
     finisher.queue(new LambdaContext([module=module, notify_type, notify_id]
-      (int r){ 
-        module->notify(notify_type, notify_id); 
+      (int r){
+        module->notify(notify_type, notify_id);
     }));
   }
 }
@@ -726,7 +735,9 @@ PyObject* ActivePyModules::with_perf_counters(
 
   auto metadata = daemon_state.get(DaemonKey{svc_name, svc_id});
   if (metadata) {
+    tstate = PyEval_SaveThread();
     std::lock_guard l2(metadata->lock);
+    PyEval_RestoreThread(tstate);
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
       auto counter_type = metadata->perf_counters.types.at(path);
@@ -830,8 +841,9 @@ PyObject* ActivePyModules::get_perf_schema_python(
   if (!daemons.empty()) {
     for (auto& [key, state] : daemons) {
       f.open_object_section(ceph::to_string(key).c_str());
-
+      tstate = PyEval_SaveThread();
       std::lock_guard l(state->lock);
+      PyEval_RestoreThread(tstate);
       for (auto ctr_inst_iter : state->perf_counters.instances) {
         const auto &counter_name = ctr_inst_iter.first;
 	f.open_object_section(counter_name.c_str());
