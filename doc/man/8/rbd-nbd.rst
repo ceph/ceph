@@ -37,11 +37,11 @@ Options
 .. option:: --nbds_max *limit*
 
    Override the parameter of NBD kernel module when modprobe, used to
-   limit the count of nbd device.
+   limit the count of nbd device (ignored unless --legacy specified).
 
 .. option:: --max_part *limit*
 
-    Override for module param nbds_max.
+   Override for module param nbds_max.
 
 .. option:: --exclusive
 
@@ -57,6 +57,9 @@ Options
    Specify timeout for the kernel to wait for a new rbd-nbd process is
    attached after the old process is detached. The default is 30
    second.
+
+.. option:: --legacy
+   Use the NBD ioctl interface (old kernels) instead of the default netlink interface.
 
 Image and snap specs
 ====================
