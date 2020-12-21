@@ -264,7 +264,7 @@ void RGWOp_Metadata_Put::execute(optional_yield y) {
   }
 
   op_ret = store->ctl()->meta.mgr->put(metadata_key, bl, s->yield, sync_type,
-				       &ondisk_version);
+				       false, &ondisk_version);
   if (op_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(op_ret) << dendl;
     return;
