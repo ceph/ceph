@@ -141,6 +141,9 @@ class FSPerfStats(object):
                 metric_features = int(metadata[CLIENT_METADATA_KEY]["metric_spec"]["metric_flags"]["feature_bits"], 16)
                 supported_metrics = [metric for metric, bit in MDS_PERF_QUERY_COUNTERS_MAP.items() if metric_features & (1 << bit)]
                 self.set_client_metadata(client_id, "valid_metrics", supported_metrics)
+                kver = metadata[CLIENT_METADATA_KEY].get("kernel_version", None)
+                if kver:
+                    self.set_client_metadata(client_id, "kernel_version", kver)
             # when all async requests are done, purge clients metadata if any.
             if not self.client_metadata['in_progress']:
                 for client in self.client_metadata['to_purge']:
