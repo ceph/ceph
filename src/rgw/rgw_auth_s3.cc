@@ -638,7 +638,7 @@ get_v4_canonical_headers(const req_info& info,
 
     std::transform(std::begin(token), std::end(token),
                    std::back_inserter(token_env), [](const int c) {
-                     return c == '-' ? '_' : std::toupper(c);
+                     return c == '-' ? '_' : c == '_' ? '-' : std::toupper(c);
                    });
 
     if (token_env == "HTTP_CONTENT_LENGTH") {
