@@ -13,17 +13,18 @@ To run integration tests using teuthology, you need to have Ceph binaries
 built for your branch. Follow these steps to initiate the build process -
 
 #. Push the branch to `ceph-ci`_ repository. This triggers the process of
-   building the binaries.
+   building the binaries on jenkins CI.
 
 #. To confirm that the build process has been initiated, spot the branch name
    at `Shaman`_. Little after the build process has been initiated, the single
    entry with your branch name would multiply, each new entry for a different
    combination of distro and flavour.
 
-#. Wait until the packages are built and uploaded, and the repository offering
-   them are created. This is marked by colouring the entries for the branch
-   name green. Preferably, wait until each entry is coloured green. Usually,
-   it takes around 2-3 hours depending on the availability of the machines.
+#. Wait until the packages are built and uploaded to `Chacra`_, and the
+   repository offering them are created. This is marked by colouring the entries
+   for the branch name green. Preferably, wait until each entry is coloured
+   green. Usually, it takes around 2-3 hours depending on the availability of
+   the machines.
 
 .. note:: Branch to be pushed on ceph-ci can be any branch, it shouldn't
    necessarily be a PR branch.
@@ -40,7 +41,8 @@ After building is complete, proceed to trigger tests -
 
        ssh <username>@teuthology.front.sepia.ceph.com
 
-   This would require Sepia lab access. To know how to request it, see: https://ceph.github.io/sepia/adding_users/
+   This would require Sepia lab access. To know how to request it, see:
+   https://ceph.github.io/sepia/adding_users/
 
 #. Next, get teuthology installed. Run the first set of commands in
    `Running Your First Test`_ for that. After that, activate the virtual
@@ -58,20 +60,20 @@ After building is complete, proceed to trigger tests -
         -R fail
 
    Following are the options used in above command with their meanings -
-        -v          verbose
-        -m          machine name
-        -c          branch name, the branch that was pushed on ceph-ci
-        -s          test-suite name
-        -p          higher the number, lower the priority of the job
-        --filter    filter tests in given suite that needs to run, the arg to
-                    filter should be the test you want to run
-        -e <email>  When tests finish or time out, send an email
-                    here. May also be specified in ~/.teuthology.yaml
-                    as 'results_email'
-        -R          A comma-separated list of statuses to be used
-                    with --rerun. Supported statuses are: 'dead',
-                    'fail', 'pass', 'queued', 'running', 'waiting'
-                    [default: fail,dead]
+        -v            verbose
+        -m            machine name
+        -c            branch name, the branch that was pushed on ceph-ci
+        -s            test-suite name
+        -p            higher the number, lower the priority of the job
+        --filter      filter tests in given suite that needs to run, the arg to
+                      filter should be the test you want to run
+        -e <email>    When tests finish or time out, send an email
+                      here. May also be specified in ~/.teuthology.yaml
+                      as 'results_email'
+        -R            A comma-separated list of statuses to be used
+                      with --rerun. Supported statuses are: 'dead',
+                      'fail', 'pass', 'queued', 'running', 'waiting'
+                      [default: fail,dead]
 
 #. Wait for the tests to run. ``teuthology-suite`` prints a link to the
    `Pulpito`_ page created for the tests triggered.
@@ -82,9 +84,6 @@ After building is complete, proceed to trigger tests -
 
 .. note:: Don't skip passing a priority number, the default value is 1000
    which is way too high; the job probably might never run.
-
-#. Wait for the tests to run. ``teuthology-suite`` prints a link to the
-   `Pulpito`_ page created for the tests triggered.
 
 Other frequently used/useful options are ``-d`` (or ``--distro``),
 ``--distroversion``, ``--filter-out``, ``--timeout``, ``flavor``, ``-rerun``,
@@ -98,10 +97,11 @@ Testing QA changes (without re-building binaires)
 While writing a PR you might need to test your PR repeatedly using teuthology.
 If you are making non-QA changes, you need to follow the standard process of
 triggering builds, waiting for it to finish and then triggering tests and
-wait for the result. But if changes you made are purely changes in qa/,
-you don't need rebuild the binaries. Instead you can test binaries built for
-the ceph-ci branch and instruct ``teuthology-suite`` command to use a separate
-branch for running tests.
+wait for the result.
+But if changes you made are purely changes in qa/, you don't need rebuild the
+binaries. Instead you can test binaries built for the ceph-ci branch and
+instruct ``teuthology-suite`` command to use a separate branch for running
+tests.
 The separate branch can be passed to the command by using ``--suite-repo`` and
 ``--suite-branch``. Pass the link to the GitHub fork where your PR branch exists
 to the first option and pass the PR branch name to the second option.
@@ -161,7 +161,7 @@ Pulpito Dashboard
 
 Once the teuthology job is scheduled, the status/results for test run could
 be checked from https://pulpito.ceph.com/.
-It could be used for quickly checking out job logs... their status etc.
+It could be used for quickly checking out job logs, their status, etc.
 
 Teuthology Archives
 *******************
@@ -169,7 +169,7 @@ Teuthology Archives
 Once the tests have finished running, the log for the job can be obtained by
 clicking on job ID at the Pulpito page for your tests. It's more convenient to
 download the log and then view it rather than viewing it in an internet browser
-since these logs can easily be up to size of  1 GB. It is easier to
+since these logs can easily be up to size of 1 GB. It is easier to
 ssh into the teuthology machine again (``teuthology.front.sepia.ceph.com``), and
 access the following path::
 
@@ -183,8 +183,8 @@ This way the log can be viewed remotely without having to wait too
 much.
 
 .. note:: To access archives more conveniently, ``/a/`` has been symbolically
-  linked to ``/ceph/teuthology-archive/``. For instance, to access the previous
-  example, we can use something like::
+   linked to ``/ceph/teuthology-archive/``. For instance, to access the previous
+   example, we can use something like::
 
    /a/teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi/4588482/teuthology.log
 
@@ -204,8 +204,8 @@ example, for the above test ID, the link is - http://pulpito.front.sepia.ceph.co
 
 Re-running Tests
 ----------------
-You can pass --rerun option, with test ID as an argument to it, to
-teuthology-suite command. Generally, this is useful in cases where teuthology test
+You can pass ``--rerun`` option, with test ID as an argument to it, to
+``teuthology-suite`` command. Generally, this is useful in cases where teuthology test
 batch has some failed/dead jobs that we might want to retrigger. We can trigger
 jobs based on their status using::
 
@@ -217,7 +217,7 @@ jobs based on their status using::
     -R fail,dead,queued,running \
     -e $CEPH_QA_MAIL
 
-The meaning of rest the of the options is already covered in `Triggering Tests`_
+The meaning of the rest the options is already covered in `Triggering Tests`_
 section.
 
 Naming the ceph-ci branch
@@ -239,9 +239,11 @@ logged in at GitHub, all your branches on ceph-ci can be easily found here -
 https://github.com/ceph/ceph-ci/branches.
 
 .. _ceph-ci: https://github.com/ceph/ceph-ci
+.. _Chacra: https://github.com/ceph/chacra/blob/master/README.rst
 .. _Pulpito: http://pulpito.front.sepia.ceph.com/
-.. _Running Your First Test: ../running-tests-locally/#running-your-first-test
+.. _Running Your First Test: ../../running-tests-locally/#running-your-first-test
 .. _Shaman: https://shaman.ceph.com/builds/ceph/
-.. _Suites Inventory: ../tests-integration-testing-teuthology-intro.rst/#suites-inventory
-.. _Testing Priority: ../tests-integration-testing-teuthology-intro.rst/#testing-priority
-.. _Triggering Tests: ../tests-integration-testing-teuthology-workflow.rst/#triggering-tests
+.. _Suites Inventory: ../tests-integration-testing-teuthology-intro/#suites-inventory
+.. _Testing Priority: ../tests-integration-testing-teuthology-intro/#testing-priority
+.. _Triggering Tests: ../tests-integration-testing-teuthology-workflow/#triggering-tests
+.. _tests-sentry-developers-guide: ../tests-sentry-developers-guide/

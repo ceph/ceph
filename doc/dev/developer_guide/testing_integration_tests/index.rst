@@ -5,8 +5,8 @@ Teuthology User Guide
 .. rubric:: Contents
 
 .. toctree::
-   :maxdepth: 1
    :glob:
+   :titlesonly:
 
    Introduction <tests-integration-testing-teuthology-intro>
    Workflow <tests-integration-testing-teuthology-workflow>
