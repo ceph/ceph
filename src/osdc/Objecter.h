@@ -2764,8 +2764,7 @@ public:
   };
 
   template<typename CompletionToken>
-  typename boost::asio::async_result<CompletionToken, OpSignature>::return_type
-  wait_for_map(epoch_t epoch, CompletionToken&& token) {
+  auto wait_for_map(epoch_t epoch, CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, OpSignature> init(token);
 
     if (osdmap->get_epoch() >= epoch) {
@@ -2794,8 +2793,7 @@ private:
 public:
 
   template<typename CompletionToken>
-  typename boost::asio::async_result<CompletionToken, OpSignature>::return_type
-  wait_for_latest_osdmap(CompletionToken&& token) {
+  auto wait_for_latest_osdmap(CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, OpSignature> init(token);
 
     monc->get_version("osdmap",
