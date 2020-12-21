@@ -430,9 +430,8 @@ class interval_set {
   }
   offset_type range_end() const {
     ceph_assert(!empty());
-    auto p = m.end();
-    p--;
-    return p->first+p->second;
+    auto p = m.rbegin();
+    return p->first + p->second;
   }
 
   // interval start after p (where p not in set)
