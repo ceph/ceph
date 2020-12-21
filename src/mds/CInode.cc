@@ -4616,6 +4616,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       fetch.getxattr("parent", bt, bt_r);
       in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
 				       NULL, 0, fin);
+      if (in->mdcache->mds->logger)
+        in->mdcache->mds->logger->inc(l_mds_openino_backtrace_fetch);
+
       using ceph::encode;
       if (!is_internal) {
         ObjectOperation scrub_tag;
