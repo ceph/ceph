@@ -1280,7 +1280,7 @@ public:
     /* XXX: do we need to check for retention/versioning attributes
      * as done in RGWDeleteObj?
      */
-    ret = oc.store->getRados()->delete_obj(oc.rctx, oc.bucket_info, oc.obj, 0);
+    ret = oc.store->getRados()->delete_obj(oc.rctx, oc.bucket->get_info(), oc.obj->get_obj(), tier_ctx.bucket_info.versioning_status());
 
     return ret;
   }
@@ -1325,6 +1325,7 @@ public:
     obj_op.meta.user_data = NULL;
     obj_op.meta.zones_trace = NULL;
     obj_op.meta.delete_at = real_time();
+    obj_op.meta.olh_epoch = tier_ctx.o.versioned_epoch;
     
     RGWObjManifest *pmanifest; 
 
@@ -1402,8 +1403,8 @@ public:
       return ret;
     }
 
-    RGWLCCloudTierCtx tier_ctx(oc.cct, oc.o, oc.store, oc.bucket_info,
-                        oc.obj, oc.rctx, conn, bucket_name, oc.tier.target_storage_class,
+    RGWLCCloudTierCtx tier_ctx(oc.cct, oc.o, oc.store, oc.bucket->get_info(),
+                        oc.obj->get_obj(), oc.rctx, conn, bucket_name, oc.tier.target_storage_class,
                         &http_manager);
     tier_ctx.acl_mappings = oc.tier.acl_mappings;
     tier_ctx.multipart_min_part_size = oc.tier.multipart_min_part_size;

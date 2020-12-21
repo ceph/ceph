@@ -523,7 +523,8 @@ class RGWLCStreamObjToCloudPlainCR : public RGWCoroutine {
     string target_obj_name;
 
     target_bucket.name = tier_ctx.target_bucket_name;
-    target_obj_name = tier_ctx.obj.key.name; // cross check with aws module
+    target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
+                      tier_ctx.obj.key.name;
 
     dest_bucket.reset(new rgw::sal::RGWRadosBucket(tier_ctx.store, target_bucket));
 
@@ -533,6 +534,8 @@ class RGWLCStreamObjToCloudPlainCR : public RGWCoroutine {
 
 
     reenter(this) {
+    //  tier_ctx.obj.set_atomic(&tier_ctx.rctx); -- might need when updated to zipper SAL
+
       /* Prepare Read from source */
       in_crf.reset(new RGWLCStreamReadCRF(tier_ctx.cct, tier_ctx.store->getRados(), tier_ctx.bucket_info,
                    tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
@@ -582,7 +585,8 @@ class RGWLCStreamObjToCloudMultipartPartCR : public RGWCoroutine {
     off_t end;
 
     target_bucket.name = tier_ctx.target_bucket_name;
-    target_obj_name = tier_ctx.obj.key.name; // cross check with aws module
+    target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
+                      tier_ctx.obj.key.name;
 
     dest_bucket.reset(new rgw::sal::RGWRadosBucket(tier_ctx.store, target_bucket));
 
@@ -590,6 +594,8 @@ class RGWLCStreamObjToCloudMultipartPartCR : public RGWCoroutine {
                    (rgw::sal::RGWRadosBucket *)(dest_bucket.get())));
 
     reenter(this) {
+    //  tier_ctx.obj.set_atomic(&tier_ctx.rctx); -- might need when updated to zipper SAL
+
       /* Prepare Read from source */
       in_crf.reset(new RGWLCStreamReadCRF(tier_ctx.cct, tier_ctx.store->getRados(),
                    tier_ctx.bucket_info, tier_ctx.rctx, tier_ctx.obj, tier_ctx.o.meta.mtime));
@@ -922,7 +928,10 @@ class RGWLCStreamObjToCloudMultipartCR : public RGWCoroutine {
 
     rgw_bucket target_bucket;
     target_bucket.name = tier_ctx.target_bucket_name;
-    string target_obj_name = obj.key.name; // cross check with aws module
+
+    string target_obj_name;
+    target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
+                      tier_ctx.obj.key.name;
     rgw_obj dest_obj(target_bucket, target_obj_name);
     std::shared_ptr<RGWStreamReadCRF> in_crf;
     rgw_rest_obj rest_obj;
@@ -1041,7 +1050,8 @@ int RGWLCCloudCheckCR::operate() {
   string target_obj_name;
 
   target_bucket.name = tier_ctx.target_bucket_name;
-  target_obj_name = tier_ctx.obj.key.name; // cross check with aws module
+  target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
+                    tier_ctx.obj.key.name;
 
   std::shared_ptr<rgw::sal::RGWRadosBucket> dest_bucket;
   dest_bucket.reset(new rgw::sal::RGWRadosBucket(tier_ctx.store, target_bucket));
