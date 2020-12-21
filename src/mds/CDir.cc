@@ -267,11 +267,11 @@ bool CDir::check_rstats(bool scrub)
   // rstat
   if (!nest_info.same_sums(fnode->rstat)) {
     dout(1) << "mismatch between child accounted_rstats and my rstats!" << dendl;
-    dout(1) << "total of child dentrys: " << nest_info << dendl;
+    dout(1) << "total of child dentries: " << nest_info << dendl;
     dout(1) << "my rstats:              " << fnode->rstat << dendl;
     good = false;
   } else {
-    dout(20) << "total of child dentrys: " << nest_info << dendl;
+    dout(20) << "total of child dentries: " << nest_info << dendl;
     dout(20) << "my rstats:              " << fnode->rstat << dendl;
   }
 
