@@ -259,6 +259,13 @@ public:
     Client *m_client;
   };
 
+  // snapshot info returned via get_snap_info(). nothing to do
+  // with SnapInfo on the MDS.
+  struct SnapInfo {
+    snapid_t id;
+    std::map<std::string, std::string> metadata;
+  };
+
   Client(Messenger *m, MonClient *mc, Objecter *objecter_);
   Client(const Client&) = delete;
   Client(const Client&&) = delete;
@@ -440,6 +447,8 @@ public:
   int sync_fs();
   int64_t drop_caches();
 
+  int get_snap_info(const char *path, const UserPerm &perms, SnapInfo *snap_info);
+
   // hpc lazyio
   int lazyio(int fd, int enable);
   int lazyio_propagate(int fd, loff_t offset, size_t count);
@@ -466,7 +475,8 @@ public:
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
 
-  int mksnap(const char *path, const char *name, const UserPerm& perm);
+  int mksnap(const char *path, const char *name, const UserPerm& perm,
+             mode_t mode=0, const std::map<std::string, std::string> &metadata={});
   int rmsnap(const char *path, const char *name, const UserPerm& perm);
 
   // Inode permission checking
@@ -1215,7 +1225,7 @@ private:
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm);
   int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
-	     InodeRef *inp = 0);
+	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={});
   int _rmdir(Inode *dir, const char *name, const UserPerm& perms);
   int _symlink(Inode *dir, const char *name, const char *target,
 	       const UserPerm& perms, InodeRef *inp = 0);
