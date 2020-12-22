@@ -743,6 +743,18 @@ Many service specifications can be applied at once using
       all: true
     EOF
 
+Retrieving the running Service Specification
+--------------------------------------------
+
+If started via ``ceph orch apply <rgw|mds|...>`` changing the Service
+Specification directly is normally a bit more complicated. It is easier to
+export the running Service Specification like so::
+    
+    ceph orch ls rgw rgw.<id> --export yaml >rgw.<id>.yaml
+    ceph orch ls mgr mgr --export yaml >mgr.yaml
+
+The Specification can then be changed and re-applied as above.
+
 .. _orchestrator-cli-placement-spec:
 
 Placement Specification
