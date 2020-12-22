@@ -39,26 +39,15 @@ class Onodes {
     }
   }
 
-  ~Onodes() {
-    std::for_each(tracked_onodes.begin(), tracked_onodes.end(),
-                  [] (onode_t* onode) {
-      std::free(onode);
-    });
-  }
+  ~Onodes() = default;
 
   const onode_t& create(size_t size) {
-    ceph_assert(size >= sizeof(onode_t) + sizeof(uint32_t));
-    uint32_t target = size * 137;
-    auto p_mem = (char*)std::malloc(size);
-    std::memset(p_mem, 0, size);
-    auto p_onode = (onode_t*)p_mem;
-    tracked_onodes.push_back(p_onode);
-    p_onode->size = size;
-    p_onode->id = id++;
-    p_mem += (size - sizeof(uint32_t));
-    std::memcpy(p_mem, &target, sizeof(uint32_t));
-    validate(*p_onode);
-    return *p_onode;
+    ceph_assert(size <= std::numeric_limits<uint16_t>::max());
+    onode_t config{static_cast<uint16_t>(size), id++};
+    auto onode = onode_t::allocate(config);
+    auto p_onode = onode.get();
+    tracked_onodes.push_back(std::move(onode));
+    return *reinterpret_cast<onode_t*>(p_onode);
   }
 
   const onode_t& pick() const {
@@ -77,21 +66,14 @@ class Onodes {
     ceph_assert(cursor.value());
     ceph_assert(cursor.value() != &onode);
     ceph_assert(*cursor.value() == onode);
-    validate(*cursor.value());
+    onode_t::validate_tail_magic(*cursor.value());
   }
 
  private:
-  static void validate(const onode_t& node) {
-    auto p_target = (const char*)&node + node.size - sizeof(uint32_t);
-    uint32_t target;
-    std::memcpy(&target, p_target, sizeof(uint32_t));
-    ceph_assert(target == node.size * 137);
-  }
-
   uint16_t id = 0;
   mutable std::random_device rd;
   std::vector<const onode_t*> onodes;
-  std::vector<onode_t*> tracked_onodes;
+  std::vector<std::unique_ptr<char[]>> tracked_onodes;
 };
 
 class KVPool {
