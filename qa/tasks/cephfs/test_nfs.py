@@ -257,10 +257,11 @@ class TestNFS(MgrTestCase):
                 return
             raise
 
-        if check:
+        try:
             self.ctx.cluster.run(args=['sudo', 'touch', '/mnt/test'])
             out_mnt = self._sys_cmd(['sudo', 'ls', '/mnt'])
             self.assertEqual(out_mnt,  b'test\n')
+        finally:
             self.ctx.cluster.run(args=['sudo', 'umount', '/mnt'])
 
     def test_create_and_delete_cluster(self):
@@ -420,6 +421,21 @@ class TestNFS(MgrTestCase):
         check_pseudo_path('/')
         check_pseudo_path('//')
         self._cmd('fs', 'volume', 'rm', self.fs_name, '--yes-i-really-mean-it')
+        self._test_delete_cluster()
+
+    def test_write_to_read_only_export(self):
+        '''
+        Test write to readonly export.
+        '''
+        self._test_create_cluster()
+        self._create_export(export_id='1', create_fs=True, extra_cmd=[self.pseudo_path, '--readonly'])
+        port, ip = self._get_port_ip_info()
+        try:
+            self._test_mnt(self.pseudo_path, port, ip)
+        except CommandFailedError as e:
+            # Write to cephfs export should fail for test to pass
+            if e.exitstatus != errno.EPERM:
+                raise
         self._test_delete_cluster()
 
     def test_cluster_info(self):
