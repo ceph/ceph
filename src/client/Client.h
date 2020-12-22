@@ -778,7 +778,7 @@ protected:
   void _sync_write_commit(Inode *in);
 
   void dump_mds_requests(Formatter *f);
-  void dump_mds_sessions(Formatter *f);
+  void dump_mds_sessions(Formatter *f, bool cap_dump=false);
 
   int make_request(MetaRequest *req, const UserPerm& perms,
 		   InodeRef *ptarget = 0, bool *pcreated = 0,
