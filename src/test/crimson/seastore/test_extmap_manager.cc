@@ -109,11 +109,7 @@ struct extentmap_manager_test_t :
 
   void replay() {
     logger().debug("{}: begin", __func__);
-    tm->close().unsafe_get();
-    destroy();
-    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
-    init();
-    tm->mount().unsafe_get();
+    restart();
     extmap_manager = extentmap_manager::create_extentmap_manager(*tm);
     logger().debug("{}: end", __func__);
   }
