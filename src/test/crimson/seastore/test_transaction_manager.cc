@@ -176,11 +176,7 @@ struct transaction_manager_test_t :
   void replay() {
     logger().debug("{}: begin", __func__);
     EXPECT_TRUE(check_usage());
-    tm->close().unsafe_get();
-    destroy();
-    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
-    init();
-    tm->mount().unsafe_get();
+    restart();
     logger().debug("{}: end", __func__);
   }
 
