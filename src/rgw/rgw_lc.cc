@@ -824,7 +824,6 @@ int RGWLC::handle_multipart_expiration(rgw::sal::RGWBucket* target,
 				       LCWorker* worker, time_t stop_at, bool once)
 {
   MultipartMetaFilter mp_filter;
-  vector<rgw_bucket_dir_entry> objs;
   int ret;
   rgw::sal::RGWBucket::ListParams params;
   rgw::sal::RGWBucket::ListResults results;
@@ -887,7 +886,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::RGWBucket* target,
     }
     params.prefix = prefix_iter->first;
     do {
-      objs.clear();
+      results.objs.clear();
       ret = target->list(params, 1000, results, null_yield);
       if (ret < 0) {
           if (ret == (-ENOENT))
@@ -896,7 +895,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::RGWBucket* target,
           return ret;
       }
 
-      for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
+      for (auto obj_iter = results.objs.begin(); obj_iter != results.objs.end(); ++obj_iter) {
 	std::tuple<lc_op, rgw_bucket_dir_entry> t1 =
 	  {prefix_iter->second, *obj_iter};
 	worker->workpool->enqueue(WorkItem{t1});
