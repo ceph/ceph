@@ -969,6 +969,96 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in mkdir {}".format(path.decode('utf-8')))
 
+    def mksnap(self, path, name, mode, metadata={}):
+        """
+        Create a snapshot.
+
+        :param path: path of the directory to snapshot.
+        :param name: snapshot name
+        :param mode: permission of the snapshot
+        :param metadata: metadata key/value to store with the snapshot
+
+        :raises: :class: `TypeError`
+        :raises: :class: `Error`
+        :returns: int: 0 on success
+        """
+
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        name = cstr(name, 'name')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        if not isinstance(metadata, dict):
+            raise TypeError('metadata must be an dictionary')
+        md = {}
+        for key, value in metadata.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise TypeError('metadata key and values should be strings')
+            md[key.encode('utf-8')] = value.encode('utf-8')
+        cdef:
+            char* _path = path
+            char* _name = name
+            int _mode = mode
+            size_t nr = len(md)
+            snap_metadata *_snap_meta = <snap_metadata *>malloc(nr * sizeof(snap_metadata))
+        if nr and _snap_meta == NULL:
+            raise MemoryError("malloc failed")
+        i = 0
+        for key, value in md.items():
+            _snap_meta[i] = snap_metadata(<char*>key, <char*>value)
+            i += 1
+        with nogil:
+            ret = ceph_mksnap(self.cluster, _path, _name, _mode, _snap_meta, nr)
+        free(_snap_meta)
+        if ret < 0:
+            raise make_ex(ret, "mksnap error")
+        return 0
+
+    def rmsnap(self, path, name):
+        """
+        Remove a snapshot.
+
+        :param path: path of the directory for removing snapshot
+        :param name: snapshot name
+
+        :raises: :class: `Error`
+        :returns: int: 0 on success
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        name = cstr(name, 'name')
+        cdef:
+            char* _path = path
+            char* _name = name
+        ret = ceph_rmsnap(self.cluster, _path, _name)
+        if ret < 0:
+            raise make_ex(ret, "rmsnap error")
+        return 0
+
+    def snap_info(self, path):
+        """
+        Fetch sapshot info
+
+        :param path: snapshot path
+
+        :raises: :class: `Error`
+        :returns: dict: snapshot metadata
+        """
+        self.require_state("mounted")
+        path = cstr(path, 'path')
+        cdef:
+            char* _path = path
+            snap_info info
+        ret = ceph_get_snap_info(self.cluster, _path, &info)
+        if ret < 0:
+            raise make_ex(ret, "snap_info error")
+        md = {}
+        if info.nr_snap_metadata:
+            md = {snap_meta.key.decode('utf-8'): snap_meta.value.decode('utf-8') for snap_meta in
+                  info.snap_metadata[:info.nr_snap_metadata]}
+            ceph_free_snap_info_buffer(&info)
+        return {'id': info.id, 'metadata': md}
+
     def chmod(self, path, mode) :
         """
         Change directory mode.

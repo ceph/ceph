@@ -159,6 +159,7 @@ struct Inode {
   version_t version;           // auth only
   version_t xattr_version;
   utime_t   snap_btime;        // snapshot creation (birth) time
+  std::map<std::string, std::string> snap_metadata;
 
   // inline data
   version_t  inline_version;

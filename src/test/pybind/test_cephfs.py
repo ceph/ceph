@@ -832,3 +832,34 @@ def test_disk_quota_exceeeded_error():
     assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz", 0)
     cephfs.close(fd)
     cephfs.unlink(b"/dir-1/file-1")
+
+@with_setup(setup_test)
+def test_empty_snapshot_info():
+    cephfs.mkdir("/dir-1", 0o755)
+
+    # snap without metadata
+    cephfs.mkdir("/dir-1/.snap/snap0", 0o755)
+    snap_info = cephfs.snap_info("/dir-1/.snap/snap0")
+    assert_equal(snap_info["metadata"], {})
+    assert_greater(snap_info["id"], 0)
+    cephfs.rmdir("/dir-1/.snap/snap0")
+
+    # remove directory
+    cephfs.rmdir("/dir-1")
+
+@with_setup(setup_test)
+def test_snapshot_info():
+    cephfs.mkdir("/dir-1", 0o755)
+
+    # snap with custom metadata
+    md = {"foo": "bar", "zig": "zag", "abcdefg": "12345"}
+    cephfs.mksnap("/dir-1", "snap0", 0o755, metadata=md)
+    snap_info = cephfs.snap_info("/dir-1/.snap/snap0")
+    assert_equal(snap_info["metadata"]["foo"], md["foo"])
+    assert_equal(snap_info["metadata"]["zig"], md["zig"])
+    assert_equal(snap_info["metadata"]["abcdefg"], md["abcdefg"])
+    assert_greater(snap_info["id"], 0)
+    cephfs.rmsnap("/dir-1", "snap0")
+
+    # remove directory
+    cephfs.rmdir("/dir-1")
