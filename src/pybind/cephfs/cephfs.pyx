@@ -2030,13 +2030,13 @@ cdef class LibCephFS(object):
         :return 3-tuple of output status int, output status string, output data
         """
         mds_spec = cstr(mds_spec, 'mds_spec')
-        args = cstr_list(args, 'args')
+        args = cstr(args, 'args')
         input_data = cstr(input_data, 'input_data')
 
         cdef:
             char *_mds_spec = opt_str(mds_spec)
-            char **_cmd = to_bytes_array(args)
-            size_t _cmdlen = len(args)
+            char **_cmd = to_bytes_array([args])
+            size_t _cmdlen = 1
 
             char *_inbuf = input_data
             size_t _inbuf_len = len(input_data)
