@@ -66,6 +66,11 @@ private:
   std::string m_pool_namespace;
   std::string m_image_name;
   std::string m_image_id;
+  std::string m_snap_name;
+  uint64_t m_snap_id = CEPH_NOSNAP;
+
+  void handle_open(int r, Context* on_finish);
+  void handle_snap_set(int r, Context* on_finish);
 
 };
 
