@@ -27,9 +27,9 @@ These are exciting times in the Ceph community! Get involved!
 |                      | IRC channel particularly during daytime hours   | - **Channels:**                               |
 |                      | in the US Pacific Standard Time zone.           |     ``#ceph``,                                |
 |                      | While ``#ceph`` is a good starting point for    |     ``#ceph-devel``,                          |
-|                      | cluster operators and users, there is also      |     ``#ceph-dashboard``                       |
-|                      | ``#ceph-devel`` and ``#ceph-dashboard``         |                                               |
-|                      | dedicated for Ceph developers.                  |                                               |
+|                      | cluster operators and users, there is also      |     ``#ceph-dashboard``,                      |
+|                      | ``#ceph-devel``, ``#ceph-dashboard`` and        |     ``#cephfs``                               |
+|                      | ``#cephfs`` dedicated for Ceph developers.      |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **User List**        | Ask and answer user-related questions by        |                                               |
 |                      | subscribing to the email list at                | - `User Subscribe`_                           |
