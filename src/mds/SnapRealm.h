@@ -102,6 +102,11 @@ public:
     return (p != s.end() && *p <= last);
   }
 
+  inodeno_t get_subvolume_ino() {
+    check_cache();
+    return cached_subvolume_ino;
+  }
+
   void adjust_parent();
 
   void split_at(SnapRealm *child);
@@ -156,6 +161,7 @@ private:
   mutable set<snapid_t> cached_snaps;
   mutable SnapContext cached_snap_context;
   mutable bufferlist cached_snap_trace;
+  mutable inodeno_t cached_subvolume_ino = 0;
 };
 
 ostream& operator<<(ostream& out, const SnapRealm &realm);
