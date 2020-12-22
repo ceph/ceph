@@ -1804,11 +1804,11 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	    << dendl;
 
     lock->unlock();
-    delete lock;
     ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
     bucket_lc_post(index, max_lock_secs, entry, ret, worker);
   } while(1 && !once);
 
+  delete lock;
   return 0;
 
 exit:
