@@ -201,7 +201,7 @@ class CephFSMount(object):
         return self.run_shell(["bash", "-c", Raw(f"'{payload}'")], **kwargs)
 
     def run_shell(self, args, wait=True, stdin=None, check_status=True,
-                  omit_sudo=True):
+                  omit_sudo=True, timeout=10800):
         if isinstance(args, str):
             args = args.split()
 
@@ -209,7 +209,8 @@ class CephFSMount(object):
         return self.client_remote.run(args=args, stdout=StringIO(),
                                       stderr=StringIO(), wait=wait,
                                       stdin=stdin, check_status=check_status,
-                                      omit_sudo=omit_sudo)
+                                      omit_sudo=omit_sudo,
+                                      timeout=timeout)
 
     def open_no_data(self, basename):
         """
