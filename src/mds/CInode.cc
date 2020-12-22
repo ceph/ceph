@@ -4037,6 +4037,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(any_i->btime, bl);
     encode(any_i->change_attr, bl);
     encode(file_i->export_pin, bl);
+    encode(file_i->export_ephemeral_distributed_pin, bl);
     encode(snap_btime, bl);
     encode(file_i->rstat.rsnaps, bl);
     ENCODE_FINISH(bl);
@@ -4095,6 +4096,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       encode(any_i->btime, bl);
       encode(any_i->change_attr, bl);
     }
+    encode(file_i->export_ephemeral_distributed_pin, bl);
   }
 
   return valid;
