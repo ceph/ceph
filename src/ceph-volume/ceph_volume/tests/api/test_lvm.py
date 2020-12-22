@@ -185,9 +185,9 @@ class TestCreateLV(object):
     def setup(self):
         self.foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
         self.foo_group = api.VolumeGroup(vg_name='foo_group',
-                                         vg_extent_size=4194304,
-                                         vg_extent_count=100,
-                                         vg_free_count=100)
+                                         vg_extent_size="4194304",
+                                         vg_extent_count="100",
+                                         vg_free_count="100")
 
     @patch('ceph_volume.api.lvm.process.run')
     @patch('ceph_volume.api.lvm.process.call')
@@ -204,9 +204,9 @@ class TestCreateLV(object):
     def test_uses_size_adjust_if_1percent_over(self, m_get_first_lv, m_call, m_run, monkeypatch):
         foo_volume = api.Volume(lv_name='foo', lv_path='/path', vg_name='foo_group', lv_tags='')
         foo_group = api.VolumeGroup(vg_name='foo_group',
-                                    vg_extent_size=4194304,
-                                    vg_extent_count=1000,
-                                    vg_free_count=1000)
+                                    vg_extent_size="4194304",
+                                    vg_extent_count="1000",
+                                    vg_free_count="1000")
         m_get_first_lv.return_value = foo_volume
         # 423624704 should be just under 1% off of the available size 419430400
         api.create_lv('foo', 0, vg=foo_group, size=4232052736, tags={'ceph.type': 'data'})
