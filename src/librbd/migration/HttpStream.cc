@@ -56,6 +56,7 @@ void HttpStream<I>::close(Context* on_finish) {
 
   if (!m_http_client) {
     on_finish->complete(0);
+    return;
   }
 
   m_http_client->close(on_finish);
