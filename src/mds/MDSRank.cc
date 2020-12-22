@@ -3571,6 +3571,11 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_recall_warning_decay_rate",
     "mds_request_load_average_decay_rate",
     "mds_session_cache_liveness_decay_rate",
+    "mds_session_cap_acquisition_decay_rate",
+    "mds_max_caps_per_client",
+    "mds_session_cap_acquisition_throttle",
+    "mds_session_max_caps_throttle_ratio",
+    "mds_cap_acquisition_throttle_retry_request_time",
     NULL
   };
   return KEYS;
