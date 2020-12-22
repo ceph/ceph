@@ -29,7 +29,13 @@ struct onode_t {
     onode_t ret{size, id};
     return ret;
   }
-  static std::unique_ptr<char[]> allocate(onode_t config) {
+  static void validate_tail_magic(const onode_t& onode) {
+    auto p_target = (const char*)&onode + onode.size - sizeof(uint32_t);
+    uint32_t target;
+    std::memcpy(&target, p_target, sizeof(uint32_t));
+    ceph_assert(target == onode.size * 137);
+  }
+  static std::unique_ptr<char[]> allocate(const onode_t& config) {
     ceph_assert(config.size >= sizeof(onode_t) + sizeof(uint32_t));
 
     auto ret = std::make_unique<char[]>(config.size);
@@ -40,6 +46,7 @@ struct onode_t {
     uint32_t tail_magic = config.size * 137;
     p_mem += (config.size - sizeof(uint32_t));
     std::memcpy(p_mem, &tail_magic, sizeof(uint32_t));
+    validate_tail_magic(*p_onode);
 
     return ret;
   }
