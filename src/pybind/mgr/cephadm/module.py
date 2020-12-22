@@ -2279,11 +2279,14 @@ Then run the following:
             allow_colo=self.cephadm_services[spec.service_type].allow_colo(),
         ).validate()
 
-        self.log.info('Saving service %s spec with placement %s' % (
-            spec.service_name(), spec.placement.pretty_str()))
+        msg = 'Saving service %s spec with placement <%s>' % (
+            spec.service_name(),
+            spec.placement.pretty_str())
+        self.log.info(msg)
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        return "Scheduled %s update..." % spec.service_name()
+
+        return '%s\nScheduled %s update...' % (msg, spec.service_name())
 
     @handle_orch_error
     def apply(self, specs: Sequence[GenericSpec], no_overwrite: bool = False) -> List[str]:

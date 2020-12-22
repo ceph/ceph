@@ -132,11 +132,11 @@ class TestCephadm(object):
                     out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
                     expected = [
                         {
-                            'placement': {'count': 2},
+                            'placement': {'count': 1},
                             'service_id': 'name',
                             'service_name': 'mds.name',
                             'service_type': 'mds',
-                            'status': {'created': mock.ANY, 'running': 1, 'size': 2},
+                            'status': {'created': mock.ANY, 'running': 1, 'size': 1},
                             'unmanaged': True
                         },
                         {
@@ -499,7 +499,11 @@ class TestCephadm(object):
             )
 
             c = cephadm_module.apply([spec])
-            assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
+
+            expected_result = f'Saving service osd.foo spec with placement ' \
+                              f'<{spec.placement.pretty_str()}>\nScheduled ' \
+                              f'osd.foo update...'
+            assert wait(cephadm_module, c) == [expected_result]
 
             inventory = Devices([
                 Device(
@@ -538,7 +542,10 @@ class TestCephadm(object):
             )
 
             c = cephadm_module.apply([spec])
-            assert wait(cephadm_module, c) == ['Scheduled osd.noncollocated update...']
+            expected_result = [f'Saving service osd.noncollocated spec with placement '
+                               f'<{spec.placement.pretty_str()}>\nScheduled '
+                               f'osd.noncollocated update...']
+            assert wait(cephadm_module, c) == expected_result
 
             inventory = Devices([
                 Device('/dev/sdb', available=True),
@@ -571,7 +578,10 @@ class TestCephadm(object):
             spec = ServiceSpec.from_json(json_spec)
             assert isinstance(spec, DriveGroupSpec)
             c = cephadm_module.apply([spec])
-            assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
+            expected_result = f'Saving service osd.foo spec with placement ' \
+                              f'<{spec.placement.pretty_str()}>\nScheduled ' \
+                              f'osd.foo update...'
+            assert wait(cephadm_module, c) == [expected_result]
             _save_spec.assert_called_with(spec)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -933,6 +943,31 @@ class TestCephadm(object):
                 'key': 'mds_join_fs',
             })
             assert not out
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_placement_defaults(self, cephadm_module: CephadmOrchestrator):
+        """ Test services that can be deployed using a default placement
+             Ex: ceph orch appply mon
+        """
+        with with_host(cephadm_module, 'host1'):
+
+            defaults = [('mon', 'mon', 'count:5', cephadm_module.apply_mon),
+                        ('mgr', 'mgr', 'count:2', cephadm_module.apply_mgr),
+                        ('mds', 'mds.test', 'count:2', cephadm_module.apply_mds),
+                        ('rbd-mirror', 'rbd-mirror', 'count:2', cephadm_module.apply_rbd_mirror),
+                        ('grafana', 'grafana', 'count:1', cephadm_module.apply_grafana),
+                        ('alertmanager', 'alertmanager', 'count:1', cephadm_module.apply_alertmanager),
+                        ('prometheus', 'prometheus', 'count:1', cephadm_module.apply_prometheus),
+                        ('node-exporter', 'node-exporter', '*', cephadm_module.apply_node_exporter),
+                        ('crash', 'crash', '*', cephadm_module.apply_crash),
+                        ('cephadm-exporter', 'cephadm-exporter', '*', cephadm_module.apply_cephadm_exporter)]
+
+            for service in defaults:
+                test_spec = ServiceSpec(service[0], service_id='test')
+
+                c = service[3](test_spec)
+                expected = f'Saving service {service[1]} spec with placement <{service[2]}>\nScheduled {service[1]} update...'
+                assert wait(cephadm_module, c) == expected
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")

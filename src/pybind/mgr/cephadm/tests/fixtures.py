@@ -96,14 +96,21 @@ def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):
 
 @contextmanager
 def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth=None, host: str = '') -> Iterator[List[str]]:
-    if spec.placement.is_empty() and host:
+    if spec.placement.is_empty():
         spec.placement = PlacementSpec(hosts=[host], count=1)
+
+    expected_result = f'Saving service {spec.service_name()} spec with ' \
+        f'placement <{spec.placement.pretty_str()}>\nScheduled ' \
+        f'{spec.service_name()} update...'
     if meth is not None:
         c = meth(cephadm_module, spec)
-        assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+        expected = expected_result
     else:
         c = cephadm_module.apply([spec])
-        assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
+        expected = [expected_result]
+
+    out = wait(cephadm_module, c)
+    assert out == expected
 
     specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
     assert spec in specs
