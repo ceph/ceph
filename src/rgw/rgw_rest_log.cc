@@ -471,9 +471,13 @@ void RGWOp_BILog_List::send_response_end() {
 
   if (format_ver >= 2) {
     encode_json("truncated", truncated, s->formatter);
-    encode_json("next_generation", gen, s->formatter);
-    encode_json("next_gen_num_shards", num_shards, s->formatter);
-    s->formatter->close_section();
+
+    s->formatter->open_object_section("next_log");
+    encode_json("generation", gen, s->formatter);
+    encode_json("num_shards", num_shards, s->formatter);
+    s->formatter->close_section(); // next_log
+
+    s->formatter->close_section(); // result
   }
 
   flusher.flush();

@@ -3514,17 +3514,25 @@ public:
   }
 };
 
-struct extended_result {
+struct next_bilog_result {
+  uint64_t generation = 0;
+  int num_shards = 0;
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("generation", generation, obj);
+    JSONDecoder::decode_json("num_shards", num_shards, obj);
+  }
+};
+
+struct bilog_list_result {
   list<rgw_bi_log_entry> entries;
   bool truncated{false};
-  uint64_t next_generation{0};
-  int next_gen_num_shards;
+  next_bilog_result next_log;
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("entries", entries, obj);
     JSONDecoder::decode_json("truncated", truncated, obj);
-    JSONDecoder::decode_json("next_generation", next_generation, obj);
-    JSONDecoder::decode_json("next_gen_num_shards", next_gen_num_shards, obj);
+    JSONDecoder::decode_json("next_log", next_log, obj);
   }
 };
 
@@ -3534,17 +3542,16 @@ class RGWListBucketIndexLogCR: public RGWCoroutine {
   const string instance_key;
   string marker;
 
-  list<rgw_bi_log_entry> *result;
+  bilog_list_result *result;
   std::optional<PerfGuard> timer;
   uint64_t generation;
   uint32_t format_ver{1};
-  extended_result extended_result;
 
 public:
-  RGWListBucketIndexLogCR(RGWDataSyncCtx *_sc, const rgw_bucket_shard& bs,
-                          string& _marker, std::optional<uint64_t> _generation, int _format_ver, list<rgw_bi_log_entry> *_result, extended_result *_extended_result)
+  RGWListBucketIndexLogCR(RGWDataSyncCtx *_sc, const rgw_bucket_shard& bs, string& _marker, 
+                          uint64_t _generation, bilog_list_result *_result)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      instance_key(bs.get_key()), marker(_marker), generation(_generation), format_ver(_format_ver), result(_result), extended_result(_extended_result) {}
+      instance_key(bs.get_key()), marker(_marker), generation(_generation), result(_result) {}
 
   int operate() override {
     reenter(this) {
@@ -3557,13 +3564,11 @@ public:
 					{ "marker" , marker.c_str() },
 					{ "type", "bucket-index" },
           { "generation", generation},
-          { "format-ver", format_ver},
+          { "format-ver", "2"},
 	                                { NULL, NULL } };
-        if (format_ver >= 2) {
-          call(new RGWReadRESTResourceC<extended_result>(sync_env->cct, sc->conn, sync_env->http_manager, "/admin/log", pairs, extended_result));
-        } else {
-          call(new RGWReadRESTResourceCR<list<rgw_bi_log_entry> >(sync_env->cct, sc->conn, sync_env->http_manager, "/admin/log", pairs, result));
-        }
+
+        call(new RGWReadRESTResourceC<bilog_list_result>(sync_env->cct, sc->conn, sync_env->http_manager, 
+                                                      "/admin/log", pairs, result));
       }
       timer.reset();
       if (retcode < 0) {
@@ -4117,12 +4122,11 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWBucketSyncFlowManager::pipe_rules_ref rules;
   rgw_bucket_shard& bs;
   boost::intrusive_ptr<const RGWContinuousLeaseCR> lease_cr;
+  bilog_list_result extended_result;
   list<rgw_bi_log_entry> list_result;
-  extended_result extra_info;
   uint64_t generation;
-  int format_ver;
-  uint64_t new_gen;
-  int new_num_shards;
+  int next_num_shards;
+  uint64_t next_gen;
   bool truncated;
 
   list<rgw_bi_log_entry>::iterator entries_iter, entries_end;
@@ -4194,26 +4198,16 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
       tn->log(20, SSTR("listing bilog for incremental sync; position=" << sync_info.inc_marker.position));
       set_status() << "listing bilog; position=" << sync_info.inc_marker.position;
-      if (generation != 0) {
-        yield call(new RGWListBucketIndexLogCR(sc, bs, sync_info.inc_marker.position,
-                                              generation, 2, nullptr, &extra_info));
-        if (retcode < 0 && retcode != -ENOENT) {
-          /* wait for all operations to complete */
-          drain_all();
-          return set_cr_error(retcode);
-          *list_result = std::move(extra_info.entries);
-          *new_gen = extra_info.next_gen.gen;
-          *truncated = extra_info.truncated;
-          *new_num_shards = extra_info.next_gen.num_shards;
-        }
-      } else {
-        yield call(new RGWListBucketIndexLogCR(sc, bs, sync_info.inc_marker.position, std::nullopt, 1, &list_result, nullptr));
-        if (retcode < 0 && retcode != -ENOENT) {
-          /* wait for all operations to complete */
-          drain_all();
-          return set_cr_error(retcode);
-        }
+      yield call(new RGWListBucketIndexLogCR(sc, bs, sync_info.inc_marker.position, generation, &extended_result));
+      if (retcode < 0 && retcode != -ENOENT) {
+        /* wait for all operations to complete */
+        drain_all();
+        return set_cr_error(retcode);
       }
+      list_result = std::move(extended_result.entries);
+      next_gen = extended_result.next_log.gen;
+      next_num_shards = extended_result.next_log.num_shards;
+      truncated = extended_result.truncated;
 
       squash_map.clear();
       entries_iter = list_result.begin();
