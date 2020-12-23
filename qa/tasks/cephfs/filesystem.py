@@ -597,34 +597,41 @@ class Filesystem(MDSCluster):
 
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
                                          self.metadata_pool_name, self.pgs_per_fs_pool.__str__())
+
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
+                                         data_pool_name, self.pgs_per_fs_pool.__str__())
+
         if self.metadata_overlay:
             self.mon_manager.raw_cluster_cmd('fs', 'new',
                                              self.name, self.metadata_pool_name, data_pool_name,
                                              '--allow-dangerous-metadata-overlay')
         else:
+            self.mon_manager.raw_cluster_cmd('fs', 'new',
+                                             self.name,
+                                             self.metadata_pool_name,
+                                             data_pool_name)
+
             if self.ec_profile and 'disabled' not in self.ec_profile:
+                ec_data_pool_name = data_pool_name + "_ec"
                 log.debug("EC profile is %s", self.ec_profile)
-                cmd = ['osd', 'erasure-code-profile', 'set', data_pool_name]
+                cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
                 cmd.extend(self.ec_profile)
                 self.mon_manager.raw_cluster_cmd(*cmd)
                 self.mon_manager.raw_cluster_cmd(
                     'osd', 'pool', 'create',
-                    data_pool_name, self.pgs_per_fs_pool.__str__(), 'erasure',
-                    data_pool_name)
+                    ec_data_pool_name, self.pgs_per_fs_pool.__str__(), 'erasure',
+                    ec_data_pool_name)
                 self.mon_manager.raw_cluster_cmd(
                     'osd', 'pool', 'set',
-                    data_pool_name, 'allow_ec_overwrites', 'true')
-            else:
-                self.mon_manager.raw_cluster_cmd(
-                    'osd', 'pool', 'create',
-                    data_pool_name, self.pgs_per_fs_pool.__str__())
-            self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                             self.name,
-                                             self.metadata_pool_name,
-                                             data_pool_name,
-                                             "--force")
+                    ec_data_pool_name, 'allow_ec_overwrites', 'true')
+                self.add_data_pool(ec_data_pool_name, create=False)
+                self.check_pool_application(ec_data_pool_name)
+
+                self.run_client_payload(f"setfattr -n ceph.dir.layout.pool -v {ec_data_pool_name} . && getfattr -n ceph.dir.layout .")
+
         self.check_pool_application(self.metadata_pool_name)
         self.check_pool_application(data_pool_name)
+
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
             self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
@@ -646,6 +653,15 @@ class Filesystem(MDSCluster):
                 self.set_session_timeout(session_timeout)
 
         self.getinfo(refresh = True)
+
+    def run_client_payload(self, cmd):
+        # avoid circular dep by importing here:
+        from tasks.cephfs.fuse_mount import FuseMount
+        d = misc.get_testdir(self._ctx)
+        m = FuseMount(self._ctx, {}, d, "admin", self.client_remote, cephfs_name=self.name)
+        m.mount()
+        m.run_shell_payload(cmd)
+        m.umount_wait(require_clean=True)
 
     def destroy(self, reset_obj_attrs=True):
         log.info('Destroying file system ' + self.name +  ' and related '
