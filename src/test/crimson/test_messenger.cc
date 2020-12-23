@@ -22,6 +22,7 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/core/with_timeout.hh>
 
 #include "test_cmds.h"
 
@@ -3583,6 +3584,59 @@ test_v2_protocol(entity_addr_t test_addr,
 
 }
 
+seastar::future<int> do_test(seastar::app_template& app)
+{
+  std::vector<const char*> args;
+  std::string cluster;
+  std::string conf_file_list;
+  auto init_params = ceph_argparse_early_args(args,
+                                              CEPH_ENTITY_TYPE_CLIENT,
+                                              &cluster,
+                                              &conf_file_list);
+  return crimson::common::sharded_conf().start(init_params.name, cluster)
+  .then([conf_file_list] {
+    return local_conf().parse_config_files(conf_file_list);
+  }).then([&app] {
+    auto&& config = app.configuration();
+    verbose = config["verbose"].as<bool>();
+    auto rounds = config["rounds"].as<unsigned>();
+    auto keepalive_ratio = config["keepalive-ratio"].as<double>();
+    entity_addr_t v2_test_addr;
+    ceph_assert(v2_test_addr.parse(
+        config["v2-test-addr"].as<std::string>().c_str(), nullptr));
+    entity_addr_t v2_testpeer_addr;
+    ceph_assert(v2_testpeer_addr.parse(
+        config["v2-testpeer-addr"].as<std::string>().c_str(), nullptr));
+    auto v2_testpeer_islocal = config["v2-testpeer-islocal"].as<bool>();
+    return test_echo(rounds, keepalive_ratio, false)
+   .then([rounds, keepalive_ratio] {
+      return test_echo(rounds, keepalive_ratio, true);
+    }).then([] {
+      return test_concurrent_dispatch(false);
+    }).then([] {
+      return test_concurrent_dispatch(true);
+    }).then([] {
+      return test_preemptive_shutdown(false);
+    }).then([] {
+      return test_preemptive_shutdown(true);
+    }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
+      return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
+    }).then([] {
+      logger().info("All tests succeeded");
+      // Seastar has bugs to have events undispatched during shutdown,
+      // which will result in memory leak and thus fail LeakSanitizer.
+      return seastar::sleep(100ms);
+    });
+  }).then([] {
+    return crimson::common::sharded_conf().stop();
+  }).then([] {
+    return 0;
+  }).handle_exception([] (auto eptr) {
+    logger().error("Test failed: got exception {}", eptr);
+    return 1;
+  });
+}
+
 int main(int argc, char** argv)
 {
   seastar::app_template app;
@@ -3601,52 +3655,14 @@ int main(int argc, char** argv)
     ("v2-testpeer-islocal", bpo::value<bool>()->default_value(true),
      "create a local crimson testpeer, or connect to a remote testpeer");
   return app.run(argc, argv, [&app] {
-    std::vector<const char*> args;
-    std::string cluster;
-    std::string conf_file_list;
-    auto init_params = ceph_argparse_early_args(args,
-                                                CEPH_ENTITY_TYPE_CLIENT,
-                                                &cluster,
-                                                &conf_file_list);
-    return crimson::common::sharded_conf().start(init_params.name, cluster)
-    .then([conf_file_list] {
-      return local_conf().parse_config_files(conf_file_list);
-    }).then([&app] {
-      auto&& config = app.configuration();
-      verbose = config["verbose"].as<bool>();
-      auto rounds = config["rounds"].as<unsigned>();
-      auto keepalive_ratio = config["keepalive-ratio"].as<double>();
-      entity_addr_t v2_test_addr;
-      ceph_assert(v2_test_addr.parse(
-          config["v2-test-addr"].as<std::string>().c_str(), nullptr));
-      entity_addr_t v2_testpeer_addr;
-      ceph_assert(v2_testpeer_addr.parse(
-          config["v2-testpeer-addr"].as<std::string>().c_str(), nullptr));
-      auto v2_testpeer_islocal = config["v2-testpeer-islocal"].as<bool>();
-      return test_echo(rounds, keepalive_ratio, false)
-      .then([rounds, keepalive_ratio] {
-        return test_echo(rounds, keepalive_ratio, true);
-      }).then([] {
-        return test_concurrent_dispatch(false);
-      }).then([] {
-        return test_concurrent_dispatch(true);
-      }).then([] {
-        return test_preemptive_shutdown(false);
-      }).then([] {
-        return test_preemptive_shutdown(true);
-      }).then([v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal] {
-        return test_v2_protocol(v2_test_addr, v2_testpeer_addr, v2_testpeer_islocal);
-      }).then([] {
-        logger().info("All tests succeeded");
-        // Seastar has bugs to have events undispatched during shutdown,
-        // which will result in memory leak and thus fail LeakSanitizer.
-        return seastar::sleep(100ms);
+    // This test normally succeeds within 60 seconds, so kill it after 120
+    // seconds in case it is blocked forever due to unaddressed bugs.
+    return seastar::with_timeout(seastar::lowres_clock::now() + 120s, do_test(app))
+      .handle_exception_type([](seastar::timed_out_error&) {
+        logger().error("test_messenger timeout after 120s, abort! "
+                       "Consider to extend the period if the test is still running.");
+        // use the retcode of timeout(1)
+        return 124;
       });
-    }).then([] {
-      return crimson::common::sharded_conf().stop();
-    }).handle_exception([] (auto eptr) {
-      logger().error("Test failed: got exception {}", eptr);
-      throw;
-    });
   });
 }
