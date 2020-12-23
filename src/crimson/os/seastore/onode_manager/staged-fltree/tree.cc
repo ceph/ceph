@@ -204,6 +204,10 @@ std::ostream& Btree::dump(Transaction& t, std::ostream& os) {
   return os;
 }
 
+std::ostream& Btree::print(std::ostream& os) const {
+  return os << "BTree-" << *nm;
+}
+
 btree_future<Ref<Node>> Btree::get_root(Transaction& t) {
   auto root = root_tracker->get_root(t);
   if (root) {

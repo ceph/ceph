@@ -6,12 +6,17 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/thread.hh>
 
+#include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
 
 using namespace crimson::os::seastore::onode;
 namespace bpo = boost::program_options;
+
+seastar::logger& logger() {
+  return crimson::get_logger(ceph_subsys_test);
+}
 
 template <bool TRACK>
 class PerfTree : public TMTestState {
@@ -32,7 +37,10 @@ class PerfTree : public TMTestState {
         {
           auto t = tm->create_transaction();
           tree->insert(*t).unsafe_get();
+          auto start_time = mono_clock::now();
           tm->submit_transaction(std::move(t)).unsafe_get();
+          std::chrono::duration<double> duration = mono_clock::now() - start_time;
+          logger().warn("submit_transaction() done! {}s", duration.count());
         }
         {
           auto t = tm->create_transaction();
