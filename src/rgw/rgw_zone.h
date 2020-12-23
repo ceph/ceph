@@ -748,6 +748,7 @@ struct RGWTierACLMapping {
 WRITE_CLASS_ENCODER(RGWTierACLMapping)
 
 struct RGWZoneGroupPlacementTier {
+#define DEFAULT_MULTIPART_SYNC_PART_SIZE (32 * 1024 * 1024)
   std::string storage_class;
   std::string tier_type;
   std::string endpoint;
@@ -758,6 +759,9 @@ struct RGWZoneGroupPlacementTier {
   /* Should below be bucket/zone specific?? */
   string target_path;
   map<string, RGWTierACLMapping> acl_mappings;
+
+  uint64_t multipart_sync_threshold{DEFAULT_MULTIPART_SYNC_PART_SIZE};
+  uint64_t multipart_min_part_size{DEFAULT_MULTIPART_SYNC_PART_SIZE};
 
   int update_params(const JSONFormattable& config);
   int clear_params(const JSONFormattable& config);
@@ -773,6 +777,8 @@ struct RGWZoneGroupPlacementTier {
     encode(tier_storage_class, bl);
     encode(target_path, bl);
     encode(acl_mappings, bl);
+    encode(multipart_sync_threshold, bl);
+    encode(multipart_min_part_size, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -792,6 +798,8 @@ struct RGWZoneGroupPlacementTier {
     decode(tier_storage_class, bl);
     decode(target_path, bl);
     decode(acl_mappings, bl);
+    decode(multipart_sync_threshold, bl);
+    decode(multipart_min_part_size, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
