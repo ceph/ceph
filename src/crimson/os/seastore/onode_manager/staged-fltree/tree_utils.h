@@ -197,7 +197,9 @@ class TreeBuilder {
   using future = ertr::future<ValueT>;
 
   TreeBuilder(KVPool& kvs, NodeExtentManagerURef&& nm)
-    : kvs{kvs}, tree{std::move(nm)} {}
+      : kvs{kvs} {
+    tree.emplace(std::move(nm));
+  }
 
   future<> bootstrap(Transaction& t) {
     std::ostringstream oss;
@@ -216,9 +218,9 @@ class TreeBuilder {
     } else {
       oss << "track=off, ";
     }
-    oss << tree;
+    oss << *tree;
     logger().warn("TreeBuilder: {}, bootstrapping ...", oss.str());
-    return tree.mkfs(t);
+    return tree->mkfs(t);
   }
 
   future<> insert(Transaction& t) {
@@ -232,7 +234,7 @@ class TreeBuilder {
       }
       auto [key, p_value] = kv_iter.get_kv();
       logger().debug("[{}] {} -> {}", kv_iter.index(), key_hobj_t{key}, *p_value);
-      return tree.insert(t, key, *p_value
+      return tree->insert(t, key, *p_value
       ).safe_then([&t, this, cursors](auto ret) {
         auto& [cursor, success] = ret;
         assert(success == true);
@@ -242,7 +244,7 @@ class TreeBuilder {
 #ifndef NDEBUG
         auto [key, p_value] = kv_iter.get_kv();
         Onodes::validate_cursor(cursor, key, *p_value);
-        return tree.lower_bound(t, key).safe_then([this, cursor](auto cursor_) {
+        return tree->lower_bound(t, key).safe_then([this, cursor](auto cursor_) {
           auto [key, p_value] = kv_iter.get_kv();
           ceph_assert(cursor_.get_ghobj() == key);
           ceph_assert(cursor_.value() == cursor.value());
@@ -270,7 +272,7 @@ class TreeBuilder {
             assert(c_iter != cursors->end());
             auto [k, v] = kv_iter.get_kv();
             // validate values in tree keep intact
-            return tree.lower_bound(t, k).safe_then([this, &c_iter](auto cursor) {
+            return tree->lower_bound(t, k).safe_then([this, &c_iter](auto cursor) {
               auto [k, v] = kv_iter.get_kv();
               Onodes::validate_cursor(cursor, k, *v);
               // validate values in cursors keep intact
@@ -288,10 +290,14 @@ class TreeBuilder {
   }
 
   future<> get_stats(Transaction& t) {
-    return tree.get_stats_slow(t
+    return tree->get_stats_slow(t
     ).safe_then([this](auto stats) {
       logger().warn("{}", stats);
     });
+  }
+
+  void reload(NodeExtentManagerURef&& nm) {
+    tree.emplace(std::move(nm));
   }
 
   future<> validate(Transaction& t) {
@@ -304,7 +310,7 @@ class TreeBuilder {
           return ertr::make_ready_future<bool>(true);
         }
         auto [k, v] = kvs_iter.get_kv();
-        return tree.lower_bound(t, k
+        return tree->lower_bound(t, k
         ).safe_then([&kvs_iter, k=k, v=v] (auto cursor) {
           Onodes::validate_cursor(cursor, k, *v);
           ++kvs_iter;
@@ -320,7 +326,7 @@ class TreeBuilder {
   }
 
   KVPool& kvs;
-  Btree tree;
+  std::optional<Btree> tree;
   KVPool::iterator_t kv_iter;
 };
 

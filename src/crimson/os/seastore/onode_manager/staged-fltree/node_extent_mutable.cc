@@ -8,16 +8,19 @@ namespace crimson::os::seastore::onode {
 
 NodeExtentMutable::NodeExtentMutable(NodeExtent& extent)
     : extent{extent} {
-  assert(extent.is_pending());
+  assert(extent.is_pending() ||  // during mutation
+         extent.is_clean());     // during replay
 }
 
 const char* NodeExtentMutable::get_read() const {
-  assert(extent.is_pending());
+  assert(extent.is_pending() ||  // during mutation
+         extent.is_clean());     // during replay
   return extent.get_bptr().c_str();
 }
 
 char* NodeExtentMutable::get_write() {
-  assert(extent.is_pending());
+  assert(extent.is_pending() ||  // during mutation
+         extent.is_clean());     // during replay
   return extent.get_bptr().c_str();
 }
 
