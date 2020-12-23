@@ -1181,7 +1181,7 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
-        self.ec_profile = fs_config.get('cephfs_ec_profile')
+        self.ec_profile = fs_config.get('ec_profile')
 
         # Hack: cheeky inspection of ceph.conf to see what MDSs exist
         self.mds_ids = set()

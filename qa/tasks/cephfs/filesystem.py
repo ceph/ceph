@@ -462,7 +462,7 @@ class Filesystem(MDSCluster):
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
-        self.ec_profile = fs_config.get('cephfs_ec_profile')
+        self.ec_profile = fs_config.get('ec_profile')
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
