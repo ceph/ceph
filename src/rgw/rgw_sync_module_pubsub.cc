@@ -17,12 +17,6 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_perf_counters.h"
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-#include "rgw_amqp.h"
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-#include "rgw_kafka.h"
-#endif
 
 #include <boost/algorithm/hex.hpp>
 #include <boost/asio/yield.hpp>
@@ -264,38 +258,38 @@ static void make_event_ref(CephContext *cct, const rgw_bucket& bucket,
   encode_json("info", oevent, &e->info);
 }
 
-static void make_s3_record_ref(CephContext *cct, const rgw_bucket& bucket,
+static void make_s3_event_ref(CephContext *cct, const rgw_bucket& bucket,
                        const rgw_user& owner,
                        const rgw_obj_key& key,
                        const ceph::real_time& mtime,
-                       const std::vector<std::pair<std::string, std::string> > *attrs,
+                       const std::vector<std::pair<std::string, std::string>>* attrs,
                        rgw::notify::EventType event_type,
-                       EventRef<rgw_pubsub_s3_record> *record) {
-  *record = std::make_shared<rgw_pubsub_s3_record>();
+                       EventRef<rgw_pubsub_s3_event>* event) {
+  *event = std::make_shared<rgw_pubsub_s3_event>();
 
-  EventRef<rgw_pubsub_s3_record>& r = *record;
-  r->eventTime = mtime;
-  r->eventName = rgw::notify::to_string(event_type);
+  EventRef<rgw_pubsub_s3_event>& e = *event;
+  e->eventTime = mtime;
+  e->eventName = rgw::notify::to_string(event_type);
   // userIdentity: not supported in sync module
   // x_amz_request_id: not supported in sync module
   // x_amz_id_2: not supported in sync module
   // configurationId is filled from subscription configuration
-  r->bucket_name = bucket.name;
-  r->bucket_ownerIdentity = owner.to_str();
-  r->bucket_arn = to_string(rgw::ARN(bucket));
-  r->bucket_id = bucket.bucket_id; // rgw extension
-  r->object_key = key.name;
+  e->bucket_name = bucket.name;
+  e->bucket_ownerIdentity = owner.to_str();
+  e->bucket_arn = to_string(rgw::ARN(bucket));
+  e->bucket_id = bucket.bucket_id; // rgw extension
+  e->object_key = key.name;
   // object_size not supported in sync module
   objstore_event oevent(bucket, key, mtime, attrs);
-  r->object_etag = oevent.get_hash();
-  r->object_versionId = key.instance;
+  e->object_etag = oevent.get_hash();
+  e->object_versionId = key.instance;
  
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
-          std::back_inserter(r->object_sequencer));
+          std::back_inserter(e->object_sequencer));
  
-  set_event_id(r->id, r->object_etag, ts);
+  set_event_id(e->id, e->object_etag, ts);
 }
 
 class PSManager;
@@ -1022,11 +1016,10 @@ class RGWPSHandleObjEventCR : public RGWCoroutine {
   const PSEnvRef env;
   const rgw_user owner;
   const EventRef<rgw_pubsub_event> event;
-  const EventRef<rgw_pubsub_s3_record> record;
+  const EventRef<rgw_pubsub_s3_event> s3_event;
   const TopicsRef topics;
   bool has_subscriptions;
   bool event_handled;
-  bool sub_conf_found;
   PSSubscriptionRef sub;
   std::vector<PSTopicConfigRef>::const_iterator titer;
   std::set<std::string>::const_iterator siter;
@@ -1036,13 +1029,13 @@ public:
                       const PSEnvRef _env,
                       const rgw_user& _owner,
                       const EventRef<rgw_pubsub_event>& _event,
-                      const EventRef<rgw_pubsub_s3_record>& _record,
+                      const EventRef<rgw_pubsub_s3_event>& _s3_event,
                       const TopicsRef& _topics) : RGWCoroutine(_sc->cct),
                                           sc(_sc),
                                           env(_env),
                                           owner(_owner),
                                           event(_event),
-                                          record(_record),
+                                          s3_event(s3_event),
                                           topics(_topics),
                                           has_subscriptions(false),
                                           event_handled(false) {}
@@ -1106,23 +1099,23 @@ public:
             } 
           } else {
             // subscription was made by S3 compatible API
-            ldout(sc->cct, 20) << "storing record for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
-            record->configurationId = sub->sub_conf->s3_id;
-            record->opaque_data = (*titer)->opaque_data;
-            yield call(PSSubscription::store_event_cr(sc, sub, record));
+            ldout(sc->cct, 20) << "storing s3 event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
+            s3_event->configurationId = sub->sub_conf->s3_id;
+            s3_event->opaque_data = (*titer)->opaque_data;
+            yield call(PSSubscription::store_event_cr(sc, sub, s3_event));
             if (retcode < 0) {
               if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
-              ldout(sc->cct, 1) << "ERROR: failed to store record for subscription=" << *siter << " ret=" << retcode << dendl;
+              ldout(sc->cct, 1) << "ERROR: failed to store s3 event for subscription=" << *siter << " ret=" << retcode << dendl;
             } else {
               if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_ok);
               event_handled = true;
             }
             if (sub->sub_conf->push_endpoint) {
-                ldout(sc->cct, 20) << "push record for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
-              yield call(PSSubscription::push_event_cr(sc, sub, record));
+                ldout(sc->cct, 20) << "push s3 event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
+              yield call(PSSubscription::push_event_cr(sc, sub, s3_event));
               if (retcode < 0) {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
-                ldout(sc->cct, 1) << "ERROR: failed to push record for subscription=" << *siter << " ret=" << retcode << dendl;
+                ldout(sc->cct, 1) << "ERROR: failed to push s3 event for subscription=" << *siter << " ret=" << retcode << dendl;
               } else {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
                 event_handled = true;
@@ -1152,7 +1145,7 @@ class RGWPSHandleRemoteObjCBCR : public RGWStatRemoteObjCBCR {
   PSEnvRef env;
   std::optional<uint64_t> versioned_epoch;
   EventRef<rgw_pubsub_event> event;
-  EventRef<rgw_pubsub_s3_record> record;
+  EventRef<rgw_pubsub_s3_event> s3_event;
   TopicsRef topics;
 public:
   RGWPSHandleRemoteObjCBCR(RGWDataSyncCtx *_sc,
@@ -1179,20 +1172,20 @@ public:
           }
           attrs.push_back(std::make_pair(k, attr.second));
         } 
-        // at this point we don't know whether we need the ceph event or S3 record
+        // at this point we don't know whether we need the ceph event or S3 event
         // this is why both are created here, once we have information about the 
         // subscription, we will store/push only the relevant ones
         make_event_ref(sc->cct,
                        sync_pipe.info.source_bs.bucket, key,
                        mtime, &attrs,
                        rgw::notify::ObjectCreated, &event);
-        make_s3_record_ref(sc->cct,
+        make_s3_event_ref(sc->cct,
                        sync_pipe.info.source_bs.bucket, sync_pipe.dest_bucket_info.owner, key,
                        mtime, &attrs,
-                       rgw::notify::ObjectCreated, &record);
+                       rgw::notify::ObjectCreated, &s3_event);
       }
 
-      yield call(new RGWPSHandleObjEventCR(sc, env, sync_pipe.source_bucket_info.owner, event, record, topics));
+      yield call(new RGWPSHandleObjEventCR(sc, env, sync_pipe.source_bucket_info.owner, event, s3_event, topics));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -1278,7 +1271,7 @@ class RGWPSGenericObjEventCBCR : public RGWCoroutine {
   ceph::real_time mtime;
   rgw::notify::EventType event_type;
   EventRef<rgw_pubsub_event> event;
-  EventRef<rgw_pubsub_s3_record> record;
+  EventRef<rgw_pubsub_s3_event> s3_event;
   TopicsRef topics;
 public:
   RGWPSGenericObjEventCBCR(RGWDataSyncCtx *_sc,
@@ -1304,18 +1297,18 @@ public:
         ldout(sc->cct, 20) << "no topics found for " << bucket << "/" << key << dendl;
         return set_cr_done();
       }
-      // at this point we don't know whether we need the ceph event or S3 record
+      // at this point we don't know whether we need the ceph event or S3 event
       // this is why both are created here, once we have information about the 
       // subscription, we will store/push only the relevant ones
       make_event_ref(sc->cct,
                      bucket, key,
                      mtime, nullptr,
                      event_type, &event);
-      make_s3_record_ref(sc->cct,
+      make_s3_event_ref(sc->cct,
                      bucket, owner, key,
                      mtime, nullptr,
-                     event_type, &record);
-      yield call(new RGWPSHandleObjEventCR(sc, env, owner, event, record, topics));
+                     event_type, &s3_event);
+      yield call(new RGWPSHandleObjEventCR(sc, env, owner, event, s3_event, topics));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -1383,25 +1376,6 @@ RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFor
   } else {
     effective_conf.decode_json(&p);
   }
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  if (!rgw::amqp::init(cct)) {
-    ldout(cct, 1) << "ERROR: failed to initialize AMQP manager in pubsub sync module" << dendl;
-  }
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-  if (!rgw::kafka::init(cct)) {
-    ldout(cct, 1) << "ERROR: failed to initialize Kafka manager in pubsub sync module" << dendl;
-  }
-#endif
-}
-
-RGWPSSyncModuleInstance::~RGWPSSyncModuleInstance() {
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  rgw::amqp::shutdown();
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-  rgw::kafka::shutdown();
-#endif
 }
 
 RGWDataSyncModule *RGWPSSyncModuleInstance::get_data_handler()

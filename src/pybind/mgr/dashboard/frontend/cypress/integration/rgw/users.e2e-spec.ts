@@ -6,6 +6,7 @@ describe('RGW users page', () => {
 
   beforeEach(() => {
     cy.login();
+    Cypress.Cookies.preserveOnce('token');
     users.navigateTo();
   });
 

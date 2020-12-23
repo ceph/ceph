@@ -478,6 +478,18 @@ TEST(TestRGWLua, WithLib)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, NotAllowedInLib)
+{
+  const std::string script = R"(
+    os.clock() -- this should be ok
+    os.exit()  -- this should fail (os.exit() is removed)
+  )";
+
+  DEFINE_REQ_STATE;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, "put_obj", script);
+  ASSERT_NE(rc, 0);
+}
 #include <sys/socket.h>
 #include <stdlib.h>
 

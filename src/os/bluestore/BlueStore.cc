@@ -1074,7 +1074,14 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     --num_pinned;
     dout(20) << __func__ << this << " " << " " << " " << o->oid << " unpinned" << dendl;
   }
-
+  void _unpin_and_rm(BlueStore::Onode* o) override
+  {
+    o->pop_cache();
+    ceph_assert(num_pinned);
+    --num_pinned;
+    ceph_assert(num);
+    --num;
+  }
   void _trim_to(uint64_t new_size) override
   {
     if (new_size >= lru.size()) {
@@ -1928,12 +1935,12 @@ void BlueStore::OnodeSpace::rename(
   cache->_trim();
 }
 
-bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
+bool BlueStore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
 {
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << dendl;
   for (auto& i : onode_map) {
-    if (f(i.second)) {
+    if (f(i.second.get())) {
       return true;
     }
   }
@@ -3498,32 +3505,42 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 //
 void BlueStore::Onode::get() {
   if (++nref == 2) {
-    c->get_onode_cache()->pin(this, [&]() {
-        bool was_pinned = pinned;
-        pinned = nref >= 2;
-        // additional increment for newly pinned instance
-        bool r = !was_pinned && pinned;
-        if (r) {
-          ++nref;
-        }
-        return cached && r;
-      });
+    OnodeCacheShard* ocs = c->get_onode_cache();
+    std::lock_guard l(ocs->lock);
+    bool was_pinned = pinned;
+    pinned = nref >= 2;
+    // additional increment for newly pinned instance
+    bool r = !was_pinned && pinned;
+    if (r) {
+      ++nref;
+    }
+    if (cached && r) {
+      ocs->_pin(this);
+    }
   }
 }
 void BlueStore::Onode::put() {
   int n = --nref;
   if (n == 2) {
-    c->get_onode_cache()->unpin(this, [&]() {
-        bool was_pinned = pinned;
-        pinned = pinned && nref > 2; // intentionally use > not >= as we have
-                                     // +1 due to pinned state
-        bool r = was_pinned && !pinned;
-        // additional decrement for newly unpinned instance
-        if (r) {
-          n = --nref;
-        }
-        return cached && r;
-      });
+    OnodeCacheShard* ocs = c->get_onode_cache();
+    std::lock_guard l(ocs->lock);
+    bool was_pinned = pinned;
+    pinned = pinned && nref > 2; // intentionally use > not >= as we have
+    // +1 due to pinned state
+    bool r = was_pinned && !pinned;
+    // additional decrement for newly unpinned instance
+    if (r) {
+      n = --nref;
+    }
+    if (cached && r) {
+      if (exists) {
+        ocs->_unpin(this);
+      } else {
+        ocs->_unpin_and_rm(this);
+        // remove will also decrement nref and delete Onode
+        c->onode_map._remove(oid);
+      }
+    }
   }
   if (n == 0) {
     delete this;
@@ -5647,13 +5664,13 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
   if (r < 0) {
     return r;
   }
-  RocksDBBlueFSVolumeSelector* vselector = nullptr;
+  BlueFSVolumeSelector* vselector = nullptr;
   if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
 
     string options = cct->_conf->bluestore_rocksdb_options;
 
     rocksdb::Options rocks_opts;
-    int r = RocksDBStore::ParseOptionsFromStringStatic(
+    r = RocksDBStore::ParseOptionsFromStringStatic(
       cct,
       options,
       rocks_opts,
@@ -5661,19 +5678,25 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     if (r < 0) {
       return r;
     }
-
-    double reserved_factor = cct->_conf->bluestore_volume_selection_reserved_factor;
-    vselector =
-      new RocksDBBlueFSVolumeSelector(
+    if (cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
+      vselector = new FitToFastVolumeSelector(
         bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
-        bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
-        1024 * 1024 * 1024, //FIXME: set expected l0 size here
-        rocks_opts.max_bytes_for_level_base,
-        rocks_opts.max_bytes_for_level_multiplier,
-        reserved_factor,
-        cct->_conf->bluestore_volume_selection_reserved,
-        cct->_conf->bluestore_volume_selection_policy != "rocksdb_original");
+        bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100);
+    } else {
+      double reserved_factor = cct->_conf->bluestore_volume_selection_reserved_factor;
+      vselector =
+        new RocksDBBlueFSVolumeSelector(
+          bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+          bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+          bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
+          1024 * 1024 * 1024, //FIXME: set expected l0 size here
+          rocks_opts.max_bytes_for_level_base,
+          rocks_opts.max_bytes_for_level_multiplier,
+          reserved_factor,
+          cct->_conf->bluestore_volume_selection_reserved,
+          cct->_conf->bluestore_volume_selection_policy == "use_some_extra");
+    }    
   }
   if (create) {
     bluefs->mkfs(fsid, bluefs_layout);
@@ -9111,7 +9134,7 @@ void BlueStore::_reap_collections()
   while (p != removed_colls.end()) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
-    if (c->onode_map.map_any([&](OnodeRef o) {
+    if (c->onode_map.map_any([&](Onode* o) {
 	  ceph_assert(!o->exists);
 	  if (o->flushing_count.load()) {
 	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
@@ -15126,7 +15149,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     }
     size_t nonexistent_count = 0;
     ceph_assert((*c)->exists);
-    if ((*c)->onode_map.map_any([&](OnodeRef o) {
+    if ((*c)->onode_map.map_any([&](Onode* o) {
         if (o->exists) {
           dout(1) << __func__ << " " << o->oid << " " << o
 		  << " exists in onode_map" << dendl;

@@ -926,29 +926,6 @@ int RGWGetObj::verify_permission(optional_yield y)
   return 0;
 }
 
-// cache the objects tags into the requests
-// use inside try/catch as "decode()" may throw
-void populate_tags_in_request(req_state* s, const rgw::sal::RGWAttrs& attrs) {
-  const auto attr_iter = attrs.find(RGW_ATTR_TAGS);
-  if (attr_iter != attrs.end()) {
-    auto bliter = attr_iter->second.cbegin();
-    decode(s->tagset, bliter);
-  }
-}
-
-// cache the objects metadata into the request
-void populate_metadata_in_request(req_state* s, const rgw::sal::RGWAttrs& attrs) {
-  for (auto& attr : attrs) {
-    if (boost::algorithm::starts_with(attr.first, RGW_ATTR_META_PREFIX)) {
-      std::string_view key(attr.first);
-      key.remove_prefix(sizeof(RGW_ATTR_PREFIX)-1);
-      // we want to pass a null terminated version
-      // of the bufferlist, hence "to_str().c_str()"
-      s->info.x_meta_map.emplace(key, attr.second.to_str().c_str());
-    }
-  }
-}
-
 int RGWOp::verify_op_mask()
 {
   uint32_t required_mask = op_mask();
@@ -1003,7 +980,7 @@ void RGWGetObjTags::execute(optional_yield y)
 
   s->object->set_atomic(s->obj_ctx);
 
-  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield);
+  op_ret = s->object->get_obj_attrs(s->obj_ctx, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
         << " ret=" << op_ret << dendl;
@@ -1052,7 +1029,7 @@ void RGWPutObjTags::execute(optional_yield y)
   }
 
   s->object->set_atomic(s->obj_ctx);
-  op_ret = s->object->modify_obj_attrs(s->obj_ctx, RGW_ATTR_TAGS, tags_bl, s->yield);
+  op_ret = s->object->modify_obj_attrs(s->obj_ctx, RGW_ATTR_TAGS, tags_bl, y);
   if (op_ret == -ECANCELED){
     op_ret = -ERR_TAG_CONFLICT;
   }
@@ -1092,7 +1069,7 @@ void RGWDeleteObjTags::execute(optional_yield y)
   if (rgw::sal::RGWObject::empty(s->object.get()))
     return;
 
-  op_ret = s->object->delete_obj_attrs(s->obj_ctx, RGW_ATTR_TAGS, s->yield);
+  op_ret = s->object->delete_obj_attrs(s->obj_ctx, RGW_ATTR_TAGS, y);
 }
 
 int RGWGetBucketTags::verify_permission(optional_yield y)
@@ -1138,10 +1115,10 @@ void RGWPutBucketTags::execute(optional_yield y)
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
   }
 
-  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, y] {
     rgw::sal::RGWAttrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_TAGS] = tags_bl;
-    return s->bucket->set_instance_attrs(attrs, s->yield);
+    return s->bucket->set_instance_attrs(attrs, y);
   });
 
 }
@@ -1165,10 +1142,10 @@ void RGWDeleteBucketTags::execute(optional_yield y)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(s->bucket.get(), [this, y] {
     rgw::sal::RGWAttrs attrs = s->bucket->get_attrs();
     attrs.erase(RGW_ATTR_TAGS);
-    op_ret = s->bucket->set_instance_attrs(attrs, s->yield);
+    op_ret = s->bucket->set_instance_attrs(attrs, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
 			 << s->bucket->get_name()
@@ -2811,7 +2788,7 @@ void RGWListBucket::execute(optional_yield y)
 
   rgw::sal::RGWBucket::ListResults results;
 
-  op_ret = s->bucket->list(params, max, results, s->yield);
+  op_ret = s->bucket->list(params, max, results, y);
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;
@@ -3200,10 +3177,10 @@ void RGWCreateBucket::execute(optional_yield y)
   }
 
   op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_key(),
-                                          s->bucket->get_creation_time(), s->yield, false);
+                                          s->bucket->get_creation_time(), y, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_key(), s->yield);
+    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_key(), y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -3221,7 +3198,7 @@ void RGWCreateBucket::execute(optional_yield y)
     do {
       map<string, bufferlist> battrs;
 
-      op_ret = s->bucket->get_bucket_info(s->yield);
+      op_ret = s->bucket->get_bucket_info(y);
       if (op_ret < 0) {
         return;
       } else if (!s->bucket->is_owner(s->user.get())) {
@@ -3258,7 +3235,7 @@ void RGWCreateBucket::execute(optional_yield y)
       /* This will also set the quota on the bucket. */
       op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
 							    &s->bucket->get_info().objv_tracker,
-							    s->yield);
+							    y);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
     /* Restore the proper return code. */
@@ -3319,7 +3296,7 @@ void RGWDeleteBucket::execute(optional_yield y)
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
 
-  op_ret = s->bucket->check_empty(s->yield);
+  op_ret = s->bucket->check_empty(y);
   if (op_ret < 0) {
     return;
   }
@@ -3350,8 +3327,8 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, false, nullptr, s->yield);
-
+  op_ret = s->bucket->remove_bucket(false, prefix, delimiter, false, nullptr,
+				    y);
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
       // in either case, we've already called ctl.bucket->unlink_bucket()
@@ -3406,13 +3383,13 @@ int RGWPutObj::init_processing(optional_yield y) {
     }
     std::unique_ptr<rgw::sal::RGWBucket> bucket;
     ret = store->get_bucket(s->user.get(), copy_source_tenant_name, copy_source_bucket_name,
-			      &bucket, s->yield);
+			      &bucket, y);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket() returned ret=" << ret << dendl;
       return ret;
     }
 
-    ret = bucket->get_bucket_info(s->yield);
+    ret = bucket->get_bucket_info(y);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
       return ret;
@@ -3795,7 +3772,7 @@ void RGWPutObj::execute(optional_yield y)
   // make reservation for notification if needed
   rgw::notify::reservation_t res(store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedPut;
-  op_ret = rgw::notify::publish_reserve(event_type, res);
+  op_ret = rgw::notify::publish_reserve(event_type, res, obj_tags.get());
   if (op_ret < 0) {
     return;
   }
@@ -4144,7 +4121,7 @@ void RGWPostObj::execute(optional_yield y)
   // make reservation for notification if needed
   rgw::notify::reservation_t res(store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedPost;
-  op_ret = rgw::notify::publish_reserve(event_type, res);
+  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -4777,21 +4754,12 @@ void RGWDeleteObj::execute(optional_yield y)
       return;
     }
 
-    // cache the objects tags and metadata into the requests
-    // so it could be used in the notification mechanism
-    try {
-      populate_tags_in_request(s, attrs);
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
-    }
-    populate_metadata_in_request(s, attrs);
-
     // make reservation for notification if needed
     rgw::notify::reservation_t res(store, s, s->object.get());
     const auto versioned_object = s->bucket->versioning_enabled();
     const auto event_type = versioned_object && s->object->get_instance().empty() ? 
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    op_ret = rgw::notify::publish_reserve(event_type, res);
+    op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
     if (op_ret < 0) {
       return;
     }
@@ -4837,14 +4805,6 @@ void RGWDeleteObj::execute(optional_yield y)
       op_ret = 0;
     }
 
-    // cache the objects tags and metadata into the requests
-    // so it could be used in the notification mechanism
-    try {
-      populate_tags_in_request(s, attrs);
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 5) << "WARNING: failed to populate delete request with object tags: " << err.what() << dendl;
-    }
-    populate_metadata_in_request(s, attrs);
     const auto obj_state = obj_ctx->get_state(s->object->get_obj());
 
     // send request to notification manager
@@ -5110,10 +5070,15 @@ void RGWCopyObj::execute(optional_yield y)
   if (init_common() < 0)
     return;
 
+  if (! s->object->get_bucket()) {
+    s->bucket = src_object->get_bucket()->clone();
+    s->object->set_bucket(s->bucket.get());
+  }
+
   // make reservation for notification if needed
   rgw::notify::reservation_t res(store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedCopy; 
-  op_ret = rgw::notify::publish_reserve(event_type, res);
+  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -5805,7 +5770,7 @@ void RGWInitMultipart::execute(optional_yield y)
   // make reservation for notification if needed
   rgw::notify::reservation_t res(store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedPost;
-  op_ret = rgw::notify::publish_reserve(event_type, res);
+  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -5953,7 +5918,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   // make reservation for notification if needed
   rgw::notify::reservation_t res(store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedCompleteMultipartUpload;
-  op_ret = rgw::notify::publish_reserve(event_type, res);
+  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -6536,7 +6501,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     rgw::notify::reservation_t res(store, s, obj.get());
     const auto event_type = versioned_object && obj->get_instance().empty() ? 
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    op_ret = rgw::notify::publish_reserve(event_type, res);
+    op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
     if (op_ret < 0) {
       send_partial_response(*iter, false, "", op_ret);
       continue;
@@ -7267,6 +7232,98 @@ ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
   return len;
 }
 
+int RGWGetAttrs::verify_permission(optional_yield y)
+{
+  s->object->set_atomic(s->obj_ctx);
+
+  auto iam_action = s->object->get_instance().empty() ?
+    rgw::IAM::s3GetObject :
+    rgw::IAM::s3GetObjectVersion;
+
+  if (!verify_object_permission(this, s, iam_action)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetAttrs::execute(optional_yield y)
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  s->object->set_atomic(s->obj_ctx);
+
+  op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to get obj attrs, obj=" << s->object
+        << " ret=" << op_ret << dendl;
+    return;
+  }
+
+  /* XXX RGWObject::get_obj_attrs() does not support filtering (yet) */
+  auto& obj_attrs = s->object->get_attrs();
+  if (attrs.size() != 0) {
+    /* return only attrs requested */
+    for (auto& att : attrs) {
+      auto iter = obj_attrs.find(att.first);
+      if (iter != obj_attrs.end()) {
+	att.second = iter->second;
+      }
+    }
+  } else {
+    /* return all attrs */
+    for  (auto& att : obj_attrs) {
+      attrs.insert(get_attrs_t::value_type(att.first, att.second));;
+    }
+  }
+
+  return;
+ }
+
+int RGWRMAttrs::verify_permission(optional_yield y)
+{
+  // This looks to be part of the RGW-NFS machinery and has no S3 or
+  // Swift equivalent.
+  bool perm;
+  if (!rgw::sal::RGWObject::empty(s->object.get())) {
+    perm = verify_object_permission_no_policy(this, s, RGW_PERM_WRITE);
+  } else {
+    perm = verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE);
+  }
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWRMAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWRMAttrs::execute(optional_yield y)
+{
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  s->object->set_atomic(s->obj_ctx);
+
+  op_ret = s->object->set_obj_attrs(s->obj_ctx, nullptr, &attrs, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "ERROR: failed to delete obj attrs, obj=" << s->object
+		       << " ret=" << op_ret << dendl;
+  }
+  return;
+}
+
 int RGWSetAttrs::verify_permission(optional_yield y)
 {
   // This looks to be part of the RGW-NFS machinery and has no S3 or
@@ -7296,16 +7353,17 @@ void RGWSetAttrs::execute(optional_yield y)
 
   if (!rgw::sal::RGWObject::empty(s->object.get())) {
     rgw::sal::RGWAttrs a(attrs);
-    op_ret = s->object->set_obj_attrs(s->obj_ctx, &a, nullptr, s->yield);
+    op_ret = s->object->set_obj_attrs(s->obj_ctx, &a, nullptr, y);
   } else {
     for (auto& iter : attrs) {
       s->bucket_attrs[iter.first] = std::move(iter.second);
     }
-    op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							  &s->bucket->get_info().objv_tracker,
-							  s->yield);
+    op_ret = store->ctl()->bucket->set_bucket_instance_attrs(
+      s->bucket->get_info(), attrs, &s->bucket->get_info().objv_tracker,
+      s->yield);
   }
-}
+
+} /* RGWSetAttrs::execute() */
 
 void RGWGetObjLayout::pre_exec()
 {
@@ -7320,14 +7378,14 @@ void RGWGetObjLayout::execute(optional_yield y)
   std::unique_ptr<rgw::sal::RGWObject::ReadOp> stat_op(s->object->get_read_op(s->obj_ctx));
 
 
-  op_ret = stat_op->prepare(s->yield);
+  op_ret = stat_op->prepare(y);
   if (op_ret < 0) {
     return;
   }
 
   head_obj = stat_op->result.head_obj;
 
-  op_ret = stat_op->get_manifest(&manifest, s->yield);
+  op_ret = stat_op->get_manifest(&manifest, y);
 }
 
 

@@ -77,7 +77,7 @@ bool rgw_s3_key_filter::has_content() const {
 }
 
 bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
-  kvl.clear();
+  kv.clear();
   XMLObjIter iter = obj->find("FilterRule");
   XMLObj *o;
 
@@ -89,13 +89,13 @@ bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
   while ((o = iter.get_next())) {
     RGWXMLDecoder::decode_xml("Name", key, o, throw_if_missing);
     RGWXMLDecoder::decode_xml("Value", value, o, throw_if_missing);
-    kvl.emplace(key, value);
+    kv.emplace(key, value);
   }
   return true;
 }
 
 void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
-  for (const auto& key_value : kvl) {
+  for (const auto& key_value : kv) {
     f->open_object_section("FilterRule");
     ::encode_xml("Name", key_value.first, f);
     ::encode_xml("Value", key_value.second, f);
@@ -104,7 +104,7 @@ void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
 }
 
 bool rgw_s3_key_value_filter::has_content() const {
-    return !kvl.empty();
+    return !kv.empty();
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
@@ -166,10 +166,10 @@ bool match(const rgw_s3_key_filter& filter, const std::string& key) {
   return true;
 }
 
-bool match(const rgw_s3_key_value_filter& filter, const KeyValueList& kvl) {
+bool match(const rgw_s3_key_value_filter& filter, const KeyValueMap& kv) {
   // all filter pairs must exist with the same value in the object's metadata/tags
   // object metadata/tags may include items not in the filter
-  return std::includes(kvl.begin(), kvl.end(), filter.kvl.begin(), filter.kvl.end());
+  return std::includes(kv.begin(), kv.end(), filter.kv.begin(), filter.kv.end());
 }
 
 bool match(const rgw::notify::EventTypeList& events, rgw::notify::EventType event) {
@@ -236,7 +236,7 @@ void rgw_pubsub_s3_notifications::dump_xml(Formatter *f) const {
   do_encode_xml("NotificationConfiguration", list, "TopicConfiguration", f);
 }
 
-void rgw_pubsub_s3_record::dump(Formatter *f) const {
+void rgw_pubsub_s3_event::dump(Formatter *f) const {
   encode_json("eventVersion", eventVersion, f);
   encode_json("eventSource", eventSource, f);
   encode_json("awsRegion", awsRegion, f);
@@ -612,6 +612,35 @@ int RGWPubSub::Bucket::remove_notification(const string& topic_name, optional_yi
   return 0;
 }
 
+int RGWPubSub::Bucket::remove_notifications(optional_yield y)
+{
+  // get all topics on a bucket
+  rgw_pubsub_bucket_topics bucket_topics;
+  auto ret  = get_topics(&bucket_topics);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(ps->store->ctx(), 1) << "ERROR: failed to get list of topics from bucket '" << bucket.name << "', ret=" << ret << dendl;
+    return ret ;
+  }
+
+  // remove all auto-genrated topics
+  for (const auto& topic : bucket_topics.topics) {
+    const auto& topic_name = topic.first;
+    ret = ps->remove_topic(topic_name, y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(ps->store->ctx(), 5) << "WARNING: failed to remove auto-generated topic '" << topic_name << "', ret=" << ret << dendl;
+    }
+  }
+
+  // delete all notification of on a bucket
+  ret = ps->remove(bucket_meta_obj, nullptr, y);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(ps->store->ctx(), 1) << "ERROR: failed to remove bucket topics: ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 int RGWPubSub::create_topic(const string& name, optional_yield y) {
   return create_topic(name, rgw_pubsub_sub_dest(), "", "", y);
 }
@@ -935,5 +964,5 @@ void RGWPubSub::SubWithEvents<EventType>::dump(Formatter* f) const {
 // explicit instantiation for the only two possible types
 // no need to move implementation to header
 template class RGWPubSub::SubWithEvents<rgw_pubsub_event>;
-template class RGWPubSub::SubWithEvents<rgw_pubsub_s3_record>;
+template class RGWPubSub::SubWithEvents<rgw_pubsub_s3_event>;
 

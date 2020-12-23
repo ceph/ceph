@@ -666,7 +666,7 @@ Journal::scan_valid_records_ret Journal::scan_valid_records(
       return [=, &handler, &cursor, &budget_used] {
 	if (!cursor.last_valid_header_found) {
 	  return read_validate_record_metadata(cursor.offset, nonce
-	  ).safe_then([=, &cursor, &handler](auto md) {
+	  ).safe_then([=, &cursor](auto md) {
 	    logger().debug(
 	      "Journal::scan_valid_records: read complete {}",
 	      cursor.offset);

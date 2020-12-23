@@ -110,6 +110,11 @@ class RGWStore : public DoutPrefixProvider {
     virtual void finalize(void)=0;
 
     virtual CephContext *ctx(void)=0;
+    
+    // get the location of where lua packages are installed
+    virtual const std::string& get_luarocks_path() const = 0;
+    // set the location of where lua packages are installed
+    virtual void set_luarocks_path(const std::string& path) = 0;
 };
 
 class RGWUser {
@@ -479,6 +484,7 @@ class RGWObject {
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
 
     RGWAttrs& get_attrs(void) { return attrs; }
+    const RGWAttrs& get_attrs(void) const { return attrs; }
     ceph::real_time get_mtime(void) const { return mtime; }
     uint64_t get_obj_size(void) const { return obj_size; }
     RGWBucket* get_bucket(void) const { return bucket; }

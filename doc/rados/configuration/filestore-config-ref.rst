@@ -2,6 +2,8 @@
  Filestore Config Reference
 ============================
 
+The Filestore back end is no longer the default when creating new OSDs,
+though Filestore OSDs are still supported.
 
 ``filestore debug omap check``
 
@@ -16,8 +18,8 @@
 Extended Attributes
 ===================
 
-Extended Attributes (XATTRs) are an important aspect in your configuration. 
-Some file systems have limits on the number of bytes stored in XATTRS. 
+Extended Attributes (XATTRs) are important for Filestore OSDs.
+Some file systems have limits on the number of bytes that can be stored in XATTRs. 
 Additionally, in some cases, the file system may not be as fast as an alternative
 method of storing XATTRs. The following settings may help improve performance
 by using a method of storing XATTRs that is extrinsic to the underlying file system.
@@ -25,15 +27,15 @@ by using a method of storing XATTRs that is extrinsic to the underlying file sys
 Ceph XATTRs are stored as ``inline xattr``, using the XATTRs provided
 by the underlying file system, if it does not impose a size limit. If
 there is a size limit (4KB total on ext4, for instance), some Ceph
-XATTRs will be stored in an key/value database when either the
-``filestore max inline xattr size`` or ``filestore max inline
-xattrs`` threshold is reached.
+XATTRs will be stored in a key/value database when either the
+``filestore_max_inline_xattr_size`` or ``filestore_max_inline_xattrs``
+threshold is reached.
 
 
-``filestore max inline xattr size``
+``filestore_max_inline_xattr_size``
 
 :Description: The maximum size of an XATTR stored in the file system (i.e., XFS,
-              btrfs, ext4, etc.) per object. Should not be larger than the
+              Btrfs, EXT4, etc.) per object. Should not be larger than the
               file system can handle. Default value of 0 means to use the value
               specific to the underlying file system.
 :Type: Unsigned 32-bit Integer
@@ -41,34 +43,34 @@ xattrs`` threshold is reached.
 :Default: ``0``
 
 
-``filestore max inline xattr size xfs``
+``filestore_max_inline_xattr_size_xfs``
 
 :Description: The maximum size of an XATTR stored in the XFS file system.
-              Only used if ``filestore max inline xattr size`` == 0.
+              Only used if ``filestore_max_inline_xattr_size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
 :Default: ``65536``
 
 
-``filestore max inline xattr size btrfs``
+``filestore_max_inline_xattr_size_btrfs``
 
-:Description: The maximum size of an XATTR stored in the btrfs file system.
-              Only used if ``filestore max inline xattr size`` == 0.
+:Description: The maximum size of an XATTR stored in the Btrfs file system.
+              Only used if ``filestore_max_inline_xattr_size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
 :Default: ``2048``
 
 
-``filestore max inline xattr size other``
+``filestore_max_inline_xattr_size_other``
 
 :Description: The maximum size of an XATTR stored in other file systems.
-              Only used if ``filestore max inline xattr size`` == 0.
+              Only used if ``filestore_max_inline_xattr_size`` == 0.
 :Type: Unsigned 32-bit Integer
 :Required: No
 :Default: ``512``
 
 
-``filestore max inline xattrs``
+``filestore_max_inline_xattrs``
 
 :Description: The maximum number of XATTRs stored in the file system per object.
               Default value of 0 means to use the value specific to the
@@ -78,28 +80,28 @@ xattrs`` threshold is reached.
 :Default: ``0``
 
 
-``filestore max inline xattrs xfs``
+``filestore_max_inline_xattrs_xfs``
 
 :Description: The maximum number of XATTRs stored in the XFS file system per object.
-              Only used if ``filestore max inline xattrs`` == 0.
+              Only used if ``filestore_max_inline_xattrs`` == 0.
 :Type: 32-bit Integer
 :Required: No
 :Default: ``10``
 
 
-``filestore max inline xattrs btrfs``
+``filestore_max_inline_xattrs_btrfs``
 
-:Description: The maximum number of XATTRs stored in the btrfs file system per object.
-              Only used if ``filestore max inline xattrs`` == 0.
+:Description: The maximum number of XATTRs stored in the Btrfs file system per object.
+              Only used if ``filestore_max_inline_xattrs`` == 0.
 :Type: 32-bit Integer
 :Required: No
 :Default: ``10``
 
 
-``filestore max inline xattrs other``
+``filestore_max_inline_xattrs_other``
 
 :Description: The maximum number of XATTRs stored in other file systems per object.
-              Only used if ``filestore max inline xattrs`` == 0.
+              Only used if ``filestore_max_inline_xattrs`` == 0.
 :Type: 32-bit Integer
 :Required: No
 :Default: ``2``
@@ -109,26 +111,26 @@ xattrs`` threshold is reached.
 Synchronization Intervals
 =========================
 
-Periodically, the filestore needs to quiesce writes and synchronize the
+Filestore needs to periodically quiesce writes and synchronize the
 file system, which creates a consistent commit point. It can then free journal
 entries up to the commit point. Synchronizing more frequently tends to reduce
 the time required to perform synchronization, and reduces the amount of data
 that needs to remain in the  journal. Less frequent synchronization allows the
-backing file system to coalesce  small writes and metadata updates more
-optimally--potentially resulting in more efficient synchronization.
+backing file system to coalesce small writes and metadata updates more
+optimally, potentially resulting in more efficient synchronization at the
+expense of potentially increasing tail latency.
 
+``filestore_max_sync_interval``
 
-``filestore max sync interval``
-
-:Description: The maximum interval in seconds for synchronizing the filestore.
+:Description: The maximum interval in seconds for synchronizing Filestore.
 :Type: Double
 :Required: No
 :Default: ``5``
 
 
-``filestore min sync interval``
+``filestore_min_sync_interval``
 
-:Description: The minimum interval in seconds for synchronizing the filestore.
+:Description: The minimum interval in seconds for synchronizing Filestore.
 :Type: Double
 :Required: No
 :Default: ``.01``
@@ -139,13 +141,13 @@ optimally--potentially resulting in more efficient synchronization.
 Flusher
 =======
 
-The filestore flusher forces data from large writes to be written out using
-``sync file range`` before the sync in order to (hopefully) reduce the cost of
-the eventual sync. In practice, disabling 'filestore flusher' seems to improve
+The Filestore flusher forces data from large writes to be written out using
+``sync_file_range`` before the sync in order to (hopefully) reduce the cost of
+the eventual sync. In practice, disabling 'filestore_flusher' seems to improve
 performance in some cases.
 
 
-``filestore flusher``
+``filestore_flusher``
 
 :Description: Enables the filestore flusher.
 :Type: Boolean
@@ -154,7 +156,7 @@ performance in some cases.
 
 .. deprecated:: v.65
 
-``filestore flusher max fds``
+``filestore_flusher_max_fds``
 
 :Description: Sets the maximum number of file descriptors for the flusher.
 :Type: Integer
@@ -163,7 +165,7 @@ performance in some cases.
 
 .. deprecated:: v.65
 
-``filestore sync flush``
+``filestore_sync_flush``
 
 :Description: Enables the synchronization flusher. 
 :Type: Boolean
@@ -172,7 +174,7 @@ performance in some cases.
 
 .. deprecated:: v.65
 
-``filestore fsync flushes journal data``
+``filestore_fsync_flushes_journal_data``
 
 :Description: Flush journal data during file system synchronization.
 :Type: Boolean
@@ -185,9 +187,9 @@ performance in some cases.
 Queue
 =====
 
-The following settings provide limits on the size of filestore queue.
+The following settings provide limits on the size of the Filestore queue.
 
-``filestore queue max ops``
+``filestore_queue_max_ops``
 
 :Description: Defines the maximum number of in progress operations the file store accepts before blocking on queuing new operations. 
 :Type: Integer
@@ -195,7 +197,7 @@ The following settings provide limits on the size of filestore queue.
 :Default: ``50``
 
 
-``filestore queue max bytes``
+``filestore_queue_max_bytes``
 
 :Description: The maximum number of bytes for an operation. 
 :Type: Integer
@@ -211,7 +213,7 @@ Timeouts
 ========
 
 
-``filestore op threads``
+``filestore_op_threads``
 
 :Description: The number of file system operation threads that execute in parallel. 
 :Type: Integer
@@ -219,7 +221,7 @@ Timeouts
 :Default: ``2``
 
 
-``filestore op thread timeout``
+``filestore_op_thread_timeout``
 
 :Description: The timeout for a file system operation thread (in seconds).
 :Type: Integer
@@ -227,7 +229,7 @@ Timeouts
 :Default: ``60``
 
 
-``filestore op thread suicide timeout``
+``filestore_op_thread_suicide_timeout``
 
 :Description: The timeout for a commit operation before cancelling the commit (in seconds). 
 :Type: Integer
@@ -241,7 +243,7 @@ B-Tree Filesystem
 =================
 
 
-``filestore btrfs snap``
+``filestore_btrfs_snap``
 
 :Description: Enable snapshots for a ``btrfs`` filestore.
 :Type: Boolean
@@ -249,7 +251,7 @@ B-Tree Filesystem
 :Default: ``true``
 
 
-``filestore btrfs clone range``
+``filestore_btrfs_clone_range``
 
 :Description: Enable cloning ranges for a ``btrfs`` filestore.
 :Type: Boolean
@@ -263,23 +265,23 @@ Journal
 =======
 
 
-``filestore journal parallel``
+``filestore_journal_parallel``
 
-:Description: Enables parallel journaling, default for btrfs.
+:Description: Enables parallel journaling, default for Btrfs.
 :Type: Boolean
 :Required: No
 :Default: ``false``
 
 
-``filestore journal writeahead``
+``filestore_journal_writeahead``
 
-:Description: Enables writeahead journaling, default for xfs.
+:Description: Enables writeahead journaling, default for XFS.
 :Type: Boolean
 :Required: No
 :Default: ``false``
 
 
-``filestore journal trailing``
+``filestore_journal_trailing``
 
 :Description: Deprecated, never use.
 :Type: Boolean
@@ -291,7 +293,7 @@ Misc
 ====
 
 
-``filestore merge threshold``
+``filestore_merge_threshold``
 
 :Description: Min number of files in a subdir before merging into parent
               NOTE: A negative value means to disable subdir merging
@@ -300,7 +302,7 @@ Misc
 :Default: ``-10``
 
 
-``filestore split multiple``
+``filestore_split_multiple``
 
 :Description:  ``(filestore_split_multiple * abs(filestore_merge_threshold) + (rand() % filestore_split_rand_factor)) * 16``
                is the maximum number of files in a subdirectory before 
@@ -311,28 +313,28 @@ Misc
 :Default: ``2``
 
 
-``filestore split rand factor``
+``filestore_split_rand_factor``
 
 :Description:  A random factor added to the split threshold to avoid
-               too many filestore splits occurring at once. See
-               ``filestore split multiple`` for details.
-               This can only be changed for an existing osd offline,
-               via ceph-objectstore-tool's apply-layout-settings command.
+               too many (expensive) Filestore splits occurring at once. See
+               ``filestore_split_multiple`` for details.
+               This can only be changed offline for an existing OSD,
+               via the ``ceph-objectstore-tool apply-layout-settings`` command.
 
 :Type: Unsigned 32-bit Integer
 :Required: No
 :Default: ``20``
 
 
-``filestore update to``
+``filestore_update_to``
 
-:Description: Limits filestore auto upgrade to specified version.
+:Description: Limits Filestore auto upgrade to specified version.
 :Type: Integer
 :Required: No
 :Default: ``1000``
 
 
-``filestore blackhole``
+``filestore_blackhole``
 
 :Description: Drop any new transactions on the floor.
 :Type: Boolean
@@ -340,7 +342,7 @@ Misc
 :Default: ``false``
 
 
-``filestore dump file``
+``filestore_dump_file``
 
 :Description: File onto which store transaction dumps.
 :Type: Boolean
@@ -348,7 +350,7 @@ Misc
 :Default: ``false``
 
 
-``filestore kill at``
+``filestore_kill_at``
 
 :Description: inject a failure at the n'th opportunity
 :Type: String
@@ -356,7 +358,7 @@ Misc
 :Default: ``false``
 
 
-``filestore fail eio``
+``filestore_fail_eio``
 
 :Description: Fail/Crash on eio.
 :Type: Boolean

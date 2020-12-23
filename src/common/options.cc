@@ -2247,7 +2247,7 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("issue DAEMON_OLD_VERSION health warning if daemons are not all running the same version"),
 
-    Option("mon_warn_older_version_delay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mon_warn_older_version_delay", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(7_day)
     .add_service("mon")
     .set_description("issue DAEMON_OLD_VERSION health warning after this amount of time has elapsed"),
@@ -4783,9 +4783,12 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("use_some_extra")
-    .set_enum_allowed({ "rocksdb_original", "use_some_extra" })
+    .set_enum_allowed({ "rocksdb_original", "use_some_extra", "fit_to_fast" })
     .set_description("Determines bluefs volume selection policy")
-    .set_long_description("Determines bluefs volume selection policy. 'use_some_extra' policy allows to override RocksDB level granularity and put high level's data to faster device even when the level doesn't completely fit there"),
+    .set_long_description("Determines bluefs volume selection policy. 'use_some_extra' policy allows to override RocksDB level "
+                          "granularity and put high level's data to faster device even when the level doesn't completely fit there. "
+                          "'fit_to_fast' policy enables using 100% of faster disk capacity and allows the user to turn on "
+                          "'level_compaction_dynamic_level_bytes' option in RocksDB options."),
 
     Option("bluestore_volume_selection_reserved_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
       .set_flag(Option::FLAG_STARTUP)
@@ -7268,6 +7271,16 @@ std::vector<Option> get_rgw_options() {
 	"but will default to FIFO if there isn't an existing log. Either of "
 	"the explicit options will cause startup to fail if the other log is "
 	"still around."),
+   
+   Option("rgw_luarocks_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+     .set_flag(Option::FLAG_STARTUP)
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    .set_default("/tmp/luarocks")
+#else
+    // if set to empty string, system default luarocks package location (if exist) will be used
+    .set_default("")
+#endif
+    .set_description("Directory where luarocks install packages from allowlist"),
   });
 }
 
@@ -8687,22 +8700,27 @@ std::vector<Option> get_mds_client_options() {
     .set_description("enable object caching"),
 
     Option("client_oc_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(200_M)
     .set_description("maximum size of object cache"),
 
     Option("client_oc_max_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(100_M)
     .set_description("maximum size of dirty pages in object cache"),
 
     Option("client_oc_target_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(8_M)
     .set_description("target size of dirty pages object cache"),
 
     Option("client_oc_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(5.0)
     .set_description("maximum age of dirty pages in object cache (seconds)"),
 
     Option("client_oc_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default(1000)
     .set_description("maximum number of objects in cache"),
 

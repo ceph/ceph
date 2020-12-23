@@ -3,8 +3,10 @@ Local Pool Module
 
 The *localpool* module can automatically create RADOS pools that are
 localized to a subset of the overall cluster.  For example, by default, it will
-create a pool for each distinct rack in the cluster.  This can be useful for some
-deployments that want to distribute some data locally as well as globally across the cluster .
+create a pool for each distinct ``rack`` in the cluster.  This can be useful for
+deployments where it is desirable to distribute some data locally and other data
+globally across the cluster.  One use-case is measuring performance and testing
+behavior of specific drive, NIC, or chassis models in isolation.
 
 Enabling
 --------

@@ -10,6 +10,15 @@ This feature allows users to upload Lua scripts to different context in the rado
 operation was taken, and "postRequest" that will execute after each operation is taken. Script may be uploaded to address requests for users of a specific tenant.
 The script can access fields in the request and modify some fields. All Lua language features can be used in the script.
 
+By default, all lua standard libraries are available in the script, however, in order to allow for other lua modules to be used in the script, we support adding packages to an allowlist:
+
+  - All packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart. Therefore a restart is needed for adding or removing of packages to take effect 
+  - To add a package that contains C source code that needs to be compiled, use the `--allow-compilation` flag. In this case a C compiler needs to be available on the host
+  - Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that lua packages in the allowlist are separated from any lua packages available on the host.
+    By default, this directory would be `/tmp/luarocks/<entity name>`. Its prefix part (`/tmp/luarocks/`) could be set to a different location via the `rgw_luarocks_location` configuration parameter. 
+    Note that this parameter should not be set to one of the default locations where luarocks install packages (e.g. `$HOME/.luarocks`, `/usr/lib64/lua`, `/usr/share/lua`)
+	
+
 .. toctree::
    :maxdepth: 1
 
@@ -36,6 +45,30 @@ To remove the script:
 ::
    
    # radosgw-admin script rm --context={preRequest|postRequest} [--tenant={tenant-name}]
+
+
+Package Management via CLI
+--------------------------
+
+To add a package to the allowlist:
+
+::
+
+  # radosgw-admin script-package add --package={package name} [--allow-compilation]
+
+
+To remove a package from the allowlist:
+
+::
+
+  # radosgw-admin script-package rm --package={package name}
+
+
+To print the list of packages in the allowlist:
+
+::
+
+  # radosgw-admin script-package list
 
 
 Context Free Functions
@@ -324,3 +357,37 @@ In the `postRequest` context we look at the metadata:
     RGWDebugLog("key=" .. k .. ", " .. "value=" .. v)
   end
  
+- Use modules to create Unix socket based, JSON encoded, "access log":
+
+First we should add the following packages to the allowlist:
+
+::
+
+  # radosgw-admin script-package add --package=luajson
+  # radosgw-admin script-package add --package=luasocket --allow-compilation
+
+
+Then, do a restart for the radosgw and upload the following script to the `postRequest` context:
+
+.. code-block:: lua
+
+  if Request.RGWOp == "get_obj" then
+    local json = require("json")
+    local socket = require("socket")
+    local unix = require("socket.unix")
+    local s = assert(unix())
+    E = {}
+
+    msg = {bucket = (Request.Bucket or (Request.CopyFrom or E).Bucket).Name,
+      time = Request.Time,
+      operation = Request.RGWOp,
+      http_status = Request.Response.HTTPStatusCode,
+      error_code = Request.Response.HTTPStatus,
+      object_size = Request.Object.Size,
+      trans_id = Request.TransactionId}
+
+    assert(s:connect("/tmp/socket"))
+    assert(s:send(json.encode(msg).."\n"))
+    assert(s:close())
+  end
+

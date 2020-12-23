@@ -27,10 +27,10 @@ old default port ``6789`` for the legacy v1 protocol.
 Address formats
 ---------------
 
-Prior to nautilus, all network addresses were rendered like
+Prior to Nautilus, all network addresses were rendered like
 ``1.2.3.4:567/89012`` where there was an IP address, a port, and a
 nonce to uniquely identify a client or daemon on the network.
-Starting with nautilus, we now have three different address types:
+Starting with Nautilus, we now have three different address types:
 
 * **v2**: ``v2:1.2.3.4:578/89012`` identifies a daemon binding to a
   port speaking the new v2 protocol

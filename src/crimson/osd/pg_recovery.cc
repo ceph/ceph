@@ -318,7 +318,6 @@ void PGRecovery::on_local_recover(
       auto& obc = pg->get_recovery_backend()->get_recovering(soid).obc; //TODO: move to pg backend?
       obc->obs.exists = true;
       obc->obs.oi = recovery_info.oi;
-      ceph_assert_always(obc->get_recovery_read());
     }
     if (!pg->is_unreadable_object(soid)) {
       pg->get_recovery_backend()->get_recovering(soid).set_readable();

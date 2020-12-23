@@ -79,7 +79,9 @@ ceph orch device ls --refresh
 sleep 10  # the previous call is asynchronous
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
 
-ceph dashboard ac-user-set-password admin admin --force-password
+DASHBOARD_ADMIN_SECRET_FILE="/tmp/dashboard-admin-secret.txt"
+printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
+ceph dashboard ac-user-set-password admin -i "${DASHBOARD_ADMIN_SECRET_FILE}" --force-password
 
 # Run Dashboard e2e tests.
 # These tests are designed with execution order in mind, since orchestrator operations

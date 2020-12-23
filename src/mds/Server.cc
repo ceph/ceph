@@ -10226,12 +10226,25 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   ceph_assert(mds->snapclient->get_cached_version() >= stid);
 
+  SnapPayload payload;
+  if (req->get_data().length()) {
+    try {
+      auto iter = req->get_data().cbegin();
+      decode(payload, iter);
+    } catch (const ceph::buffer::error &e) {
+      // backward compat -- client sends xattr bufferlist. however,
+      // that is not used anywhere -- so (log and) ignore.
+      dout(20) << ": no metadata in payload (old client?)" << dendl;
+    }
+  }
+
   // journal
   SnapInfo info;
   info.ino = diri->ino();
   info.snapid = snapid;
   info.name = snapname;
   info.stamp = mdr->get_op_stamp();
+  info.metadata = payload.metadata;
 
   auto pi = diri->project_inode(mdr, false, true);
   pi.inode->ctime = info.stamp;

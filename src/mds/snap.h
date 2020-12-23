@@ -15,6 +15,7 @@
 #ifndef CEPH_MDS_SNAP_H
 #define CEPH_MDS_SNAP_H
 
+#include <map>
 #include <string_view>
 
 #include "mdstypes.h"
@@ -39,6 +40,7 @@ struct SnapInfo {
   std::string name;
 
   mutable std::string long_name; ///< cached _$ino_$name
+  std::map<std::string,std::string> metadata;
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 

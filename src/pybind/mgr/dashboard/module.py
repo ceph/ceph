@@ -276,9 +276,9 @@ class Module(MgrModule, CherryPyConfig):
 
         self._stopping = threading.Event()
         self.shutdown_event = threading.Event()
-
         self.ACCESS_CTRL_DB = None
         self.SSO_DB = None
+        self.health_checks = {}
 
     @classmethod
     def can_run(cls):
@@ -384,7 +384,7 @@ class Module(MgrModule, CherryPyConfig):
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
-        res = handle_option_command(cmd)
+        res = handle_option_command(cmd, inbuf)
         if res[0] != -errno.ENOSYS:
             return res
         res = handle_sso_command(cmd)
@@ -423,6 +423,15 @@ class Module(MgrModule, CherryPyConfig):
                 self.__pool_stats[pool_id][stat_name].append((now, stat_val))
 
         return self.__pool_stats
+
+    def config_notify(self):
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        PLUGIN_MANAGER.hook.config_notify()
+
+    def refresh_health_checks(self):
+        self.set_health_checks(self.health_checks)
 
 
 class StandbyModule(MgrStandbyModule, CherryPyConfig):

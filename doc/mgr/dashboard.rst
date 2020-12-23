@@ -331,7 +331,35 @@ section.
 To create a user with the administrator role you can use the following
 commands::
 
-  $ ceph dashboard ac-user-create <username> <password> administrator
+  $ ceph dashboard ac-user-create <username> -i <file-containing-password> administrator
+
+Account Lock-out
+^^^^^^^^^^^^^^^^
+
+It disables a user account if a user repeatedly enters the wrong credentials
+for multiple times. It is enabled by default to prevent brute-force or dictionary
+attacks. The user can get or set the default number of lock-out attempts using
+these commands respectively::
+
+  $ ceph dashboard get-account-lockout-attempts
+  $ ceph dashboard set-account-lockout-attempts <value:int>
+
+.. warning::
+
+  This feature can be disabled by setting the default number of lock-out attempts to 0.
+  However, by disabling this feature, the account is more vulnerable to brute-force or
+  dictionary based attacks. This can be disabled by::
+
+    $ ceph dashboard set-account-lockout-attempts 0
+
+Enable a Locked User
+^^^^^^^^^^^^^^^^^^^^
+
+If a user account is disabled as a result of multiple invalid login attempts, then
+it needs to be manually enabled by the administrator. This can be done by the following
+command::
+
+  $ ceph dashboard ac-user-enable <username>
 
 Accessing the Dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -363,8 +391,8 @@ To obtain the credentials of an existing user via `radosgw-admin`::
 
 Finally, provide the credentials to the dashboard::
 
-  $ ceph dashboard set-rgw-api-access-key <access_key>
-  $ ceph dashboard set-rgw-api-secret-key <secret_key>
+  $ ceph dashboard set-rgw-api-access-key -i <file-containing-access-key>
+  $ ceph dashboard set-rgw-api-secret-key -i <file-containing-secret-key>
 
 In a simple configuration with a single RGW endpoint, this is all you
 have to do to get the Object Gateway management functionality working. The
@@ -426,7 +454,8 @@ To disable API SSL verification run the following command::
 The available iSCSI gateways must be defined using the following commands::
 
   $ ceph dashboard iscsi-gateway-list
-  $ ceph dashboard iscsi-gateway-add <scheme>://<username>:<password>@<host>[:port]
+  $ # Gateway URL format for a new gateway: <scheme>://<username>:<password>@<host>[:port]
+  $ ceph dashboard iscsi-gateway-add -i <file-containing-gateway-url> [<gateway_name>]
   $ ceph dashboard iscsi-gateway-rm <gateway_name>
 
 
@@ -880,7 +909,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Create User*::
 
-  $ ceph dashboard ac-user-create [--enabled] [--force-password] [--pwd_update_required] <username> [<password>] [<rolename>] [<name>] [<email>] [<pwd_expiration_date>]
+  $ ceph dashboard ac-user-create [--enabled] [--force-password] [--pwd_update_required] <username> -i <file-containing-password> [<rolename>] [<name>] [<email>] [<pwd_expiration_date>]
 
   To bypass password policy checks use the `force-password` option.
   Add the option `pwd_update_required` so that a newly created user has
@@ -892,11 +921,11 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Change Password*::
 
-  $ ceph dashboard ac-user-set-password [--force-password] <username> <password>
+  $ ceph dashboard ac-user-set-password [--force-password] <username> -i <file-containing-password>
 
 - *Change Password Hash*::
 
-  $ ceph dashboard ac-user-set-password-hash <username> <hash>
+  $ ceph dashboard ac-user-set-password-hash <username> -i <file-containing-password-hash>
 
   The hash must be a bcrypt hash and salt, e.g. ``$2b$12$Pt3Vq/rDt2y9glTPSV.VFegiLkQeIpddtkhoFetNApYmIJOY8gau2``.
   This can be used to import users from an external database.
@@ -1032,7 +1061,7 @@ and has read-only access to other scopes.
 
 1. *Create the user*::
 
-   $ ceph dashboard ac-user-create bob mypassword
+   $ ceph dashboard ac-user-create bob -i <file-containing-password>
 
 2. *Create role and specify scope permissions*::
 
