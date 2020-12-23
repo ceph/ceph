@@ -6009,7 +6009,11 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
     int ret = get_bucket_shard(&bs);
     if (ret < 0) {
-      ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << ", modifying to " << -ERR_INTERNAL_ERROR << dendl;
+        ret = -ERR_INTERNAL_ERROR;
+      } else 
+        ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
       return ret;
     }
     r = call(bs);
@@ -6091,7 +6095,11 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
 
   int ret = get_bucket_shard(&bs);
   if (ret < 0) {
-    ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+    if (ret == -ENOENT) {
+      ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << ", modifying to " << -ERR_INTERNAL_ERROR << dendl;
+      ret = -ERR_INTERNAL_ERROR;
+    } else
+      ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
 
@@ -6640,7 +6648,11 @@ int RGWRados::guard_reshard(BucketShard *bs,
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
     r = bs->init(pobj->bucket, *pobj, nullptr /* no RGWBucketInfo */);
     if (r < 0) {
-      ldout(cct, 5) << "bs.init() returned ret=" << r << dendl;
+      if (r == -ENOENT) {
+        ldout(cct, 5) << "bs.init() returned r=" << r << ", modifying to " << -ERR_INTERNAL_ERROR << dendl;
+        r = -ERR_INTERNAL_ERROR;
+      } else 
+        ldout(cct, 5) << "bs.init() returned r=" << r << dendl;
       return r;
     }
     r = call(bs);
@@ -6877,7 +6889,11 @@ int RGWRados::bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObj
   int ret =
     bs.init(obj_instance.bucket, obj_instance, nullptr /* no RGWBucketInfo */);
   if (ret < 0) {
-    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
+    if (ret == -ENOENT) {
+      ldout(cct, 5) << "bs.init() returned ret=" << ret << ", modifying to " << -ERR_INTERNAL_ERROR << dendl;
+      ret = -ERR_INTERNAL_ERROR;
+    } else
+      ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -6982,7 +6998,11 @@ int RGWRados::bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObj
   int ret =
     bs.init(obj_instance.bucket, obj_instance, nullptr /* no RGWBucketInfo */);
   if (ret < 0) {
-    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
+    if (ret == -ENOENT) {
+      ldout(cct, 5) << "bs.init() returned ret=" << ret << ", modifying to " << -ERR_INTERNAL_ERROR << dendl;
+      ret = -ERR_INTERNAL_ERROR;
+    } else
+      ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 
