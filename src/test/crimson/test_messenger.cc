@@ -22,6 +22,7 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/core/timer.hh>
 
 #include "test_cmds.h"
 
@@ -33,6 +34,29 @@ namespace {
 seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_ms);
 }
+
+class AbortTimer {
+ public:
+  AbortTimer() : timer{[] {
+    // This test normally succeeds within 60 seconds, so kill it after 120
+    // seconds in case it is blocked forever due to unaddressed bugs.
+    logger().error("test_messenger timeout after 120s, abort! "
+                   "Consider to extend the period if the test is still running.");
+    ceph_abort();
+  }} {}
+
+  void arm() {
+    logger().info("AbortTimer countdown 120 seconds ...\n");
+    timer.arm(120s);
+  }
+
+  void cancel() {
+    timer.cancel();
+  }
+
+ private:
+  seastar::timer<seastar::lowres_clock> timer;
+} abort_timer;
 
 static std::random_device rd;
 static std::default_random_engine rng{rd()};
@@ -3601,6 +3625,8 @@ int main(int argc, char** argv)
     ("v2-testpeer-islocal", bpo::value<bool>()->default_value(true),
      "create a local crimson testpeer, or connect to a remote testpeer");
   return app.run(argc, argv, [&app] {
+    abort_timer.arm();
+
     std::vector<const char*> args;
     std::string cluster;
     std::string conf_file_list;
@@ -3647,6 +3673,8 @@ int main(int argc, char** argv)
     }).handle_exception([] (auto eptr) {
       logger().error("Test failed: got exception {}", eptr);
       throw;
+    }).then([] {
+      abort_timer.cancel();
     });
   });
 }
