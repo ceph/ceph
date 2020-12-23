@@ -588,3 +588,60 @@ public:
 
   int operate(const DoutPrefixProvider *dpp) override;
 };
+
+class RGWStreamReadCRF {
+public:
+  RGWRados::Object op_target;
+  RGWRados::Object::Read read_op;
+  off_t ofs;
+  off_t end;
+  rgw_rest_obj rest_obj;
+
+  RGWStreamReadCRF(RGWRados* rados, RGWBucketInfo& bucket_info,
+                  RGWObjectCtx& obj_ctx, rgw_obj& obj);
+  virtual ~RGWStreamReadCRF();
+
+  virtual int init() {return 0; }
+  virtual int init_rest_obj() {return 0;}
+
+  int set_range(off_t _ofs, off_t _end) {
+    ofs = _ofs;
+    end = _end;
+
+    return 0;
+  }
+
+  int get_range(off_t &_ofs, off_t &_end) {
+    _ofs = ofs;
+    _end = end;
+
+    return 0;
+  }
+
+  rgw_rest_obj get_rest_obj() {
+    return rest_obj;
+  }
+
+  virtual int read(off_t ofs, off_t end, bufferlist &bl) {return 0;};
+
+};
+
+class RGWStreamWriteCR : public RGWCoroutine {
+  CephContext *cct;
+  RGWHTTPManager *http_manager;
+  string url;
+  std::shared_ptr<RGWStreamReadCRF> in_crf;
+  std::shared_ptr<RGWStreamWriteHTTPResourceCRF> out_crf;
+  bufferlist bl;
+  bool need_retry{false};
+  bool sent_attrs{false};
+  uint64_t total_read{0};
+  int ret{0};
+public:
+  RGWStreamWriteCR(CephContext *_cct, RGWHTTPManager *_mgr,
+                    std::shared_ptr<RGWStreamReadCRF>& _in_crf,
+                    std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
+  ~RGWStreamWriteCR();
+
+  int operate() override;
+};

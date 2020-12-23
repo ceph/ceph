@@ -2081,8 +2081,23 @@ void RGWZoneGroupMap::decode(bufferlist::const_iterator& bl) {
   }
 }
 
+static int conf_to_uint64(const JSONFormattable& config, const string& key, uint64_t *pval)
+{
+  string sval;
+  if (config.find(key, &sval)) {
+    string err;
+    uint64_t val = strict_strtoll(sval.c_str(), 10, &err);
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    *pval = val;
+  }
+  return 0;
+}
+
 int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
 {
+  int r = -1;
 
   if (config.exists("endpoint")) {
     endpoint = config["endpoint"];
@@ -2108,6 +2123,21 @@ int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
   if (config.exists("secret")) {
     key.key = config["secret"];
   }
+
+  if (config.exists("multipart_sync_threshold")) {
+    r = conf_to_uint64(config, "multipart_sync_threshold", &multipart_sync_threshold);
+    if (r < 0) {
+      multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+    }
+  }
+
+  if (config.exists("multipart_min_part_size")) {
+    r = conf_to_uint64(config, "multipart_min_part_size", &multipart_min_part_size);
+    if (r < 0) {
+      multipart_min_part_size = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+    }
+  }
+
   if (config.exists("acls")) {
     const JSONFormattable& cc = config["acls"];
     if (cc.is_array()) {
@@ -2148,6 +2178,12 @@ int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
   }
   if (config.exists("secret")) {
     key.key.clear();
+  }
+  if (config.exists("multipart_sync_threshold")) {
+    multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+  }
+  if (config.exists("multipart_min_part_size")) {
+    multipart_min_part_size = DEFAULT_MULTIPART_SYNC_PART_SIZE;
   }
   if (config.exists("acls")) {
     const JSONFormattable& cc = config["acls"];
