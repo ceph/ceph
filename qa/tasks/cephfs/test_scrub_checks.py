@@ -21,13 +21,13 @@ class TestScrubControls(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
     def _abort_scrub(self, expected):
-        res = self.fs.rank_tell(["scrub", "abort"])
+        res = self.fs.run_scrub(["abort"])
         self.assertEqual(res['return_code'], expected)
     def _pause_scrub(self, expected):
-        res = self.fs.rank_tell(["scrub", "pause"])
+        res = self.fs.run_scrub(["pause"])
         self.assertEqual(res['return_code'], expected)
     def _resume_scrub(self, expected):
-        res = self.fs.rank_tell(["scrub", "resume"])
+        res = self.fs.run_scrub(["resume"])
         self.assertEqual(res['return_code'], expected)
     def _check_task_status(self, expected_status, timo=120):
         """ check scrub status for current active mds in ceph status """
@@ -70,7 +70,7 @@ done
 
         self.create_scrub_data(test_dir)
 
-        out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
+        out_json = self.fs.run_scrub(["start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
 
         # abort and verify
@@ -91,7 +91,7 @@ done
 
         self.create_scrub_data(test_dir)
 
-        out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
+        out_json = self.fs.run_scrub(["start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
 
         # pause and verify
@@ -116,7 +116,7 @@ done
 
         self.create_scrub_data(test_dir)
 
-        out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
+        out_json = self.fs.run_scrub(["start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
 
         # pause and verify
@@ -154,7 +154,7 @@ done
 
         self.create_scrub_data(test_dir)
 
-        out_json = self.fs.rank_tell(["scrub", "start", abs_test_path, "recursive"])
+        out_json = self.fs.run_scrub(["start", abs_test_path, "recursive"])
         self.assertNotEqual(out_json, None)
 
         # pause and verify
