@@ -26,12 +26,14 @@ def task(ctx, config):
 
     json = fs.rank_tell(["scrub", "start", "/", "force", "recursive", "repair"])
     if not json or json['return_code'] == 0:
+        assert(fs.wait_until_scrub_complete(tag=json["scrub_tag"]) == True)
         log.info("scrub / completed")
     else:
         log.info("scrub / failed: {}".format(json))
 
     json = fs.rank_tell(["scrub", "start", "~mdsdir", "force", "recursive", "repair"])
     if not json or json['return_code'] == 0:
+        assert(fs.wait_until_scrub_complete(tag=json["scrub_tag"]) == True)
         log.info("scrub ~mdsdir completed")
     else:
         log.info("scrub / failed: {}".format(json))
