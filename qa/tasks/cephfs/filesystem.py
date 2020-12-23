@@ -1577,8 +1577,11 @@ class Filesystem(MDSCluster):
         self.set_max_mds(new_max_mds)
         return self.wait_for_daemons()
 
+    def run_scrub(self, cmd, rank=0):
+        return self.rank_tell(["scrub"] + cmd, rank)
+
     def get_scrub_status(self, rank=0):
-        return self.rank_tell(["scrub", "status"], rank)
+        return self.run_scrub(["status"], rank)
 
     def wait_until_scrub_complete(self, result=None, tag=None, rank=0, sleep=30, timeout=300):
         # time out after "timeout" seconds and assume as done

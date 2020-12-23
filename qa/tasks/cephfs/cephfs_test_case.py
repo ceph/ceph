@@ -379,7 +379,7 @@ class CephFSTestCase(CephTestCase):
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
 
     def _wait_until_scrub_complete(self, path="/", recursive=True, timeout=100):
-        out_json = self.fs.rank_tell(["scrub", "start", path] + ["recursive"] if recursive else [])
+        out_json = self.fs.run_scrub(["start", path] + ["recursive"] if recursive else [])
         if not self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"],
                                                  sleep=10, timeout=timeout):
             log.info("timed out waiting for scrub to complete")

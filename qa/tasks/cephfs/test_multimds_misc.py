@@ -86,7 +86,7 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.rados(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.rank_tell(["scrub", "start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
         self.assertNotEqual(out_json, None)
         self.assertEqual(out_json["return_code"], 0)
         self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
@@ -129,10 +129,10 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.rados(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.rank_tell(["scrub", "start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
         self.assertNotEqual(out_json, None)
         
-        res = self.fs.rank_tell(["scrub", "abort"])
+        res = self.fs.run_scrub(["abort"])
         self.assertEqual(res['return_code'], 0)
 
         # Abort and verify in both mdss. We also check the status in rank 0 mds because
@@ -154,10 +154,10 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.rados(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.rank_tell(["scrub", "start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
         self.assertNotEqual(out_json, None)
 
-        res = self.fs.rank_tell(["scrub", "pause"])
+        res = self.fs.run_scrub(["pause"])
         self.assertEqual(res['return_code'], 0)
 
         self.wait_until_true(lambda: "PAUSED" in self.fs.get_scrub_status(1)['status']
@@ -168,7 +168,7 @@ class TestScrub2(CephFSTestCase):
         self.assertTrue(checked)
 
         # resume and verify
-        res = self.fs.rank_tell(["scrub", "resume"])
+        res = self.fs.run_scrub(["resume"])
         self.assertEqual(res['return_code'], 0)
         
         self.wait_until_true(lambda: not("PAUSED" in self.fs.get_scrub_status(1)['status'])
@@ -187,10 +187,10 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.rados(["rmxattr", file_obj_name, "parent"])
 
-        out_json = self.fs.rank_tell(["scrub", "start", "/d1/d2/d3", "recursive", "force"], 0)
+        out_json = self.fs.run_scrub(["start", "/d1/d2/d3", "recursive", "force"], 0)
         self.assertNotEqual(out_json, None)
 
-        res = self.fs.rank_tell(["scrub", "pause"])
+        res = self.fs.run_scrub(["pause"])
         self.assertEqual(res['return_code'], 0)
 
         self.wait_until_true(lambda: "PAUSED" in self.fs.get_scrub_status(1)['status']
@@ -200,7 +200,7 @@ class TestScrub2(CephFSTestCase):
         checked = self._check_task_status("paused")
         self.assertTrue(checked)
 
-        res = self.fs.rank_tell(["scrub", "abort"])
+        res = self.fs.run_scrub(["abort"])
         self.assertEqual(res['return_code'], 0)
 
         self.wait_until_true(lambda: "PAUSED" in self.fs.get_scrub_status(1)['status']
@@ -215,7 +215,7 @@ class TestScrub2(CephFSTestCase):
         self.assertTrue(checked)
 
         # resume and verify
-        res = self.fs.rank_tell(["scrub", "resume"])
+        res = self.fs.run_scrub(["resume"])
         self.assertEqual(res['return_code'], 0)
 
         self.wait_until_true(lambda: not("PAUSED" in self.fs.get_scrub_status(1)['status'])
