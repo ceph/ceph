@@ -10,9 +10,6 @@ class TestScrub2(CephFSTestCase):
     MDSS_REQUIRED = 3
     CLIENTS_REQUIRED = 1
 
-    def _get_scrub_status(self, rank=0):
-        return self.fs.rank_tell(["scrub", "status"], rank)
-
     def _check_task_status_na(self, timo=120):
         """ check absence of scrub status in ceph status """
         with safe_while(sleep=1, tries=120, action='wait for task status') as proceed:
@@ -140,9 +137,9 @@ class TestScrub2(CephFSTestCase):
 
         # Abort and verify in both mdss. We also check the status in rank 0 mds because
         # it is supposed to gather the scrub status from other mdss.
-        self.wait_until_true(lambda: "no active" in self._get_scrub_status(1)['status']
-                and "no active" in self._get_scrub_status(2)['status']
-                and "no active" in self._get_scrub_status(0)['status'], 30)
+        self.wait_until_true(lambda: "no active" in self.fs.get_scrub_status(1)['status']
+                and "no active" in self.fs.get_scrub_status(2)['status']
+                and "no active" in self.fs.get_scrub_status(0)['status'], 30)
 
         # sleep enough to fetch updated task status
         checked = self._check_task_status_na()
@@ -163,9 +160,9 @@ class TestScrub2(CephFSTestCase):
         res = self.fs.rank_tell(["scrub", "pause"])
         self.assertEqual(res['return_code'], 0)
 
-        self.wait_until_true(lambda: "PAUSED" in self._get_scrub_status(1)['status']
-                and "PAUSED" in self._get_scrub_status(2)['status']
-                and "PAUSED" in self._get_scrub_status(0)['status'], 30)
+        self.wait_until_true(lambda: "PAUSED" in self.fs.get_scrub_status(1)['status']
+                and "PAUSED" in self.fs.get_scrub_status(2)['status']
+                and "PAUSED" in self.fs.get_scrub_status(0)['status'], 30)
 
         checked = self._check_task_status("paused")
         self.assertTrue(checked)
@@ -174,9 +171,9 @@ class TestScrub2(CephFSTestCase):
         res = self.fs.rank_tell(["scrub", "resume"])
         self.assertEqual(res['return_code'], 0)
         
-        self.wait_until_true(lambda: not("PAUSED" in self._get_scrub_status(1)['status'])
-                and not("PAUSED" in self._get_scrub_status(2)['status'])
-                and not("PAUSED" in self._get_scrub_status(0)['status']), 30)
+        self.wait_until_true(lambda: not("PAUSED" in self.fs.get_scrub_status(1)['status'])
+                and not("PAUSED" in self.fs.get_scrub_status(2)['status'])
+                and not("PAUSED" in self.fs.get_scrub_status(0)['status']), 30)
 
         checked = self._check_task_status_na()
         self.assertTrue(checked)
@@ -196,9 +193,9 @@ class TestScrub2(CephFSTestCase):
         res = self.fs.rank_tell(["scrub", "pause"])
         self.assertEqual(res['return_code'], 0)
 
-        self.wait_until_true(lambda: "PAUSED" in self._get_scrub_status(1)['status']
-                and "PAUSED" in self._get_scrub_status(2)['status']
-                and "PAUSED" in self._get_scrub_status(0)['status'], 30)
+        self.wait_until_true(lambda: "PAUSED" in self.fs.get_scrub_status(1)['status']
+                and "PAUSED" in self.fs.get_scrub_status(2)['status']
+                and "PAUSED" in self.fs.get_scrub_status(0)['status'], 30)
 
         checked = self._check_task_status("paused")
         self.assertTrue(checked)
@@ -206,12 +203,12 @@ class TestScrub2(CephFSTestCase):
         res = self.fs.rank_tell(["scrub", "abort"])
         self.assertEqual(res['return_code'], 0)
 
-        self.wait_until_true(lambda: "PAUSED" in self._get_scrub_status(1)['status']
-                and "0 inodes" in self._get_scrub_status(1)['status']
-                and "PAUSED" in self._get_scrub_status(2)['status']
-                and "0 inodes" in self._get_scrub_status(2)['status']
-                and "PAUSED" in self._get_scrub_status(0)['status']
-                and "0 inodes" in self._get_scrub_status(0)['status'], 30)
+        self.wait_until_true(lambda: "PAUSED" in self.fs.get_scrub_status(1)['status']
+                and "0 inodes" in self.fs.get_scrub_status(1)['status']
+                and "PAUSED" in self.fs.get_scrub_status(2)['status']
+                and "0 inodes" in self.fs.get_scrub_status(2)['status']
+                and "PAUSED" in self.fs.get_scrub_status(0)['status']
+                and "0 inodes" in self.fs.get_scrub_status(0)['status'], 30)
 
         # scrub status should still be paused...
         checked = self._check_task_status("paused")
@@ -221,9 +218,9 @@ class TestScrub2(CephFSTestCase):
         res = self.fs.rank_tell(["scrub", "resume"])
         self.assertEqual(res['return_code'], 0)
 
-        self.wait_until_true(lambda: not("PAUSED" in self._get_scrub_status(1)['status'])
-                and not("PAUSED" in self._get_scrub_status(2)['status'])
-                and not("PAUSED" in self._get_scrub_status(0)['status']), 30)
+        self.wait_until_true(lambda: not("PAUSED" in self.fs.get_scrub_status(1)['status'])
+                and not("PAUSED" in self.fs.get_scrub_status(2)['status'])
+                and not("PAUSED" in self.fs.get_scrub_status(0)['status']), 30)
 
         checked = self._check_task_status_na()
         self.assertTrue(checked)
