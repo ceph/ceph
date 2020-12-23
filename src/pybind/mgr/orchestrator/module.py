@@ -1351,8 +1351,17 @@ Usage:
 
         avail, why = self.available()
         result: Dict[str, Any] = {
-            "backend": o
+            "backend": o,
+            "paused": self.is_paused(),
         }
+
+        try:
+            num_workers = self.worker_pool_size()
+        except NotImplementedError:
+            pass
+        else:
+            result['workers'] = num_workers
+
         if avail is not None:
             result['available'] = avail
             if not avail:
@@ -1366,6 +1375,9 @@ Usage:
                 output += "\nAvailable: {0}".format(result['available'])
                 if 'reason' in result:
                     output += ' ({0})'.format(result['reason'])
+            output += f"\nPaused: {'Yes' if result['paused'] else 'No'}"
+            if 'workers' in result:
+                output += f"\nHost Parallelism: {result['workers']}"
         return HandleCommandResult(stdout=output)
 
     def self_test(self) -> None:
