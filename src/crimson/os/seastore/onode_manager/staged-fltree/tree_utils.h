@@ -197,13 +197,13 @@ class TreeBuilder {
   using future = ertr::future<ValueT>;
 
   TreeBuilder(KVPool& kvs, NodeExtentManagerURef&& nm)
-    : kvs{kvs}, ref_t{make_transaction()}, t{*ref_t}, tree{std::move(nm)} {}
+    : kvs{kvs}, tree{std::move(nm)} {}
 
-  future<> bootstrap() {
+  future<> bootstrap(Transaction& t) {
     return tree.mkfs(t);
   }
 
-  future<> run() {
+  future<> insert(Transaction& t) {
     std::ostringstream oss;
 #ifndef NDEBUG
     oss << "debug on, ";
@@ -216,19 +216,21 @@ class TreeBuilder {
       oss << "track off";
     }
     kv_iter = kvs.random_begin();
+    auto cursors = seastar::make_lw_shared<std::vector<Btree::Cursor>>();
     logger().warn("start inserting {} kvs ({}) ...", kvs.size(), oss.str());
     auto start_time = mono_clock::now();
-    return crimson::do_until([this]() -> future<bool> {
+    return crimson::do_until([&t, this, cursors]() -> future<bool> {
       if (kv_iter.is_end()) {
         return ertr::make_ready_future<bool>(true);
       }
       auto [key, p_value] = kv_iter.get_kv();
       logger().debug("[{}] {} -> {}", kv_iter.index(), key_hobj_t{key}, *p_value);
-      return tree.insert(t, key, *p_value).safe_then([this](auto ret) {
+      return tree.insert(t, key, *p_value
+      ).safe_then([&t, this, cursors](auto ret) {
         auto& [cursor, success] = ret;
         assert(success == true);
         if constexpr (TRACK) {
-          cursors.emplace_back(cursor);
+          cursors->emplace_back(cursor);
         }
 #ifndef NDEBUG
         auto [key, p_value] = kv_iter.get_kv();
@@ -245,23 +247,20 @@ class TreeBuilder {
         return ertr::make_ready_future<bool>(false);
 #endif
       });
-    }).safe_then([this, start_time] {
+    }).safe_then([&t, this, start_time, cursors] {
       std::chrono::duration<double> duration = mono_clock::now() - start_time;
       logger().warn("Insert done! {}s", duration.count());
-      return tree.get_stats_slow(t);
-    }).safe_then([this](auto stats) {
-      logger().warn("{}", stats);
-      if (!cursors.empty()) {
+      if (!cursors->empty()) {
         logger().info("Verifing tracked cursors ...");
         kv_iter = kvs.random_begin();
         return seastar::do_with(
-            cursors.begin(), [this](auto& c_iter) {
-          return crimson::do_until([this, &c_iter]() -> future<bool> {
+            cursors->begin(), [&t, this, cursors](auto& c_iter) {
+          return crimson::do_until([&t, this, &c_iter, cursors]() -> future<bool> {
             if (kv_iter.is_end()) {
               logger().info("Verify done!");
               return ertr::make_ready_future<bool>(true);
             }
-            assert(c_iter != cursors.end());
+            assert(c_iter != cursors->end());
             auto [k, v] = kv_iter.get_kv();
             // validate values in tree keep intact
             return tree.lower_bound(t, k).safe_then([this, &c_iter](auto cursor) {
@@ -281,17 +280,21 @@ class TreeBuilder {
     });
   }
 
+  future<> get_stats(Transaction& t) {
+    return tree.get_stats_slow(t
+    ).safe_then([this](auto stats) {
+      logger().warn("{}", stats);
+    });
+  }
+
  private:
   static seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_filestore);
   }
 
   KVPool& kvs;
-  TransactionRef ref_t;
-  Transaction& t;
   Btree tree;
   KVPool::iterator_t kv_iter;
-  std::vector<Btree::Cursor> cursors;
 };
 
 }
