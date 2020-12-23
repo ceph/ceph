@@ -1,0 +1,36 @@
+version: "3.7"
+
+services:
+    postgres:
+        image: postgres
+        ports:
+            - "5432:5432"
+        environment:
+            POSTGRES_PASSWORD: secret
+            POSTGRES_USER: paddles
+            POSTGRES_DB: paddles
+            PGDATA: /var/lib/postgresql/data/pgdata
+        volumes:
+            - ${TEUTHOLOGY_DATA:-"$HOME/.teuthology/postgres"}:/var/lib/postgresql/data
+    paddles:
+        build: ../paddles
+        environment:
+            PADDLES_SERVER_HOST: 0.0.0.0
+            PADDLES_SQLALCHEMY_URL: postgresql+psycopg2://paddles:secret@postgres/paddles
+        ports:
+            - "8180:8080"
+        depends_on:
+            - postgres
+    pulpito:
+        build: ../pulpito
+        environment:
+            PULPITO_PADDLES_ADDRESS: http://paddles:8080
+        ports:
+            - "8081:8081"
+        depends_on:
+            - paddles
+    beanstalk:
+        build: beanstalk/alpine
+        ports:
+            - "11300:11300"
+    # todo: teuthology-worker
