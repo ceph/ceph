@@ -124,6 +124,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   bool suspended;
   bool system;
   bool exclusive;
+  bool sync_enabled;
 
   int32_t max_buckets;
   const int32_t default_max_buckets =
@@ -143,6 +144,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   RESTArgs::get_string(s, "tenant", tenant_name, &tenant_name);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
+  RESTArgs::get_bool(s, "sync_enabled", false, &sync_enabled);
   RESTArgs::get_int32(s, "max-buckets", default_max_buckets, &max_buckets);
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
@@ -197,6 +199,9 @@ void RGWOp_User_Create::execute(optional_yield y)
   }
   if (s->info.args.exists("suspended"))
     op_state.set_suspension(suspended);
+
+  if (s->info.args.exists("sync_enabled"))
+    op_state.set_suspension(sync_enabled);
 
   if (s->info.args.exists("system"))
     op_state.set_system(system);
@@ -266,6 +271,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   bool email_set;
   bool quota_set;
   int32_t max_buckets;
+  bool sync_enabled;
 
   RGWUserAdminOpState op_state;
 
@@ -279,6 +285,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", false, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
+  RESTArgs::get_bool(s, "sync_enabled", false, &sync_enabled);
   RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets, &quota_set);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
 
@@ -334,6 +341,9 @@ void RGWOp_User_Modify::execute(optional_yield y)
 
   if (s->info.args.exists("suspended"))
     op_state.set_suspension(suspended);
+
+  if (s->info.args.exists("sync_enabled"))
+    op_state.set_suspension(sync_enabled);
 
   if (s->info.args.exists("system"))
     op_state.set_system(system);

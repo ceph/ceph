@@ -685,6 +685,7 @@ struct RGWUserInfo
   uint32_t type;
   set<string> mfa_ids;
   string assumed_role_arn;
+  __u8 sync_enabled;
 
   RGWUserInfo()
     : suspended(0),
@@ -692,7 +693,8 @@ struct RGWUserInfo
       op_mask(RGW_OP_TYPE_ALL),
       admin(0),
       system(0),
-      type(TYPE_NONE) {
+      type(TYPE_NONE),
+      sync_enabled(0) {
   }
 
   RGWAccessKey* get_key(const string& access_key) {
@@ -707,7 +709,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(21, 9, bl);
+     ENCODE_START(22, 9, bl);
      encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
@@ -750,10 +752,11 @@ struct RGWUserInfo
      encode(type, bl);
      encode(mfa_ids, bl);
      encode(assumed_role_arn, bl);
+     encode(sync_enabled, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(21, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(22, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -833,6 +836,10 @@ struct RGWUserInfo
     }
     if (struct_v >= 21) {
       decode(assumed_role_arn, bl);
+    }
+    sync_enabled = 0;
+    if (struct_v >= 22) {
+      decode(sync_enabled, bl);
     }
     DECODE_FINISH(bl);
   }

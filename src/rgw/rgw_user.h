@@ -164,6 +164,7 @@ struct RGWUserAdminOpState {
   __u8 exclusive;
   __u8 fetch_stats;
   __u8 sync_stats;
+  __u8 sync_enabled;
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask;
@@ -210,6 +211,7 @@ struct RGWUserAdminOpState {
   bool found_by_email;  
   bool found_by_key;
   bool mfa_ids_specified;
+  bool sync_enabled_op;
  
   // req parameters
   bool populated;
@@ -339,6 +341,11 @@ struct RGWUserAdminOpState {
     suspension_op = true;
   }
 
+  void set_sync_enabled(__u8 is_sync_enabled) {
+    sync_enabled = is_sync_enabled;
+    sync_enabled_op = true;
+  }
+
   void set_admin(__u8 is_admin) {
     admin = is_admin;
     admin_specified = true;
@@ -434,6 +441,7 @@ struct RGWUserAdminOpState {
   bool has_key_op() { return key_op; }
   bool has_caps_op() { return caps_specified; }
   bool has_suspension_op() { return suspension_op; }
+  bool has_sync_enabled_op() { return sync_enabled_op; }
   bool has_subuser_perm() { return perm_specified; }
   bool has_op_mask() { return op_mask_specified; }
   bool will_gen_access() { return gen_access; }
@@ -454,6 +462,7 @@ struct RGWUserAdminOpState {
   void set_purge_data(bool flag) { purge_data = flag; }
   void set_generate_subuser(bool flag) { gen_subuser = flag; }
   __u8 get_suspension_status() { return suspended; }
+  __u8 get_sync_enabled_status() { return sync_enabled; }
   int32_t get_key_type() {return key_type; }
   uint32_t get_subuser_perm() { return perm_mask; }
   int32_t get_max_buckets() { return max_buckets; }
@@ -549,6 +558,7 @@ struct RGWUserAdminOpState {
     perm_specified = false;
     op_mask_specified = false;
     suspension_op = false;
+    sync_enabled_op = false;
     system_specified = false;
     key_op = false;
     populated = false;

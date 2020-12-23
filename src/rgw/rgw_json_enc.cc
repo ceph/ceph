@@ -472,6 +472,7 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("display_name", display_name, f);
   encode_json("email", user_email, f);
   encode_json("suspended", (int)suspended, f);
+  encode_json("sync_enabled", (bool)sync_enabled, f);
   encode_json("max_buckets", (int)max_buckets, f);
 
   encode_json_map("subusers", NULL, "subuser", NULL, user_info_dump_subuser,(void *)this, subusers, f);

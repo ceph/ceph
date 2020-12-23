@@ -402,7 +402,8 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("user_id", info.user_id.id, f);
   encode_json("display_name", info.display_name, f);
   encode_json("email", info.user_email, f);
-  encode_json("suspended", (int)info.suspended, f);
+  encode_json("suspended", (int)info.suspended, f); 
+  encode_json("sync_enabled", (int)info.sync_enabled, f);
   encode_json("max_buckets", (int)info.max_buckets, f);
 
   dump_subusers_info(f, info);
@@ -1782,6 +1783,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg,
   user_info.suspended = op_state.get_suspension_status();
   user_info.admin = op_state.admin;
   user_info.system = op_state.system;
+  user_info.sync_enabled = op_state.get_sync_enabled_status();
 
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
@@ -2088,6 +2090,15 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg,
       }
 
     } while (buckets.is_truncated());
+  }
+
+  if (op_state.has_sync_enabled_op()) {
+    if (user_id.empty()) {
+      set_err_msg(err_msg, "empty user id passed...aborting");
+      return -EINVAL;
+    }
+    __u8 sync_enabled = op_state.get_sync_enabled_status();
+    user_info.sync_enabled = sync_enabled;
   }
 
   if (op_state.mfa_ids_specified) {

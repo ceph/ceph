@@ -582,6 +582,8 @@ enum class OPT {
   USER_RM,
   USER_SUSPEND,
   USER_ENABLE,
+  USER_SYNC_ENABLE,
+  USER_SYNC_DISABLE,
   USER_CHECK,
   USER_STATS,
   USER_LIST,
@@ -782,6 +784,8 @@ static SimpleCmd::Commands all_cmds = {
   { "user rm", OPT::USER_RM },
   { "user suspend", OPT::USER_SUSPEND },
   { "user enable", OPT::USER_ENABLE },
+  { "user sync enable", OPT::USER_SYNC_ENABLE },
+  { "user sync disable", OPT::USER_SYNC_DISABLE },
   { "user check", OPT::USER_CHECK },
   { "user stats", OPT::USER_STATS },
   { "user list", OPT::USER_LIST },
@@ -5410,7 +5414,8 @@ int main(int argc, const char **argv)
   bool non_master_cmd = (!store->svc()->zone->is_meta_master() && !yes_i_really_mean_it);
   std::set<OPT> non_master_ops_list = {OPT::USER_CREATE, OPT::USER_RM, 
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
-                                        OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
+                                        OPT::USER_SUSPEND, OPT::USER_SYNC_ENABLE,
+                                        OPT::USER_SYNC_DISABLE, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
                                         OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
                                         OPT::BUCKET_RESHARD, OPT::BUCKET_RM,
@@ -5506,6 +5511,12 @@ int main(int argc, const char **argv)
   else if (opt_cmd == OPT::USER_SUSPEND)
     user_op.set_suspension(true);
 
+  // set default sync status for buckets created by this user
+  if (opt_cmd == OPT::USER_SYNC_ENABLE)
+    user_op.set_sync_enabled(true);
+  else if (opt_cmd == OPT::USER_SYNC_DISABLE)
+    user_op.set_sync_enabled(false);
+
   if (!placement_id.empty() ||
       (opt_storage_class && !opt_storage_class->empty())) {
     rgw_placement_rule target_rule;
@@ -5598,6 +5609,8 @@ int main(int argc, const char **argv)
     break;
   case OPT::USER_ENABLE:
   case OPT::USER_SUSPEND:
+  case OPT::USER_SYNC_ENABLE:
+  case OPT::USER_SYNC_DISABLE:
   case OPT::USER_MODIFY:
     ret = user.modify(user_op, null_yield, &err_msg);
     if (ret < 0) {
