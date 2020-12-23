@@ -3155,6 +3155,9 @@ void Client::delay_put_inodes(bool wakeup)
     release.swap(delay_i_release);
   }
 
+  if (release.empty())
+    return;
+
   for (auto &[in, cnt] : release)
     _put_inode(in, cnt);
 
