@@ -1258,6 +1258,12 @@ OPTION(rgw_override_bucket_index_max_shards, OPT_U32)
 OPTION(rgw_bucket_index_max_aio, OPT_U32)
 
 /**
+ * Represents whether buckets are enabled for sync in a multisite cluster by default
+ * during creation.
+ */
+OPTION(rgw_bucket_sync_enable, OPT_BOOL)
+
+/**
  * whether or not the quota/gc threads should be started
  */
 OPTION(rgw_enable_quota_threads, OPT_BOOL)

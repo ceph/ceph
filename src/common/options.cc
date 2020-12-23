@@ -5621,6 +5621,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(128)
     .set_description("Max number of concurrent RADOS requests when handling bucket shards."),
 
+    Option("rgw_bucket_sync_enable", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("When set to true (default false), the newly created buckets are enabled for multisite sync automatically."),
+
     Option("rgw_enable_quota_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Enables the quota maintenance thread.")

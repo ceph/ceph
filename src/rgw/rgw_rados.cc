@@ -2262,6 +2262,11 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
       info.quota = *pquota_info;
     }
 
+    if (cct->_conf->rgw_bucket_sync_enable)
+      info.flags &= ~BUCKET_DATASYNC_DISABLED;
+    else
+      info.flags |= BUCKET_DATASYNC_DISABLED;
+
     int r = svc.bi->init_index(info);
     if (r < 0) {
       return r;
