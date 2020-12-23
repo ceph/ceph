@@ -1191,6 +1191,11 @@ TEST_F(d_seastore_tm_test_t, 6_random_insert_leaf_node)
       tree->get_stats(*t).unsafe_get();
       tm->submit_transaction(std::move(t)).unsafe_get();
     }
+    {
+      // Note: tm->create_weak_transaction() can also work, but too slow.
+      auto t = tm->create_transaction();
+      tree->validate(*t).unsafe_get();
+    }
     tree.reset();
   });
 }

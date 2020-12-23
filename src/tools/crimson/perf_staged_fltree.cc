@@ -47,6 +47,11 @@ class PerfTree : public TMTestState {
           tree->get_stats(*t).unsafe_get();
           tm->submit_transaction(std::move(t)).unsafe_get();
         }
+        {
+          // Note: tm->create_weak_transaction() can also work, but too slow.
+          auto t = tm->create_transaction();
+          tree->validate(*t).unsafe_get();
+        }
         tree.reset();
       });
     }).then([this] {

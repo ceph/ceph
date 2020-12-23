@@ -294,6 +294,26 @@ class TreeBuilder {
     });
   }
 
+  future<> validate(Transaction& t) {
+    logger().info("Verifing insertion ...");
+    return seastar::do_with(
+        kvs.begin(), [&t, this] (auto& kvs_iter) {
+      return crimson::do_until([&t, this, &kvs_iter]() -> future<bool> {
+        if (kvs_iter.is_end()) {
+          logger().info("Verify done!");
+          return ertr::make_ready_future<bool>(true);
+        }
+        auto [k, v] = kvs_iter.get_kv();
+        return tree.lower_bound(t, k
+        ).safe_then([&kvs_iter, k=k, v=v] (auto cursor) {
+          Onodes::validate_cursor(cursor, k, *v);
+          ++kvs_iter;
+          return ertr::make_ready_future<bool>(false);
+        });
+      });
+    });
+  }
+
  private:
   static seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_filestore);
