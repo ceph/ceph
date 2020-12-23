@@ -651,6 +651,8 @@ class Filesystem(MDSCluster):
         log.info('Destroying file system ' + self.name +  ' and related '
                  'pools')
 
+        data_pools = self.get_data_pool_names(refresh=True)
+
         # make sure no MDSs are attached to given FS.
         self.mon_manager.raw_cluster_cmd('fs', 'fail', self.name)
         self.mon_manager.raw_cluster_cmd(
@@ -659,7 +661,7 @@ class Filesystem(MDSCluster):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm',
             self.get_metadata_pool_name(), self.get_metadata_pool_name(),
             '--yes-i-really-really-mean-it')
-        for poolname in self.get_data_pool_names():
+        for poolname in data_pools:
             try:
                 self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', poolname,
                     poolname, '--yes-i-really-really-mean-it')
