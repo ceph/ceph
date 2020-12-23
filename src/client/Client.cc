@@ -3120,7 +3120,7 @@ void Client::handle_lease(const MConstRef<MClientLease>& m)
 
 void Client::_put_inode(Inode *in, int n)
 {
-  ldout(cct, 10) << __func__ << " on " << *in << dendl;
+  ldout(cct, 10) << __func__ << " on " << *in << " n = " << n << dendl;
 
   int left = in->_put(n);
   if (left == 0) {
