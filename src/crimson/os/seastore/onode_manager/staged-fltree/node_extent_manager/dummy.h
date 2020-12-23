@@ -105,6 +105,10 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     }
   }
 
+  std::ostream& print(std::ostream& os) const override {
+    return os << "DummyNodeExtentManager(sync=" << SYNC << ")";
+  }
+
  private:
   tm_future<NodeExtentRef> read_extent_sync(
       Transaction& t, laddr_t addr, extent_len_t len) {

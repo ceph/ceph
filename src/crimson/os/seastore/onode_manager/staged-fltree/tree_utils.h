@@ -200,24 +200,31 @@ class TreeBuilder {
     : kvs{kvs}, tree{std::move(nm)} {}
 
   future<> bootstrap(Transaction& t) {
+    std::ostringstream oss;
+#ifndef NDEBUG
+    oss << "debug=on, ";
+#else
+    oss << "debug=off, ";
+#endif
+#ifdef UNIT_TESTS_BUILT
+    oss << "UNIT_TEST_BUILT=on, ";
+#else
+    oss << "UNIT_TEST_BUILT=off, ";
+#endif
+    if constexpr (TRACK) {
+      oss << "track=on, ";
+    } else {
+      oss << "track=off, ";
+    }
+    oss << tree;
+    logger().warn("TreeBuilder: {}, bootstrapping ...", oss.str());
     return tree.mkfs(t);
   }
 
   future<> insert(Transaction& t) {
-    std::ostringstream oss;
-#ifndef NDEBUG
-    oss << "debug on, ";
-#else
-    oss << "debug off, ";
-#endif
-    if constexpr (TRACK) {
-      oss << "track on";
-    } else {
-      oss << "track off";
-    }
     kv_iter = kvs.random_begin();
     auto cursors = seastar::make_lw_shared<std::vector<Btree::Cursor>>();
-    logger().warn("start inserting {} kvs ({}) ...", kvs.size(), oss.str());
+    logger().warn("start inserting {} kvs ...", kvs.size());
     auto start_time = mono_clock::now();
     return crimson::do_until([&t, this, cursors]() -> future<bool> {
       if (kv_iter.is_end()) {

@@ -110,6 +110,11 @@ class SeastoreNodeExtentManager final: public NodeExtentManager {
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
     });
   }
+
+  std::ostream& print(std::ostream& os) const override {
+    return os << "SeastoreNodeExtentManager";
+  }
+
  private:
   static seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_filestore);
