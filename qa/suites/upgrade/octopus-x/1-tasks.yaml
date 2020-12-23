@@ -1,0 +1,26 @@
+tasks:
+- install:
+    branch: octopus
+- print: "**** done install task..."
+- print: "**** done start installing octopus cephadm ..."
+- cephadm:
+    image: docker.io/ceph/daemon-base:latest-octopus
+    cephadm_branch: octopus
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing octopus cephadm ..."
+
+- print: "**** done start cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+
+- print: "**** done start parallel"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done end parallel"
