@@ -786,6 +786,12 @@ class Orchestrator(object):
     def resume(self) -> None:
         raise NotImplementedError()
 
+    def is_paused(self) -> bool:
+        raise NotImplementedError()
+
+    def worker_pool_size(self) -> int:
+        raise NotImplementedError()
+
     def add_host(self, host_spec: HostSpec) -> Completion[str]:
         """
         Add a host to the orchestrator inventory.

@@ -529,6 +529,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     # start the process
                     self._kick_serve_loop()
 
+    def is_paused(self) -> bool:
+        return self.paused
+
+    def worker_pool_size(self) -> int:
+        return self._worker_pool._processes  # type: ignore
+
     def pause(self) -> None:
         if not self.paused:
             self.log.info('Paused')
