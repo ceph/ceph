@@ -29,8 +29,6 @@ class TestScrubControls(CephFSTestCase):
     def _resume_scrub(self, expected):
         res = self.fs.rank_tell(["scrub", "resume"])
         self.assertEqual(res['return_code'], expected)
-    def _get_scrub_status(self):
-        return self.fs.rank_tell(["scrub", "status"])
     def _check_task_status(self, expected_status, timo=120):
         """ check scrub status for current active mds in ceph status """
         with safe_while(sleep=1, tries=120, action='wait for task status') as proceed:
@@ -98,7 +96,7 @@ done
 
         # pause and verify
         self._pause_scrub(0)
-        out_json = self._get_scrub_status()
+        out_json = self.fs.get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
 
         checked = self._check_task_status("paused")
@@ -106,7 +104,7 @@ done
 
         # resume and verify
         self._resume_scrub(0)
-        out_json = self._get_scrub_status()
+        out_json = self.fs.get_scrub_status()
         self.assertFalse("PAUSED" in out_json['status'])
 
         checked = self._check_task_status_na()
@@ -123,7 +121,7 @@ done
 
         # pause and verify
         self._pause_scrub(0)
-        out_json = self._get_scrub_status()
+        out_json = self.fs.get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
 
         checked = self._check_task_status("paused")
@@ -131,7 +129,7 @@ done
 
         # abort and verify
         self._abort_scrub(0)
-        out_json = self._get_scrub_status()
+        out_json = self.fs.get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
         self.assertTrue("0 inodes" in out_json['status'])
 
@@ -141,7 +139,7 @@ done
 
         # resume and verify
         self._resume_scrub(0)
-        out_json = self._get_scrub_status()
+        out_json = self.fs.get_scrub_status()
         self.assertTrue("no active" in out_json['status'])
 
         checked = self._check_task_status_na()
@@ -161,7 +159,7 @@ done
 
         # pause and verify
         self._pause_scrub(0)
-        out_json = self._get_scrub_status()
+        out_json = self.fs.get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
 
         checked = self._check_task_status("paused")
@@ -281,9 +279,6 @@ class TestScrubChecks(CephFSTestCase):
         ino = self.mount_a.path_to_ino(new_file)
         rados_obj_name = "{ino:x}.00000000".format(ino=ino)
         command = "scrub start {file}".format(file=test_new_file)
-
-        def _get_scrub_status():
-            return self.fs.rank_tell(["scrub", "status"], mds_rank)
 
         def _check_and_clear_damage(ino, dtype):
             all_damage = self.fs.rank_tell(["damage", "ls"], mds_rank)
