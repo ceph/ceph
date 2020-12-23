@@ -77,7 +77,7 @@ done
 
         # abort and verify
         self._abort_scrub(0)
-        self.wait_until_true(lambda: "no active" in self._get_scrub_status()['status'], 30)
+        self.fs.wait_until_scrub_complete(sleep=5, timeout=30)
 
         # sleep enough to fetch updated task status
         checked = self._check_task_status_na()
@@ -298,7 +298,7 @@ class TestScrubChecks(CephFSTestCase):
         self.assertFalse(_check_and_clear_damage(ino, "backtrace"));
         self.fs.rados(["rmxattr", rados_obj_name, "parent"], pool=self.fs.get_data_pool_name())
         self.tell_command(mds_rank, command, success_validator)
-        self.wait_until_true(lambda: "no active" in _get_scrub_status()['status'], 30)
+        self.fs.wait_until_scrub_complete(sleep=5, timeout=30)
         self.assertTrue(_check_and_clear_damage(ino, "backtrace"));
 
         command = "flush_path /"
