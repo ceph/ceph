@@ -451,12 +451,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     def _service_rm_decorate(self, typename, name, func):
         return write_completion(
-            on_complete=lambda : func(name),
+            on_complete=lambda : func(),
             message="Removing {} services for {}".format(typename, name),
             mgr=self
         )
 
-    def remove_service(self, service_type, service_name):
+    def remove_service(self, service_name):
+        service_type, service_name = service_name.split('.', 1)
         if service_type == 'mds':
             return self._service_rm_decorate(
                 'MDS', service_name, lambda: self.rook_cluster.rm_service(
