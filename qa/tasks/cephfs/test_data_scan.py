@@ -511,6 +511,8 @@ class TestDataScan(CephFSTestCase):
         # are matched
         out_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair", "recursive"])
         self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
         # Remove the whole 'sudbdir' directory
         self.mount_a.run_shell(["rm", "-rf", "subdir/"])

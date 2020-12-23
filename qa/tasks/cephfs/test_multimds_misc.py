@@ -13,9 +13,6 @@ class TestScrub2(CephFSTestCase):
     def _get_scrub_status(self, rank=0):
         return self.fs.rank_tell(["scrub", "status"], rank)
 
-    def _wait_until_scrubbed(self, timeout):
-        self.wait_until_true(lambda: "no active" in self._get_scrub_status()['status'], timeout)
-
     def _check_task_status_na(self, timo=120):
         """ check absence of scrub status in ceph status """
         with safe_while(sleep=1, tries=120, action='wait for task status') as proceed:
@@ -72,8 +69,10 @@ class TestScrub2(CephFSTestCase):
         inos = self._find_path_inos('d1/d2/d3/')
 
         tag = "tag123"
-        self.fs.rank_tell(["tag", "path", "/d1/d2/d3", tag], 0)
-        self._wait_until_scrubbed(30);
+        out_json = self.fs.rank_tell(["tag", "path", "/d1/d2/d3", tag], 0)
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
         def assertTagged(ino):
             file_obj_name = "{0:x}.00000000".format(ino)
@@ -90,8 +89,10 @@ class TestScrub2(CephFSTestCase):
             file_obj_name = "{0:x}.00000000".format(ino)
             self.fs.rados(["rmxattr", file_obj_name, "parent"])
 
-        self.fs.rank_tell(["scrub", "start", "/d1/d2/d3", "recursive", "force"], 0)
-        self._wait_until_scrubbed(30);
+        out_json = self.fs.rank_tell(["scrub", "start", "/d1/d2/d3", "recursive", "force"], 0)
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
         def _check_damage(mds_rank, inos):
             all_damage = self.fs.rank_tell(["damage", "ls"], mds_rank)
