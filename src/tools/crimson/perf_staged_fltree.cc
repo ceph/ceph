@@ -19,56 +19,40 @@ class PerfTree : public TMTestState {
   PerfTree(bool is_dummy) : is_dummy{is_dummy} {}
 
   seastar::future<> run(KVPool& kvs) {
-    return start(kvs).then([this] {
-      return tree->run().handle_error(
-        crimson::ct_error::all_same_way([] {
-          ceph_abort("runtime error");
-        })
-      );
+    return tm_setup().then([this, &kvs] {
+      return seastar::async([this, &kvs] {
+        auto tree = std::make_unique<TreeBuilder<TRACK>>(kvs,
+            (is_dummy ? NodeExtentManager::create_dummy(true)
+                      : NodeExtentManager::create_seastore(*tm)));
+        {
+          auto t = tm->create_transaction();
+          tree->bootstrap(*t).unsafe_get();
+          tm->submit_transaction(std::move(t)).unsafe_get();
+        }
+        {
+          auto t = tm->create_transaction();
+          tree->insert(*t).unsafe_get();
+          tm->submit_transaction(std::move(t)).unsafe_get();
+        }
+        {
+          auto t = tm->create_transaction();
+          tree->get_stats(*t).unsafe_get();
+          tm->submit_transaction(std::move(t)).unsafe_get();
+        }
+        tree.reset();
+      });
     }).then([this] {
-      return stop();
+      return tm_teardown();
     });
   }
 
  private:
-  seastar::future<> start(KVPool& kvs) {
-    if (is_dummy) {
-      tree = std::make_unique<TreeBuilder<TRACK>>(
-          kvs,  NodeExtentManager::create_dummy(true));
-      return tree->bootstrap().handle_error(
-        crimson::ct_error::all_same_way([] {
-          ceph_abort("Unable to mkfs");
-        })
-      );
-    } else {
-      return tm_setup().then([this, &kvs] {
-        tree = std::make_unique<TreeBuilder<TRACK>>(
-            kvs,  NodeExtentManager::create_seastore(*tm));
-        return tree->bootstrap();
-      }).handle_error(
-        crimson::ct_error::all_same_way([] {
-          ceph_abort("Unable to mkfs");
-        })
-      );
-    }
-  }
-
-  seastar::future<> stop() {
-    tree.reset();
-    if (is_dummy) {
-      return seastar::now();
-    } else {
-      return tm_teardown();
-    }
-  }
-
   bool is_dummy;
-  std::unique_ptr<TreeBuilder<TRACK>> tree;
 };
 
 template <bool TRACK>
 seastar::future<> run(const bpo::variables_map& config) {
-  return seastar::async([&config]{
+  return seastar::async([&config] {
     auto backend = config["backend"].as<std::string>();
     bool is_dummy;
     if (backend == "dummy") {
