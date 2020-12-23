@@ -186,3 +186,5 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 20 01 * * 3,4  CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-pacific -k distro -e $CEPH_QA_EMAIL --suite-branch octopus
 
+22 14 * * 3,4 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c   $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/octopus-x -e $CEPH_QA_EMAIL -p 70 --force-priority
+
