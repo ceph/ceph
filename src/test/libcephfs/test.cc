@@ -2441,11 +2441,12 @@ TEST(LibCephFS, EmptySnapInfo) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  char snap_name[64];
-  char snap_path[128];
-  sprintf(snap_name, "%s_%d", "snap0", getpid());
-  sprintf(snap_path, "/.snap/%s", snap_name);
+  char dir_path[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d", getpid());
+  sprintf(snap_path, "%s/.snap/snap0_%d", dir_path, getpid());
 
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
   // snapshot without custom metadata
   ASSERT_EQ(0, ceph_mkdir(cmount, snap_path, 0755));
 
@@ -2455,6 +2456,7 @@ TEST(LibCephFS, EmptySnapInfo) {
   ASSERT_EQ(info.nr_snap_metadata, 0);
 
   ASSERT_EQ(0, ceph_rmdir(cmount, snap_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
   ceph_shutdown(cmount);
 }
 
@@ -2465,14 +2467,17 @@ TEST(LibCephFS, SnapInfo) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
+  char dir_path[64];
   char snap_name[64];
-  char snap_path[128];
-  sprintf(snap_name, "%s_%d", "snap0", getpid());
-  sprintf(snap_path, "/.snap/%s", snap_name);
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d", getpid());
+  sprintf(snap_name, "snap0_%d", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
 
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
   // snapshot with custom metadata
   struct snap_metadata snap_meta[] = {{"foo", "bar"},{"this", "that"},{"abcdefg", "12345"}};
-  ASSERT_EQ(0, ceph_mksnap(cmount, "/", snap_name, 0755, snap_meta, std::size(snap_meta)));
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta, std::size(snap_meta)));
 
   struct snap_info info;
   ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
@@ -2494,6 +2499,8 @@ TEST(LibCephFS, SnapInfo) {
   }
   ceph_free_snap_info_buffer(&info);
 
-  ASSERT_EQ(0, ceph_rmsnap(cmount, "/", snap_name));
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+
   ceph_shutdown(cmount);
 }
