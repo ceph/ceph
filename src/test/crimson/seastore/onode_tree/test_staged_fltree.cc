@@ -1165,17 +1165,14 @@ struct d_seastore_tm_test_t :
 TEST_F(d_seastore_tm_test_t, 6_random_insert_leaf_node)
 {
   run_async([this] {
+    constexpr bool TEST_SEASTORE = true;
     constexpr bool TRACK_CURSORS = true;
     KVPool kvs{{8, 11, 64, 256, 301, 320},
                {8, 16, 128, 512, 576, 640},
                {0, 32}, {0, 10}, {0, 4}};
     auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS>>(kvs,
-#if 0
-      NodeExtentManager::create_dummy(IS_DUMMY_SYNC)
-#else
-      NodeExtentManager::create_seastore(*tm)
-#endif
-    );
+        (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
+                       : NodeExtentManager::create_dummy(IS_DUMMY_SYNC)));
     {
       auto t = tm->create_transaction();
       tree->bootstrap(*t).unsafe_get();
@@ -1190,6 +1187,12 @@ TEST_F(d_seastore_tm_test_t, 6_random_insert_leaf_node)
       auto t = tm->create_transaction();
       tree->get_stats(*t).unsafe_get();
       tm->submit_transaction(std::move(t)).unsafe_get();
+    }
+    if constexpr (TEST_SEASTORE) {
+      logger().info("seastore replay begin");
+      restart();
+      tree->reload(NodeExtentManager::create_seastore(*tm));
+      logger().info("seastore replay end");
     }
     {
       // Note: tm->create_weak_transaction() can also work, but too slow.
