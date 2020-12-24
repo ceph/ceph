@@ -2118,7 +2118,9 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
       out_op->data_included.span_of(copy_subset, progress.data_recovered_to,
                                     available);
-      if (out_op->data_included.empty()) // zero filled section, skip to end!
+      // zero filled section, skip to end!
+      if (out_op->data_included.empty() ||
+          out_op->data_included.range_end() == copy_subset.range_end())
         new_progress.data_recovered_to = recovery_info.copy_subset.range_end();
       else
         new_progress.data_recovered_to = out_op->data_included.range_end();
