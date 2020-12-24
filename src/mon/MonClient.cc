@@ -466,7 +466,7 @@ void MonClient::handle_config(MConfig *m)
 
   // Take the sledgehammer approach to ensuring we don't depend on
   // anything in MonClient.
-  boost::asio::defer(finish_strand,
+  boost::asio::post(finish_strand,
 		    [m, cct = boost::intrusive_ptr<CephContext>(cct),
 		     config_notify_cb = config_notify_cb,
 		     config_cb = config_cb]() {
@@ -524,8 +524,8 @@ void MonClient::shutdown()
   monc_lock.lock();
   stopping = true;
   while (!version_requests.empty()) {
-    ceph::async::defer(std::move(version_requests.begin()->second),
-		       monc_errc::shutting_down, 0, 0);
+    ceph::async::post(std::move(version_requests.begin()->second),
+		      monc_errc::shutting_down, 0, 0);
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
 		   << version_requests.begin()->first << dendl;
     version_requests.erase(version_requests.begin());
@@ -728,8 +728,8 @@ void MonClient::_reopen_session(int rank)
 
   // throw out version check requests
   while (!version_requests.empty()) {
-    ceph::async::defer(std::move(version_requests.begin()->second),
-		       monc_errc::session_reset, 0, 0);
+    ceph::async::post(std::move(version_requests.begin()->second),
+		      monc_errc::session_reset, 0, 0);
     version_requests.erase(version_requests.begin());
   }
 
@@ -1322,8 +1322,8 @@ void MonClient::_finish_command(MonCommand *r, bs::error_code ret,
 {
   ldout(cct, 10) << __func__ << " " << r->tid << " = " << ret << " " << rs
 		 << dendl;
-  ceph::async::defer(std::move(r->onfinish), ret, std::string(rs),
-		     std::move(bl));
+  ceph::async::post(std::move(r->onfinish), ret, std::string(rs),
+		    std::move(bl));
   if (r->target_con) {
     r->target_con->mark_down();
   }
@@ -1345,8 +1345,8 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
     ldout(cct, 10) << __func__ << " finishing " << iter->first << " version "
 		   << m->version << dendl;
     version_requests.erase(iter);
-    ceph::async::defer(std::move(req), bs::error_code(),
-		       m->version, m->oldest_version);
+    ceph::async::post(std::move(req), bs::error_code(),
+		      m->version, m->oldest_version);
   }
   m->put();
 }

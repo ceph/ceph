@@ -2503,6 +2503,7 @@ public:
 		    ceph::coarse_mono_time sent, uint32_t register_gen);
   boost::system::error_code _normalize_watch_error(boost::system::error_code ec);
 
+  friend class CB_Objecter_GetVersion;
   friend class CB_DoWatchError;
 public:
   template<typename CT>
@@ -2665,7 +2666,7 @@ private:
     unique_lock l(rwlock);
     if (osdmap->get_epoch()) {
       l.unlock();
-      boost::asio::dispatch(std::move(init.completion_handler));
+      boost::asio::post(std::move(init.completion_handler));
     } else {
       waiting_for_map[0].emplace_back(
 	OpCompletion::create(
@@ -2751,7 +2752,7 @@ public:
 		    version_t oldest) {
       if (ec == boost::system::errc::resource_unavailable_try_again) {
 	// try again as instructed
-	objecter->wait_for_latest_osdmap(std::move(fin));
+	objecter->_wait_for_latest_osdmap(std::move(*this));
       } else if (ec) {
 	ceph::async::post(std::move(fin), ec);
       } else {
@@ -2763,8 +2764,7 @@ public:
   };
 
   template<typename CompletionToken>
-  typename boost::asio::async_result<CompletionToken, OpSignature>::return_type
-  wait_for_map(epoch_t epoch, CompletionToken&& token) {
+  auto wait_for_map(epoch_t epoch, CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, OpSignature> init(token);
 
     if (osdmap->get_epoch() >= epoch) {
@@ -2785,9 +2785,15 @@ public:
   void _wait_for_new_map(std::unique_ptr<OpCompletion>, epoch_t epoch,
 			 boost::system::error_code = {});
 
+private:
+  void _wait_for_latest_osdmap(CB_Objecter_GetVersion&& c) {
+    monc->get_version("osdmap", std::move(c));
+  }
+
+public:
+
   template<typename CompletionToken>
-  typename boost::asio::async_result<CompletionToken, OpSignature>::return_type
-  wait_for_latest_osdmap(CompletionToken&& token) {
+  auto wait_for_latest_osdmap(CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, OpSignature> init(token);
 
     monc->get_version("osdmap",
