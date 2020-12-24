@@ -91,11 +91,9 @@ TEST_F(TestMockCryptoBlockCrypto, Encrypt) {
 
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
   expect_init_context(std::string("\x34\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
-  expect_update_context("123", 0);
-  expect_update_context("4", 4);
+  expect_update_context("1234", 4);
   expect_init_context(std::string("\x35\x12\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16));
-  expect_update_context("56", 0);
-  expect_update_context("78", 4);
+  expect_update_context("5678", 4);
   EXPECT_CALL(cryptor, return_context(_, CipherMode::CIPHER_MODE_ENC));
 
   ASSERT_EQ(0, bc->encrypt(&data, image_offset));

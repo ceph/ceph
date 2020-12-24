@@ -38,6 +38,7 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
 
   bufferlist src = *data;
   data->clear();
+  src.rebuild_aligned_size_and_memory(m_block_size, CEPH_PAGE_SIZE);
 
   auto ctx = m_data_cryptor->get_context(mode);
   if (ctx == nullptr) {
