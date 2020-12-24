@@ -60,7 +60,7 @@ public:
 
   inline int decrypt_aligned_extent(io::ReadExtent& extent,
                                     uint64_t image_offset) {
-    if (extent.length == 0) {
+    if (extent.length == 0 || extent.bl.length() == 0) {
       return 0;
     }
 

@@ -132,8 +132,13 @@ struct C_UnalignedObjectReadRequest : public Context {
         auto& extent = (*extents)[i];
         auto& aligned_extent = aligned_extents[i];
         if (aligned_extent.extent_map.empty()) {
-          aligned_extent.bl.splice(extent.offset - aligned_extent.offset,
-                                   extent.length, &extent.bl);
+          uint64_t cut_offset = extent.offset - aligned_extent.offset;
+          int64_t padding_count =
+                  cut_offset + extent.length - aligned_extent.bl.length();
+          if (padding_count > 0) {
+            aligned_extent.bl.append_zero(padding_count);
+          }
+          aligned_extent.bl.splice(cut_offset, extent.length, &extent.bl);
         } else {
           for (auto [off, len]: aligned_extent.extent_map) {
             ceph::bufferlist tmp;
