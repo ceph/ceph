@@ -387,7 +387,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedRead) {
   ASSERT_EQ(on_finish, &finished_cond);
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
 
-  dispatcher_ctx->complete(0);
+  dispatcher_ctx->complete(4096*8);
   ASSERT_EQ(3 + 4096 * 5 - 2, dispatched_cond.wait());
   ASSERT_TRUE(extents[0].bl.to_str() == std::string("1"));
   ASSERT_TRUE(extents[1].bl.to_str() == std::string("2"));
@@ -431,7 +431,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWrite) {
   auto expected_data =
           std::string("2") + std::string(8192, '1') + std::string(4095, '3');
   expect_object_write(0, expected_data, 0, std::make_optional(version));
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(8192); // complete read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
   dispatcher_ctx->complete(0); // complete write
   ASSERT_EQ(0, dispatched_cond.wait());
@@ -492,7 +492,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteFailCreate) {
   auto expected_data2 =
         std::string("2") + std::string(8192, '1') + std::string(4095, '3');
   expect_object_write(0, expected_data2, 0, std::make_optional(version));
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(8192); // complete read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
   dispatcher_ctx->complete(0); // complete write
   ASSERT_EQ(0, dispatched_cond.wait());
@@ -537,7 +537,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteCopyup) {
   auto expected_data =
         std::string("2") + std::string(8192, '1') + std::string(4095, '3');
   expect_object_write(0, expected_data, 0, std::make_optional(version));
-  dispatcher_ctx->complete(0); // complete second read
+  dispatcher_ctx->complete(8192); // complete second read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
   dispatcher_ctx->complete(0); // complete write
   ASSERT_EQ(0, dispatched_cond.wait());
@@ -561,7 +561,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteFailVersionCheck) {
   auto expected_data =
           std::string("2") + std::string(8192, '1') + std::string(4095, '3');
   expect_object_write(0, expected_data, 0, std::make_optional(version));
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(8192); // complete read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
 
   version = 1235;
@@ -572,7 +572,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteFailVersionCheck) {
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
 
   expect_object_write(0, expected_data, 0, std::make_optional(version));
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(8192); // complete read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
   dispatcher_ctx->complete(0); // complete write
   ASSERT_EQ(0, dispatched_cond.wait());
@@ -594,7 +594,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteWithAssertVersion) {
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
 
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(8192); // complete read
   ASSERT_EQ(-ERANGE, dispatched_cond.wait());
 }
 
@@ -612,7 +612,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, UnalignedWriteWithExclusiveCreate) {
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
 
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(8192); // complete read
   ASSERT_EQ(-EEXIST, dispatched_cond.wait());
 }
 
@@ -638,7 +638,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, CompareAndWrite) {
   auto expected_data =
           std::string("2") + std::string(8192, '1') + std::string(4095, '3');
   expect_object_write(0, expected_data, 0, std::make_optional(version));
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(4096*4); // complete read
   ASSERT_EQ(ETIMEDOUT, dispatched_cond.wait_for(0));
   dispatcher_ctx->complete(0); // complete write
   ASSERT_EQ(0, dispatched_cond.wait());
@@ -664,7 +664,7 @@ TEST_F(TestMockCryptoCryptoObjectDispatch, CompareAndWriteFail) {
   ASSERT_EQ(dispatch_result, io::DISPATCH_RESULT_COMPLETE);
   ASSERT_EQ(on_finish, &finished_cond);
 
-  dispatcher_ctx->complete(0); // complete read
+  dispatcher_ctx->complete(4096*4); // complete read
   ASSERT_EQ(-EILSEQ, dispatched_cond.wait());
   ASSERT_EQ(mismatch_offset, 4094);
 }
