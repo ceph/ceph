@@ -642,9 +642,9 @@ def new_style_command(parsed_args,
                     interactive_input = read_input()
                 except EOFError:
                     # leave user an uncluttered prompt
-                    return 0, '\n', ''
+                    return 0, b'\n', ''
                 if interactive_input is None:
-                    return 0, '', ''
+                    return 0, b'', ''
                 cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
                 try:
                     target = find_cmd_target(cmdargs)
