@@ -2837,6 +2837,17 @@ bool CDir::contains(CDir *x)
   }
 }
 
+bool CDir::can_rep() const
+{
+  if (!is_rep()) 
+    return true;
+
+  unsigned mds_num = mdcache->mds->get_mds_map()->get_num_mds(MDSMap::STATE_ACTIVE);
+  if ((mds_num - 1) > get_replicas().size()) 
+    return true;
+  
+  return false;
+}
 
 
 /** set_dir_auth

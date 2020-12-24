@@ -1262,7 +1262,7 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
     }
 
     if (dir->is_auth() && !dir->is_ambiguous_auth()) {
-      if (!dir->is_rep() &&
+      if (dir->can_rep() &&
 	  dir_pop >= g_conf()->mds_bal_replicate_threshold) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
