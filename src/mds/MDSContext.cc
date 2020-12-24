@@ -119,8 +119,9 @@ void MDSLogContextBase::complete(int r) {
   MDLog *mdlog = get_mds()->mdlog;
   uint64_t safe_pos = write_pos;
   pre_finish(r);
-  // MDSContextBase::complete() free this
+  // MDSIOContext::complete() free this
   MDSIOContextBase::complete(r);
+  // safe_pos must be updated after MDSIOContext::complete() call
   mdlog->set_safe_pos(safe_pos);
 }
 
