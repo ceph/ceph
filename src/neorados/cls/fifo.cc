@@ -45,7 +45,9 @@ void create_meta(WriteOp& op, std::string_view id,
 		 std::optional<std::string_view> oid_prefix,
 		 bool exclusive,
 		 std::uint64_t max_part_size,
-		 std::uint64_t max_entry_size)
+		 std::uint64_t max_entry_size,
+		 std::uint64_t visibility_timeout,
+		 std::uint64_t retention_period)
 {
   fifo::op::create_meta cm;
 
@@ -55,6 +57,8 @@ void create_meta(WriteOp& op, std::string_view id,
   cm.max_part_size = max_part_size;
   cm.max_entry_size = max_entry_size;
   cm.exclusive = exclusive;
+  cm.visibility_timeout = visibility_timeout;
+  cm.retention_period = retention_period;
 
   cb::list in;
   encode(cm, in);
@@ -196,6 +200,44 @@ void list_part(ReadOp& op,
 	    if (full_part) *full_part = reply.full_part;
 	    if (ptag) *ptag = reply.tag;
 	  });
+}
+
+void get_part_visible_offset(WriteOp& op,
+	       std::optional<string_view> tag,
+	       std::uint64_t ofs,
+	       std::uint64_t max_entries,
+	       std::uint64_t& visible_ofs,
+         bool& invisible_part,
+	       bs::error_code* ec_out)
+{
+  fifo::op::get_part_visible_offset params;
+
+  params.tag = tag;
+  params.ofs = ofs;
+  params.max_entries = max_entries;
+
+  bufferlist in;
+  encode(params, in);
+  op.exec(fifo::op::CLASS, fifo::op::GET_PART_VISIBLE_OFFSET, in, 
+	  [&visible_ofs, &invisible_part, ec_out](bs::error_code ec, const cb::list& bl) {
+	    if (ec) {
+	      if (ec_out) *ec_out = ec;
+	      return;
+	    }
+
+	    fifo::op::get_part_visible_offset_reply reply;
+	    auto iter = bl.cbegin();
+	    try {
+	      decode(reply, iter);
+	    } catch (const cb::error& err) {
+	      if (ec_out) *ec_out = ec;
+	      return;
+	    }
+
+	    visible_ofs = reply.ofs;
+      invisible_part = reply.invisible_part;
+	  });
+  op.returnvec();
 }
 
 void get_part_info(ReadOp& op,

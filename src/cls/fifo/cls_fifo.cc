@@ -29,7 +29,7 @@ CLS_NAME(fifo)
 
 namespace rados::cls::fifo {
 
-static constexpr auto CLS_FIFO_MAX_PART_HEADER_SIZE = 512;
+static constexpr auto CLS_FIFO_MAX_PART_HEADER_SIZE = 1024;
 
 static std::uint32_t part_entry_overhead;
 
@@ -115,26 +115,10 @@ int read_part_header(cls_method_context_t hctx,
 
   using ceph::operator <<;
   std::ostringstream ss;
-  ss << part_header->max_time;
-  CLS_LOG(5, "%s:%d read part_header:\n"
-	  "\ttag=%s\n"
-	  "\tmagic=0x%" PRIx64 "\n"
-	  "\tmin_ofs=%" PRId64 "\n"
-	  "\tlast_ofs=%" PRId64 "\n"
-	  "\tnext_ofs=%" PRId64 "\n"
-	  "\tmin_index=%" PRId64 "\n"
-	  "\tmax_index=%" PRId64 "\n"
-	  "\tmax_time=%s\n",
-	  __PRETTY_FUNCTION__, __LINE__,
-	  part_header->tag.c_str(),
-	  part_header->magic,
-	  part_header->min_ofs,
-	  part_header->last_ofs,
-	  part_header->next_ofs,
-	  part_header->min_index,
-	  part_header->max_index,
+  ss << *part_header;
+  CLS_LOG(5, "%s: read part_header: \n%s",
+	  __PRETTY_FUNCTION__,
 	  ss.str().c_str());
-
   return 0;
 }
 
@@ -288,6 +272,8 @@ int create_meta(cls_method_context_t hctx,
   header.params.max_part_size = op.max_part_size;
   header.params.max_entry_size = op.max_entry_size;
   header.params.full_size_threshold = op.max_part_size - op.max_entry_size - part_entry_overhead;
+  header.params.visibility_timeout = op.visibility_timeout;
+  header.params.retention_period = op.retention_period;
 
   r = write_header(hctx, header, false);
   if (r < 0) {
@@ -662,7 +648,7 @@ int EntryReader::seek(std::uint64_t num_bytes)
 {
   ceph::buffer::list bl;
 
-  CLS_LOG(5, "%s:%d: num_bytes=%" PRIu64, __PRETTY_FUNCTION__, __LINE__, num_bytes);
+  CLS_LOG(5, "%s: num_bytes=%" PRIu64, __PRETTY_FUNCTION__, num_bytes);
   return read(num_bytes, &bl);
 }
 
@@ -704,7 +690,7 @@ int EntryReader::get_next_entry(ceph::buffer::list* pbl,
     *pofs = ofs;
   }
 
-  CLS_LOG(5, "%s:%d: pre_header.pre_size=%" PRIu64, __PRETTY_FUNCTION__, __LINE__,
+  CLS_LOG(5, "%s: pre_header.pre_size=%" PRIu64, __PRETTY_FUNCTION__,
 	  uint64_t(pre_header.pre_size));
   r = seek(pre_header.pre_size);
   if (r < 0) {
@@ -713,7 +699,7 @@ int EntryReader::get_next_entry(ceph::buffer::list* pbl,
   }
 
   ceph::buffer::list header;
-  CLS_LOG(5, "%s:%d: pre_header.header_size=%d", __PRETTY_FUNCTION__, __LINE__, (int)pre_header.header_size);
+  CLS_LOG(5, "%s: pre_header.header_size=%d", __PRETTY_FUNCTION__, (int)pre_header.header_size);
   r = read(pre_header.header_size, &header);
   if (r < 0) {
     CLS_ERR("ERROR: %s: failed to read entry header: r=%d", __PRETTY_FUNCTION__, r);
@@ -861,6 +847,7 @@ int list_part(cls_method_context_t hctx, ceph::buffer::list* in,
     return -EINVAL;
   }
 
+  CLS_LOG(5, "%s: offset: %lu max entries: %u", __PRETTY_FUNCTION__, op.ofs, op.max_entries);
   EntryReader reader(hctx, part_header, op.ofs);
 
   if (op.ofs >= part_header.min_ofs &&
@@ -890,6 +877,7 @@ int list_part(cls_method_context_t hctx, ceph::buffer::list* in,
       return r;
     }
 
+    CLS_LOG(5, "%s: get_next_entry ok, offset=%lu data length=%u", __PRETTY_FUNCTION__, ofs, data.length());
     reply.entries.emplace_back(std::move(data), ofs, mtime);
   }
 
@@ -897,6 +885,41 @@ int list_part(cls_method_context_t hctx, ceph::buffer::list* in,
   reply.full_part = full_part(part_header);
 
   encode(reply, *out);
+
+  return 0;
+}
+
+int end_offset(cls_method_context_t hctx, const part_header& part_header, std::uint64_t start_ofs, int max_entries,
+    std::uint64_t& end_ofs) {
+	
+	end_ofs = part_header.last_ofs;
+
+  CLS_LOG(5, "%s: offset: %lu max entries: %u", __PRETTY_FUNCTION__, start_ofs, max_entries);
+  EntryReader reader(hctx, part_header, start_ofs);
+
+  if (start_ofs >= part_header.min_ofs &&
+      !reader.end()) {
+    auto r = reader.get_next_entry(nullptr, nullptr, nullptr);
+    if (r < 0) {
+      CLS_ERR("ERROR: %s: unexpected failure at get_next_entry: r=%d", __PRETTY_FUNCTION__, r);
+      return r;
+    }
+  }
+
+  max_entries = std::min(max_entries, op::MAX_LIST_ENTRIES);
+
+  for (auto i = 0; i < max_entries && !reader.end(); ++i) {
+    ceph::buffer::list data;
+    ceph::real_time mtime;
+
+    const auto r = reader.get_next_entry(&data, &end_ofs, &mtime);
+    if (r < 0) {
+      CLS_ERR("ERROR: %s: unexpected failure at get_next_entry: r=%d",
+	      __PRETTY_FUNCTION__, r);
+      return r;
+    }
+    CLS_LOG(5, "%s: get_next_entry ok, offset=%lu data length=%u", __PRETTY_FUNCTION__, end_ofs, data.length());
+  }
 
   return 0;
 }
@@ -927,6 +950,100 @@ int get_part_info(cls_method_context_t hctx, ceph::buffer::list *in,
 
   return 0;
 }
+
+int get_part_visible_offset(cls_method_context_t hctx, ceph::buffer::list* in,
+	      ceph::buffer::list* out)
+{
+  CLS_LOG(5, "%s", __PRETTY_FUNCTION__);
+
+  op::get_part_visible_offset op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s: failed to decode request: %s", __PRETTY_FUNCTION__, err.what());
+    return -EINVAL;
+  }
+
+  part_header part_header;
+  int r = read_part_header(hctx, &part_header);
+  if (r < 0) {
+    CLS_ERR("%s: failed to read part header", __PRETTY_FUNCTION__);
+    return r;
+  }
+
+  if (op.tag &&
+      !(part_header.tag == *op.tag)) {
+    CLS_ERR("%s: bad tag", __PRETTY_FUNCTION__);
+    return -EINVAL;
+  }
+
+	if (op.ofs >= part_header.last_ofs || op.max_entries == 0) {
+    // empty segment
+    CLS_ERR("%s: empty segment with start offset: %lu", __PRETTY_FUNCTION__, op.ofs);
+    return -EINVAL;
+  }
+
+  op::get_part_visible_offset_reply reply;
+
+  const auto max_entries = std::min(op.max_entries, op::MAX_LIST_ENTRIES);
+  auto start_ofs = op.ofs;
+  std::uint64_t end_ofs;
+  segment_type segment;
+  auto& listed_segments = part_header.listed_segments;
+
+  while(true) {
+    CLS_LOG(5, "%s: find end offset for start offset: %lu. with: %u entries", __PRETTY_FUNCTION__, start_ofs, max_entries);
+    r = end_offset(hctx, part_header, start_ofs, max_entries, end_ofs);
+    if (r < 0) {
+      return r;
+    }
+    segment = segment_type(start_ofs, end_ofs);
+    
+    CLS_LOG(5, "%s: requested segment is: [%lu, %lu)", __PRETTY_FUNCTION__, segment.lower(), segment.upper());
+    
+    auto segment_it = listed_segments.find(segment);
+    if (segment_it == listed_segments.end()) {
+      CLS_LOG(5, "%s: requested segment: [%lu, %lu) was not yet listed", 
+        __PRETTY_FUNCTION__, segment.lower(), segment.upper());
+      break;
+    }
+
+    CLS_LOG(5, "%s: requested segment: overlap with the following listed segment: [%lu, %lu)",
+        __PRETTY_FUNCTION__, segment_it->first.lower(), segment_it->first.upper());
+
+    segment = boost::icl::right_subtract(segment, segment_it->first);
+    if (!boost::icl::is_empty(segment)) {
+      // partially overlapping segment, returning non-overlapping left side
+      break;
+    }
+    // completly ovarlapping segmenst - trying on the right side of the overlapping segment
+    start_ofs = segment_it->first.upper();
+    if (start_ofs >= part_header.last_ofs) {
+      // no need to retry more, move to next part
+      reply.invisible_part = true;
+      reply.ofs = 0;
+      CLS_LOG(5, "%s: end of part reached", __PRETTY_FUNCTION__);
+      encode(reply, *out);
+      return 0;
+    }
+    CLS_LOG(5, "%s: try another chunk of the part", __PRETTY_FUNCTION__);
+  }
+  
+  reply.ofs = segment.lower();
+  CLS_LOG(5, "%s: listed segment is: [%lu, %lu)", __PRETTY_FUNCTION__, segment.lower(), segment.upper());
+  listed_segments.insert(std::make_pair(segment, updating_time(ceph::real_clock::now())));
+
+  r = write_part_header(hctx, part_header);
+  if (r < 0) {
+    CLS_ERR("%s: failed to write header: r=%d", __PRETTY_FUNCTION__, r);
+    return r;
+  }
+  encode(reply, *out);
+  
+  return 0;
+}
+
 }
 } // namespace rados::cls::fifo
 
@@ -944,6 +1061,7 @@ CLS_INIT(fifo)
   cls_method_handle_t h_trim_part;
   cls_method_handle_t h_list_part;
   cls_method_handle_t h_get_part_info;
+  cls_method_handle_t h_get_part_visible_offset;
 
   cls_register(op::CLASS, &h_class);
   cls_register_cxx_method(h_class, op::CREATE_META,
@@ -977,6 +1095,10 @@ CLS_INIT(fifo)
   cls_register_cxx_method(h_class, op::GET_PART_INFO,
                           CLS_METHOD_RD,
                           get_part_info, &h_get_part_info);
+
+  cls_register_cxx_method(h_class, op::GET_PART_VISIBLE_OFFSET,
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          get_part_visible_offset, &h_get_part_visible_offset);
 
   /* calculate entry overhead */
   struct entry_header entry_header;

@@ -42,9 +42,12 @@ struct create_meta
   std::uint64_t max_entry_size{0};
 
   bool exclusive{false};
+  
+  std::uint64_t visibility_timeout{0};
+  std::uint64_t retention_period{0};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(id, bl);
     encode(version, bl);
     encode(pool.name, bl);
@@ -53,10 +56,12 @@ struct create_meta
     encode(max_part_size, bl);
     encode(max_entry_size, bl);
     encode(exclusive, bl);
+    encode(visibility_timeout, bl);
+    encode(retention_period, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(id, bl);
     decode(version, bl);
     decode(pool.name, bl);
@@ -65,6 +70,10 @@ struct create_meta
     decode(max_part_size, bl);
     decode(max_entry_size, bl);
     decode(exclusive, bl);
+    if (struct_v >= 2) {
+      decode(visibility_timeout, bl);
+      decode(retention_period, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -294,6 +303,28 @@ struct get_part_info_reply
 };
 WRITE_CLASS_ENCODER(get_part_info_reply)
 
+using get_part_visible_offset = list_part;
+
+struct get_part_visible_offset_reply
+{
+  std::uint64_t ofs{0};
+  bool invisible_part{false};
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(ofs, bl);
+    encode(invisible_part, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(ofs, bl);
+    decode(invisible_part, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(get_part_visible_offset_reply)
+
 inline constexpr auto CLASS = "fifo";
 inline constexpr auto CREATE_META = "create_meta";
 inline constexpr auto GET_META = "get_meta";
@@ -303,4 +334,5 @@ inline constexpr auto PUSH_PART = "push_part";
 inline constexpr auto TRIM_PART = "trim_part";
 inline constexpr auto LIST_PART = "part_list";
 inline constexpr auto GET_PART_INFO = "get_part_info";
+inline constexpr auto GET_PART_VISIBLE_OFFSET = "get_part_visible_offset";
 } // namespace rados::cls::fifo::op

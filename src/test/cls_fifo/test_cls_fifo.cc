@@ -51,11 +51,13 @@ void fifo_create(R::RADOS& r,
 		 std::optional<std::string_view> oid_prefix = std::nullopt,
 		 bool exclusive = false,
 		 std::uint64_t max_part_size = RCf::default_max_part_size,
-		 std::uint64_t max_entry_size = RCf::default_max_entry_size)
+		 std::uint64_t max_entry_size = RCf::default_max_entry_size,
+     std::uint64_t visibility_timeout = 0,
+     std::uint64_t retention_period = 0)
 {
   R::WriteOp op;
   RCf::create_meta(op, id, objv, oid_prefix, exclusive, max_part_size,
-		   max_entry_size);
+		   max_entry_size, visibility_timeout, retention_period);
   r.execute(oid, ioc, std::move(op), y);
 }
 }
@@ -226,6 +228,47 @@ TEST(FIFO, TestOpenParams) {
   c.run();
 }
 
+TEST(FIFO2, TestOpenParams) {
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+
+  s::spawn(c, [&](s::yield_context y) {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+
+		const std::uint64_t max_part_size = 10 * 1024;
+		const std::uint64_t max_entry_size = 128;
+		const std::uint64_t visibility_timeout = 600;
+		const std::uint64_t retention_period = 3600;
+		auto oid_prefix = "foo.123."sv;
+		fifo::objv objv;
+		objv.instance = "fooz"s;
+		objv.ver = 10;
+
+		/* first successful create */
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y, objv, oid_prefix,
+					   false, max_part_size,
+					   max_entry_size, visibility_timeout, retention_period);
+
+
+		/* force reading from backend */
+		f->read_meta(y);
+		auto info = f->meta();
+		ASSERT_EQ(info.id, fifo_id);
+		ASSERT_EQ(info.params.max_part_size, max_part_size);
+		ASSERT_EQ(info.params.max_entry_size, max_entry_size);
+		ASSERT_EQ(info.params.visibility_timeout, visibility_timeout);
+		ASSERT_EQ(info.params.retention_period, retention_period);
+		ASSERT_EQ(info.version, objv);
+	      });
+  c.run();
+}
+
 namespace {
 template<class T>
 std::pair<T, std::string> decode_entry(const RCf::list_entry& entry)
@@ -319,6 +362,130 @@ TEST(FIFO, TestPushListTrim) {
   c.run();
 }
 
+std::string random_string(std::size_t min, std::size_t max) {
+  static constexpr auto chars =
+    "0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz";
+ 		
+	std::random_device rd;
+  std::mt19937 gen(rd());
+	std::uniform_int_distribution size_dist(min, max);
+	const auto len = size_dist(gen);
+  std::uniform_int_distribution<> char_dist(0, std::strlen(chars) - 1);
+  auto result = std::string(len, '\0');
+  std::generate_n(begin(result), len, [&]() { return chars[char_dist(gen)]; });
+  return result;
+}
+
+TEST(FIFO2, TestPushList) {
+  // this tests verifies that list2 can work in the same way as list
+  // when provided with markers
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+
+  s::spawn(c, [&](s::yield_context y) mutable {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y);
+		static constexpr auto max_entries = 5000U;
+
+		std::vector<std::size_t> hashed_inputs;
+		bs::error_code ec;
+		for (auto i = 0U; i < max_entries; ++i) {
+		  cb::list bl;
+			const auto val = random_string(1024*8, 1024*16);
+			hashed_inputs.push_back(std::hash<std::string>{}(val));
+		  encode(val, bl);
+		  f->push(bl, y[ec]);
+      ASSERT_FALSE(ec.failed());
+		}
+
+    constexpr auto entries_to_list = 512UL;
+
+		bool more = true;
+		std::optional<std::string> next_marker;
+		std::uint64_t index = 0;
+		while (more) {
+			std::string marker;
+			std::vector<neorados::cls::fifo::list_entry> result;
+		  std::tie(result, more) = f->list2(entries_to_list, next_marker, y[ec]);
+      EXPECT_FALSE(ec.failed());
+			
+			const auto size = result.size();
+      EXPECT_GE(entries_to_list, size);
+
+			std::string first_marker = decode_entry<std::string>(*result.begin()).second;
+		  for (const auto& entry : result) {
+		    std::string val;
+		    std::tie(val, marker) = decode_entry<std::string>(entry);
+				EXPECT_EQ(std::hash<std::string>{}(val), hashed_inputs[index++]); 
+		  }
+			next_marker = marker;
+		}
+	});
+  c.run();
+}
+
+TEST(FIFO2, TestPushListNoMarker) {
+  // this tests verifies that list2 can work in the same way as list
+  // when not provided with markers
+  ba::io_context c;
+  auto fifo_id = "fifo"sv;
+
+  s::spawn(c, [&](s::yield_context y) mutable {
+		auto r = R::RADOS::Builder{}.build(c, y);
+		auto pool = create_pool(r, get_temp_pool_name(), y);
+		auto sg = make_scope_guard(
+		  [&] {
+		    r.delete_pool(pool, y);
+		  });
+		R::IOContext ioc(pool);
+		auto f = RCf::FIFO::create(r, ioc, fifo_id, y);
+		static constexpr auto max_entries = 5000U;
+
+		std::vector<std::size_t> hashed_inputs;
+		bs::error_code ec;
+		for (auto i = 0U; i < max_entries; ++i) {
+		  cb::list bl;
+			const auto val = random_string(1024*8, 1024*16);
+			hashed_inputs.push_back(std::hash<std::string>{}(val));
+		  encode(val, bl);
+		  f->push(bl, y[ec]);
+      ASSERT_FALSE(ec.failed());
+		}
+
+    constexpr auto entries_to_list = 512UL;
+
+		bool more = true;
+		std::optional<std::string> next_marker;
+		std::uint64_t index = 0;
+
+		// list all entries using the new api without markers
+		while (more) {
+			std::string marker;
+			std::vector<neorados::cls::fifo::list_entry> result;
+      std::tie(result, more) = f->list2(entries_to_list, std::nullopt, y[ec]);
+      EXPECT_FALSE(ec.failed());
+			
+			const auto size = result.size();
+      EXPECT_GE(entries_to_list, size);
+
+			std::string first_marker = decode_entry<std::string>(*result.begin()).second;
+		  for (const auto& entry : result) {
+		    std::string val;
+		    std::tie(val, marker) = decode_entry<std::string>(entry);
+				EXPECT_EQ(std::hash<std::string>{}(val), hashed_inputs[index++]); 
+		  }
+		}
+	});
+  c.run();
+}
 
 TEST(FIFO, TestPushTooBig) {
   ba::io_context c;

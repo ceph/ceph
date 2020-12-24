@@ -31,6 +31,7 @@
 #include "include/types.h"
 
 #include "common/ceph_time.h"
+#include <boost/icl/interval_map.hpp>
 
 class JSONObj;
 
@@ -85,19 +86,27 @@ struct data_params {
   std::uint64_t max_part_size{0};
   std::uint64_t max_entry_size{0};
   std::uint64_t full_size_threshold{0};
+  std::uint64_t visibility_timeout{0};
+  std::uint64_t retention_period{0};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(max_part_size, bl);
     encode(max_entry_size, bl);
     encode(full_size_threshold, bl);
+    encode(visibility_timeout, bl);
+    encode(retention_period, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(max_part_size, bl);
     decode(max_entry_size, bl);
     decode(full_size_threshold, bl);
+    if (struct_v >= 2) {
+      decode(visibility_timeout, bl);
+      decode(retention_period, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter* f) const;
@@ -113,7 +122,9 @@ WRITE_CLASS_ENCODER(data_params)
 inline std::ostream& operator <<(std::ostream& m, const data_params& d) {
   return m << "max_part_size: " << d.max_part_size << ", "
 	   << "max_entry_size: " << d.max_entry_size << ", "
-	   << "full_size_threshold: " << d.full_size_threshold;
+	   << "full_size_threshold: " << d.full_size_threshold << ", "
+     << "visibility_timeout: " << d.visibility_timeout << ", "
+     << "retention_period: " << d.retention_period;
 }
 
 struct journal_entry {
@@ -467,6 +478,73 @@ inline std::ostream& operator <<(std::ostream& m,
 	   << "mtime: " << p.mtime;
 }
 
+struct updating_time {
+  ceph::real_time time;
+
+  updating_time() = default;;
+  explicit updating_time(const ceph::real_time& time) : time(time) {}
+
+  updating_time& operator+=(const updating_time& t) {
+    time = std::max(t.time, time);
+    return *this;
+  }
+};
+
+static inline std::ostream& operator<<(std::ostream& os, const updating_time& t) {
+  os << t.time;
+  return os;
+}
+
+static inline bool operator==(const updating_time& t1, const updating_time& t2) {
+  return t1.time == t2.time;
+}
+
+static void encode(const updating_time& t, ceph::buffer::list& bl) {
+  encode(t.time, bl);
+}
+
+static void decode(updating_time& t, ceph::buffer::list::const_iterator& p) {
+  ceph::decode(t.time, p);
+}
+
+using segment_map = boost::icl::interval_map<std::uint64_t, updating_time>;
+using segment_type = segment_map::segment_type::first_type::type;
+
+static void encode(const segment_type& s, ceph::buffer::list& bl) {
+  ceph::encode(s.lower(), bl);
+  ceph::encode(s.upper(), bl);
+}
+
+static void decode(segment_type& s, ceph::buffer::list::const_iterator& p) {
+  uint64_t lower;
+  ceph::decode(lower, p);
+  uint64_t upper;
+  ceph::decode(upper, p);
+  s = segment_type(lower, upper);
+}
+
+static void encode(const segment_map& m, ceph::buffer::list& bl) {
+  const size_t n = m.iterative_size();
+  ceph::encode(n, bl);
+  for (const auto& p : m) {
+    encode(p.first, bl);
+    encode(p.second, bl);
+  }
+}
+
+static void decode(segment_map& m, ceph::buffer::list::const_iterator& p) {
+  size_t n;
+  ceph::decode(n, p);
+  m.clear();
+  while (n--) {
+    segment_type k;
+    decode(k, p);
+    updating_time v;
+    decode(v, p);
+    m.insert(std::make_pair(k, v));
+  }
+}
+
 struct part_header {
   std::string tag;
 
@@ -480,9 +558,10 @@ struct part_header {
   std::uint64_t min_index{0};
   std::uint64_t max_index{0};
   ceph::real_time max_time;
+  segment_map listed_segments;
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(tag, bl);
     encode(params, bl);
     encode(magic, bl);
@@ -492,10 +571,11 @@ struct part_header {
     encode(min_index, bl);
     encode(max_index, bl);
     encode(max_time, bl);
+    rados::cls::fifo::encode(listed_segments, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(tag, bl);
     decode(params, bl);
     decode(magic, bl);
@@ -505,6 +585,9 @@ struct part_header {
     decode(min_index, bl);
     decode(max_index, bl);
     decode(max_time, bl);
+    if (struct_v >= 2) {
+      rados::cls::fifo::decode(listed_segments, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -519,6 +602,7 @@ inline std::ostream& operator <<(std::ostream& m, const part_header& p) {
 	   << "next_ofs: " << p.next_ofs << ", "
 	   << "min_index: " << p.min_index << ", "
 	   << "max_index: " << p.max_index << ", "
-	   << "max_time: " << p.max_time;
+	   << "max_time: " << p.max_time << ", "
+     << "listed_offsets: {" << p.listed_segments << "}";
 }
 } // namespace rados::cls::fifo

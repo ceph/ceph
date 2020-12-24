@@ -96,7 +96,10 @@ void create_meta(WriteOp& op, std::string_view id,
 		 std::optional<std::string_view> oid_prefix,
 		 bool exclusive = false,
 		 std::uint64_t max_part_size = default_max_part_size,
-		 std::uint64_t max_entry_size = default_max_entry_size);
+		 std::uint64_t max_entry_size = default_max_entry_size,
+     std::uint64_t visibility_timeout = 0,
+     std::uint64_t retention_period = 0);
+
 void get_meta(ReadOp& op, std::optional<fifo::objv> objv,
 	      bs::error_code* ec_out, fifo::info* info,
 	      std::uint32_t* part_header_size,
@@ -123,6 +126,13 @@ void list_part(ReadOp& op,
 	       bool* more,
 	       bool* full_part,
 	       std::string* ptag);
+void get_part_visible_offset(WriteOp& op,
+	       std::optional<string_view> tag,
+	       std::uint64_t ofs,
+	       std::uint64_t max_entries,
+	       std::uint64_t& visible_ofs,
+         bool& invisible_part,
+	       bs::error_code* ec_out);
 void get_part_info(ReadOp& op,
 		   bs::error_code* out_ec,
 		   fifo::part_header* header);
@@ -365,6 +375,10 @@ public:
 		     std::uint64_t max_part_size = default_max_part_size,
 		     /// Maximum size of any entry
 		     std::uint64_t max_entry_size = default_max_entry_size,
+         /// the time (in seconds) after listing in which an entry is invisible
+         std::uint64_t visibility_timeout = 0,
+         /// the time (in seconds) after listing after which an entry is deleted
+         std::uint64_t retention_period = 0,
 		     /// Default executor. By default use the one
 		     /// associated with the RADOS handle.
 		     std::optional<ba::executor> executor = std::nullopt) {
@@ -372,7 +386,7 @@ public:
 				  std::unique_ptr<FIFO>)> init(ct);
     WriteOp op;
     create_meta(op, oid, objv, oid_prefix, exclusive, max_part_size,
-		max_entry_size);
+		max_entry_size, visibility_timeout, retention_period);
     auto e = ba::get_associated_executor(init.completion_handler,
 					 executor.value_or(r.get_executor()));
     auto a = ba::get_associated_allocator(init.completion_handler);
@@ -561,6 +575,56 @@ public:
       a, this, part_num, ofs, max_entries,
       std::move(init.completion_handler));
     ls.release()->list();
+    return init.result.get();
+  }
+
+  /// List the visible entries in a FIFO
+  /// once entries are listed via this function they become invisible for
+  /// the duration of visibility_timeout and will be automatically trimmed
+  /// after the retention_period
+  /// Signature(bs::error_code ec, bs::vector<list_entry> entries, bool more)
+  ///
+  /// More is true if entries beyond the last exist.
+  /// The list entries are of the form:
+  /// data - Contents of the entry
+  /// marker - String representing the position of this entry within the FIFO.
+  /// mtime - Time (on the OSD) at which the entry was pushed.
+  template<typename CT>
+  auto list2(int max_entries, //< Maximum number of entries to fetch
+	    /// Optionally, a marker indicating the position after
+	    /// which to begin listing. If null, begin at first visible entry strting from tail
+	    std::optional<std::string_view> markstr,
+	    CT&& ct //< CompletionToken
+    ) {
+    ba::async_completion<CT, void(bs::error_code,
+				  std::vector<list_entry>, bool)> init(ct);
+    std::unique_lock l(m);
+    std::int64_t part_num = info.tail_part_num;
+    l.unlock();
+    std::uint64_t ofs = 0;
+    auto a = ba::get_associated_allocator(init.completion_handler);
+    auto e = ba::get_associated_executor(init.completion_handler);
+
+    if (markstr) {
+      auto marker = to_marker(*markstr);
+      if (!marker) {
+        ldout(r->cct(), 0) << __func__
+          << "(): failed to parse marker (" << *markstr
+			    << ")" << dendl;
+        e.post(ca::bind_handler(std::move(init.completion_handler),
+              errc::invalid_marker,
+              std::vector<list_entry>{}, false), a);
+        return init.result.get();
+      }
+      part_num = marker->num;
+      ofs = marker->ofs;
+    }
+
+    using handler_type = decltype(init.completion_handler);
+    auto ls = ceph::allocate_unique<Lister<handler_type>>(
+        a, this, part_num, ofs, max_entries,
+        std::move(init.completion_handler));
+    ls.release()->list2();
     return init.result.get();
   }
 
@@ -1358,6 +1422,98 @@ private:
 	handle({});
 	return;
       }
+    }
+
+    void list2() {
+      if (max_entries == 0) {
+	      handle({});
+	      return;
+      }
+
+	    ec_out.clear();
+	    part_more = false;
+	    part_full = false;
+	    entries.clear();
+
+	    std::unique_lock l(f->m);
+	    auto part_oid = f->info.part_oid(part_num);
+	    l.unlock();
+
+	    WriteOp op;
+      bool invisible_part;
+	    get_part_visible_offset(op, {}, ofs, max_entries, ofs, invisible_part, &ec_out);
+	    auto e = ba::get_associated_executor(handler, f->get_executor());
+	    auto a = ba::get_associated_allocator(handler);
+	    f->r->execute(part_oid, f->ioc, std::move(op), 
+        ca::bind_ea(e, a, [t = std::unique_ptr<Lister>(this), this, part_oid, &invisible_part](bs::error_code ec) mutable {
+          t.release();
+          // TODO: handle part removal
+	        if (ec) {
+            ldout(f->r->cct(), 0) << __func__ << "(): get_part_visible_offset() on oid=" << part_oid
+              << " returned ec=" << ec.message() << dendl;
+		        handle(ec);
+		        return;
+	        }
+	        if (ec_out) {
+            ldout(f->r->cct(), 0) << __func__ << "(): get_part_visible_offset() on oid=" << f->info.part_oid(part_num)
+              << " returned ec=" << ec_out.message() << dendl;
+		        handle(ec_out);
+		        return;
+	        }
+          if (invisible_part) {
+            // try to read from next part
+	          ++part_num;
+	          ofs = 0;
+	          list2();
+            return;
+          }
+
+	        ReadOp op;
+	        ec_out.clear();
+	        list_part(op, {}, ofs, max_entries, &ec_out, &entries, &part_more, &part_full, nullptr);
+	        auto e = ba::get_associated_executor(handler, f->get_executor());
+	        auto a = ba::get_associated_allocator(handler);
+	        f->r->execute(part_oid, f->ioc, std::move(op), nullptr, ca::bind_ea(e, a,[t = std::unique_ptr<Lister>(this), this, part_oid](bs::error_code ec) mutable {
+	          t.release();
+            // TODO: handle part removal
+	          if (ec) {
+              ldout(f->r->cct(), 0) << __func__ << "(): list_part() on oid=" << part_oid
+		            << " returned ec=" << ec.message() << dendl;
+		          handle(ec);
+		          return;
+	          }
+	          if (ec_out) {
+              ldout(f->r->cct(), 0) << __func__ << "(): list_part() on oid=" << part_oid
+      		      << " returned ec=" << ec_out.message() << dendl;
+		          handle(ec_out);
+		          return;
+	          }
+
+	          more = part_full || part_more;
+	          for (auto& entry : entries) {
+		          list_entry e;
+		          e.data = std::move(entry.data);
+		          e.marker = marker{part_num, entry.ofs}.to_string();
+		          e.mtime = entry.mtime;
+		          result.push_back(std::move(e));
+	          }
+	          max_entries -= entries.size();
+	          entries.clear();
+	          if (max_entries > 0 && part_more) {
+		          list2();
+		          return;
+	          }
+
+	          if (!part_full) {
+		          handle({});
+		          return;
+	          }
+           
+	          ++part_num;
+	          ofs = 0;
+	          list2();
+          }));
+	      }));
     }
   };
 
