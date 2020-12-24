@@ -215,7 +215,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
 
     auto& mock_io_ctx = librados::get_mock_io_ctx(
       mock_image_ctx.rados_api, *mock_image_ctx.get_data_io_context());
-    auto& expect = EXPECT_CALL(mock_io_ctx, read(oid, len, off, _, _));
+    auto& expect = EXPECT_CALL(mock_io_ctx, read(oid, len, off, _, _, _));
     if (r < 0) {
       expect.WillOnce(Return(r));
     } else {

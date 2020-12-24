@@ -33,11 +33,11 @@ public:
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   read(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP),
-                       0, 0, _, _)).WillOnce(Return(r));
+                       0, 0, _, _, _)).WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   read(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP),
-                       0, 0, _, _)).WillOnce(DoDefault());
+                       0, 0, _, _, _)).WillOnce(DoDefault());
     }
   }
 

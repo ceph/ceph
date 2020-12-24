@@ -356,7 +356,8 @@ int TestMemIoCtxImpl::omap_set(const std::string& oid,
 }
 
 int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
-                           bufferlist *bl, uint64_t snap_id) {
+                           bufferlist *bl, uint64_t snap_id,
+                           uint64_t* objver) {
   if (m_client->is_blocklisted()) {
     return -EBLOCKLISTED;
   }
@@ -379,6 +380,9 @@ int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
     bufferlist bit;
     bit.substr_of(file->data, off, len);
     append_clone(bit, bl);
+  }
+  if (objver != nullptr) {
+    *objver = file->objver;
   }
   return len;
 }

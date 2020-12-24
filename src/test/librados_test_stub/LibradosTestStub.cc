@@ -431,7 +431,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
   return ctx->aio_operate_read(oid, *ops, c->pc, flags, pbl,
-                               ctx->get_snap_read());
+                               ctx->get_snap_read(), nullptr);
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -619,7 +619,7 @@ int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
     oid, std::bind(&TestIoCtxImpl::read, _1, _2, len, off, &bl,
-                     ctx->get_snap_read()));
+                     ctx->get_snap_read(), nullptr));
 }
 
 int IoCtx::remove(const std::string& oid) {
@@ -843,7 +843,7 @@ void ObjectOperation::cmpext(uint64_t off, const bufferlist& cmp_bl,
                                            cmp_bl, _4);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
   }
   o->ops.push_back(op);
 }
@@ -855,7 +855,7 @@ void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
                                            out_snaps);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
   }
   o->ops.push_back(op);
 }
@@ -868,7 +868,7 @@ void ObjectReadOperation::list_watchers(std::list<obj_watch_t> *out_watchers,
                                            _2, out_watchers);
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
   }
   o->ops.push_back(op);
 }
@@ -879,14 +879,14 @@ void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
 
   ObjectOperationTestImpl op;
   if (pbl != NULL) {
-    op = std::bind(&TestIoCtxImpl::read, _1, _2, len, off, pbl, _4);
+    op = std::bind(&TestIoCtxImpl::read, _1, _2, len, off, pbl, _4, nullptr);
   } else {
-    op = std::bind(&TestIoCtxImpl::read, _1, _2, len, off, _3, _4);
+    op = std::bind(&TestIoCtxImpl::read, _1, _2, len, off, _3, _4, nullptr);
   }
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
   }
   o->ops.push_back(op);
 }
@@ -905,7 +905,7 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
   }
   o->ops.push_back(op);
 }
@@ -918,7 +918,7 @@ void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
 
   if (prval != NULL) {
     op = std::bind(save_operation_result,
-                     std::bind(op, _1, _2, _3, _4, _5), prval);
+                     std::bind(op, _1, _2, _3, _4, _5, _6), prval);
   }
   o->ops.push_back(op);
 }
@@ -1381,7 +1381,8 @@ int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
                   bufferlist *outbl, uint32_t op_flags) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
-  return ctx->io_ctx_impl->read(ctx->oid, len, ofs, outbl, ctx->snap_id);
+  return ctx->io_ctx_impl->read(
+          ctx->oid, len, ofs, outbl, ctx->snap_id, nullptr);
 }
 
 int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
