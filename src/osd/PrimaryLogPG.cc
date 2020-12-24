@@ -3268,28 +3268,24 @@ struct SetManifestFinisher : public PrimaryLogPG::OpFinisher {
 };
 
 struct C_SetManifestRefCountDone : public Context {
-  RefCountCallback* cb;
+  PrimaryLogPGRef pg;
+  PrimaryLogPG::ManifestOpRef mop;
   hobject_t soid;
-  C_SetManifestRefCountDone(
-    RefCountCallback* cb, hobject_t soid) : cb(cb), soid(soid) {}
+  C_SetManifestRefCountDone(PrimaryLogPG *p,
+    PrimaryLogPG::ManifestOpRef mop, hobject_t soid) : 
+    pg(p), mop(mop), soid(soid) {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
-    auto pg = cb->ctx->pg;
     std::scoped_lock locker{*pg};
     auto it = pg->manifest_ops.find(soid);
     if (it == pg->manifest_ops.end()) {
       // raced with cancel_manifest_ops
       return;
     }
+    it->second->cb->complete(r);
     pg->manifest_ops.erase(it);
-    cb->complete(r);
-    cb = nullptr;
-  }
-  ~C_SetManifestRefCountDone() {
-    if (cb) {
-      delete cb;
-    }
+    mop.reset();
   }
 };
 
@@ -3415,12 +3411,12 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
        * the reference the targe object has prior to update object_manifest in object_info_t.
        * So, call directly refcount_manifest.
        */
-      C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(
-			  new RefCountCallback(ctx, osd_op), 
-			  ctx->obs->oi.soid);
+      ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
+      C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, ctx->obs->oi.soid);
       ceph_tid_t tid = refcount_manifest(ctx->obs->oi.soid, p->first,
-			refcount_t::INCREMENT_REF, fin, std::nullopt);
-      manifest_ops[ctx->obs->oi.soid] = std::make_shared<ManifestOp>(fin->cb, tid);
+					  refcount_t::INCREMENT_REF, fin, std::nullopt);
+      mop->objecter_tid = tid;
+      manifest_ops[ctx->obs->oi.soid] = mop;
       ctx->obc->start_block();
       return true;
     } else if (inc_ref_count < 0) {
@@ -6892,12 +6888,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // start
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
-	  C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(
-			      new RefCountCallback(ctx, osd_op), 
-			      soid);
+	  ManifestOpRef mop = std::make_shared<ManifestOp>(new RefCountCallback(ctx, osd_op));
+	  C_SetManifestRefCountDone* fin = new C_SetManifestRefCountDone(this, mop, soid);
 	  ceph_tid_t tid = refcount_manifest(soid, target, 
-			    refcount_t::INCREMENT_REF, fin, std::nullopt);
-	  manifest_ops[soid] = std::make_shared<ManifestOp>(fin->cb, tid);
+					      refcount_t::INCREMENT_REF, fin, std::nullopt);
+	  mop->objecter_tid = tid;
+	  manifest_ops[soid] = mop;
 	  ctx->obc->start_block();
 	  result = -EINPROGRESS;
 	} else {
@@ -10111,7 +10107,7 @@ int PrimaryLogPG::start_dedup(OpRequestRef op, ObjectContextRef obc)
    * The operations to make dedup chunks are tracked by a ManifestOp.
    * This op will be finished if all the operations are completed.
    */
-  ManifestOpRef mop(std::make_shared<ManifestOp>(nullptr, 0));
+  ManifestOpRef mop(std::make_shared<ManifestOp>(nullptr));
 
   // cdc
   std::map<uint64_t, bufferlist> chunks; 
