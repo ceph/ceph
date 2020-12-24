@@ -201,7 +201,7 @@
     ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
 
 * CephFS: Scrub is supported in multiple active mds setup. MDS rank 0 handles
-  scrub commands, and forward scrub to other mds if nessesary.
+  scrub commands, and forward scrub to other mds if necessary.
 
 * The following librados API calls have changed:
 
