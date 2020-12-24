@@ -2711,7 +2711,7 @@ bool Client::ms_dispatch2(const MessageRef &m)
              << "+" << inode_map.size() << dendl;
     uint64_t size = lru.lru_get_size() + inode_map.size();
     trim_cache();
-    if (size < lru.lru_get_size() + inode_map.size()) {
+    if (size > lru.lru_get_size() + inode_map.size()) {
       ldout(cct, 10) << "unmounting: trim pass, cache shrank, poking unmount()" << dendl;
       mount_cond.notify_all();
     } else {
