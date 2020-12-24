@@ -92,6 +92,17 @@ void FormatRequest<I>::send() {
     return;
   }
 
+  m_image_ctx->image_lock.lock_shared();
+  uint64_t image_size = m_image_ctx->get_image_size(CEPH_NOSNAP);
+  m_image_ctx->image_lock.unlock_shared();
+
+  if (m_header.get_data_offset() >= image_size) {
+    lderr(m_image_ctx->cct) << "image is too small. format requires more than "
+                            << m_header.get_data_offset() << " bytes" << dendl;
+    finish(-ENOSPC);
+    return;
+  }
+
   // add keyslot (volume key encrypted with passphrase)
   r = m_header.add_keyslot(m_passphrase.c_str(), m_passphrase.size());
   if (r != 0) {
