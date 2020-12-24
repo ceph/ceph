@@ -29,6 +29,8 @@ import sys
 import time
 import platform
 
+from typing import Dict, List, Sequence, Tuple
+
 try:
     input = raw_input
 except NameError:
@@ -257,7 +259,9 @@ GLOBAL_ARGS = {
 }
 
 
-def parse_cmdargs(args=None, target=''):
+def parse_cmdargs(args=None, target='') -> Tuple[argparse.ArgumentParser,
+                                                 argparse.Namespace,
+                                                 List[str]]:
     """
     Consume generic arguments from the start of the ``args``
     list.  Call this first to handle arguments that are not
@@ -374,7 +378,7 @@ daemonperf {type.id | path} list|ls [stat-pats] [priority]
     """, file=sys.stdout)
 
 
-def do_extended_help(parser, args, target, partial):
+def do_extended_help(parser, args, target, partial) -> int:
     def help_for_sigs(sigs, partial=None):
         try:
             sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
@@ -458,7 +462,7 @@ def wrap(s, width, indent):
             yield result
 
 
-def format_help(cmddict, partial=None):
+def format_help(cmddict, partial=None) -> str:
     """
     Formats all the cmdsigs and helptexts from cmddict into a sorted-by-
     cmdsig 2-column display, with each column wrapped and indented to
@@ -604,7 +608,11 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
     return ret, outbuf, outs
 
 
-def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
+def new_style_command(parsed_args,
+                      cmdargs,
+                      target,
+                      sigdict,
+                      inbuf, verbose) -> Tuple[int, bytes, str]:
     """
     Do new-style command dance.
     target: daemon to receive command: mon (any) or osd.N
@@ -803,7 +811,7 @@ def isnum(s):
         return False
 
 
-def daemonperf(childargs, sockpath):
+def daemonperf(childargs: Sequence[str], sockpath: str):
     """
     Handle daemonperf command; returns errno or 0
 
@@ -877,7 +885,9 @@ def daemonperf(childargs, sockpath):
 
     return 0
 
-def get_scrub_timestamps(childargs):
+
+def get_scrub_timestamps(childargs: Sequence[str]) -> Dict[str,
+                                                           Tuple[str, str]]:
     last_scrub_stamp = "last_" + childargs[1].replace('-', '_') + "_stamp"
     results = dict()
     scruball = False
@@ -896,12 +906,14 @@ def get_scrub_timestamps(childargs):
             results[stat['pgid']] = scrub_tuple
     return results
 
+
 def check_scrub_stamps(waitdata, currdata):
     for pg in waitdata.keys():
        # Try to handle the case where a pg may not exist in current results
        if pg in currdata and waitdata[pg][1] == currdata[pg][1]:
            return False
     return True
+
 
 def waitscrub(childargs, waitdata):
     print('Waiting for {0} to complete...'.format(childargs[1]), file=sys.stdout)
@@ -911,7 +923,8 @@ def waitscrub(childargs, waitdata):
         currdata = get_scrub_timestamps(childargs)
     print('{0} completed'.format(childargs[1]), file=sys.stdout)
 
-def wait(childargs, waitdata):
+
+def wait(childargs: Sequence[str], waitdata):
     if childargs[1] in ['scrub', 'deep-scrub']:
         waitscrub(childargs, waitdata)
 

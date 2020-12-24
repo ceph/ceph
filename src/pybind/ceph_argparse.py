@@ -23,6 +23,9 @@ import sys
 import threading
 import uuid
 
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+
+
 # Flags are from MonCommand.h
 class Flag:
     NOFORWARD = (1 << 0)
@@ -755,7 +758,7 @@ def descsort(sh1, sh2):
     return cmp(descsort_key(sh1), descsort_key(sh2))
 
 
-def parse_funcsig(sig):
+def parse_funcsig(sig: Sequence[Union[str, Dict[str, str]]]) -> List[argdesc]:
     """
     parse a single descriptor (array of strings or dicts) into a
     dict of function descriptor/validators (objects of CephXXX type)
@@ -798,7 +801,8 @@ def parse_funcsig(sig):
     return newsig
 
 
-def parse_json_funcsigs(s, consumer):
+def parse_json_funcsigs(s: str,
+                        consumer: str) -> Dict[str, Dict[str, List[argdesc]]]:
     """
     A function signature is mostly an array of argdesc; it's represented
     in JSON as
@@ -907,7 +911,12 @@ def matchnum(args, signature, partial=False):
     return matchcnt
 
 
-def store_arg(desc, d):
+ValidatedArgs = Dict[str, Union[bool, int, float, str,
+                                Tuple[str, str],
+                                Sequence[str]]]
+
+
+def store_arg(desc: argdesc, d: ValidatedArgs):
     '''
     Store argument described by, and held in, thanks to valid(),
     desc into the dictionary d, keyed by desc.name.  Three cases:
@@ -932,7 +941,10 @@ def store_arg(desc, d):
         d[desc.name] = desc.instance.val
 
 
-def validate(args, signature, flags=0, partial=False):
+def validate(args: List[str],
+             signature: Sequence[argdesc],
+             flags: Optional[int] = 0,
+             partial: Optional[bool] = False) -> ValidatedArgs:
     """
     validate(args, signature, flags=0, partial=False)
 
@@ -1116,7 +1128,9 @@ def validate(args, signature, flags=0, partial=False):
     return d
 
 
-def validate_command(sigdict, args, verbose=False):
+def validate_command(sigdict: Dict[str, Dict[str, Any]],
+                     args: Sequence[str],
+                     verbose: Optional[bool] = False) -> ValidatedArgs:
     """
     Parse positional arguments into a parameter dict, according to
     the command descriptions.
@@ -1224,7 +1238,7 @@ def validate_command(sigdict, args, verbose=False):
     return valid_dict
 
 
-def find_cmd_target(childargs):
+def find_cmd_target(childargs: List[str]) -> Tuple[str, str]:
     """
     Using a minimal validation, figure out whether the command
     should be sent to a monitor or an osd.  We do this before even
@@ -1307,7 +1321,8 @@ class RadosThread(threading.Thread):
             self.exception = e
 
 
-def run_in_thread(func, *args, **kwargs):
+def run_in_thread(func: Callable[[Any, Any], int],
+                  *args: Any, **kwargs: Any) -> int:
     timeout = kwargs.pop('timeout', 0)
     if timeout == 0 or timeout == None:
         # python threading module will just get blocked if timeout is `None`,
@@ -1340,7 +1355,7 @@ def run_in_thread(func, *args, **kwargs):
         return t.retval
 
 
-def send_command_retry(*args, **kwargs):
+def send_command_retry(*args: Any, **kwargs: Any) -> Tuple[int, bytes, str]:
     while True:
         try:
             return send_command(*args, **kwargs)
@@ -1353,8 +1368,13 @@ def send_command_retry(*args, **kwargs):
             else:
                 raise
 
-def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
-                 verbose=False):
+
+def send_command(cluster,
+                 target: Optional[Tuple[str, str]] = ('mon', ''),
+                 cmd: Optional[List[str]] = None,
+                 inbuf: Optional[bytes] = b'',
+                 timeout: Optional[int] = 0,
+                 verbose: Optional[bool] = False) -> Tuple[int, bytes, str]:
     """
     Send a command to a daemon using librados's
     mon_command, osd_command, mgr_command, or pg_command.  Any bulk input data
@@ -1449,8 +1469,13 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
     return ret, outbuf, outs
 
 
-def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
-                 inbuf=b'', timeout=0, verbose=False):
+def json_command(cluster,
+                 target: Optional[Tuple[str, str]] = ('mon', ''),
+                 prefix: Optional[str] = None,
+                 argdict: Optional[Dict[str, str]] = None,
+                 inbuf: Optional[bytes] = b'',
+                 timeout: Optional[int] = 0,
+                 verbose: Optional[bool] = False) -> Tuple[int, bytes, str]:
     """
     Serialize a command and up a JSON command and send it with send_command() above.
     Prefix may be supplied separately or in argdict.  Any bulk input
