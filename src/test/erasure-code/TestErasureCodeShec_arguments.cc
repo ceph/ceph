@@ -164,8 +164,6 @@ bool search_table_shec432(set<int> want_to_read, set<int> available_chunks) {
 
 TEST(ParameterTest, combination_all)
 {
-  int result;
-  unsigned alignment, tail, padded_length;
   const unsigned int kObjectSize = 128;
 
   //get profile
@@ -175,10 +173,10 @@ TEST(ParameterTest, combination_all)
   int i_k = atoi(k);
   int i_m = atoi(m);
   int i_c = atoi(c);
-  alignment = i_k * 8 * sizeof(int);
-  tail = kObjectSize % alignment;
-  padded_length = kObjectSize + (tail ? (alignment - tail) : 0);
-  unsigned c_size = padded_length / i_k;
+  const unsigned alignment = i_k * 8 * sizeof(int);
+  const unsigned tail = kObjectSize % alignment;
+  const unsigned padded_length = kObjectSize + (tail ? (alignment - tail) : 0);
+  const unsigned c_size = padded_length / i_k;
 
   //init
   ErasureCodeShecTableCache tcache;
@@ -194,7 +192,7 @@ TEST(ParameterTest, combination_all)
   (*profile)["m"] = m;
   (*profile)["c"] = c;
 
-  result = shec->init(*profile, &cerr);
+  int result = shec->init(*profile, &cerr);
 
   //check profile
   EXPECT_EQ(i_k, shec->k);
@@ -208,60 +206,46 @@ TEST(ParameterTest, combination_all)
   EXPECT_EQ(0, result);
 
   //encode
-  bufferlist in,out1;
-  set<int> want_to_encode;
-  map<int, bufferlist> encoded;
-
+  bufferlist in;
   in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//length = 62
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"//124
 	    "0123"//128
   );
+  set<int> want_to_encode;
   for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
     want_to_encode.insert(i);
   }
 
+  map<int, bufferlist> encoded;
   result = shec->encode(want_to_encode, in, &encoded);
   EXPECT_EQ(0, result);
   EXPECT_EQ(i_k+i_m, (int)encoded.size());
   EXPECT_EQ(c_size, encoded[0].length());
+  bufferlist out1;
   //out1 is "encoded"
   for (unsigned int i = 0; i < encoded.size(); ++i) {
     out1.append(encoded[i]);
   }
   EXPECT_FALSE(out1 == in);
 
-  set<int> want_to_read, available_chunks, want_to_read_without_avails;
-  map<int, vector<pair<int,int>>> minimum_chunks;
-  set<int>::iterator itr;
-  int array_want_to_read[shec->get_chunk_count()];
-  int array_available_chunks[shec->get_chunk_count()];
-  int dresult,cmp;
-  map<int, bufferlist> inchunks,decoded;
-  bufferlist usable;
-  unsigned int minimum_count;
-
   for (unsigned int w1 = 0; w1 <= shec->get_chunk_count(); ++w1) {
-    const unsigned int r1 = w1;		// combination(k+m,r1)
-
-    for (unsigned int i = 0; i < r1; ++i) {
-      array_want_to_read[i] = 1;
-    }
-    for (unsigned int i = r1; i < shec->get_chunk_count(); ++i) {
-      array_want_to_read[i] = 0;
+    // combination(k+m,w1)
+    int array_want_to_read[shec->get_chunk_count()];
+    for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
+      array_want_to_read[i] = i < w1 ? 1 : 0;
     }
 
     for (unsigned w2 = 0; w2 <= shec->get_chunk_count(); ++w2) {
-      const unsigned int r2 = w2;	// combination(k+m,r2)
-
-      for (unsigned int i = 0; i < r2; ++i ) {
-        array_available_chunks[i] = 1;
-      }
-      for (unsigned int i = r2; i < shec->get_chunk_count(); ++i ) {
-        array_available_chunks[i] = 0;
+      // combination(k+m,w2)
+      int array_available_chunks[shec->get_chunk_count()];
+      for (unsigned int i = 0; i < shec->get_chunk_count(); ++i ) {
+        array_available_chunks[i] = i < w2 ? 1 : 0;
       }
 
       do {
         do {
+	  set<int> want_to_read, available_chunks;
+	  map<int, bufferlist> inchunks;
           for (unsigned int i = 0; i < shec->get_chunk_count(); ++i) {
 	    if (array_want_to_read[i]) {
 	      want_to_read.insert(i);
@@ -272,12 +256,14 @@ TEST(ParameterTest, combination_all)
             }
           }
 
+	  map<int, vector<pair<int,int>>> minimum_chunks;
+	  map<int, bufferlist> decoded;
           result = shec->minimum_to_decode(want_to_read, available_chunks,
 				           &minimum_chunks);
-          dresult = shec->decode(want_to_read, inchunks, &decoded,
-				 shec->get_chunk_size(kObjectSize));
+          int dresult = shec->decode(want_to_read, inchunks, &decoded,
+				     shec->get_chunk_size(kObjectSize));
           ++count_num;
-          minimum_count = 0;
+	  unsigned int minimum_count = 0;
 
           if (want_to_read.size() == 0) {
             EXPECT_EQ(0, result);
@@ -290,9 +276,10 @@ TEST(ParameterTest, combination_all)
             }
           } else {
             // want - avail
-            for (itr = want_to_read.begin();itr != want_to_read.end(); ++itr) {
-              if (!available_chunks.count(*itr)) {
-                want_to_read_without_avails.insert(*itr);
+	    set<int> want_to_read_without_avails;
+            for (auto chunk : want_to_read) {
+              if (!available_chunks.count(chunk)) {
+                want_to_read_without_avails.insert(chunk);
               } else {
                 ++minimum_count;
               }
@@ -306,9 +293,9 @@ TEST(ParameterTest, combination_all)
               EXPECT_NE(0u, decoded.size());
               for (unsigned int i = 0; i < shec->get_data_chunk_count(); ++i) {
                 if (array_want_to_read[i]) {
-                  usable.clear();
+		  bufferlist usable;
                   usable.substr_of(in, c_size * i, c_size);
-                  cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
+                  int cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
                   EXPECT_EQ(c_size, decoded[i].length());
                   EXPECT_EQ(0, cmp);
                   if (cmp != 0) {
@@ -323,7 +310,6 @@ TEST(ParameterTest, combination_all)
               EXPECT_EQ(-EIO, result);
 	      EXPECT_EQ(0u, minimum_chunks.size());
               EXPECT_EQ(-1, dresult);
-              EXPECT_EQ(shec->get_chunk_count(), decoded.size());
               if (result != -EIO || dresult != -1) {
                 ++unexpected_count;
               }
@@ -337,9 +323,9 @@ TEST(ParameterTest, combination_all)
                 EXPECT_NE(0u, decoded.size());
                 for (unsigned int i = 0; i < shec->get_data_chunk_count(); ++i) {
                   if (array_want_to_read[i]) {
-                    usable.clear();
+		    bufferlist usable;
                     usable.substr_of(in, c_size * i, c_size);
-                    cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
+                    int cmp = memcmp(decoded[i].c_str(), usable.c_str(), c_size);
                     EXPECT_EQ(c_size, decoded[i].length());
                     EXPECT_EQ(0, cmp);
                     if (cmp != 0) {
@@ -359,21 +345,12 @@ TEST(ParameterTest, combination_all)
                 EXPECT_EQ(-EIO, result);
 	        EXPECT_EQ(0u, minimum_chunks.size());
                 EXPECT_EQ(-1, dresult);
-                EXPECT_EQ(shec->get_chunk_count(), decoded.size());
                 if (result != -EIO || dresult != -1) {
                   ++unexpected_count;
                 }
               }
             }
           }
-
-          want_to_read.clear();
-          want_to_read_without_avails.clear();
-          available_chunks.clear();
-          minimum_chunks.clear();
-          inchunks.clear();
-          decoded.clear();
-          usable.clear();
         } while (std::prev_permutation(
 		   array_want_to_read,
 		   array_want_to_read + shec->get_chunk_count()));
