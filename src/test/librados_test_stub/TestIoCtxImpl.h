@@ -22,8 +22,9 @@ class TestRadosClient;
 typedef boost::function<int(TestIoCtxImpl*,
 			    const std::string&,
 			    bufferlist *,
-                            uint64_t,
-                            const SnapContext &)> ObjectOperationTestImpl;
+          uint64_t,
+          const SnapContext &,
+          uint64_t*)> ObjectOperationTestImpl;
 typedef std::list<ObjectOperationTestImpl> ObjectOperations;
 
 struct TestObjectOperationImpl {
@@ -90,7 +91,8 @@ public:
                           int flags);
   virtual int aio_operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, int flags,
-                               bufferlist *pbl, uint64_t snap_id);
+                               bufferlist *pbl, uint64_t snap_id,
+                               uint64_t* objver);
   virtual int aio_remove(const std::string& oid, AioCompletionImpl *c,
                          int flags = 0) = 0;
   virtual int aio_watch(const std::string& o, AioCompletionImpl *c,
@@ -133,7 +135,7 @@ public:
   virtual int operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                            bufferlist *pbl);
   virtual int read(const std::string& oid, size_t len, uint64_t off,
-                   bufferlist *bl, uint64_t snap_id) = 0;
+                   bufferlist *bl, uint64_t snap_id, uint64_t* objver) = 0;
   virtual int remove(const std::string& oid, const SnapContext &snapc) = 0;
   virtual int selfmanaged_snap_create(uint64_t *snapid) = 0;
   virtual void aio_selfmanaged_snap_create(uint64_t *snapid,
@@ -186,7 +188,8 @@ protected:
   int execute_aio_operations(const std::string& oid,
                              TestObjectOperationImpl *ops,
                              bufferlist *pbl, uint64_t,
-                             const SnapContext &snapc);
+                             const SnapContext &snapc,
+                             uint64_t* objver);
 
 private:
   struct C_AioNotify : public Context {
