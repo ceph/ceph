@@ -258,6 +258,9 @@ template <typename I>
 void ObjectReadRequest<I>::handle_read_object(int r) {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
+  if (m_version != nullptr) {
+    ldout(image_ctx->cct, 20) << "version=" << *m_version << dendl;
+  }
 
   if (r == -ENOENT) {
     read_parent();

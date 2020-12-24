@@ -70,12 +70,13 @@ struct C_AlignedObjectReadRequest : public Context {
     }
 
     void finish(int r) override {
+      ldout(image_ctx->cct, 20) << "aligned read r=" << r << dendl;
       on_finish->complete(r);
     }
 
     void handle_read(int r) {
       auto cct = image_ctx->cct;
-      ldout(cct, 20) << "r=" << r << dendl;
+      ldout(cct, 20) << "aligned read r=" << r << dendl;
       if (r == 0) {
         for (auto& extent: *extents) {
           auto crypto_ret = crypto->decrypt_aligned_extent(
@@ -171,7 +172,7 @@ struct C_UnalignedObjectReadRequest : public Context {
     }
 
     void finish(int r) override {
-      ldout(cct, 20) << "r=" << r << dendl;
+      ldout(cct, 20) << "unaligned read r=" << r << dendl;
       if (r >= 0) {
         remove_alignment_data();
 
@@ -342,7 +343,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
     }
 
     void handle_read(int r) {
-      ldout(image_ctx->cct, 20) << "r=" << r << dendl;
+      ldout(image_ctx->cct, 20) << "unaligned write r=" << r << dendl;
 
       if (r == -ENOENT) {
         auto ctx = create_context_callback<
@@ -397,6 +398,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
     }
 
     void handle_write(int r) {
+      ldout(image_ctx->cct, 20) << "r=" << r << dendl;
       bool exclusive = write_flags & io::OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE;
       bool restart = false;
       if (r == -ERANGE && !assert_version.has_value()) {
@@ -413,6 +415,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
     }
 
     void finish(int r) override {
+      ldout(image_ctx->cct, 20) << "unaligned write r=" << r << dendl;
       on_finish->complete(r);
     }
 };
