@@ -564,11 +564,11 @@ class CephFragment(CephArgtype):
             raise ArgumentFormat("{0} not a hex integer".format(val))
         try:
             int(val)
-        except:
+        except ValueError:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(val))
         try:
             int(bits)
-        except:
+        except ValueError:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(bits))
         self.val = s
 
@@ -1077,15 +1077,12 @@ def validate(args, signature, flags=0, partial=False):
             # Have an arg; validate it
             try:
                 validate_one(myarg, desc)
-                valid = True
             except ArgumentError as e:
-                valid = False
-
                 # argument mismatch
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    save_exception = [ myarg, e ]
+                    save_exception = [myarg, e]
                     myargs.insert(0, myarg)
                     break
                 else:
@@ -1171,9 +1168,9 @@ def validate_command(sigdict, args, verbose=False):
     # (relies on a cmdsig being key,val where val is a list of len 1)
 
     def grade(cmd):
-      # prefer optional arguments over required ones
-      sigs = cmd['sig']
-      return sum(map(lambda sig: sig.req, sigs))
+        # prefer optional arguments over required ones
+        sigs = cmd['sig']
+        return sum(map(lambda sig: sig.req, sigs))
 
     bestcmds_sorted = sorted(bestcmds, key=grade)
     if verbose:
@@ -1225,7 +1222,6 @@ def validate_command(sigdict, args, verbose=False):
         for cmd in bestcmds:
             print(concise_sig(cmd['sig']), file=sys.stderr)
     return valid_dict
-
 
 
 def find_cmd_target(childargs):
@@ -1312,14 +1308,15 @@ class RadosThread(threading.Thread):
 
 
 def run_in_thread(func, *args, **kwargs):
-    interrupt = False
     timeout = kwargs.pop('timeout', 0)
     if timeout == 0 or timeout == None:
         # python threading module will just get blocked if timeout is `None`,
         # otherwise it will keep polling until timeout or thread stops.
-        # wait for INT32_MAX, as python 3.6.8 use int32_t to present the
-        # timeout in integer when converting it to nanoseconds
-        timeout = (1 << (32 - 1)) - 1
+        # timeout in integer when converting it to nanoseconds, but since
+        # python3 uses `int64_t` for the deadline before timeout expires,
+        # we have to use a safe value which does not overflow after being
+        # added to current time in microseconds.
+        timeout = 24 * 60 * 60
     t = RadosThread(func, *args, **kwargs)
 
     # allow the main thread to exit (presumably, avoid a join() on this
