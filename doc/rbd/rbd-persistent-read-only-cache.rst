@@ -116,8 +116,8 @@ The ``ceph-immutable-object-cache`` daemon is available within the optional
 .. important:: ``ceph-immutable-object-cache`` daemon requires the ability to
    connect RADOS clusters.
 
-Run Daemon
-----------
+Running the Immutable Object Cache Daemon
+-----------------------------------------
 
 ``ceph-immutable-object-cache`` daemon should use a unique Ceph user ID.
 To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
@@ -137,7 +137,7 @@ The ``ceph-immutable-object-cache`` can also be run in foreground by ``ceph-immu
 QOS Settings
 ------------
 
-Immutable object cache supports throttle, controlled by the following settings.
+The immutable object cache supports throttling, controlled by the following settings:
 
 ``immutable_object_cache_qos_schedule_tick_min``
 
