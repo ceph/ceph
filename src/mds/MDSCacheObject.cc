@@ -80,9 +80,8 @@ void MDSCacheObject::dump_states(ceph::Formatter *f) const
   if (state_test(STATE_AUTH)) f->dump_string("state", "auth");
   if (state_test(STATE_DIRTY)) f->dump_string("state", "dirty");
   if (state_test(STATE_NOTIFYREF)) f->dump_string("state", "notifyref");
-  if (state_test(STATE_REJOINING)) f->dump_string("state", "rejoining");
-  if (state_test(STATE_REJOINUNDEF))
-    f->dump_string("state", "rejoinundef");
+  if (is_rejoining()) f->dump_string("state", "rejoining");
+  if (is_rejoin_undef()) f->dump_string("state", "rejoinundef");
 }
 
 bool MDSCacheObject::is_waiter_for(uint64_t mask, uint64_t min) {

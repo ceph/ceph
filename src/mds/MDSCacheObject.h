@@ -113,6 +113,7 @@ class MDSCacheObject {
   bool is_dirty() const { return state_test(STATE_DIRTY); }
   bool is_clean() const { return !is_dirty(); }
   bool is_rejoining() const { return state_test(STATE_REJOINING); }
+  bool is_rejoin_undef() const { return state_test(STATE_REJOINUNDEF); }
 
   // --------------------------------------------
   // authority
