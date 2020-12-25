@@ -483,7 +483,7 @@ class MDCache {
 
   void rejoin_start(MDSContext *rejoin_done_);
   void rejoin_gather_finish();
-  void rejoin_send_rejoins();
+  void rejoin_send_rejoins(mds_rank_t target);
   void rejoin_export_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr,
 			  int target=-1, bool drop_path=false) {
     auto& ex = cap_exports[ino];
@@ -1041,6 +1041,8 @@ class MDCache {
   void send_subtree_resolves();
   void maybe_finish_peer_resolve();
 
+  void process_delayed_rejoins();
+  void discard_delayed_rejoin(mds_rank_t from);
   void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin);
   void handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m);
   void handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &m);
@@ -1055,7 +1057,7 @@ class MDCache {
   void rejoin_send_acks();
   void maybe_send_pending_rejoins() {
     if (rejoins_pending)
-      rejoin_send_rejoins();
+      rejoin_send_rejoins(MDS_RANK_NONE);
   }
 
   void touch_inode(CInode *in) {
@@ -1168,6 +1170,7 @@ class MDCache {
   set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+  map<mds_rank_t, cref_t<MMDSCacheRejoin>> delayed_rejoins;
 
   map<dirfrag_t, mds_rank_t> rejoin_subtree_auth_map;
   std::set<CInode*> rejoin_implicitly_imported_inodes;

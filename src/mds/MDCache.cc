@@ -2916,6 +2916,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   rejoin_sent.erase(who);        // i need to send another
   rejoin_ack_sent.erase(who);    // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
+  discard_delayed_rejoin(who);
 
   dout(10) << " peer_resolve_sent " << peer_resolve_sent << dendl;
   dout(10) << " peer_resolve_gather " << peer_resolve_gather << dendl;
@@ -3701,24 +3702,18 @@ void MDCache::rejoin_start(MDSContext *rejoin_done_)
  * if we are rejoin, send for all regions in our cache.
  * if we are active|stopping, send only to nodes that are rejoining.
  */
-void MDCache::rejoin_send_rejoins()
+void MDCache::rejoin_send_rejoins(mds_rank_t target)
 {
   dout(10) << "rejoin_send_rejoins with recovery_set " << recovery_set << dendl;
 
   if (rejoin_gather.count(mds->get_nodeid())) {
     dout(7) << "rejoin_send_rejoins still processing imported caps, delaying" << dendl;
-    rejoins_pending = true;
-    return;
-  }
-  if (!subtree_resolve_gather.empty()) {
-    dout(7) << "rejoin_send_rejoins still waiting for resolves ("
-	    << subtree_resolve_gather << ")" << dendl;
+    ceph_assert(target == MDS_RANK_NONE);
     rejoins_pending = true;
     return;
   }
 
   ceph_assert(!migrator->is_any_in_progress());
-
   map<mds_rank_t, ref_t<MMDSCacheRejoin>> rejoins;
 
   // if i am rejoining, send a rejoin to everyone.
@@ -3728,29 +3723,35 @@ void MDCache::rejoin_send_rejoins()
     if (rejoin_sent.count(rank)) continue;     // already sent a rejoin to this node!
     if (mds->is_rejoin())
       rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_WEAK);
-    else if (mds->mdsmap->is_rejoin(rank))
+    else if (rank == target)
       rejoins[rank] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_STRONG);
   }
+  if (rejoins.empty() && target != MDS_RANK_NONE)
+    return;
+
+  ceph_assert(subtree_resolve_gather.empty());
 
   if (mds->is_rejoin()) {
     map<client_t, pair<Session*, set<mds_rank_t> > > client_exports;
     for (auto& p : cap_exports) {
-      mds_rank_t target = p.second.first;
-      if (rejoins.count(target) == 0)
+      mds_rank_t rank = p.second.first;
+      auto it = rejoins.find(rank);
+      if (it == rejoins.end())
 	continue;
+      auto& rejoin = it->second;
       for (auto q = p.second.second.begin(); q != p.second.second.end(); ) {
 	Session *session = nullptr;
 	auto it = client_exports.find(q->first);
 	if (it != client_exports.end()) {
 	  session = it->second.first;
 	  if (session)
-	    it->second.second.insert(target);
+	    it->second.second.insert(rank);
 	} else {
 	  session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
 	  auto& r = client_exports[q->first];
 	  r.first = session;
 	  if (session)
-	    r.second.insert(target);
+	    r.second.insert(rank);
 	}
 	if (session) {
 	  ++q;
@@ -3759,7 +3760,7 @@ void MDCache::rejoin_send_rejoins()
 	  p.second.second.erase(q++);
 	}
       }
-      rejoins[target]->cap_exports[p.first] = p.second.second;
+      rejoin->cap_exports[p.first] = p.second.second;
     }
     for (auto& p : client_exports) {
       Session *session = p.second.first;
@@ -3786,10 +3787,12 @@ void MDCache::rejoin_send_rejoins()
 
     mds_rank_t auth = dir->get_dir_auth().first;
     ceph_assert(auth >= 0);
-    if (rejoins.count(auth) == 0)
+
+    auto it = rejoins.find(auth);
+    if (it == rejoins.end())
       continue;   // don't care about this node's subtrees
 
-    rejoin_walk(dir, rejoins[auth]);
+    rejoin_walk(dir, it->second);
   }
   
   // rejoin root inodes, too
@@ -3850,10 +3853,12 @@ void MDCache::rejoin_send_rejoins()
 	if (q.second.remote_auth_pinned == MDS_RANK_NONE)
 	  continue;
 	if (!q.first->is_auth()) {
-	  mds_rank_t target = q.second.remote_auth_pinned;
-	  ceph_assert(target == q.first->authority().first);
-	  if (rejoins.count(target) == 0) continue;
-	  const auto& rejoin = rejoins[target];
+	  mds_rank_t rank = q.second.remote_auth_pinned;
+	  ceph_assert(rank == q.first->authority().first);
+	  auto it = rejoins.find(rank);
+	  if (it == rejoins.end())
+	    continue;
+	  auto& rejoin = it->second;
 	  
 	  dout(15) << " " << *mdr << " authpin on " << *q.first << dendl;
 	  MDSCacheObjectInfo i;
@@ -3875,8 +3880,10 @@ void MDCache::rejoin_send_rejoins()
 	auto obj = lock->get_parent();
 	if (q.is_xlock() && !obj->is_auth()) {
 	  mds_rank_t who = obj->authority().first;
-	  if (rejoins.count(who) == 0) continue;
-	  const auto& rejoin = rejoins[who];
+	  auto it = rejoins.find(who);
+	  if (it == rejoins.end())
+	    continue;
+	  auto& rejoin = it->second;
 	  
 	  dout(15) << " " << *mdr << " xlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -3889,8 +3896,10 @@ void MDCache::rejoin_send_rejoins()
 				     mdr->reqid, mdr->attempt);
 	} else if (q.is_remote_wrlock()) {
 	  mds_rank_t who = q.wrlock_target;
-	  if (rejoins.count(who) == 0) continue;
-	  const auto& rejoin = rejoins[who];
+	  auto it = rejoins.find(who);
+	  if (it == rejoins.end())
+	    continue;
+	  auto& rejoin = it->second;
 
 	  dout(15) << " " << *mdr << " wrlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -4045,6 +4054,21 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
   }
 }
 
+void MDCache::process_delayed_rejoins()
+{
+  dout(10) << __func__ << dendl;
+  map<mds_rank_t, cref_t<MMDSCacheRejoin>> tmp;
+  tmp.swap(delayed_rejoins);
+  for (auto &p : tmp) {
+    handle_cache_rejoin(p.second);
+  }
+}
+
+void MDCache::discard_delayed_rejoin(mds_rank_t who)
+{
+  delayed_rejoins.erase(who);
+}
+
 /*
  * i got a rejoin.
  *  - reply with the lockstate
@@ -4092,6 +4116,8 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
 {
   mds_rank_t from = mds_rank_t(weak->get_source().num());
 
+  discard_delayed_rejoin(from);
+
   // possible response(s)
   ref_t<MMDSCacheRejoin> ack;      // if survivor
   set<dirfrag_t> acked_dirfrags;  // if survivor
@@ -4101,6 +4127,8 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
 
   if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     survivor = true;
+    rejoin_send_rejoins(from);
+
     dout(10) << "i am a survivor, and will ack immediately" << dendl;
     ack = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_ACK);
 
@@ -4128,6 +4156,12 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
     encode(imported_caps, ack->imported_caps);
   } else {
     ceph_assert(mds->is_rejoin());
+
+    if (!subtrees_connected) {
+      dout(10) << " subtrees are not connected, delay processing cache rejoin" << dendl;
+      delayed_rejoins[from] = weak;
+      return;
+    }
 
     // we may have already received a strong rejoin from the sender.
     rejoin_scour_survivor_replicas(from, NULL, acked_dirfrags, acked_inodes, gather_locks);
@@ -4423,6 +4457,14 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
       return;
     }
     ceph_abort_msg("got unexpected rejoin message during recovery");
+  }
+
+  discard_delayed_rejoin(from);
+
+  if (!subtrees_connected) {
+    dout(10) << " subtrees are not connected, delay processing cache rejoin" << dendl;
+    delayed_rejoins[from] = strong;
+    return;
   }
 
   rejoin_unlinked_inodes[from].clear();
@@ -4997,6 +5039,7 @@ void MDCache::rejoin_reconnect_inode_finish(inodeno_t ino, int r)
   }
 
   subtrees_connected = true;
+  process_delayed_rejoins();
   process_imported_caps();
 }
 
