@@ -275,7 +275,7 @@ class Module(MgrModule):
                     next_scrape = now
                 else:
                     # align to scrape interval
-                    scrape_frequency = int(self.scrape_frequency) or 86400
+                    scrape_frequency = int(self.scrape_frequency)
                     seconds = (last_scrape - datetime.utcfromtimestamp(0)).total_seconds()
                     seconds -= seconds % scrape_frequency
                     seconds += scrape_frequency
@@ -294,7 +294,7 @@ class Module(MgrModule):
                     self.set_store('last_scrape', last_scrape.strftime(TIME_FORMAT))
 
             # sleep
-            sleep_interval = int(self.sleep_interval) or 60
+            sleep_interval = int(self.sleep_interval)
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
