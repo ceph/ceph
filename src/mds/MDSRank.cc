@@ -1962,7 +1962,7 @@ void MDSRank::reconnect_done()
 void MDSRank::rejoin_joint_start()
 {
   dout(1) << "rejoin_joint_start" << dendl;
-  mdcache->rejoin_send_rejoins();
+  mdcache->rejoin_send_rejoins(MDS_RANK_NONE);
 }
 void MDSRank::rejoin_start()
 {
