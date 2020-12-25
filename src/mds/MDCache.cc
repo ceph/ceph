@@ -5546,16 +5546,8 @@ void MDCache::opened_undef_inode(CInode *in) {
   if (in->is_dir()) {
     // FIXME: re-hash dentries if necessary
     ceph_assert(in->get_inode()->dir_layout.dl_dir_hash == g_conf()->mds_default_dir_hash);
-    if (in->get_num_dirfrags() && !in->dirfragtree.is_leaf(frag_t())) {
-      CDir *dir = in->get_dirfrag(frag_t());
-      ceph_assert(dir);
-      rejoin_undef_dirfrags.erase(dir);
+    if (in->get_num_dirfrags() && !in->dirfragtree.is_leaf(frag_t()))
       in->force_dirfrags();
-      auto&& ls = in->get_dirfrags();
-      for (const auto& dir : ls) {
-	rejoin_undef_dirfrags.insert(dir);
-      }
-    }
   }
 }
 
@@ -10709,22 +10701,31 @@ void MDCache::adjust_dir_fragments(CInode *diri,
     ceph_assert(srcfrags.size() == 1);
     CDir *dir = srcfrags.front();
 
+    bool undef = dir->is_rejoin_undef();
+    if (undef)
+      rejoin_undef_dirfrags.erase(dir);
+
     dir->split(bits, resultfrags, waiters, replay);
+
+    if (undef) {
+      for (auto& d : *resultfrags)
+	rejoin_undef_dirfrags.insert(d);
+    }
 
     // did i change the subtree map?
     if (dir->is_subtree_root()) {
       // new frags are now separate subtrees
-      for (const auto& dir : *resultfrags) {
-	subtrees[dir].clear();   // new frag is now its own subtree
+      for (const auto& d : *resultfrags) {
+	subtrees[d].clear();   // new frag is now its own subtree
       }
       
       // was i a bound?
       if (parent_subtree) {
 	ceph_assert(subtrees[parent_subtree].count(dir));
 	subtrees[parent_subtree].erase(dir);
-	for (const auto& dir : *resultfrags) {
-	  ceph_assert(dir->is_subtree_root());
-	  subtrees[parent_subtree].insert(dir);
+	for (const auto& d : *resultfrags) {
+	  ceph_assert(d->is_subtree_root());
+	  subtrees[parent_subtree].insert(d);
 	}
       }
       
@@ -10751,6 +10752,8 @@ void MDCache::adjust_dir_fragments(CInode *diri,
     // (it's all or none, actually.)
     bool any_subtree = false, any_non_subtree = false;
     for (const auto& dir : srcfrags) {
+      if (dir->is_rejoin_undef())
+	rejoin_undef_dirfrags.erase(dir);
       if (dir->is_subtree_root())
 	any_subtree = true;
       else
@@ -10788,6 +10791,9 @@ void MDCache::adjust_dir_fragments(CInode *diri,
     // merge
     CDir *f = new CDir(diri, basefrag, this, srcfrags.front()->is_auth());
     f->merge(srcfrags, waiters, replay);
+
+    if (f->is_rejoin_undef())
+      rejoin_undef_dirfrags.insert(f);
 
     if (any_subtree) {
       ceph_assert(f->is_subtree_root());
