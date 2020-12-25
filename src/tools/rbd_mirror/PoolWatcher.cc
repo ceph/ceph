@@ -426,16 +426,6 @@ void PoolWatcher<I>::notify_listener() {
   {
     std::lock_guard locker{m_lock};
     ceph_assert(m_notify_listener_in_progress);
-  }
-
-  if (!removed_image_ids.empty()) {
-    m_listener.handle_update(mirror_uuid, {}, std::move(removed_image_ids));
-    removed_image_ids.clear();
-  }
-
-  {
-    std::lock_guard locker{m_lock};
-    ceph_assert(m_notify_listener_in_progress);
 
     // if the watch failed while we didn't own the lock, we are going
     // to need to perform a full refresh
