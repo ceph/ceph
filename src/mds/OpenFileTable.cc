@@ -1056,7 +1056,7 @@ void OpenFileTable::_prefetch_dirfrags()
     CInode *diri = mdcache->get_inode(ino);
     if (!diri)
       continue;
-    if (diri->state_test(CInode::STATE_REJOINUNDEF))
+    if (diri->is_rejoin_undef())
       continue;
 
     for (auto& fg: anchor.frags) {
@@ -1083,7 +1083,7 @@ void OpenFileTable::_prefetch_dirfrags()
   MDSGatherBuilder gather(g_ceph_context);
   int num_opening_dirfrags = 0;
   for (const auto& dir : fetch_queue) {
-    if (dir->state_test(CDir::STATE_REJOINUNDEF))
+    if (dir->is_rejoin_undef())
       ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
 

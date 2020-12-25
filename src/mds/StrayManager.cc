@@ -438,7 +438,7 @@ bool StrayManager::_eval_stray(CDentry *dn)
   dout(10) << " inode is " << *dnl->get_inode() << dendl;
   CInode *in = dnl->get_inode();
   ceph_assert(in);
-  ceph_assert(!in->state_test(CInode::STATE_REJOINUNDEF));
+  ceph_assert(!in->is_rejoin_undef());
 
   // The only dentries elegible for purging are those
   // in the stray directories
