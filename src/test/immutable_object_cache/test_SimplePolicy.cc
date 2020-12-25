@@ -30,7 +30,7 @@ public:
   static void SetUpTestCase() {}
   static void TearDownTestCase() {}
   void SetUp() override {
-    m_simple_policy = new SimplePolicy(g_ceph_context, m_cache_size, 128, 0.1);
+    m_simple_policy = new SimplePolicy(g_ceph_context, m_cache_size, 128, 0.9);
     // populate 50 entries
     for (uint64_t i = 0; i < m_cache_size / 2; i++, m_entry_index++) {
       insert_entry_into_promoted_lru(generate_file_name(m_entry_index));
@@ -210,7 +210,7 @@ TEST_F(TestSimplePolicy, test_update_state_from_promoting_to_promoted) {
 
 TEST_F(TestSimplePolicy, test_evict_list_0) {
   std::list<std::string> evict_entry_list;
-  // 0.1 is watermark
+  // the default water mark is 0.9
   ASSERT_TRUE((float)m_simple_policy->get_free_size() > m_cache_size*0.1);
   m_simple_policy->get_evict_list(&evict_entry_list);
   ASSERT_TRUE(evict_entry_list.size() == 0);
