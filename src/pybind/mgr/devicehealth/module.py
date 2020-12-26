@@ -109,9 +109,11 @@ class Module(MgrModule):
 
     @CLICommand('device query-daemon-health-metrics',
                 args='name=who,type=CephString',
-                desc='Get device health metrics for a given daemon',
                 perm='r')
     def do_query_daemon_health_metrics(self, who=''):
+        '''
+        Get device health metrics for a given daemon
+        '''
         if not self.is_valid_daemon_name(who):
             return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
         (daemon_type, daemon_id) = who.split('.')
@@ -124,10 +126,11 @@ class Module(MgrModule):
 
     @CLICommand('device scrape-daemon-health-metrics',
                 args='name=who,type=CephString',
-                desc='Scrape and store device health metrics '
-                     'for a given daemon',
                 perm='r')
     def do_scrape_daemon_health_metrics(self, who=''):
+        '''
+        Scrape and store device health metrics for a given daemon
+        '''
         if not self.is_valid_daemon_name(who):
             return -errno.EINVAL, '', 'not a valid mon or osd daemon name'
         (daemon_type, daemon_id) = who.split('.')
@@ -135,9 +138,11 @@ class Module(MgrModule):
 
     @CLICommand('device scrape-daemon-health-metrics',
                 args='name=devid,type=CephString,req=False',
-                desc='Scrape and store device health metrics',
                 perm='r')
     def do_scrape_health_metrics(self, devid=None):
+        '''
+        Scrape and store device health metrics
+        '''
         if devid is None:
             return self.scrape_all()
         else:
@@ -146,36 +151,46 @@ class Module(MgrModule):
     @CLICommand('device get-health-metrics',
                 args=('name=devid,type=CephString ' +
                       'name=sample,type=CephString,req=False'),
-                desc='Show stored device metrics for the device',
                 perm='r')
     def do_get_health_metrics(self, devid, sample=None):
+        '''
+        Show stored device metrics for the device
+        '''
         return self.show_device_metrics(devid, sample)
 
     @CLICommand('device check-health',
-                desc='Check life expectancy of devices',
                 perm='rw')
     def do_check_health(self):
+        '''
+        Check life expectancy of devices
+        '''
         return self.check_health()
 
     @CLICommand('device monitoring on',
-                desc='Enable device health monitoring',
                 perm='rw')
     def do_monitoring_on(self):
+        '''
+        Enable device health monitoring
+        '''
         self.set_module_option('enable_monitoring', True)
         self.event.set()
 
     @CLICommand('device monitoring off',
-                desc='Disable device health monitoring',
                 perm='rw')
     def do_monitoring_off(self):
+        '''
+        Disable device health monitoring
+        '''
         self.set_module_option('enable_monitoring', False)
         self.set_health_checks({})  # avoid stuck health alerts
 
     @CLICommand('device predict-life-expectancy',
                 args='name=devid,type=CephString,req=true',
-                desc='Predict life expectancy with local predictor',
                 perm='r')
     def do_predict_life_expectancy(self, devid):
+        '''
+        Predict life expectancy with local predictor
+        '''
         return self.predict_lift_expectancy(devid)
 
     def self_test(self):
