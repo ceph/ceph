@@ -288,18 +288,19 @@ class CLICommand(object):
 
     def __init__(self, prefix, args="", desc="", perm="rw"):
         self.prefix = prefix
-        self.args = args
         self.args_dict = {}
         self.desc = desc
         self.perm = perm
         self.func = None  # type: Optional[Callable]
-        self._parse_args()
+        self.args = args
+        self.args_dict = self._parse_args(args)
 
-    def _parse_args(self):
-        if not self.args:
-            return
-        args = self.args.split(" ")
-        for arg in args:
+    @staticmethod
+    def _parse_args(args):
+        if not args:
+            return {}
+        args_dict = {}
+        for arg in args.split(" "):
             arg_desc = arg.strip().split(",")
             arg_d = {}
             for kv in arg_desc:
@@ -307,7 +308,8 @@ class CLICommand(object):
                 if k != "name":
                     arg_d[k] = v
                 else:
-                    self.args_dict[v] = arg_d
+                    args_dict[v] = arg_d
+        return args_dict
 
     def __call__(self, func):
         self.func = func
@@ -334,7 +336,8 @@ class CLICommand(object):
         for a, d in self.args_dict.items():
             if 'req' in d and d['req'] == "false" and a not in cmd_dict:
                 continue
-            kwargs_switch, k, v = self._get_arg_value(kwargs_switch, a, cmd_dict[a])
+            kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
+                                                      a, cmd_dict[a])
             kwargs[k] = v
         return kwargs
 
