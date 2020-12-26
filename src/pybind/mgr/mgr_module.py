@@ -1,6 +1,6 @@
 import ceph_module  # noqa
 
-from typing import Set, Tuple, Iterator, Any, Dict, Optional, Callable, List, \
+from typing import Set, Tuple, Iterator, Any, Dict, Generic, Optional, Callable, List, \
     Union, TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import sys
@@ -8,7 +8,6 @@ if TYPE_CHECKING:
         from typing import Literal
     else:
         from typing_extensions import Literal
-
 
 import inspect
 import logging
@@ -19,8 +18,23 @@ import threading
 from collections import defaultdict, namedtuple
 import rados
 import re
+import sys
 import time
+from ceph_argparse import CephArgtype
 from mgr_util import profile_method
+
+if sys.version_info >= (3, 8):
+    from typing import get_args, get_origin
+else:
+    def get_args(tp):
+        if tp is Generic:
+            return tp
+        else:
+            return getattr(tp, '__args__', ())
+
+    def get_origin(tp):
+        return getattr(tp, '__origin__', None)
+
 
 ERROR_MSG_EMPTY_INPUT_FILE = 'Empty content: please add a password/secret to the file.'
 ERROR_MSG_NO_INPUT_FILE = 'Please specify the file containing the password/secret with "-i" option.'
@@ -294,6 +308,8 @@ class CLICommand(object):
         self.func = None  # type: Optional[Callable]
         self.args = args
         self.args_dict = self._parse_args(args)
+        self.arg_spec = {}    # type: Dict[str, Any]
+        self.first_default = -1
 
     @staticmethod
     def _parse_args(args):
@@ -315,8 +331,13 @@ class CLICommand(object):
         self.func = func
         if not self.desc:
             self.desc = inspect.getdoc(func)
+        if not self.args_dict:
+            self.arg_spec = inspect.getfullargspec(func).annotations
         self.COMMANDS[self.prefix] = self
         return self.func
+
+    def _is_arg_key(self, k):
+        return k in self.args_dict or k in self.arg_spec
 
     def _get_arg_value(self, kwargs_switch, key, val):
         def start_kwargs():
@@ -335,7 +356,7 @@ class CLICommand(object):
             k, v = key, val
         return kwargs_switch, k.replace('-', '_'), v
 
-    def _collect_args(self, cmd_dict):
+    def _collect_args_by_argdesc(self, cmd_dict):
         kwargs = {}
         kwargs_switch = False
         for a, d in self.args_dict.items():
@@ -346,8 +367,27 @@ class CLICommand(object):
             kwargs[k] = v
         return kwargs
 
+    def _collect_args_by_argspec(self, cmd_dict):
+        kwargs = {}
+        kwargs_switch = False
+        for index, (name, tp) in enumerate(self.arg_spec.items()):
+            if name in CLICommand.KNOWN_ARGS:
+                continue
+            assert self.first_default >= 0
+            raw_v = cmd_dict.get(name)
+            if index >= self.first_default:
+                if raw_v is None:
+                    continue
+            kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
+                                                      name, raw_v)
+            kwargs[k] = v
+        return kwargs
+
     def call(self, mgr, cmd_dict, inbuf):
-        kwargs = self._collect_args(cmd_dict)
+        if self.args_dict:
+            kwargs = self._collect_args_by_argdesc(cmd_dict)
+        else:
+            kwargs = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
             kwargs['inbuf'] = inbuf
         assert self.func
