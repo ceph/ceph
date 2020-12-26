@@ -4,7 +4,7 @@ Device health monitoring
 
 import errno
 import json
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, Option
 import operator
 import rados
 from threading import Event
@@ -26,62 +26,62 @@ MAX_SAMPLES=500
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {
-            'name': 'enable_monitoring',
-            'default': True,
-            'type': 'bool',
-            'desc': 'monitor device health metrics',
-            'runtime': True,
-        },
-        {
-            'name': 'scrape_frequency',
-            'default': 86400,
-            'type': 'secs',
-            'desc': 'how frequently to scrape device health metrics',
-            'runtime': True,
-        },
-        {
-            'name': 'pool_name',
-            'default': 'device_health_metrics',
-            'type': 'str',
-            'desc': 'name of pool in which to store device health metrics',
-            'runtime': True,
-        },
-        {
-            'name': 'retention_period',
-            'default': (86400 * 180),
-            'type': 'secs',
-            'desc': 'how long to retain device health metrics',
-            'runtime': True,
-        },
-        {
-            'name': 'mark_out_threshold',
-            'default': (86400 * 14 * 2),
-            'type': 'secs',
-            'desc': 'automatically mark OSD if it may fail before this long',
-            'runtime': True,
-        },
-        {
-            'name': 'warn_threshold',
-            'default': (86400 * 14 * 6),
-            'type': 'secs',
-            'desc': 'raise health warning if OSD may fail before this long',
-            'runtime': True,
-        },
-        {
-            'name': 'self_heal',
-            'default': True,
-            'type': 'bool',
-            'desc': 'preemptively heal cluster around devices that may fail',
-            'runtime': True,
-        },
-        {
-            'name': 'sleep_interval',
-            'default': 600,
-            'type': 'secs',
-            'desc': 'how frequently to wake up and check device health',
-            'runtime': True,
-        },
+        Option(
+            name='enable_monitoring',
+            default=True,
+            type='bool',
+            desc='monitor device health metrics',
+            runtime=True,
+        ),
+        Option(
+            name='scrape_frequency',
+            default=86400,
+            type='secs',
+            desc='how frequently to scrape device health metrics',
+            runtime=True,
+        ),
+        Option(
+            name='pool_name',
+            default='device_health_metrics',
+            type='str',
+            desc='name of pool in which to store device health metrics',
+            runtime=True,
+        ),
+        Option(
+            name='retention_period',
+            default=(86400 * 180),
+            type='secs',
+            desc='how long to retain device health metrics',
+            runtime=True,
+        ),
+        Option(
+            name='mark_out_threshold',
+            default=(86400 * 14 * 2),
+            type='secs',
+            desc='automatically mark OSD if it may fail before this long',
+            runtime=True,
+        ),
+        Option(
+            name='warn_threshold',
+            default=(86400 * 14 * 6),
+            type='secs',
+            desc='raise health warning if OSD may fail before this long',
+            runtime=True,
+        ),
+        Option(
+            name='self_heal',
+            default=True,
+            type='bool',
+            desc='preemptively heal cluster around devices that may fail',
+            runtime=True,
+        ),
+        Option(
+            name='sleep_interval',
+            default=600,
+            type='secs',
+            desc='how frequently to wake up and check device health',
+            runtime=True,
+        ),
     ]
 
     COMMANDS = [
