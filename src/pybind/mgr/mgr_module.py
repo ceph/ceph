@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 import logging
 import errno
+import functools
 import json
 import threading
 from collections import defaultdict, namedtuple
@@ -359,6 +360,7 @@ def CLIWriteCommand(prefix, args="", desc=""):
 
 
 def CLICheckNonemptyFileInput(func):
+    @functools.wraps(func)
     def check(*args, **kwargs):
         if not 'inbuf' in kwargs:
             return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
