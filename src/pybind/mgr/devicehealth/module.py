@@ -255,7 +255,7 @@ class Module(MgrModule):
                     next_scrape = now
                 else:
                     # align to scrape interval
-                    scrape_frequency = int(self.scrape_frequency) or 86400
+                    scrape_frequency = self.scrape_frequency or 86400
                     seconds = (last_scrape - datetime.utcfromtimestamp(0)).total_seconds()
                     seconds -= seconds % scrape_frequency
                     seconds += scrape_frequency
@@ -274,7 +274,7 @@ class Module(MgrModule):
                     self.set_store('last_scrape', last_scrape.strftime(TIME_FORMAT))
 
             # sleep
-            sleep_interval = int(self.sleep_interval) or 60
+            sleep_interval = self.sleep_interval or 60
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
@@ -384,7 +384,7 @@ class Module(MgrModule):
     def put_device_metrics(self, ioctx, devid, data):
         assert devid
         old_key = datetime.utcnow() - timedelta(
-            seconds=int(self.retention_period))
+            seconds=self.retention_period)
         prune = old_key.strftime(TIME_FORMAT)
         self.log.debug('put_device_metrics device %s prune %s' %
                        (devid, prune))
@@ -460,8 +460,8 @@ class Module(MgrModule):
         self.log.info('Check health')
         config = self.get('config')
         min_in_ratio = float(config.get('mon_osd_min_in_ratio'))
-        mark_out_threshold_td = timedelta(seconds=int(self.mark_out_threshold))
-        warn_threshold_td = timedelta(seconds=int(self.warn_threshold))
+        mark_out_threshold_td = timedelta(seconds=self.mark_out_threshold)
+        warn_threshold_td = timedelta(seconds=self.warn_threshold)
         checks = {}
         health_warnings = {
             DEVICE_HEALTH: [],
