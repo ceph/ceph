@@ -381,6 +381,18 @@ double div32()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  uint64_t numerator = 0xa5a5a5a555aa55aaUL;
+  uint32_t divisor = 0xaa55aa55U;
+  uint32_t result;
+  for (int i = 0; i < count; i++) {
+    asm volatile("udiv %0, %1, %2" : "=r"(result) :
+                  "r"(numerator), "r"(divisor));
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
 #else
   return -1;
 #endif
@@ -610,12 +622,20 @@ static inline void prefetch(const void *object, uint64_t num_bytes)
     for (uint64_t i = 0; i < offset + num_bytes; i += 64)
         _mm_prefetch(p + i, _MM_HINT_T0);
 }
+#elif defined(__aarch64__)
+static inline void prefetch(const void *object, uint64_t num_bytes)
+{
+    uint64_t offset = reinterpret_cast<uint64_t>(object) & 0x3fUL;
+    const char* ptr = reinterpret_cast<const char*>(object) - offset;
+    for (uint64_t i = 0; i < offset + num_bytes; i += 64, ptr += 64)
+        asm volatile("prfm pldl1keep, %a0\n" : : "p" (ptr));
+}
 #endif
 
 // Measure the cost of the prefetch instruction.
 double perf_prefetch()
 {
-#ifdef HAVE_SSE
+#if defined(HAVE_SSE) || defined(__aarch64__)
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
@@ -692,6 +712,14 @@ double lfence()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    asm volatile("dmb ishld" ::: "memory");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
 #else
   return -1;
 #endif
@@ -705,6 +733,14 @@ double sfence()
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     __asm__ __volatile__("sfence" ::: "memory");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    asm volatile("dmb ishst" ::: "memory");
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
