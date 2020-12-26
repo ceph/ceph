@@ -319,10 +319,15 @@ class CLICommand(object):
         return self.func
 
     def _get_arg_value(self, kwargs_switch, key, val):
-        if isinstance(val, str) and '=' in val:
-            k, v = val.split('=', 1)
-            if self._is_arg_key(k):
-                kwargs_switch = True
+        def start_kwargs():
+            if isinstance(val, str) and '=' in val:
+                k, v = val.split('=', 1)
+                if self._is_arg_key(k):
+                    return True
+            else:
+                return False
+        if not kwargs_switch:
+            kwargs_switch = start_kwargs()
 
         if kwargs_switch:
             k, v = val.split('=', 1)
