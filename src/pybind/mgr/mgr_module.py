@@ -328,7 +328,7 @@ class CLICommand(object):
             k, v = key, val
         return kwargs_switch, k.replace('-', '_'), v
 
-    def call(self, mgr, cmd_dict, inbuf):
+    def _collect_args(self, cmd_dict):
         kwargs = {}
         kwargs_switch = False
         for a, d in self.args_dict.items():
@@ -336,6 +336,10 @@ class CLICommand(object):
                 continue
             kwargs_switch, k, v = self._get_arg_value(kwargs_switch, a, cmd_dict[a])
             kwargs[k] = v
+        return kwargs
+
+    def call(self, mgr, cmd_dict, inbuf):
+        kwargs = self._collect_args(cmd_dict)
         if inbuf:
             kwargs['inbuf'] = inbuf
         assert self.func
