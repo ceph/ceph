@@ -316,27 +316,26 @@ class CLICommand(object):
         self.COMMANDS[self.prefix] = self
         return self.func
 
+    def _get_arg_value(self, kwargs_switch, key, val):
+        if isinstance(val, str) and '=' in val:
+            k, v = val.split('=', 1)
+            if self._is_arg_key(k):
+                kwargs_switch = True
+
+        if kwargs_switch:
+            k, v = val.split('=', 1)
+        else:
+            k, v = key, val
+        return kwargs_switch, k.replace('-', '_'), v
+
     def call(self, mgr, cmd_dict, inbuf):
         kwargs = {}
         kwargs_switch = False
         for a, d in self.args_dict.items():
             if 'req' in d and d['req'] == "false" and a not in cmd_dict:
                 continue
-
-            if isinstance(cmd_dict[a], str) and '=' in cmd_dict[a]:
-                k, arg = cmd_dict[a].split('=', 1)
-                if k in self.args_dict:
-                    kwargs_switch = True
-
-            if kwargs_switch:
-                try:
-                    k, arg = cmd_dict[a].split('=', 1)
-                except ValueError as e:
-                    mgr.log.error('found positional arg after switching to kwarg parsing')
-                    return -errno.EINVAL, '', 'Error EINVAL: postitional arg not allowed after kwarg'
-                kwargs[k.replace("-", "_")] = arg
-            else:
-                kwargs[a.replace("-", "_")] = cmd_dict[a]
+            kwargs_switch, k, v = self._get_arg_value(kwargs_switch, a, cmd_dict[a])
+            kwargs[k] = v
         if inbuf:
             kwargs['inbuf'] = inbuf
         assert self.func
