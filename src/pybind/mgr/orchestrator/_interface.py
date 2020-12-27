@@ -84,7 +84,7 @@ def set_exception_subject(kind, subject, overwrite=False):
         raise
 
 
-def handle_exception(prefix, cmd_args, desc, perm, func):
+def handle_exception(prefix, perm, func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
@@ -101,15 +101,16 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
     # misuse partial to copy `wrapper`
     wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)
     wrapper_copy._prefix = prefix  # type: ignore
-    wrapper_copy._cli_command = CLICommand(prefix, cmd_args, desc, perm)  # type: ignore
+    wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
+    wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
     wrapper_copy._cli_command.func = wrapper_copy  # type: ignore
 
     return wrapper_copy
 
 
 def _cli_command(perm):
-    def inner_cli_command(prefix, cmd_args="", desc=""):
-        return lambda func: handle_exception(prefix, cmd_args, desc, perm, func)
+    def inner_cli_command(prefix):
+        return lambda func: handle_exception(prefix, perm, func)
     return inner_cli_command
 
 
