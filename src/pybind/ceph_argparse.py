@@ -214,6 +214,36 @@ class CephArgtype(object):
         attrs['type'] = type(self).__name__
         return ','.join(f'{k}={v}' for k, v in attrs.items())
 
+    @staticmethod
+    def _cast_to_compound_type(tp, v):
+        orig_type = get_origin(tp)
+        type_args = get_args(tp)
+        if orig_type in (abc.Sequence, Sequence, List, list):
+            return [CephArgtype.cast_to(type_args[0], e) for e in v]
+        elif orig_type is Tuple:
+            return tuple(CephArgtype.cast_to(type_args[0], e) for e in v)
+        elif get_origin(tp) is Union:
+            # should be Union[t, NoneType]
+            assert len(type_args) == 2 and isinstance(None, type_args[1])
+            return CephArgtype.cast_to(type_args[0], v)
+        else:
+            raise ValueError(f"unknown type '{tp}': '{v}'")
+
+    @staticmethod
+    def cast_to(tp, v):
+        PYTHON_TYPES = (
+            str,
+            int,
+            float,
+            bool
+        )
+        if tp in PYTHON_TYPES:
+            return tp(v)
+        elif isinstance(tp, type) and issubclass(tp, enum.Enum):
+            return tp(v)
+        else:
+            return CephArgtype._cast_to_compound_type(tp, v)
+
 
 class CephInt(CephArgtype):
     """

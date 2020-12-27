@@ -369,7 +369,7 @@ class CLICommand(object):
                     continue
             kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
                                                       name, raw_v)
-            kwargs[k] = v
+            kwargs[k] = CephArgtype.cast_to(tp, v)
         return kwargs
 
     def call(self, mgr, cmd_dict, inbuf):
