@@ -300,59 +300,46 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 class CLICommand(object):
     COMMANDS = {}  # type: Dict[str, CLICommand]
 
-    def __init__(self, prefix, args="", desc="", perm="rw"):
+    def __init__(self, prefix, desc="", perm="rw"):
         self.prefix = prefix
-        self.args_dict = {}
         self.desc = desc
         self.perm = perm
         self.func = None  # type: Optional[Callable]
-        self.args = args
-        self.args_dict = self._parse_args(args)
         self.arg_spec = {}    # type: Dict[str, Any]
         self.first_default = -1
 
     KNOWN_ARGS = '_', 'self', 'mgr', 'inbuf', 'return'
 
-    @staticmethod
-    def _parse_args(args):
-        if not args:
-            return {}
-        args_dict = {}
-        for arg in args.split(" "):
-            arg_desc = arg.strip().split(",")
-            arg_d = {}
-            for kv in arg_desc:
-                k, v = kv.split("=")
-                if k != "name":
-                    arg_d[k] = v
-                else:
-                    args_dict[v] = arg_d
-        return args_dict
-
     def __call__(self, func):
         self.func = func
         if not self.desc:
             self.desc = inspect.getdoc(func)
-        if not self.args_dict:
-            full_argspec = inspect.getfullargspec(func)
-            self.arg_spec = full_argspec.annotations
-            for arg in full_argspec.args:
-                assert arg in CLICommand.KNOWN_ARGS or arg in self.arg_spec, \
-                    f"'{arg}' is not annotated for {func}: {full_argspec}"
-            self.args = ' '.join(CephArgtype.to_argdesc(tp, dict(name=name))
-                                 for name, tp in self.arg_spec)
+        full_argspec = inspect.getfullargspec(func)
+        self.arg_spec = full_argspec.annotations
+        self.first_default = len(self.arg_spec)
+        if full_argspec.defaults:
+            self.first_default -= len(full_argspec.defaults)
+        args = []
+        for index, arg in enumerate(full_argspec.args):
+            if arg in CLICommand.KNOWN_ARGS:
+                continue
+            assert arg in self.arg_spec, \
+                f"'{arg}' is not annotated for {f}: {full_argspec}"
+            has_default = index >= self.first_default
+            args.append(CephArgtype.to_argdesc(self.arg_spec[arg],
+                                               dict(name=arg),
+                                               has_default))
+        self.args = ' '.join(CephArgtype.to_argdesc(tp, dict(name=name))
+                             for name, tp in self.arg_spec)
 
         self.COMMANDS[self.prefix] = self
         return self.func
-
-    def _is_arg_key(self, k):
-        return k in self.args_dict or k in self.arg_spec
 
     def _get_arg_value(self, kwargs_switch, key, val):
         def start_kwargs():
             if isinstance(val, str) and '=' in val:
                 k, v = val.split('=', 1)
-                if self._is_arg_key(k):
+                if k in self.arg_spec:
                     return True
             else:
                 return False
@@ -364,17 +351,6 @@ class CLICommand(object):
         else:
             k, v = key, val
         return kwargs_switch, k.replace('-', '_'), v
-
-    def _collect_args_by_argdesc(self, cmd_dict):
-        kwargs = {}
-        kwargs_switch = False
-        for a, d in self.args_dict.items():
-            if 'req' in d and d['req'] == "false" and a not in cmd_dict:
-                continue
-            kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
-                                                      a, cmd_dict[a])
-            kwargs[k] = v
-        return kwargs
 
     def _collect_args_by_argspec(self, cmd_dict):
         kwargs = {}
@@ -393,10 +369,7 @@ class CLICommand(object):
         return kwargs
 
     def call(self, mgr, cmd_dict, inbuf):
-        if self.args_dict:
-            kwargs = self._collect_args_by_argdesc(cmd_dict)
-        else:
-            kwargs = self._collect_args_by_argspec(cmd_dict)
+        kwargs = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
             kwargs['inbuf'] = inbuf
         assert self.func
@@ -414,12 +387,12 @@ class CLICommand(object):
         return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
 
 
-def CLIReadCommand(prefix, args=""):
-    return CLICommand(prefix, args, "r")
+def CLIReadCommand(prefix):
+    return CLICommand(prefix, "r")
 
 
-def CLIWriteCommand(prefix, args=""):
-    return CLICommand(prefix, args, "w")
+def CLIWriteCommand(prefix):
+    return CLICommand(prefix, "w")
 
 
 def CLICheckNonemptyFileInput(func):
@@ -493,19 +466,21 @@ class Command(dict):
             self,
             prefix,
             handler,
-            args=None,
             perm="rw",
-            desc=None,
             poll=False,
     ):
-        super(Command, self).__init__(
-            cmd=prefix + (' ' + args if args else ''),
-            perm=perm,
-            poll=poll)
+        super().__init__(perm=perm,
+                         poll=poll)
         self.prefix = prefix
-        self.args = args
         self.handler = handler
-        self['desc'] = inspect.getdoc(self.handler)
+
+    @staticmethod
+    def returns_command_result(instance, f):
+        @functools.wraps(f)
+        def wrapper(mgr, *args, **kwargs):
+            retval, stdout, stderr = f(instance or mgr, *args, **kwargs)
+            return HandleCommandResult(retval, stdout, stderr)
+        return wrapper
 
     def register(self, instance=False):
         """
@@ -515,15 +490,8 @@ class Command(dict):
         It also uses HandleCommandResult helper to return a wrapped a tuple of 3
         items.
         """
-        return CLICommand(
-            prefix=self.prefix,
-            args=self.args,
-            desc=self['desc'],
-            perm=self['perm']
-        )(
-            func=lambda mgr, *args, **kwargs: HandleCommandResult(*self.handler(
-                *((instance or mgr,) + args), **kwargs))
-        )
+        cmd = CLICommand(prefix=self.prefix, perm=self['perm'])
+        return cmd(self.returns_command_result(instance, self.handler))
 
 
 class CPlusPlusHandler(logging.Handler):
