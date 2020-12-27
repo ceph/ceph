@@ -10,6 +10,7 @@ Copyright (C) 2013 Inktank Storage, Inc.
 LGPL-2.1 or LGPL-3.0.  See file COPYING.
 """
 import copy
+import enum
 import math
 import json
 import os
@@ -21,7 +22,20 @@ import sys
 import threading
 import uuid
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from collections import abc
+from typing import Any, Callable, Dict, Generic, List, Optional, Sequence, Tuple, Union
+
+if sys.version_info >= (3, 8):
+    from typing import get_args, get_origin
+else:
+    def get_args(tp):
+        if tp is Generic:
+            return tp
+        else:
+            return getattr(tp, '__args__', ())
+
+    def get_origin(tp):
+        return getattr(tp, '__origin__', None)
 
 
 # Flags are from MonCommand.h
@@ -147,8 +161,58 @@ class CephArgtype(object):
         """
         return '<{0}>'.format(self.__class__.__name__)
 
+    def __call__(self, v):
+        return v
+
     def complete(self, s):
         return []
+
+    @staticmethod
+    def _compound_type_to_argdesc(tp, attrs):
+        # generate argdesc from Sequence[T], Tuple[T,..] and Optional[T]
+        orig_type = get_origin(tp)
+        type_args = get_args(tp)
+        if orig_type in (abc.Sequence, Sequence, List, list):
+            assert len(type_args) == 1
+            attrs['n'] = 'N'
+            return CephArgtype.to_argdesc(type_args[0], attrs)
+        elif orig_type is Tuple:
+            assert len(type_args) >= 1
+            inner_tp = type_args[0]
+            assert type_args.count(inner_tp) == len(type_args), \
+                f'all elements in {tp} should be identical'
+            attrs['n'] = str(len(type_args))
+            return CephArgtype.to_argdesc(inner_tp, attrs)
+        elif get_origin(tp) is Union:
+            # should be Union[t, NoneType]
+            assert len(type_args) == 2 and isinstance(None, type_args[1])
+            return CephArgtype.to_argdesc(type_args[0], attrs, True)
+        else:
+            raise ValueError(f"unknown type '{tp}': '{attrs}'")
+
+    @staticmethod
+    def to_argdesc(tp, attrs, has_default=False):
+        if has_default:
+            attrs['req'] = 'false'
+        CEPH_ARG_TYPES = {
+            str: CephString,
+            int: CephInt,
+            float: CephFloat,
+            bool: CephBool
+        }
+        try:
+            return CEPH_ARG_TYPES[tp]().argdesc(attrs)
+        except KeyError:
+            if isinstance(tp, CephArgtype):
+                return tp.argdesc(attrs)
+            elif isinstance(tp, type) and issubclass(tp, enum.Enum):
+                return CephChoices(tp=tp).argdesc(attrs)
+            else:
+                return CephArgtype._compound_type_to_argdesc(tp, attrs)
+
+    def argdesc(self, attrs):
+        attrs['type'] = type(self).__name__
+        return ','.join(f'{k}={v}' for k, v in attrs.items())
 
 
 class CephInt(CephArgtype):
@@ -185,6 +249,11 @@ class CephInt(CephArgtype):
 
         return '<int{0}>'.format(r)
 
+    def argdesc(self, attrs):
+        if self.range:
+            attrs['range'] = '|'.join(self.range)
+        return super().argdesc(attrs)
+
 
 class CephFloat(CephArgtype):
     """
@@ -218,6 +287,11 @@ class CephFloat(CephArgtype):
         if len(self.range) == 2:
             r = '[{0}-{1}]'.format(self.range[0], self.range[1])
         return '<float{0}>'.format(r)
+
+    def argdesc(self, attrs):
+        if self.range:
+            attrs['range'] = '|'.join(self.range)
+        return super().argdesc(attrs)
 
 
 class CephString(CephArgtype):
@@ -254,6 +328,11 @@ class CephString(CephArgtype):
             return []
         else:
             return [s]
+
+    def argdesc(self, attrs):
+        if self.goodchars:
+            attrs['goodchars'] = self.goodchars
+        return super().argdesc(attrs)
 
 
 class CephSocketpath(CephArgtype):
@@ -476,8 +555,11 @@ class CephChoices(CephArgtype):
     """
     Set of string literals; init with valid choices
     """
-    def __init__(self, strings='', **kwargs):
+    def __init__(self, strings='', tp=None, **kwargs):
         self.strings = strings.split('|')
+        self.enum = tp
+        if self.enum is not None:
+            self.strings = list(e.value for e in self.enum)
 
     def valid(self, s, partial=False):
         if not partial:
@@ -500,9 +582,19 @@ class CephChoices(CephArgtype):
         else:
             return '{0}'.format('|'.join(self.strings))
 
+    def __call__(self, v):
+        if self.enum is None:
+            return v
+        else:
+            return self.enum[v]
+
     def complete(self, s):
         all_elems = [token for token in self.strings if token.startswith(s)]
         return all_elems
+
+    def argdesc(self, attrs):
+        attrs['strings'] = '|'.join(self.strings)
+        return super().argdesc(attrs)
 
 
 class CephBool(CephArgtype):
