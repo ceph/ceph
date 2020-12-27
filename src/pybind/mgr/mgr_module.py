@@ -300,9 +300,8 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 class CLICommand(object):
     COMMANDS = {}  # type: Dict[str, CLICommand]
 
-    def __init__(self, prefix, desc="", perm="rw"):
+    def __init__(self, prefix, perm="rw"):
         self.prefix = prefix
-        self.desc = desc
         self.perm = perm
         self.func = None  # type: Optional[Callable]
         self.arg_spec = {}    # type: Dict[str, Any]
@@ -310,28 +309,33 @@ class CLICommand(object):
 
     KNOWN_ARGS = '_', 'self', 'mgr', 'inbuf', 'return'
 
-    def __call__(self, func):
-        self.func = func
-        if not self.desc:
-            self.desc = inspect.getdoc(func)
-        full_argspec = inspect.getfullargspec(func)
-        self.arg_spec = full_argspec.annotations
-        self.first_default = len(self.arg_spec)
+    @staticmethod
+    def load_func_metadata(f):
+        desc = inspect.getdoc(f) or ''
+        full_argspec = inspect.getfullargspec(f)
+        arg_spec = full_argspec.annotations
+        first_default = len(arg_spec)
         if full_argspec.defaults:
-            self.first_default -= len(full_argspec.defaults)
+            first_default -= len(full_argspec.defaults)
         args = []
         for index, arg in enumerate(full_argspec.args):
             if arg in CLICommand.KNOWN_ARGS:
                 continue
-            assert arg in self.arg_spec, \
+            assert arg in arg_spec, \
                 f"'{arg}' is not annotated for {f}: {full_argspec}"
-            has_default = index >= self.first_default
-            args.append(CephArgtype.to_argdesc(self.arg_spec[arg],
+            has_default = index >= first_default
+            args.append(CephArgtype.to_argdesc(arg_spec[arg],
                                                dict(name=arg),
                                                has_default))
-        self.args = ' '.join(CephArgtype.to_argdesc(tp, dict(name=name))
-                             for name, tp in self.arg_spec)
+        return desc, arg_spec, first_default, ' '.join(args)
 
+    def store_func_metadata(self, f):
+        self.desc, self.arg_spec, self.first_default, self.args = \
+            self.load_func_metadata(f)
+
+    def __call__(self, func):
+        self.store_func_metadata(func)
+        self.func = func
         self.COMMANDS[self.prefix] = self
         return self.func
 
