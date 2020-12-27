@@ -9,6 +9,7 @@ import operator
 import rados
 from threading import Event
 from datetime import datetime, timedelta
+from typing import Optional
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
@@ -106,9 +107,8 @@ class Module(MgrModule):
         self.log.error("handle_command")
 
     @CLICommand('device query-daemon-health-metrics',
-                args='name=who,type=CephString',
                 perm='r')
-    def do_query_daemon_health_metrics(self, who=''):
+    def do_query_daemon_health_metrics(self, who: str):
         '''
         Get device health metrics for a given daemon
         '''
@@ -123,9 +123,8 @@ class Module(MgrModule):
         return result.wait()
 
     @CLICommand('device scrape-daemon-health-metrics',
-                args='name=who,type=CephString',
                 perm='r')
-    def do_scrape_daemon_health_metrics(self, who=''):
+    def do_scrape_daemon_health_metrics(self, who: str):
         '''
         Scrape and store device health metrics for a given daemon
         '''
@@ -135,9 +134,8 @@ class Module(MgrModule):
         return self.scrape_daemon(daemon_type, daemon_id)
 
     @CLICommand('device scrape-daemon-health-metrics',
-                args='name=devid,type=CephString,req=False',
                 perm='r')
-    def do_scrape_health_metrics(self, devid=None):
+    def do_scrape_health_metrics(self, devid: Optional[str] = None):
         '''
         Scrape and store device health metrics
         '''
@@ -147,10 +145,8 @@ class Module(MgrModule):
             return self.scrape_device(devid)
 
     @CLICommand('device get-health-metrics',
-                args=('name=devid,type=CephString ' +
-                      'name=sample,type=CephString,req=False'),
                 perm='r')
-    def do_get_health_metrics(self, devid, sample=None):
+    def do_get_health_metrics(self, devid: str, sample: Optional[str] = None):
         '''
         Show stored device metrics for the device
         '''
@@ -183,9 +179,8 @@ class Module(MgrModule):
         self.set_health_checks({})  # avoid stuck health alerts
 
     @CLICommand('device predict-life-expectancy',
-                args='name=devid,type=CephString,req=true',
                 perm='r')
-    def do_predict_life_expectancy(self, devid):
+    def do_predict_life_expectancy(self, devid: str):
         '''
         Predict life expectancy with local predictor
         '''
