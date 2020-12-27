@@ -8,7 +8,7 @@ from mgr_module import MgrModule, CommandResult, CLICommand, Option
 import operator
 import rados
 from threading import Event
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
@@ -21,7 +21,7 @@ HEALTH_MESSAGES = {
     DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 
-MAX_SAMPLES=500
+MAX_SAMPLES = 500
 
 
 class Module(MgrModule):
@@ -97,12 +97,10 @@ class Module(MgrModule):
         self.has_device_pool = False
 
     def is_valid_daemon_name(self, who):
-        l = who.split('.')
-        if len(l) != 2:
+        parts = who.split('.')
+        if len(parts) != 2:
             return False
-        if l[0] not in ('osd', 'mon'):
-            return False;
-        return True;
+        return parts[0] in ('osd', 'mon')
 
     def handle_command(self, _, cmd):
         self.log.error("handle_command")
@@ -217,8 +215,8 @@ class Module(MgrModule):
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def notify(self, notify_type, notify_id):
-       # create device_health_metrics pool if it doesn't exist
-       if notify_type == "osd_map" and self.enable_monitoring:
+        # create device_health_metrics pool if it doesn't exist
+        if notify_type == "osd_map" and self.enable_monitoring:
             if not self.has_device_pool:
                 self.create_device_pool()
                 self.has_device_pool = True
@@ -256,7 +254,7 @@ class Module(MgrModule):
         if ls:
             try:
                 last_scrape = datetime.strptime(ls, TIME_FORMAT)
-            except ValueError as e:
+            except ValueError:
                 pass
         self.log.debug('Last scrape %s', last_scrape)
 
@@ -406,7 +404,8 @@ class Module(MgrModule):
         erase = []
         try:
             with rados.ReadOpCtx() as op:
-                omap_iter, ret = ioctx.get_omap_keys(op, "", MAX_SAMPLES)  # fixme
+                # FIXME
+                omap_iter, ret = ioctx.get_omap_keys(op, "", MAX_SAMPLES)
                 assert ret == 0
                 ioctx.operate_read_op(op, devid)
                 for key, _ in list(omap_iter):
@@ -604,7 +603,8 @@ class Module(MgrModule):
         }), '')
         r, outb, outs = result.wait()
         if r != 0:
-            self.log.warning('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]' % (osd_ids, r, outb, outs))
+            self.log.warning('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]',
+                             osd_ids, r, outb, outs)
         for osd_id in osd_ids:
             result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
@@ -615,7 +615,9 @@ class Module(MgrModule):
             }), '')
             r, outb, outs = result.wait()
             if r != 0:
-                self.log.warning('Could not set osd.%s primary-affinity, r: [%s], outs: [%s]' % (osd_id, r, outb, outs))
+                self.log.warning('Could not set osd.%s primary-affinity, '
+                                 'r: [%s], outb: [%s], outs: [%s]',
+                                 osd_id, r, outb, outs)
 
     def extract_smart_features(self, raw):
         # FIXME: extract and normalize raw smartctl --json output and
