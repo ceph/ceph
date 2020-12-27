@@ -698,12 +698,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 p.evaluate()
 
     @orchestrator._cli_write_command(
-        prefix='cephadm set-ssh-config',
-        desc='Set the ssh_config file (use -i <ssh_config>)')
+        prefix='cephadm set-ssh-config')
     def _set_ssh_config(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
         """
-        Set an ssh_config file provided from stdin
+        Set the ssh_config file (use -i <ssh_config>)
         """
+        # Set an ssh_config file provided from stdin
+
         if inbuf == self.ssh_config:
             return 0, "value unchanged", ""
         self.validate_ssh_config_content(inbuf)
@@ -712,24 +713,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._reconfig_ssh()
         return 0, "", ""
 
-    @orchestrator._cli_write_command(
-        prefix='cephadm clear-ssh-config',
-        desc='Clear the ssh_config file')
+    @orchestrator._cli_write_command('cephadm clear-ssh-config')
     def _clear_ssh_config(self) -> Tuple[int, str, str]:
         """
-        Clear the ssh_config file provided from stdin
+        Clear the ssh_config file
         """
+        # Clear the ssh_config file provided from stdin
         self.set_store("ssh_config", None)
         self.ssh_config_tmp = None
         self.log.info('Cleared ssh_config')
         self._reconfig_ssh()
         return 0, "", ""
 
-    @orchestrator._cli_read_command(
-        prefix='cephadm get-ssh-config',
-        desc='Returns the ssh config as used by cephadm'
-    )
+    @orchestrator._cli_read_command('cephadm get-ssh-config')
     def _get_ssh_config(self) -> HandleCommandResult:
+        """
+        Returns the ssh config as used by cephadm
+        """
         if self.ssh_config_file:
             self.validate_ssh_config_fname(self.ssh_config_file)
             with open(self.ssh_config_file) as f:
@@ -739,10 +739,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return HandleCommandResult(stdout=ssh_config)
         return HandleCommandResult(stdout=DEFAULT_SSH_CONFIG)
 
-    @orchestrator._cli_write_command(
-        'cephadm generate-key',
-        desc='Generate a cluster SSH key (if not present)')
+    @orchestrator._cli_write_command('cephadm generate-key')
     def _generate_key(self) -> Tuple[int, str, str]:
+        """
+        Generate a cluster SSH key (if not present)
+        """
         if not self.ssh_pub or not self.ssh_key:
             self.log.info('Generating ssh key...')
             tmp_dir = TemporaryDirectory()
@@ -768,9 +769,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, '', ''
 
     @orchestrator._cli_write_command(
-        'cephadm set-priv-key',
-        desc='Set cluster SSH private key (use -i <private_key>)')
+        'cephadm set-priv-key')
     def _set_priv_key(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """Set cluster SSH private key (use -i <private_key>)"""
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty private ssh key provided"
         if inbuf == self.ssh_key:
@@ -781,9 +782,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, "", ""
 
     @orchestrator._cli_write_command(
-        'cephadm set-pub-key',
-        desc='Set cluster SSH public key (use -i <public_key>)')
+        'cephadm set-pub-key')
     def _set_pub_key(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """Set cluster SSH public key (use -i <public_key>)"""
         if inbuf is None or len(inbuf) == 0:
             return -errno.EINVAL, "", "empty public ssh key provided"
         if inbuf == self.ssh_pub:
@@ -794,9 +795,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, "", ""
 
     @orchestrator._cli_write_command(
-        'cephadm clear-key',
-        desc='Clear cluster SSH key')
+        'cephadm clear-key')
     def _clear_key(self) -> Tuple[int, str, str]:
+        """Clear cluster SSH key"""
         self.set_store('ssh_identity_key', None)
         self.set_store('ssh_identity_pub', None)
         self._reconfig_ssh()
@@ -804,25 +805,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, '', ''
 
     @orchestrator._cli_read_command(
-        'cephadm get-pub-key',
-        desc='Show SSH public key for connecting to cluster hosts')
+        'cephadm get-pub-key')
     def _get_pub_key(self) -> Tuple[int, str, str]:
+        """Show SSH public key for connecting to cluster hosts"""
         if self.ssh_pub:
             return 0, self.ssh_pub, ''
         else:
             return -errno.ENOENT, '', 'No cluster SSH key defined'
 
     @orchestrator._cli_read_command(
-        'cephadm get-user',
-        desc='Show user for SSHing to cluster hosts')
+        'cephadm get-user')
     def _get_user(self) -> Tuple[int, str, str]:
+        """
+        Show user for SSHing to cluster hosts
+        """
         return 0, self.ssh_user, ''
 
     @orchestrator._cli_read_command(
-        'cephadm set-user',
-        'name=user,type=CephString',
-        'Set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
+        'cephadm set-user')
     def set_ssh_user(self, user: str) -> Tuple[int, str, str]:
+        """
+        Set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users
+        """
         current_user = self.ssh_user
         if user == current_user:
             return 0, "value unchanged", ""
@@ -845,12 +849,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, msg, ''
 
     @orchestrator._cli_read_command(
-        'cephadm registry-login',
-        "name=url,type=CephString,req=false "
-        "name=username,type=CephString,req=false "
-        "name=password,type=CephString,req=false",
-        'Set custom registry login info by providing url, username and password or json file with login info (-i <file>)')
+        'cephadm registry-login')
     def registry_login(self, url: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Set custom registry login info by providing url, username and password or json file with login info (-i <file>)
+        """
         # if password not given in command line, get it through file input
         if not (url and username and password) and (inbuf is None or len(inbuf) == 0):
             return -errno.EINVAL, "", ("Invalid arguments. Please provide arguments <url> <username> <password> "
@@ -889,12 +892,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cache.distribute_new_registry_login_info()
         return 0, "registry login scheduled", ''
 
-    @orchestrator._cli_read_command(
-        'cephadm check-host',
-        'name=host,type=CephString '
-        'name=addr,type=CephString,req=false',
-        'Check whether we can access and manage a remote host')
+    @orchestrator._cli_read_command('cephadm check-host')
     def check_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
+        """Check whether we can access and manage a remote host"""
         try:
             out, err, code = CephadmServe(self)._run_cephadm(host, cephadmNoImage, 'check-host',
                                                              ['--expect-hostname', host],
@@ -915,11 +915,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, '%s (%s) ok' % (host, addr), '\n'.join(err)
 
     @orchestrator._cli_read_command(
-        'cephadm prepare-host',
-        'name=host,type=CephString '
-        'name=addr,type=CephString,req=false',
-        'Prepare a remote host for use with cephadm')
+        'cephadm prepare-host')
     def _prepare_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
+        """Prepare a remote host for use with cephadm"""
         out, err, code = CephadmServe(self)._run_cephadm(host, cephadmNoImage, 'prepare-host',
                                                          ['--expect-hostname', host],
                                                          addr=addr,
@@ -935,12 +933,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, '%s (%s) ok' % (host, addr), '\n'.join(err)
 
     @orchestrator._cli_write_command(
-        prefix='cephadm set-extra-ceph-conf',
-        desc="Text that is appended to all daemon's ceph.conf.\n"
-             "Mainly a workaround, till `config generate-minimal-conf` generates\n"
-             "a complete ceph.conf.\n\n"
-             "Warning: this is a dangerous operation.")
+        prefix='cephadm set-extra-ceph-conf')
     def _set_extra_ceph_conf(self, inbuf: Optional[str] = None) -> HandleCommandResult:
+        """
+        Text that is appended to all daemon's ceph.conf.
+        Mainly a workaround, till `config generate-minimal-conf` generates
+        a complete ceph.conf.
+             
+        Warning: this is a dangerous operation.
+        """
         if inbuf:
             # sanity check.
             cp = ConfigParser()
@@ -955,9 +956,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return HandleCommandResult()
 
     @orchestrator._cli_read_command(
-        'cephadm get-extra-ceph-conf',
-        desc='Get extra ceph conf that is appended')
+        'cephadm get-extra-ceph-conf')
     def _get_extra_ceph_conf(self) -> HandleCommandResult:
+        """
+        Get extra ceph conf that is appended
+        """
         return HandleCommandResult(stdout=self.extra_ceph_conf().conf)
 
     def _set_exporter_config(self, config: Dict[str, str]) -> None:
@@ -976,10 +979,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return self.get_store(kv_option)
 
     @orchestrator._cli_write_command(
-        prefix='cephadm generate-exporter-config',
-        desc='Generate default SSL crt/key and token for cephadm exporter daemons')
+        prefix='cephadm generate-exporter-config')
     @service_inactive('cephadm-exporter')
     def _generate_exporter_config(self) -> Tuple[int, str, str]:
+        """
+        Generate default SSL crt/key and token for cephadm exporter daemons
+        """
         self._set_exporter_defaults()
         self.log.info('Default settings created for cephadm exporter(s)')
         return 0, "", ""
@@ -1002,10 +1007,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return secrets.token_hex(32)
 
     @orchestrator._cli_write_command(
-        prefix='cephadm clear-exporter-config',
-        desc='Clear the SSL configuration used by cephadm exporter daemons')
+        prefix='cephadm clear-exporter-config')
     @service_inactive('cephadm-exporter')
     def _clear_exporter_config(self) -> Tuple[int, str, str]:
+        """
+        Clear the SSL configuration used by cephadm exporter daemons
+        """
         self._clear_exporter_config_settings()
         self.log.info('Cleared cephadm exporter configuration')
         return 0, "", ""
@@ -1015,11 +1022,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._set_exporter_option('enabled', None)
 
     @orchestrator._cli_write_command(
-        prefix='cephadm set-exporter-config',
-        desc='Set custom cephadm-exporter configuration from a json file (-i <file>). JSON must contain crt, key, token and port')
+        prefix='cephadm set-exporter-config')
     @service_inactive('cephadm-exporter')
     def _store_exporter_config(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
-
+        """
+        Set custom cephadm-exporter configuration from a json file (-i <file>). JSON must contain crt, key, token and port
+        """
         if not inbuf:
             return 1, "", "JSON configuration has not been provided (-i <filename>)"
 
@@ -1042,9 +1050,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, "", ""
 
     @orchestrator._cli_read_command(
-        'cephadm get-exporter-config',
-        desc='Show the current cephadm-exporter configuraion (JSON)')
+        'cephadm get-exporter-config')
     def _show_exporter_config(self) -> Tuple[int, str, str]:
+        """
+        Show the current cephadm-exporter configuraion (JSON)'
+        """
         cfg = self._get_exporter_config()
         return 0, json.dumps(cfg, indent=2), ""
 
