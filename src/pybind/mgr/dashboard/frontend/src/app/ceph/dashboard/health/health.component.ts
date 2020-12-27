@@ -94,7 +94,7 @@ export class HealthComponent implements OnInit, OnDestroy {
         this.healthData.client_perf.read_op_per_sec
       )} ${this.i18n(`/s`)}`
     );
-    ratioData.push(this.healthData.client_perf.read_op_per_sec);
+    ratioData.push(this.calcPercentage(this.healthData.client_perf.read_op_per_sec, total));
     ratioLabels.push(
       `${this.i18n(`Writes`)}: ${this.dimless.transform(
         this.healthData.client_perf.write_op_per_sec
