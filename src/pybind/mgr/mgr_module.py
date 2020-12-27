@@ -425,7 +425,7 @@ def CLIWriteCommand(prefix, args=""):
 def CLICheckNonemptyFileInput(func):
     @functools.wraps(func)
     def check(*args, **kwargs):
-        if not 'inbuf' in kwargs:
+        if 'inbuf' not in kwargs:
             return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
         if not kwargs['inbuf'] or (isinstance(kwargs['inbuf'], str)
                                    and not kwargs['inbuf'].strip('\n')):
