@@ -114,6 +114,11 @@ void QosImageDispatch<I>::apply_qos_limit(uint64_t flag, uint64_t limit,
 }
 
 template <typename I>
+void QosImageDispatch<I>::apply_qos_exclude_ops(uint64_t exclude_ops) {
+  m_qos_exclude_ops = exclude_ops;
+}
+
+template <typename I>
 bool QosImageDispatch<I>::read(
     AioCompletion* aio_comp, Extents &&image_extents, ReadResult &&read_result,
     IOContext io_context, int op_flags, int read_flags,
@@ -124,6 +129,10 @@ bool QosImageDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_READ) {
+    return false;
+  }
 
   if (needs_throttle(true, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
@@ -143,6 +152,10 @@ bool QosImageDispatch<I>::write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE) {
+    return false;
+  }
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
@@ -164,6 +177,10 @@ bool QosImageDispatch<I>::discard(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_DISCARD) {
+    return false;
+  }
+
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
     return true;
@@ -182,6 +199,10 @@ bool QosImageDispatch<I>::write_same(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE_SAME) {
+    return false;
+  }
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
@@ -202,6 +223,10 @@ bool QosImageDispatch<I>::compare_and_write(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
+
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_COMPARE_AND_WRITE) {
+    return false;
+  }
 
   if (needs_throttle(false, image_extents, tid, image_dispatch_flags,
                      dispatch_result, on_finish, on_dispatched)) {
