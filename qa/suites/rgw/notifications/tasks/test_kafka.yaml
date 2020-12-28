@@ -1,0 +1,9 @@
+tasks:
+- tox: [ client.0 ]
+- kafka:
+    client.0:
+- notification-tests:
+    client.0:
+      force-branch: wip-rgw-bucket-tests-separation-new
+      rgw_server: client.0
+      git_remote: https://github.com/TRYTOBE8TME/
