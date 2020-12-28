@@ -326,6 +326,14 @@ int radosgw_Main(int argc, const char **argv)
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
 #endif
+  lsubdout(cct, rgw_datacache, 2) << "rgw_d3n: rgw_d3n_l1_local_datacache_enabled=" << cct->_conf->rgw_d3n_l1_local_datacache_enabled << dendl;
+  lsubdout(cct, rgw_datacache, 2) << "rgw_d3n: rgw_d3n_l1_datacache_persistent_path='" << cct->_conf->rgw_d3n_l1_datacache_persistent_path << "'" << dendl;
+  lsubdout(cct, rgw_datacache, 2) << "rgw_d3n: rgw_d3n_l1_datacache_size=" << cct->_conf->rgw_d3n_l1_datacache_size << dendl;
+  lsubdout(cct, rgw_datacache, 2) << "rgw_d3n: rgw_enable_ops_log=" << cct->_conf->rgw_enable_ops_log << dendl;
+  lsubdout(cct, rgw_datacache, 5) << "rgw_d3n: rgw_d3n_l1_evict_cache_on_start=" << cct->_conf->rgw_d3n_l1_evict_cache_on_start << dendl;
+  lsubdout(cct, rgw_datacache, 5) << "rgw_d3n: rgw_d3n_l1_libaio_read=" << cct->_conf->rgw_d3n_l1_libaio_read << dendl;
+  lsubdout(cct, rgw_datacache, 5) << "rgw_d3n: rgw_d3n_l1_fadvise=" << cct->_conf->rgw_d3n_l1_fadvise << dendl;
+  lsubdout(cct, rgw_datacache, 5) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" << cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
   bool rgw_d3n_datacache_enabled = g_conf()->rgw_d3n_l1_local_datacache_enabled || g_conf()->rgw_d3n_l2_distributed_datacache_enabled;
   rgw::sal::RGWRadosStore *store =
     RGWStoreManager::get_storage(g_ceph_context,

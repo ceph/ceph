@@ -768,10 +768,6 @@ if(WITH_LIBCEPHFS)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
-  if(WITH_BOOST_CONTEXT)
-    target_include_directories(cephfs PRIVATE
-      $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
-  endif()
   if(ENABLE_SHARED)
     set_target_properties(cephfs PROPERTIES
       OUTPUT_NAME cephfs

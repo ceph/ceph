@@ -32,7 +32,6 @@
 
 #include "services/svc_zone.h"
 
-#include <curl/curl.h>
 #include <sstream>
 
 #define dout_context g_ceph_context

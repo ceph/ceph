@@ -5,10 +5,7 @@
 #define CEPH_RGWRADOS_H
 
 #include <functional>
-#include <fcntl.h>
 #include <boost/container/flat_map.hpp>
-#include <aio.h>
-#include <list>
 
 
 #include "include/rados/librados.hpp"
@@ -447,8 +444,6 @@ class RGWRados
   bool quota_threads;
   bool run_sync_thread;
   bool run_reshard_thread;
-
-  get_obj_data* d;
 
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
@@ -1571,18 +1566,6 @@ public:
    */
   static uint32_t calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 						     uint32_t num_shards);
-};
-
-
-struct get_obj_aio_data {
-  struct get_obj_data* op_data;
-  off_t ofs;
-  off_t len;
-};
-
-struct get_obj_io {
-  off_t len;
-  bufferlist bl;
 };
 
 

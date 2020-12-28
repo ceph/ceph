@@ -7051,16 +7051,21 @@ std::vector<Option> get_rgw_options() {
     .set_description("Datacache size in bytes"),
 
     Option("rgw_d3n_l1_evict_cache_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
+    .set_default(false)
     .set_description("clear the content of the persistent data cache directory on start"),
 
     Option("rgw_d3n_l1_libaio_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description("Specified usage of libaio asynchronous IO or posix synchronous IO for reading from cache"),
 
     Option("rgw_d3n_l1_fadvise", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(POSIX_FADV_DONTNEED)
     .set_description("posix_fadvise() flag fir access pattern of cache files"),
+
+    Option("rgw_d3n_l1_eviction_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_enum_allowed({"lru", "random"})
+    .set_default("lru")
+    .set_description("select the d3n cache eviction policy"),
 
     Option("rgw_d3n_l2_distributed_datacache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)

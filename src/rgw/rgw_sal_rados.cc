@@ -1278,6 +1278,7 @@ rgw::sal::RGWRadosStore *RGWStoreManager::init_storage_provider(CephContext *cct
   RGWRados *rados{nullptr};
   use_datacache = cct->_conf->rgw_d3n_l1_local_datacache_enabled;
   if (use_datacache) {
+    lsubdout(g_ceph_context, rgw_datacache, 5) << "D3nDataCache: " << __func__ << "(): rgw_d3n_l1_local_datacache_enabled" << dendl;
     rados = new D3nRGWDataCache<RGWRados>;
   } else {
     rados = new RGWRados;

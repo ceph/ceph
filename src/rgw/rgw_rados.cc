@@ -20,7 +20,6 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/Throttle.h"
-//#include "common/split.h"
 
 #include "rgw_sal.h"
 #include "rgw_zone.h"
@@ -3470,7 +3469,7 @@ public:
     data_len += size;
 
     if (client_cb && (g_conf()->rgw_d3n_l1_local_datacache_enabled || g_conf()->rgw_d3n_l2_distributed_datacache_enabled)) {
-      // d3n L2 cache client cb
+      lsubdout(g_ceph_context, rgw_datacache, 10) << "D3nDataCache: " << __func__ << "(): d3n L2 cache client cb" << dendl;
       bufferlist bl_temp;
       bl_temp.append(bl);
       client_cb->handle_data(bl_temp, 0, size);
@@ -6396,17 +6395,6 @@ struct get_obj_data {
 };
 */
 
-std::vector<string> split(const string &s, const char * delim)
-{
-  stringstream ss(s);
-  string item;
-  std::vector<string> tokens;
-  while (getline(ss, item, (*delim))) {
-    tokens.push_back(item);
-  }
-  return tokens;
-}
-
 bool get_obj_data::d3n_deterministic_hash_is_local(string oid) {
   if( g_conf()->rgw_d3n_l2_distributed_datacache_enabled == false ) {
     return true;
@@ -6420,15 +6408,28 @@ std::string get_obj_data::d3n_deterministic_hash(std::string oid)
   std::string location = g_conf()->rgw_d3n_l2_datacache_hosts;
   string delimiters(",");
 
-  std::vector<std::string> tokens = split(location, ",");
+  std::vector<std::string> tokens;
+  boost::split(tokens, location, boost::is_any_of(",")); 
   int mod = tokens.size();
 
   std::string::size_type sz;   // alias of size_t
-  std::vector<string> sv = split(oid, "_");
+  std::vector<std::string> sv;
+  boost::split(sv, oid, boost::is_any_of("_"));
   /* Make sure the input string to stoi starts with a number */
   std::string key = sv[sv.size() - 1];
   std::string key_length = to_string(key.size());
-  int hash = std::stoi(key_length + key, &sz);
+  int hash = 0;
+  try { 
+    hash = std::stoi(key_length + key, &sz); 
+  }
+  catch(std::invalid_argument& e) {
+    dout(0) << "ERROR: d3n_deterministic_hash(): stoi() catch invalid_argumen" << dendl;
+    return 0; 
+  }
+  catch(std::out_of_range& e) {
+    dout(0) << "ERROR: d3n_deterministic_hash(): stoi() catch out_of_range" << dendl;
+    return 0; 
+  }
   return tokens[hash%mod];
 }
 
@@ -6459,7 +6460,7 @@ static int _get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
 
 int RGWRados::flush_read_list(struct get_obj_data* d)
 {
-
+  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
   d->d3n_datacache_lock.lock();
   list<bufferlist> l;
   l.swap(d->d3n_read_list);
@@ -6491,8 +6492,6 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   struct get_obj_data* d = static_cast<struct get_obj_data*>(arg);
   string oid, key;
 
-  int r;
-
   if (is_head_obj) {
     /* only when reading from the head object do we need to do the atomic test */
     int r = append_atomic_test(astate, op);
@@ -6517,7 +6516,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   }
 
   auto obj = d->store->svc.rados->obj(read_obj);
-  r = obj.open();
+  int r = obj.open();
   if (r < 0) {
     ldout(cct, 4) << "failed to open rados context for " << read_obj << dendl;
     return r;
@@ -6532,7 +6531,6 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
 
   return d->flush(std::move(completed));
-
 }
 
 int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
@@ -6557,6 +6555,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
 
   r = data.drain();
   if( cct->_conf->rgw_d3n_l1_local_datacache_enabled ) {
+    lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "(): rgw_d3n_l1_local_datacache_enabled" << dendl;
     r = store->flush_read_list(&data);
     if (r < 0)
       return r;

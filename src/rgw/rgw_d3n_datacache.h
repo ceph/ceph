@@ -55,14 +55,13 @@ struct D3nCacheAioWriteRequest{
 	D3nCacheAioWriteRequest(CephContext *_cct) : cct(_cct) {}
 	int create_io(bufferlist& bl, unsigned int len, string oid, string cache_location);
 
-	void release() {
-		::close(fd);
+  ~D3nCacheAioWriteRequest() {
+    ::close(fd);
 		cb->aio_buf = nullptr;
 		free(data);
 		data = nullptr;
 		free(cb);
-		free(this);
-	}
+  }
 };
 
 struct D3nDataCache {
@@ -71,9 +70,7 @@ private:
   std::map<string, D3nChunkDataInfo*> cache_map;
   std::list<string> outstanding_write_list;
   int index;
-  std::mutex lock;
   std::mutex cache_lock;
-  std::mutex req_lock;
   std::mutex eviction_lock;
   std::string cache_location;
 
@@ -83,6 +80,9 @@ private:
     ASYNC_IO = 2,
     SEND_FILE = 3
   } io_type;
+  enum _eviction_policy { 
+    LRU=0, RANDOM=1 
+  } eviction_policy;
 
   struct sigaction action;
   uint64_t free_data_cache_size = 0;
@@ -125,23 +125,31 @@ public:
       if (efs::exists(cache_location)) {
         // evict the cache storage directory
         if (g_conf()->rgw_d3n_l1_evict_cache_on_start) {
-          lsubdout(g_ceph_context, rgw, 20) << "D3nDataCache init: evicting the persistent storage directory on start" << dendl;
+          lsubdout(g_ceph_context, rgw, 5) << "D3nDataCache: init: evicting the persistent storage directory on start" << dendl;
           for (auto& p : efs::directory_iterator(cache_location)) {
             efs::remove_all(p.path());
           }
         }
       } else {
         // create the cache storage directory
-        lsubdout(g_ceph_context, rgw, 20) << "D3nDataCache init: creating the persistent storage directory on start" << dendl;
+        lsubdout(g_ceph_context, rgw, 5) << "D3nDataCache: init: creating the persistent storage directory on start" << dendl;
         efs::create_directories(cache_location);
       }
     } catch (const efs::filesystem_error& e) {
-      lderr(g_ceph_context) << "Error initialize the cache storage directory '" << cache_location <<
+      lderr(g_ceph_context) << "D3nDataCache: init: ERROR initializing the cache storage directory '" << cache_location <<
                                "' : " << e.what() << dendl;
     }
+
+    auto conf_eviction_policy = cct->_conf.get_val<std::string>("rgw_d3n_l1_eviction_policy");
+    ceph_assert(conf_eviction_policy == "lru" || conf_eviction_policy == "random");
+    if (conf_eviction_policy == "lru")
+      eviction_policy = LRU;
+    if (conf_eviction_policy == "random")
+      eviction_policy = RANDOM;
   }
 
   void lru_insert_head(struct D3nChunkDataInfo* o) {
+    lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "()" << dendl;
     o->lru_next = head;
     o->lru_prev = nullptr;
     if (head) {
@@ -152,6 +160,7 @@ public:
     head = o;
   }
   void lru_insert_tail(struct D3nChunkDataInfo* o) {
+    lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "()" << dendl;
     o->lru_next = nullptr;
     o->lru_prev = tail;
     if (tail) {
@@ -163,6 +172,7 @@ public:
   }
 
   void lru_remove(struct D3nChunkDataInfo* o) {
+    lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "()" << dendl;
     if (o->lru_next)
       o->lru_next->lru_prev = o->lru_prev;
     else
@@ -204,7 +214,7 @@ public:
 
 template<typename T>
 int D3nRGWDataCache<T>::flush_read_list(struct get_obj_data* d) {
-
+  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
   d->d3n_datacache_lock.lock();
   std::list<bufferlist> l;
   l.swap(d->d3n_read_list);
@@ -219,12 +229,16 @@ int D3nRGWDataCache<T>::flush_read_list(struct get_obj_data* d) {
     bufferlist& bl = *iter;
     oid = d->d3n_get_pending_oid();
     if(oid.empty()) {
-      lsubdout(g_ceph_context, rgw, 0) << "ERROR: flush_read_list(): d3n_get_pending_oid() returned empty oid" << dendl;
+      lsubdout(g_ceph_context, rgw, 0) << "ERROR: D3nDataCache: flush_read_list(): d3n_get_pending_oid() returned empty oid" << dendl;
       r = -ENOENT;
       break;
     }
-    if (bl.length() <= 0x400000)
+    if (bl.length() <= g_conf()->rgw_get_obj_max_req_size) {
+      lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): bl.len<=rgw_get_obj_max_req_size (default 4MB), bl.length()=" << bl.length() << dendl;
       d3n_data_cache.put(bl, bl.length(), oid);
+    } else {
+      lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): bl.length()=" << bl.length() << dendl;
+    }
   }
 
   return r;
@@ -262,51 +276,56 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t ob
         return 0;
     }
   }
+  if (!is_head_obj) {
+    lsubdout(g_ceph_context, rgw, 20) << "D3nDataCache::get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+    op.read(read_ofs, len, nullptr, nullptr);
 
-  lsubdout(g_ceph_context, rgw, 20) << "D3nRGWDataCache::get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
-  op.read(read_ofs, len, nullptr, nullptr);
+    const uint64_t cost = len;
+    const uint64_t id = obj_ofs; // use logical object offset for sorting replies
+    oid = read_obj.oid;
 
-  const uint64_t cost = len;
-  const uint64_t id = obj_ofs; // use logical object offset for sorting replies
-  oid = read_obj.oid;
+    d->d3n_add_pending_oid(oid);
 
-  d->d3n_add_pending_oid(oid);
-
-  if (d3n_data_cache.get(read_obj.oid)) {
-    auto obj = d->store->svc.rados->obj(read_obj);
-    r = obj.open();
-    if (r < 0) {
-      lsubdout(g_ceph_context, rgw, 0) << "Error: d3n failed to open rados context for " << read_obj << ", r=" << dendl;
+    if (d3n_data_cache.get(read_obj.oid)) {
+      // Read From Cache
+      lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): Read From Cache starting, oid=" << read_obj.oid << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << ", len=" << len << dendl;
+      auto obj = d->store->svc.rados->obj(read_obj);
+      r = obj.open();
+      if (r < 0) {
+        lsubdout(g_ceph_context, rgw, 0) << "D3nDataCache: Error: failed to open rados context for " << read_obj << ", r=" << r << dendl;
+        return r;
+      }
+      auto completed = d->aio->get(obj, rgw::Aio::cache_op(std::move(op), d->yield, obj_ofs, read_ofs, len, g_conf()->rgw_d3n_l1_datacache_persistent_path), cost, id);
+      if (g_conf()->rgw_d3n_l1_libaio_read) {
+        r = d->drain();
+      } else {
+        r = d->flush(std::move(completed));
+      }
+      if (r < 0) {
+        lsubdout(g_ceph_context, rgw, 0) << "D3nDataCache: Error: failed to drain/flush, r= " << r << dendl;
+      }
       return r;
-    }
-    auto completed = d->aio->get(obj, rgw::Aio::cache_op(std::move(op), d->yield, obj_ofs, read_ofs, len, g_conf()->rgw_d3n_l1_datacache_persistent_path), cost, id);
-    if (g_conf()->rgw_d3n_l1_libaio_read) {
-      r = d->drain();
     } else {
-      r = d->flush(std::move(completed));
+      // Write To Cache
+      lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): Write To Cache, oid=" << read_obj.oid << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << ", len=" << len << dendl;
+      auto obj = d->store->svc.rados->obj(read_obj);
+      r = obj.open();
+      if (r < 0) {
+        lsubdout(g_ceph_context, rgw, 0) << "D3nDataCache: Error: failed to open rados context for " << read_obj << ", r=" << r << dendl;
+        return r;
+      }
+      auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
+      return d->flush(std::move(completed));
     }
-    if (r < 0) {
-      lsubdout(g_ceph_context, rgw, 0) << "Error: d3n failed to drain/flush, r= " << r << dendl;
-    }
-    return r;
-  } else {
-    lsubdout(g_ceph_context, rgw, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
-    auto obj = d->store->svc.rados->obj(read_obj);
-    r = obj.open();
-    if (r < 0) {
-      lsubdout(g_ceph_context, rgw, 0) << "Error: d3n failed to open rados context for " << read_obj << ", r=" << dendl;
-      return r;
-    }
-    auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
-    return d->flush(std::move(completed));
   }
+  lsubdout(g_ceph_context, rgw, 1) << "D3nDataCache: Check: head object cache handling flow, oid=" << read_obj.oid << dendl;
 
   /*
     // TODO: complete L2 cache support refactoring
     D3nL2CacheRequest* cc;
     d->add_l2_request(&cc, pbl, read_obj.oid, obj_ofs, read_ofs, len, key, c);
     r = io_ctx.cache_aio_notifier(read_obj.oid, static_cast<D3nCacheRequest*>(cc));
-    data_cache.push_l2_request(cc);
+    d3n_data_cache.push_l2_request(cc);
   }
 
   // Flush data to client if there is any
