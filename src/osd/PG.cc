@@ -360,7 +360,7 @@ void PG::clear_primary_state()
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();
 
-  m_scrubber->unreserve_replicas();
+  m_scrubber->discard_replica_reservations();
   scrub_after_recovery = false;
 
   agent_clear();
@@ -2066,31 +2066,19 @@ void PG::replica_scrub(OpRequestRef op, ThreadPool::TPHandle& handle)
 void PG::scrub(epoch_t epoch_queued, ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
-
-  scrub_queued = false;
-  ceph_assert(is_primary());
-  ceph_assert(!m_scrubber->is_scrub_active());
-
   // a new scrub
-
-  m_scrubber->reset_epoch(epoch_queued);
-
-  // note: send_start_scrub() will verify 'epoch queued' against our current interval
-  m_scrubber->send_start_scrub(epoch_queued);
+  scrub_queued = false;
+  m_scrubber->initiate_regular_scrub(epoch_queued);
 }
 
 // note: no need to secure OSD resources for a recovery scrub
-void PG::recovery_scrub(epoch_t epoch_queued, ThreadPool::TPHandle& handle)
+void PG::recovery_scrub(epoch_t epoch_queued,
+                        [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
-
-  scrub_queued = false;
-  ceph_assert(is_primary());
-  ceph_assert(!m_scrubber->is_scrub_active());
-
   // a new scrub
-  m_scrubber->reset_epoch(epoch_queued);
-  m_scrubber->send_start_after_repair(epoch_queued);
+  scrub_queued = false;
+  m_scrubber->initiate_scrub_after_repair(epoch_queued);
 }
 
 void PG::replica_scrub(epoch_t epoch_queued,

@@ -12552,8 +12552,6 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   requeue_ops(waiting_for_active);
   requeue_ops(waiting_for_readable);
 
-  m_scrubber->clear_scrub_reservations();
-
   vector<ceph_tid_t> tids;
   cancel_copy_ops(is_primary(), &tids);
   cancel_flush_ops(is_primary(), &tids);

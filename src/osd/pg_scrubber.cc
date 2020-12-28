@@ -72,75 +72,14 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
   return out;
 }
 
-// returns false if the message should be discarded. Handles the notification of interval
-// change, if not done already. called only for active scrub? not sure.
-
-// let's first make this a Primary-only function
+/*
+ * if the incoming message is from a previous interval, it must mean
+ * PrimaryLogPG::on_change() was called when that interval ended. We can safely discard
+ * the stale message.
+ */
 bool PgScrubber::check_interval(epoch_t epoch_to_verify)
 {
-  const auto current_interval = m_pg->get_same_interval_since();
-
-  if (epoch_to_verify < current_interval) {
-    // the event will not be delivered. If we have already noticed and handled
-    // the change of seasons, it will be silently discarded. Otherwise - we
-    // reset the scrubber and its FSM.
-    dout(10) << __func__ << " stale message. epoch: " << epoch_to_verify << " vs. "
-	     << current_interval << " (handled: " << m_last_dead_interval << ")" << dendl;
-
-    if (epoch_to_verify > m_last_dead_interval) {
-
-      // we have not seen this interval change yet.
-      // The remote reservations are no longer relevant.
-
-      m_last_dead_interval = current_interval;
-
-      // clear the remote reservations. No need to send messages.
-      if (m_reservations) {
-	m_reservations->discard_all();
-      }
-
-      // stop the scrub and send a reset message to the FSM
-      scrub_clear_state();
-    }
-    return false;
-  }
-
-  return true;
-}
-
-bool PgScrubber::check_interval_replica(epoch_t epoch_to_verify)
-{
-  const auto current_interval = m_pg->get_same_interval_since();
-
-  if (epoch_to_verify < current_interval) {
-    // the event will not be delivered. If we have already noticed and handled
-    // the change of seasons, it will be silently discarded. Otherwise - we
-    // reset the scrubber and its FSM.
-    dout(10) << __func__ << " stale message. epoch: " << epoch_to_verify << " vs. "
-	     << current_interval << " (handled: " << m_last_dead_interval << ")" << dendl;
-
-    if (epoch_to_verify > m_last_dead_interval) {
-
-      // we have not seen this interval change yet.
-      // The remote reservations are no longer relevant.
-
-      m_last_dead_interval = current_interval;
-
-      // clear the remote reservations. No need to send messages
-      m_remote_osd_resource.reset();
-
-      // stop the scrub and send a reset message to the FSM
-      // replica_handling_done();
-      send_interval_changed();
-    }
-    return false;
-  }
-
-  // verify that we are reserved by the primary
-  // not true anymore (see rapair scrubs) ceph_assert(m_remote_osd_resource &&
-  // m_remote_osd_resource->is_reserved());
-
-  return true;
+  return epoch_to_verify >= m_pg->get_same_interval_since();
 }
 
 bool PgScrubber::is_message_relevant(epoch_t epoch_to_verify)
@@ -156,12 +95,10 @@ bool PgScrubber::is_message_relevant(epoch_t epoch_to_verify)
     return false;
   }
 
-  // check for reasons to abort this scrub
-
   // has a new interval started?
   if (!check_interval(epoch_to_verify)) {
-    // if this is a new interval, check_interval() just discarded
-    // remote resources and then killed the scrub
+    // if this is a new interval, on_change() has already terminated that
+    // old scrub.
     return false;
   }
 
@@ -171,9 +108,6 @@ bool PgScrubber::is_message_relevant(epoch_t epoch_to_verify)
   return verify_against_abort(epoch_to_verify);
 }
 
-
-// false if the message was discarded because of an abort flag.
-// Reset everything if the abort was not handled before.
 bool PgScrubber::verify_against_abort(epoch_t epoch_to_verify)
 {
   if (!should_abort()) {
@@ -214,7 +148,7 @@ bool PgScrubber::should_abort() const
   return false;
 }
 
-//   sending (processing) state-machine events --------------------------------
+//   initiating state-machine events --------------------------------
 
 /*
  * a note re the checks performed before sending scrub-initiating messages:
@@ -226,7 +160,7 @@ bool PgScrubber::should_abort() const
  * The check_interval() catches all major changes to the PG. As for the other conditions
  * we may check (and see is_message_relevant() above):
  *
- * - we are not 'active' yet, so must check against is_active(), andL
+ * - we are not 'active' yet, so must not check against is_active(), and:
  *
  * - the 'abort' flags were just verified (when the triggering message was queued). As
  *   those are only modified in human speeds - they need not be queried again.
@@ -235,25 +169,30 @@ bool PgScrubber::should_abort() const
  * ('StartReplica' & 'StartReplicaNoWait').
  */
 
-
-void PgScrubber::send_start_scrub(epoch_t epoch_queued)
+void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
 {
-  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+  dout(15) << __func__ << " epoch: " << epoch_queued << dendl;
+  // we may have lost our Primary status while the message languished in the queue
   if (check_interval(epoch_queued)) {
+    dout(10) << "scrubber event -->> StartScrub epoch: " << epoch_queued << dendl;
+    reset_epoch(epoch_queued);
     m_fsm->my_states();
     m_fsm->process_event(StartScrub{});
+    dout(10) << "scrubber event --<< StartScrub" << dendl;
   }
-  dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
-void PgScrubber::send_start_after_repair(epoch_t epoch_queued)
+void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
 {
-  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
+  dout(15) << __func__ << " epoch: " << epoch_queued << dendl;
+  // we may have lost our Primary status while the message languished in the queue
   if (check_interval(epoch_queued)) {
+    dout(10) << "scrubber event -->> AfterRepairScrub epoch: " << epoch_queued << dendl;
+    reset_epoch(epoch_queued);
     m_fsm->my_states();
     m_fsm->process_event(AfterRepairScrub{});
+    dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
   }
-  dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
 void PgScrubber::send_scrub_unblock(epoch_t epoch_queued)
@@ -273,6 +212,7 @@ void PgScrubber::send_scrub_resched(epoch_t epoch_queued)
     m_fsm->my_states();
     m_fsm->process_event(InternalSchedScrub{});
   }
+  dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
 void PgScrubber::send_start_replica(epoch_t epoch_queued)
@@ -283,9 +223,9 @@ void PgScrubber::send_start_replica(epoch_t epoch_queued)
     dout(1) << "got a replica scrub request while Primary!" << dendl;
     return;
   }
-  if (check_interval_replica(epoch_queued)) {
+  if (check_interval(epoch_queued)) {
     m_fsm->my_states();
-    // buy us some time by not waiting for updates if there are none
+    // save us some time by not waiting for updates if there are none
     // to wait for. Affects the transition from NotActive into either
     // ReplicaWaitUpdates or ActiveReplica.
     if (pending_active_pushes())
@@ -299,7 +239,7 @@ void PgScrubber::send_start_replica(epoch_t epoch_queued)
 void PgScrubber::send_sched_replica(epoch_t epoch_queued)
 {
   dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
-  if (check_interval_replica(epoch_queued)) {
+  if (check_interval(epoch_queued)) {
     m_fsm->my_states();
     m_fsm->process_event(SchedReplica{});  // retest for map availability
   }
@@ -339,15 +279,6 @@ void PgScrubber::digest_update_notification(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
-// no checks should be performed here
-void PgScrubber::send_interval_changed()
-{
-  dout(10) << "scrubber event -->> " << __func__ << dendl;
-  m_fsm->my_states();
-  m_fsm->process_event(IntervalChanged{});
-  dout(10) << "scrubber event --<< " << __func__ << dendl;
-}
-
 void PgScrubber::send_replica_maps_ready(epoch_t epoch_queued)
 {
   dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
@@ -361,7 +292,7 @@ void PgScrubber::send_replica_maps_ready(epoch_t epoch_queued)
 void PgScrubber::send_replica_pushes_upd(epoch_t epoch_queued)
 {
   dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued << dendl;
-  if (check_interval_replica(epoch_queued)) {
+  if (check_interval(epoch_queued)) {
     m_fsm->my_states();
     m_fsm->process_event(ReplicaPushesUpd{});
   }
@@ -852,7 +783,6 @@ void PgScrubber::on_init()
   preemption_data.reset();
   m_pg->publish_stats_to_osd();
   m_interval_start = m_pg->get_history().same_interval_since;
-  // m_epoch_started = m_pg->get_osdmap_epoch();
 
   dout(10) << __func__ << " start same_interval:" << m_interval_start << dendl;
 
@@ -866,7 +796,6 @@ void PgScrubber::on_init()
   }
 
   m_start = m_pg->info.pgid.pgid.get_hobj_start();
-  m_last_dead_interval = get_osdmap_epoch();
   m_active = true;
 }
 
@@ -874,8 +803,6 @@ void PgScrubber::on_replica_init()
 {
   ceph_assert(!m_active);
   m_active = true;
-  m_last_dead_interval = get_osdmap_epoch();  // so that check_interval_replica() won't
-					      // kill a scrub for stale messages
 }
 
 void PgScrubber::_scan_snaps(ScrubMap& smap)
@@ -1459,6 +1386,14 @@ void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
   m_remote_osd_resource.reset();
 }
 
+void PgScrubber::discard_replica_reservations()
+{
+  dout(10) << __func__ << dendl;
+  if (m_reservations.has_value()) {
+    m_reservations->discard_all();
+  }
+}
+
 void PgScrubber::clear_scrub_reservations()
 {
   dout(10) << __func__ << dendl;
@@ -1819,12 +1754,14 @@ void PgScrubber::cleanup_on_finish()
   state_clear(PG_STATE_DEEP_SCRUB);
   m_pg->publish_stats_to_osd();
 
-  m_reservations.reset();
-  m_local_osd_resource.reset();
+  clear_scrub_reservations();
+  m_pg->publish_stats_to_osd();
 
   requeue_waiting();
 
   reset_internal_state();
+  m_flags = scrub_flags_t{};
+
   // type-specific state clear
   _scrub_clear_state();
 }
@@ -1857,6 +1794,7 @@ void PgScrubber::clear_pgscrub_state()
   requeue_waiting();
 
   reset_internal_state();
+  m_flags = scrub_flags_t{};
 
   // type-specific state clear
   _scrub_clear_state();
@@ -1869,32 +1807,8 @@ void PgScrubber::replica_handling_done()
   state_clear(PG_STATE_SCRUBBING);
   state_clear(PG_STATE_DEEP_SCRUB);
 
-  preemption_data.reset();
-  m_maps_status.reset();
-  m_received_maps.clear();
+  reset_internal_state();
 
-  m_start = hobject_t{};
-  m_end = hobject_t{};
-  m_max_end = hobject_t{};
-  m_subset_last_update = eversion_t{};
-  m_shallow_errors = 0;
-  m_deep_errors = 0;
-  m_fixed_count = 0;
-  m_omap_stats = (const struct omap_stat_t){0};
-
-  run_callbacks();
-  m_inconsistent.clear();
-  m_missing.clear();
-  m_authoritative.clear();
-  num_digest_updates_pending = 0;
-  replica_scrubmap = ScrubMap{};
-  replica_scrubmap_pos.reset();
-
-  m_cleaned_meta_map = ScrubMap{};
-  m_needs_sleep = true;
-  m_sleep_started_at = utime_t{};
-
-  m_active = false;
   m_pg->publish_stats_to_osd();
 }
 
@@ -1932,8 +1846,6 @@ void PgScrubber::reset_internal_state()
   m_cleaned_meta_map = ScrubMap{};
   m_needs_sleep = true;
   m_sleep_started_at = utime_t{};
-
-  m_flags = scrub_flags_t{};
 
   m_active = false;
 }

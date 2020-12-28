@@ -75,12 +75,6 @@ NotActive::NotActive(my_context ctx) : my_base(ctx)
   dout(10) << "-- state -->> NotActive" << dendl;
 }
 
-sc::result NotActive::react(const IntervalChanged&)
-{
-  dout(15) << "NotActive::react(const IntervalChanged&)" << dendl;
-  return discard_event();
-}
-
 // ----------------------- ReservingReplicas ---------------------------------
 
 ReservingReplicas::ReservingReplicas(my_context ctx) : my_base(ctx)
@@ -426,16 +420,6 @@ ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx) : my_base(ctx)
   scrbr->on_replica_init();
 }
 
-sc::result ReplicaWaitUpdates::react(const IntervalChanged&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaWaitUpdates::react(const IntervalChanged&)" << dendl;
-
-  // note: the master's reservation of us was just discarded by our caller
-  scrbr->replica_handling_done();
-  return transit<NotActive>();
-}
-
 /*
  * Triggered externally, by the entity that had an update re pushes
  */
@@ -512,16 +496,6 @@ sc::result ActiveReplica::react(const SchedReplica&)
 
 
   // the local map was created. Send it to the primary.
-  scrbr->send_replica_map(PreemptionNoted::no_preemption);
-  scrbr->replica_handling_done();
-  return transit<NotActive>();
-}
-
-sc::result ActiveReplica::react(const IntervalChanged&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ActiveReplica::react(const IntervalChanged&) " << dendl;
-
   scrbr->send_replica_map(PreemptionNoted::no_preemption);
   scrbr->replica_handling_done();
   return transit<NotActive>();
