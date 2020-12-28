@@ -131,6 +131,64 @@ function TEST_recovery_scrub_1() {
     return 0
 }
 
+##
+# a modified version of wait_for_scrub(), which terminates if the Primary
+# of the to-be-scrubbed PG changes
+#
+# Given the *last_scrub*, wait for scrub to happen on **pgid**. It
+# will fail if scrub does not complete within $TIMEOUT seconds. The
+# repair is complete whenever the **get_last_scrub_stamp** function
+# reports a timestamp different from the one given in argument.
+#
+# @param pgid the id of the PG
+# @param the primary OSD when started
+# @param last_scrub timestamp of the last scrub for *pgid*
+# @return 0 on success, 1 on error
+#
+function wait_for_scrub_mod() {
+    local pgid=$1
+    local orig_primary=$2
+    local last_scrub="$3"
+    local sname=${4:-last_scrub_stamp}
+
+    for ((i=0; i < $TIMEOUT; i++)); do
+        sleep 0.2
+        if test "$(get_last_scrub_stamp $pgid $sname)" '>' "$last_scrub" ; then
+            return 0
+        fi
+        sleep 1
+        # are we still the primary?
+        local current_primary=`bin/ceph pg $pgid query | jq '.acting[0]' `
+        if [ $orig_primary != $current_primary ]; then
+            echo $orig_primary no longer primary for $pgid
+            return 0
+        fi
+    done
+    return 1
+}
+
+##
+# A modified version of pg_scrub()
+#
+# Run scrub on **pgid** and wait until it completes. The pg_scrub
+# function will fail if repair does not complete within $TIMEOUT
+# seconds. The pg_scrub is complete whenever the
+# **get_last_scrub_stamp** function reports a timestamp different from
+# the one stored before starting the scrub, or whenever the Primary
+# changes.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function pg_scrub_mod() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    # locate the primary
+    local my_primary=`bin/ceph pg $pgid query | jq '.acting[0]' `
+    ceph pg scrub $pgid
+    wait_for_scrub_mod $pgid $my_primary "$last_scrub"
+}
+
 # osd_scrub_during_recovery=true make sure scrub happens
 function TEST_recovery_scrub_2() {
     local dir=$1
@@ -190,7 +248,7 @@ function TEST_recovery_scrub_2() {
     pids=""
     for pg in $(seq 0 $(expr $PGS - 1))
     do
-        run_in_background pids pg_scrub $poolid.$(printf "%x" $pg)
+        run_in_background pids pg_scrub_mod $poolid.$(printf "%x" $pg)
     done
     ceph pg dump pgs
     wait_background pids
