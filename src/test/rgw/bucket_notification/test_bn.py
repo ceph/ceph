@@ -13,6 +13,13 @@ from random import randint
 
 from boto.s3.connection import S3Connection
 
+from . import(
+    get_config_host,
+    get_config_port,
+    get_access_key,
+    get_secret_key
+    )
+
 from .api import PSTopicS3, \
     PSNotificationS3, \
     delete_all_s3_topics, \
@@ -403,13 +410,14 @@ def get_ip():
     return 'localhost'
 
 def connection():
-    vstart_access_key = '0555b35654ad1656d804'
-    vstart_secret_key = 'h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
-    hostname = get_ip()
+    hostname = get_config_host()
+    port_no = get_config_port()
+    vstart_access_key = get_access_key()
+    vstart_secret_key = get_secret_key()
 
     conn = S3Connection(aws_access_key_id=vstart_access_key,
 	    	      aws_secret_access_key=vstart_secret_key,
-                      is_secure=False, port=8000, host=hostname, 
+                      is_secure=False, port=port_no, host=hostname, 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
 
     return conn
@@ -431,9 +439,11 @@ def connection2():
 # bucket notifications tests
 ##############
 
-'''
+
 def test_ps_s3_topic_on_master():
     """ test s3 topics set/get/delete on master """
+    return SkipTest('Get tenant function required.')
+
     zonegroup = 'default' 
     bucket_name = gen_bucket_name()
     conn = connection()
@@ -497,6 +507,8 @@ def test_ps_s3_topic_on_master():
 
 def test_ps_s3_topic_with_secret_on_master():
     """ test s3 topics with secret set/get/delete on master """
+    return SkipTest('secure connection is needed to test topic with secrets')
+
     conn = connection1()
     if conn.secure_conn is None:
         return SkipTest('secure connection is needed to test topic with secrets')
@@ -541,7 +553,6 @@ def test_ps_s3_topic_with_secret_on_master():
 
     # delete topics
     result = topic_conf.del_config()
-'''
 
 
 def test_ps_s3_notification_on_master():
@@ -603,13 +614,15 @@ def test_ps_s3_notification_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+
 def test_ps_s3_notification_filter_on_master():
     """ test s3 notification filter on master """
-    on_master = True
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
-    if on_master:
-        conn = connection()
-        ps_zone = conn
+    
+    conn = connection()
+    ps_zone = conn
 
     zonegroup = 'default'
 
@@ -626,9 +639,9 @@ def test_ps_s3_notification_filter_on_master():
     # create s3 topic
     endpoint_address = 'amqp://' + hostname
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
-    if on_master:
-        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
-        topic_arn = topic_conf.set_config()
+        
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
 
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
@@ -665,29 +678,28 @@ def test_ps_s3_notification_filter_on_master():
     result, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
-    if on_master:
-        topic_conf_list = [{'Id': notification_name+'_4',
-                            'TopicArn': topic_arn,
-                            'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
-                            'Filter': {
-                                'Metadata': {
-                                    'FilterRules': [{'Name': 'x-amz-meta-foo', 'Value': 'bar'},
-                                                    {'Name': 'x-amz-meta-hello', 'Value': 'world'}]
-                                },
-                                'Key': {
-                                    'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)'}]
-                                }
+    topic_conf_list = [{'Id': notification_name+'_4',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+                        'Filter': {
+                            'Metadata': {
+                                'FilterRules': [{'Name': 'x-amz-meta-foo', 'Value': 'bar'},
+                                                {'Name': 'x-amz-meta-hello', 'Value': 'world'}]
+                            },
+                            'Key': {
+                                'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)'}]
                             }
-                            }]
+                        }
+                        }]
 
-        try:
-            s3_notification_conf4 = PSNotificationS3(conn, bucket_name, topic_conf_list)
-            _, status = s3_notification_conf4.set_config()
-            assert_equal(status/100, 2)
-            skip_notif4 = False
-        except Exception as error:
-            print('note: metadata filter is not supported by boto3 - skipping test')
-            skip_notif4 = True
+    try:
+        s3_notification_conf4 = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        _, status = s3_notification_conf4.set_config()
+        assert_equal(status/100, 2)
+        skip_notif4 = False
+    except Exception as error:
+        print('note: metadata filter is not supported by boto3 - skipping test')
+        skip_notif4 = True
 
 
     # get all notifications
@@ -736,9 +748,8 @@ def test_ps_s3_notification_filter_on_master():
         key = bucket.new_key(key_name)
         key.set_contents_from_string('bar')
 
-    if on_master:
-        print('wait for 5sec for the messages...')
-        time.sleep(5)
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
 
     found_in1 = []
     found_in2 = []
@@ -873,6 +884,8 @@ def test_ps_s3_notification_errors_on_master():
 
 def test_ps_s3_notification_push_amqp_on_master():
     """ test pushing amqp s3 notification on master """
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1271,6 +1284,8 @@ def test_ps_s3_opaque_data_on_master():
 
 def test_ps_s3_creation_triggers_on_master():
     """ test object creation s3 notifications in using put/copy/post on master"""
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1336,6 +1351,8 @@ def test_ps_s3_creation_triggers_on_master():
 
 def test_ps_s3_multipart_on_master():
     """ test multipart object upload on master"""
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1424,6 +1441,8 @@ def test_ps_s3_multipart_on_master():
 
 def test_ps_s3_metadata_on_master():
     """ test s3 notification of metadata on master """
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1521,6 +1540,8 @@ def test_ps_s3_metadata_on_master():
 
 def test_ps_s3_tags_on_master():
     """ test s3 notification of tags on master """
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1594,6 +1615,8 @@ def test_ps_s3_tags_on_master():
 
 def test_ps_s3_versioning_on_master():
     """ test s3 notification of object versions """
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1661,6 +1684,8 @@ def test_ps_s3_versioning_on_master():
 
 def test_ps_s3_versioned_deletion_on_master():
     """ test s3 notification of deletion markers on master """
+    return SkipTest('This is an AMQP test.')
+
     hostname = get_ip()
     conn = connection()
     zonegroup = 'default'
@@ -1927,6 +1952,8 @@ def test_ps_s3_persistent_notification_pushback():
 
 def test_ps_s3_persistent_gateways_recovery():
     """ test gateway recovery of persistent notifications """
+    return SkipTest('This test requires two gateways.')
+
     conn = connection()
     zonegroup = 'default'
     # create random port for the http server
@@ -2010,6 +2037,8 @@ def test_ps_s3_persistent_gateways_recovery():
 
 def test_ps_s3_persistent_multiple_gateways():
     """ test pushing persistent notification via two gateways """
+    return SkipTest('This test requires two gateways.')
+
     conn = connection()
     zonegroup = 'default'
     # create random port for the http server
@@ -2303,7 +2332,14 @@ def test_ps_s3_persistent_notification_http():
 
 def test_ps_s3_persistent_notification_amqp():
     """ test pushing persistent notification amqp """
+    return SkipTest('This is an AMQP test.')
     persistent_notification('amqp')
+
+'''
+def test_ps_s3_persistent_notification_kafka():
+    """ test pushing persistent notification http """
+    persistent_notification('kafka')
+'''
 
 def random_string(length):
     import string
@@ -2312,6 +2348,8 @@ def random_string(length):
 
 def test_ps_s3_persistent_notification_large():
     """ test pushing persistent notification of large notifications """
+    return SkipTest('This is an AMQP test.')
+
     conn = connection()
     zonegroup = 'default'
 
@@ -2393,13 +2431,12 @@ def test_ps_s3_persistent_notification_large():
     conn.delete_bucket(bucket_name)
     stop_amqp_receiver(receiver, task)
 
-'''
-#################
-# Extra tests
-################
+
 
 def test_ps_s3_topic_update():
     """ test updating topic associated with a notification"""
+    return SkipTest('This test is yet to be modified.')
+
     conn = connection()
     ps_zone = None
     bucket_name = gen_bucket_name()
@@ -2502,8 +2539,12 @@ def test_ps_s3_topic_update():
     topic_conf.del_config()
     conn.delete_bucket(bucket_name)
     http_server.close()
+
+
 def test_ps_s3_notification_update():
     """ test updating the topic of a notification"""
+    return SkipTest('This test is yet to be modified.')
+
     hostname = get_ip()
     conn = connection()
     ps_zone = None
@@ -2586,8 +2627,12 @@ def test_ps_s3_notification_update():
     topic_conf2.del_config()
     conn.delete_bucket(bucket_name)
     http_server.close()
+
+
 def test_ps_s3_multiple_topics_notification():
     """ test notification creation with multiple topics"""
+    return SkipTest('This test is yet to be modified.')
+
     hostname = get_ip()
     zonegroup = 'default'
     conn = connection()
@@ -2684,8 +2729,12 @@ def test_ps_s3_multiple_topics_notification():
         key.delete()
     conn.delete_bucket(bucket_name)
     http_server.close()
+
+
 def kafka_security(security_type):
     """ test pushing kafka s3 notification on master """
+    return SkipTest('This test is yet to be modified.')
+
     conn = connection()
     if security_type == 'SSL_SASL' and master_zone.secure_conn is None:
         return SkipTest("secure connection is needed to test SASL_SSL security")
@@ -2761,8 +2810,13 @@ def kafka_security(security_type):
             key.delete()
         conn.delete_bucket(bucket_name)
         stop_kafka_receiver(receiver, task)
+
+
 def test_ps_s3_notification_push_kafka_security_ssl():
+    return SkipTest('This test is yet to be modified.')
     kafka_security('SSL')
+
 def test_ps_s3_notification_push_kafka_security_ssl_sasl():
+    return SkipTest('This test is yet to be modified.')
     kafka_security('SSL_SASL')
-'''
+
