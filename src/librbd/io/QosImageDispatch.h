@@ -49,6 +49,7 @@ public:
   void apply_qos_schedule_tick_min(uint64_t tick);
   void apply_qos_limit(uint64_t flag, uint64_t limit, uint64_t burst,
                        uint64_t burst_seconds);
+  void apply_qos_exclude_ops(uint64_t exclude_ops);
 
   bool read(
       AioCompletion* aio_comp, Extents &&image_extents,
@@ -109,6 +110,7 @@ private:
 
   std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
   uint64_t m_qos_enabled_flag = 0;
+  uint64_t m_qos_exclude_ops = 0;
 
   FlushTracker<ImageCtxT>* m_flush_tracker;
 
