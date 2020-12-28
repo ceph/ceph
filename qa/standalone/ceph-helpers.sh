@@ -1998,7 +1998,7 @@ function run_in_background() {
     shift
     # Execute the command and prepend the output with its pid
     # We enforce to return the exit status of the command and not the sed one.
-    ("$@" |& sed 's/^/'$$': /'; return "${PIPESTATUS[0]}") >&2 &
+    ("$@" |& sed 's/^/'$BASHPID': /'; return "${PIPESTATUS[0]}") >&2 &
     eval "$pid_variable+=\" $!\""
 }
 
