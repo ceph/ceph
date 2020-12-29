@@ -396,13 +396,12 @@ void PgScrubber::reg_next_scrub(const requested_scrub_t& request_flags)
 	   << " required:" << m_flags.required << " flags: " << request_flags
 	   << " stamp: " << reg_stamp << dendl;
 
-  // note down the sched_time, so we can locate this scrub, and remove it
-  // later on.
-  double scrub_min_interval = 0;
-  double scrub_max_interval = 0;
-  m_pg->pool.info.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &scrub_min_interval);
-  m_pg->pool.info.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &scrub_max_interval);
+  const double scrub_min_interval =
+    m_pg->pool.info.opts.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
+  const double scrub_max_interval =
+    m_pg->pool.info.opts.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
 
+  // note the sched_time, so we can locate this scrub, and remove it later
   m_scrub_reg_stamp = m_osds->reg_pg_scrub(m_pg->info.pgid, reg_stamp, scrub_min_interval,
 					   scrub_max_interval, must);
   dout(15) << __func__ << " pg(" << m_pg_id << ") register next scrub, scrub time "
