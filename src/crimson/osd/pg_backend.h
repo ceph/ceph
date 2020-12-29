@@ -132,7 +132,7 @@ public:
     uint64_t limit) const;
   seastar::future<> setxattr(
     ObjectState& os,
-    OSDOp& osd_op,
+    const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
   get_attr_errorator::future<> getxattr(
@@ -147,7 +147,7 @@ public:
   using rm_xattr_ertr = crimson::errorator<crimson::ct_error::enoent>;
   rm_xattr_ertr::future<> rm_xattr(
     ObjectState& os,
-    OSDOp& osd_op,
+    const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   seastar::future<struct stat> stat(
     CollectionRef c,
@@ -170,7 +170,7 @@ public:
     OSDOp& osd_op) const;
   seastar::future<> omap_set_vals(
     ObjectState& os,
-    OSDOp& osd_op,
+    const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
   seastar::future<ceph::bufferlist> omap_get_header(
@@ -185,7 +185,7 @@ public:
     ceph::os::Transaction& trans);
   seastar::future<> omap_remove_range(
     ObjectState& os,
-    OSDOp& osd_op,
+    const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   using omap_clear_ertr = crimson::errorator<crimson::ct_error::enoent>;
   omap_clear_ertr::future<> omap_clear(

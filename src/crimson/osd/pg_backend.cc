@@ -738,7 +738,7 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 
 seastar::future<> PGBackend::setxattr(
   ObjectState& os,
-  OSDOp& osd_op,
+  const OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
   if (local_conf()->osd_max_attr_size > 0 &&
@@ -826,7 +826,7 @@ PGBackend::get_attr_errorator::future<> PGBackend::get_xattrs(
 
 PGBackend::rm_xattr_ertr::future<> PGBackend::rm_xattr(
   ObjectState& os,
-  OSDOp& osd_op,
+  const OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
   if (__builtin_expect(stopping, false)) {
@@ -1059,7 +1059,7 @@ PGBackend::omap_get_vals_by_keys(
 
 seastar::future<> PGBackend::omap_set_vals(
   ObjectState& os,
-  OSDOp& osd_op,
+  const OSDOp& osd_op,
   ceph::os::Transaction& txn,
   osd_op_params_t& osd_op_params)
 {
@@ -1104,7 +1104,7 @@ seastar::future<> PGBackend::omap_set_header(
 
 seastar::future<> PGBackend::omap_remove_range(
   ObjectState& os,
-  OSDOp& osd_op,
+  const OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
   std::string key_begin, key_end;
