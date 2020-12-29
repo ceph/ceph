@@ -114,7 +114,7 @@ bool PgScrubber::verify_against_abort(epoch_t epoch_to_verify)
     return true;
   }
 
-  dout(15) << __func__ << " aborting. incoming epoch: " << epoch_to_verify
+  dout(10) << __func__ << " aborting. incoming epoch: " << epoch_to_verify
 	   << " vs last-aborted: " << m_last_aborted << dendl;
 
   // if we were not aware of the abort before - kill the scrub.
@@ -371,9 +371,9 @@ void PgScrubber::reg_next_scrub(const requested_scrub_t& request_flags)
     return;
   }
 
-  dout(10) << __func__ << " planned.m.s: " << request_flags.must_scrub
-	   << ": planned.n.a.: " << request_flags.need_auto
-	   << " stamp: " << m_pg->info.history.last_scrub_stamp << dendl;
+  dout(10) << __func__ << " planned: must? " << request_flags.must_scrub << " need-auto? "
+	   << request_flags.need_auto << " stamp: " << m_pg->info.history.last_scrub_stamp
+	   << dendl;
 
   ceph_assert(!is_scrub_registered());
 
@@ -411,6 +411,8 @@ void PgScrubber::reg_next_scrub(const requested_scrub_t& request_flags)
 
 void PgScrubber::unreg_next_scrub()
 {
+  dout(10) << __func__ << " existing-" << m_scrub_reg_stamp << ". was registered? "
+	   << is_scrub_registered() << dendl;
   if (is_scrub_registered()) {
     m_osds->unreg_pg_scrub(m_pg->info.pgid, m_scrub_reg_stamp);
     m_scrub_reg_stamp = utime_t{};
@@ -618,11 +620,10 @@ void PgScrubber::add_delayed_scheduling()
   milliseconds sleep_time{0ms};
   if (m_needs_sleep) {
     double scrub_sleep = 1000.0 * m_osds->osd->scrub_sleep_time(m_flags.required);
-    dout(10) << __func__ << " sleep: " << scrub_sleep << dendl;
     sleep_time = milliseconds{long(scrub_sleep)};
   }
-  dout(15) << __func__ << " sleep: " << sleep_time.count() << " needed? " << m_needs_sleep
-	   << dendl;
+  dout(15) << __func__ << " sleep: " << sleep_time.count() << "ms. needed? "
+	   << m_needs_sleep << dendl;
 
   if (sleep_time.count()) {
     // schedule a transition for some 'sleep_time' ms in the future
@@ -1638,7 +1639,7 @@ void PgScrubber::scrub_finish()
 
 Scrub::FsmNext PgScrubber::on_digest_updates()
 {
-  dout(10) << __func__ << " #pending: " << num_digest_updates_pending << " are we done? "
+  dout(10) << __func__ << " #pending: " << num_digest_updates_pending << " pending? "
 	   << num_digest_updates_pending
 	   << (m_end.is_max() ? " <last chunk> " : " <mid chunk> ") << dendl;
 

@@ -4,6 +4,9 @@
 #include "scrub_machine.h"
 
 #include <chrono>
+#include <typeinfo>
+
+#include <boost/core/demangle.hpp>
 
 #include "OSD.h"
 #include "OpRequest.h"
@@ -14,7 +17,6 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix *_dout << " scrubberFSM "
-
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
@@ -32,19 +34,19 @@ namespace Scrub {
 
 void on_event_creation(std::string_view nm)
 {
-  dout(20) << " scrubberFSM event: --vvvv---- " << nm << dendl;
+  dout(20) << " event: --vvvv---- " << nm << dendl;
 }
 
 void on_event_discard(std::string_view nm)
 {
-  dout(20) << " scrubberFSM event: --^^^^---- " << nm << dendl;
+  dout(20) << " event: --^^^^---- " << nm << dendl;
 }
 
 void ScrubMachine::my_states() const
 {
   for (auto si = state_begin(); si != state_end(); ++si) {
     const auto& siw{*si};  // prevents a warning re side-effects
-    dout(20) << __func__ << " : scrub-states : " << typeid(siw).name() << dendl;
+    dout(20) << " state: " << boost::core::demangle(typeid(siw).name()) << dendl;
   }
 }
 
@@ -267,7 +269,7 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   // no need to check for an epoch change, as all possible flows that brought us here have
-  // an check_interval() verification of their final event.
+  // a check_interval() verification of their final event.
 
   if (scrbr->get_preemptor().was_preempted()) {
 

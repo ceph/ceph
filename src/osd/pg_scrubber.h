@@ -474,8 +474,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
 
-
-
   /**
    * return true if any inconsistency/missing is repaired, false otherwise
    */

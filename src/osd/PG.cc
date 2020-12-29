@@ -353,6 +353,8 @@ void PG::update_object_snap_mapping(
 /******* PG ***********/
 void PG::clear_primary_state()
 {
+  dout(20) << __func__ << dendl;
+
   projected_log = PGLog::IndexedLog();
 
   snap_trimq.clear();
