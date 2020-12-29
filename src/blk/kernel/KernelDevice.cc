@@ -12,6 +12,7 @@
  *
  */
 
+#include <limits>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -813,6 +814,8 @@ void KernelDevice::aio_submit(IOContext *ioc)
 
   void *priv = static_cast<void*>(ioc);
   int r, retries = 0;
+  // num of pending aios should not overflow when passed to submit_batch()
+  assert(pending <= std::numeric_limits<uint16_t>::max());
   r = io_queue->submit_batch(ioc->running_aios.begin(), e,
 			     pending, priv, &retries);
 
