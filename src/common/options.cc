@@ -6752,6 +6752,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_num_async_rados_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Number of concurrent RADOS operations in multisite sync")
     .set_long_description(
         "The number of concurrent RADOS IO operations that will be triggered for handling "

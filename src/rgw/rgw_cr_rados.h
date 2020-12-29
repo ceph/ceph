@@ -66,13 +66,21 @@ public:
 };
 
 
-class RGWAsyncRadosProcessor {
+class RGWAsyncRadosProcessor : public md_config_obs_t {
   deque<RGWAsyncRadosRequest *> m_req_queue;
   std::atomic<bool> going_down = { false };
 protected:
   CephContext *cct;
   ThreadPool m_tp;
   Throttle req_throttle;
+  std::string _thread_num_option;
+  const char **_conf_keys;
+
+  const char **get_tracked_conf_keys() const override {
+    return _conf_keys;
+  }
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set <std::string> &changed) override;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWAsyncRadosRequest> {
     RGWAsyncRadosProcessor *processor;
@@ -96,13 +104,12 @@ protected:
   } req_wq;
 
 public:
-  RGWAsyncRadosProcessor(CephContext *_cct, int num_threads);
-  ~RGWAsyncRadosProcessor() {}
+  RGWAsyncRadosProcessor(CephContext *_cct, int num_threads, const char *option = NULL);
+  ~RGWAsyncRadosProcessor();
   void start();
   void stop();
   void handle_request(RGWAsyncRadosRequest *req);
   void queue(RGWAsyncRadosRequest *req);
-
   bool is_going_down() {
     return going_down;
   }

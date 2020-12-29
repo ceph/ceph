@@ -32,7 +32,9 @@ int RGWSI_RADOS::do_start(optional_yield)
     return ret;
   }
 
-  async_processor.reset(new RGWAsyncRadosProcessor(cct, cct->_conf->rgw_num_async_rados_threads));
+  async_processor.reset(new RGWAsyncRadosProcessor(cct, 
+        cct->_conf->rgw_num_async_rados_threads, 
+        "rgw_num_async_rados_threads"));
   async_processor->start();
 
   return 0;
