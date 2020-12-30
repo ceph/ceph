@@ -3424,7 +3424,8 @@ void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
       MDRequestRef mdr = request_get(metareq);
       mdr->aborted = true;
       if (mdr->peer_request) {
-	if (mdr->peer_did_prepare()) // journaling peer prepare ?
+	// journaling peer prepare ?
+	if (mdr->peer_did_prepare() && mdr->more()->rollback_bl.length())
 	  add_rollback(metareq, from);
       } else {
 	request_finish(mdr);
