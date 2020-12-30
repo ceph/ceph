@@ -62,41 +62,44 @@ TEST_F(TestMockPoolWatcherRefreshImagesRequest, Success) {
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
+  std::map<MirrorEntity, std::string> entities;
   MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  ImageIds expected_image_ids = {{"global id", "local id"}};
-  ASSERT_EQ(expected_image_ids, image_ids);
+  std::map<MirrorEntity, std::string> expected_entities =
+    {{{MIRROR_ENTITY_TYPE_IMAGE, "global id", 1}, "local id"}};
+  ASSERT_EQ(expected_entities, entities);
 }
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, LargeDirectory) {
   InSequence seq;
   std::map<std::string, std::string> mirror_list;
-  ImageIds expected_image_ids;
+  std::map<MirrorEntity, std::string> expected_entities;
   for (uint32_t idx = 1; idx <= 1024; ++idx) {
     mirror_list.insert(std::make_pair("local id " + stringify(idx),
                                       "global id " + stringify(idx)));
-    expected_image_ids.insert({{"global id " + stringify(idx),
-                                "local id " + stringify(idx)}});
+    expected_entities.insert(
+      {{MIRROR_ENTITY_TYPE_IMAGE, "global id " + stringify(idx), 1},
+       "local id " + stringify(idx)});
   }
 
   expect_mirror_image_list(m_remote_io_ctx, mirror_list, 0);
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
+  std::map<MirrorEntity, std::string> entities;
   MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  expected_image_ids.insert({"global id", "local id"});
-  ASSERT_EQ(expected_image_ids, image_ids);
+  expected_entities.insert(
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global id", 1}, "local id"});
+  ASSERT_EQ(expected_entities, entities);
 }
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, MirrorImageListError) {
@@ -104,9 +107,9 @@ TEST_F(TestMockPoolWatcherRefreshImagesRequest, MirrorImageListError) {
   expect_mirror_image_list(m_remote_io_ctx, {}, -EINVAL);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
+  std::map<MirrorEntity, std::string> entities;
   MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());

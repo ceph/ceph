@@ -20,14 +20,16 @@ namespace pool_watcher {
 template <typename ImageCtxT = librbd::ImageCtx>
 class RefreshImagesRequest {
 public:
-  static RefreshImagesRequest *create(librados::IoCtx &remote_io_ctx,
-                                      ImageIds *image_ids, Context *on_finish) {
-    return new RefreshImagesRequest(remote_io_ctx, image_ids, on_finish);
+  static RefreshImagesRequest *create(
+      librados::IoCtx &remote_io_ctx,
+      std::map<MirrorEntity, std::string> *entities, Context *on_finish) {
+    return new RefreshImagesRequest(remote_io_ctx, entities, on_finish);
   }
 
-  RefreshImagesRequest(librados::IoCtx &remote_io_ctx, ImageIds *image_ids,
+  RefreshImagesRequest(librados::IoCtx &remote_io_ctx,
+                       std::map<MirrorEntity, std::string> *entities,
                        Context *on_finish)
-    : m_remote_io_ctx(remote_io_ctx), m_image_ids(image_ids),
+    : m_remote_io_ctx(remote_io_ctx), m_entities(entities),
       m_on_finish(on_finish) {
   }
 
@@ -51,7 +53,7 @@ private:
    */
 
   librados::IoCtx &m_remote_io_ctx;
-  ImageIds *m_image_ids;
+  std::map<MirrorEntity, std::string> *m_entities;
   Context *m_on_finish;
 
   bufferlist m_out_bl;

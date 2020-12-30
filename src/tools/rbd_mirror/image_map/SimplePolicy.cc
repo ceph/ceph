@@ -39,47 +39,63 @@ size_t SimplePolicy::calc_images_per_instance(const InstanceToImageMap& map,
 
 void SimplePolicy::do_shuffle_add_instances(
     const InstanceToImageMap& map, size_t image_count,
-    std::set<std::string> *remap_global_image_ids) {
+    GlobalIds *remap_global_ids) {
   uint64_t images_per_instance = calc_images_per_instance(map, image_count);
   dout(5) << "images per instance=" << images_per_instance << dendl;
 
   for (auto const &instance : map) {
-    if (instance.second.size() <= images_per_instance) {
+    uint64_t instance_image_count =
+      std::accumulate(instance.second.begin(), instance.second.end(), 0,
+                      [this](uint64_t count, const GlobalId &global_id) {
+                        return count + get_weight(global_id);
+                      });
+
+    if (instance_image_count <= images_per_instance) {
       continue;
     }
 
     auto it = instance.second.begin();
-    uint64_t cut_off = instance.second.size() - images_per_instance;
 
+    uint64_t cut_off = instance_image_count - images_per_instance;
+
+    // TODO: improve for weight > 1: find the best entity(ies) to cut off
     while (it != instance.second.end() && cut_off > 0) {
-      if (Policy::is_image_shuffling(*it)) {
-        --cut_off;
-      } else if (Policy::can_shuffle_image(*it)) {
-        --cut_off;
-        remap_global_image_ids->emplace(*it);
+      auto weight = get_weight(*it);
+      if (weight <= cut_off) {
+        if (Policy::is_entity_shuffling(*it)) {
+          cut_off -= weight;
+        } else if (Policy::can_shuffle_entity(*it)) {
+          cut_off -= weight;
+          remap_global_ids->emplace(*it);
+        }
       }
-
       ++it;
     }
   }
 }
 
 std::string SimplePolicy::do_map(const InstanceToImageMap& map,
-                                 const std::string &global_image_id) {
+                                 const GlobalId &global_id) {
   auto min_it = map.end();
+  uint64_t min_image_count = UINT64_MAX;
   for (auto it = map.begin(); it != map.end(); ++it) {
-    ceph_assert(it->second.find(global_image_id) == it->second.end());
+    ceph_assert(it->second.find(global_id) == it->second.end());
     if (Policy::is_dead_instance(it->first)) {
       continue;
-    } else if (min_it == map.end()) {
+    }
+    uint64_t image_count =
+      std::accumulate(it->second.begin(), it->second.end(), 0,
+                      [this](uint64_t count, const GlobalId &global_id) {
+                        return count + get_weight(global_id);
+                      });
+    if (image_count < min_image_count) {
       min_it = it;
-    } else if (it->second.size() < min_it->second.size()) {
-      min_it = it;
+      min_image_count = image_count;
     }
   }
 
   ceph_assert(min_it != map.end());
-  dout(20) << "global_image_id=" << global_image_id << " maps to instance_id="
+  dout(20) << "global_id=" << global_id << " maps to instance_id="
            << min_it->first << dendl;
   return min_it->first;
 }

@@ -155,11 +155,11 @@ private:
     }
 
     void handle_update(const std::string &mirror_uuid,
-                       ImageIds &&added_image_ids,
-                       ImageIds &&removed_image_ids) override {
+                       MirrorEntities &&added_entities,
+                       MirrorEntities &&removed_entities) override {
       namespace_replayer->handle_update((local ? "" : mirror_uuid),
-				   std::move(added_image_ids),
-                                   std::move(removed_image_ids));
+                                        std::move(added_entities),
+                                        std::move(removed_entities));
     }
   };
 
@@ -174,14 +174,14 @@ private:
                        const std::string &instance_id,
                        Context* on_finish) override {
       namespace_replayer->handle_acquire_image(global_image_id, instance_id,
-                                          on_finish);
+                                               on_finish);
     }
 
     void release_image(const std::string &global_image_id,
                        const std::string &instance_id,
                        Context* on_finish) override {
       namespace_replayer->handle_release_image(global_image_id, instance_id,
-                                          on_finish);
+                                               on_finish);
     }
 
     void remove_image(const std::string &mirror_uuid,
@@ -194,8 +194,8 @@ private:
   };
 
   void handle_update(const std::string &mirror_uuid,
-                     ImageIds &&added_image_ids,
-                     ImageIds &&removed_image_ids);
+                     MirrorEntities &&added_entities,
+                     MirrorEntities &&removed_entities);
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,

@@ -44,11 +44,11 @@ Policy::Policy(librados::IoCtx &ioctx)
 
   // map should at least have once instance
   std::string instance_id = stringify(ioctx.get_instance_id());
-  m_map.emplace(instance_id, std::set<std::string>{});
+  m_map.emplace(instance_id, GlobalIds{});
 }
 
 void Policy::init(
-    const std::map<std::string, cls::rbd::MirrorImageMap> &image_mapping) {
+    const std::map<GlobalId, cls::rbd::MirrorImageMap> &image_mapping) {
   dout(20) << dendl;
 
   std::unique_lock map_lock{m_map_lock};
@@ -57,8 +57,20 @@ void Policy::init(
     auto map_result = m_map[it.second.instance_id].emplace(it.first);
     ceph_assert(map_result.second);
 
+    PolicyData policy_data;
+    try {
+      auto iter = it.second.data.cbegin();
+      if (!iter.end()) {
+        decode(policy_data, iter);
+      }
+    } catch (const buffer::error &err) {
+      derr << "error decoding policy data: " << err.what() << dendl;
+      continue;
+    }
+
     auto image_state_result = m_image_states.emplace(
-      it.first, ImageState{it.second.instance_id, it.second.mapped_time});
+      it.first, ImageState{policy_data.weight, it.second.instance_id,
+                           it.second.mapped_time});
     ceph_assert(image_state_result.second);
 
     // ensure we (re)send image acquire actions to the instance
@@ -69,40 +81,41 @@ void Policy::init(
   }
 }
 
-LookupInfo Policy::lookup(const std::string &global_image_id) {
-  dout(20) << "global_image_id=" << global_image_id << dendl;
+LookupInfo Policy::lookup(const GlobalId &global_id) {
+  dout(20) << "global_id=" << global_id << dendl;
 
   std::shared_lock map_lock{m_map_lock};
   LookupInfo info;
 
-  auto it = m_image_states.find(global_image_id);
+  auto it = m_image_states.find(global_id);
   if (it != m_image_states.end()) {
     info.instance_id = it->second.instance_id;
     info.mapped_time = it->second.mapped_time;
+    info.weight = it->second.weight;
   }
   return info;
 }
 
-bool Policy::add_image(const std::string &global_image_id) {
-  dout(5) << "global_image_id=" << global_image_id << dendl;
+bool Policy::add_entity(const GlobalId &global_id, uint64_t weight) {
+  dout(5) << "global_id=" << global_id << dendl;
 
   std::unique_lock map_lock{m_map_lock};
-  auto image_state_result = m_image_states.emplace(global_image_id,
-                                                   ImageState{});
+  auto image_state_result = m_image_states.emplace(global_id, ImageState{});
   auto& image_state = image_state_result.first->second;
   if (image_state.state == StateTransition::STATE_INITIALIZING) {
     // avoid duplicate acquire notifications upon leader startup
     return false;
   }
 
+  image_state.weight = weight;
   return set_state(&image_state, StateTransition::STATE_ASSOCIATING, false);
 }
 
-bool Policy::remove_image(const std::string &global_image_id) {
-  dout(5) << "global_image_id=" << global_image_id << dendl;
+bool Policy::remove_entity(const GlobalId &global_id) {
+  dout(5) << "global_id=" << global_id << dendl;
 
   std::unique_lock map_lock{m_map_lock};
-  auto it = m_image_states.find(global_image_id);
+  auto it = m_image_states.find(global_id);
   if (it == m_image_states.end()) {
     return false;
   }
@@ -112,13 +125,13 @@ bool Policy::remove_image(const std::string &global_image_id) {
 }
 
 void Policy::add_instances(const InstanceIds &instance_ids,
-                           GlobalImageIds* global_image_ids) {
+                           GlobalIds* global_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
 
   std::unique_lock map_lock{m_map_lock};
   for (auto& instance : instance_ids) {
     ceph_assert(!instance.empty());
-    m_map.emplace(instance, std::set<std::string>{});
+    m_map.emplace(instance, GlobalIds{});
   }
 
   // post-failover, remove any dead instances and re-shuffle their images
@@ -136,34 +149,41 @@ void Policy::add_instances(const InstanceIds &instance_ids,
     }
 
     if (!dead_instances.empty()) {
-      remove_instances(m_map_lock, dead_instances, global_image_ids);
+      remove_instances(m_map_lock, dead_instances, global_ids);
     }
   }
 
-  GlobalImageIds shuffle_global_image_ids;
-  do_shuffle_add_instances(m_map, m_image_states.size(), &shuffle_global_image_ids);
-  dout(5) << "shuffling global_image_ids=[" << shuffle_global_image_ids
-          << "]" << dendl;
-  for (auto& global_image_id : shuffle_global_image_ids) {
-    auto it = m_image_states.find(global_image_id);
+  GlobalIds shuffle_global_ids;
+  size_t image_count =
+    std::accumulate(m_image_states.begin(), m_image_states.end(), 0,
+                    [](size_t count,
+                       const std::pair<GlobalId, ImageState> &p) {
+                      return count + p.second.weight;
+                    });
+
+  do_shuffle_add_instances(m_map, image_count, &shuffle_global_ids);
+  dout(5) << "shuffling global_ids=[" << shuffle_global_ids << "]" << dendl;
+
+  for (auto &global_id : shuffle_global_ids) {
+    auto it = m_image_states.find(global_id);
     ceph_assert(it != m_image_states.end());
 
     auto& image_state = it->second;
     if (set_state(&image_state, StateTransition::STATE_SHUFFLING, false)) {
-      global_image_ids->emplace(global_image_id);
+      global_ids->emplace(global_id);
     }
   }
 }
 
 void Policy::remove_instances(const InstanceIds &instance_ids,
-                              GlobalImageIds* global_image_ids) {
+                              GlobalIds* global_ids) {
   std::unique_lock map_lock{m_map_lock};
-  remove_instances(m_map_lock, instance_ids, global_image_ids);
+  remove_instances(m_map_lock, instance_ids, global_ids);
 }
 
 void Policy::remove_instances(const ceph::shared_mutex& lock,
                               const InstanceIds &instance_ids,
-                              GlobalImageIds* global_image_ids) {
+                              GlobalIds* global_ids) {
   ceph_assert(ceph_mutex_is_wlocked(m_map_lock));
   dout(5) << "instance_ids=" << instance_ids << dendl;
 
@@ -173,17 +193,17 @@ void Policy::remove_instances(const ceph::shared_mutex& lock,
       continue;
     }
 
-    auto& instance_global_image_ids = map_it->second;
-    if (instance_global_image_ids.empty()) {
+    auto& instance_global_ids = map_it->second;
+    if (instance_global_ids.empty()) {
       m_map.erase(map_it);
       continue;
     }
 
     m_dead_instances.insert(instance_id);
     dout(5) << "force shuffling: instance_id=" << instance_id << ", "
-            << "global_image_ids=[" << instance_global_image_ids << "]"<< dendl;
-    for (auto& global_image_id : instance_global_image_ids) {
-      auto it = m_image_states.find(global_image_id);
+            << "global_ids=[" << instance_global_ids << "]"<< dendl;
+    for (auto& global_id : instance_global_ids) {
+      auto it = m_image_states.find(global_id);
       ceph_assert(it != m_image_states.end());
 
       auto& image_state = it->second;
@@ -194,42 +214,42 @@ void Policy::remove_instances(const ceph::shared_mutex& lock,
       }
 
       if (set_state(&image_state, StateTransition::STATE_SHUFFLING, true)) {
-        global_image_ids->emplace(global_image_id);
+        global_ids->emplace(global_id);
       }
     }
   }
 }
 
-ActionType Policy::start_action(const std::string &global_image_id) {
+ActionType Policy::start_action(const GlobalId &global_id) {
   std::unique_lock map_lock{m_map_lock};
 
-  auto it = m_image_states.find(global_image_id);
+  auto it = m_image_states.find(global_id);
   ceph_assert(it != m_image_states.end());
 
   auto& image_state = it->second;
   auto& transition = image_state.transition;
   ceph_assert(transition.action_type != ACTION_TYPE_NONE);
 
-  dout(5) << "global_image_id=" << global_image_id << ", "
+  dout(5) << "global_id=" << global_id << ", "
           << "state=" << image_state.state << ", "
           << "action_type=" << transition.action_type << dendl;
   if (transition.start_policy_action) {
-    execute_policy_action(global_image_id, &image_state,
+    execute_policy_action(global_id, &image_state,
                           *transition.start_policy_action);
     transition.start_policy_action = boost::none;
   }
   return transition.action_type;
 }
 
-bool Policy::finish_action(const std::string &global_image_id, int r) {
+bool Policy::finish_action(const GlobalId &global_id, int r) {
   std::unique_lock map_lock{m_map_lock};
 
-  auto it = m_image_states.find(global_image_id);
+  auto it = m_image_states.find(global_id);
   ceph_assert(it != m_image_states.end());
 
   auto& image_state = it->second;
   auto& transition = image_state.transition;
-  dout(5) << "global_image_id=" << global_image_id << ", "
+  dout(5) << "global_id=" << global_id << ", "
           << "state=" << image_state.state << ", "
           << "action_type=" << transition.action_type << ", "
           << "r=" << r << dendl;
@@ -261,36 +281,36 @@ bool Policy::finish_action(const std::string &global_image_id, int r) {
   // image state may get purged in execute_policy_action()
   bool pending_action = image_state.transition.action_type != ACTION_TYPE_NONE;
   if (finish_policy_action) {
-    execute_policy_action(global_image_id, &image_state, *finish_policy_action);
+    execute_policy_action(global_id, &image_state, *finish_policy_action);
   }
 
   return pending_action;
 }
 
 void Policy::execute_policy_action(
-    const std::string& global_image_id, ImageState* image_state,
+    const GlobalId &global_id, ImageState *image_state,
     StateTransition::PolicyAction policy_action) {
-  dout(5) << "global_image_id=" << global_image_id << ", "
+  dout(5) << "global_id=" << global_id << ", "
           << "policy_action=" << policy_action << dendl;
 
   switch (policy_action) {
   case StateTransition::POLICY_ACTION_MAP:
-    map(global_image_id, image_state);
+    map(global_id, image_state);
     break;
   case StateTransition::POLICY_ACTION_UNMAP:
-    unmap(global_image_id, image_state);
+    unmap(global_id, image_state);
     break;
   case StateTransition::POLICY_ACTION_REMOVE:
     if (image_state->state == StateTransition::STATE_UNASSOCIATED) {
       ceph_assert(image_state->instance_id == UNMAPPED_INSTANCE_ID);
       ceph_assert(!image_state->next_state);
-      m_image_states.erase(global_image_id);
+      m_image_states.erase(global_id);
     }
     break;
   }
 }
 
-void Policy::map(const std::string& global_image_id, ImageState* image_state) {
+void Policy::map(const GlobalId &global_id, ImageState *image_state) {
   ceph_assert(ceph_mutex_is_wlocked(m_map_lock));
 
   std::string instance_id = image_state->instance_id;
@@ -298,23 +318,22 @@ void Policy::map(const std::string& global_image_id, ImageState* image_state) {
     return;
   }
   if (is_dead_instance(instance_id)) {
-    unmap(global_image_id, image_state);
+    unmap(global_id, image_state);
   }
 
-  instance_id = do_map(m_map, global_image_id);
+  instance_id = do_map(m_map, global_id);
   ceph_assert(!instance_id.empty());
-  dout(5) << "global_image_id=" << global_image_id << ", "
+  dout(5) << "global_id=" << global_id << ", "
           << "instance_id=" << instance_id << dendl;
 
   image_state->instance_id = instance_id;
   image_state->mapped_time = ceph_clock_now();
 
-  auto ins = m_map[instance_id].emplace(global_image_id);
+  auto ins = m_map[instance_id].emplace(global_id);
   ceph_assert(ins.second);
 }
 
-void Policy::unmap(const std::string &global_image_id,
-                   ImageState* image_state) {
+void Policy::unmap(const GlobalId &global_id, ImageState* image_state) {
   ceph_assert(ceph_mutex_is_wlocked(m_map_lock));
 
   std::string instance_id = image_state->instance_id;
@@ -322,11 +341,11 @@ void Policy::unmap(const std::string &global_image_id,
     return;
   }
 
-  dout(5) << "global_image_id=" << global_image_id << ", "
-          << "instance_id=" << instance_id << dendl;
+  dout(5) << "global_id=" << global_id << ", " << "instance_id=" << instance_id
+          << dendl;
 
   ceph_assert(!instance_id.empty());
-  m_map[instance_id].erase(global_image_id);
+  m_map[instance_id].erase(global_id);
   image_state->instance_id = UNMAPPED_INSTANCE_ID;
   image_state->mapped_time = {};
 
@@ -337,29 +356,29 @@ void Policy::unmap(const std::string &global_image_id,
   }
 }
 
-bool Policy::is_image_shuffling(const std::string &global_image_id) {
+bool Policy::is_entity_shuffling(const GlobalId &global_id) const {
   ceph_assert(ceph_mutex_is_locked(m_map_lock));
 
-  auto it = m_image_states.find(global_image_id);
+  auto it = m_image_states.find(global_id);
   ceph_assert(it != m_image_states.end());
   auto& image_state = it->second;
 
   // avoid attempting to re-shuffle a pending shuffle
   auto result = is_state_scheduled(image_state,
                                    StateTransition::STATE_SHUFFLING);
-  dout(20) << "global_image_id=" << global_image_id << ", "
+  dout(20) << "global_id=" << global_id << ", "
            << "result=" << result << dendl;
   return result;
 }
 
-bool Policy::can_shuffle_image(const std::string &global_image_id) {
+bool Policy::can_shuffle_entity(const GlobalId &global_id) const {
   ceph_assert(ceph_mutex_is_locked(m_map_lock));
 
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   int migration_throttle = cct->_conf.get_val<uint64_t>(
     "rbd_mirror_image_policy_migration_throttle");
 
-  auto it = m_image_states.find(global_image_id);
+  auto it = m_image_states.find(global_id);
   ceph_assert(it != m_image_states.end());
   auto& image_state = it->second;
 
@@ -370,11 +389,20 @@ bool Policy::can_shuffle_image(const std::string &global_image_id) {
   auto result = (StateTransition::is_idle(image_state.state) &&
                  ((migration_throttle <= 0) ||
                   (now - last_shuffled_time >= migration_throttle)));
-  dout(10) << "global_image_id=" << global_image_id << ", "
+  dout(10) << "global_id=" << global_id << ", "
            << "migration_throttle=" << migration_throttle << ", "
            << "last_shuffled_time=" << last_shuffled_time << ", "
            << "result=" << result << dendl;
   return result;
+}
+
+uint64_t Policy::get_weight(const GlobalId &global_id) const {
+  ceph_assert(ceph_mutex_is_locked(m_map_lock));
+
+  auto it = m_image_states.find(global_id);
+  ceph_assert(it != m_image_states.end());
+
+  return it->second.weight;
 }
 
 bool Policy::set_state(ImageState* image_state, StateTransition::State state,
