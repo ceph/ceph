@@ -15,7 +15,9 @@
 #include "librbd/api/Mirror.h"
 #include "librbd/asio/ContextWQ.h"
 #include "tools/rbd_mirror/Threads.h"
-#include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.h"
+#include "tools/rbd_mirror/pool_watcher/RefreshEntitiesRequest.h"
+
+#include <numeric>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -52,7 +54,7 @@ public:
 
   void handle_mode_updated(cls::rbd::MirrorMode mirror_mode) override {
     // invalidate all image state and refresh the pool contents
-    m_pool_watcher->schedule_refresh_images(5);
+    m_pool_watcher->schedule_refresh_entities(5);
   }
 
   void handle_image_updated(cls::rbd::MirrorImageState state,
@@ -103,6 +105,16 @@ bool PoolWatcher<I>::is_blocklisted() const {
 }
 
 template <typename I>
+size_t PoolWatcher<I>::get_image_count() const {
+  std::lock_guard locker{m_lock};
+  return std::accumulate(m_entities.begin(), m_entities.end(), 0,
+                         [](size_t count,
+                            const std::pair<MirrorEntity, std::string> &p) {
+                           return count + p.first.count;
+                         });
+}
+
+template <typename I>
 void PoolWatcher<I>::init(Context *on_finish) {
   dout(5) << dendl;
 
@@ -143,14 +155,14 @@ template <typename I>
 void PoolWatcher<I>::register_watcher() {
   {
     std::lock_guard locker{m_lock};
-    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_entities_invalid);
     ceph_assert(m_refresh_in_progress);
   }
 
   // if the watch registration is in-flight, let the watcher
   // handle the transition -- only (re-)register if it's not registered
   if (!m_mirroring_watcher->is_unregistered()) {
-    refresh_images();
+    refresh_entities();
     return;
   }
 
@@ -169,7 +181,7 @@ void PoolWatcher<I>::handle_register_watcher(int r) {
 
   {
     std::lock_guard locker{m_lock};
-    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_entities_invalid);
     ceph_assert(m_refresh_in_progress);
     if (r < 0) {
       m_refresh_in_progress = false;
@@ -178,7 +190,7 @@ void PoolWatcher<I>::handle_register_watcher(int r) {
 
   Context *on_init_finish = nullptr;
   if (r >= 0) {
-    refresh_images();
+    refresh_entities();
   } else if (r == -EBLOCKLISTED) {
     dout(0) << "detected client is blocklisted" << dendl;
 
@@ -192,11 +204,11 @@ void PoolWatcher<I>::handle_register_watcher(int r) {
       std::swap(on_init_finish, m_on_init_finish);
     }
 
-    schedule_refresh_images(30);
+    schedule_refresh_entities(30);
   } else {
     derr << "unexpected error registering mirroring directory watch: "
          << cpp_strerror(r) << dendl;
-    schedule_refresh_images(10);
+    schedule_refresh_entities(10);
   }
 
   m_async_op_tracker.finish_op();
@@ -224,32 +236,31 @@ void PoolWatcher<I>::unregister_watcher() {
 }
 
 template <typename I>
-void PoolWatcher<I>::refresh_images() {
+void PoolWatcher<I>::refresh_entities() {
   dout(5) << dendl;
 
   {
     std::lock_guard locker{m_lock};
-    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_entities_invalid);
     ceph_assert(m_refresh_in_progress);
 
     // clear all pending notification events since we need to perform
-    // a full image list refresh
-    m_pending_added_image_ids.clear();
-    m_pending_removed_image_ids.clear();
+    // a full entity list refresh
+    m_pending_added_entities.clear();
+    m_pending_removed_entities.clear();
   }
 
   m_async_op_tracker.start_op();
-  m_refresh_image_ids.clear();
+  m_refresh_entities.clear();
   Context *ctx = create_context_callback<
-    PoolWatcher, &PoolWatcher<I>::handle_refresh_images>(this);
-  auto req = pool_watcher::RefreshImagesRequest<I>::create(m_io_ctx,
-                                                           &m_refresh_image_ids,
-                                                           ctx);
+    PoolWatcher, &PoolWatcher<I>::handle_refresh_entities>(this);
+  auto req = pool_watcher::RefreshEntitiesRequest<I>::create(
+    m_io_ctx, &m_refresh_entities, ctx);
   req->send();
 }
 
 template <typename I>
-void PoolWatcher<I>::handle_refresh_images(int r) {
+void PoolWatcher<I>::handle_refresh_entities(int r) {
   dout(5) << "r=" << r << dendl;
 
   bool deferred_refresh = false;
@@ -257,27 +268,27 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
   Context *on_init_finish = nullptr;
   {
     std::lock_guard locker{m_lock};
-    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_entities_invalid);
     ceph_assert(m_refresh_in_progress);
     m_refresh_in_progress = false;
 
     if (r == -ENOENT) {
       dout(5) << "mirroring directory not found" << dendl;
       r = 0;
-      m_refresh_image_ids.clear();
+      m_refresh_entities.clear();
     }
 
     if (m_deferred_refresh) {
       // need to refresh -- skip the notification
       deferred_refresh = true;
     } else if (r >= 0) {
-      m_pending_image_ids = std::move(m_refresh_image_ids);
-      m_image_ids_invalid = false;
+      m_pending_entities = std::move(m_refresh_entities);
+      m_entities_invalid = false;
       std::swap(on_init_finish, m_on_init_finish);
 
       schedule_listener();
     } else if (r == -EBLOCKLISTED) {
-      dout(0) << "detected client is blocklisted during image refresh" << dendl;
+      dout(0) << "detected client is blocklisted during entity refresh" << dendl;
 
       m_blocklisted = true;
       std::swap(on_init_finish, m_on_init_finish);
@@ -288,11 +299,11 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
 
   if (deferred_refresh) {
     dout(5) << "scheduling deferred refresh" << dendl;
-    schedule_refresh_images(0);
+    schedule_refresh_entities(0);
   } else if (retry_refresh) {
     derr << "failed to retrieve mirroring directory: " << cpp_strerror(r)
          << dendl;
-    schedule_refresh_images(10);
+    schedule_refresh_entities(10);
   }
 
   m_async_op_tracker.finish_op();
@@ -302,7 +313,7 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
 }
 
 template <typename I>
-void PoolWatcher<I>::schedule_refresh_images(double interval) {
+void PoolWatcher<I>::schedule_refresh_entities(double interval) {
   std::scoped_lock locker{m_threads->timer_lock, m_lock};
   if (m_shutting_down || m_refresh_in_progress || m_timer_ctx != nullptr) {
     if (m_refresh_in_progress && !m_deferred_refresh) {
@@ -312,11 +323,11 @@ void PoolWatcher<I>::schedule_refresh_images(double interval) {
     return;
   }
 
-  m_image_ids_invalid = true;
+  m_entities_invalid = true;
   m_timer_ctx = m_threads->timer->add_event_after(
     interval,
     new LambdaContext([this](int r) {
-	process_refresh_images();
+	process_refresh_entities();
       }));
 }
 
@@ -337,7 +348,7 @@ void PoolWatcher<I>::handle_rewatch_complete(int r) {
          << cpp_strerror(r) << dendl;
   }
 
-  schedule_refresh_images(5);
+  schedule_refresh_entities(5);
 }
 
 template <typename I>
@@ -349,15 +360,15 @@ void PoolWatcher<I>::handle_image_updated(const std::string &id,
            << "enabled=" << enabled << dendl;
 
   std::lock_guard locker{m_lock};
-  ImageId image_id(global_image_id, id);
-  m_pending_added_image_ids.erase(image_id);
-  m_pending_removed_image_ids.erase(image_id);
+  MirrorEntity entity(MIRROR_ENTITY_TYPE_IMAGE, global_image_id, 1);
+  m_pending_added_entities.erase(entity);
+  m_pending_removed_entities.erase(entity);
 
   if (enabled) {
-    m_pending_added_image_ids.insert(image_id);
+    m_pending_added_entities.insert({entity, id});
     schedule_listener();
   } else {
-    m_pending_removed_image_ids.insert(image_id);
+    m_pending_removed_entities.insert({entity, id});
     schedule_listener();
   }
 }
@@ -375,7 +386,7 @@ void PoolWatcher<I>::handle_group_updated(const std::string &id,
 }
 
 template <typename I>
-void PoolWatcher<I>::process_refresh_images() {
+void PoolWatcher<I>::process_refresh_entities() {
   ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
   ceph_assert(m_timer_ctx != nullptr);
   m_timer_ctx = nullptr;
@@ -400,7 +411,7 @@ template <typename I>
 void PoolWatcher<I>::schedule_listener() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   m_pending_updates = true;
-  if (m_shutting_down || m_image_ids_invalid || m_notify_listener_in_progress) {
+  if (m_shutting_down || m_entities_invalid || m_notify_listener_in_progress) {
     return;
   }
 
@@ -421,54 +432,64 @@ void PoolWatcher<I>::notify_listener() {
   dout(10) << dendl;
 
   std::string mirror_uuid;
-  ImageIds added_image_ids;
-  ImageIds removed_image_ids;
+  MirrorEntities added_entities;
+  MirrorEntities removed_entities;
   {
     std::lock_guard locker{m_lock};
     ceph_assert(m_notify_listener_in_progress);
 
     // if the watch failed while we didn't own the lock, we are going
     // to need to perform a full refresh
-    if (m_image_ids_invalid) {
+    if (m_entities_invalid) {
       m_notify_listener_in_progress = false;
       return;
     }
 
-    // merge add/remove notifications into pending set (a given image
+    // merge add/remove notifications into pending set (a given entity
     // can only be in one set or another)
-    for (auto &image_id : m_pending_removed_image_ids) {
-      dout(20) << "image_id=" << image_id << dendl;
-      m_pending_image_ids.erase(image_id);
-    }
-
-    for (auto &image_id : m_pending_added_image_ids) {
-      dout(20) << "image_id=" << image_id << dendl;
-      m_pending_image_ids.erase(image_id);
-      m_pending_image_ids.insert(image_id);
-    }
-    m_pending_added_image_ids.clear();
-
-    // compute added/removed images
-    for (auto &image_id : m_image_ids) {
-      auto it = m_pending_image_ids.find(image_id);
-      if (it == m_pending_image_ids.end() || it->id != image_id.id) {
-        removed_image_ids.insert(image_id);
+    for (auto &[entity, id] : m_pending_removed_entities) {
+      dout(20) << "removed pending entity={" << entity << "}" << dendl;
+      m_pending_entities.erase(entity);
+      auto it = m_entities.find(entity);
+      if (it != m_entities.end()) {
+        m_entities.erase(entity);
+        m_entities.insert({entity, id});
       }
     }
-    for (auto &image_id : m_pending_image_ids) {
-      auto it = m_image_ids.find(image_id);
-      if (it == m_image_ids.end() || it->id != image_id.id) {
-        added_image_ids.insert(image_id);
+    m_pending_removed_entities.clear();
+
+    for (auto &[entity, id] : m_pending_added_entities) {
+      dout(20) << "added pending entity={" << entity << "}" << dendl;
+      m_pending_entities.erase(entity);
+      m_pending_entities.insert({entity, id});
+    }
+    m_pending_added_entities.clear();
+
+    // compute added/removed images
+    for (auto &[entity, id] : m_entities) {
+      auto it = m_pending_entities.find(entity);
+      // If previous entity is not there in current set of entities or if
+      // their id's don't match then consider its removed
+      if (it == m_pending_entities.end() || it->second != id) { /* PK? */
+        removed_entities.insert(entity);
+      }
+    }
+    for (auto &[entity, id] : m_pending_entities) {
+      auto it = m_entities.find(entity);
+      // If current entity is not there in previous set of entities or if
+      // their id's don't match then consider its added
+      if (it == m_entities.end() || it->second != id ||
+          it->first.count < entity.count) {
+        added_entities.insert(entity);
       }
     }
 
     m_pending_updates = false;
-    m_image_ids = m_pending_image_ids;
+    m_entities = m_pending_entities;
   }
 
-  m_listener.handle_update(m_mirror_uuid, std::move(added_image_ids),
-                           std::move(removed_image_ids));
-
+  m_listener.handle_update(m_mirror_uuid, std::move(added_entities),
+                           std::move(removed_entities));
   {
     std::lock_guard locker{m_lock};
     m_notify_listener_in_progress = false;
