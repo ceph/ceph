@@ -308,12 +308,12 @@ void PG::prepare_write(pg_info_t &info,
   }
 }
 
-ghobject_t PG::do_delete_work(ceph::os::Transaction &t,
-  ghobject_t _next)
+std::pair<ghobject_t, bool>
+PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 {
   // TODO
   shard_services.dec_pg_num();
-  return _next;
+  return {_next, false};
 }
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
