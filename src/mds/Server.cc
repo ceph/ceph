@@ -2330,8 +2330,11 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
     inodeno_t created;
     if (session->have_completed_request(req->get_reqid().tid, &created)) {
       has_completed = true;
-      if (!session->is_open_or_stale())
-        return;
+      if (!session->is_open_or_stale()) {
+	if (req->is_queued_for_replay())
+	  mds->queue_one_replay();
+	return;
+      }
       // Don't send traceless reply if the completed request has created
       // new inode. Treat the request as lookup request instead.
       if (req->is_replay() ||
@@ -2349,7 +2352,6 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
 
 	if (req->is_queued_for_replay())
 	  mds->queue_one_replay();
-
 	return;
       }
       if (req->get_op() != CEPH_MDS_OP_OPEN &&
