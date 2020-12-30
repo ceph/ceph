@@ -2297,6 +2297,15 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     if (!_new)
       op.stat(nullptr, nullptr, nullptr);
 
+    op.priority = op_prio;
+    if (!_set.empty())
+      op.omap_set(_set);
+    if (!_rm.empty()) {
+      op.omap_rm_keys(_rm);
+      if (_new)
+	op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+    }
+
     /*
      * save the header at the last moment.. If we were to send it off before
      * other updates, but die before sending them all, we'd think that the
@@ -2312,11 +2321,6 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       op.omap_set_header(header);
     }
 
-    op.priority = op_prio;
-    if (!_set.empty())
-      op.omap_set(_set);
-    if (!_rm.empty())
-      op.omap_rm_keys(_rm);
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc,
                                    ceph::real_clock::now(),
                                    0, gather.new_sub());
@@ -2451,7 +2455,7 @@ void CDir::_omap_commit(int op_prio)
     for (auto p = items.begin(); p != items.end(); ) {
       CDentry *dn = p->second;
       ++p;
-      if (dn->get_linkage()->is_null())
+      if (!dn->is_dirty() && dn->get_linkage()->is_null())
 	continue;
       write_one(dn);
     }
