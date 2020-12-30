@@ -7361,14 +7361,11 @@ def _parse_args(av):
     return args
 
 
-def main():
+def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
 
     global logger
-
-    # root?
-    if os.geteuid() != 0:
-        sys.stderr.write('ERROR: cephadm should be run as root\n')
-        sys.exit(1)
+    ctx = CephadmContext()
+    ctx.args = _parse_args(args)
 
     # Logger configuration
     if not os.path.exists(LOG_DIR):
@@ -7376,50 +7373,56 @@ def main():
     dictConfig(logging_config)
     logger = logging.getLogger()
 
-    # allow argv to be injected
+    if ctx.args.verbose:
+        for handler in logger.handlers:
+            if handler.name == "console":
+                handler.setLevel(logging.DEBUG)
+
+    if "func" not in ctx.args:
+        sys.stderr.write("No command specified; pass -h or --help for usage\n")
+        return None
+
+    ctx.container_path = ""
+    if ctx.args.func != command_check_host:
+        if ctx.args.docker:
+            ctx.container_path = find_program("docker")
+        else:
+            for i in CONTAINER_PREFERENCE:
+                try:
+                    ctx.container_path = find_program(i)
+                    break
+                except Exception as e:
+                    logger.debug("Could not locate %s: %s" % (i, e))
+            if not ctx.container_path and ctx.args.func != command_prepare_host\
+                    and ctx.args.func != command_add_repo:
+                sys.stderr.write("Unable to locate any of %s\n" %
+                     CONTAINER_PREFERENCE)
+                return None
+
+    return ctx
+
+
+def main():
+
+    # root?
+    if os.geteuid() != 0:
+        sys.stderr.write('ERROR: cephadm should be run as root\n')
+        sys.exit(1)
+
+    av: List[str] = []
     try:
         av = injected_argv  # type: ignore
     except NameError:
         av = sys.argv[1:]
-    logger.debug("%s\ncephadm %s" % ("-" * 80, av))
-    args = _parse_args(av)
 
-    # More verbose console output
-    if args.verbose:
-        for handler in logger.handlers:
-          if handler.name == "console":
-               handler.setLevel(logging.DEBUG)
-
-    if 'func' not in args:
-        sys.stderr.write('No command specified; pass -h or --help for usage\n')
+    ctx = cephadm_init(av)
+    if not ctx: # error, exit
         sys.exit(1)
 
-    container_path = ""
-
-    # podman or docker?
-    if args.func != command_check_host:
-        if args.docker:
-            container_path = find_program('docker')
-        else:
-            for i in CONTAINER_PREFERENCE:
-                try:
-                    container_path = find_program(i)
-                    break
-                except Exception as e:
-                    logger.debug('Could not locate %s: %s' % (i, e))
-            if not container_path and args.func != command_prepare_host\
-                    and args.func != command_add_repo:
-                sys.stderr.write('Unable to locate any of %s\n' % CONTAINER_PREFERENCE)
-                sys.exit(1)
-
-    ctx = CephadmContext()
-    ctx.args = args
-    ctx.container_path = container_path
-
     try:
-        r = args.func(ctx)
+        r = ctx.args.func(ctx)
     except Error as e:
-        if args.verbose:
+        if ctx.args.verbose:
             raise
         sys.stderr.write('ERROR: %s\n' % e)
         sys.exit(1)
