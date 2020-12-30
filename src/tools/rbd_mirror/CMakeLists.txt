@@ -1,4 +1,5 @@
 add_library(rbd_mirror_types STATIC
+  Types.cc
   image_map/Types.cc
   instance_watcher/Types.cc
   leader_watcher/Types.cc)
