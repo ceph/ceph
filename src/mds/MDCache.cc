@@ -12137,7 +12137,21 @@ void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
 
     mds->queue_waiters(waiters);
   } else {
-    ceph_abort();
+    ceph_assert(notify->is_ack_wanted());
+    auto em = make_message<MCacheExpire>(mds->get_nodeid());
+    auto p = notify->basebl.cbegin();
+    while (!p.end()) {
+      // decode replica dirfrag
+      DECODE_START(1, p);
+      dirfrag_t df;
+      __u32 nonce;
+      decode(df, p);
+      decode(nonce, p);
+      em->add_dir(df, df, nonce);
+      // ignore the rest
+      DECODE_FINISH(p)
+    }
+    mds->send_message_mds(em, from);
   }
 
   if (notify->is_ack_wanted()) {
