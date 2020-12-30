@@ -4895,18 +4895,12 @@ void Client::update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool
       put_snap_realm(realm);
   }
 
-  for (map<SnapRealm*, SnapContext>::iterator q = dirty_realms.begin();
-       q != dirty_realms.end();
-       ++q) {
-    SnapRealm *realm = q->first;
+  for (auto &[realm, snapc] : dirty_realms) {
     // if there are new snaps ?
-    if (has_new_snaps(q->second, realm->get_snap_context())) {
+    if (has_new_snaps(snapc, realm->get_snap_context())) {
       ldout(cct, 10) << " flushing caps on " << *realm << dendl;
-      xlist<Inode*>::iterator r = realm->inodes_with_caps.begin();
-      while (!r.end()) {
-	Inode *in = *r;
-	++r;
-	queue_cap_snap(in, q->second);
+      for (auto&& in : realm->inodes_with_caps) {
+	queue_cap_snap(in, snapc);
       }
     } else {
       ldout(cct, 10) << " no new snap on " << *realm << dendl;
