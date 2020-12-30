@@ -24,7 +24,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void RefreshImagesRequest<I>::send() {
-  m_image_ids->clear();
+  m_entities->clear();
   mirror_image_list();
 }
 
@@ -60,9 +60,9 @@ void RefreshImagesRequest<I>::handle_mirror_image_list(int r) {
     return;
   }
 
-  // store as global -> local image ids
-  for (auto &id : ids) {
-    m_image_ids->emplace(id.second, id.first);
+  for (auto &[image_id, global_image_id] : ids) {
+    m_entities->insert(
+        {{MIRROR_ENTITY_TYPE_IMAGE, global_image_id, 1}, image_id});
   }
 
   if (ids.size() == MAX_RETURN) {
