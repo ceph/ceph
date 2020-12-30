@@ -1723,7 +1723,8 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   dout(7) << "wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->get_wrlock(true);
-  mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  it->flags |= MutationImpl::LockOp::WRLOCK; // may already remote_wrlocked
 }
 
 bool Locker::wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client)
