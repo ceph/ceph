@@ -32,8 +32,8 @@
 
 using namespace std::chrono_literals;
 
-using rbd::mirror::ImageId;
-using rbd::mirror::ImageIds;
+using rbd::mirror::MirrorEntity;
+using rbd::mirror::MirrorEntities;
 using rbd::mirror::PoolWatcher;
 using rbd::mirror::PeerSpec;
 using rbd::mirror::RadosRef;
@@ -73,19 +73,23 @@ public:
   struct PoolWatcherListener : public rbd::mirror::pool_watcher::Listener {
     TestPoolWatcher *test;
     ceph::condition_variable cond;
-    ImageIds image_ids;
+    set<string> image_ids;
 
     explicit PoolWatcherListener(TestPoolWatcher *test) : test(test) {
     }
 
     void handle_update(const std::string &mirror_uuid,
-                       ImageIds &&added_image_ids,
-                       ImageIds &&removed_image_ids) override {
+                       MirrorEntities &&added_entities,
+                       MirrorEntities &&removed_entities) override {
       std::lock_guard locker{test->m_lock};
-      for (auto &image_id : removed_image_ids) {
-        image_ids.erase(image_id);
+      for (auto &entity : removed_entities) {
+        EXPECT_EQ(entity.type, rbd::mirror::MIRROR_ENTITY_TYPE_IMAGE);
+        image_ids.erase(entity.global_id);
       }
-      image_ids.insert(added_image_ids.begin(), added_image_ids.end());
+      for (auto &entity : added_entities) {
+        EXPECT_EQ(entity.type, rbd::mirror::MIRROR_ENTITY_TYPE_IMAGE);
+        image_ids.insert(entity.global_id);
+      }
       cond.notify_all();
     }
   };
@@ -120,13 +124,6 @@ public:
     m_pool_watcher->init();
   }
 
-  string get_image_id(librados::IoCtx *ioctx, const string &image_name) {
-    string obj = librbd::util::id_obj_name(image_name);
-    string id;
-    EXPECT_EQ(0, librbd::cls_client::get_id(ioctx, obj, &id));
-    return id;
-  }
-
   void create_image(const string &pool_name, bool mirrored=true,
 		    string *image_name=nullptr) {
     uint64_t features = librbd::util::get_rbd_default_features(g_ceph_context);
@@ -151,8 +148,7 @@ public:
                                                sizeof(mirror_image_info)));
       image.close();
 
-      m_mirrored_images.insert(ImageId(
-        mirror_image_info.global_id, get_image_id(&ioctx, name)));
+      m_mirrored_images.insert(mirror_image_info.global_id);
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -199,8 +195,7 @@ public:
                                                sizeof(mirror_image_info)));
       image.close();
 
-      m_mirrored_images.insert(ImageId(
-        mirror_image_info.global_id, get_image_id(&cioctx, name)));
+      m_mirrored_images.insert(mirror_image_info.global_id);
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -223,7 +218,7 @@ public:
   std::unique_ptr<PoolWatcher<> > m_pool_watcher;
 
   set<string> m_pools;
-  ImageIds m_mirrored_images;
+  set<string> m_mirrored_images;
 
   uint64_t m_image_number;
   uint64_t m_snap_number;
