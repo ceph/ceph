@@ -1313,6 +1313,8 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
     eval_any(&in->nestlock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IFLOCK)
     eval_any(&in->flocklock, &need_issue, &finishers, caps_imported);
+  if (mask & CEPH_LOCK_ISNAP)
+    eval_any(&in->snaplock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IPOLICY)
     eval_any(&in->policylock, &need_issue, &finishers, caps_imported);
 
