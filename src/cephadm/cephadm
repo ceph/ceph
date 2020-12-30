@@ -3097,6 +3097,170 @@ def is_ipv6(ctx, address):
         return False
 
 
+def obtain_mon_ip(ctx: CephadmContext) -> Tuple[str, str]:
+    r = re.compile(r':(\d+)$')
+    base_ip = ""
+    if ctx.args.mon_ip:
+        ipv6 = is_ipv6(ctx, ctx.args.mon_ip)
+        if ipv6:
+            ctx.args.mon_ip = wrap_ipv6(ctx.args.mon_ip)
+        hasport = r.findall(ctx.args.mon_ip)
+        if hasport:
+            port = int(hasport[0])
+            if port == 6789:
+                addr_arg = '[v1:%s]' % ctx.args.mon_ip
+            elif port == 3300:
+                addr_arg = '[v2:%s]' % ctx.args.mon_ip
+            else:
+                logger.warning('Using msgr2 protocol for unrecognized port %d' %
+                               port)
+                addr_arg = '[v2:%s]' % ctx.args.mon_ip
+            base_ip = ctx.args.mon_ip[0:-(len(str(port)))-1]
+            check_ip_port(ctx, base_ip, port)
+        else:
+            base_ip = ctx.args.mon_ip
+            addr_arg = '[v2:%s:3300,v1:%s:6789]' % (ctx.args.mon_ip, ctx.args.mon_ip)
+            check_ip_port(ctx, ctx.args.mon_ip, 3300)
+            check_ip_port(ctx, ctx.args.mon_ip, 6789)
+    elif ctx.args.mon_addrv:
+        addr_arg = ctx.args.mon_addrv
+        if addr_arg[0] != '[' or addr_arg[-1] != ']':
+            raise Error('--mon-addrv value %s must use square backets' %
+                        addr_arg)
+        ipv6 = addr_arg.count('[') > 1
+        for addr in addr_arg[1:-1].split(','):
+            hasport = r.findall(addr)
+            if not hasport:
+                raise Error('--mon-addrv value %s must include port number' %
+                            addr_arg)
+            port = int(hasport[0])
+            # strip off v1: or v2: prefix
+            addr = re.sub(r'^\w+:', '', addr)
+            base_ip = addr[0:-(len(str(port)))-1]
+            check_ip_port(ctx, base_ip, port)
+    else:
+        raise Error('must specify --mon-ip or --mon-addrv')
+    logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
+    return (base_ip, addr_arg)
+
+
+def create_initial_keys(
+    ctx: CephadmContext,
+    uid: int, gid: int,
+    mgr_id: str
+) -> Tuple[str, str, str, Any, Any]: # type: ignore
+
+    _image = ctx.args.image
+
+    # create some initial keys
+    logger.info('Creating initial keys...')
+    mon_key = CephContainer(
+        ctx,
+        image=_image,
+        entrypoint='/usr/bin/ceph-authtool',
+        args=['--gen-print-key'],
+    ).run().strip()
+    admin_key = CephContainer(
+        ctx,
+        image=_image,
+        entrypoint='/usr/bin/ceph-authtool',
+        args=['--gen-print-key'],
+    ).run().strip()
+    mgr_key = CephContainer(
+        ctx,
+        image=_image,
+        entrypoint='/usr/bin/ceph-authtool',
+        args=['--gen-print-key'],
+    ).run().strip()
+
+    keyring = ('[mon.]\n'
+               '\tkey = %s\n'
+               '\tcaps mon = allow *\n'
+               '[client.admin]\n'
+               '\tkey = %s\n'
+               '\tcaps mon = allow *\n'
+               '\tcaps mds = allow *\n'
+               '\tcaps mgr = allow *\n'
+               '\tcaps osd = allow *\n'
+               '[mgr.%s]\n'
+               '\tkey = %s\n'
+               '\tcaps mon = profile mgr\n'
+               '\tcaps mds = allow *\n'
+               '\tcaps osd = allow *\n'
+               % (mon_key, admin_key, mgr_id, mgr_key))
+
+    admin_keyring = write_tmp('[client.admin]\n'
+                                  '\tkey = ' + admin_key + '\n',
+                                       uid, gid)
+
+    # tmp keyring file
+    bootstrap_keyring = write_tmp(keyring, uid, gid)
+    return (mon_key, mgr_key, admin_key,
+            bootstrap_keyring, admin_keyring)
+
+
+def create_initial_monmap(
+    ctx: CephadmContext,
+    uid: int, gid: int,
+    fsid: str,
+    mon_id: str, mon_addr: str
+) -> Any:
+    logger.info('Creating initial monmap...')
+    monmap = write_tmp('', 0, 0)
+    out = CephContainer(
+        ctx,
+        image=ctx.args.image,
+        entrypoint='/usr/bin/monmaptool',
+        args=['--create',
+              '--clobber',
+              '--fsid', fsid,
+              '--addv', mon_id, mon_addr,
+              '/tmp/monmap'
+        ],
+        volume_mounts={
+            monmap.name: '/tmp/monmap:z',
+        },
+    ).run()
+    logger.debug(f"monmaptool for {mon_id} {mon_addr} on {out}")
+
+    # pass monmap file to ceph user for use by ceph-mon --mkfs below
+    os.fchown(monmap.fileno(), uid, gid)
+    return monmap
+
+
+def create_mon(
+    ctx: CephadmContext,
+    uid: int, gid: int,
+    fsid: str, mon_id: str,
+    bootstrap_keyring_path: str,
+    monmap_path: str
+):
+    logger.info('Creating mon...')
+    create_daemon_dirs(ctx, fsid, 'mon', mon_id, uid, gid)
+    mon_dir = get_data_dir(fsid, ctx.args.data_dir, 'mon', mon_id)
+    log_dir = get_log_dir(fsid, ctx.args.log_dir)
+    out = CephContainer(
+        ctx,
+        image=ctx.args.image,
+        entrypoint='/usr/bin/ceph-mon',
+        args=['--mkfs',
+              '-i', mon_id,
+              '--fsid', fsid,
+              '-c', '/dev/null',
+              '--monmap', '/tmp/monmap',
+              '--keyring', '/tmp/keyring',
+        ] + get_daemon_args(ctx, fsid, 'mon', mon_id),
+        volume_mounts={
+            log_dir: '/var/log/ceph:z',
+            mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+            bootstrap_keyring_path: '/tmp/keyring:z',
+            monmap_path: '/tmp/monmap:z',
+        },
+    ).run()
+    logger.debug(f"create mon.{mon_id} on {out}")
+    return (mon_dir, log_dir)
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -3149,49 +3313,7 @@ def command_bootstrap(ctx):
     l.acquire()
 
     # ip
-    r = re.compile(r':(\d+)$')
-    base_ip = ''
-    if ctx.args.mon_ip:
-        ipv6 = is_ipv6(ctx, ctx.args.mon_ip)
-        if ipv6:
-            ctx.args.mon_ip = wrap_ipv6(ctx.args.mon_ip)
-        hasport = r.findall(ctx.args.mon_ip)
-        if hasport:
-            port = int(hasport[0])
-            if port == 6789:
-                addr_arg = '[v1:%s]' % ctx.args.mon_ip
-            elif port == 3300:
-                addr_arg = '[v2:%s]' % ctx.args.mon_ip
-            else:
-                logger.warning('Using msgr2 protocol for unrecognized port %d' %
-                               port)
-                addr_arg = '[v2:%s]' % ctx.args.mon_ip
-            base_ip = ctx.args.mon_ip[0:-(len(str(port)))-1]
-            check_ip_port(ctx, base_ip, port)
-        else:
-            base_ip = ctx.args.mon_ip
-            addr_arg = '[v2:%s:3300,v1:%s:6789]' % (ctx.args.mon_ip, ctx.args.mon_ip)
-            check_ip_port(ctx, args.mon_ip, 3300)
-            check_ip_port(ctx, args.mon_ip, 6789)
-    elif ctx.args.mon_addrv:
-        addr_arg = ctx.args.mon_addrv
-        if addr_arg[0] != '[' or addr_arg[-1] != ']':
-            raise Error('--mon-addrv value %s must use square backets' %
-                        addr_arg)
-        ipv6 = addr_arg.count('[') > 1
-        for addr in addr_arg[1:-1].split(','):
-            hasport = r.findall(addr)
-            if not hasport:
-                raise Error('--mon-addrv value %s must include port number' %
-                            addr_arg)
-            port = int(hasport[0])
-            # strip off v1: or v2: prefix
-            addr = re.sub(r'^\w+:', '', addr)
-            base_ip = addr[0:-(len(str(port)))-1]
-            check_ip_port(ctx, base_ip, port)
-    else:
-        raise Error('must specify --mon-ip or --mon-addrv')
-    logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
+    (base_ip, addr_arg) = obtain_mon_ip(ctx)    
 
     mon_network = None
     if not ctx.args.skip_mon_network:
@@ -3229,89 +3351,15 @@ def command_bootstrap(ctx):
     (uid, gid) = extract_uid_gid(ctx)
 
     # create some initial keys
-    logger.info('Creating initial keys...')
-    mon_key = CephContainer(
-        ctx,
-        image=ctx.args.image,
-        entrypoint='/usr/bin/ceph-authtool',
-        args=['--gen-print-key'],
-    ).run().strip()
-    admin_key = CephContainer(
-        ctx,
-        image=ctx.args.image,
-        entrypoint='/usr/bin/ceph-authtool',
-        args=['--gen-print-key'],
-    ).run().strip()
-    mgr_key = CephContainer(
-        ctx,
-        image=ctx.args.image,
-        entrypoint='/usr/bin/ceph-authtool',
-        args=['--gen-print-key'],
-    ).run().strip()
+    (mon_key, mgr_key, admin_key,
+     bootstrap_keyring, admin_keyring
+    ) = \
+        create_initial_keys(ctx, uid, gid, mgr_id)
 
-    keyring = ('[mon.]\n'
-               '\tkey = %s\n'
-               '\tcaps mon = allow *\n'
-               '[client.admin]\n'
-               '\tkey = %s\n'
-               '\tcaps mon = allow *\n'
-               '\tcaps mds = allow *\n'
-               '\tcaps mgr = allow *\n'
-               '\tcaps osd = allow *\n'
-               '[mgr.%s]\n'
-               '\tkey = %s\n'
-               '\tcaps mon = profile mgr\n'
-               '\tcaps mds = allow *\n'
-               '\tcaps osd = allow *\n'
-               % (mon_key, admin_key, mgr_id, mgr_key))
-
-    # tmp keyring file
-    tmp_bootstrap_keyring = write_tmp(keyring, uid, gid)
-
-    # create initial monmap, tmp monmap file
-    logger.info('Creating initial monmap...')
-    tmp_monmap = write_tmp('', 0, 0)
-    out = CephContainer(
-        ctx,
-        image=ctx.args.image,
-        entrypoint='/usr/bin/monmaptool',
-        args=['--create',
-              '--clobber',
-              '--fsid', fsid,
-              '--addv', mon_id, addr_arg,
-              '/tmp/monmap'
-        ],
-        volume_mounts={
-            tmp_monmap.name: '/tmp/monmap:z',
-        },
-    ).run()
-
-    # pass monmap file to ceph user for use by ceph-mon --mkfs below
-    os.fchown(tmp_monmap.fileno(), uid, gid)
-
-    # create mon
-    logger.info('Creating mon...')
-    create_daemon_dirs(ctx, fsid, 'mon', mon_id, uid, gid)
-    mon_dir = get_data_dir(fsid, ctx.args.data_dir, 'mon', mon_id)
-    log_dir = get_log_dir(fsid, ctx.args.log_dir)
-    out = CephContainer(
-        ctx,
-        image=ctx.args.image,
-        entrypoint='/usr/bin/ceph-mon',
-        args=['--mkfs',
-              '-i', mon_id,
-              '--fsid', fsid,
-              '-c', '/dev/null',
-              '--monmap', '/tmp/monmap',
-              '--keyring', '/tmp/keyring',
-        ] + get_daemon_args(ctx, fsid, 'mon', mon_id),
-        volume_mounts={
-            log_dir: '/var/log/ceph:z',
-            mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-            tmp_bootstrap_keyring.name: '/tmp/keyring:z',
-            tmp_monmap.name: '/tmp/monmap:z',
-        },
-    ).run()
+    monmap = create_initial_monmap(ctx, uid, gid, fsid, mon_id, addr_arg)
+    (mon_dir, log_dir) = \
+        create_mon(ctx, uid, gid, fsid, mon_id,
+                   bootstrap_keyring.name, monmap.name)
 
     with open(mon_dir + '/config', 'w') as f:
         os.fchown(f.fileno(), uid, gid)
@@ -3323,10 +3371,7 @@ def command_bootstrap(ctx):
     deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
 
-    # client.admin key + config to issue various CLI commands
-    tmp_admin_keyring = write_tmp('[client.admin]\n'
-                                  '\tkey = ' + admin_key + '\n',
-                                       uid, gid)
+    # config to issue various CLI commands
     tmp_config = write_tmp(config, uid, gid)
 
     # a CLI helper to reduce our typing
@@ -3334,7 +3379,7 @@ def command_bootstrap(ctx):
         # type: (List[str], Dict[str, str], Optional[int]) -> str
         mounts = {
             log_dir: '/var/log/ceph:z',
-            tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+            admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
             tmp_config.name: '/etc/ceph/ceph.conf:z',
         }
         for k, v in extra_mounts.items():
@@ -3357,7 +3402,7 @@ def command_bootstrap(ctx):
             'status'],
         volume_mounts={
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-            tmp_admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
+            admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
             tmp_config.name: '/etc/ceph/ceph.conf:z',
         },
     )
