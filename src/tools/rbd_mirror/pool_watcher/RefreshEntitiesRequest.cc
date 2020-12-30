@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.h"
+#include "tools/rbd_mirror/pool_watcher/RefreshEntitiesRequest.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -11,7 +11,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::mirror::pool_watcher::RefreshImagesRequest " \
+#define dout_prefix *_dout << "rbd::mirror::pool_watcher::RefreshEntitiesRequest " \
                            << this << " " << __func__ << ": "
 
 namespace rbd {
@@ -23,13 +23,13 @@ static const uint32_t MAX_RETURN = 1024;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-void RefreshImagesRequest<I>::send() {
-  m_image_ids->clear();
+void RefreshEntitiesRequest<I>::send() {
+  m_entities->clear();
   mirror_image_list();
 }
 
 template <typename I>
-void RefreshImagesRequest<I>::mirror_image_list() {
+void RefreshEntitiesRequest<I>::mirror_image_list() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
@@ -37,15 +37,15 @@ void RefreshImagesRequest<I>::mirror_image_list() {
                                               false);
   m_out_bl.clear();
   librados::AioCompletion *aio_comp = create_rados_callback<
-    RefreshImagesRequest<I>,
-    &RefreshImagesRequest<I>::handle_mirror_image_list>(this);
+    RefreshEntitiesRequest<I>,
+    &RefreshEntitiesRequest<I>::handle_mirror_image_list>(this);
   int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
   ceph_assert(r == 0);
   aio_comp->release();
 }
 
 template <typename I>
-void RefreshImagesRequest<I>::handle_mirror_image_list(int r) {
+void RefreshEntitiesRequest<I>::handle_mirror_image_list(int r) {
   dout(10) << "r=" << r << dendl;
 
   std::map<std::string, std::string> ids;
@@ -60,9 +60,9 @@ void RefreshImagesRequest<I>::handle_mirror_image_list(int r) {
     return;
   }
 
-  // store as global -> local image ids
-  for (auto &id : ids) {
-    m_image_ids->emplace(id.second, id.first);
+  for (auto &[image_id, global_image_id] : ids) {
+    m_entities->insert(
+        {{MIRROR_ENTITY_TYPE_IMAGE, global_image_id, 1}, image_id});
   }
 
   if (ids.size() == MAX_RETURN) {
@@ -75,7 +75,7 @@ void RefreshImagesRequest<I>::handle_mirror_image_list(int r) {
 }
 
 template <typename I>
-void RefreshImagesRequest<I>::finish(int r) {
+void RefreshEntitiesRequest<I>::finish(int r) {
   dout(10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
@@ -86,4 +86,4 @@ void RefreshImagesRequest<I>::finish(int r) {
 } // namespace mirror
 } // namespace rbd
 
-template class rbd::mirror::pool_watcher::RefreshImagesRequest<librbd::ImageCtx>;
+template class rbd::mirror::pool_watcher::RefreshEntitiesRequest<librbd::ImageCtx>;

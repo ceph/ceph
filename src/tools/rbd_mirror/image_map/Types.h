@@ -46,6 +46,7 @@ struct Listener {
 struct LookupInfo {
   std::string instance_id = UNMAPPED_INSTANCE_ID;
   utime_t mapped_time;
+  uint64_t weight = 1;
 };
 
 enum ActionType {
@@ -56,8 +57,31 @@ enum ActionType {
   ACTION_TYPE_RELEASE
 };
 
+struct GlobalId {
+  MirrorEntityType type = MIRROR_ENTITY_TYPE_IMAGE;
+  std::string id;
+
+  GlobalId(MirrorEntityType type, const std::string &id) : type(type), id(id) {
+  }
+  GlobalId(const std::string &global_id);
+
+  std::string to_str() const;
+
+  inline bool operator==(const GlobalId &rhs) const {
+    return type == rhs.type && id == rhs.id;
+  }
+  inline bool operator<(const GlobalId &rhs) const {
+    if (type != rhs.type) {
+      return type < rhs.type;
+    }
+    return id < rhs.id;
+  }
+};
+
+std::ostream &operator<<(std::ostream &os, const GlobalId &global_id);
+
 typedef std::vector<std::string> InstanceIds;
-typedef std::set<std::string> GlobalImageIds;
+typedef std::set<GlobalId> GlobalIds;
 typedef std::map<std::string, ActionType> ImageActionTypes;
 
 enum PolicyMetaType {
@@ -104,10 +128,11 @@ struct PolicyData {
   PolicyData()
     : policy_meta(PolicyMetaUnknown()) {
   }
-  PolicyData(const PolicyMeta &policy_meta)
-    : policy_meta(policy_meta) {
+  PolicyData(uint64_t weight, const PolicyMeta &policy_meta)
+    : weight(weight), policy_meta(policy_meta) {
   }
 
+  uint64_t weight = 1;
   PolicyMeta policy_meta;
 
   PolicyMetaType get_policy_meta_type() const;

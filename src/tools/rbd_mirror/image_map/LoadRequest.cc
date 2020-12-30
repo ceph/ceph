@@ -28,7 +28,7 @@ using librbd::util::create_context_callback;
 
 template<typename I>
 LoadRequest<I>::LoadRequest(librados::IoCtx &ioctx,
-                            std::map<std::string, cls::rbd::MirrorImageMap> *image_mapping,
+                            std::map<GlobalId, cls::rbd::MirrorImageMap> *image_mapping,
                             Context *on_finish)
   : m_ioctx(ioctx),
     m_image_mapping(image_mapping),
@@ -74,7 +74,16 @@ void LoadRequest<I>::handle_image_map_list(int r) {
     return;
   }
 
-  m_image_mapping->insert(image_mapping.begin(), image_mapping.end());
+  for (auto &[global_id_str, image_map] : image_mapping) {
+    auto global_id = GlobalId(global_id_str);
+    if (global_id.type != MIRROR_ENTITY_TYPE_IMAGE &&
+        global_id.type != MIRROR_ENTITY_TYPE_GROUP) {
+      derr << ": unknown mirror entitiy type " << global_id.type << " for "
+           << global_id_str << dendl;
+      continue;
+    }
+    m_image_mapping->insert({global_id, image_map});
+  }
 
   if (image_mapping.size() == MAX_RETURN) {
     m_start_after = image_mapping.rbegin()->first;
@@ -135,7 +144,7 @@ template<typename I>
 void LoadRequest<I>::cleanup_image_map() {
   dout(20) << dendl;
 
-  std::set<std::string> map_removals;
+  std::set<GlobalId> map_removals;
 
   auto it = m_image_mapping->begin();
   while (it != m_image_mapping->end()) {
