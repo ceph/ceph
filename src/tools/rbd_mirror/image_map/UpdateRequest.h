@@ -6,6 +6,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/rados/librados.hpp"
+#include "Types.h"
 
 class Context;
 
@@ -21,9 +22,9 @@ public:
   // accepts an image map for updation and a collection of
   // global image ids to purge.
   static UpdateRequest *create(librados::IoCtx &ioctx,
-                               std::map<std::string, cls::rbd::MirrorImageMap> &&update_mapping,
-                               std::set<std::string> &&remove_global_image_ids, Context *on_finish) {
-    return new UpdateRequest(ioctx, std::move(update_mapping), std::move(remove_global_image_ids),
+                               std::map<GlobalId, cls::rbd::MirrorImageMap> &&update_mapping,
+                               GlobalIds &&remove_global_ids, Context *on_finish) {
+    return new UpdateRequest(ioctx, std::move(update_mapping), std::move(remove_global_ids),
                              on_finish);
   }
 
@@ -44,12 +45,12 @@ private:
    * @endverbatim
    */
   UpdateRequest(librados::IoCtx &ioctx,
-                std::map<std::string, cls::rbd::MirrorImageMap> &&update_mapping,
-                std::set<std::string> &&remove_global_image_ids, Context *on_finish);
+                std::map<GlobalId, cls::rbd::MirrorImageMap> &&update_mapping,
+                GlobalIds &&remove_global_ids, Context *on_finish);
 
   librados::IoCtx &m_ioctx;
-  std::map<std::string, cls::rbd::MirrorImageMap> m_update_mapping;
-  std::set<std::string> m_remove_global_image_ids;
+  std::map<GlobalId, cls::rbd::MirrorImageMap> m_update_mapping;
+  GlobalIds m_remove_global_ids;
   Context *m_on_finish;
 
   void update_image_map();
