@@ -4428,7 +4428,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
   if (s->info.args.sub_resource_exists("logging") ||
-      s->info.args.sub_resource_exists("encryption"))
+      s->info.args.sub_resource_exists("encryption") ||
+      s->info.args.exists("uploadId"))
     return nullptr;
 
   if (is_tagging_op()) {
