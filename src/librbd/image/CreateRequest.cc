@@ -73,6 +73,9 @@ int validate_striping(CephContext *cct, uint8_t order, uint64_t stripe_unit,
   } else if (stripe_unit && ((1ull << order) % stripe_unit || stripe_unit > (1ull << order))) {
     lderr(cct) << "stripe unit is not a factor of the object size" << dendl;
     return -EINVAL;
+  } else if (stripe_unit != 0 && stripe_unit < 512) {
+    lderr(cct) << "stripe unit must be at least 512 bytes" << dendl;
+    return -EINVAL;
   }
   return 0;
 }
