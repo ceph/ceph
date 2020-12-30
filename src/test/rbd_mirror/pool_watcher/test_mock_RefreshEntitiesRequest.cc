@@ -5,7 +5,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "test/librbd/mock/MockImageCtx.h"
-#include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.h"
+#include "tools/rbd_mirror/pool_watcher/RefreshEntitiesRequest.h"
 #include "include/stringify.h"
 
 namespace librbd {
@@ -21,8 +21,8 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 } // namespace librbd
 
 // template definitions
-#include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.cc"
-template class rbd::mirror::pool_watcher::RefreshImagesRequest<librbd::MockTestImageCtx>;
+#include "tools/rbd_mirror/pool_watcher/RefreshEntitiesRequest.cc"
+template class rbd::mirror::pool_watcher::RefreshEntitiesRequest<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
@@ -36,9 +36,9 @@ using ::testing::Return;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
-class TestMockPoolWatcherRefreshImagesRequest : public TestMockFixture {
+class TestMockPoolWatcherRefreshEntitiesRequest : public TestMockFixture {
 public:
-  typedef RefreshImagesRequest<librbd::MockTestImageCtx> MockRefreshImagesRequest;
+  typedef RefreshEntitiesRequest<librbd::MockTestImageCtx> MockRefreshEntitiesRequest;
 
   void expect_mirror_image_list(librados::IoCtx &io_ctx,
                                 const std::map<std::string, std::string> &ids,
@@ -57,56 +57,59 @@ public:
 
 };
 
-TEST_F(TestMockPoolWatcherRefreshImagesRequest, Success) {
+TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, Success) {
   InSequence seq;
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
-  MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+  std::map<MirrorEntity, std::string> entities;
+  MockRefreshEntitiesRequest *req = new MockRefreshEntitiesRequest(
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  ImageIds expected_image_ids = {{"global id", "local id"}};
-  ASSERT_EQ(expected_image_ids, image_ids);
+  std::map<MirrorEntity, std::string> expected_entities =
+    {{{MIRROR_ENTITY_TYPE_IMAGE, "global id", 1}, "local id"}};
+  ASSERT_EQ(expected_entities, entities);
 }
 
-TEST_F(TestMockPoolWatcherRefreshImagesRequest, LargeDirectory) {
+TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, LargeDirectory) {
   InSequence seq;
   std::map<std::string, std::string> mirror_list;
-  ImageIds expected_image_ids;
+  std::map<MirrorEntity, std::string> expected_entities;
   for (uint32_t idx = 1; idx <= 1024; ++idx) {
     mirror_list.insert(std::make_pair("local id " + stringify(idx),
                                       "global id " + stringify(idx)));
-    expected_image_ids.insert({{"global id " + stringify(idx),
-                                "local id " + stringify(idx)}});
+    expected_entities.insert(
+      {{MIRROR_ENTITY_TYPE_IMAGE, "global id " + stringify(idx), 1},
+       "local id " + stringify(idx)});
   }
 
   expect_mirror_image_list(m_remote_io_ctx, mirror_list, 0);
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
-  MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+  std::map<MirrorEntity, std::string> entities;
+  MockRefreshEntitiesRequest *req = new MockRefreshEntitiesRequest(
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  expected_image_ids.insert({"global id", "local id"});
-  ASSERT_EQ(expected_image_ids, image_ids);
+  expected_entities.insert(
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global id", 1}, "local id"});
+  ASSERT_EQ(expected_entities, entities);
 }
 
-TEST_F(TestMockPoolWatcherRefreshImagesRequest, MirrorImageListError) {
+TEST_F(TestMockPoolWatcherRefreshEntitiesRequest, MirrorImageListError) {
   InSequence seq;
   expect_mirror_image_list(m_remote_io_ctx, {}, -EINVAL);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
-  MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+  std::map<MirrorEntity, std::string> entities;
+  MockRefreshEntitiesRequest *req = new MockRefreshEntitiesRequest(
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
