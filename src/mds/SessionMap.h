@@ -233,6 +233,8 @@ public:
   bool is_stale() const { return state == STATE_STALE; }
   bool is_killing() const { return state == STATE_KILLING; }
 
+  bool is_open_or_stale() const { return is_open() || is_stale(); }
+
   void inc_importing() {
     ++importing_count;
   }

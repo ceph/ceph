@@ -9830,7 +9830,7 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
   set<Session*> sessions;
   mds->sessionmap.get_client_session_set(sessions);
   for (auto &session : sessions) {
-    if (!session->is_open() && !session->is_stale())
+    if (!session->is_open_or_stale())
       continue;
     auto update = make_message<MClientSnap>(snap_op);
     update->head.split = global_snaprealm->inode->ino();

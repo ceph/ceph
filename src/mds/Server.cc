@@ -415,7 +415,7 @@ Session* Server::find_session_by_uuid(std::string_view uuid)
 
 void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
 {
-  if (!session->is_open() && !session->is_stale()) {
+  if (!session->is_open_or_stale()) {
     dout(10) << "session not open, dropping this req" << dendl;
     return;
   }
@@ -574,8 +574,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
   switch (m->get_op()) {
   case CEPH_SESSION_REQUEST_OPEN:
     if (session->is_opening() ||
-	session->is_open() ||
-	session->is_stale() ||
+	session->is_open_or_stale() ||
 	session->is_killing() ||
 	terminating_sessions) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
@@ -715,7 +714,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
-    if (session->is_open() || session->is_stale()) {
+    if (session->is_open_or_stale()) {
       mds->sessionmap.touch_session(session);
       if (session->is_stale()) {
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
@@ -741,9 +740,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	dout(10) << "ignoring close req on importing session" << dendl;
 	return;
       }
-      ceph_assert(session->is_open() || 
-	     session->is_stale() || 
-	     session->is_opening());
+      ceph_assert(session->is_open_or_stale() || session->is_opening());
       if (m->get_seq() < session->get_push_seq()) {
 	dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq() 
 		 << ", dropping" << dendl;
@@ -969,9 +966,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
       if (q != cmm.end())
 	session->info.client_metadata.merge(q->second);
     } else {
-      ceph_assert(session->is_open() ||
-	     session->is_opening() ||
-	     session->is_stale());
+      ceph_assert(session->is_open_or_stale() || session->is_opening());
       sseq = 0;
     }
     smap[p->first] = make_pair(session, sseq);
@@ -1013,7 +1008,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
       }
     } else {
       dout(10) << "force_open_sessions skipping already-open " << session->info.inst << dendl;
-      ceph_assert(session->is_open() || session->is_stale());
+      ceph_assert(session->is_open_or_stale());
     }
 
     if (dec_import) {
@@ -1264,8 +1259,7 @@ void Server::kill_session(Session *session, Context *on_safe)
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
   if ((session->is_opening() ||
-       session->is_open() ||
-       session->is_stale()) &&
+       session->is_open_or_stale()) &&
       !session->is_importing()) {
     dout(10) << "kill_session " << session << dendl;
     journal_close_session(session, Session::STATE_KILLING, on_safe);
@@ -1855,7 +1849,7 @@ void Server::force_clients_readonly()
       ++p) {
     Session *session = *p;
     if (!session->info.inst.name.is_client() ||
-	!(session->is_open() || session->is_stale()))
+	!session->is_open_or_stale())
       continue;
     mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_FORCE_RO), session);
   }
