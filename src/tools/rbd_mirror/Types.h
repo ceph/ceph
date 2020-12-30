@@ -41,27 +41,36 @@ typedef std::shared_ptr<librados::Rados> RadosRef;
 typedef std::shared_ptr<librados::IoCtx> IoCtxRef;
 typedef std::shared_ptr<librbd::Image> ImageRef;
 
-struct ImageId {
+enum MirrorEntityType {
+  MIRROR_ENTITY_TYPE_IMAGE = 0,
+  MIRROR_ENTITY_TYPE_GROUP = 1,
+};
+
+std::ostream &operator<<(std::ostream &os, const MirrorEntityType &type);
+
+struct MirrorEntity {
+  MirrorEntityType type = MIRROR_ENTITY_TYPE_IMAGE;
   std::string global_id;
-  std::string id;
+  size_t count = 1;
 
-  explicit ImageId(const std::string &global_id) : global_id(global_id) {
-  }
-  ImageId(const std::string &global_id, const std::string &id)
-    : global_id(global_id), id(id) {
+  MirrorEntity(MirrorEntityType type, const std::string &global_id, size_t count)
+    : type(type), global_id(global_id), count(count) {
   }
 
-  inline bool operator==(const ImageId &rhs) const {
-    return (global_id == rhs.global_id && id == rhs.id);
+  inline bool operator==(const MirrorEntity &rhs) const {
+    return type == rhs.type && global_id == rhs.global_id && count == rhs.count;
   }
-  inline bool operator<(const ImageId &rhs) const {
+  inline bool operator<(const MirrorEntity &rhs) const {
+    if (type != rhs.type) {
+      return type < rhs.type;
+    }
     return global_id < rhs.global_id;
   }
 };
 
-std::ostream &operator<<(std::ostream &, const ImageId &image_id);
+std::ostream &operator<<(std::ostream &, const MirrorEntity &entity);
 
-typedef std::set<ImageId> ImageIds;
+typedef std::set<MirrorEntity> MirrorEntities;
 
 struct LocalPoolMeta {
   LocalPoolMeta() {}

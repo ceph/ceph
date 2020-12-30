@@ -47,7 +47,7 @@ add_executable(unittest_rbd_mirror
   image_replayer/snapshot/test_mock_Replayer.cc
   image_sync/test_mock_SyncPointCreateRequest.cc
   image_sync/test_mock_SyncPointPruneRequest.cc
-  pool_watcher/test_mock_RefreshImagesRequest.cc
+  pool_watcher/test_mock_RefreshEntitiesRequest.cc
   )
 add_ceph_unittest(unittest_rbd_mirror)
 

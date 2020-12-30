@@ -49,14 +49,10 @@ public:
   PoolWatcher& operator=(const PoolWatcher&) = delete;
 
   bool is_blocklisted() const;
+  size_t get_image_count() const;
 
   void init(Context *on_finish = nullptr);
   void shut_down(Context *on_finish);
-
-  inline uint64_t get_image_count() const {
-    std::lock_guard locker{m_lock};
-    return m_image_ids.size();
-  }
 
 private:
   /**
@@ -73,7 +69,7 @@ private:
    *    |/--------------------------------\
    *    |                                 |
    *    v                                 |
-   * REFRESH_IMAGES                       |
+   * REFRESH_ENTITIES                     |
    *    |                                 |
    *    |/----------------------------\   |
    *    |                             |   |
@@ -83,10 +79,7 @@ private:
    *    v                             |   |
    *  IDLE ---\                       |   |
    *    |     |                       |   |
-   *    |     |\---> IMAGE_UPDATED    |   |
-   *    |     |         |             |   |
-   *    |     |         v             |   |
-   *    |     |      GET_IMAGE_NAME --/   |
+   *    |     |\---> ENTITY_UPDATED --/   |
    *    |     |                           |
    *    |     \----> WATCH_ERROR ---------/
    *    v
@@ -107,20 +100,20 @@ private:
   std::string m_mirror_uuid;
   pool_watcher::Listener &m_listener;
 
-  ImageIds m_refresh_image_ids;
+  std::map<MirrorEntity, std::string> m_refresh_entities;
   bufferlist m_out_bl;
 
   mutable ceph::mutex m_lock;
 
   Context *m_on_init_finish = nullptr;
 
-  ImageIds m_image_ids;
+  std::map<MirrorEntity, std::string> m_entities;
 
   bool m_pending_updates = false;
   bool m_notify_listener_in_progress = false;
-  ImageIds m_pending_image_ids;
-  ImageIds m_pending_added_image_ids;
-  ImageIds m_pending_removed_image_ids;
+  std::map<MirrorEntity, std::string> m_pending_entities;
+  std::map<MirrorEntity, std::string> m_pending_added_entities;
+  std::map<MirrorEntity, std::string> m_pending_removed_entities;
 
   MirroringWatcher *m_mirroring_watcher;
 
@@ -129,7 +122,7 @@ private:
   AsyncOpTracker m_async_op_tracker;
   bool m_blocklisted = false;
   bool m_shutting_down = false;
-  bool m_image_ids_invalid = true;
+  bool m_entities_invalid = true;
   bool m_refresh_in_progress = false;
   bool m_deferred_refresh = false;
 
@@ -137,11 +130,11 @@ private:
   void handle_register_watcher(int r);
   void unregister_watcher();
 
-  void refresh_images();
-  void handle_refresh_images(int r);
+  void refresh_entities();
+  void handle_refresh_entities(int r);
 
-  void schedule_refresh_images(double interval);
-  void process_refresh_images();
+  void schedule_refresh_entities(double interval);
+  void process_refresh_entities();
 
   void handle_rewatch_complete(int r);
   void handle_image_updated(const std::string &image_id,
