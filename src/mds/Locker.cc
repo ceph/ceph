@@ -5356,6 +5356,13 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
     return;
   }
 
+  if (in->is_stray()) {
+    // we want to keep straydir writable at all times.
+    if (!lock->is_rdlocked() && lock->get_state() != LOCK_LOCK)
+      simple_lock(lock, need_issue);
+    return;
+  }
+
   // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {
     dout(20) << " is excl" << dendl;
