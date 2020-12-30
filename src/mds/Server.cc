@@ -2330,7 +2330,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
     inodeno_t created;
     if (session->have_completed_request(req->get_reqid().tid, &created)) {
       has_completed = true;
-      if (!session->is_open())
+      if (!session->is_open_or_stale())
         return;
       // Don't send traceless reply if the completed request has created
       // new inode. Treat the request as lookup request instead.
@@ -3210,7 +3210,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   // state. In that corner case, session's prealloc_inos are being freed.
   // To simplify the code, we disallow using/refilling session's prealloc_ino
   // while session is opening.
-  bool allow_prealloc_inos = mdr->session->is_open();
+  bool allow_prealloc_inos = mdr->session->is_open_or_stale();
 
   // assign ino
   if (allow_prealloc_inos && (mdr->used_prealloc_ino = _inode->ino = mdr->session->take_ino(useino))) {
