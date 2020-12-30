@@ -3261,6 +3261,37 @@ def create_mon(
     return (mon_dir, log_dir)
 
 
+def wait_for_mon(
+    ctx: CephadmContext,
+    mon_id: str, mon_dir: str,
+    admin_keyring_path: str, config_path: str
+):
+    logger.info('Waiting for mon to start...')
+    c = CephContainer(
+        ctx,
+        image=ctx.args.image,
+        entrypoint='/usr/bin/ceph',
+        args=[
+            'status'],
+        volume_mounts={
+            mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
+            admin_keyring_path: '/etc/ceph/ceph.client.admin.keyring:z',
+            config_path: '/etc/ceph/ceph.conf:z',
+        },
+    )
+
+    # wait for the service to become available
+    def is_mon_available():
+        # type: () -> bool
+        timeout=ctx.args.timeout if ctx.args.timeout else 60 # seconds
+        out, err, ret = call(ctx, c.run_cmd(),
+                             desc=c.entrypoint,
+                             timeout=timeout)
+        return ret == 0
+
+    is_available(ctx, 'mon', is_mon_available)
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -3393,29 +3424,7 @@ def command_bootstrap(ctx):
             volume_mounts=mounts,
         ).run(timeout=timeout)
 
-    logger.info('Waiting for mon to start...')
-    c = CephContainer(
-        ctx,
-        image=ctx.args.image,
-        entrypoint='/usr/bin/ceph',
-        args=[
-            'status'],
-        volume_mounts={
-            mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
-            admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
-            tmp_config.name: '/etc/ceph/ceph.conf:z',
-        },
-    )
-
-    # wait for the service to become available
-    def is_mon_available():
-        # type: () -> bool
-        timeout=ctx.args.timeout if ctx.args.timeout else 60 # seconds
-        out, err, ret = call(ctx, c.run_cmd(),
-                             desc=c.entrypoint,
-                             timeout=timeout)
-        return ret == 0
-    is_available(ctx, 'mon', is_mon_available)
+    wait_for_mon(ctx, mon_id, mon_dir, admin_keyring.name, tmp_config.name)
 
     # assimilate and minimize config
     if not ctx.args.no_minimize_config:
@@ -7484,3 +7493,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
