@@ -3192,7 +3192,7 @@ void Client::put_cap_ref(Inode *in, int cap)
     int put_nref = 0;
     int drop = last & ~in->caps_issued();
     if (in->snapid == CEPH_NOSNAP) {
-      if ((last & CEPH_CAP_FILE_WR) &&
+      if ((last & (CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER)) &&
 	  !in->cap_snaps.empty() &&
 	  in->cap_snaps.rbegin()->second.writing) {
 	ldout(cct, 10) << __func__ << " finishing pending cap_snap on " << *in << dendl;
@@ -3707,6 +3707,7 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
   }
 
   if (used & CEPH_CAP_FILE_BUFFER) {
+    capsnap.writing = 1;
     ldout(cct, 10) << __func__ << " " << *in << " cap_snap " << &capsnap << " used " << used
 	     << " WRBUFFER, delaying" << dendl;
   } else {
@@ -3782,7 +3783,7 @@ void Client::flush_snaps(Inode *in)
 	     << " on " << *in << dendl;
     if (capsnap.dirty_data || capsnap.writing)
       break;
-    
+
     capsnap.flush_tid = ++last_flush_tid;
     session->flushing_caps_tids.insert(capsnap.flush_tid);
     in->flushing_cap_tids[capsnap.flush_tid] = 0;
