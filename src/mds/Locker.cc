@@ -1666,10 +1666,23 @@ bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, MDRequestRef& mdr)
   for (const auto& p : lov) {
     auto lock = p.lock;
     ceph_assert(p.is_rdlock());
-    if (!mdr->is_rdlocked(lock) && !rdlock_try(lock, mdr->get_client())) {
-      lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD,
-                       new C_MDS_RetryRequest(mdcache, mdr));
-      goto failed;
+    if (mdr->is_rdlocked(lock))
+      continue;
+
+    if (!lock->can_rdlock(mdr->get_client())) {
+      MDSCacheObject *object = lock->get_parent();
+      if (object->is_auth() && !object->can_auth_pin()) {
+	object->add_waiter(MDSCacheObject::WAIT_UNFREEZE,
+			   new C_MDS_RetryRequest(mdcache, mdr));
+	goto failed;
+      }
+
+      _rdlock_kick(lock, false);
+      if (!lock->can_rdlock(mdr->get_client())) {
+	lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD,
+			 new C_MDS_RetryRequest(mdcache, mdr));
+	goto failed;
+      }
     }
     lock->get_rdlock();
     mdr->emplace_lock(lock, MutationImpl::LockOp::RDLOCK);
