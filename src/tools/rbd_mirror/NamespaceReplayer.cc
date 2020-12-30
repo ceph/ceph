@@ -181,8 +181,8 @@ void NamespaceReplayer<I>::flush()
 
 template <typename I>
 void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
-                                         ImageIds &&added_image_ids,
-                                         ImageIds &&removed_image_ids) {
+                                         MirrorEntities &&added_entities,
+                                         MirrorEntities &&removed_entities) {
   std::lock_guard locker{m_lock};
 
   if (!m_image_map) {
@@ -191,8 +191,8 @@ void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
   }
 
   dout(10) << "mirror_uuid=" << mirror_uuid << ", "
-           << "added_count=" << added_image_ids.size() << ", "
-           << "removed_count=" << removed_image_ids.size() << dendl;
+           << "added_count=" << added_entities.size() << ", "
+           << "removed_count=" << removed_entities.size() << dendl;
 
   m_service_daemon->add_or_update_namespace_attribute(
     m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
@@ -204,19 +204,8 @@ void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
       m_remote_pool_watcher->get_image_count());
   }
 
-  std::set<std::string> added_global_image_ids;
-  for (auto& image_id : added_image_ids) {
-    added_global_image_ids.insert(image_id.global_id);
-  }
-
-  std::set<std::string> removed_global_image_ids;
-  for (auto& image_id : removed_image_ids) {
-    removed_global_image_ids.insert(image_id.global_id);
-  }
-
-  m_image_map->update_images(mirror_uuid,
-                             std::move(added_global_image_ids),
-                             std::move(removed_global_image_ids));
+  m_image_map->update_images(mirror_uuid, std::move(added_entities),
+                             std::move(removed_entities));
 }
 
 template <typename I>
