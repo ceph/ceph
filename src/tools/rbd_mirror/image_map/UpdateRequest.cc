@@ -26,11 +26,11 @@ static const uint32_t MAX_UPDATE = 256;
 
 template <typename I>
 UpdateRequest<I>::UpdateRequest(librados::IoCtx &ioctx,
-                                std::map<std::string, cls::rbd::MirrorImageMap> &&update_mapping,
-                                std::set<std::string> &&remove_global_image_ids, Context *on_finish)
+                                std::map<GlobalId, cls::rbd::MirrorImageMap> &&update_mapping,
+                                GlobalIds &&remove_global_ids, Context *on_finish)
   : m_ioctx(ioctx),
     m_update_mapping(update_mapping),
-    m_remove_global_image_ids(remove_global_image_ids),
+    m_remove_global_ids(remove_global_ids),
     m_on_finish(on_finish) {
 }
 
@@ -45,7 +45,7 @@ template <typename I>
 void UpdateRequest<I>::update_image_map() {
   dout(20) << dendl;
 
-  if (m_update_mapping.empty() && m_remove_global_image_ids.empty()) {
+  if (m_update_mapping.empty() && m_remove_global_ids.empty()) {
     finish(0);
     return;
   }
@@ -55,14 +55,14 @@ void UpdateRequest<I>::update_image_map() {
 
   auto it1 = m_update_mapping.begin();
   while (it1 != m_update_mapping.end() && nr_updates++ < MAX_UPDATE) {
-    librbd::cls_client::mirror_image_map_update(&op, it1->first, it1->second);
+    librbd::cls_client::mirror_image_map_update(&op, it1->first.to_str(), it1->second);
     it1 = m_update_mapping.erase(it1);
   }
 
-  auto it2 = m_remove_global_image_ids.begin();
-  while (it2 != m_remove_global_image_ids.end() && nr_updates++ < MAX_UPDATE) {
-    librbd::cls_client::mirror_image_map_remove(&op, *it2);
-    it2 = m_remove_global_image_ids.erase(it2);
+  auto it2 = m_remove_global_ids.begin();
+  while (it2 != m_remove_global_ids.end() && nr_updates++ < MAX_UPDATE) {
+    librbd::cls_client::mirror_image_map_remove(&op, it2->to_str());
+    it2 = m_remove_global_ids.erase(it2);
   }
 
   librados::AioCompletion *aio_comp = create_rados_callback<

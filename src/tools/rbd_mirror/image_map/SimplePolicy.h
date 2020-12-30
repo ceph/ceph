@@ -19,12 +19,12 @@ public:
 protected:
   SimplePolicy(librados::IoCtx &ioctx);
 
-  std::string do_map(const InstanceToImageMap& map,
-                     const std::string &global_image_id) override;
+  std::string do_map(const InstanceToImageMap &map,
+                     const GlobalId &global_id) override;
 
   void do_shuffle_add_instances(
       const InstanceToImageMap& map, size_t image_count,
-      std::set<std::string> *remap_global_image_ids) override;
+      GlobalIds *remap_global_ids) override;
 
 private:
   size_t calc_images_per_instance(const InstanceToImageMap& map,
