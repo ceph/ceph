@@ -87,6 +87,13 @@ Show NFS Ganesha Cluster Information
 
 This displays ip and port of deployed cluster.
 
+.. note:: This will not work with rook backend. Instead expose port with
+   kubectl patch command and fetch the port details with kubectl get services
+   command::
+
+   $ kubectl patch service -n rook-ceph -p '{"spec":{"type": "NodePort"}}' rook-ceph-nfs-<cluster-name>-<node-id>
+   $ kubectl get services -n rook-ceph rook-ceph-nfs-<cluster-name>-<node-id>
+
 Set Customized NFS Ganesha Configuration
 ========================================
 
