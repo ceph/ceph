@@ -3330,6 +3330,94 @@ def create_mgr(
     is_available(ctx, 'mgr', is_mgr_available)
 
 
+def prepare_ssh(
+    ctx: CephadmContext,
+    cli: Callable, wait_for_mgr_restart: Callable
+) -> None:
+
+    cli(['config-key', 'set', 'mgr/cephadm/ssh_user', ctx.args.ssh_user])
+
+    logger.info('Enabling cephadm module...')
+    cli(['mgr', 'module', 'enable', 'cephadm'])
+    wait_for_mgr_restart()
+
+    logger.info('Setting orchestrator backend to cephadm...')
+    cli(['orch', 'set', 'backend', 'cephadm'])
+
+    if ctx.args.ssh_config:
+        logger.info('Using provided ssh config...')
+        mounts = {
+            pathify(ctx.args.ssh_config.name): '/tmp/cephadm-ssh-config:z',
+        }
+        cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
+
+    if ctx.args.ssh_private_key and ctx.args.ssh_public_key:
+        logger.info('Using provided ssh keys...')
+        mounts = {
+            pathify(ctx.args.ssh_private_key.name): '/tmp/cephadm-ssh-key:z',
+            pathify(ctx.args.ssh_public_key.name): '/tmp/cephadm-ssh-key.pub:z'
+        }
+        cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
+        cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
+    else:
+        logger.info('Generating ssh key...')
+        cli(['cephadm', 'generate-key'])
+        ssh_pub = cli(['cephadm', 'get-pub-key'])
+
+        with open(ctx.args.output_pub_ssh_key, 'w') as f:
+            f.write(ssh_pub)
+        logger.info('Wrote public SSH key to to %s' % ctx.args.output_pub_ssh_key)
+
+        logger.info('Adding key to %s@localhost\'s authorized_keys...' % ctx.args.ssh_user)
+        try:
+            s_pwd = pwd.getpwnam(ctx.args.ssh_user)
+        except KeyError as e:
+            raise Error('Cannot find uid/gid for ssh-user: %s' % (ctx.args.ssh_user))
+        ssh_uid = s_pwd.pw_uid
+        ssh_gid = s_pwd.pw_gid
+        ssh_dir = os.path.join(s_pwd.pw_dir, '.ssh')
+
+        if not os.path.exists(ssh_dir):
+            makedirs(ssh_dir, ssh_uid, ssh_gid, 0o700)
+
+        auth_keys_file = '%s/authorized_keys' % ssh_dir
+        add_newline = False
+
+        if os.path.exists(auth_keys_file):
+            with open(auth_keys_file, 'r') as f:
+                f.seek(0, os.SEEK_END)
+                if f.tell() > 0:
+                    f.seek(f.tell()-1, os.SEEK_SET) # go to last char
+                    if f.read() != '\n':
+                        add_newline = True
+
+        with open(auth_keys_file, 'a') as f:
+            os.fchown(f.fileno(), ssh_uid, ssh_gid) # just in case we created it
+            os.fchmod(f.fileno(), 0o600)  # just in case we created it
+            if add_newline:
+                f.write('\n')
+            f.write(ssh_pub.strip() + '\n')
+
+    host = get_hostname()
+    logger.info('Adding host %s...' % host)
+    try:
+        cli(['orch', 'host', 'add', host])
+    except RuntimeError as e:
+        raise Error('Failed to add host <%s>: %s' % (host, e))
+
+    if not ctx.args.orphan_initial_daemons:
+        for t in ['mon', 'mgr', 'crash']:
+            logger.info('Deploying %s service with default placement...' % t)
+            cli(['orch', 'apply', t])
+
+    if not ctx.args.skip_monitoring_stack:
+        logger.info('Enabling mgr prometheus module...')
+        cli(['mgr', 'module', 'enable', 'prometheus'])
+        for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
+            logger.info('Deploying %s service with default placement...' % t)
+            cli(['orch', 'apply', t])
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -3532,87 +3620,7 @@ def command_bootstrap(ctx):
     # ssh
     host = None
     if not ctx.args.skip_ssh:
-        cli(['config-key', 'set', 'mgr/cephadm/ssh_user', ctx.args.ssh_user])
-
-        logger.info('Enabling cephadm module...')
-        cli(['mgr', 'module', 'enable', 'cephadm'])
-        wait_for_mgr_restart()
-
-        logger.info('Setting orchestrator backend to cephadm...')
-        cli(['orch', 'set', 'backend', 'cephadm'])
-
-        if ctx.args.ssh_config:
-            logger.info('Using provided ssh config...')
-            mounts = {
-                pathify(ctx.args.ssh_config.name): '/tmp/cephadm-ssh-config:z',
-            }
-            cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
-
-        if ctx.args.ssh_private_key and ctx.args.ssh_public_key:
-            logger.info('Using provided ssh keys...')
-            mounts = {
-                pathify(ctx.args.ssh_private_key.name): '/tmp/cephadm-ssh-key:z',
-                pathify(ctx.args.ssh_public_key.name): '/tmp/cephadm-ssh-key.pub:z'
-            }
-            cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
-            cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
-        else:
-            logger.info('Generating ssh key...')
-            cli(['cephadm', 'generate-key'])
-            ssh_pub = cli(['cephadm', 'get-pub-key'])
-
-            with open(ctx.args.output_pub_ssh_key, 'w') as f:
-                f.write(ssh_pub)
-            logger.info('Wrote public SSH key to to %s' % ctx.args.output_pub_ssh_key)
-
-            logger.info('Adding key to %s@localhost\'s authorized_keys...' % ctx.args.ssh_user)
-            try:
-                s_pwd = pwd.getpwnam(ctx.args.ssh_user)
-            except KeyError as e:
-                raise Error('Cannot find uid/gid for ssh-user: %s' % (ctx.args.ssh_user))
-            ssh_uid = s_pwd.pw_uid
-            ssh_gid = s_pwd.pw_gid
-            ssh_dir = os.path.join(s_pwd.pw_dir, '.ssh')
-
-            if not os.path.exists(ssh_dir):
-                makedirs(ssh_dir, ssh_uid, ssh_gid, 0o700)
-
-            auth_keys_file = '%s/authorized_keys' % ssh_dir
-            add_newline = False
-
-            if os.path.exists(auth_keys_file):
-                with open(auth_keys_file, 'r') as f:
-                    f.seek(0, os.SEEK_END)
-                    if f.tell() > 0:
-                        f.seek(f.tell()-1, os.SEEK_SET) # go to last char
-                        if f.read() != '\n':
-                            add_newline = True
-
-            with open(auth_keys_file, 'a') as f:
-                os.fchown(f.fileno(), ssh_uid, ssh_gid) # just in case we created it
-                os.fchmod(f.fileno(), 0o600)  # just in case we created it
-                if add_newline:
-                    f.write('\n')
-                f.write(ssh_pub.strip() + '\n')
-
-        host = get_hostname()
-        logger.info('Adding host %s...' % host)
-        try:
-            cli(['orch', 'host', 'add', host])
-        except RuntimeError as e:
-            raise Error('Failed to add host <%s>: %s' % (host, e))
-
-        if not ctx.args.orphan_initial_daemons:
-            for t in ['mon', 'mgr', 'crash']:
-                logger.info('Deploying %s service with default placement...' % t)
-                cli(['orch', 'apply', t])
-
-        if not ctx.args.skip_monitoring_stack:
-            logger.info('Enabling mgr prometheus module...')
-            cli(['mgr', 'module', 'enable', 'prometheus'])
-            for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
-                logger.info('Deploying %s service with default placement...' % t)
-                cli(['orch', 'apply', t])
+        prepare_ssh(ctx, cli, wait_for_mgr_restart)
 
     if ctx.args.registry_url and ctx.args.registry_username and ctx.args.registry_password:
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_url', ctx.args.registry_url, '--force'])
