@@ -2492,8 +2492,6 @@ void MDSRankDispatcher::handle_mds_map(
   if (mdsmap->get_inline_data_enabled() && !oldmap.get_inline_data_enabled())
     dout(0) << "WARNING: inline_data support has been deprecated and will be removed in a future release" << dendl;
 
-  mdcache->handle_mdsmap(*mdsmap, oldmap);
-
   if (metric_aggregator != nullptr) {
     metric_aggregator->notify_mdsmap(*mdsmap);
   }
@@ -2994,13 +2992,7 @@ void MDSRank::command_get_subtrees(Formatter *f)
     {
       f->dump_bool("is_auth", dir->is_auth());
       f->dump_int("auth_first", dir->get_dir_auth().first);
-      f->dump_int("auth_second", dir->get_dir_auth().second); {
-	mds_rank_t export_pin = dir->inode->get_export_pin(false);
-	f->dump_int("export_pin", export_pin >= 0 ? export_pin : -1);
-	f->dump_bool("distributed_ephemeral_pin", export_pin == MDS_RANK_EPHEMERAL_DIST);
-	f->dump_bool("random_ephemeral_pin", export_pin == MDS_RANK_EPHEMERAL_RAND);
-      }
-      f->dump_int("export_pin_target", dir->get_export_pin(false));
+      f->dump_int("auth_second", dir->get_dir_auth().second);
       f->open_object_section("dir");
       dir->dump(f);
       f->close_section();
@@ -3708,9 +3700,6 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_dump_cache_threshold_file",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
-    "mds_export_ephemeral_random",
-    "mds_export_ephemeral_random_max",
-    "mds_export_ephemeral_distributed",
     "mds_health_cache_threshold",
     "mds_inject_migrator_session_race",
     "mds_log_pause",

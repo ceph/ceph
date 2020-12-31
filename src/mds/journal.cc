@@ -548,11 +548,6 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
   in->reset_inode(std::move(inode));
   in->reset_xattrs(std::move(xattrs));
   if (in->is_dir()) {
-    if (is_export_ephemeral_random()) {
-      dout(15) << "random ephemeral pin on " << *in << dendl;
-      in->set_ephemeral_pin(false, true);
-    }
-    in->maybe_export_pin();
     if (!(in->dirfragtree == dirfragtree)) {
       dout(10) << "EMetaBlob::fullbit::update_inode dft " << in->dirfragtree << " -> "
 	       << dirfragtree << " on " << *in << dendl;

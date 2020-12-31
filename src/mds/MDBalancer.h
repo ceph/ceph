@@ -49,8 +49,6 @@ public:
    */
   void tick();
 
-  void handle_export_pins(void);
-
   void subtract_export(CDir *ex);
   void add_import(CDir *im);
   void adjust_pop_for_rename(CDir *pdir, CDir *dir, bool inc);

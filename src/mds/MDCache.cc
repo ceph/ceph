@@ -152,10 +152,6 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
 
-  export_ephemeral_distributed_config =  g_conf().get_val<bool>("mds_export_ephemeral_distributed");
-  export_ephemeral_random_config =  g_conf().get_val<bool>("mds_export_ephemeral_random");
-  export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
-
   lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
 
   bottom_lru.lru_set_midpoint(0);
@@ -181,30 +177,6 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
-
-  bool ephemeral_pin_config_changed = false;
-  if (changed.count("mds_export_ephemeral_distributed")) {
-    export_ephemeral_distributed_config = g_conf().get_val<bool>("mds_export_ephemeral_distributed");
-    dout(10) << "Migrating any ephemeral distributed pinned inodes" << dendl;
-    /* copy to vector to avoid removals during iteration */
-    ephemeral_pin_config_changed = true;
-  }
-  if (changed.count("mds_export_ephemeral_random")) {
-    export_ephemeral_random_config = g_conf().get_val<bool>("mds_export_ephemeral_random");
-    dout(10) << "Migrating any ephemeral random pinned inodes" << dendl;
-    /* copy to vector to avoid removals during iteration */
-    ephemeral_pin_config_changed = true;
-  }
-  if (ephemeral_pin_config_changed) {
-    std::vector<CInode*> migrate;
-    migrate.assign(export_ephemeral_pins.begin(), export_ephemeral_pins.end());
-    for (auto& in : migrate) {
-      in->maybe_export_pin(true);
-    }
-  }
-  if (changed.count("mds_export_ephemeral_random_max")) {
-    export_ephemeral_random_max = g_conf().get_val<double>("mds_export_ephemeral_random_max");
-  }
   if (changed.count("mds_health_cache_threshold"))
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
@@ -305,14 +277,6 @@ void MDCache::remove_inode(CInode *o)
   o->clear_clientwriteable();
 
   o->item_open_file.remove_myself();
-
-  if (o->state_test(CInode::STATE_QUEUEDEXPORTPIN))
-    export_pin_queue.erase(o);
-
-  if (o->state_test(CInode::STATE_DELAYEDEXPORTPIN))
-    export_pin_delayed_queue.erase(o);
-
-  o->clear_ephemeral_pin(true, true);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -454,7 +418,6 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino, int mode) 
   _inode->nlink = 1;
   _inode->truncate_size = -1ull;
   _inode->change_attr = 0;
-  _inode->export_pin = MDS_RANK_NONE;
 
   // FIPS zeroization audit 20191117: this memset is not security related.
   memset(&_inode->dir_layout, 0, sizeof(_inode->dir_layout));
@@ -7638,16 +7601,13 @@ bool MDCache::shutdown_pass()
       if (dir->is_frozen() ||
           dir->is_freezing() ||
           dir->is_ambiguous_dir_auth() ||
-          dir->state_test(CDir::STATE_EXPORTING) ||
-          dir->get_inode()->is_ephemerally_pinned()) {
+          dir->state_test(CDir::STATE_EXPORTING))
         continue;
-      }
       ls.push_back(dir);
     }
 
     migrator->clear_export_queue();
     // stopping mds does not call MDBalancer::tick()
-    mds->balancer->handle_export_pins();
     for (const auto& dir : ls) {
       mds_rank_t dest = dir->get_inode()->authority().first;
       if (dest > 0 && !mds->mdsmap->is_active(dest))
@@ -10596,7 +10556,7 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 {
   ceph_assert(in->is_auth());
 
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(1, 1, bl);
   encode(in->ino(), bl);  // bleh, minor assymetry here
   encode(in->last, bl);
 
@@ -10605,10 +10565,6 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 
   in->_encode_base(bl, features);
   in->_encode_locks_state_for_replica(bl, mds->get_state() < MDSMap::STATE_ACTIVE);
-
-  __u32 state = in->state;
-  encode(state, bl);
-
   ENCODE_FINISH(bl);
 }
 
@@ -10723,7 +10679,7 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
 
 void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished)
 {
-  DECODE_START(2, p);
+  DECODE_START(1, p);
   inodeno_t ino;
   snapid_t last;
   __u32 nonce;
@@ -10762,17 +10718,6 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
       dout(10) << __func__ << " different linkage in dentry " << *dn << dendl;
   }
-
-  if (struct_v >= 2) {
-    __u32 s;
-    decode(s, p);
-    s &= CInode::MASK_STATE_REPLICATED;
-    if (s & CInode::STATE_RANDEPHEMERALPIN) {
-      dout(10) << "replica inode is random ephemeral pinned" << dendl;
-      in->set_ephemeral_pin(false, true);
-    }
-  }
-
   DECODE_FINISH(p); 
 }
 
@@ -13203,48 +13148,6 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   in->dump(f, CInode::DUMP_DEFAULT | CInode::DUMP_PATH);
   f->close_section();
   return true;
-}
-
-void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
-  const mds_rank_t max_mds = mdsmap.get_max_mds();
-
-  // process export_pin_delayed_queue whenever a new MDSMap received
-  auto &q = export_pin_delayed_queue;
-  for (auto it = q.begin(); it != q.end(); ) {
-    auto *in = *it;
-    mds_rank_t export_pin = in->get_export_pin(false);
-    dout(10) << " delayed export_pin=" << export_pin << " on " << *in 
-             << " max_mds=" << max_mds << dendl;
-    if (export_pin >= mdsmap.get_max_mds()) {
-      it++;
-      continue;
-    }
-
-    in->state_clear(CInode::STATE_DELAYEDEXPORTPIN);
-    it = q.erase(it);
-    in->queue_export_pin(export_pin);
-  }
-
-  if (mdsmap.get_max_mds() != oldmap.get_max_mds()) {
-    dout(10) << "Checking ephemerally pinned directories for redistribute due to max_mds change." << dendl;
-    /* copy to vector to avoid removals during iteration */
-    std::vector<CInode*> migrate;
-    migrate.assign(export_ephemeral_pins.begin(), export_ephemeral_pins.end());
-    for (auto& in : migrate) {
-      in->maybe_export_pin();
-    }
-  }
-
-  if (max_mds <= 1) {
-    export_ephemeral_dist_frag_bits = 0;
-  } else {
-    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
-    want *= max_mds;
-    unsigned n = 0;
-    while ((1U << n) < (unsigned)want)
-      ++n;
-    export_ephemeral_dist_frag_bits = n;
-  }
 }
 
 void MDCache::upkeep_main(void)

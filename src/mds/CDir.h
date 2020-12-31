@@ -560,9 +560,6 @@ public:
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
 
   // -- import/export --
-  mds_rank_t get_export_pin(bool inherit=true) const;
-  bool is_exportable(mds_rank_t dest) const;
-
   void encode_export(ceph::buffer::list& bl);
   void finish_export();
   void abort_export() {
@@ -706,14 +703,9 @@ protected:
   void _omap_fetch_more(version_t omap_version, bufferlist& hdrbl,
 			std::map<std::string, bufferlist>& omap, MDSContext *fin);
   CDentry *_load_dentry(
-      std::string_view key,
-      std::string_view dname,
-      snapid_t last,
-      ceph::buffer::list &bl,
-      int pos,
-      const std::set<snapid_t> *snaps,
-      double rand_threshold,
-      bool *force_dirty);
+      std::string_view key, std::string_view dname,
+      snapid_t last, ceph::buffer::list &bl,
+      int pos, const std::set<snapid_t> *snaps);
 
   /**
    * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)

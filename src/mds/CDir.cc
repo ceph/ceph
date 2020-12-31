@@ -1758,9 +1758,7 @@ CDentry *CDir::_load_dentry(
     const snapid_t last,
     bufferlist &bl,
     const int pos,
-    const std::set<snapid_t> *snaps,
-    double rand_threshold,
-    bool *force_dirty)
+    const std::set<snapid_t> *snaps)
 {
   auto q = bl.cbegin();
 
@@ -1796,6 +1794,12 @@ CDentry *CDir::_load_dentry(
   else
     dn = lookup(dname, last);
 
+  if (stale) {
+    if (!dn)
+      stale_items.insert(mempool::mds_co::string(key));
+    return dn;
+  }
+
   if (type == 'L' || type == 'l') {
     // hard link
     inodeno_t ino;
@@ -1803,14 +1807,6 @@ CDentry *CDir::_load_dentry(
     mempool::mds_co::string alternate_name;
 
     CDentry::decode_remote(type, ino, d_type, alternate_name, q);
-
-    if (stale) {
-      if (!dn) {
-        stale_items.insert(mempool::mds_co::string(key));
-        *force_dirty = true;
-      }
-      return dn;
-    }
 
     if (dn) {
       CDentry::linkage_t *dnl = dn->get_linkage();
@@ -1853,14 +1849,6 @@ CDentry *CDir::_load_dentry(
       DECODE_FINISH(q);
     } else {
       inode_data.decode_bare(q);
-    }
-
-    if (stale) {
-      if (!dn) {
-        stale_items.insert(mempool::mds_co::string(key));
-        *force_dirty = true;
-      }
-      return dn;
     }
 
     bool undef_inode = false;
@@ -1934,7 +1922,6 @@ CDentry *CDir::_load_dentry(
 	if (in->get_inode()->is_dirty_rstat())
 	  in->mark_dirty_rstat();
 
-	in->maybe_ephemeral_rand(rand_threshold);
 	dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
 	//in->hack_accessed = false;
 	//in->hack_load_stamp = ceph_clock_now();
@@ -2047,7 +2034,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   unsigned pos = omap.size() - 1;
-  double rand_threshold = get_inode()->get_ephemeral_rand();
   for (map<string, bufferlist>::reverse_iterator p = omap.rbegin();
        p != omap.rend();
        ++p, --pos) {
@@ -2057,9 +2043,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
     CDentry *dn = NULL;
     try {
-      dn = _load_dentry(
-            p->first, dname, last, p->second, pos, snaps,
-            rand_threshold, &force_dirty);
+      dn = _load_dentry(p->first, dname, last, p->second, pos, snaps);
     } catch (const buffer::error &err) {
       mdcache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
@@ -2109,6 +2093,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   // dirty myself to remove stale snap dentries
+  if (!stale_items.empty())
+    force_dirty = true;
   if (force_dirty && !mdcache->is_readonly())
     log_mark_dirty();
 
@@ -2699,26 +2685,6 @@ void CDir::_committed(int r, version_t v)
 
 
 // IMPORT/EXPORT
-
-mds_rank_t CDir::get_export_pin(bool inherit) const
-{
-  mds_rank_t export_pin = inode->get_export_pin(inherit);
-  if (export_pin == MDS_RANK_EPHEMERAL_DIST)
-    export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
-  else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
-    export_pin = mdcache->hash_into_rank_bucket(ino());
-  return export_pin;
-}
-
-bool CDir::is_exportable(mds_rank_t dest) const
-{
-  mds_rank_t export_pin = get_export_pin();
-  if (export_pin == dest)
-    return true;
-  if (export_pin >= 0)
-    return false;
-  return true;
-}
 
 void CDir::encode_export(bufferlist& bl)
 {
@@ -3656,13 +3622,6 @@ bool CDir::should_merge() const
 {
   if (get_frag() == frag_t())
     return false;
-
-  if (inode->is_ephemeral_dist()) {
-    unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
-    if (min_frag_bits > 0 && get_frag().bits() < min_frag_bits + 1)
-      return false;
-  }
-
   return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
 }
 

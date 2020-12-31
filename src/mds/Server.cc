@@ -5737,82 +5737,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     mdr->no_early_reply = true;
     pip = pi.inode.get();
     adjust_realm = true;
-  } else if (name == "ceph.dir.pin"sv) {
-    if (!cur->is_dir() || cur->is_root()) {
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    mds_rank_t rank;
-    try {
-      rank = boost::lexical_cast<mds_rank_t>(value);
-      if (rank < 0) rank = MDS_RANK_NONE;
-      else if (rank >= MAX_MDS) {
-        respond_to_request(mdr, -CEPHFS_EDOM);
-        return;
-      }
-    } catch (boost::bad_lexical_cast const&) {
-      dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    if (!xlock_policylock(mdr, cur))
-      return;
-
-    auto pi = cur->project_inode(mdr);
-    cur->set_export_pin(rank);
-    pip = pi.inode.get();
-  } else if (name == "ceph.dir.pin.random"sv) {
-    if (!cur->is_dir() || cur->is_root()) {
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    double val;
-    try {
-      val = boost::lexical_cast<double>(value);
-    } catch (boost::bad_lexical_cast const&) {
-      dout(10) << "bad vxattr value, unable to parse float for " << name << dendl;
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    if (val < 0.0 || 1.0 < val) {
-      respond_to_request(mdr, -CEPHFS_EDOM);
-      return;
-    } else if (mdcache->export_ephemeral_random_max < val) {
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    if (!xlock_policylock(mdr, cur))
-      return;
-
-    auto pi = cur->project_inode(mdr);
-    cur->setxattr_ephemeral_rand(val);
-    pip = pi.inode.get();
-  } else if (name == "ceph.dir.pin.distributed"sv) {
-    if (!cur->is_dir() || cur->is_root()) {
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    bool val;
-    try {
-      val = boost::lexical_cast<bool>(value);
-    } catch (boost::bad_lexical_cast const&) {
-      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    if (!xlock_policylock(mdr, cur))
-      return;
-
-    auto pi = cur->project_inode(mdr);
-    cur->setxattr_ephemeral_dist(val);
-    pip = pi.inode.get();
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -CEPHFS_EINVAL);
@@ -6286,9 +6210,6 @@ public:
 
     if (newi->is_file()) {
       get_mds()->locker->share_inode_max_size(newi);
-    } else if (newi->is_dir()) {
-      // We do this now so that the linkages on the new directory are stable.
-      newi->maybe_ephemeral_rand();
     }
 
     // hit pop
