@@ -3097,9 +3097,9 @@ def is_ipv6(ctx, address):
         return False
 
 
-def obtain_mon_ip(
+def prepare_mon_addresses(
     ctx: CephadmContext
-) -> Tuple[str, str, bool]:
+) -> Tuple[str, bool, Optional[str]]:
     r = re.compile(r':(\d+)$')
     base_ip = ""
     ipv6 = False
@@ -3145,7 +3145,23 @@ def obtain_mon_ip(
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
     logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
-    return (base_ip, addr_arg, ipv6)
+
+    mon_network = None
+    if not ctx.args.skip_mon_network:
+        # make sure IP is configured locally, and then figure out the
+        # CIDR network
+        for net, ips in list_networks(ctx).items():
+            if ipaddress.ip_address(unicode(unwrap_ipv6(base_ip))) in \
+                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
+                mon_network = net
+                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
+                                                                 mon_network))
+                break
+        if not mon_network:
+            raise Error('Failed to infer CIDR network for mon ip %s; pass '
+                        '--skip-mon-network to configure it later' % base_ip)
+
+    return (addr_arg, ipv6, mon_network)
 
 
 def create_initial_keys(
@@ -3599,24 +3615,7 @@ def command_bootstrap(ctx):
     l = FileLock(ctx, fsid)
     l.acquire()
 
-    # ip
-    (base_ip, addr_arg, ipv6) = obtain_mon_ip(ctx)    
-
-    mon_network = None
-    if not ctx.args.skip_mon_network:
-        # make sure IP is configured locally, and then figure out the
-        # CIDR network
-        for net, ips in list_networks(ctx).items():
-            if ipaddress.ip_address(unicode(unwrap_ipv6(base_ip))) in \
-                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
-                mon_network = net
-                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
-                                                                 mon_network))
-                break
-        if not mon_network:
-            raise Error('Failed to infer CIDR network for mon ip %s; pass '
-                        '--skip-mon-network to configure it later' % base_ip)
-
+    (addr_arg, ipv6, mon_network) = prepare_mon_addresses(ctx)
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.args.image)
 
     logger.info('Extracting ceph user uid/gid from container image...')
