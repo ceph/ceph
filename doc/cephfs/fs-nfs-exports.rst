@@ -132,7 +132,15 @@ serve this export.
 
 ``clusterid`` is the NFS Ganesha cluster ID.
 
-``binding`` is the pseudo root path (must be an absolute path).
+``binding`` is the pseudo root path (must be an absolute path and unique). It
+specifies the export position within the NFS v4 Pseudo Filesystem.
+
+``path`` is the path within cephfs. Valid path should be given and default path
+is '/'. It need not be unique. Subvolume path can be fetched using:
+
+.. code::
+
+   $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
 Delete CephFS Export
 ====================
