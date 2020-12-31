@@ -72,8 +72,6 @@
 
 typedef int32_t mds_rank_t;
 constexpr mds_rank_t MDS_RANK_NONE		= -1;
-constexpr mds_rank_t MDS_RANK_EPHEMERAL_DIST	= -2;
-constexpr mds_rank_t MDS_RANK_EPHEMERAL_RAND	= -3;
 
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
@@ -608,11 +606,6 @@ struct inode_t {
 
   quota_info_t quota;
 
-  mds_rank_t export_pin = MDS_RANK_NONE;
-
-  double export_ephemeral_random_pin = 0;
-  bool export_ephemeral_distributed_pin = false;
-
   // special stuff
   version_t version = 0;           // auth only
   version_t file_data_version = 0; // auth only
@@ -687,10 +680,11 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(btime, bl);
   encode(change_attr, bl);
 
-  encode(export_pin, bl);
-
-  encode(export_ephemeral_random_pin, bl);
-  encode(export_ephemeral_distributed_pin, bl);
+  {
+    encode((mds_rank_t)MDS_RANK_NONE, bl);
+    encode((double)0, bl);
+    encode((bool)false, bl);
+  }
 
   encode(fscrypt, bl);
 
@@ -785,17 +779,14 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
   }
 
   if (struct_v >= 15) {
+    mds_rank_t export_pin;
     decode(export_pin, p);
-  } else {
-    export_pin = MDS_RANK_NONE;
   }
-
   if (struct_v >= 16) {
-    decode(export_ephemeral_random_pin, p);
-    decode(export_ephemeral_distributed_pin, p);
-  } else {
-    export_ephemeral_random_pin = 0;
-    export_ephemeral_distributed_pin = false;
+    double ephemeral_random_pin;
+    bool ephemeral_distributed_pin;
+    decode(ephemeral_random_pin, p);
+    decode(ephemeral_distributed_pin, p);
   }
 
   if (struct_v >= 17) {
@@ -840,9 +831,6 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_stream("atime") << atime;
   f->dump_unsigned("time_warp_seq", time_warp_seq);
   f->dump_unsigned("change_attr", change_attr);
-  f->dump_int("export_pin", export_pin);
-  f->dump_int("export_ephemeral_random_pin", export_ephemeral_random_pin);
-  f->dump_bool("export_ephemeral_distributed_pin", export_ephemeral_distributed_pin);
 
   f->open_array_section("client_ranges");
   for (const auto &p : client_ranges) {
@@ -924,7 +912,6 @@ void inode_t<Allocator>::decode_json(JSONObj *obj)
   //JSONDecoder::decode_json("atime", atime, obj, true);
   JSONDecoder::decode_json("time_warp_seq", time_warp_seq, obj, true);
   JSONDecoder::decode_json("change_attr", change_attr, obj, true);
-  JSONDecoder::decode_json("export_pin", export_pin, obj, true);
   JSONDecoder::decode_json("client_ranges", client_ranges, inode_t<Allocator>::client_ranges_cb, obj, true);
   JSONDecoder::decode_json("dirstat", dirstat, obj, true);
   JSONDecoder::decode_json("rstat", rstat, obj, true);

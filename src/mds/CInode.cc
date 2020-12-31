@@ -186,8 +186,6 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.state_test(CInode::STATE_RECOVERING)) out << " RECOVERING";
   if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " DIRTYPARENT";
   if (in.state_test(CInode::STATE_MISSINGOBJS)) out << " MISSINGOBJS";
-  if (in.is_ephemeral_dist()) out << " DISTEPHEMERALPIN";
-  if (in.is_ephemeral_rand()) out << " RANDEPHEMERALPIN";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
   if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
@@ -289,17 +287,6 @@ ostream& operator<<(ostream& out, const CInode& in)
     out << " |";
     in.print_pin_set(out);
   }
-
-  if (in.get_inode()->export_pin != MDS_RANK_NONE) {
-    out << " export_pin=" << in.get_inode()->export_pin;
-  }
-  if (in.state_test(CInode::STATE_DISTEPHEMERALPIN)) {
-    out << " distepin";
-  }
-  if (in.state_test(CInode::STATE_RANDEPHEMERALPIN)) {
-    out << " randepin";
-  }
-
   out << " " << &in;
   out << "]";
   return out;
@@ -480,9 +467,6 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mu
     mut->remove_projected_node(this);
 
   bool pool_updated = get_inode()->layout.pool_id != front.inode->layout.pool_id;
-  bool pin_updated = (get_inode()->export_pin != front.inode->export_pin) ||
-		     (get_inode()->export_ephemeral_distributed_pin !=
-		      front.inode->export_ephemeral_distributed_pin);
 
   reset_inode(std::move(front.inode));
   if (front.xattrs != get_xattrs())
@@ -496,9 +480,6 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mu
   mark_dirty(ls);
   if (get_inode()->is_backtrace_updated())
     mark_dirty_parent(ls, pool_updated);
-
-  if (pin_updated)
-    maybe_export_pin(true);
 }
 
 sr_t *CInode::prepare_new_srnode(snapid_t snapid)
@@ -808,9 +789,6 @@ CDir *CInode::add_dirfrag(CDir *dir)
     dir->state_set(CDir::STATE_STICKY);
     dir->get(CDir::PIN_STICKY);
   }
-
-  maybe_export_pin();
-
   return dir;
 }
 
@@ -2107,9 +2085,6 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
     encode(get_inode()->ctime, bl);
     encode(get_inode()->layout, bl, mdcache->mds->mdsmap->get_up_features());
     encode(get_inode()->quota, bl);
-    encode(get_inode()->export_pin, bl);
-    encode(get_inode()->export_ephemeral_distributed_pin, bl);
-    encode(get_inode()->export_ephemeral_random_pin, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2127,19 +2102,10 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
       _inode->ctime = tm;
     decode(_inode->layout, p);
     decode(_inode->quota, p);
-    decode(_inode->export_pin, p);
-    if (struct_v >= 2) {
-      decode(_inode->export_ephemeral_distributed_pin, p);
-      decode(_inode->export_ephemeral_random_pin, p);
-    }
   }
   DECODE_FINISH(p);
 
-  bool pin_updated = (get_inode()->export_pin != _inode->export_pin) ||
-		     (get_inode()->export_ephemeral_distributed_pin !=
-		      _inode->export_ephemeral_distributed_pin);
   reset_inode(std::move(_inode));
-  maybe_export_pin(pin_updated);
 }
 
 void CInode::encode_lock_state(int type, bufferlist& bl)
@@ -4100,7 +4066,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(layout.pool_ns, bl);
     encode(any_i->btime, bl);
     encode(any_i->change_attr, bl);
-    encode(file_i->export_pin, bl);
+    encode((mds_rank_t)MDS_RANK_NONE, bl);
     encode(snap_btime, bl);
     encode(file_i->rstat.rsnaps, bl);
     encode(snap_metadata, bl);
@@ -4448,9 +4414,6 @@ void CInode::decode_import(bufferlist::const_iterator& p,
     unsigned s;
     decode(s, p);
     s &= MASK_STATE_EXPORTED;
-
-    set_ephemeral_pin((s & STATE_DISTEPHEMERALPIN),
-		      (s & STATE_RANDEPHEMERALPIN));
     state_set(STATE_AUTH | s);
   }
 
@@ -5232,273 +5195,6 @@ int64_t CInode::get_backtrace_pool() const
     ceph_assert(get_inode()->layout.pool_id != -1);
     return get_inode()->layout.pool_id;
   }
-}
-
-void CInode::queue_export_pin(mds_rank_t export_pin)
-{
-  if (state_test(CInode::STATE_QUEUEDEXPORTPIN))
-    return;
-
-  mds_rank_t target;
-  if (export_pin >= 0)
-    target = export_pin;
-  else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
-    target = mdcache->hash_into_rank_bucket(ino());
-  else
-    target = MDS_RANK_NONE;
-
-  unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
-  bool queue = false;
-  for (auto& p : dirfrags) {
-    CDir *dir = p.second;
-    if (!dir->is_auth())
-      continue;
-
-    if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
-      if (dir->get_frag().bits() < min_frag_bits) {
-	// needs split
-	queue = true;
-	break;
-      }
-      target = mdcache->hash_into_rank_bucket(ino(), dir->get_frag());
-    }
-
-    if (target == MDS_RANK_NONE) {
-      if (dir->state_test(CDir::STATE_AUXBOUND)) {
-	dout(10) << " clear aux bound on " << *dir << dendl;
-	dir->state_clear(CDir::STATE_AUXBOUND);
-      }
-    } else {
-      if (!dir->state_test(CDir::STATE_AUXBOUND)) {
-	dout(10) << " create aux bound on " << *dir << dendl;
-	dir->state_set(CDir::STATE_AUXBOUND);
-      }
-      if (target != dir->authority().first)
-	queue = true;
-    }
-
-    if (queue)
-      break;
-  }
-  if (queue) {
-    state_set(CInode::STATE_QUEUEDEXPORTPIN);
-    mdcache->export_pin_queue.insert(this);
-  }
-}
-
-void CInode::maybe_export_pin(bool update)
-{
-  if (!g_conf()->mds_bal_export_pin)
-    return;
-  if (!is_dir() || !is_normal())
-    return;
-
-  dout(15) << __func__ << " update=" << update << " " << *this << dendl;
-
-  mds_rank_t export_pin = get_export_pin(false);
-  if (export_pin == MDS_RANK_NONE && !update)
-    return;
-
-  check_pin_policy(export_pin);
-  queue_export_pin(export_pin);
-}
-
-void CInode::set_ephemeral_pin(bool dist, bool rand)
-{
-  unsigned state = 0;
-  if (dist)
-    state |= STATE_DISTEPHEMERALPIN;
-  if (rand)
-    state |= STATE_RANDEPHEMERALPIN;
-  if (!state)
-    return;
-
-  if (state_test(state) != state) {
-    dout(10) << "set ephemeral (" << (dist ? "dist" : "")
-	     << (rand ? " rand" : "") << ") pin on " << *this << dendl;
-    if (!is_ephemerally_pinned()) {
-      auto p = mdcache->export_ephemeral_pins.insert(this);
-      ceph_assert(p.second);
-    }
-    state_set(state);
-  }
-}
-
-void CInode::clear_ephemeral_pin(bool dist, bool rand)
-{
-  unsigned state = 0;
-  if (dist)
-    state |= STATE_DISTEPHEMERALPIN;
-  if (rand)
-    state |= STATE_RANDEPHEMERALPIN;
-
-  if (state_test(state)) {
-    dout(10) << "clear ephemeral (" << (dist ? "dist" : "")
-	     << (rand ? " rand" : "") << ") pin on " << *this << dendl;
-    state_clear(state);
-    if (!is_ephemerally_pinned()) {
-      auto count = mdcache->export_ephemeral_pins.erase(this);
-      ceph_assert(count == 1);
-    }
-  }
-}
-
-void CInode::maybe_ephemeral_rand(double threshold)
-{
-  if (!mdcache->get_export_ephemeral_random_config()) {
-    dout(15) << __func__ << " config false: cannot ephemeral random pin " << *this << dendl;
-    clear_ephemeral_pin(false, true);
-    return;
-  } else if (!is_dir() || !is_normal()) {
-    dout(15) << __func__ << " !dir or !normal: cannot ephemeral random pin " << *this << dendl;
-    clear_ephemeral_pin(false, true);
-    return;
-  } else if (get_inode()->nlink == 0) {
-    dout(15) << __func__ << " unlinked directory: cannot ephemeral random pin " << *this << dendl;
-    clear_ephemeral_pin(false, true);
-    return;
-  } else if (state_test(CInode::STATE_RANDEPHEMERALPIN)) {
-    dout(10) << __func__ << " already ephemeral random pinned: requeueing " << *this << dendl;
-    queue_export_pin(MDS_RANK_EPHEMERAL_RAND);
-    return;
-  }
-
-  /* not precomputed? */
-  if (threshold < 0.0) {
-    threshold = get_ephemeral_rand();
-  }
-  if (threshold <= 0.0) {
-    return;
-  }
-  double n = ceph::util::generate_random_number(0.0, 1.0);
-
-  dout(15) << __func__ << " rand " << n << " <?= " << threshold
-           << " " << *this << dendl;
-
-  if (n <= threshold) {
-    dout(10) << __func__ << " randomly export pinning " << *this << dendl;
-    set_ephemeral_pin(false, true);
-    queue_export_pin(MDS_RANK_EPHEMERAL_RAND);
-  }
-}
-
-void CInode::setxattr_ephemeral_rand(double probability)
-{
-  ceph_assert(is_dir());
-  _get_projected_inode()->export_ephemeral_random_pin = probability;
-}
-
-void CInode::setxattr_ephemeral_dist(bool val)
-{
-  ceph_assert(is_dir());
-  _get_projected_inode()->export_ephemeral_distributed_pin = val;
-}
-
-void CInode::set_export_pin(mds_rank_t rank)
-{
-  ceph_assert(is_dir());
-  _get_projected_inode()->export_pin = rank;
-  maybe_export_pin(true);
-}
-
-mds_rank_t CInode::get_export_pin(bool inherit) const
-{
-  if (!g_conf()->mds_bal_export_pin)
-    return MDS_RANK_NONE;
-
-  /* An inode that is export pinned may not necessarily be a subtree root, we
-   * need to traverse the parents. A base or system inode cannot be pinned.
-   * N.B. inodes not yet linked into a dir (i.e. anonymous inodes) will not
-   * have a parent yet.
-   */
-  mds_rank_t r_target = MDS_RANK_NONE;
-  const CInode *in = this;
-  const CDir *dir = nullptr;
-  while (true) {
-    if (in->is_system())
-      break;
-    const CDentry *pdn = in->get_parent_dn();
-    if (!pdn)
-      break;
-    if (in->get_inode()->nlink == 0) {
-      // ignore export pin for unlinked directory
-      break;
-    }
-
-    if (in->get_inode()->export_pin >= 0) {
-      return in->get_inode()->export_pin;
-    } else if (in->get_inode()->export_ephemeral_distributed_pin &&
-	       mdcache->get_export_ephemeral_distributed_config()) {
-      if (in != this)
-	return mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
-      return MDS_RANK_EPHEMERAL_DIST;
-    } else if (r_target != MDS_RANK_NONE && in->get_inode()->export_ephemeral_random_pin > 0.0) {
-      return r_target;
-    } else if (r_target == MDS_RANK_NONE && in->is_ephemeral_rand() &&
-	       mdcache->get_export_ephemeral_random_config()) {
-      /* If a parent overrides a grandparent ephemeral pin policy with an export pin, we use that export pin instead. */
-      if (!inherit)
-	return MDS_RANK_EPHEMERAL_RAND;
-      if (in == this)
-	r_target = MDS_RANK_EPHEMERAL_RAND;
-      else
-	r_target = mdcache->hash_into_rank_bucket(in->ino());
-    }
-
-    if (!inherit)
-      break;
-    dir = pdn->get_dir();
-    in = dir->inode;
-  }
-  return MDS_RANK_NONE;
-}
-
-void CInode::check_pin_policy(mds_rank_t export_pin)
-{
-  if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
-    set_ephemeral_pin(true, false);
-    clear_ephemeral_pin(false, true);
-  } else if (export_pin == MDS_RANK_EPHEMERAL_RAND) {
-    set_ephemeral_pin(false, true);
-    clear_ephemeral_pin(true, false);
-  } else if (is_ephemerally_pinned()) {
-    // export_pin >= 0 || export_pin == MDS_RANK_NONE
-    clear_ephemeral_pin(true, true);
-    if (export_pin != get_inode()->export_pin) // inherited export_pin
-      queue_export_pin(MDS_RANK_NONE);
-  }
-}
-
-double CInode::get_ephemeral_rand() const
-{
-  /* N.B. inodes not yet linked into a dir (i.e. anonymous inodes) will not
-   * have a parent yet.
-   */
-  const CInode *in = this;
-  double max = mdcache->export_ephemeral_random_max;
-  while (true) {
-    if (in->is_system())
-      break;
-    const CDentry *pdn = in->get_parent_dn();
-    if (!pdn)
-      break;
-    // ignore export pin for unlinked directory
-    if (in->get_inode()->nlink == 0)
-      break;
-
-    if (in->get_inode()->export_ephemeral_random_pin > 0.0)
-      return std::min(in->get_inode()->export_ephemeral_random_pin, max);
-
-    /* An export_pin overrides only if no closer parent (incl. this one) has a
-     * random pin set.
-     */
-    if (in->get_inode()->export_pin >= 0 ||
-	in->get_inode()->export_ephemeral_distributed_pin)
-      return 0.0;
-
-    in = pdn->get_dir()->inode;
-  }
-  return 0.0;
 }
 
 void CInode::get_nested_dirfrags(std::vector<CDir*>& v) const

@@ -212,17 +212,6 @@ class MDCache {
 
   void advance_stray();
 
-  unsigned get_ephemeral_dist_frag_bits() const {
-    return export_ephemeral_dist_frag_bits;
-  }
-  bool get_export_ephemeral_distributed_config(void) const {
-    return export_ephemeral_distributed_config;
-  }
-
-  bool get_export_ephemeral_random_config(void) const {
-    return export_ephemeral_random_config;
-  }
-
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
@@ -353,27 +342,6 @@ class MDCache {
       }
     }
     return c;
-  }
-  auto num_subtrees_fullauth() const {
-    std::size_t n = 0;
-    for (auto& p : subtrees) {
-      auto& root = p.first;
-      if (root->is_full_dir_auth()) {
-        ++n;
-      }
-    }
-    return n;
-  }
-
-  auto num_subtrees_fullnonauth() const {
-    std::size_t n = 0;
-    for (auto& p : subtrees) {
-      auto& root = p.first;
-      if (root->is_full_dir_nonauth()) {
-        ++n;
-      }
-    }
-    return n;
   }
 
   auto num_subtrees() const {
@@ -889,9 +857,6 @@ class MDCache {
   void process_delayed_expire(CDir *dir);
   void discard_delayed_expire(CDir *dir);
 
-  // -- mdsmap --
-  void handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap);
-
   int dump_cache() { return dump_cache({}, nullptr); }
   int dump_cache(std::string_view filename);
   int dump_cache(Formatter *f);
@@ -975,14 +940,7 @@ class MDCache {
   // delayed cache expire
   map<CDir*, expiremap_t> delayed_expire; // subtree root -> expire msg
 
-  /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
-  std::set<CInode *> export_pin_queue;
-  std::set<CInode *> export_pin_delayed_queue;
-  std::set<CInode *> export_ephemeral_pins;
-
   OpenFileTable open_file_table;
-
-  double export_ephemeral_random_max = 0.0;
 
  protected:
   // track leader requests whose peers haven't acknowledged commit
@@ -1303,10 +1261,6 @@ class MDCache {
   double cache_reservation;
   double cache_health_threshold;
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
-
-  bool export_ephemeral_distributed_config;
-  bool export_ephemeral_random_config;
-  unsigned export_ephemeral_dist_frag_bits;
 
   // File size recovery
   RecoveryQueue recovery_queue;
