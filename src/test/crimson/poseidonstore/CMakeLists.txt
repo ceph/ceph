@@ -8,3 +8,14 @@ target_link_libraries(
   crimson-poseidonstore
   crimson-os
   crimson-common)
+
+add_executable(unittest_poseidonstore_cache
+  test_poseidonstore_cache.cc)
+add_ceph_test(unittest_poseidonstore_cache
+  unittest_poseidonstore_cache)
+target_link_libraries(
+  unittest_poseidonstore_cache
+  crimson::gtest
+  crimson-poseidonstore
+  crimson-os
+  crimson-common)
