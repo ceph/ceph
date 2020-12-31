@@ -3302,6 +3302,34 @@ def wait_for_mon(
     is_available(ctx, 'mon', is_mon_available)
 
 
+def create_mgr(
+    ctx: CephadmContext,
+    uid: int, gid: int,
+    fsid: str, mgr_id: str, mgr_key: str,
+    config: str, clifunc: Callable
+) -> None:
+    logger.info('Creating mgr...')
+    mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
+    mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
+    # Note:the default port used by the Prometheus node exporter is opened in fw
+    deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
+                  config=config, keyring=mgr_keyring, ports=[9283])
+
+    # wait for the service to become available
+    logger.info('Waiting for mgr to start...')
+    def is_mgr_available():
+        # type: () -> bool
+        timeout=ctx.args.timeout if ctx.args.timeout else 60 # seconds
+        try:
+            out = clifunc(['status', '-f', 'json-pretty'], timeout=timeout)
+            j = json.loads(out)
+            return j.get('mgrmap', {}).get('available', False)
+        except Exception as e:
+            logger.debug('status failed: %s' % e)
+            return False
+    is_available(ctx, 'mgr', is_mgr_available)
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -3480,26 +3508,7 @@ def command_bootstrap(ctx):
     logger.info('Wrote config to %s' % ctx.args.output_config)
 
     # create mgr
-    logger.info('Creating mgr...')
-    mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
-    mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
-    # Note:the default port used by the Prometheus node exporter is opened in fw
-    deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
-                  config=config, keyring=mgr_keyring, ports=[9283])
-
-    # wait for the service to become available
-    logger.info('Waiting for mgr to start...')
-    def is_mgr_available():
-        # type: () -> bool
-        timeout=ctx.args.timeout if ctx.args.timeout else 60 # seconds
-        try:
-            out = cli(['status', '-f', 'json-pretty'], timeout=timeout)
-            j = json.loads(out)
-            return j.get('mgrmap', {}).get('available', False)
-        except Exception as e:
-            logger.debug('status failed: %s' % e)
-            return False
-    is_available(ctx, 'mgr', is_mgr_available)
+    create_mgr(ctx, uid, gid, fsid, mgr_id, mgr_key, config, cli)
 
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart():
