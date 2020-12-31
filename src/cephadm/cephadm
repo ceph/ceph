@@ -3421,6 +3421,59 @@ def prepare_ssh(
             cli(['orch', 'apply', t])
 
 
+def prepare_dashboard(
+    ctx: CephadmContext,
+    uid: int, gid: int,
+    cli: Callable, wait_for_mgr_restart: Callable
+) -> None:
+
+    # Configure SSL port (cephadm only allows to configure dashboard SSL port)
+    # if the user does not want to use SSL he can change this setting once the cluster is up
+    cli(["config", "set",  "mgr", "mgr/dashboard/ssl_server_port" , str(ctx.args.ssl_dashboard_port)])
+
+    # configuring dashboard parameters
+    logger.info('Enabling the dashboard module...')
+    cli(['mgr', 'module', 'enable', 'dashboard'])
+    wait_for_mgr_restart()
+
+    # dashboard crt and key
+    if ctx.args.dashboard_key and ctx.args.dashboard_crt:
+        logger.info('Using provided dashboard certificate...')
+        mounts = {
+            pathify(ctx.args.dashboard_crt.name): '/tmp/dashboard.crt:z',
+            pathify(ctx.args.dashboard_key.name): '/tmp/dashboard.key:z'
+        }
+        cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
+        cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
+    else:
+        logger.info('Generating a dashboard self-signed certificate...')
+        cli(['dashboard', 'create-self-signed-cert'])
+
+    logger.info('Creating initial admin user...')
+    password = ctx.args.initial_dashboard_password or generate_password()
+    tmp_password_file = write_tmp(password, uid, gid)
+    cmd = ['dashboard', 'ac-user-create', ctx.args.initial_dashboard_user, '-i', '/tmp/dashboard.pw', 'administrator', '--force-password']
+    if not ctx.args.dashboard_password_noupdate:
+        cmd.append('--pwd-update-required')
+    cli(cmd, extra_mounts={pathify(tmp_password_file.name): '/tmp/dashboard.pw:z'})
+    logger.info('Fetching dashboard port number...')
+    out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
+    port = int(out)
+
+    # Open dashboard port
+    fw = Firewalld(ctx)
+    fw.open_ports([port])
+    fw.apply_rules()
+
+    logger.info('Ceph Dashboard is now available at:\n\n'
+                '\t     URL: https://%s:%s/\n'
+                '\t    User: %s\n'
+                '\tPassword: %s\n' % (
+                    get_fqdn(), port,
+                    ctx.args.initial_dashboard_user,
+                    password))
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -3656,51 +3709,7 @@ def command_bootstrap(ctx):
 
 
     if not ctx.args.skip_dashboard:
-        # Configure SSL port (cephadm only allows to configure dashboard SSL port)
-        # if the user does not want to use SSL he can change this setting once the cluster is up
-        cli(["config", "set",  "mgr", "mgr/dashboard/ssl_server_port" , str(ctx.args.ssl_dashboard_port)])
-
-        # configuring dashboard parameters
-        logger.info('Enabling the dashboard module...')
-        cli(['mgr', 'module', 'enable', 'dashboard'])
-        wait_for_mgr_restart()
-
-        # dashboard crt and key
-        if ctx.args.dashboard_key and ctx.args.dashboard_crt:
-            logger.info('Using provided dashboard certificate...')
-            mounts = {
-                pathify(ctx.args.dashboard_crt.name): '/tmp/dashboard.crt:z',
-                pathify(ctx.args.dashboard_key.name): '/tmp/dashboard.key:z'
-            }
-            cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
-            cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
-        else:
-            logger.info('Generating a dashboard self-signed certificate...')
-            cli(['dashboard', 'create-self-signed-cert'])
-
-        logger.info('Creating initial admin user...')
-        password = args.initial_dashboard_password or generate_password()
-        tmp_password_file = write_tmp(password, uid, gid)
-        cmd = ['dashboard', 'ac-user-create', ctx.args.initial_dashboard_user, '-i', '/tmp/dashboard.pw', 'administrator', '--force-password']
-        if not ctx.args.dashboard_password_noupdate:
-            cmd.append('--pwd-update-required')
-        cli(cmd, extra_mounts={pathify(tmp_password_file.name): '/tmp/dashboard.pw:z'})
-        logger.info('Fetching dashboard port number...')
-        out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
-        port = int(out)
-
-        # Open dashboard port
-        fw = Firewalld(ctx)
-        fw.open_ports([port])
-        fw.apply_rules()
-
-        logger.info('Ceph Dashboard is now available at:\n\n'
-                    '\t     URL: https://%s:%s/\n'
-                    '\t    User: %s\n'
-                    '\tPassword: %s\n' % (
-                        get_fqdn(), port,
-                        ctx.args.initial_dashboard_user,
-                        password))
+        prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
     if ctx.args.apply_spec:
         logger.info('Applying %s to cluster' % ctx.args.apply_spec)
