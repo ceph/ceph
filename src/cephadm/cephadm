@@ -3097,9 +3097,13 @@ def is_ipv6(ctx, address):
         return False
 
 
-def obtain_mon_ip(ctx: CephadmContext) -> Tuple[str, str]:
+def obtain_mon_ip(
+    ctx: CephadmContext
+) -> Tuple[str, str, bool]:
     r = re.compile(r':(\d+)$')
     base_ip = ""
+    ipv6 = False
+
     if ctx.args.mon_ip:
         ipv6 = is_ipv6(ctx, ctx.args.mon_ip)
         if ipv6:
@@ -3141,7 +3145,7 @@ def obtain_mon_ip(ctx: CephadmContext) -> Tuple[str, str]:
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
     logger.debug('Base mon IP is %s, final addrv is %s' % (base_ip, addr_arg))
-    return (base_ip, addr_arg)
+    return (base_ip, addr_arg, ipv6)
 
 
 def create_initial_keys(
@@ -3591,13 +3595,12 @@ def command_bootstrap(ctx):
     mon_id = ctx.args.mon_id or hostname
     mgr_id = ctx.args.mgr_id or generate_service_id()
     logger.info('Cluster fsid: %s' % fsid)
-    ipv6 = False
 
     l = FileLock(ctx, fsid)
     l.acquire()
 
     # ip
-    (base_ip, addr_arg) = obtain_mon_ip(ctx)    
+    (base_ip, addr_arg, ipv6) = obtain_mon_ip(ctx)    
 
     mon_network = None
     if not ctx.args.skip_mon_network:
