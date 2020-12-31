@@ -3231,7 +3231,7 @@ def create_initial_monmap(
     return monmap
 
 
-def create_mon(
+def prepare_create_mon(
     ctx: CephadmContext,
     uid: int, gid: int,
     fsid: str, mon_id: str,
@@ -3262,6 +3262,16 @@ def create_mon(
     ).run()
     logger.debug(f"create mon.{mon_id} on {out}")
     return (mon_dir, log_dir)
+
+
+def create_mon(
+    ctx: CephadmContext,
+    uid: int, gid: int,
+    fsid: str, mon_id: str
+) -> None:
+    mon_c = get_container(ctx, fsid, 'mon', mon_id)
+    deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
+                  config=None, keyring=None)
 
 
 def wait_for_mon(
@@ -3392,7 +3402,7 @@ def command_bootstrap(ctx):
 
     monmap = create_initial_monmap(ctx, uid, gid, fsid, mon_id, addr_arg)
     (mon_dir, log_dir) = \
-        create_mon(ctx, uid, gid, fsid, mon_id,
+        prepare_create_mon(ctx, uid, gid, fsid, mon_id,
                    bootstrap_keyring.name, monmap.name)
 
     with open(mon_dir + '/config', 'w') as f:
@@ -3401,9 +3411,7 @@ def command_bootstrap(ctx):
         f.write(config)
 
     make_var_run(ctx, fsid, uid, gid)
-    mon_c = get_container(ctx, fsid, 'mon', mon_id)
-    deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
-                  config=None, keyring=None)
+    create_mon(ctx, uid, gid, fsid, mon_id)
 
     # config to issue various CLI commands
     tmp_config = write_tmp(config, uid, gid)
