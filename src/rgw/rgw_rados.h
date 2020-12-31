@@ -1586,8 +1586,6 @@ struct get_obj_data {
   std::list<string> d3n_pending_oid_list;
   void d3n_add_pending_oid(std::string oid);
   std::string d3n_get_pending_oid();
-  std::string d3n_deterministic_hash(std::string oid);
-  bool d3n_deterministic_hash_is_local(string oid);
 
   int flush(rgw::AioResultList&& results) {
     int r = rgw::check_for_errors(results);

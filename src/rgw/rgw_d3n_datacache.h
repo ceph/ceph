@@ -21,8 +21,6 @@
 /*D3nDataCache*/
 namespace efs = std::experimental::filesystem;
 struct D3nDataCache;
-class D3nL2CacheThreadPool;
-class D3nHttpL2Request;
 
 struct D3nChunkDataInfo : public LRUObject {
 	CephContext *cct;
@@ -80,14 +78,13 @@ private:
     ASYNC_IO = 2,
     SEND_FILE = 3
   } io_type;
-  enum _eviction_policy { 
-    LRU=0, RANDOM=1 
+  enum _eviction_policy {
+    LRU=0, RANDOM=1
   } eviction_policy;
 
   struct sigaction action;
   uint64_t free_data_cache_size = 0;
   uint64_t outstanding_write_size = 0;
-  D3nL2CacheThreadPool *tp;
   struct D3nChunkDataInfo* head;
   struct D3nChunkDataInfo* tail;
 
@@ -105,12 +102,6 @@ public:
   void cache_aio_write_completion_cb(D3nCacheAioWriteRequest* c);
   size_t random_eviction();
   size_t lru_eviction();
-  std::string hash_uri(std::string dest);
-  std::string deterministic_hash(std::string oid);
-  void remote_io(struct D3nL2CacheRequest* l2request);
-  void init_l2_request_cb(librados::completion_t c, void *arg);
-  void push_l2_request(D3nL2CacheRequest* l2request);
-  void l2_http_request(off_t ofs , off_t len, std::string oid);
 
   void init(CephContext *_cct) {
     cct = _cct;
@@ -320,85 +311,6 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t ob
   }
   lsubdout(g_ceph_context, rgw, 1) << "D3nDataCache: Check: head object cache handling flow, oid=" << read_obj.oid << dendl;
 
-  /*
-    // TODO: complete L2 cache support refactoring
-    D3nL2CacheRequest* cc;
-    d->add_l2_request(&cc, pbl, read_obj.oid, obj_ofs, read_ofs, len, key, c);
-    r = io_ctx.cache_aio_notifier(read_obj.oid, static_cast<D3nCacheRequest*>(cc));
-    d3n_data_cache.push_l2_request(cc);
-  }
-
-  // Flush data to client if there is any
-  r = flush_read_list(d);
-  if (r < 0)
-    return r;
-
-  return 0;
-
-done_err:
-  lsubdout(g_ceph_context, rgw, 20) << "cancelling io r=" << r << " obj_ofs=" << obj_ofs << dendl;
-  d->set_cancelled(r);
-  d->cancel_io(obj_ofs);
-
-  return r;
-  */
 }
-
-class D3nL2CacheThreadPool {
-public:
-  D3nL2CacheThreadPool(int n) {
-    for (int i=0; i<n; ++i) {
-      threads.push_back(new PoolWorkerThread(workQueue));
-      threads.back()->start();
-    }
-  }
-
-  ~D3nL2CacheThreadPool() {
-    finish();
-  }
-
-  void addTask(Task *nt) {
-    workQueue.addTask(nt);
-  }
-
-  void finish() {
-    for (size_t i=0,e=threads.size(); i<e; ++i)
-      workQueue.addTask(NULL);
-    for (size_t i=0,e=threads.size(); i<e; ++i) {
-      threads[i]->join();
-      delete threads[i];
-    }
-    threads.clear();
-  }
-
-private:
-  std::vector<PoolWorkerThread*> threads;
-  WorkQueue workQueue;
-};
-
-class D3nHttpL2Request : public Task {
-public:
-  D3nHttpL2Request(D3nL2CacheRequest* _req, CephContext* _cct) : Task(), req(_req), cct(_cct) {
-    pthread_mutex_init(&qmtx, 0);
-    pthread_cond_init(&wcond, 0);
-  }
-  ~D3nHttpL2Request() {
-    pthread_mutex_destroy(&qmtx);
-    pthread_cond_destroy(&wcond);
-  }
-  virtual void run();
-  virtual void set_handler(void *handle) {
-    curl_handle = (CURL *)handle;
-  }
-private:
-  int submit_http_request();
-  int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
-private:
-  pthread_mutex_t qmtx;
-  pthread_cond_t wcond;
-  D3nL2CacheRequest* req;
-  CURL *curl_handle;
-  CephContext *cct;
-};
 
 #endif

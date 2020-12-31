@@ -322,7 +322,7 @@ int radosgw_Main(int argc, const char **argv)
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
   rgw_http_client_init(g_ceph_context);
-  
+
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
 #endif
@@ -334,7 +334,7 @@ int radosgw_Main(int argc, const char **argv)
   lsubdout(cct, rgw_datacache, 5) << "rgw_d3n: rgw_d3n_l1_libaio_read=" << cct->_conf->rgw_d3n_l1_libaio_read << dendl;
   lsubdout(cct, rgw_datacache, 5) << "rgw_d3n: rgw_d3n_l1_fadvise=" << cct->_conf->rgw_d3n_l1_fadvise << dendl;
   lsubdout(cct, rgw_datacache, 5) << "rgw_d3n: rgw_d3n_l1_eviction_policy=" << cct->_conf->rgw_d3n_l1_eviction_policy << dendl;
-  bool rgw_d3n_datacache_enabled = g_conf()->rgw_d3n_l1_local_datacache_enabled || g_conf()->rgw_d3n_l2_distributed_datacache_enabled;
+  bool rgw_d3n_datacache_enabled = g_conf()->rgw_d3n_l1_local_datacache_enabled;
   rgw::sal::RGWRadosStore *store =
     RGWStoreManager::get_storage(g_ceph_context,
 				 g_conf()->rgw_enable_gc_threads,

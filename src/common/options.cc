@@ -7067,18 +7067,6 @@ std::vector<Option> get_rgw_options() {
     .set_default("lru")
     .set_description("select the d3n cache eviction policy"),
 
-    Option("rgw_d3n_l2_distributed_datacache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("Enable datacenter-scale dataset delivery distributed cache"),
-
-    Option("rgw_d3n_l2_datacache_request_thread_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10)
-    .set_description("Number of threads to utilize for distributed cache requests"),
-
-    Option("rgw_d3n_l2_datacache_hosts", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("localhost")
-    .set_description("Comma separated list of hosts in the format host:port"),
-
     Option("rgw_dynamic_resharding", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(true)
     .set_description("Enable dynamic resharding")

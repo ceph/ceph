@@ -159,32 +159,4 @@ struct D3nL1CacheRequest : public D3nCacheRequest {
   }
 };
 
-struct D3nL2CacheRequest : public D3nCacheRequest {
-  size_t read;
-  int stat;
-  void *tp;
-  string dest;
-  D3nL2CacheRequest() : D3nCacheRequest(), read(0), stat(-1) {}
-  ~D3nL2CacheRequest(){}
-  void release (){
-    lock.lock();
-    lock.unlock();
-  }
-
-  void cancel_io(){
-    lock.lock();
-    stat = ECANCELED;
-    lock.unlock();
-  }
-
-  void finish(){
-    onack->complete(0);
-    release();
-  }
-
-  int status(){
-    return 0;
-  }
-};
-
 #endif

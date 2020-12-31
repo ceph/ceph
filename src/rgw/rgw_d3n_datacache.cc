@@ -54,10 +54,6 @@ D3nDataCache::D3nDataCache()
   : index(0), cct(NULL), io_type(ASYNC_IO), free_data_cache_size(0), outstanding_write_size(0)
 {
   lsubdout(g_ceph_context, rgw_datacache, 5) << "D3nDataCache: " << __func__ << "()" << dendl;
-  if( g_conf()->rgw_d3n_l2_distributed_datacache_enabled ) {
-    lsubdout(g_ceph_context, rgw_datacache, 5) << "D3nDataCache: " << __func__ << "(): rgw_d3n_l2_distributed_datacache_enabled" << dendl;
-    tp = new D3nL2CacheThreadPool(32);
-  }
 }
 
 int D3nDataCache::io_write(bufferlist& bl, unsigned int len, std::string oid)
@@ -314,14 +310,6 @@ size_t D3nDataCache::lru_eviction()
 }
 
 
-void D3nDataCache::remote_io(D3nL2CacheRequest* l2request )
-{
-  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
-  ldout(cct, 20) << "D3nDataCache: Add task to remote IO" << dendl;
-  tp->addTask(new D3nHttpL2Request(l2request, cct));
-}
-
-
 std::vector<string> d3n_split(const std::string &s, char * delim)
 {
   stringstream ss(s);
@@ -332,146 +320,3 @@ std::vector<string> d3n_split(const std::string &s, char * delim)
   }
   return tokens;
 }
-
-void D3nDataCache::push_l2_request(D3nL2CacheRequest* l2request )
-{
-  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
-  tp->addTask(new D3nHttpL2Request(l2request, cct));
-}
-
-static size_t _d3n_l2_response_cb(void *ptr, size_t size, size_t nmemb, void* param)
-{
-  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
-  D3nL2CacheRequest* req = static_cast<D3nL2CacheRequest*>(param);
-  req->pbl->append((char *)ptr, size*nmemb);
-  return size*nmemb;
-}
-
-// TODO: complete L2 cache support refactoring
-void D3nHttpL2Request::run()
-{
-  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
-/*
-  get_obj_data* d = static_cast<get_obj_data*>(req->op_data);
-  int n_retries = cct->_conf->rgw_d3n_l2_datacache_request_thread_num;
-  int r = 0;
-
-  for (int i=0; i<n_retries; i++ ) {
-    if (!(r = submit_http_request())) {
-      d->cache_aio_completion_cb(req);
-      return;
-    }
-    if (r == ECANCELED) {
-      return;
-    }
-  }
-  */
-}
-/*
-int D3nHttpL2Request::submit_http_request()
-{
-  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
-  CURLcode res;
-  string auth_token;
-  string range = std::to_string(req->ofs + req->read_ofs)+ "-"+ std::to_string(req->ofs + req->read_ofs + req->len - 1);
-  struct curl_slist* header{nullptr};
-  get_obj_data* d = static_cast<get_obj_data*>(req->op_data);
-
-  string req_uri;
-  string uri,dest;
-  (static_cast<RGWGetObj_CB*>(d->client_cb))->get_req_info(dest, req_uri, auth_token);
-  uri = "http://" + req->dest + req_uri;
-
-  struct req_state *s;
-  ((RGWGetObj_CB *)(d->client_cb))->get_req_info(req->dest, s->info.request_uri, auth_token);
-
-  if (s->dialect == "s3") {
-    RGWEnv env;
-    req_info info(cct, &env);
-    memcpy(&info, &s->info, sizeof(info));
-    memcpy(&env, s->info.env, sizeof(env));
-    info.env = &env;
-    std::string access_key_id;
-    const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
-    if (! http_auth || http_auth[0] == '\0') {
-      access_key_id = s->info.args.get("AWSAccessKeyId");
-    } else {
-      string auth_str("auth");
-      int pos = auth_str.rfind(':');
-      if (pos < 0)
-        return -EINVAL;
-      access_key_id = auth_str.substr(0, pos);
-    }
-    map<string, RGWAccessKey>::iterator iter = s->user->get_info().access_keys.find(access_key_id);
-    if (iter == s->user->get_info().access_keys.end()) {
-      ldout(cct, 1) << "ERROR: access key not encoded in user info" << dendl;
-      return -EPERM;
-    }
-   RGWAccessKey& key = iter->second;
-   sign_request(key, env, info);
-  }
-  else if (s->dialect == "swift") {
-    header = curl_slist_append(header, auth_token.c_str());
-  } else {
-    ldout(cct, 10) << "D3nDataCache: curl_easy_perform() failed " << dendl;
-    return -1;
-  }
-
-
-  if (curl_handle) {
-    curl_easy_setopt(curl_handle, CURLOPT_RANGE, range.c_str());
-    curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, header);
-    curl_easy_setopt(curl_handle, CURLOPT_URL, uri.c_str());
-    curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, _d3n_l2_response_cb);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void*)req);
-    res = curl_easy_perform(curl_handle);
-    curl_easy_reset(curl_handle);
-    curl_slist_free_all(header);
-  }
-  if (res != CURLE_OK) {
-    ldout(cct, 10) << "D3nDataCache: curl_easy_perform() failed " << curl_easy_strerror(res) << " oid " << req->oid << " offset " << req->ofs + req->read_ofs  <<dendl;
-    return -1;
-  }
-  return 0;
-}
-
-int D3nHttpL2Request::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
-{
-  lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "()" << dendl;
-  // don't sign if no key is provided
-  if (key.key.empty()) {
-    return 0;
-  }
-
-  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    for (const auto& i: env.get_map()) {
-      ldout(cct, 20) << "> " << i.first << " -> " << rgw::crypt_sanitize::x_meta_map{i.first, i.second} << dendl;
-    }
-  }
-
-  std::string canonical_header;
-  if (!rgw_create_s3_canonical_header(info, NULL, canonical_header, false)) {
-    ldout(cct, 0) << "failed to create canonical s3 header" << dendl;
-    return -EINVAL;
-  }
-
-  ldout(cct, 20) << "generated canonical header: " << canonical_header << dendl;
-
-  std::string digest;
-  try {
-    digest = rgw::auth::s3::get_v2_signature(cct, key.key, canonical_header);
-  } catch (int ret) {
-    return ret;
-  }
-
-  string auth_hdr = "AWS " + key.id + ":" + digest;
-  ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
-
-  env.set("AUTHORIZATION", auth_hdr);
-
-  return 0;
-}
-*/
-
