@@ -109,6 +109,11 @@ This removes the user defined configuration.
 Create CephFS Export
 ====================
 
+.. warning:: Currently, the volume/nfs interface is not integrated with dashboard. Both
+   dashboard and volume/nfs interface have different export requirements and
+   create exports differently. Management of dashboard created exports is not
+   supported.
+
 .. code:: bash
 
     $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
