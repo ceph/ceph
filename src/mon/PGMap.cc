@@ -3261,8 +3261,8 @@ void PGMap::get_health_checks(
 	summary += " reporting legacy (not per-pool) BlueStore stats";
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
 	summary += " have dangerous mismatch between BlueStore block device and free list sizes";
-      } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
-	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
+      } else if (asum.first == "BLUESTORE_NO_PER_PG_OMAP") {
+	summary += " reporting legacy (not per-pg) BlueStore omap usage stats";
       } else if (asum.first == "BLUESTORE_SPURIOUS_READ_ERRORS") {
         summary += " have spurious read errors";
       }

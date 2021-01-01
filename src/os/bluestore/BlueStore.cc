@@ -113,6 +113,7 @@ const string PREFIX_OBJ = "O";         // object name -> onode_t
 const string PREFIX_OMAP = "M";        // u64 + keyname -> value
 const string PREFIX_PGMETA_OMAP = "P"; // u64 + keyname -> value(for meta coll)
 const string PREFIX_PERPOOL_OMAP = "m"; // s64 + u64 + keyname -> value
+const string PREFIX_PERPG_OMAP = "p";   // u64(pool) + u32(hash) + u64(id) + keyname -> value
 const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
 const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
 const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
@@ -273,8 +274,8 @@ static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
 }
 
 static void get_coll_range(const coll_t& cid, int bits,
-                           ghobject_t *temp_start, ghobject_t *temp_end,
-                           ghobject_t *start, ghobject_t *end)
+  ghobject_t *temp_start, ghobject_t *temp_end,
+  ghobject_t *start, ghobject_t *end)
 {
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
@@ -467,7 +468,6 @@ static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
     }
   }
 }
-
 
 // extent shard keys are the onode key, plus a u32, plus 'x'.  the trailing
 // char lets us quickly test whether it is a shard key without decoding any
@@ -3601,6 +3601,9 @@ const string& BlueStore::Onode::get_omap_prefix()
   if (onode.is_pgmeta_omap()) {
     return PREFIX_PGMETA_OMAP;
   }
+  if (onode.is_perpg_omap()) {
+    return PREFIX_PERPG_OMAP;
+  }
   if (onode.is_perpool_omap()) {
     return PREFIX_PERPOOL_OMAP;
   }
@@ -3611,8 +3614,13 @@ const string& BlueStore::Onode::get_omap_prefix()
 
 void BlueStore::Onode::get_omap_header(string *out)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(c->pool(), out);
+  if (!onode.is_pgmeta_omap()) {
+    if (onode.is_perpg_omap()) {
+      _key_encode_u64(c->pool(), out);
+      _key_encode_u32(oid.hobj.get_bitwise_key_u32(), out);
+    } else if (onode.is_perpool_omap()) {
+      _key_encode_u64(c->pool(), out);
+    }
   }
   _key_encode_u64(onode.nid, out);
   out->push_back('-');
@@ -3620,8 +3628,13 @@ void BlueStore::Onode::get_omap_header(string *out)
 
 void BlueStore::Onode::get_omap_key(const string& key, string *out)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(c->pool(), out);
+  if (!onode.is_pgmeta_omap()) {
+    if (onode.is_perpg_omap()) {
+      _key_encode_u64(c->pool(), out);
+      _key_encode_u32(oid.hobj.get_bitwise_key_u32(), out);
+    } else if (onode.is_perpool_omap()) {
+      _key_encode_u64(c->pool(), out);
+    }
   }
   _key_encode_u64(onode.nid, out);
   out->push_back('.');
@@ -3630,8 +3643,13 @@ void BlueStore::Onode::get_omap_key(const string& key, string *out)
 
 void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(c->pool(), out);
+  if (!onode.is_pgmeta_omap()) {
+    if (onode.is_perpg_omap()) {
+      _key_encode_u64(c->pool(), out);
+      _key_encode_u32(oid.hobj.get_bitwise_key_u32(), out);
+    } else if (onode.is_perpool_omap()) {
+      _key_encode_u64(c->pool(), out);
+    }
   }
   _key_encode_u64(onode.nid, out);
   out->append(old.c_str() + out->length(), old.size() - out->length());
@@ -3639,8 +3657,13 @@ void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
 
 void BlueStore::Onode::get_omap_tail(string *out)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(c->pool(), out);
+  if (!onode.is_pgmeta_omap()) {
+    if (onode.is_perpg_omap()) {
+      _key_encode_u64(c->pool(), out);
+      _key_encode_u32(oid.hobj.get_bitwise_key_u32(), out);
+    } else if (onode.is_perpool_omap()) {
+      _key_encode_u64(c->pool(), out);
+    }
   }
   _key_encode_u64(onode.nid, out);
   out->push_back('~');
@@ -3648,11 +3671,15 @@ void BlueStore::Onode::get_omap_tail(string *out)
 
 void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    *user_key = key.substr(sizeof(uint64_t)*2 + 1);
-  } else {
-    *user_key = key.substr(sizeof(uint64_t) + 1);
+  size_t pos = sizeof(uint64_t) + 1;
+  if (!onode.is_pgmeta_omap()) {
+    if (onode.is_perpg_omap()) {
+      pos += sizeof(uint64_t) + sizeof(uint32_t);
+    } else if (onode.is_perpool_omap()) {
+      pos += sizeof(uint64_t);
+    }
   }
+  *user_key = key.substr(pos);
 }
 
 
@@ -4505,7 +4532,7 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
     _check_legacy_statfs_alert();
   }
   if (changed.count("bluestore_warn_on_no_per_pool_omap")) {
-    _check_no_per_pool_omap_alert();
+    _check_no_per_pg_omap_alert();
   }
 
   if (changed.count("bluestore_csum_type")) {
@@ -6157,16 +6184,22 @@ void BlueStore::_fsck_collections(int64_t* errors)
 
 void BlueStore::_set_per_pool_omap()
 {
-  per_pool_omap = false;
+  per_pool_omap = OMAP_BULK;
   bufferlist bl;
   db->get(PREFIX_SUPER, "per_pool_omap", &bl);
   if (bl.length()) {
-    per_pool_omap = true;
-    dout(10) << __func__ << " per_pool_omap=1" << dendl;
+    auto s = bl.to_str();
+    if (s == stringify(OMAP_PER_POOL)) {
+      per_pool_omap = OMAP_PER_POOL;
+    } else {
+      ceph_assert(s == stringify(OMAP_PER_PG));
+      per_pool_omap = OMAP_PER_PG;
+    }
+    dout(10) << __func__ << " per_pool_omap = " << per_pool_omap << dendl;
   } else {
     dout(10) << __func__ << " per_pool_omap not present" << dendl;
   }
-  _check_no_per_pool_omap_alert();
+  _check_no_per_pg_omap_alert();
 }
 
 void BlueStore::_open_statfs()
@@ -6463,7 +6496,7 @@ int BlueStore::mkfs()
     }
     {
       bufferlist bl;
-      bl.append("1");
+      bl.append(stringify(OMAP_PER_PG));
       t->set(PREFIX_SUPER, "per_pool_omap", bl);
     }
     ondisk_format = latest_ondisk_format;
@@ -6940,10 +6973,10 @@ int BlueStore::_mount()
 
   mempool_thread.init();
 
-  if ((!per_pool_stat_collection || !per_pool_omap) &&
+  if ((!per_pool_stat_collection || per_pool_omap != OMAP_PER_PG) &&
     cct->_conf->bluestore_fsck_quick_fix_on_mount == true) {
 
-    bool was_per_pool_omap = per_pool_omap;
+    auto was_per_pool_omap = per_pool_omap;
 
     dout(1) << __func__ << " quick-fix on mount" << dendl;
     _fsck_on_open(FSCK_SHALLOW, true);
@@ -6954,7 +6987,7 @@ int BlueStore::_mount()
     _check_legacy_statfs_alert();
 
     //set again as hopefully it has been fixed
-    if (!was_per_pool_omap) {
+    if (was_per_pool_omap != OMAP_PER_PG) {
       _set_per_pool_omap();
     }
   }
@@ -7651,11 +7684,11 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
   auto repairer = ctx.repairer;
 
   ceph_assert(o->onode.has_omap());
-  if (!o->onode.is_perpool_omap() && !o->onode.is_pgmeta_omap()) {
-    if (per_pool_omap) {
+  if (!o->onode.is_perpg_omap() && !o->onode.is_pgmeta_omap()) {
+    if (per_pool_omap == OMAP_PER_PG) {
       fsck_derr(errors, MAX_FSCK_ERROR_LINES)
         << "fsck error: " << o->oid
-        << " has omap that is not per-pool or pgmeta"
+        << " has omap that is not per-pg or pgmeta"
         << fsck_dendl;
       ++errors;
     } else {
@@ -7672,14 +7705,14 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       }
       fsck_derr(num, MAX_FSCK_ERROR_LINES)
         << "fsck " << w << ": " << o->oid
-        << " has omap that is not per-pool or pgmeta"
+        << " has omap that is not per-pg or pgmeta"
         << fsck_dendl;
     }
   }
   if (repairer &&
-    !o->onode.is_perpool_omap() &&
+    !o->onode.is_perpg_omap() &&
     !o->onode.is_pgmeta_omap()) {
-    dout(10) << "fsck converting " << o->oid << " omap to per-pool" << dendl;
+    dout(10) << "fsck converting " << o->oid << " omap to per-pg" << dendl;
     bufferlist h;
     map<string, bufferlist> kv;
     int r = _onode_omap_get(o, &h, &kv);
@@ -7695,7 +7728,7 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       txn->rm_range_keys(old_omap_prefix, old_head, old_tail);
       txn->rmkey(old_omap_prefix, old_tail);
       // set flag
-      o->onode.set_flag(bluestore_onode_t::FLAG_PERPOOL_OMAP);
+      o->onode.set_flag(bluestore_onode_t::FLAG_PERPOOL_OMAP | bluestore_onode_t::FLAG_PERPG_OMAP);
       _record_onode(o, txn);
       const string& new_omap_prefix = o->get_omap_prefix();
       // head
@@ -8153,7 +8186,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     derr << "fsck " << w << ": store not yet converted to per-pool stats"
 	 << dendl;
   }
-  if (!per_pool_omap) {
+  if (per_pool_omap != OMAP_PER_PG) {
     const char *w;
     if (cct->_conf->bluestore_fsck_error_on_no_per_pool_omap) {
       w = "error";
@@ -8162,7 +8195,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       w = "warning";
       ++warnings;
     }
-    derr << "fsck " << w << ": store not yet converted to per-pool omap"
+    derr << "fsck " << w << ": store not yet converted to per-pg omap"
 	 << dendl;
   }
 
@@ -8532,14 +8565,16 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       uint64_t last_omap_head = 0;
       for (it->lower_bound(string()); it->valid(); it->next()) {
         uint64_t omap_head;
+
         _key_decode_u64(it->key().c_str(), &omap_head);
+
         if (used_omap_head.count(omap_head) == 0 &&
-	    omap_head != last_omap_head) {
+           omap_head != last_omap_head) {
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
             << "fsck error: found stray omap data on omap_head "
-            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head)<< fsck_dendl;
-	  ++errors;
-	  last_omap_head = omap_head;
+            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
+          ++errors;
+          last_omap_head = omap_head;
         }
       }
     }
@@ -8565,17 +8600,37 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       for (it->lower_bound(string()); it->valid(); it->next()) {
         uint64_t pool;
         uint64_t omap_head;
-        string k = it->key();
-        const char *c = k.c_str();
+        const char *c = it->key().c_str();
         c = _key_decode_u64(c, &pool);
         c = _key_decode_u64(c, &omap_head);
         if (used_omap_head.count(omap_head) == 0 &&
-	    omap_head != last_omap_head) {
+          omap_head != last_omap_head) {
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
             << "fsck error: found stray (per-pool) omap data on omap_head "
             << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
           ++errors;
-	  last_omap_head = omap_head;
+          last_omap_head = omap_head;
+        }
+      }
+    }
+    it = db->get_iterator(PREFIX_PERPG_OMAP, KeyValueDB::ITERATOR_NOCACHE);
+    if (it) {
+      uint64_t last_omap_head = 0;
+      for (it->lower_bound(string()); it->valid(); it->next()) {
+        uint64_t pool;
+        uint32_t hash;
+        uint64_t omap_head;
+        const char* c = it->key().c_str();
+        c = _key_decode_u64(c, &pool);
+        c = _key_decode_u32(c, &hash);
+        c = _key_decode_u64(c, &omap_head);
+        if (used_omap_head.count(omap_head) == 0 &&
+          omap_head != last_omap_head) {
+          fsck_derr(errors, MAX_FSCK_ERROR_LINES)
+            << "fsck error: found stray (per-pg) omap data on omap_head "
+            << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
+          ++errors;
+          last_omap_head = omap_head;
         }
       }
     }
@@ -8687,9 +8742,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     }
   }
   if (repair) {
-    if (!per_pool_omap) {
-      dout(5) << __func__ << " marking per_pool_omap=1" << dendl;
-      repairer.fix_per_pool_omap(db);
+    if (per_pool_omap != OMAP_PER_PG) {
+      dout(5) << __func__ << " fixing per_pg_omap" << dendl;
+      repairer.fix_per_pool_omap(db, OMAP_PER_PG);
     }
 
     dout(5) << __func__ << " applying repair results" << dendl;
@@ -8793,7 +8848,7 @@ void BlueStore::inject_false_free(coll_t cid, ghobject_t oid)
 void BlueStore::inject_legacy_omap()
 {
   dout(1) << __func__ << dendl;
-  per_pool_omap = false;
+  per_pool_omap = OMAP_BULK;
   KeyValueDB::Transaction txn;
   txn = db->get_transaction();
   txn->rmkey(PREFIX_SUPER, "per_pool_omap");
@@ -8814,7 +8869,10 @@ void BlueStore::inject_legacy_omap(coll_t cid, ghobject_t oid)
     o = c->get_onode(oid, false);
     ceph_assert(o);
   }
-  o->onode.clear_flag(bluestore_onode_t::FLAG_PERPOOL_OMAP | bluestore_onode_t::FLAG_PGMETA_OMAP);
+  o->onode.clear_flag(
+    bluestore_onode_t::FLAG_PERPG_OMAP |
+    bluestore_onode_t::FLAG_PERPOOL_OMAP |
+    bluestore_onode_t::FLAG_PGMETA_OMAP);
   txn = db->get_transaction();
   _record_onode(o, txn);
   db->submit_transaction_sync(txn);
@@ -9011,9 +9069,13 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 {
   buf->reset();
 
+  auto prefix = per_pool_omap == OMAP_BULK ?
+    PREFIX_OMAP :
+    per_pool_omap == OMAP_PER_POOL ?
+      PREFIX_PERPOOL_OMAP :
+      PREFIX_PERPG_OMAP;
   buf->omap_allocated =
-    db->estimate_prefix_size(PREFIX_OMAP, string()) +
-    db->estimate_prefix_size(PREFIX_PERPOOL_OMAP, string());
+    db->estimate_prefix_size(prefix, string());
 
   uint64_t bfree = shared_alloc.a->get_free();
 
@@ -9083,9 +9145,13 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
 
   string key_prefix;
   _key_encode_u64(pool_id, &key_prefix);
-  buf->omap_allocated = db->estimate_prefix_size(PREFIX_PERPOOL_OMAP,
-						 key_prefix);
-  *out_per_pool_omap = per_pool_omap;
+  *out_per_pool_omap = per_pool_omap != OMAP_BULK;
+  if (*out_per_pool_omap) {
+    auto prefix = per_pool_omap == OMAP_PER_POOL ?
+      PREFIX_PERPOOL_OMAP :
+      PREFIX_PERPG_OMAP;
+    buf->omap_allocated = db->estimate_prefix_size(prefix, key_prefix);
+  }
 
   dout(10) << __func__ << *buf << dendl;
   return 0;
@@ -9103,16 +9169,16 @@ void BlueStore::_check_legacy_statfs_alert()
   legacy_statfs_alert = s;
 }
 
-void BlueStore::_check_no_per_pool_omap_alert()
+void BlueStore::_check_no_per_pg_omap_alert()
 {
   string s;
-  if (!per_pool_omap &&
+  if (per_pool_omap != OMAP_PER_PG &&
       cct->_conf->bluestore_warn_on_no_per_pool_omap) {
-    s = "legacy (not per-pool) omap detected, "
-      "suggest to run store repair to measure per-pool omap usage";
+    s = "legacy (not per-pg) omap detected, "
+      "suggest to run store repair to benefit from per-pool omap usage statistic and faster PG removal";
   }
   std::lock_guard l(qlock);
-  no_per_pool_omap_alert = s;
+  no_per_pg_omap_alert = s;
 }
 
 // ---------------
@@ -10933,8 +10999,8 @@ int BlueStore::_upgrade_super()
     }
     if (ondisk_format == 2) {
       // changes:
-      // - onode has FLAG_PER_POOL_OMAP.  Note that we do not know that *all*
-      //   ondes are using the per-pool prefix until a repair is run; at that
+      // - onode has FLAG_PERPOOL_OMAP.  Note that we do not know that *all*
+      //   oondes are using the per-pool prefix until a repair is run; at that
       //   point the per_pool_omap=1 key will be set.
       // - super: added per_pool_omap key, which indicates that *all* objects
       //   are using the new prefix and key format
@@ -15168,18 +15234,17 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     size_t nonexistent_count = 0;
     ceph_assert((*c)->exists);
     if ((*c)->onode_map.map_any([&](Onode* o) {
-        if (o->exists) {
-          dout(1) << __func__ << " " << o->oid << " " << o
-		  << " exists in onode_map" << dendl;
+      if (o->exists) {
+        dout(1) << __func__ << " " << o->oid << " " << o
+	        << " exists in onode_map" << dendl;
           return true;
-        }
-        ++nonexistent_count;
-        return false;
-        })) {
+      }
+      ++nonexistent_count;
+      return false;
+    })) {
       r = -ENOTEMPTY;
       goto out;
     }
-
     vector<ghobject_t> ls;
     ghobject_t next;
     // Enumerate onodes in db, up to nonexistent_count + 1
@@ -15197,23 +15262,22 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         exists = !onode || onode->exists;
         if (exists) {
           dout(1) << __func__ << " " << *it
-		  << " exists in db, "
-		  << (!onode ? "not present in ram" : "present in ram")
-		  << dendl;
+	  << " exists in db, "
+	  << (!onode ? "not present in ram" : "present in ram")
+	  << dendl;
         }
       }
       if (!exists) {
-	_do_remove_collection(txc, c);
+        _do_remove_collection(txc, c);
         r = 0;
       } else {
         dout(10) << __func__ << " " << cid
                  << " is non-empty" << dendl;
-        r = -ENOTEMPTY;
+	r = -ENOTEMPTY;
       }
     }
   }
-
- out:
+out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;
   return r;
 }
@@ -15665,6 +15729,12 @@ void BlueStore::generate_db_histogram(Formatter *f)
     } else if (key.first == PREFIX_OMAP) {
 	hist.update_hist_entry(hist.key_hist, PREFIX_OMAP, key_size, value_size);
 	num_omap++;
+    } else if (key.first == PREFIX_PERPOOL_OMAP) {
+	hist.update_hist_entry(hist.key_hist, PREFIX_PERPOOL_OMAP, key_size, value_size);
+	num_omap++;
+    } else if (key.first == PREFIX_PERPG_OMAP) {
+	hist.update_hist_entry(hist.key_hist, PREFIX_PERPG_OMAP, key_size, value_size);
+	num_omap++;
     } else if (key.first == PREFIX_PGMETA_OMAP) {
 	hist.update_hist_entry(hist.key_hist, PREFIX_PGMETA_OMAP, key_size, value_size);
 	num_pgmeta_omap++;
@@ -15838,10 +15908,10 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
       "BLUEFS_SPILLOVER",
       spillover_alert);
   }
-  if (!no_per_pool_omap_alert.empty()) {
+  if (!no_per_pg_omap_alert.empty()) {
     alerts.emplace(
-      "BLUESTORE_NO_PER_POOL_OMAP",
-      no_per_pool_omap_alert);
+      "BLUESTORE_NO_PER_PG_OMAP",
+      no_per_pg_omap_alert);
   }
   string s0(failed_cmode);
 
@@ -15969,12 +16039,12 @@ bool BlueStoreRepairer::remove_key(KeyValueDB *db,
   return true;
 }
 
-void BlueStoreRepairer::fix_per_pool_omap(KeyValueDB *db)
+void BlueStoreRepairer::fix_per_pool_omap(KeyValueDB *db, int val)
 {
   fix_per_pool_omap_txn = db->get_transaction();
   ++to_repair_cnt;
   bufferlist bl;
-  bl.append("1");
+  bl.append(stringify(val));
   fix_per_pool_omap_txn->set(PREFIX_SUPER, "per_pool_omap", bl);
 }
 
