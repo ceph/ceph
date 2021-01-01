@@ -160,7 +160,7 @@ cluster_handle = None
 
 def raw_write(buf):
     sys.stdout.flush()
-    sys.stdout.buffer.write(rados.cstr(buf, ''))
+    sys.stdout.buffer.write(buf)
 
 
 def osdids():
