@@ -1004,7 +1004,7 @@ Rados object in state %s." % self.state)
                     cmd: str,
                     inbuf: bytes,
                     timeout: int = 0,
-                    target: Optional[Union[str, int]] = None) -> Tuple[int, str, bytes]:
+                    target: Optional[Union[str, int]] = None) -> Tuple[int, bytes, str]:
         """
         Send a command to the mon.
 
@@ -1078,7 +1078,7 @@ Rados object in state %s." % self.state)
                     osdid: int,
                     cmd: str,
                     inbuf: bytes,
-                    timeout: int = 0) -> Tuple[int, str, bytes]:
+                    timeout: int = 0) -> Tuple[int, bytes, str]:
         """
         osd_command(osdid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
 
@@ -1181,7 +1181,7 @@ Rados object in state %s." % self.state)
                    pgid: str,
                    cmd: str,
                    inbuf: bytes,
-                   timeout: int = 0) -> Tuple[int, str, bytes]:
+                   timeout: int = 0) -> Tuple[int, bytes, str]:
         """
         pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
 
