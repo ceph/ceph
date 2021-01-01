@@ -5668,6 +5668,14 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
   if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
 
     string options = cct->_conf->bluestore_rocksdb_options;
+    string options_annex = cct->_conf->bluestore_rocksdb_options_annex;
+    if (!options_annex.empty()) {
+      if (!options.empty() &&
+        *options.rbegin() != ',') {
+        options += ',';
+      }
+      options += options_annex;
+    }
 
     rocksdb::Options rocks_opts;
     r = RocksDBStore::ParseOptionsFromStringStatic(
@@ -6020,6 +6028,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   int r;
   ceph_assert(!(create && read_only));
   string options;
+  string options_annex;
   stringstream err;
   string kv_dir_fn;
   string kv_backend;
@@ -6031,6 +6040,15 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   }
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
+    options_annex = cct->_conf->bluestore_rocksdb_options_annex;
+    if (!options_annex.empty()) {
+      if (!options.empty() &&
+        *options.rbegin() != ',') {
+        options += ',';
+      }
+      options += options_annex;
+    }
+
     if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
       sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
     }
