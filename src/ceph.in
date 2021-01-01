@@ -626,47 +626,46 @@ def new_style_command(parsed_args,
             sig = cmd['sig']
             print('{0}: {1}'.format(cmdtag, concise_sig(sig)))
 
-    if True:
-        if cmdargs:
-            # Non interactive mode
-            ret, outbuf, outs = do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
-        else:
-            # Interactive mode (ceph cli)
-            if sys.stdin.isatty():
-                # do the command-interpreter looping
-                # for input to do readline cmd editing
-                import readline  # noqa
+    if cmdargs:
+        # Non interactive mode
+        ret, outbuf, outs = do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
+    else:
+        # Interactive mode (ceph cli)
+        if sys.stdin.isatty():
+            # do the command-interpreter looping
+            # for input to do readline cmd editing
+            import readline  # noqa
 
-            while True:
-                try:
-                    interactive_input = read_input()
-                except EOFError:
-                    # leave user an uncluttered prompt
-                    return 0, b'\n', ''
-                if interactive_input is None:
-                    return 0, b'', ''
-                cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
-                try:
-                    target = find_cmd_target(cmdargs)
-                except Exception as e:
-                    print('error handling command target: {0}'.format(e),
-                          file=sys.stderr)
-                    continue
-                if len(cmdargs) and cmdargs[0] == 'tell':
-                    print('Can not use \'tell\' in interactive mode.',
-                          file=sys.stderr)
-                    continue
-                ret, outbuf, outs = do_command(parsed_args, target, cmdargs,
-                                               sigdict, inbuf, verbose)
-                if ret < 0:
-                    ret = -ret
-                    errstr = errno.errorcode.get(ret, 'Unknown')
-                    print('Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
-                else:
-                    if outs:
-                        print(outs, file=sys.stderr)
-                    if outbuf:
-                        print(outbuf.decode('utf-8'))
+        while True:
+            try:
+                interactive_input = read_input()
+            except EOFError:
+                # leave user an uncluttered prompt
+                return 0, b'\n', ''
+            if interactive_input is None:
+                return 0, b'', ''
+            cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
+            try:
+                target = find_cmd_target(cmdargs)
+            except Exception as e:
+                print('error handling command target: {0}'.format(e),
+                      file=sys.stderr)
+                continue
+            if len(cmdargs) and cmdargs[0] == 'tell':
+                print('Can not use \'tell\' in interactive mode.',
+                      file=sys.stderr)
+                continue
+            ret, outbuf, outs = do_command(parsed_args, target, cmdargs,
+                                           sigdict, inbuf, verbose)
+            if ret < 0:
+                ret = -ret
+                errstr = errno.errorcode.get(ret, 'Unknown')
+                print('Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
+            else:
+                if outs:
+                    print(outs, file=sys.stderr)
+                if outbuf:
+                    print(outbuf.decode('utf-8'))
 
     return ret, outbuf, outs
 
