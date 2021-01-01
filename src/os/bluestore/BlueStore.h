@@ -1853,6 +1853,8 @@ public:
     DeferredBatch *deferred_running = nullptr;
     DeferredBatch *deferred_pending = nullptr;
 
+    ceph::mutex deferred_lock = ceph::make_mutex("BlueStore::OpSequencer::deferred_lock");
+
     BlueStore *store;
     coll_t cid;
 
@@ -2082,7 +2084,7 @@ private:
       ceph::make_mutex("BlueStore::atomic_alloc_and_submit_lock");
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
-  int deferred_queue_size = 0;         ///< num txc's queued across all osrs
+  std::atomic_int deferred_queue_size = {0};         ///< num txc's queued across all osrs
   std::atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
   Finisher  finisher;
   utime_t  deferred_last_submitted = utime_t();
