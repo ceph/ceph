@@ -2998,7 +2998,7 @@ void Server::handle_peer_auth_pin(MDRequestRef& mdr)
     /* freeze authpin wrong inode */
     if (mdr->has_more() && mdr->more()->is_freeze_authpin &&
 	mdr->more()->rename_inode != auth_pin_freeze)
-      mdr->unfreeze_auth_pin(true);
+      mdr->unfreeze_auth_pin();
 
     /* handle_peer_rename_prep() call freeze_inode() to wait for all other operations
      * on the source inode to complete. This happens after all locks for the rename
@@ -8881,6 +8881,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       // hack: fix auth bit
       in->state_set(CInode::STATE_AUTH);
 
+      ceph_assert(mdr->more()->is_ambiguous_auth);
       mdr->clear_ambiguous_auth();
     }
 
@@ -9033,13 +9034,7 @@ void Server::handle_peer_rename_prep(MDRequestRef& mdr)
       //     (this could also be accomplished with the versionlock)
       int allowance = 3; // 1 for the mdr auth_pin, 1 for the link lock, 1 for the snap lock
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
-      bool frozen_inode = srcdnl->get_inode()->freeze_inode(allowance);
-
-      // unfreeze auth pin after freezing the inode to avoid queueing waiters
-      if (srcdnl->get_inode()->is_frozen_auth_pin())
-	mdr->unfreeze_auth_pin();
-
-      if (!frozen_inode) {
+      if (!srcdnl->get_inode()->freeze_inode(allowance)) {
 	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
@@ -9307,16 +9302,20 @@ void Server::_commit_peer_rename(MDRequestRef& mdr, int r,
       mdcache->migrator->finish_export_inode(in, mdr->peer_to_mds, peer_imported, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
+      // singleauth
+      if (mdr->more()->is_ambiguous_auth)
+	mdr->clear_ambiguous_auth(finished);
+
       // unfreeze
       ceph_assert(in->is_frozen_inode());
-      in->unfreeze_inode(finished);
+      ceph_assert(mdr->more()->is_freeze_authpin);
+      mdr->unfreeze_auth_pin(finished);
+    } else {
+      // singleauth
+      if (mdr->more()->is_ambiguous_auth)
+	mdr->clear_ambiguous_auth(finished);
     }
 
-    // singleauth
-    if (mdr->more()->is_ambiguous_auth) {
-      mdr->more()->rename_inode->clear_ambiguous_auth(finished);
-      mdr->more()->is_ambiguous_auth = false;
-    }
 
     if (straydn && mdr->more()->peer_update_journaled) {
       CInode *strayin = straydn->get_projected_linkage()->get_inode();
@@ -9358,13 +9357,10 @@ void Server::_commit_peer_rename(MDRequestRef& mdr, int r,
     } else {
       dout(10) << " rollback_bl empty, not rollback back rename (leader failed after getting extra witnesses?)" << dendl;
       // singleauth
-      if (mdr->more()->is_ambiguous_auth) {
-	if (srcdn->is_auth())
-	  mdr->more()->rename_inode->unfreeze_inode(finished);
-
-	mdr->more()->rename_inode->clear_ambiguous_auth(finished);
-	mdr->more()->is_ambiguous_auth = false;
-      }
+      if (mdr->more()->is_ambiguous_auth)
+	mdr->clear_ambiguous_auth(finished);
+      if (mdr->more()->is_freeze_authpin)
+	mdr->unfreeze_auth_pin(finished);
       mds->queue_waiters(finished);
       mdcache->request_finish(mdr);
     }
@@ -9759,13 +9755,10 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
 
   if (mdr) {
     MDSContext::vec finished;
-    if (mdr->more()->is_ambiguous_auth) {
-      if (srcdn->is_auth())
-	mdr->more()->rename_inode->unfreeze_inode(finished);
-
-      mdr->more()->rename_inode->clear_ambiguous_auth(finished);
-      mdr->more()->is_ambiguous_auth = false;
-    }
+    if (mdr->more()->is_ambiguous_auth)
+      mdr->clear_ambiguous_auth(finished);
+    if (mdr->more()->is_freeze_authpin)
+      mdr->unfreeze_auth_pin(finished);
     mds->queue_waiters(finished);
     if (finish_mdr || mdr->aborted)
       mdcache->request_finish(mdr);
