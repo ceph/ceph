@@ -375,11 +375,13 @@ struct MDRequestImpl : public MutationImpl {
   bool peer_did_prepare();
   bool peer_rolling_back();
   bool freeze_auth_pin(CInode *inode);
-  void unfreeze_auth_pin(bool clear_inode=false);
+  void unfreeze_auth_pin(MDSContext::vec& finished);
+  void unfreeze_auth_pin();
   void set_remote_frozen_auth_pin(CInode *inode);
   bool can_auth_pin(MDSCacheObject *object);
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
+  void clear_ambiguous_auth(MDSContext::vec& finished);
   void clear_ambiguous_auth();
   const filepath& get_filepath();
   const filepath& get_filepath2();

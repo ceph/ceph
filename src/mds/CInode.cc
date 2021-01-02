@@ -2820,6 +2820,8 @@ bool CInode::freeze_inode(int auth_pin_allowance)
       get(PIN_FROZEN);
       state_set(STATE_FROZEN);
       dir->num_frozen_inodes++;
+      if (is_frozen_auth_pin())
+	unfreeze_auth_pin();
     }
     return true;
   }
@@ -2830,6 +2832,9 @@ bool CInode::freeze_inode(int auth_pin_allowance)
 
   get(PIN_FREEZING);
   state_set(STATE_FREEZING);
+
+  if (is_frozen_auth_pin())
+    unfreeze_auth_pin();
 
   if (!dir->lock_caches_with_auth_pins.empty())
     mdcache->mds->locker->invalidate_lock_caches(dir);
@@ -2848,7 +2853,7 @@ bool CInode::freeze_inode(int auth_pin_allowance)
   return state_test(STATE_FROZEN);
 }
 
-void CInode::unfreeze_inode(MDSContext::vec& finished) 
+void CInode::unfreeze_inode(MDSContext::vec& finished)
 {
   dout(10) << __func__ << dendl;
   if (state_test(STATE_FREEZING)) {
@@ -2866,28 +2871,39 @@ void CInode::unfreeze_inode(MDSContext::vec& finished)
 
 void CInode::unfreeze_inode()
 {
-    MDSContext::vec finished;
-    unfreeze_inode(finished);
+  MDSContext::vec finished;
+  unfreeze_inode(finished);
+  if (!finished.empty())
     mdcache->mds->queue_waiters(finished);
 }
 
 void CInode::freeze_auth_pin()
 {
   ceph_assert(state_test(CInode::STATE_FROZEN));
+  ceph_assert(!state_test(CInode::STATE_FROZENAUTHPIN));
   state_set(CInode::STATE_FROZENAUTHPIN);
   get_parent_dir()->num_frozen_inodes++;
+
+  MDSContext::vec finished;
+  unfreeze_inode(finished);
+  if (!finished.empty())
+    mdcache->mds->queue_waiters(finished);
+}
+
+void CInode::unfreeze_auth_pin(MDSContext::vec& finished)
+{
+  state_clear(CInode::STATE_FROZENAUTHPIN);
+  get_parent_dir()->num_frozen_inodes--;
+  if (!state_test(STATE_FREEZING|STATE_FROZEN))
+    take_waiting(WAIT_UNFREEZE, finished);
 }
 
 void CInode::unfreeze_auth_pin()
 {
-  ceph_assert(state_test(CInode::STATE_FROZENAUTHPIN));
-  state_clear(CInode::STATE_FROZENAUTHPIN);
-  get_parent_dir()->num_frozen_inodes--;
-  if (!state_test(STATE_FREEZING|STATE_FROZEN)) {
-    MDSContext::vec finished;
-    take_waiting(WAIT_UNFREEZE, finished);
+  MDSContext::vec finished;
+  unfreeze_auth_pin(finished);
+  if (!finished.empty())
     mdcache->mds->queue_waiters(finished);
-  }
 }
 
 void CInode::clear_ambiguous_auth(MDSContext::vec& finished)
@@ -2901,7 +2917,8 @@ void CInode::clear_ambiguous_auth()
 {
   MDSContext::vec finished;
   clear_ambiguous_auth(finished);
-  mdcache->mds->queue_waiters(finished);
+  if (!finished.empty())
+    mdcache->mds->queue_waiters(finished);
 }
 
 // auth_pins

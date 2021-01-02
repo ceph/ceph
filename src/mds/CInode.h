@@ -949,6 +949,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void unfreeze_inode();
 
   void freeze_auth_pin();
+  void unfreeze_auth_pin(MDSContext::vec& finished);
   void unfreeze_auth_pin();
 
   // -- reference counting --
