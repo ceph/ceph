@@ -18,38 +18,22 @@
 #include <list>
 #include <mutex>
 #include "common/ceph_mutex.h"
+#include "common/RefCountedObj.h"
 #include "include/radosstriper/libradosstriper.hpp"
 
 namespace libradosstriper {
 
-struct MultiAioCompletionImpl {
-
+class MultiAioCompletionImpl : public RefCountedObject {
+public:
   ceph::mutex lock = ceph::make_mutex("MultiAioCompletionImpl lock", false);
   ceph::condition_variable cond;
-  int ref, rval;
-  int pending_complete, pending_safe;
-  rados_callback_t callback_complete, callback_safe;
-  void *callback_complete_arg, *callback_safe_arg;
-  bool building;       ///< true if we are still building this completion
-  bufferlist bl;       /// only used for read case in C api of rados striper
+  int rval = 0;
+  int pending_complete = 0, pending_safe = 0;
+  rados_callback_t callback_complete = 0, callback_safe = 0;
+  void *callback_complete_arg = nullptr, *callback_safe_arg = nullptr;
+  bool building = true;  ///< true if we are still building this completion
+  bufferlist bl;         /// only used for read case in C api of rados striper
   std::list<bufferlist*> bllist; /// keep temporary buffer lists used for destriping
-
-  MultiAioCompletionImpl()
-  : ref(1), rval(0),
-    pending_complete(0), pending_safe(0),
-    callback_complete(0), callback_safe(0),
-    callback_complete_arg(0), callback_safe_arg(0),
-    building(true) {};
-
-  ~MultiAioCompletionImpl() {
-    // deallocate temporary buffer lists
-    for (std::list<bufferlist*>::iterator it = bllist.begin();
-	 it != bllist.end();
-	 it++) {
-      delete *it;
-    }
-    bllist.clear();
-  }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
     std::scoped_lock l{lock};
@@ -101,37 +85,17 @@ struct MultiAioCompletionImpl {
     std::scoped_lock l{lock};
     return rval;
   }
-  void get() {
-    std::scoped_lock l{lock};
-    _get();
-  }
-  void _get() {
-    ceph_assert(ceph_mutex_is_locked(lock));
-    ceph_assert(ref > 0);
-    ++ref;
-  }
-  void put() {
-    lock.lock();
-    put_unlock();
-  }
-  void put_unlock() {
-    ceph_assert(ref > 0);
-    int n = --ref;
-    lock.unlock();
-    if (!n)
-      delete this;
-  }
   void add_request() {
     std::scoped_lock l{lock};
     pending_complete++;
-    _get();
+    get();
     pending_safe++;
-    _get();
+    get();
   }
   void add_safe_request() {
     std::scoped_lock l{lock};
     pending_complete++;
-    _get();
+    get();
   }
   void complete() {
     ceph_assert(ceph_mutex_is_locked(lock));
@@ -153,17 +117,19 @@ struct MultiAioCompletionImpl {
   void complete_request(ssize_t r);
   void safe_request(ssize_t r);
   void finish_adding_requests();
+
+protected:
+  FRIEND_MAKE_REF(MultiAioCompletionImpl);
+  MultiAioCompletionImpl() = default;
+  ~MultiAioCompletionImpl() {
+    // deallocate temporary buffer lists
+    for (auto& blp : bllist) {
+      delete blp;
+    }
+    bllist.clear();
+  }
 };
 
-inline void intrusive_ptr_add_ref(MultiAioCompletionImpl* ptr)
-{
-  ptr->get();
-}
-
-inline void intrusive_ptr_release(MultiAioCompletionImpl* ptr)
-{
-  ptr->put();
-}
 }
 
 #endif // CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H

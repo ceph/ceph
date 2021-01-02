@@ -30,7 +30,7 @@ void libradosstriper::MultiAioCompletionImpl::complete_request(ssize_t r)
   if (!count && !building) {
     complete();
   }
-  put_unlock();
+  put();
 }
 
 void libradosstriper::MultiAioCompletionImpl::safe_request(ssize_t r)
@@ -45,7 +45,7 @@ void libradosstriper::MultiAioCompletionImpl::safe_request(ssize_t r)
   if (!count && !building) {
     safe();
   }
-  put_unlock();
+  put();
 }
 
 void libradosstriper::MultiAioCompletionImpl::finish_adding_requests()

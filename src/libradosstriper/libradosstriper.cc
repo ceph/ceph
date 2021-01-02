@@ -34,7 +34,7 @@
 
 libradosstriper::MultiAioCompletion::~MultiAioCompletion()
 {
-  ceph_assert(pc->ref == 1);
+  ceph_assert(pc->get_nref() == 1);
   pc->put();
 }
 
@@ -326,8 +326,8 @@ int libradosstriper::RadosStriper::aio_flush()
 
 libradosstriper::MultiAioCompletion* libradosstriper::RadosStriper::multi_aio_create_completion()
 {
-  MultiAioCompletionImpl *c = new MultiAioCompletionImpl;
-  return new MultiAioCompletion(c);
+  auto c = ceph::make_ref<MultiAioCompletionImpl>();
+  return new MultiAioCompletion(c.detach());
 }
 
 libradosstriper::MultiAioCompletion*
@@ -537,12 +537,12 @@ extern "C" int rados_striper_multi_aio_create_completion(void *cb_arg,
 							 rados_callback_t cb_safe,
 							 rados_striper_multi_completion_t *pc)
 {
-  libradosstriper::MultiAioCompletionImpl *c = new libradosstriper::MultiAioCompletionImpl;
+  auto c = ceph::make_ref<libradosstriper::MultiAioCompletionImpl>();
   if (cb_complete)
     c->set_complete_callback(cb_arg, cb_complete);
   if (cb_safe)
     c->set_safe_callback(cb_arg, cb_safe);
-  *pc = c;
+  *pc = c.detach();
   return 0;
 }
 

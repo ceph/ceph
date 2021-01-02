@@ -32,9 +32,6 @@
 
 namespace libradosstriper {
 
-using MultiAioCompletionImplPtr =
-    boost::intrusive_ptr<MultiAioCompletionImpl>;
-
 struct RadosStriperImpl {
 
   /**
@@ -154,7 +151,7 @@ struct RadosStriperImpl {
 			       size_t len,
 			       uint64_t off);
   int internal_aio_write(const std::string& soid,
-			 MultiAioCompletionImplPtr c,
+			 ceph::ref_t<MultiAioCompletionImpl> c,
 			 const bufferlist& bl,
 			 size_t len,
 			 uint64_t off,
@@ -173,7 +170,7 @@ struct RadosStriperImpl {
 				   uint64_t *size);
 
   int internal_aio_remove(const std::string& soid,
-			  MultiAioCompletionImplPtr multi_completion,
+			  ceph::ref_t<MultiAioCompletionImpl> multi_completion,
 			  int flags=0);
 
   /**
@@ -236,7 +233,7 @@ struct RadosStriperImpl {
    * point is synchronous for lack of asynchronous truncation in the rados layer
    */
   int aio_truncate(const std::string& soid,
-		   MultiAioCompletionImplPtr c,
+		   ceph::ref_t<MultiAioCompletionImpl> c,
 		   uint64_t original_size,
 		   uint64_t size,
 		   ceph_file_layout &layout);
