@@ -192,6 +192,7 @@ namespace rgw {
     RGWLibFS* fs;
     RGWFileHandle* bucket;
     RGWFileHandle* parent;
+    std::atomic_int64_t file_ondisk_version; // version of unix attrs, file only
     /* const */ std::string name; /* XXX file or bucket name */
     /* const */ fh_key fhk;
 
@@ -279,8 +280,8 @@ namespace rgw {
 
   private:
     explicit RGWFileHandle(RGWLibFS* _fs)
-      : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
-	depth(0), flags(FLAG_NONE)
+      : fs(_fs), bucket(nullptr), parent(nullptr), file_ondisk_version(-1),
+	variant_type{directory()}, depth(0), flags(FLAG_NONE)
       {
         fh.fh_hk.bucket = 0;
         fh.fh_hk.object = 0;
@@ -320,8 +321,8 @@ namespace rgw {
   public:
     RGWFileHandle(RGWLibFS* _fs, RGWFileHandle* _parent,
 		  const fh_key& _fhk, std::string& _name, uint32_t _flags)
-      : fs(_fs), bucket(nullptr), parent(_parent), name(std::move(_name)),
-	fhk(_fhk), flags(_flags) {
+      : fs(_fs), bucket(nullptr), parent(_parent), file_ondisk_version(-1),
+	name(std::move(_name)), fhk(_fhk), flags(_flags) {
 
       if (parent->is_root()) {
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -673,7 +674,7 @@ namespace rgw {
     }
 
     void encode(buffer::list& bl) const {
-      ENCODE_START(2, 1, bl);
+      ENCODE_START(3, 1, bl);
       encode(uint32_t(fh.fh_type), bl);
       encode(state.dev, bl);
       encode(state.size, bl);
@@ -685,11 +686,15 @@ namespace rgw {
 	encode(real_clock::from_timespec(t), bl);
       }
       encode((uint32_t)2, bl);
+      encode(file_ondisk_version.load(), bl);
       ENCODE_FINISH(bl);
     }
 
+    //XXX: RGWFileHandle::decode method can only be called from
+    //	   RGWFileHandle::decode_attrs, otherwise the file_ondisk_version
+    //	   fied would be contaminated
     void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(2, bl);
+      DECODE_START(3, bl);
       uint32_t fh_type;
       decode(fh_type, bl);
       if ((fh.fh_type != fh_type) &&
@@ -710,11 +715,17 @@ namespace rgw {
       if (struct_v >= 2) {
         decode(state.version, bl);
       }
+      if (struct_v >= 3) {
+	int64_t fov;
+	decode(fov, bl);
+	file_ondisk_version = fov;
+      }
       DECODE_FINISH(bl);
     }
 
     void encode_attrs(ceph::buffer::list& ux_key1,
-		      ceph::buffer::list& ux_attrs1);
+		      ceph::buffer::list& ux_attrs1,
+		      bool inc_ov = true);
 
     DecodeAttrsResult decode_attrs(const ceph::buffer::list* ux_key1,
                                    const ceph::buffer::list* ux_attrs1);
