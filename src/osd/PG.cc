@@ -362,7 +362,9 @@ void PG::clear_primary_state()
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();
 
-  m_scrubber->discard_replica_reservations();
+  if (m_scrubber) {
+    m_scrubber->discard_replica_reservations();
+  }
   scrub_after_recovery = false;
 
   agent_clear();
@@ -1536,8 +1538,10 @@ void PG::reg_next_scrub()
 
 void PG::on_info_history_change()
 {
-  m_scrubber->unreg_next_scrub();
-  m_scrubber->reg_next_scrub(m_planned_scrub);
+  if (m_scrubber) {
+    m_scrubber->unreg_next_scrub();
+    m_scrubber->reg_next_scrub(m_planned_scrub);
+  }
 }
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
@@ -2059,10 +2063,23 @@ void PG::repair_object(
   recovery_state.force_object_missing(bad_peers, soid, oi.version);
 }
 
+void PG::forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued)
+{
+  dout(20) << __func__ << " queued at: " << epoch_queued << dendl;
+  if (is_active() && m_scrubber) {
+    ((*m_scrubber).*fn)(epoch_queued);
+  } else {
+    // pg might be in the process of being deleted
+    dout(5) << __func__ << " refusing to forward. " << (is_clean() ? "(clean) " : "(not clean) ") <<
+            (is_active() ? "(active) " : "(not active) ") <<  dendl;
+  }
+}
+
 void PG::replica_scrub(OpRequestRef op, ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " (op)" << dendl;
-  m_scrubber->replica_scrub_op(op);
+  if (m_scrubber)
+    m_scrubber->replica_scrub_op(op);
 }
 
 void PG::scrub(epoch_t epoch_queued, ThreadPool::TPHandle& handle)
@@ -2070,7 +2087,7 @@ void PG::scrub(epoch_t epoch_queued, ThreadPool::TPHandle& handle)
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
   // a new scrub
   scrub_queued = false;
-  m_scrubber->initiate_regular_scrub(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::initiate_regular_scrub, epoch_queued);
 }
 
 // note: no need to secure OSD resources for a recovery scrub
@@ -2080,7 +2097,7 @@ void PG::recovery_scrub(epoch_t epoch_queued,
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
   // a new scrub
   scrub_queued = false;
-  m_scrubber->initiate_scrub_after_repair(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::initiate_scrub_after_repair, epoch_queued);
 }
 
 void PG::replica_scrub(epoch_t epoch_queued,
@@ -2089,7 +2106,7 @@ void PG::replica_scrub(epoch_t epoch_queued,
   dout(10) << __func__ << " queued at: " << epoch_queued
 	   << (is_primary() ? " (primary)" : " (replica)") << dendl;
   scrub_queued = false;
-  m_scrubber->send_start_replica(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_start_replica, epoch_queued);
 }
 
 void PG::scrub_send_scrub_resched(epoch_t epoch_queued,
@@ -2097,21 +2114,21 @@ void PG::scrub_send_scrub_resched(epoch_t epoch_queued,
 {
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
   scrub_queued = false;
-  m_scrubber->send_scrub_resched(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_scrub_resched, epoch_queued);
 }
 
 void PG::scrub_send_resources_granted(epoch_t epoch_queued,
 				      [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->send_remotes_reserved(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_remotes_reserved, epoch_queued);
 }
 
 void PG::scrub_send_resources_denied(epoch_t epoch_queued,
 				     [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->send_reservation_failure(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_reservation_failure, epoch_queued);
 }
 
 void PG::replica_scrub_resched(epoch_t epoch_queued,
@@ -2119,49 +2136,49 @@ void PG::replica_scrub_resched(epoch_t epoch_queued,
 {
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
   scrub_queued = false;
-  m_scrubber->send_sched_replica(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_sched_replica, epoch_queued);
 }
 
 void PG::scrub_send_pushes_update(epoch_t epoch_queued,
 				  [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(10) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->active_pushes_notification(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::active_pushes_notification, epoch_queued);
 }
 
 void PG::scrub_send_replica_pushes(epoch_t epoch_queued,
 				   [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(15) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->send_replica_pushes_upd(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_replica_pushes_upd, epoch_queued);
 }
 
 void PG::scrub_send_applied_update(epoch_t epoch_queued,
 				   [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(15) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->update_applied_notification(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::update_applied_notification, epoch_queued);
 }
 
 void PG::scrub_send_unblocking(epoch_t epoch_queued,
 			       [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(15) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->send_scrub_unblock(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_scrub_unblock, epoch_queued);
 }
 
 void PG::scrub_send_digest_update(epoch_t epoch_queued,
 				  [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(15) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->digest_update_notification(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::digest_update_notification, epoch_queued);
 }
 
 void PG::scrub_send_replmaps_ready(epoch_t epoch_queued,
 				   [[maybe_unused]] ThreadPool::TPHandle& handle)
 {
   dout(15) << __func__ << " queued at: " << epoch_queued << dendl;
-  m_scrubber->send_replica_maps_ready(epoch_queued);
+  forward_scrub_event(&ScrubPgIF::send_replica_maps_ready, epoch_queued);
 }
 
 bool PG::ops_blocked_by_scrub() const
