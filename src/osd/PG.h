@@ -569,6 +569,9 @@ private:
 				  bool has_deep_errors,
 				  requested_scrub_t& planned) const;
 
+  using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
+  void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued);
+
 public:
   virtual void do_request(
     OpRequestRef& op,
