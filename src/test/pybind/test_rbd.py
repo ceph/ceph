@@ -2644,13 +2644,15 @@ class TestMigration(object):
         create_image()
         with Image(ioctx, image_name) as image:
             image_id = image.id()
+            image.create_snap('snap')
 
         source_spec = json.dumps(
             {'type': 'native',
              'pool_id': ioctx.get_pool_id(),
              'pool_namespace': '',
              'image_name': image_name,
-             'image_id': image_id})
+             'image_id': image_id,
+             'snap_name': 'snap'})
         dst_image_name = get_temp_image_name()
         RBD().migration_prepare_import(source_spec, ioctx, dst_image_name,
                                        features=63, order=23, stripe_unit=1<<23,
@@ -2667,6 +2669,12 @@ class TestMigration(object):
 
         RBD().migration_execute(ioctx, dst_image_name)
         RBD().migration_commit(ioctx, dst_image_name)
+
+        with Image(ioctx, image_name) as image:
+            image.remove_snap('snap')
+        with Image(ioctx, dst_image_name) as image:
+            image.remove_snap('snap')
+
         RBD().remove(ioctx, dst_image_name)
         RBD().remove(ioctx, image_name)
 

@@ -1491,7 +1491,7 @@
                                [--source-spec-path <source-spec-path>] 
                                [--source-spec <source-spec>] [--pool <pool>] 
                                [--namespace <namespace>] [--image <image>] 
-                               [--dest-pool <dest-pool>] 
+                               [--snap <snap>] [--dest-pool <dest-pool>] 
                                [--dest-namespace <dest-namespace>] 
                                [--dest <dest>] [--image-format <image-format>] 
                                [--new-format] [--order <order>] 
@@ -1504,40 +1504,44 @@
                                [--journal-splay-width <journal-splay-width>] 
                                [--journal-object-size <journal-object-size>] 
                                [--journal-pool <journal-pool>] [--flatten] 
-                               <source-image-spec> <dest-image-spec> 
+                               <source-image-or-snap-spec> <dest-image-spec> 
   
   Prepare image migration.
   
   Positional arguments
-    <source-image-spec>       source image specification
-                              (example: [<pool-name>/[<namespace>/]]<image-name>)
-    <dest-image-spec>         destination image specification
-                              (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <source-image-or-snap-spec>  source image or snapshot specification
+                                 (example:
+                                 [<pool-name>/[<namespace>/]]<image-name>[@<snap-n
+                                 ame>])
+    <dest-image-spec>            destination image specification
+                                 (example:
+                                 [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
-    --import-only             only import data from source
-    --source-spec-path arg    source-spec file (or '-' for stdin)
-    --source-spec arg         source-spec
-    -p [ --pool ] arg         source pool name
-    --namespace arg           source namespace name
-    --image arg               source image name
-    --dest-pool arg           destination pool name
-    --dest-namespace arg      destination namespace name
-    --dest arg                destination image name
-    --image-format arg        image format [default: 2]
-    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
-    --image-feature arg       image features
-                              [layering(+), exclusive-lock(+*), object-map(+*),
-                              deep-flatten(+-), journaling(*)]
-    --image-shared            shared image
-    --stripe-unit arg         stripe unit in B/K/M
-    --stripe-count arg        stripe count
-    --data-pool arg           data pool
-    --mirror-image-mode arg   mirror image mode [journal or snapshot]
-    --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects [4K <= size <= 64M]
-    --journal-pool arg        pool for journal objects
-    --flatten                 fill clone with parent data (make it independent)
+    --import-only                only import data from source
+    --source-spec-path arg       source-spec file (or '-' for stdin)
+    --source-spec arg            source-spec
+    -p [ --pool ] arg            source pool name
+    --namespace arg              source namespace name
+    --image arg                  source image name
+    --snap arg                   source snapshot name
+    --dest-pool arg              destination pool name
+    --dest-namespace arg         destination namespace name
+    --dest arg                   destination image name
+    --image-format arg           image format [default: 2]
+    --object-size arg            object size in B/K/M [4K <= object size <= 32M]
+    --image-feature arg          image features
+                                 [layering(+), exclusive-lock(+*),
+                                 object-map(+*), deep-flatten(+-), journaling(*)]
+    --image-shared               shared image
+    --stripe-unit arg            stripe unit in B/K/M
+    --stripe-count arg           stripe count
+    --data-pool arg              data pool
+    --mirror-image-mode arg      mirror image mode [journal or snapshot]
+    --journal-splay-width arg    number of active journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
+    --journal-pool arg           pool for journal objects
+    --flatten                    fill clone with parent data (make it independent)
   
   Image Features:
     (*) supports enabling/disabling on existing images
