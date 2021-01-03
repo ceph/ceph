@@ -73,14 +73,13 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
 class RGWDataChangesOmap final : public RGWDataChangesBE {
   using centries = std::list<cls_log_entry>;
   std::vector<std::string> oids;
-  std::string get_oid(int i) const {
-    return datalog.get_oid(i);
-  }
+
 public:
   RGWDataChangesOmap(lr::IoCtx& ioctx,
 		     RGWDataChangesLog& datalog,
+		     uint64_t gen_id,
 		     int num_shards)
-    : RGWDataChangesBE(ioctx, datalog) {
+    : RGWDataChangesBE(ioctx, datalog, gen_id) {
     oids.reserve(num_shards);
     for (auto i = 0; i < num_shards; ++i) {
       oids.push_back(get_oid(i));
@@ -208,14 +207,12 @@ public:
 class RGWDataChangesFIFO final : public RGWDataChangesBE {
   using centries = std::vector<ceph::buffer::list>;
   std::vector<std::unique_ptr<rgw::cls::fifo::FIFO>> fifos;
-  std::string get_oid(int i) const {
-    return datalog.get_oid(i);
-  }
+
 public:
   RGWDataChangesFIFO(lr::IoCtx& ioctx,
 		     RGWDataChangesLog& datalog,
-		     int shards)
-    : RGWDataChangesBE(ioctx, datalog) {
+		     uint64_t gen_id, int shards)
+    : RGWDataChangesBE(ioctx, datalog, gen_id) {
     fifos.resize(shards);
     for (auto i = 0; i < shards; ++i) {
       auto  r = rgw::cls::fifo::FIFO::create(ioctx, get_oid(i),
@@ -395,7 +392,7 @@ int RGWDataChangesLog::start(const RGWZone* _zone,
   }
 
   auto found = log_backing_type(ioctx, *defbacking, num_shards,
-				[this](int i) { return get_oid(i); },
+				[this](int i) { return get_oid(0, i); },
 				null_yield);
 
   if (!found) {
@@ -406,10 +403,10 @@ int RGWDataChangesLog::start(const RGWZone* _zone,
   try {
     switch (*found) {
     case log_type::omap:
-      be = std::make_unique<RGWDataChangesOmap>(ioctx, *this, num_shards);
+      be = std::make_unique<RGWDataChangesOmap>(ioctx, *this, 0, num_shards);
       break;
     case log_type::fifo:
-      be = std::make_unique<RGWDataChangesFIFO>(ioctx, *this, num_shards);
+      be = std::make_unique<RGWDataChangesFIFO>(ioctx, *this, 0, num_shards);
       break;
     }
   } catch (bs::system_error& e) {
@@ -531,8 +528,10 @@ bool RGWDataChangesLog::filter_bucket(const DoutPrefixProvider *dpp,
   return bucket_filter(bucket, y, dpp);
 }
 
-std::string RGWDataChangesLog::get_oid(int i) const {
-  return fmt::format("{}.{}", prefix, i);
+std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
+  return (gen_id > 0 ?
+	  fmt::format("{}@G{}.{}", prefix, gen_id, i) :
+	  fmt::format("{}.{}", prefix, i));
 }
 
 int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, int shard_id) {
