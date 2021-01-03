@@ -75,13 +75,17 @@ test_import_native_format() {
     local base_image=$1
     local dest_image=$2
 
+    rbd migration prepare --import-only "rbd/${base_image}@2" ${dest_image}
+    rbd migration abort ${dest_image}
+
     local pool_id=$(ceph osd pool ls detail --format xml | xmlstarlet sel -t -v "//pools/pool[pool_name='rbd']/pool_id")
     cat > ${TEMPDIR}/spec.json <<EOF
 {
   "type": "native",
   "pool_id": ${pool_id},
   "pool_namespace": "",
-  "image_name": "${base_image}"
+  "image_name": "${base_image}",
+  "snap_name": "2"
 }
 EOF
     cat ${TEMPDIR}/spec.json
@@ -91,11 +95,6 @@ EOF
 
     compare_images "${base_image}@1" "${dest_image}@1"
     compare_images "${base_image}@2" "${dest_image}@2"
-    compare_images "${base_image}" "${dest_image}"
-
-    rbd snap create ${dest_image}@head
-    rbd bench --io-type write --io-pattern rand --io-size=32K --io-total=32M ${dest_image}
-    compare_images "${base_image}" "${dest_image}@head"
 
     rbd migration abort ${dest_image}
 
@@ -105,24 +104,22 @@ EOF
 
     compare_images "${base_image}@1" "${dest_image}@1"
     compare_images "${base_image}@2" "${dest_image}@2"
-    compare_images "${base_image}" "${dest_image}"
 
     rbd migration abort ${dest_image}
 
     rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": "${pool_id}", \"image_name\": \"${base_image}\"}" \
+        --source-spec "{\"type\": \"native\", \"pool_id\": "${pool_id}", \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
         ${dest_image}
     rbd migration abort ${dest_image}
 
     rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_name\": \"rbd\", \"image_name\": \"${base_image}\"}" \
+        --source-spec "{\"type\": \"native\", \"pool_name\": \"rbd\", \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
         ${dest_image}
     rbd migration execute ${dest_image}
     rbd migration commit ${dest_image}
 
     compare_images "${base_image}@1" "${dest_image}@1"
     compare_images "${base_image}@2" "${dest_image}@2"
-    compare_images "${base_image}" "${dest_image}"
 
     remove_image "${dest_image}"
 }
