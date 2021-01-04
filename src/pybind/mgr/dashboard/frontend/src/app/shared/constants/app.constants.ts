@@ -108,6 +108,7 @@ export class ActionLabelsI18n {
   UNPROTECT: string;
   UNSET: string;
   UPDATE: string;
+  FLAGS: string;
 
   constructor(private i18n: I18n) {
     /* Create a new item */
@@ -151,6 +152,7 @@ export class ActionLabelsI18n {
     this.TRASH = this.i18n('Move to Trash');
     this.UNPROTECT = this.i18n('Unprotect');
     this.CHANGE = this.i18n('Change');
+    this.FLAGS = this.i18n('Flags');
 
     /* Prometheus wording */
     this.RECREATE = this.i18n('Recreate');

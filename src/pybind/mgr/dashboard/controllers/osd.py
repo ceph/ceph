@@ -383,6 +383,17 @@ class OsdFlagsController(RESTController):
                 set(enabled_flags) - {'pauserd', 'pausewr'} | {'pause'})
         return sorted(enabled_flags)
 
+    @staticmethod
+    def _update_flags(action, flags, ids=None):
+        if ids:
+            if flags:
+                ids = list(map(str, ids))
+                CephService.send_command('mon', 'osd ' + action, who=ids,
+                                         flags=','.join(flags))
+        else:
+            for flag in flags:
+                CephService.send_command('mon', 'osd ' + action, '', key=flag)
+
     def list(self):
         return self._osd_flags()
 
@@ -398,10 +409,56 @@ class OsdFlagsController(RESTController):
         data = set(flags)
         added = data - enabled_flags
         removed = enabled_flags - data
-        for flag in added:
-            CephService.send_command('mon', 'osd set', '', key=flag)
-        for flag in removed:
-            CephService.send_command('mon', 'osd unset', '', key=flag)
+
+        self._update_flags('set', added)
+        self._update_flags('unset', removed)
+
         logger.info('Changed OSD flags: added=%s removed=%s', added, removed)
 
         return sorted(enabled_flags - removed | added)
+
+    @Endpoint('PUT', 'individual')
+    @UpdatePermission
+    def set_individual(self, flags, ids):
+        """
+        Updates flags (`noout`, `noin`, `nodown`, `noup`) for an individual
+        subset of OSDs.
+        """
+        assert isinstance(flags, dict)
+        assert isinstance(ids, list)
+        assert all(isinstance(id, int) for id in ids)
+
+        # These are to only flags that can be applied to an OSD individually.
+        all_flags = {'noin', 'noout', 'nodown', 'noup'}
+        added = set()
+        removed = set()
+        for flag, activated in flags.items():
+            if flag in all_flags:
+                if activated is not None:
+                    if activated:
+                        added.add(flag)
+                    else:
+                        removed.add(flag)
+
+        self._update_flags('set-group', added, ids)
+        self._update_flags('unset-group', removed, ids)
+
+        logger.error('Changed individual OSD flags: added=%s removed=%s for ids=%s',
+                     added, removed, ids)
+
+        return {'added': sorted(added),
+                'removed': sorted(removed),
+                'ids': ids}
+
+    @Endpoint('GET', 'individual')
+    @ReadPermission
+    def get_individual(self):
+        osd_map = mgr.get('osd_map')['osds']
+        resp = []
+
+        for osd in osd_map:
+            resp.append({
+                'osd': osd['osd'],
+                'flags': osd['state']
+            })
+        return resp
