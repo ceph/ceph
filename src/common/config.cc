@@ -1368,7 +1368,7 @@ int md_config_t::_get_val_from_conf_file(
   std::string &out) const
 {
   for (auto &s : sections) {
-    int ret = cf.read(s.c_str(), std::string{key}, out);
+    int ret = cf.read(s, key, out);
     if (ret == 0) {
       return 0;
     } else if (ret != -ENOENT) {

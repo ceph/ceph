@@ -58,8 +58,8 @@ public:
   friend std::ostream& operator<<(std::ostream& os, const conf_section_t&);
 };
 
-class ConfFile : public std::map<std::string, conf_section_t> {
-  using base_type = std::map<std::string, conf_section_t>;
+class ConfFile : public std::map<std::string, conf_section_t, std::less<>> {
+  using base_type = std::map<std::string, conf_section_t, std::less<>>;
 public:
   ConfFile()
     : ConfFile{std::vector<conf_section_t>{}}
@@ -71,7 +71,7 @@ public:
   int parse_file(const std::string &fname, std::ostream *warnings);
   int parse_bufferlist(ceph::bufferlist *bl, std::ostream *warnings);
   bool parse_buffer(std::string_view buf, std::ostream* warning);
-  int read(const std::string& section, std::string_view key,
+  int read(std::string_view section, std::string_view key,
 	   std::string &val) const;
   static std::string normalize_key_name(std::string_view key);
   // print warnings to os if any old-style section name is found

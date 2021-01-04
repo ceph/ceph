@@ -282,7 +282,7 @@ int ConfFile::parse_bufferlist(ceph::bufferlist *bl,
   return parse_buffer({bl->c_str(), bl->length()}, warnings) ? 0 : -EINVAL;
 }
 
-int ConfFile::read(const std::string& section_name,
+int ConfFile::read(std::string_view section_name,
 		   std::string_view key,
 		   std::string &val) const
 {
