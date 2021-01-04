@@ -347,16 +347,16 @@ the following::
 
 The output of ``ceph df`` looks like this::
 
-   CLASS  SIZE     AVAIL    USED     RAW USED  %RAW USED
+   CLASS     SIZE    AVAIL     USED  RAW USED  %RAW USED
    ssd    202 GiB  200 GiB  2.0 GiB   2.0 GiB       1.00
    TOTAL  202 GiB  200 GiB  2.0 GiB   2.0 GiB       1.00
 
    --- POOLS ---
-   POOL                   ID  PGS  STORED   (DATA)   (OMAP)   OBJECTS  USED     (DATA)  (OMAP)   %USED  MAX AVAIL  QUOTA OBJECTS  QUOTA BYTES  DIRTY  USED COMPR  UNDER COMPR
-   device_health_metrics   1    1  242 KiB   15 KiB  227 KiB        4  251 KiB  24 KiB  227 KiB      0    297 GiB  N/A            N/A              4         0 B          0 B
-   cephfs.a.meta           2   32  6.8 KiB  6.8 KiB      0 B       22   96 KiB  96 KiB      0 B      0    297 GiB  N/A            N/A             22         0 B          0 B
-   cephfs.a.data           3   32      0 B      0 B      0 B        0      0 B     0 B      0 B      0     99 GiB  N/A            N/A              0         0 B          0 B
-   test                    4   32   22 MiB   22 MiB   50 KiB      248   19 MiB  19 MiB   50 KiB      0    297 GiB  N/A            N/A            248         0 B          0 B
+   POOL                   ID  PGS   STORED   (DATA)   (OMAP)   OBJECTS     USED  (DATA)   (OMAP)   %USED  MAX AVAIL  QUOTA OBJECTS  QUOTA BYTES  DIRTY  USED COMPR  UNDER COMPR
+   device_health_metrics   1    1  242 KiB   15 KiB  227 KiB         4  251 KiB  24 KiB  227 KiB       0    297 GiB            N/A          N/A      4         0 B          0 B
+   cephfs.a.meta           2   32  6.8 KiB  6.8 KiB      0 B        22   96 KiB  96 KiB      0 B       0    297 GiB            N/A          N/A     22         0 B          0 B
+   cephfs.a.data           3   32      0 B      0 B      0 B         0      0 B     0 B      0 B       0     99 GiB            N/A          N/A      0         0 B          0 B
+   test                    4   32   22 MiB   22 MiB   50 KiB       248   19 MiB  19 MiB   50 KiB       0    297 GiB            N/A          N/A    248         0 B          0 B
 
 
 
