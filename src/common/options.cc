@@ -3193,18 +3193,6 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .set_description(""),
 
-    Option("osd_mon_ack_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(30.0)
-    .set_description(""),
-
-    Option("osd_stats_ack_timeout_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(2.0)
-    .set_description(""),
-
-    Option("osd_stats_ack_timeout_decay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.9)
-    .set_description(""),
-
     Option("osd_max_snap_prune_intervals_per_epoch", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
     .set_description("Max number of snap intervals to report to mgr in pg_stat_t"),
