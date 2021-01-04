@@ -174,3 +174,21 @@ TEST_F(LogBacking, TestFIFOEmpty)
 			       get_oid, null_yield);
   ASSERT_EQ(log_type::fifo, *stat);
 }
+
+TEST(CursorGen, RoundTrip) {
+  const auto pcurs = "fded"sv;
+  {
+    auto gc = gencursor(0, pcurs);
+    ASSERT_EQ(pcurs, gc);
+    auto [gen, cursor] = cursorgen(gc);
+    ASSERT_EQ(0, gen);
+    ASSERT_EQ(pcurs, cursor);
+  }
+  {
+    auto gc = gencursor(53, pcurs);
+    ASSERT_NE(pcurs, gc);
+    auto [gen, cursor] = cursorgen(gc);
+    ASSERT_EQ(53, gen);
+    ASSERT_EQ(pcurs, cursor);
+  }
+}
