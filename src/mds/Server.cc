@@ -6143,8 +6143,9 @@ public:
     newi->mark_dirty_parent(mdr->ls, true);
 
     // mkdir?
+    CDir *dir = nullptr;
     if (newi->is_dir()) {
-      CDir *dir = newi->get_dirfrag(frag_t());
+      dir = newi->get_dirfrag(frag_t());
       ceph_assert(dir);
       dir->mark_dirty(mdr->ls);
       dir->mark_new(mdr->ls);
@@ -6152,10 +6153,14 @@ public:
 
     mdr->apply();
 
-    MDRequestRef null_ref;
-    get_mds()->mdcache->send_dentry_link(dn, null_ref);
+    MDCache *mdcache = get_mds()->mdcache;
 
-    if (newi->is_file()) {
+    MDRequestRef null_ref;
+    mdcache->send_dentry_link(dn, null_ref);
+
+    if (dir) {
+      mdcache->export_dir_distributed(dir, nullptr);
+    } else if (newi->is_file()) {
       get_mds()->locker->share_inode_max_size(newi);
     }
 
@@ -6349,6 +6354,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
 
+  mdr->no_early_reply = true;
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
 
   // We hit_dir (via hit_inode) in our finish callback, but by then we might

@@ -965,6 +965,33 @@ mds_rank_t MDCache::hash_into_rank_bucket(inodeno_t ino, frag_t fg)
   return result;
 }
 
+bool MDCache::export_dir_distributed(CDir *dir, MDSContext *fin)
+{
+  mds_rank_t dest = hash_into_rank_bucket(dir->ino(), dir->get_frag());
+  if (dest == mds->get_nodeid())
+    return false;
+
+  int err = migrator->export_dir(dir, dest);
+  if (err == 0 || err == -Migrator::ERR_EXPORT_INPROGRESS) {
+    if (fin)
+      dir->add_waiter(CDir::WAIT_EXPORTED, fin);
+    return true;
+  }
+
+  if (fin) {
+    if (err == -Migrator::ERR_CLUSTER_DEGRADED) {
+      mds->wait_for_cluster_recovered(fin);
+      return true;
+    }
+    if (err == -Migrator::ERR_FREEZING_OR_FROZEN) {
+      dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
+      return true;
+    }
+  }
+
+  // not exportable
+  return false;
+}
 
 // ====================================================================
 // subtree management

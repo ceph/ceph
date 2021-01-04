@@ -1572,6 +1572,15 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
     return;
   }
 
+  if (!ignore_authpinnability &&
+      !state_test(CDir::STATE_FETCHING) &&
+      get_num_any() == 0 &&
+      mdcache->mds->is_active() &&
+      mdcache->export_dir_distributed(this, c)) {
+    dout(7) << "distributing empty dirfrag, waiting" << dendl;
+    return;
+  }
+
   if (c) add_waiter(WAIT_COMPLETE, c);
   if (!want_dn.empty()) wanted_items.insert(mempool::mds_co::string(want_dn));
   
