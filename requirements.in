@@ -25,8 +25,8 @@ pyopenssl>=0.13
 python-dateutil
 python-novaclient
 python-openstackclient
-raven
 requests!=2.13.0
+sentry-sdk
 # test requires
 boto>=2.0b4
 boto3

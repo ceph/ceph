@@ -8,12 +8,12 @@ import yaml
 
 from copy import deepcopy
 from humanfriendly import format_timespan
+import sentry_sdk
 
 from teuthology.config import config as teuth_config
 from teuthology.exceptions import ConnectionLostError
 from teuthology.job_status import set_status, get_status
 from teuthology.misc import get_http_log_path, get_results_url
-from teuthology.sentry import get_client as get_sentry_client
 from teuthology.timer import Timer
 
 log = logging.getLogger(__name__)
@@ -104,8 +104,8 @@ def run_tasks(tasks, ctx):
             ctx.summary['failure_reason'] = str(e)
         log.exception('Saw exception from tasks.')
 
-        sentry = get_sentry_client()
-        if sentry:
+        if teuth_config.sentry_dsn:
+            sentry_sdk.init(teuth_config.sentry_dsn)
             config = deepcopy(ctx.config)
 
             tags = {
@@ -126,15 +126,16 @@ def run_tasks(tasks, ctx):
 
             job_id = ctx.config.get('job_id')
             archive_path = ctx.config.get('archive_path')
-            extra = dict(config=config,
+            extras = dict(config=config,
                          )
             if job_id:
-                extra['logs'] = get_http_log_path(archive_path, job_id)
+                extras['logs'] = get_http_log_path(archive_path, job_id)
 
-            exc_id = sentry.get_ident(sentry.captureException(
+            exc_id = sentry_sdk.capture_exception(
+                error=e,
                 tags=tags,
-                extra=extra,
-            ))
+                extras=extras,
+            )
             event_url = "{server}/?query={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)

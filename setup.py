@@ -87,8 +87,8 @@ setup(
             # with openstacklient >= 2.1.0, neutronclient no longer is
             # a dependency but we need it anyway.
             'python-neutronclient',
-            'raven',
             'requests != 2.13.0',
+            'sentry-sdk',
         ],
         'test': [
             'boto >= 2.0b4',       # for qa/tasks/radosgw_*.py
