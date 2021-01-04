@@ -62,6 +62,9 @@ public:
   virtual bool is_write_entry() const {
     return false;
   }
+  virtual bool is_writesame_entry() const {
+    return false;
+  }
   virtual bool is_sync_point() const {
     return false;
   }
@@ -222,6 +225,9 @@ public:
   }
   bool is_write_entry() const override {
     return true;
+  }
+  bool is_writesame_entry() const override {
+    return is_writesame;
   }
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,

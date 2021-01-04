@@ -12,6 +12,7 @@
 #include "librbd/BlockGuard.h"
 #include "librbd/cache/Types.h"
 #include "librbd/cache/pwl/LogOperation.h"
+#include "librbd/cache/pwl/ReadRequest.h"
 #include "librbd/cache/pwl/Request.h"
 #include "librbd/cache/pwl/LogMap.h"
 #include "librbd/cache/pwl/Builder.h"
@@ -365,6 +366,14 @@ protected:
   virtual void remove_pool_file() = 0;
   virtual void initialize_pool(Context *on_finish,
                                pwl::DeferredContexts &later) = 0;
+  virtual void collect_read_extents(
+      uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
+      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
+      Extent hit_extent, pwl::C_ReadRequest *read_ctx) = 0;
+  virtual void complete_read(
+      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<bufferlist*> &bls_to_read, Context *ctx) = 0;
   virtual void write_data_to_buffer(
       std::shared_ptr<pwl::WriteLogEntry> ws_entry,
       pwl::WriteLogCacheEntry *cache_entry) {}
