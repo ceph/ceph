@@ -21,7 +21,7 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 getjson="no"
 
 jqfilter='.inconsistents'
-sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print ( json.dumps(ud, sort_keys=True, indent=2) )'
 
 function run() {
     local dir=$1
