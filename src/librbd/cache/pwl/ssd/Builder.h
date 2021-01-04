@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include "LogEntry.h"
+#include "ReadRequest.h"
 #include "Request.h"
 
 #include "librbd/cache/ImageWriteback.h"
@@ -82,6 +83,10 @@ public:
     return std::make_shared<WriteLogOperation>(
         set, image_offset_bytes, write_bytes, data_len, cct,
         writesame_log_entry);
+  }
+  C_ReadRequest *create_read_request(CephContext *cct, utime_t arrived,
+      PerfCounters *perfcounter, ceph::bufferlist *bl, Context *on_finish) {
+    return new C_ReadRequest(cct, arrived, perfcounter, bl, on_finish);
   }
 };
 

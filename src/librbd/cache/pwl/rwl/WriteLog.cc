@@ -57,6 +57,36 @@ WriteLog<I>::~WriteLog() {
   delete m_builderobj;
 }
 
+template <typename I>
+void WriteLog<I>::collect_read_extents(
+      uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
+      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
+      Extent hit_extent, pwl::C_ReadRequest *read_ctx) {
+  /* Make a bl for this hit extent. This will add references to the
+   * write_entry->pmem_bp */
+  buffer::list hit_bl;
+
+  /* Create buffer object referring to pmem pool for this read hit */
+  auto write_entry = map_entry.log_entry;
+
+  buffer::list entry_bl_copy;
+  write_entry->copy_cache_bl(&entry_bl_copy);
+  entry_bl_copy.begin(read_buffer_offset).copy(entry_hit_length, hit_bl);
+  ceph_assert(hit_bl.length() == entry_hit_length);
+
+  /* Add hit extent to read extents */
+  ImageExtentBuf hit_extent_buf(hit_extent, hit_bl);
+  read_ctx->read_extents.push_back(hit_extent_buf);
+}
+
+template <typename I>
+void WriteLog<I>::complete_read(
+    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<bufferlist*> &bls_to_read, Context *ctx) {
+  ctx->complete(0);
+}
+
 /*
  * Allocate the (already reserved) write log entries for a set of operations.
  *

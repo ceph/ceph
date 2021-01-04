@@ -24,13 +24,11 @@ public:
       m_arrived_time(arrived), m_perfcounter(perfcounter) {}
   ~C_ReadRequest() {}
 
-  void finish(int r) override;
-
   const char *get_name() const {
     return "C_ReadRequest";
   }
 
-private:
+protected:
   CephContext *m_cct;
   Context *m_on_finish;
   bufferlist *m_out_bl;
