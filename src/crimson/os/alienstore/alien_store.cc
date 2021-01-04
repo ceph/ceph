@@ -316,10 +316,8 @@ auto AlienStore::omap_get_values(CollectionRef ch,
     }).then([&values] (int r) -> read_errorator::future<omap_values_t> {
       if (r == -ENOENT) {
         return crimson::ct_error::enoent::make();
-      } else if (r < 0){
-        logger().error("omap_get_values: {}", r);
-        return crimson::ct_error::input_output_error::make();
       } else {
+        assert(r == 0);
         return read_errorator::make_ready_future<omap_values_t>(std::move(values));
       }
     });
