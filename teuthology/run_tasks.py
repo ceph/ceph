@@ -131,10 +131,12 @@ def run_tasks(tasks, ctx):
             if job_id:
                 extras['logs'] = get_http_log_path(archive_path, job_id)
 
+            fingerprint = e.fingerprint() if hasattr(e, 'fingerprint') else None
             exc_id = sentry_sdk.capture_exception(
                 error=e,
                 tags=tags,
                 extras=extras,
+                fingerprint=fingerprint,
             )
             event_url = "{server}/?query={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
