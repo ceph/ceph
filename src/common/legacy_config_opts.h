@@ -666,9 +666,6 @@ OPTION(osd_mon_report_interval, OPT_INT)  // failures, up_thru, boot.
 OPTION(osd_mon_report_max_in_flight, OPT_INT)  // max updates in flight
 OPTION(osd_beacon_report_interval, OPT_INT)       // (second) how often to send beacon message to monitor
 OPTION(osd_pg_stat_report_interval_max, OPT_INT)  // report pg stats for any given pg at least this often
-OPTION(osd_mon_ack_timeout, OPT_DOUBLE) // time out a mon if it doesn't ack stats
-OPTION(osd_stats_ack_timeout_factor, OPT_DOUBLE) // multiples of mon_ack_timeout
-OPTION(osd_stats_ack_timeout_decay, OPT_DOUBLE)
 OPTION(osd_default_data_pool_replay_window, OPT_INT)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL)
 OPTION(osd_recovery_delay_start, OPT_FLOAT)
