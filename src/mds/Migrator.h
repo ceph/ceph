@@ -201,9 +201,19 @@ public:
   // -- import/export --
   // exporter
   void dispatch_export_dir(MDRequestRef& mdr, int count);
-  void export_dir(CDir *dir, mds_rank_t dest);
-  void export_empty_import(CDir *dir);
 
+  enum {
+    // export error codes
+    ERR_NOT_EXPORTABLE = 1,
+    ERR_PEER_NOT_ACTIVE,
+    ERR_CLUSTER_DEGRADED,
+    ERR_RANK_READONLY,
+    ERR_EXPORT_INPROGRESS,
+    ERR_FREEZING_OR_FROZEN,
+  };
+  int export_dir(CDir *dir, mds_rank_t dest);
+
+  void export_empty_import(CDir *dir);
   void export_dir_nicely(CDir *dir, mds_rank_t dest);
   void maybe_do_queued_export();
   void clear_export_queue() {

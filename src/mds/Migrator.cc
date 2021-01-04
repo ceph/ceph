@@ -175,7 +175,7 @@ void Migrator::export_empty_import(CDir *dir)
     dout(7) << " freezing or frozen" << dendl;
     return;
   }
-  if (dir->get_num_head_items() > 0) {
+  if (dir->get_num_any() > 0) {
     dout(7) << " not actually empty" << dendl;
     return;
   }
@@ -192,7 +192,7 @@ void Migrator::export_empty_import(CDir *dir)
   
   dout(7) << "exporting to mds." << dest 
            << " empty import " << *dir << dendl;
-  export_dir( dir, dest );
+  export_dir(dir, dest);
 }
 
 void Migrator::find_stale_export_freeze()
@@ -373,8 +373,9 @@ void Migrator::export_cancel_finish(export_state_iterator& it)
   total_exporting_size -= it->second.approx_size;
   export_state.erase(it);
 
-  ceph_assert(dir->state_test(CDir::STATE_EXPORTING));
+  ceph_assert(dir->is_exporting());
   dir->clear_exporting();
+  dir->finish_waiting(CDir::WAIT_EXPORTED, -1);
 
   if (unpin) {
     // pinned by Migrator::export_notify_abort()
@@ -782,37 +783,34 @@ bool Migrator::export_try_grab_locks(CDir *dir, MutationRef& mut)
  * public method to initiate an export.
  * will fail if the directory is freezing, frozen, unpinnable, or root. 
  */
-void Migrator::export_dir(CDir *dir, mds_rank_t dest)
+int Migrator::export_dir(CDir *dir, mds_rank_t dest)
 {
   ceph_assert(dir->is_auth());
   ceph_assert(dest != mds->get_nodeid());
    
   CDir* parent = dir->inode->get_projected_parent_dir();
-  if (!(mds->is_active() || mds->is_stopping())) {
-    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": not active" << dendl;
-    return;
-  } else if (mdcache->is_readonly()) {
-    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": read-only FS, no exports for now" << dendl;
-    return;
+  if (mds->is_cluster_degraded()) {
+    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": cluster degraded" << dendl;
+    return -ERR_CLUSTER_DEGRADED;
   } else if (!mds->mdsmap->is_active(dest)) {
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": destination not active" << dendl;
-    return;
-  } else if (mds->is_cluster_degraded()) {
-    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": cluster degraded" << dendl;
-    return;
+    return -ERR_PEER_NOT_ACTIVE;
+  } else if (mdcache->is_readonly()) {
+    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": read-only FS, no exports for now" << dendl;
+    return -ERR_RANK_READONLY;
   } else if (dir->inode->is_system()) {
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": is a system directory" << dendl;
-    return;
+    return -ERR_NOT_EXPORTABLE;
+  } else if (parent && parent->inode->is_stray() &&
+	     parent->get_parent_dir()->ino() != MDS_INO_MDSDIR(dest)) {
+    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": in stray directory" << dendl;
+    return -ERR_NOT_EXPORTABLE;
+  } else if (dir->is_exporting()) {
+    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": already exporting" << dendl;
+    return -ERR_EXPORT_INPROGRESS;
   } else if (dir->is_frozen() || dir->is_freezing()) {
     dout(7) << "Cannot export to mds." << dest << " " << *dir << ": is frozen" << dendl;
-    return;
-  } else if (dir->state_test(CDir::STATE_EXPORTING)) {
-    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": already exporting" << dendl;
-    return;
-  } else if (parent && parent->inode->is_stray()
-             && parent->get_parent_dir()->ino() != MDS_INO_MDSDIR(dest)) {
-    dout(7) << "Cannot export to mds." << dest << " " << *dir << ": in stray directory" << dendl;
-    return;
+    return -ERR_FREEZING_OR_FROZEN;
   }
 
   if (unlikely(g_conf()->mds_thrash_exports)) {
@@ -865,6 +863,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   stat.mut = mdr;
 
   mdcache->dispatch_request(mdr);
+  return 0;
 }
 
 /*
@@ -934,7 +933,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 	    p = ls.erase(p);
 	    continue;
 	  }
-	  if ((*p)->state_test(CDir::STATE_EXPORTING) ||
+	  if ((*p)->is_exporting() ||
 	      (*p)->is_freezing_dir() || (*p)->is_frozen_dir()) {
 	    complete = false;
 	    p = ls.erase(p);
@@ -2300,16 +2299,17 @@ void Migrator::export_finish(CDir *dir, export_state_iterator it)
     dir->get_inode()->take_waiting(CInode::WAIT_ANY_MASK, finished);
   }
 
-  if (!finished.empty())
-    mds->queue_waiters(finished);
-
   // remove from exporting list, clean up state
   total_exporting_size -= it->second.approx_size;
   it->second.state = EXPORT_FINISHED;
   it->second.base = nullptr;
 
-  ceph_assert(dir->state_test(CDir::STATE_EXPORTING));
+  ceph_assert(dir->is_exporting());
   dir->clear_exporting();
+  dir->take_waiting(CDir::WAIT_EXPORTED, finished);
+
+  if (!finished.empty())
+    mds->queue_waiters(finished);
 
   mdcache->show_subtrees();
   audit();
@@ -2881,6 +2881,10 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
     dir->unfreeze_tree();
     mdcache->try_subtree_merge(dir);
 
+    // fetch/export if someone uses this dirfrag again
+    if (dir->is_complete() && !dir->get_num_any() && !dir->is_subtree_root())
+      dir->state_clear(CDir::STATE_COMPLETE);
+
     mdcache->show_subtrees();
     //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
 
@@ -2888,6 +2892,7 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
     // send pending import_maps?
     mdcache->maybe_send_pending_resolves();
   } else {
+    ceph_assert(dir->get_version() != 0);
     // note state
     stat.state = IMPORT_LOGGINGSTART;
     assert (g_conf()->mds_kill_import_at != 6);

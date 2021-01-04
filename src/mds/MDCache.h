@@ -225,6 +225,7 @@ class MDCache {
   }
 
   mds_rank_t hash_into_rank_bucket(inodeno_t ino, frag_t fg=0);
+  bool export_dir_distributed(CDir *dir, MDSContext *fin=nullptr);
 
   void maybe_eval_stray(CInode *in, bool delay=false);
   void clear_dirty_bits_for_stray(CInode* diri);
