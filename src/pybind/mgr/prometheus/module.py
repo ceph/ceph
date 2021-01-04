@@ -1,4 +1,5 @@
 import cherrypy
+from collections import defaultdict
 from distutils.version import StrictVersion
 import json
 import errno
@@ -12,8 +13,8 @@ from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
 from mgr_util import get_default_addr, profile_method
 from rbd import RBD
 try:
-    from typing import Optional, Dict, Any, Set
-except:
+    from typing import DefaultDict, Optional, Dict, Any, Set
+except ImportError:
     pass
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
@@ -571,8 +572,7 @@ class Module(MgrModule):
         pg_summary = self.get('pg_summary')
 
         for pool in pg_summary['by_pool']:
-            num_by_state = dict((state, 0) for state in PG_STATES)
-            num_by_state['total'] = 0
+            num_by_state = defaultdict(int)  # type: DefaultDict[str, int]
 
             for state_name, count in pg_summary['by_pool'][pool].items():
                 for state in state_name.split('+'):
