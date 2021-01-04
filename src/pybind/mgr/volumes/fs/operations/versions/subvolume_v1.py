@@ -267,7 +267,22 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 if subvol_meta['auths'][auth_id] == want_auth:
                     continue
 
-                self._authorize_subvolume(auth_id, access_level)
+                client_entity = "client.{0}".format(auth_id)
+                ret, out, err = self.mgr.mon_command(
+                    {
+                        'prefix': 'auth get',
+                        'entity': client_entity,
+                        'format': 'json'
+                    })
+                if ret == 0:
+                    existing_caps = json.loads(out)
+                elif ret == -errno.ENOENT:
+                    existing_caps = None
+                else:
+                    log.error(err)
+                    raise VolumeException(ret, err)
+
+                self._authorize_subvolume(auth_id, access_level, existing_caps)
 
             # Recovered from partial auth updates for the auth ID's access
             # to a subvolume.
@@ -299,6 +314,22 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         """
 
         with self.auth_mdata_mgr.auth_lock(auth_id):
+            client_entity = "client.{0}".format(auth_id)
+            ret, out, err = self.mgr.mon_command(
+                {
+                    'prefix': 'auth get',
+                    'entity': client_entity,
+                    'format': 'json'
+                })
+
+            if ret == 0:
+                existing_caps = json.loads(out)
+            elif ret == -errno.ENOENT:
+                existing_caps = None
+            else:
+                log.error(err)
+                raise VolumeException(ret, err)
+
             # Existing meta, or None, to be updated
             auth_meta = self.auth_mdata_mgr.auth_metadata_get(auth_id)
 
@@ -313,7 +344,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     'dirty': True,
                 }
             }
+
             if auth_meta is None:
+                if existing_caps is not None:
+                    msg = "auth ID: {0} exists and not created by mgr plugin. Not allowed to modify".format(auth_id)
+                    log.error(msg)
+                    raise VolumeException(-errno.EPERM, msg)
+
+                # non-existent auth IDs
                 sys.stderr.write("Creating meta for ID {0} with tenant {1}\n".format(
                     auth_id, tenant_id
                 ))
@@ -323,14 +361,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     'tenant_id': str(tenant_id) if tenant_id else None,
                     'volumes': subvolume
                 }
-
-                # Note: this is *not* guaranteeing that the key doesn't already
-                # exist in Ceph: we are allowing VolumeClient tenants to
-                # 'claim' existing Ceph keys.  In order to prevent VolumeClient
-                # tenants from reading e.g. client.admin keys, you need to
-                # have configured your VolumeClient user (e.g. Manila) to
-                # have mon auth caps that prevent it from accessing those keys
-                # (e.g. limit it to only access keys with a manila.* prefix)
             else:
                 # Disallow tenants to share auth IDs
                 if str(auth_meta['tenant_id']) != str(tenant_id):
@@ -350,7 +380,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.auth_mdata_mgr.auth_metadata_set(auth_id, auth_meta)
 
             with self.auth_mdata_mgr.subvol_metadata_lock(self.group.groupname, self.subvolname):
-                key = self._authorize_subvolume(auth_id, access_level)
+                key = self._authorize_subvolume(auth_id, access_level, existing_caps)
 
             auth_meta['dirty'] = False
             auth_meta['volumes'][group_subvol_id]['dirty'] = False
@@ -363,7 +393,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 # them a key
                 return ""
 
-    def _authorize_subvolume(self, auth_id, access_level):
+    def _authorize_subvolume(self, auth_id, access_level, existing_caps):
         subvol_meta = self.auth_mdata_mgr.subvol_metadata_get(self.group.groupname, self.subvolname)
 
         auth = {
@@ -381,14 +411,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             subvol_meta['auths'].update(auth)
             self.auth_mdata_mgr.subvol_metadata_set(self.group.groupname, self.subvolname, subvol_meta)
 
-        key = self._authorize(auth_id, access_level)
+        key = self._authorize(auth_id, access_level, existing_caps)
 
         subvol_meta['auths'][auth_id]['dirty'] = False
         self.auth_mdata_mgr.subvol_metadata_set(self.group.groupname, self.subvolname, subvol_meta)
 
         return key
 
-    def _authorize(self, auth_id, access_level):
+    def _authorize(self, auth_id, access_level, existing_caps):
         subvol_path = self.path
         log.debug("Authorizing Ceph id '{0}' for path '{1}'".format(auth_id, subvol_path))
 
@@ -419,7 +449,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 unwanted_access_level, pool, " namespace={0}".format(namespace) if namespace else "")
 
         return allow_access(self.mgr, client_entity, want_mds_cap, want_osd_cap,
-                            unwanted_mds_cap, unwanted_osd_cap)
+                            unwanted_mds_cap, unwanted_osd_cap, existing_caps)
 
     def deauthorize(self, auth_id):
         with self.auth_mdata_mgr.auth_lock(auth_id):
