@@ -770,7 +770,8 @@ void Locker::drop_locks_for_fragment_unfreeze(MutationImpl *mut)
 
   for (auto it = mut->locks.begin(); it != mut->locks.end(); ) {
     SimpleLock *lock = it->lock;
-    if (lock->get_type() == CEPH_LOCK_IDFT) {
+    if (lock->get_type() == CEPH_LOCK_ISNAP ||
+	lock->get_type() == CEPH_LOCK_IDFT) {
       ++it;
       continue;
     }
