@@ -2,20 +2,15 @@ import errno
 import json
 
 def allow_access(mgr, client_entity, want_mds_cap, want_osd_cap,
-               unwanted_mds_cap, unwanted_osd_cap):
-    ret, out, err = mgr.mon_command({
-        "prefix": "auth get",
-        "entity": client_entity,
-        "format": "json"})
-
-    if ret == -errno.ENOENT:
+                 unwanted_mds_cap, unwanted_osd_cap, existing_caps):
+    if existing_caps is None:
         ret, out, err = mgr.mon_command({
             "prefix": "auth get-or-create",
             "entity": client_entity,
             "caps": ['mds',  want_mds_cap, 'osd', want_osd_cap, 'mon', 'allow r'],
             "format": "json"})
     else:
-        cap = json.loads(out)[0]
+        cap = existing_caps[0]
 
         def cap_update(
                 orig_mds_caps, orig_osd_caps, want_mds_cap,
