@@ -59,9 +59,11 @@ protected:
     const ObjectRecoveryInfo& recovery_info,
     const ObjectRecoveryProgress& progress,
     object_stat_sum_t* stat);
+  /// @returns true if this push op is the last push op for
+  ///          recovery @c pop.soid
   seastar::future<bool> _handle_pull_response(
     pg_shard_t from,
-    PushOp& pop,
+    const PushOp& pop,
     PullOp* response,
     ceph::os::Transaction* t);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
@@ -117,6 +119,16 @@ private:
     const hobject_t& soid,
     eversion_t need);
 
+  /// read the data attached to given object. the size of them is supposed to
+  /// be relatively small.
+  ///
+  /// @return @c oi.version
+  seastar::future<eversion_t> read_metadata_for_push_op(
+    const hobject_t& oid,
+    const ObjectRecoveryProgress& progress,
+    ObjectRecoveryProgress& new_progress,
+    eversion_t ver,
+    PushOp* push_op);
   /// read the remaining extents of object to be recovered and fill push_op
   /// with them
   ///
@@ -134,6 +146,6 @@ private:
     const hobject_t& oid,
     const ObjectRecoveryProgress& progress,
     ObjectRecoveryProgress& new_progress,
-    uint64_t max_len,
+    uint64_t* max_len,
     PushOp* push_op);
 };

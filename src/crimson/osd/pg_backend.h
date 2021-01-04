@@ -173,10 +173,10 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params);
-  seastar::future<ceph::bufferlist> omap_get_header(
+  ll_read_errorator::future<ceph::bufferlist> omap_get_header(
     const crimson::os::CollectionRef& c,
     const ghobject_t& oid) const;
-  seastar::future<> omap_get_header(
+  ll_read_errorator::future<> omap_get_header(
     const ObjectState& os,
     OSDOp& osd_op) const;
   seastar::future<> omap_set_header(

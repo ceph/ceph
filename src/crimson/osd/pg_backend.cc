@@ -878,18 +878,20 @@ maybe_get_omap_vals(
   }
 }
 
-seastar::future<ceph::bufferlist> PGBackend::omap_get_header(
+PGBackend::ll_read_errorator::future<ceph::bufferlist>
+PGBackend::omap_get_header(
   const crimson::os::CollectionRef& c,
   const ghobject_t& oid) const
 {
   return store->omap_get_header(c, oid);
 }
 
-seastar::future<> PGBackend::omap_get_header(
+PGBackend::ll_read_errorator::future<>
+PGBackend::omap_get_header(
   const ObjectState& os,
   OSDOp& osd_op) const
 {
-  return omap_get_header(coll, ghobject_t{os.oi.soid}).then(
+  return omap_get_header(coll, ghobject_t{os.oi.soid}).safe_then(
     [&osd_op] (ceph::bufferlist&& header) {
       osd_op.outdata = std::move(header);
       return seastar::now();
