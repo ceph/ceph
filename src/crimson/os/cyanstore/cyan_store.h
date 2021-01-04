@@ -118,7 +118,7 @@ public:
     const ghobject_t& end,
     uint64_t limit) const final;
 
-  seastar::future<ceph::bufferlist> omap_get_header(
+  read_errorator::future<ceph::bufferlist> omap_get_header(
     CollectionRef c,
     const ghobject_t& oid) final;
 

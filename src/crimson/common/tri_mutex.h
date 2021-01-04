@@ -67,6 +67,7 @@ class tri_mutex : private read_lock,
 {
 public:
   tri_mutex() = default;
+  ~tri_mutex();
 
   read_lock& for_read() {
     return *this;

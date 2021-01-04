@@ -170,9 +170,11 @@ seastar::future<struct stat> SeaStore::stat(
   return seastar::make_ready_future<struct stat>(st);
 }
 
-seastar::future<ceph::bufferlist> omap_get_header(
+auto
+SeaStore::omap_get_header(
   CollectionRef c,
   const ghobject_t& oid)
+  -> read_errorator::future<bufferlist>
 {
   return seastar::make_ready_future<bufferlist>();
 }
