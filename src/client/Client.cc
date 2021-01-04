@@ -5718,7 +5718,7 @@ int Client::may_delete(Inode *dir, const char *name, const UserPerm& perms)
   if (r < 0)
     goto out;
 
-  /* 'name == NULL' means rmsnap */
+  /* 'name == NULL' means rmsnap w/o permission checks */
   if (perms.uid() != 0 && name && (dir->mode & S_ISVTX)) {
     InodeRef otherin;
     r = _lookup(dir, name, CEPH_CAP_AUTH_SHARED, &otherin, perms);
@@ -11100,7 +11100,7 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
   return _mkdir(snapdir, name, mode, perm, nullptr, metadata);
 }
 
-int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms)
+int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms, bool check_perms)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
@@ -11113,12 +11113,12 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms)
   int r = path_walk(path, &in, perms);
   if (r < 0)
     return r;
+  Inode *snapdir = open_snapdir(in.get());
   if (cct->_conf->client_permissions) {
-    r = may_delete(in.get(), NULL, perms);
+    r = may_delete(snapdir, check_perms ? name : NULL, perms);
     if (r < 0)
       return r;
   }
-  Inode *snapdir = open_snapdir(in.get());
   return _rmdir(snapdir, name, perms);
 }
 
