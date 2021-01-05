@@ -238,10 +238,7 @@ void Migrator::find_stale_export_freeze()
     }
     if (stat.last_cum_auth_pins_change >= cutoff)
       continue;
-    if (stat.num_remote_waiters > 0 ||
-	(!dir->inode->is_root() && dir->get_parent_dir()->is_freezing())) {
-      export_try_cancel(dir);
-    }
+    export_try_cancel(dir);
   }
 }
 

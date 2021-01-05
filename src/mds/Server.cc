@@ -2976,8 +2976,6 @@ void Server::handle_peer_auth_pin(MDRequestRef& mdr)
 	dout(10) << " waiting for authpinnable on " << *obj << dendl;
 	obj->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
-
-	mds->locker->notify_freeze_waiter(obj);
 	goto blocked;
       }
     }
@@ -3409,8 +3407,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
 	(ref->is_freezing() && !mdr->is_auth_pinned(ref))) {
       dout(7) << "waiting for !frozen/authpinnable on " << *ref << dendl;
       ref->add_waiter(CInode::WAIT_UNFREEZE, cf.build());
-      if (mdr->is_any_remote_auth_pin())
-	mds->locker->notify_freeze_waiter(ref);
       return 0;
     }
     mdr->auth_pin(ref);
