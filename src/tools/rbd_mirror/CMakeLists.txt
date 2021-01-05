@@ -5,6 +5,7 @@ add_library(rbd_mirror_types STATIC
 
 set(rbd_mirror_internal
   ClusterWatcher.cc
+  GroupReplayer.cc
   ImageDeleter.cc
   ImageMap.cc
   ImageReplayer.cc

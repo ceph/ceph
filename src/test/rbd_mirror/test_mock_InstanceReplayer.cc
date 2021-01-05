@@ -5,6 +5,7 @@
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "test/rbd_mirror/mock/MockContextWQ.h"
 #include "test/rbd_mirror/mock/MockSafeTimer.h"
+#include "tools/rbd_mirror/GroupReplayer.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/InstanceReplayer.h"
@@ -58,6 +59,54 @@ struct ServiceDaemon<librbd::MockTestImageCtx> {
 template<>
 struct InstanceWatcher<librbd::MockTestImageCtx> {
 };
+
+template<>
+struct GroupReplayer<librbd::MockTestImageCtx> {
+  static GroupReplayer* s_instance;
+  std::string global_group_id;
+
+  static GroupReplayer *create(
+      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      const std::string &global_group_id,
+      Threads<librbd::MockTestImageCtx> *threads,
+      InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
+      MirrorStatusUpdater<librbd::MockTestImageCtx>* local_status_updater,
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->global_group_id = global_group_id;
+    return s_instance;
+  }
+
+  GroupReplayer() {
+    ceph_assert(s_instance == nullptr);
+    s_instance = this;
+  }
+
+  virtual ~GroupReplayer() {
+    ceph_assert(s_instance == this);
+    s_instance = nullptr;
+  }
+
+  MOCK_METHOD0(destroy, void());
+  MOCK_METHOD2(start, void(Context *, bool));
+  MOCK_METHOD2(stop, void(Context *, bool));
+  MOCK_METHOD1(restart, void(Context*));
+  MOCK_METHOD0(flush, void());
+  MOCK_METHOD1(print_status, void(Formatter *));
+  MOCK_METHOD1(add_peer, void(const Peer<librbd::MockTestImageCtx>& peer));
+  MOCK_METHOD0(get_global_group_id, const std::string &());
+  MOCK_METHOD0(is_running, bool());
+  MOCK_METHOD0(is_stopped, bool());
+  MOCK_METHOD0(is_blocklisted, bool());
+
+  MOCK_CONST_METHOD0(is_finished, bool());
+  MOCK_METHOD1(set_finished, void(bool));
+
+  MOCK_CONST_METHOD0(get_health_state, image_replayer::HealthState());
+};
+
+GroupReplayer<librbd::MockTestImageCtx>* GroupReplayer<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 template<>
 struct ImageReplayer<librbd::MockTestImageCtx> {
@@ -133,6 +182,7 @@ using ::testing::WithArg;
 class TestMockInstanceReplayer : public TestMockFixture {
 public:
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
+  typedef GroupReplayer<librbd::MockTestImageCtx> MockGroupReplayer;
   typedef ImageReplayer<librbd::MockTestImageCtx> MockImageReplayer;
   typedef InstanceReplayer<librbd::MockTestImageCtx> MockInstanceReplayer;
   typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
@@ -191,6 +241,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   expect_work_queue(mock_threads);
   Context *timer_ctx = nullptr;
   expect_add_event_after(mock_threads, &timer_ctx);
+  Context *group_timer_ctx = nullptr;
+  expect_add_event_after(mock_threads, &group_timer_ctx);
   instance_replayer.init();
   instance_replayer.add_peer({"peer_uuid", m_remote_io_ctx, {}, nullptr});
 
@@ -241,6 +293,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   instance_replayer.shut_down();
   ASSERT_TRUE(timer_ctx != nullptr);
   delete timer_ctx;
+  ASSERT_TRUE(group_timer_ctx != nullptr);
+  delete group_timer_ctx;
 }
 
 TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
@@ -262,6 +316,8 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   expect_work_queue(mock_threads);
   Context *timer_ctx1 = nullptr;
   expect_add_event_after(mock_threads, &timer_ctx1);
+  Context *group_timer_ctx = nullptr;
+  expect_add_event_after(mock_threads, &group_timer_ctx);
   instance_replayer.init();
   instance_replayer.add_peer({"peer_uuid", m_remote_io_ctx, {}, nullptr});
 
@@ -316,6 +372,8 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   instance_replayer.shut_down();
   ASSERT_TRUE(timer_ctx2 != nullptr);
   delete timer_ctx2;
+  ASSERT_TRUE(group_timer_ctx != nullptr);
+  delete group_timer_ctx;
 }
 
 TEST_F(TestMockInstanceReplayer, Reacquire) {
@@ -337,6 +395,8 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
   expect_work_queue(mock_threads);
   Context *timer_ctx = nullptr;
   expect_add_event_after(mock_threads, &timer_ctx);
+  Context *group_timer_ctx = nullptr;
+  expect_add_event_after(mock_threads, &group_timer_ctx);
   instance_replayer.init();
   instance_replayer.add_peer({"peer_uuid", m_remote_io_ctx, {}, nullptr});
 
@@ -376,6 +436,8 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
   instance_replayer.shut_down();
   ASSERT_TRUE(timer_ctx != nullptr);
   delete timer_ctx;
+  ASSERT_TRUE(group_timer_ctx != nullptr);
+  delete group_timer_ctx;
 }
 
 } // namespace mirror
