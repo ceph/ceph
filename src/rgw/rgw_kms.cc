@@ -115,6 +115,25 @@ static void concat_url(std::string &url, std::string path) {
   }
 }
 
+/**
+ * Determine if a string (url) ends with a given suffix.
+ * Must deal with (ignore) trailing slashes.
+ */
+static bool string_ends_maybe_slash(std::string_view hay,
+    std::string_view needle)
+{
+  auto hay_len { hay.size() };
+  auto needle_len { needle.size() };
+  if (hay_len < needle_len) return false;
+  auto hay_suffix_start { hay.data() + (hay_len - needle_len) };
+  while (hay_len > needle_len && hay[hay_len-1] == '/') {
+    --hay_len;
+    --hay_suffix_start;
+  }
+  std::string_view hay_suffix { hay_suffix_start, needle_len };
+  return hay_suffix == needle;
+}
+
 template<typename E, typename A = ZeroPoolAllocator>
 static inline void
 add_name_val_to_obj(std::string &n, std::string &v, rapidjson::GenericValue<E,A> &d,
@@ -319,7 +338,7 @@ public:
     }
     if (compat == COMPAT_UNSET) {
       std::string_view v { cct->_conf->rgw_crypt_vault_prefix };
-      if (v.rfind("/export/encryption-key") == v.length() - 22) {
+      if (string_ends_maybe_slash(v,"/export/encryption-key")) {
 	compat = COMPAT_ONLY_OLD;
       } else {
 	compat = COMPAT_NEW_ONLY;
