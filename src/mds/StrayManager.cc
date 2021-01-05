@@ -232,6 +232,8 @@ void StrayManager::_purge_stray_purged(
     CDir *dir = dn->get_dir();
     auto pf = dir->project_fnode(mut);
     pf->version = dir->pre_dirty();
+    dir->resync_accounted_fragstat();
+    dir->resync_accounted_rstat();
     if (in->is_dir())
       pf->fragstat.nsubdirs--;
     else
