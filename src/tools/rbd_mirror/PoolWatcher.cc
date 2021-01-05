@@ -382,7 +382,18 @@ void PoolWatcher<I>::handle_group_updated(const std::string &id,
            << "image_count=" << image_count << ", "
            << "enabled=" << enabled << dendl;
 
-  // TODO
+  std::lock_guard locker{m_lock};
+  MirrorEntity entity(MIRROR_ENTITY_TYPE_GROUP, global_group_id, image_count);
+  m_pending_added_entities.erase(entity);
+  m_pending_removed_entities.erase(entity);
+
+  if (enabled) {
+    m_pending_added_entities.insert({entity, id});
+    schedule_listener();
+  } else {
+    m_pending_removed_entities.insert({entity, id});
+    schedule_listener();
+  }
 }
 
 template <typename I>

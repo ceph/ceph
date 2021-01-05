@@ -41,6 +41,16 @@ struct Listener {
                             const std::string &global_image_id,
                             const std::string &instance_id,
                             Context* on_finish) = 0;
+  virtual void acquire_group(const std::string &global_group_id,
+                             const std::string &instance_id,
+                             Context* on_finish) = 0;
+  virtual void release_group(const std::string &global_group_id,
+                             const std::string &instance_id,
+                             Context* on_finish) = 0;
+  virtual void remove_group(const std::string &mirror_uuid,
+                            const std::string &global_group_id,
+                            const std::string &instance_id,
+                            Context* on_finish) = 0;
 };
 
 struct LookupInfo {
