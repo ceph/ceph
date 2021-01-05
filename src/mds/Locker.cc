@@ -362,12 +362,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     if (!object->is_auth()) {
-      if (mdr->lock_cache) { // debug
-	ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
-	CDentry *dn = mdr->dn[0].back();
-	ceph_assert(dn->get_projected_linkage()->is_remote());
-      }
-
       if (object->is_ambiguous_auth()) {
 	// wait
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
@@ -386,7 +380,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       if (mdr->lock_cache) {
 	CDir *dir;
 	if (CInode *in = dynamic_cast<CInode*>(object)) {
-	  ceph_assert(!in->is_frozen_inode() && !in->is_frozen_auth_pin());
 	  dir = in->get_projected_parent_dir();
 	} else if (CDentry *dn = dynamic_cast<CDentry*>(object)) {
 	  dir = dn->get_dir();
@@ -396,12 +389,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	if (dir->get_inode() == mdr->lock_cache->get_dir_inode()) {
 	  // forcibly auth pin if there is lock cache on parent dir
 	  continue;
-	}
-
-	{ // debug
-	  ceph_assert(mdr->lock_cache->opcode == CEPH_MDS_OP_UNLINK);
-	  CDentry *dn = mdr->dn[0].back();
-	  ceph_assert(dn->get_projected_linkage()->is_remote());
 	}
       }
 
