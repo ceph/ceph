@@ -3336,6 +3336,34 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
+bool PrimaryLogPG::has_manifest_chunk(ObjectContextRef obc, std::string& fp_oid) 
+{
+  // head
+  for (auto &p : obc->obs.oi.manifest.chunk_map) {
+    if (p.second.oid.oid.name == fp_oid) {
+      return true;
+    }
+  }
+  // snap
+  SnapSet& ss = obc->ssc->snapset;
+  for (vector<snapid_t>::const_iterator p = ss.clones.begin();
+      p != ss.clones.end();
+      ++p) {
+    hobject_t clone_oid = obc->obs.oi.soid;
+    clone_oid.snap = *p;
+    ObjectContextRef clone_obc = get_object_context(clone_oid, false);
+    if (clone_obc && clone_obc->obs.oi.has_manifest()) {
+      for (auto &p : clone_obc->obs.oi.manifest.chunk_map) {
+	if (p.second.oid.oid.name == fp_oid) {
+	  return true;
+	}
+      }
+    }
+  }
+
+  return false;
+}
+
 ObjectContextRef PrimaryLogPG::get_prev_clone_obc(ObjectContextRef obc)
 {
   auto s = std::find(obc->ssc->snapset.clones.begin(), obc->ssc->snapset.clones.end(),
