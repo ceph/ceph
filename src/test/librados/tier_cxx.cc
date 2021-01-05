@@ -5470,6 +5470,187 @@ TEST_F(LibRadosTwoPoolsPP, TierFlushDuringFlush) {
 
 }
 
+#include "cls/cas/cls_cas_client.h"
+#include "cls/cas/cls_cas_internal.h"
+TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
+  // skip test if not yet octopus
+  if (_get_required_osd_release(cluster) < "octopus") {
+    cout << "cluster is not yet octopus, skipping test" << std::endl;
+    return;
+  }
+
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("there hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  string er_fp_oid, hi_fp_oid, HI_fp_oid, ai_fp_oid, bi_fp_oid,
+	  Er_fp_oid, Hi_fp_oid, SI_fp_oid;
+
+  // get fp_oid
+  er_fp_oid = get_fp_oid("er", "sha1");
+  hi_fp_oid = get_fp_oid("hi", "sha1");
+  HI_fp_oid = get_fp_oid("HI", "sha1");
+  ai_fp_oid = get_fp_oid("ai", "sha1");
+  bi_fp_oid = get_fp_oid("bi", "sha1");
+  Er_fp_oid = get_fp_oid("Er", "sha1");
+  Hi_fp_oid = get_fp_oid("Hi", "sha1");
+  SI_fp_oid = get_fp_oid("SI", "sha1");
+
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("HI");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(HI_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("ai");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(ai_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("bi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(bi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Er");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Er_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("Hi");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(Hi_fp_oid, &op));
+  }
+  // write
+  {
+    ObjectWriteOperation op;
+    bufferlist bl;
+    bl.append("SI");
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate(SI_fp_oid, &op));
+  }
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, hi_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, HI_fp_oid, "foo");
+
+  // foo head:     [hi] [HI]
+  
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("a");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("S");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 8));
+  }
+
+  // foo snap[0]:      [hi] [HI]
+  // foo head   : [er] [ai] [SI]
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 2, 2, er_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, ai_fp_oid, "foo");
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, SI_fp_oid, "foo");
+
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+	my_snaps));
+
+  // create a clone
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+  // write
+  {
+    bufferlist bl;
+    bl.append("b");
+    ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
+  }
+
+  // foo snap[1]:      [hi] [HI]
+  // foo snap[0]: [er] [ai] [SI]
+  // foo head   : [er] [bi] [SI]
+
+  // set-chunk (dedup)
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, bi_fp_oid, "foo");
+
+
+  {
+    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", SI_fp_oid));
+    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", er_fp_oid));
+    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", ai_fp_oid));
+    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", HI_fp_oid));
+    ASSERT_EQ(-ENOLINK, cls_cas_references_chunk(ioctx, "foo", Hi_fp_oid));
+  }
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
