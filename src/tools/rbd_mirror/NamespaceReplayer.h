@@ -194,7 +194,29 @@ private:
                       const std::string &instance_id,
                       Context* on_finish) override {
       namespace_replayer->handle_remove_image(mirror_uuid, global_image_id,
-                                         instance_id, on_finish);
+                                              instance_id, on_finish);
+    }
+
+    void acquire_group(const std::string &global_group_id,
+                       const std::string &instance_id,
+                       Context* on_finish) override {
+      namespace_replayer->handle_acquire_group(global_group_id, instance_id,
+                                               on_finish);
+    }
+
+    void release_group(const std::string &global_group_id,
+                       const std::string &instance_id,
+                       Context* on_finish) override {
+      namespace_replayer->handle_release_group(global_group_id, instance_id,
+                                               on_finish);
+    }
+
+    void remove_group(const std::string &mirror_uuid,
+                      const std::string &global_group_id,
+                      const std::string &instance_id,
+                      Context* on_finish) override {
+      namespace_replayer->handle_remove_group(mirror_uuid, global_group_id,
+                                              instance_id, on_finish);
     }
   };
 
@@ -266,6 +288,16 @@ private:
                             Context* on_finish);
   void handle_remove_image(const std::string &mirror_uuid,
                            const std::string &global_image_id,
+                           const std::string &instance_id,
+                           Context* on_finish);
+  void handle_acquire_group(const std::string &global_group_id,
+                            const std::string &instance_id,
+                            Context* on_finish);
+  void handle_release_group(const std::string &global_group_id,
+                            const std::string &instance_id,
+                            Context* on_finish);
+  void handle_remove_group(const std::string &mirror_uuid,
+                           const std::string &global_group_id,
                            const std::string &instance_id,
                            Context* on_finish);
 
