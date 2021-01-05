@@ -462,6 +462,64 @@ void InstanceWatcher<I>::notify_peer_image_removed(
 }
 
 template <typename I>
+void InstanceWatcher<I>::notify_group_acquire(
+    const std::string &instance_id, const std::string &global_group_id,
+    Context *on_notify_ack) {
+  dout(10) << "instance_id=" << instance_id << ", global_group_id="
+           << global_group_id << dendl;
+
+  std::lock_guard locker{m_lock};
+
+  ceph_assert(m_on_finish == nullptr);
+
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{GroupAcquirePayload{request_id, global_group_id}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
+}
+
+template <typename I>
+void InstanceWatcher<I>::notify_group_release(
+    const std::string &instance_id, const std::string &global_group_id,
+    Context *on_notify_ack) {
+  dout(10) << "instance_id=" << instance_id << ", global_group_id="
+           << global_group_id << dendl;
+
+  std::lock_guard locker{m_lock};
+
+  ceph_assert(m_on_finish == nullptr);
+
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{GroupReleasePayload{request_id, global_group_id}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
+}
+
+template <typename I>
+void InstanceWatcher<I>::notify_peer_group_removed(
+    const std::string &instance_id, const std::string &global_group_id,
+    const std::string &peer_mirror_uuid, Context *on_notify_ack) {
+  dout(10) << "instance_id=" << instance_id << ", "
+           << "global_group_id=" << global_group_id << ", "
+           << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
+
+  std::lock_guard locker{m_lock};
+  ceph_assert(m_on_finish == nullptr);
+
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{PeerGroupRemovedPayload{request_id, global_group_id,
+                                               peer_mirror_uuid}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
+}
+
+template <typename I>
 void InstanceWatcher<I>::notify_sync_request(const std::string &sync_id,
                                              Context *on_sync_start) {
   dout(10) << "sync_id=" << sync_id << dendl;
@@ -1146,6 +1204,54 @@ void InstanceWatcher<I>::handle_peer_image_removed(
 }
 
 template <typename I>
+void InstanceWatcher<I>::handle_group_acquire(
+    const std::string &global_group_id, Context *on_finish) {
+  dout(10) << "global_group_id=" << global_group_id << dendl;
+
+  auto ctx = new LambdaContext(
+      [this, global_group_id, on_finish] (int r) {
+        m_instance_replayer->acquire_group(this, global_group_id, on_finish);
+        m_notify_op_tracker.finish_op();
+      });
+
+  m_notify_op_tracker.start_op();
+  m_work_queue->queue(ctx, 0);
+}
+
+template <typename I>
+void InstanceWatcher<I>::handle_group_release(
+    const std::string &global_group_id, Context *on_finish) {
+  dout(10) << "global_group_id=" << global_group_id << dendl;
+
+  auto ctx = new LambdaContext(
+      [this, global_group_id, on_finish] (int r) {
+        m_instance_replayer->release_group(global_group_id, on_finish);
+        m_notify_op_tracker.finish_op();
+      });
+
+  m_notify_op_tracker.start_op();
+  m_work_queue->queue(ctx, 0);
+}
+
+template <typename I>
+void InstanceWatcher<I>::handle_peer_group_removed(
+    const std::string &global_group_id, const std::string &peer_mirror_uuid,
+    Context *on_finish) {
+  dout(10) << "global_group_id=" << global_group_id << ", "
+           << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
+
+  auto ctx = new LambdaContext(
+      [this, peer_mirror_uuid, global_group_id, on_finish] (int r) {
+        m_instance_replayer->remove_peer_group(global_group_id,
+                                               peer_mirror_uuid, on_finish);
+        m_notify_op_tracker.finish_op();
+      });
+
+  m_notify_op_tracker.start_op();
+  m_work_queue->queue(ctx, 0);
+}
+
+template <typename I>
 void InstanceWatcher<I>::handle_sync_request(const std::string &instance_id,
                                              const std::string &sync_id,
                                              Context *on_finish) {
@@ -1239,6 +1345,49 @@ void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
                                    on_notify_ack);
   if (on_finish != nullptr) {
     handle_peer_image_removed(payload.global_image_id, payload.peer_mirror_uuid,
+                              on_finish);
+  }
+}
+
+template <typename I>
+void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
+                                        const GroupAcquirePayload &payload,
+                                        C_NotifyAck *on_notify_ack) {
+  dout(10) << "group_acquire: instance_id=" << instance_id << ", "
+           << "request_id=" << payload.request_id << dendl;
+
+  auto on_finish = prepare_request(instance_id, payload.request_id,
+                                   on_notify_ack);
+  if (on_finish != nullptr) {
+    handle_group_acquire(payload.global_group_id, on_finish);
+  }
+}
+
+template <typename I>
+void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
+                                        const GroupReleasePayload &payload,
+                                        C_NotifyAck *on_notify_ack) {
+  dout(10) << "group_release: instance_id=" << instance_id << ", "
+           << "request_id=" << payload.request_id << dendl;
+
+  auto on_finish = prepare_request(instance_id, payload.request_id,
+                                   on_notify_ack);
+  if (on_finish != nullptr) {
+    handle_group_release(payload.global_group_id, on_finish);
+  }
+}
+
+template <typename I>
+void InstanceWatcher<I>::handle_payload(const std::string &instance_id,
+                                        const PeerGroupRemovedPayload &payload,
+                                        C_NotifyAck *on_notify_ack) {
+  dout(10) << "remove_peer_group: instance_id=" << instance_id << ", "
+           << "request_id=" << payload.request_id << dendl;
+
+  auto on_finish = prepare_request(instance_id, payload.request_id,
+                                   on_notify_ack);
+  if (on_finish != nullptr) {
+    handle_peer_group_removed(payload.global_group_id, payload.peer_mirror_uuid,
                               on_finish);
   }
 }
