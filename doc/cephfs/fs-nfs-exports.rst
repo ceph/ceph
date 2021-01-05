@@ -87,6 +87,13 @@ Show NFS Ganesha Cluster Information
 
 This displays ip and port of deployed cluster.
 
+.. note:: This will not work with rook backend. Instead expose port with
+   kubectl patch command and fetch the port details with kubectl get services
+   command::
+
+   $ kubectl patch service -n rook-ceph -p '{"spec":{"type": "NodePort"}}' rook-ceph-nfs-<cluster-name>-<node-id>
+   $ kubectl get services -n rook-ceph rook-ceph-nfs-<cluster-name>-<node-id>
+
 Set Customized NFS Ganesha Configuration
 ========================================
 
@@ -109,6 +116,11 @@ This removes the user defined configuration.
 Create CephFS Export
 ====================
 
+.. warning:: Currently, the volume/nfs interface is not integrated with dashboard. Both
+   dashboard and volume/nfs interface have different export requirements and
+   create exports differently. Management of dashboard created exports is not
+   supported.
+
 .. code:: bash
 
     $ ceph nfs export create cephfs <fsname> <clusterid> <binding> [--readonly] [--path=/path/in/cephfs]
@@ -120,7 +132,15 @@ serve this export.
 
 ``clusterid`` is the NFS Ganesha cluster ID.
 
-``binding`` is the pseudo root path (must be an absolute path).
+``binding`` is the pseudo root path (must be an absolute path and unique). It
+specifies the export position within the NFS v4 Pseudo Filesystem.
+
+``path`` is the path within cephfs. Valid path should be given and default path
+is '/'. It need not be unique. Subvolume path can be fetched using:
+
+.. code::
+
+   $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
 Delete CephFS Export
 ====================
