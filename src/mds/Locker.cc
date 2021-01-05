@@ -583,7 +583,7 @@ void Locker::set_xlocks_done(MutationImpl *mut, bool skip_dentry)
     MDSCacheObject *obj = p.lock->get_parent();
     ceph_assert(obj->is_auth());
     if (skip_dentry &&
-	(p.lock->get_type() == CEPH_LOCK_DN || p.lock->get_type() == CEPH_LOCK_DVERSION))
+	(p.lock->get_type() == CEPH_LOCK_DN || p.lock->get_type() == CEPH_LOCK_ISNAP))
       continue;
     dout(10) << "set_xlocks_done on " << *p.lock << " " << *obj << dendl;
     p.lock->set_xlock_done();
