@@ -8664,7 +8664,7 @@ std::vector<Option> get_mds_options() {
     .set_description("maximum number of scrub operations performed in parallel"),
 
     Option("mds_forward_all_requests_to_auth", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("always process op on auth mds"),
     
