@@ -59,7 +59,6 @@ public:
   bool try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
 			      int n=0, bool want_layout=false);
 
-  void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);
   void drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);

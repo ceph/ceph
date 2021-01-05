@@ -191,11 +191,6 @@ public:
     return (it->second.notify_ack_waiting.count(who) == 0);
   }
 
-  void export_freeze_inc_num_waiters(CDir *dir) {
-    auto it = export_state.find(dir->dirfrag());
-    ceph_assert(it != export_state.end());
-    it->second.num_remote_waiters++;
-  }
   void find_stale_export_freeze();
 
   // -- misc --
@@ -320,7 +315,6 @@ protected:
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins = 0;
-    int num_remote_waiters = 0; // number of remote authpin waiters
     std::shared_ptr<export_base_t> parent;
     bool active_peer = true;
   };
