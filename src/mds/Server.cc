@@ -8180,12 +8180,21 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     mdr->more()->srcdn_auth_mds = last;
     // ask auth of srci to mark srci as ambiguous auth if more than two MDS
     // are involved in the rename operation.
-    if (srcdnl->is_primary() && !mdr->more()->is_ambiguous_auth) {
-      dout(10) << " preparing ambiguous auth for srci" << dendl;
-      ceph_assert(mdr->more()->is_remote_frozen_authpin);
-      ceph_assert(mdr->more()->rename_inode == srci);
-      _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
-      return;
+    if (srcdnl->is_primary()) {
+      if (!mdr->more()->is_ambiguous_auth) {
+	dout(10) << " preparing ambiguous auth for srci" << dendl;
+	ceph_assert(mdr->more()->is_remote_frozen_authpin);
+	ceph_assert(mdr->more()->rename_inode == srci);
+	_rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
+	return;
+      }
+    } else {
+      if (mds->is_cluster_degraded() &&
+	  !mds->mdsmap->is_clientreplay_or_active_or_stopping(last)) {
+	dout(10) << " srcdn auth mds." << last << " is not active" << dendl;
+	mds->wait_for_active_peer(last, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
     }
   }
   

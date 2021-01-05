@@ -484,6 +484,7 @@ class MDCache {
 
   void rejoin_start(MDSContext *rejoin_done_);
   void rejoin_gather_finish();
+  void maybe_rejoin_finish();
   void rejoin_send_rejoins(mds_rank_t target);
   void rejoin_export_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr,
 			  int target=-1, bool drop_path=false) {
@@ -1171,6 +1172,7 @@ class MDCache {
   set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_sent;    // nodes i sent a rejoin to
   set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+  set<mds_rank_t> rejoin_fin_gather;  // nodes from whom i need a rejoin fin
   map<mds_rank_t, cref_t<MMDSCacheRejoin>> delayed_rejoins;
 
   map<dirfrag_t, mds_rank_t> rejoin_subtree_auth_map;

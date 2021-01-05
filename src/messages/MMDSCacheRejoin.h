@@ -29,11 +29,13 @@ public:
   static constexpr int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
   static constexpr int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
   static constexpr int OP_ACK     = 3;  // auth -> replica, here is your lock state.
+  static constexpr int OP_FIN	  = 4;  // survivor -> recovering, got rejoin ack
   static const char *get_opname(int op) {
     switch (op) {
     case OP_WEAK: return "weak";
     case OP_STRONG: return "strong";
     case OP_ACK: return "ack";
+    case OP_FIN: return "fin";
     default: ceph_abort(); return 0;
     }
   }
