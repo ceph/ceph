@@ -28,14 +28,13 @@ The following chart illustrates the basic Ceph development workflow:
            | pull request |         git push       \-------------/
            \--------------/
 
-The below explanation is written with the assumption that you, the reader, are
-a new contributor who has an idea for a bugfix or enhancement, but do not know
-exactly how to proceed. Watch the `Getting Started with Ceph Development
-<https://www.youtube.com/watch?v=t5UIehZ1oLs>`_ video for a practical summary
-of this workflow.
+This page assumes that you are a new contributor with an idea for a bugfix or
+enhancement, but do not know how to proceed. Watch the `Getting Started with
+Ceph Development <https://www.youtube.com/watch?v=t5UIehZ1oLs>`_ video for a
+practical summary of this workflow.
 
-Update the tracker
-------------------
+Updating the tracker
+--------------------
 
 Before you start, you should know the :ref:`issue-tracker` (Redmine) number
 of the bug you intend to fix. If there is no tracker issue, now is the time to
@@ -56,8 +55,8 @@ setting the ``Assignee`` field.  If your tracker permissions have not been
 elevated, simply add a comment with a short message like "I am working on this
 issue".
 
-Upstream code
--------------
+Forking and Cloning the Ceph Repostory
+--------------------------------------
 
 This section, and the ones that follow, correspond to nodes in the above chart.
 
@@ -71,78 +70,84 @@ A local copy of the upstream code is made by
 1. Forking the upstream repo on GitHub, and
 2. Cloning your fork to make a local working copy
 
+
+Forking The Ceph Repository
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 See the `GitHub documentation
 <https://help.github.com/articles/fork-a-repo/#platform-linux>`_ for
 detailed instructions on forking. In short, if your GitHub username is
 "mygithubaccount", your fork of the upstream repo will appear at
-https://github.com/mygithubaccount/ceph. Once you have created your fork,
-clone it by running:
+``https://github.com/mygithubaccount/ceph``. 
+
+Cloning Your Fork  
+^^^^^^^^^^^^^^^^^
+
+Once you have created your fork, clone it by running:
 
 .. prompt:: bash $
 
    git clone https://github.com/mygithubaccount/ceph
 
-While it is possible to clone the upstream repo directly, for the Ceph workflow
-you must fork it first. Forking is what enables us to open a `GitHub pull
-request`_.
+You must fork the Ceph repository before you clone it.  Without forking, you cannot 
+open a `GitHub pull request
+<https://docs.github.com/en/free-pro-team@latest/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request>`_.
 
 For more information on using GitHub, refer to `GitHub Help
 <https://help.github.com/>`_.
 
-Local environment
------------------
+Configuring Your Local Environment
+----------------------------------
 
 In the local environment created in the previous step, you now have a copy of
 the ``master`` branch in ``remotes/origin/master``. This fork
 (https://github.com/mygithubaccount/ceph.git) is frozen in time and the
 upstream repo (https://github.com/ceph/ceph.git, typically abbreviated to
-``ceph/ceph.git``) is updated frequently by other contributors, you must sync
-your fork periodically. Failure to do so may result in your commits and pull
-requests failing to merge because they refer to file contents that have since
-changed.
+``ceph/ceph.git``) is updated frequently by other contributors. This means that
+you must sync your fork periodically. Failure to synchronize your fork may
+result in your commits and pull requests failing to merge because they refer to
+file contents that have changed since you last synchronized your fork.
 
-First, ensure that you have properly configured your local git environment with
-your name and email address.  Skip this step if you have already configured this
-information.
+Configure your local git environment with your name and email address.  
 
 .. prompt:: bash $
 
    git config user.name "FIRST_NAME LAST_NAME"
    git config user.email "MY_NAME@example.com"
 
-Now add the upstream repo as a "remote" and fetch it:
+Add the upstream repo as a "remote" and fetch it:
 
 .. prompt:: bash $
 
    git remote add ceph https://github.com/ceph/ceph.git
    git fetch ceph
 
-Fetching downloads all objects (commits, branches) that were added since
-the last sync. After running these commands, all the branches from
-``ceph/ceph.git`` are downloaded to the local git repo as
-``remotes/ceph/$BRANCH_NAME`` and can be referenced as
-``ceph/$BRANCH_NAME`` in local git commands.
+Fetching is a process that downloads all objects (commits, branches) that have
+been added since the last sync. These commands download all the branches from
+``ceph/ceph.git`` to the local git repo as ``remotes/ceph/$BRANCH_NAME`` and
+can be referenced as ``ceph/$BRANCH_NAME`` in local git commands.
 
-For example, your local ``master`` branch can be reset to the upstream Ceph
-``master`` branch by running
+
+Resetting Local Master to Upstream Master
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Your local ``master`` branch can be reset to the upstream Ceph ``master``
+branch by running the following commands:
 
 .. prompt:: bash $
 
    git fetch ceph
    git checkout master
    git reset --hard ceph/master
-
-Finally, the ``master`` branch of your fork is synced to the upstream
-master by
-
-.. prompt:: bash $
-
    git push -u origin master
 
-Bugfix branch
--------------
+This procedure should be followed often, in order to keep your local ``master``
+in sync with upstream ``master``.
 
-Next, create a branch for your bugfix:
+Creating a Bugfix branch
+------------------------
+
+Create a branch for your bugfix:
 
 .. prompt:: bash $
 
@@ -150,45 +155,47 @@ Next, create a branch for your bugfix:
    git checkout -b fix_1
    git push -u origin fix_1
 
-This creates a ``fix_1`` branch locally and in our GitHub fork. At this point,
+This creates a local branch called ``fix_1`` in our GitHub fork. At this point,
 the ``fix_1`` branch is identical to the ``master`` branch, but not for long!
 You are now ready to modify the code.  Be careful to always run `git checkout
 master` first, otherwise you may find commits from an unrelated branch mixed
 with your new work.
 
-Fix bug locally
----------------
+Fixing the bug locally
+----------------------
 
-Now change the status of the tracker issue to "In progress" to communicate to
-other Ceph contributors that you have begun working on a fix.  This helps avoid
+In the `Ceph issue tracker <https://tracker.ceph.com>`_, change the status of
+the tracker issue to "In progress".  This communicates to other Ceph
+contributors that you have begun working on a fix, which helps to avoid
 duplication of effort.  If you don't have permission to change that field, your
 previous comment that you are working on the issue is sufficient.
 
-Your fix may be very simple and require only minimal testing.  More likely,
-this will be an iterative process involving trial and error, not to mention
-skill. An explanation of how to fix bugs is beyond the scope of this
-document. Instead, we focus on the mechanics of the process in the context of
-the Ceph project.
+Your fix may be very simple and require only minimal testing. But that's not
+likely. It is more likely that the process of fixing your bug will be iterative
+and will involve trial and error, as well as skill. An explanation of how to
+fix bugs is beyond the scope of this document. Instead, we focus on the
+mechanics of the process in the context of the Ceph project.
 
 For a detailed discussion of the tools available for validating bugfixes,
 see the chapters on testing.
 
-For now, let us just assume that you have finished work on the bugfix, that
-you have tested, and that you believe it works. Commit the changes to your local
-branch using the ``--signoff`` option
+For now, let us assume that you have finished work on the bugfix, that you have
+tested the bugfix , and that you believe that it works. Commit the changes to
+your local branch using the ``--signoff`` option (here represented as the `s`
+portion of the `-as` flag): 
 
 .. prompt:: bash $
 
    git commit -as
 
-and push the changes to your fork
+Push the changes to your fork:
 
 .. prompt:: bash $
 
    git push origin fix_1
 
-GitHub pull request
--------------------
+Opening a GitHub pull request
+-----------------------------
 
 The next step is to open a GitHub pull request (PR). This makes your bugfix
 visible to the community of Ceph contributors.  They will review it and may
@@ -218,8 +225,8 @@ as simple as::
 
     *PR*: https://github.com/ceph/ceph/pull/$NUMBER_OF_YOUR_PULL_REQUEST
 
-Automated PR validation
------------------------
+Understanding Automated PR validation
+-------------------------------------
 
 When you create or update your PR, the Ceph project's `Continuous Integration
 (CI) <https://en.wikipedia.org/wiki/Continuous_integration>`_ infrastructure
@@ -327,8 +334,8 @@ makes for clean history, eases peer review of your changes, and facilitates
 merges.  In rare circumstances it also makes it easier to cleanly revert
 changes.
 
-Merge
------
+Merging
+-------
 
 The bugfix process completes when a project lead merges your PR.
 
