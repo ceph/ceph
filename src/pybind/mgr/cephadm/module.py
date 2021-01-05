@@ -2027,34 +2027,7 @@ To check that the host is reachable:
 
     @forall_hosts
     def _remove_daemons(self, name: str, host: str) -> str:
-        return self._remove_daemon(name, host)
-
-    def _remove_daemon(self, name: str, host: str) -> str:
-        """
-        Remove a daemon
-        """
-        (daemon_type, daemon_id) = name.split('.', 1)
-        daemon = orchestrator.DaemonDescription(
-            daemon_type=daemon_type,
-            daemon_id=daemon_id,
-            hostname=host)
-
-        with set_exception_subject('service', daemon.service_id(), overwrite=True):
-
-            self.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
-
-            args = ['--name', name, '--force']
-            self.log.info('Removing daemon %s from %s' % (name, host))
-            out, err, code = self._run_cephadm(
-                host, name, 'rm-daemon', args)
-            if not code:
-                # remove item from cache
-                self.cache.rm_daemon(host, name)
-            self.cache.invalidate_host_daemons(host)
-
-            self.cephadm_services[daemon_type_to_service(daemon_type)].post_remove(daemon)
-
-            return "Removed {} from host '{}'".format(name, host)
+        return CephadmServe(self)._remove_daemon(name, host)
 
     def _check_pool_exists(self, pool: str, service_name: str) -> None:
         logger.info(f'Checking pool "{pool}" exists for service {service_name}')
