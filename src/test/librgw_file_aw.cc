@@ -47,7 +47,7 @@ namespace {
   bool do_verify = false;
   bool do_hexdump = false;
 
-  string bucket_name = "sorry_dave";
+  string bucket_name = "sorrydave";
   string object_name = "jocaml";
 
   struct rgw_file_handle *bucket_fh = nullptr;
