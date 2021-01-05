@@ -590,7 +590,7 @@ bool CryptoObjectDispatch<I>::discard(
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   auto req = io::ObjectDispatchSpec::create_write_same(
           m_image_ctx, PREVIOUS_LAYER, object_no, object_off, object_len,
-          {{0, buffer_size}}, std::move(bl), io_context,
+          {{0, object_len}}, std::move(bl), io_context,
           *object_dispatch_flags, 0, parent_trace, ctx);
   req->send();
   return true;
