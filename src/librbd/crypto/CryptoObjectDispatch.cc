@@ -25,6 +25,9 @@ namespace crypto {
 using librbd::util::create_context_callback;
 using librbd::util::data_object_name;
 
+io::ObjectDispatchLayer PREVIOUS_LAYER =
+        io::util::get_previous_layer(io::OBJECT_DISPATCH_LAYER_CRYPTO);
+
 template <typename I>
 struct C_AlignedObjectReadRequest : public Context {
     I* image_ctx;
@@ -118,9 +121,8 @@ struct C_UnalignedObjectReadRequest : public Context {
 
       // send the aligned read back to get decrypted
       req = io::ObjectDispatchSpec::create_read(
-              image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, object_no,
-              &aligned_extents, io_context, op_flags, read_flags, parent_trace,
-              version, this);
+              image_ctx, PREVIOUS_LAYER, object_no, &aligned_extents,
+              io_context, op_flags, read_flags, parent_trace, version, this);
     }
 
     void send() {
@@ -377,9 +379,9 @@ struct C_UnalignedObjectWriteRequest : public Context {
 
       // send back aligned write back to get encrypted and committed
       auto write_req = io::ObjectDispatchSpec::create_write(
-              image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, object_no,
-              aligned_off, std::move(aligned_data), io_context, op_flags,
-              new_write_flags, new_assert_version,
+              image_ctx, PREVIOUS_LAYER, object_no, aligned_off,
+              std::move(aligned_data), io_context, op_flags, new_write_flags,
+              new_assert_version,
               journal_tid == nullptr ? 0 : *journal_tid, parent_trace, ctx);
       write_req->send();
     }
@@ -531,9 +533,9 @@ bool CryptoObjectDispatch<I>::write_same(
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   auto req = io::ObjectDispatchSpec::create_write(
-          m_image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, object_no,
-          object_off, std::move(ws_data), io_context, op_flags, 0, std::nullopt,
-          0, parent_trace, ctx);
+          m_image_ctx, PREVIOUS_LAYER, object_no, object_off,
+          std::move(ws_data), io_context, op_flags, 0, std::nullopt, 0,
+          parent_trace, ctx);
   req->send();
   return true;
 }
@@ -587,8 +589,8 @@ bool CryptoObjectDispatch<I>::discard(
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   auto req = io::ObjectDispatchSpec::create_write_same(
-          m_image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, object_no, object_off,
-          object_len, {{0, buffer_size}}, std::move(bl), io_context,
+          m_image_ctx, PREVIOUS_LAYER, object_no, object_off, object_len,
+          {{0, buffer_size}}, std::move(bl), io_context,
           *object_dispatch_flags, 0, parent_trace, ctx);
   req->send();
   return true;
