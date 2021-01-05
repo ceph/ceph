@@ -594,7 +594,7 @@ class CephadmServe:
             r = True
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
-            self.mgr._remove_daemon(d.name(), d.hostname)
+            self._remove_daemon(d.name(), d.hostname)
 
         if r is None:
             r = False
@@ -611,7 +611,7 @@ class CephadmServe:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
-                self.mgr._remove_daemon(dd.name(), dd.hostname)
+                self._remove_daemon(dd.name(), dd.hostname)
 
             # ignore unmanaged services
             if spec and spec.unmanaged:
@@ -833,3 +833,30 @@ class CephadmServe:
                 self.mgr.events.for_daemon(
                     daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
             return msg
+
+    def _remove_daemon(self, name: str, host: str) -> str:
+        """
+        Remove a daemon
+        """
+        (daemon_type, daemon_id) = name.split('.', 1)
+        daemon = orchestrator.DaemonDescription(
+            daemon_type=daemon_type,
+            daemon_id=daemon_id,
+            hostname=host)
+
+        with set_exception_subject('service', daemon.service_id(), overwrite=True):
+
+            self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
+
+            args = ['--name', name, '--force']
+            self.log.info('Removing daemon %s from %s' % (name, host))
+            out, err, code = self.mgr._run_cephadm(
+                host, name, 'rm-daemon', args)
+            if not code:
+                # remove item from cache
+                self.mgr.cache.rm_daemon(host, name)
+            self.mgr.cache.invalidate_host_daemons(host)
+
+            self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].post_remove(daemon)
+
+            return "Removed {} from host '{}'".format(name, host)
