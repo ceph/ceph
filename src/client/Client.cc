@@ -6526,7 +6526,7 @@ void Client::start_tick_thread()
       auto d_interval = clock::duration(cct->_conf.get_val<sec>("client_debug_inject_tick_delay"));
 
       auto interval = std::max(t_interval, d_interval);
-      if (likely(since >= interval)) {
+      if (likely(since >= interval*.90)) {
         tick();
         last_tick = clock::now();
       } else {
