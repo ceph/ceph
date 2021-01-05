@@ -127,6 +127,43 @@ void SyncPayloadBase::dump(Formatter *f) const {
   f->dump_string("sync_id", sync_id);
 }
 
+void GroupPayloadBase::encode(bufferlist &bl) const {
+  using ceph::encode;
+  PayloadBase::encode(bl);
+  encode(global_group_id, bl);
+}
+
+void GroupPayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  PayloadBase::decode(version, iter);
+  decode(global_group_id, iter);
+}
+
+void GroupPayloadBase::dump(Formatter *f) const {
+  PayloadBase::dump(f);
+  f->dump_string("global_group_id", global_group_id);
+}
+
+void PeerGroupRemovedPayload::encode(bufferlist &bl) const {
+  using ceph::encode;
+  PayloadBase::encode(bl);
+  encode(global_group_id, bl);
+  encode(peer_mirror_uuid, bl);
+}
+
+void PeerGroupRemovedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  PayloadBase::decode(version, iter);
+  decode(global_group_id, iter);
+  decode(peer_mirror_uuid, iter);
+}
+
+void PeerGroupRemovedPayload::dump(Formatter *f) const {
+  PayloadBase::dump(f);
+  f->dump_string("global_group_id", global_group_id);
+  f->dump_string("peer_mirror_uuid", peer_mirror_uuid);
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
@@ -166,6 +203,15 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   case NOTIFY_OP_SYNC_START:
     payload = SyncStartPayload();
     break;
+  case NOTIFY_OP_GROUP_ACQUIRE:
+    payload = GroupAcquirePayload();
+    break;
+  case NOTIFY_OP_GROUP_RELEASE:
+    payload = GroupReleasePayload();
+    break;
+  case NOTIFY_OP_PEER_GROUP_REMOVED:
+    payload = PeerGroupRemovedPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -194,6 +240,15 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
 
   o.push_back(new NotifyMessage(SyncStartPayload()));
   o.push_back(new NotifyMessage(SyncStartPayload(1, "sync_id")));
+
+  o.push_back(new NotifyMessage(GroupAcquirePayload()));
+  o.push_back(new NotifyMessage(GroupAcquirePayload(1, "gid")));
+
+  o.push_back(new NotifyMessage(GroupReleasePayload()));
+  o.push_back(new NotifyMessage(GroupReleasePayload(1, "gid")));
+
+  o.push_back(new NotifyMessage(PeerGroupRemovedPayload()));
+  o.push_back(new NotifyMessage(PeerGroupRemovedPayload(1, "gid", "uuid")));
 }
 
 std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
@@ -212,6 +267,15 @@ std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {
     break;
   case NOTIFY_OP_SYNC_START:
     out << "SyncStart";
+    break;
+  case NOTIFY_OP_GROUP_ACQUIRE:
+    out << "GroupAcquire";
+    break;
+  case NOTIFY_OP_GROUP_RELEASE:
+    out << "GroupRelease";
+    break;
+  case NOTIFY_OP_PEER_GROUP_REMOVED:
+    out << "PeerGroupRemoved";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";
