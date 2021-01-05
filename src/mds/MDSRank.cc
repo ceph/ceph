@@ -1347,14 +1347,12 @@ bool MDSRank::is_stale_message(const cref_t<Message> &m) const
     } else {
       // FIXME: this is a convoluted check.  we should be maintaining a nice
       // clean map of current ConnectionRefs for current mdses!!!
-      auto c = messenger->connect_to(CEPH_ENTITY_TYPE_MDS,
-				     mdsmap->get_addrs(from));
-      if (c != m->get_connection()) {
+      auto&& addrs = mdsmap->get_addrs(from);
+      if (!addrs.legacy_equals(m->get_source_addrs())) {
 	bad = true;
-	dout(5) << " mds." << from << " should be " << c << " "
-		<< c->get_peer_addrs() << " but this message is "
-		<< m->get_connection() << " " << m->get_source_addrs()
-		<< dendl;
+	dout(5) << " mds." << from << " should be " << addrs
+		<< " but this message is " << m->get_source_addrs()
+		<< " con " << m->get_connection() << dendl;
       }
     }
     if (bad) {
@@ -1427,16 +1425,21 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
   }
 
   // send mdsmap first?
-  auto addrs = mdsmap->get_addrs(mds);
+  const auto& info = mdsmap->get_info(mds);
+  if (info.state < MDSMap::STATE_RESOLVE) {
+    dout(10) << "send_message_mds mds." << mds << " not reach resolve yet, dropping " << *m << dendl;
+    return;
+  }
+
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
     auto _m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap,
 				    std::string(mdsmap->get_fs_name()));
-    send_message_mds(_m, addrs);
+    send_message_mds(_m, info.get_addrs());
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
 
   // send message
-  send_message_mds(m, addrs);
+  send_message_mds(m, info.get_addrs());
 }
 
 void MDSRank::send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr)
