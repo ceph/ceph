@@ -415,6 +415,7 @@ def cephfs_setup(ctx, config):
         fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
         set_allow_multifs = len(fs_configs) > 1
 
+        fss = []
         for fs_config in fs_configs:
             assert isinstance(fs_config, dict)
             name = fs_config.pop('name')
@@ -424,8 +425,14 @@ def cephfs_setup(ctx, config):
             if set_allow_multifs:
                 fs.set_allow_multifs()
                 set_allow_multifs = False
+            fss.append(fs)
 
-    yield
+        yield
+
+        for fs in fss:
+            fs.destroy()
+    else:
+        yield
 
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):

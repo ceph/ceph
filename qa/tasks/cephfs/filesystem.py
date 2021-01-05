@@ -60,6 +60,13 @@ class ObjectNotFound(Exception):
     def __str__(self):
         return "Object not found: '{0}'".format(self._object_name)
 
+class FSMissing(Exception):
+    def __init__(self, ident):
+        self.ident = ident
+
+    def __str__(self):
+        return f"File system {self.ident} does not exist in the map"
+
 class FSStatus(object):
     """
     Operations on a snapshot of the FSMap.
@@ -109,7 +116,7 @@ class FSStatus(object):
         for fs in self.map['filesystems']:
             if fscid is None or fs['id'] == fscid:
                 return fs
-        raise RuntimeError("FSCID {0} not in map".format(fscid))
+        raise FSMissing(fscid)
 
     def get_fsmap_byname(self, name):
         """
@@ -118,7 +125,7 @@ class FSStatus(object):
         for fs in self.map['filesystems']:
             if name is None or fs['mdsmap']['fs_name'] == name:
                 return fs
-        raise RuntimeError("FS {0} not in map".format(name))
+        raise FSMissing(name)
 
     def get_replays(self, fscid):
         """
@@ -484,6 +491,12 @@ class Filesystem(MDSCluster):
         if not hasattr(self._ctx, "filesystem"):
             self._ctx.filesystem = self
 
+    def dead(self):
+        try:
+            return not bool(self.get_mds_map())
+        except FSMissing:
+            return True
+
     def get_task_status(self, status_key):
         return self.mon_manager.get_service_task_status("mds", status_key)
 
@@ -648,8 +661,11 @@ class Filesystem(MDSCluster):
         self.getinfo(refresh = True)
 
     def destroy(self, reset_obj_attrs=True):
-        log.info('Destroying file system ' + self.name +  ' and related '
-                 'pools')
+        log.info(f'Destroying file system {self.name} and related pools')
+
+        if self.dead():
+            log.debug('already dead...')
+            return
 
         # make sure no MDSs are attached to given FS.
         self.mon_manager.raw_cluster_cmd('fs', 'fail', self.name)
@@ -728,6 +744,7 @@ class Filesystem(MDSCluster):
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
 
+    # may raise FSMissing
     def get_mds_map(self, status=None):
         if status is None:
             status = self.status()
