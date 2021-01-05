@@ -2873,6 +2873,11 @@ void MDCache::handle_mds_failure(mds_rank_t who)
   rejoin_ack_gather.erase(who);  // i'll need/get another.
   discard_delayed_rejoin(who);
 
+  if (rejoin_fin_gather.erase(who)) {
+    ceph_assert(mds->is_rejoin());
+    maybe_rejoin_finish();
+  }
+
   dout(10) << " peer_resolve_sent " << peer_resolve_sent << dendl;
   dout(10) << " peer_resolve_gather " << peer_resolve_gather << dendl;
   dout(10) << " peer_resolve_ack_gather " << peer_resolve_ack_gather << dendl;
@@ -4048,12 +4053,19 @@ void MDCache::handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m)
   case MMDSCacheRejoin::OP_ACK:
     handle_cache_rejoin_ack(m);
     break;
-
+  case MMDSCacheRejoin::OP_FIN:
+    {
+      mds_rank_t from = mds_rank_t(m->get_source().num());
+      auto ret = rejoin_fin_gather.erase(from);
+      ceph_assert(ret);
+      ceph_assert(mds->is_rejoin());
+      maybe_rejoin_finish();
+    }
+    break;
   default: 
     ceph_abort();
   }
 }
-
 
 /*
  * handle_cache_rejoin_weak
@@ -4941,7 +4953,12 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
   // done?
   ceph_assert(rejoin_ack_gather.count(from));
   rejoin_ack_gather.erase(from);
-  if (!survivor) {
+  if (survivor) {
+    // survivor.
+    mds->queue_waiters(rejoin_waiters);
+    auto m = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_FIN);
+    mds->send_message_mds(m, from);
+  } else {
     if (rejoin_gather.empty()) {
       // eval unstable scatter locks after all wrlocks are rejoined.
       while (!rejoin_eval_locks.empty()) {
@@ -4952,17 +4969,7 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
       }
     }
 
-    if (rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
-	rejoin_ack_gather.empty()) {
-      // finally, kickstart past snap parent opens
-      open_snaprealms();
-    } else {
-      dout(7) << "still need rejoin from (" << rejoin_gather << ")"
-	      << ", rejoin_ack from (" << rejoin_ack_gather << ")" << dendl;
-    }
-  } else {
-    // survivor.
-    mds->queue_waiters(rejoin_waiters);
+    maybe_rejoin_finish();
   }
 }
 
@@ -5181,10 +5188,21 @@ void MDCache::rejoin_gather_finish()
   // signal completion of fetches, rejoin_gather_finish, etc.
   rejoin_ack_gather.erase(mds->get_nodeid());
 
-  // did we already get our acks too?
-  if (rejoin_ack_gather.empty()) {
+  maybe_rejoin_finish();
+}
+
+void MDCache::maybe_rejoin_finish()
+{
+  if (rejoin_gather.empty() &&
+      rejoin_ack_gather.empty() &&
+      rejoin_fin_gather.empty()) {
     // finally, open snaprealms
     open_snaprealms();
+  } else {
+    dout(7) << __func__ << " still need rejoin from ("
+	    << rejoin_gather << "), rejoin_ack from ("
+	    << rejoin_ack_gather << "), rejoin_fin from ("
+	    << rejoin_fin_gather << ")" << dendl;
   }
 }
 
@@ -5768,13 +5786,6 @@ void MDCache::do_delayed_cap_imports()
   ceph_assert(delayed_imported_caps.empty());
 }
 
-struct C_MDC_OpenSnapRealms : public MDCacheContext {
-  explicit C_MDC_OpenSnapRealms(MDCache *c) : MDCacheContext(c) {}
-  void finish(int r) override {
-    mdcache->open_snaprealms();
-  }
-};
-
 void MDCache::open_snaprealms()
 {
   dout(10) << "open_snaprealms" << dendl;
@@ -5995,12 +6006,12 @@ void MDCache::rejoin_send_acks()
   
   // send acks to everyone in the recovery set
   map<mds_rank_t,ref_t<MMDSCacheRejoin>> acks;
-  for (set<mds_rank_t>::iterator p = recovery_set.begin();
-       p != recovery_set.end();
-       ++p) {
-    if (rejoin_ack_sent.count(*p))
+  for (auto& r : recovery_set) {
+    if (rejoin_ack_sent.count(r))
       continue;
-    acks[*p] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_ACK);
+    acks[r] = make_message<MMDSCacheRejoin>(MMDSCacheRejoin::OP_ACK);
+    if (mds->mdsmap->get_state(r) > MDSMap::STATE_REJOIN)
+      rejoin_fin_gather.insert(r);
   }
 
   rejoin_ack_sent = recovery_set;
