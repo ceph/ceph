@@ -34,6 +34,11 @@
   must still set the "enable_multiple" flag on the fs. Please see the CephFS
   documentation for more information.
 
+* volume/nfs: Recently "ganesha-" prefix from cluster id and nfs-ganesha common
+  config object was removed, to ensure consistent namespace across different
+  orchestrator backends. Please delete any existing nfs-ganesha clusters prior
+  to upgrading and redeploy new clusters after upgrading to Pacific.
+
 * A new health check, DAEMON_OLD_VERSION, will warn if different versions of Ceph are running
   on daemons. It will generate a health error if multiple versions are detected.
   This condition must exist for over mon_warn_older_version_delay (set to 1 week by default) in order for the
