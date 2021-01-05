@@ -465,11 +465,11 @@ void AbstractWriteLog<I>::update_sync_points(std::map<uint64_t, bool> &missing_s
             ceph_assert(previous_sync_point_entry->prior_sync_point_flushed);
             ceph_assert(previous_sync_point_entry->writes == previous_sync_point_entry->writes_flushed);
           }
-          previous_sync_point_entry = sync_point_entry;
         } else {
           /* There are no previous sync points, so we'll consider them flushed */
           sync_point_entry->prior_sync_point_flushed = true;
         }
+        previous_sync_point_entry = sync_point_entry;
         ldout(m_image_ctx.cct, 10) << "Loaded to sync point=[" << *sync_point_entry << dendl;
       }
     }
