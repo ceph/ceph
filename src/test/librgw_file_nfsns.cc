@@ -520,7 +520,7 @@ TEST(LibRGW, RGW_SETUP_RENAME1) {
     st.st_mode = 755;
 
     for (int b_ix : {0, 1}) {
-      std::string bname{"brename_" + to_string(b_ix)};
+      std::string bname{"brename" + to_string(b_ix)};
       obj_rec brec{bname, nullptr, nullptr, nullptr};
       (void) rgw_lookup(fs, fs->root_fh, brec.name.c_str(), &brec.fh,
 			nullptr, 0, RGW_LOOKUP_FLAG_NONE);

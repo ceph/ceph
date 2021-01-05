@@ -41,7 +41,7 @@ namespace {
   bool do_multi = false;
   int multi_cnt = 10;
 
-  string bucket_name = "sorry_dave";
+  string bucket_name = "sorrydave";
 
   struct {
     int argc;
