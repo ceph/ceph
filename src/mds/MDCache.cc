@@ -190,7 +190,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
       }
       since = now-upkeep_last_release;
       auto release_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_release_free_interval"));
-      if (since >= release_interval) {
+      if (since >= release_interval*.90) {
         /* XXX not necessary once MDCache uses PriorityCache */
         dout(10) << "releasing free memory" << dendl;
         ceph_heap_release_free_memory();
