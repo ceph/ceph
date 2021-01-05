@@ -1432,15 +1432,20 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
   }
 
   // send mdsmap first?
-  auto addrs = mdsmap->get_addrs(mds);
+  const auto& info = mdsmap->get_info(mds);
+  if (info.state < MDSMap::STATE_RESOLVE) {
+    dout(10) << "send_message_mds mds." << mds << " not reach resolve yet, dropping " << *m << dendl;
+    return;
+  }
+
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
     auto _m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
-    send_message_mds(_m, addrs);
+    send_message_mds(_m, info.get_addrs());
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
 
   // send message
-  send_message_mds(m, addrs);
+  send_message_mds(m, info.get_addrs());
 }
 
 void MDSRank::send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr)
