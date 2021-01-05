@@ -240,7 +240,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         """
         remove_subvolumes = []
 
-        for subvol, subvol_data in auth_meta['volumes'].items():
+        for subvol, subvol_data in auth_meta['subvolumes'].items():
             if not subvol_data['dirty']:
                 continue
 
@@ -263,8 +263,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     'dirty': False,
                 }
                 # SVMeta update looks clean. Ceph auth update must have been
-                # clean.
+                # clean. Update the dirty flag and continue
                 if subvol_meta['auths'][auth_id] == want_auth:
+                    auth_meta['subvolumes'][subvol]['dirty'] = False
+                    self.auth_mdata_mgr.auth_metadata_set(auth_id, auth_meta)
                     continue
 
                 client_entity = "client.{0}".format(auth_id)
@@ -286,13 +288,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # Recovered from partial auth updates for the auth ID's access
             # to a subvolume.
-            auth_meta['volumes'][subvol]['dirty'] = False
+            auth_meta['subvolumes'][subvol]['dirty'] = False
             self.auth_mdata_mgr.auth_metadata_set(auth_id, auth_meta)
 
         for subvol in remove_subvolumes:
-            del auth_meta['volumes'][subvol]
+            del auth_meta['subvolumes'][subvol]
 
-        if not auth_meta['volumes']:
+        if not auth_meta['subvolumes']:
             # Clean up auth meta file
             self.fs.unlink(self.auth_mdata_mgr._auth_metadata_path(auth_id))
             return
@@ -361,9 +363,13 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 auth_meta = {
                     'dirty': True,
                     'tenant_id': str(tenant_id) if tenant_id else None,
-                    'volumes': subvolume
+                    'subvolumes': subvolume
                 }
             else:
+                # Update 'volumes' key (old style auth metadata file) to 'subvolumes' key
+                if 'volumes' in auth_meta:
+                    auth_meta['subvolumes'] = auth_meta.pop('volumes')
+
                 # Disallow tenants to share auth IDs
                 if str(auth_meta['tenant_id']) != str(tenant_id):
                     msg = "auth ID: {0} is already in use".format(auth_id)
@@ -377,7 +383,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     tenant=auth_meta['tenant_id']
                 ))
                 auth_meta['dirty'] = True
-                auth_meta['volumes'].update(subvolume)
+                auth_meta['subvolumes'].update(subvolume)
 
             self.auth_mdata_mgr.auth_metadata_set(auth_id, auth_meta)
 
@@ -385,7 +391,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 key = self._authorize_subvolume(auth_id, access_level, existing_caps)
 
             auth_meta['dirty'] = False
-            auth_meta['volumes'][group_subvol_id]['dirty'] = False
+            auth_meta['subvolumes'][group_subvol_id]['dirty'] = False
             self.auth_mdata_mgr.auth_metadata_set(auth_id, auth_meta)
 
             if tenant_id:
@@ -458,9 +464,18 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             # Existing meta, or None, to be updated
             auth_meta = self.auth_mdata_mgr.auth_metadata_get(auth_id)
 
+            if auth_meta is None:
+                msg = "auth ID: {0} doesn't exist".format(auth_id)
+                log.error(msg)
+                raise VolumeException(-errno.ENOENT, msg)
+
+            # Update 'volumes' key (old style auth metadata file) to 'subvolumes' key
+            if 'volumes' in auth_meta:
+                auth_meta['subvolumes'] = auth_meta.pop('volumes')
+
             group_name = self.group.groupname if self.group.groupname != Group.NO_GROUP_NAME else None
             group_subvol_id = "{0}/{1}".format(group_name, self.subvolname)
-            if (auth_meta is None) or (not auth_meta['volumes']):
+            if (auth_meta is None) or (not auth_meta['subvolumes']):
                 log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for subvolume '{subvolume}'".format(
                     auth_id=auth_id, subvolume=self.subvolname
@@ -469,7 +484,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 self.fs.unlink(self.auth_mdata_mgr._auth_metadata_path(auth_id))
                 return
 
-            if group_subvol_id not in auth_meta['volumes']:
+            if group_subvol_id not in auth_meta['subvolumes']:
                 log.warning("deauthorized called for already-removed auth"
                          "ID '{auth_id}' for subvolume '{subvolume}'".format(
                     auth_id=auth_id, subvolume=self.subvolname
@@ -480,16 +495,16 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 self._recover_auth_meta(auth_id, auth_meta)
 
             auth_meta['dirty'] = True
-            auth_meta['volumes'][group_subvol_id]['dirty'] = True
+            auth_meta['subvolumes'][group_subvol_id]['dirty'] = True
             self.auth_mdata_mgr.auth_metadata_set(auth_id, auth_meta)
 
             self._deauthorize_subvolume(auth_id)
 
             # Filter out the volume we're deauthorizing
-            del auth_meta['volumes'][group_subvol_id]
+            del auth_meta['subvolumes'][group_subvol_id]
 
             # Clean up auth meta file
-            if not auth_meta['volumes']:
+            if not auth_meta['subvolumes']:
                 self.fs.unlink(self.auth_mdata_mgr._auth_metadata_path(auth_id))
                 return
 
