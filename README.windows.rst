@@ -5,6 +5,7 @@ Ceph Windows support is currently a work in progress. For now, the main focus
 is the client side, allowing Windows hosts to consume rados, rbd and cephfs
 resources.
 
+.. _building:
 Building
 --------
 
@@ -15,6 +16,10 @@ components for Windows. Support for msvc and clang will be added soon.
 It may be called from a Linux environment, including Windows Subsystem for
 Linux. MSYS2 and CygWin may also work but those weren't tested.
 
+This script currently supports Ubuntu 18.04 and openSUSE Tumbleweed, but it
+may be easily adapted to run on other Linux distributions, taking into
+account different package managers, package names or paths (e.g. mingw paths).
+
 .. _win32_build.sh: win32_build.sh
 
 The script accepts the following flags:
@@ -22,6 +27,8 @@ The script accepts the following flags:
 ============  ===============================  ===============================
 Flag          Description                      Default value
 ============  ===============================  ===============================
+OS            Host OS distribution, for mingw  ubuntu (also valid: suse)
+              and other OS specific settings.
 CEPH_DIR      The Ceph source code directory.  The same as the script.
 BUILD_DIR     The directory where the          $CEPH_DIR/build
               generated artifacts will be
@@ -33,13 +40,43 @@ NUM_WORKERS   The number of workers to use     The number of vcpus
 CLEAN_BUILD   Clean the build directory.
 SKIP_BUILD    Run cmake without actually
               performing the build.
+SKIP_TESTS    Skip building Ceph tests.
+BUILD_ZIP     Build a zip archive containing
+              the generated binaries.
+ZIP_DEST      Where to put a zip containing    $BUILD_DIR/ceph.zip
+              the generated binaries.
+STRIP_ZIPPED  If set, the zip will contain
+              stripped binaries.
 ============  ===============================  ===============================
+
+In order to build debug binaries as well as an archive containing stripped
+binaries that may be easily moved around, one may use the following:
+
+.. code:: bash
+
+    BUILD_ZIP=1 STRIP_ZIPPED=1 SKIP_TESTS=1 ./win32_build.sh
+
+In order to disable a flag, such as ``CLEAN_BUILD``, leave it undefined.
+
+Debug binaries can be quite large, the following parameters may be passed to
+``win32_build.sh`` to reduce the amount of debug information:
+
+.. code:: bash
+
+    CFLAGS="-g1" CXXFLAGS="-g1" CMAKE_BUILD_TYPE="Release"
+
+``win32_build.sh`` will fetch dependencies using ``win32_deps_build.sh``. If
+all dependencies are successfully prepared, this potentially time consuming
+step will be skipped by subsequent builds. Be aware that you may have to do
+a clean build (using the ``CLEAN_BUILD`` flag) when the dependencies change
+(e.g. after switching to a more recent Ceph version by doing a ``git pull``).
+
+Make sure to explicitly pass the "OS" parameter when directly calling
+``win32_deps_build.sh``. Also, be aware of the fact that it will use the distro
+specific package manager, which will require privileged rights.
 
 Current status
 --------------
-
-The rados and rbd binaries and libs compile successfully and can be used on
-Windows, successfully connecting to the cluster and consuming pools.
 
 Ceph filesystems can be mounted using the ``ceph-dokan`` command, which
 requires the Dokany package to be installed. Note that dokany is a well
@@ -85,7 +122,10 @@ Cinder to be attached to Hyper-V VMs managed by OpenStack Nova.
 Installing
 ----------
 
-Soon we're going to provide an MSI installed for Ceph. For now, unzip the
+The following project allows building an MSI installer that bundles ``ceph`` and
+the ``WNBD`` driver: https://github.com/cloudbase/ceph-windows-installer
+
+In order to manually install ``ceph``, start by unzipping the
 binaries that you may have obtained by following the building_ step.
 
 You may want to update the environment PATH variable, including the Ceph
@@ -139,8 +179,7 @@ also copy your keyring file to the specified location and make sure
 that the configured directories exist (e.g. ``C:\ProgramData\ceph\out``).
 
 Please use slashes ``/`` instead of backslashes ``\`` as path separators
-within ``ceph.conf`` for the time being. Also, don't forget to include a
-newline at the end of the file, Ceph will complain otherwise.
+within ``ceph.conf`` for the time being.
 
 .. _windows_service:
 Windows service
@@ -260,10 +299,10 @@ The following sample imports an RBD image and boots a Hyper-V VM using it.
     # Let's give it a hefty 100MB size.
     rbd resize cirros-0.5.1-x86_64-disk.raw --size=100MB
 
-    rbd-wnbd map cirros-0.5.1-x86_64-disk.raw
+    rbd device map cirros-0.5.1-x86_64-disk.raw
 
     # Let's have a look at the mappings.
-    rbd-wnbd list
+    rbd device list
     Get-Disk
 
     $mappingJson = rbd-wnbd show cirros-0.5.1-x86_64-disk.raw --format=json
@@ -286,7 +325,7 @@ initializes a partition.
 .. code:: PowerShell
 
     rbd create blank_image --size=1G
-    rbd-wnbd map blank_image
+    rbd device map blank_image
 
     $mappingJson = rbd-wnbd show blank_image --format=json
     $mappingJson = $mappingJson | ConvertFrom-Json
@@ -301,3 +340,73 @@ initializes a partition.
         Initialize-Disk -PassThru | `
         New-Partition -AssignDriveLetter -UseMaximumSize | `
         Format-Volume -Force -Confirm:$false
+
+Troubleshooting
+...............
+
+Wnbd
+~~~~
+
+For ``WNBD`` troubleshooting, please check this page: https://github.com/cloudbase/wnbd#troubleshooting
+
+Privileges
+~~~~~~~~~~
+
+Most ``rbd-wnbd`` and ``rbd device`` commands require privileged rights. Make
+sure to use an elevated PowerShell or CMD command prompt.
+
+Crash dumps
+~~~~~~~~~~~
+
+Userspace crash dumps can be placed at a configurable location and enabled for all
+applications or just predefined ones, as outlined here:
+https://docs.microsoft.com/en-us/windows/win32/wer/collecting-user-mode-dumps.
+
+Whenever a Windows application crashes, an event will be submitted to the ``Application``
+Windows Event Log, having Event ID 1000. The entry will also include the process id,
+the faulting module name and path as well as the exception code.
+
+Please note that in order to analyze crash dumps, the debug symbols are required.
+We're currently buidling Ceph using ``MinGW``, so by default ``DWARF`` symbols will
+be embedded in the binaries. ``windbg`` does not support such symbols but ``gdb``
+can be used.
+
+``gdb`` can debug running Windows processes but it cannot open Windows minidumps.
+The following ``gdb`` fork may be used until this functionality is merged upstream:
+https://github.com/ssbssa/gdb/releases. As an alternative, ``DWARF`` symbols
+can be converted using ``cv2pdb`` but be aware that this tool has limitted C++
+support.
+
+ceph tool
+~~~~~~~~~
+
+The ``ceph`` Python tool can't be used on Windows natively yet. With minor
+changes it may run, but the main issue is that Python doesn't currently allow
+using ``AF_UNIX`` on Windows: https://bugs.python.org/issue33408
+
+As an alternative, the ``ceph`` tool can be used through Windows Subsystem
+for Linux (WSL). For example, running Windows RBD daemons may be contacted by
+using:
+
+.. code:: bash
+
+    ceph daemon /mnt/c/ProgramData/ceph/out/ceph-client.admin.61436.1209215304.asok help
+
+IO counters
+~~~~~~~~~~~
+
+Along with the standard RBD perf counters, the ``libwnbd`` IO counters may be
+retrieved using:
+
+.. code:: PowerShell
+
+    rbd-wnbd stats $imageName
+
+At the same time, WNBD driver counters can be fetched using:
+
+.. code:: PowerShell
+
+    wnbd-client stats $mappingId
+
+Note that the ``wnbd-client`` mapping identifier will be the full RBD image spec
+(the ``device`` column of the ``rbd device list`` output).
