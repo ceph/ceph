@@ -1,6 +1,7 @@
 import json
 import errno
 import logging
+from typing import TYPE_CHECKING
 
 import cephfs
 
@@ -19,6 +20,9 @@ from .exception import VolumeException
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
+
+if TYPE_CHECKING:
+    from volumes import Module
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +46,7 @@ def name_to_json(names):
     return json.dumps(namedict, indent=4, sort_keys=True)
 
 
-class VolumeClient(CephfsClient):
+class VolumeClient(CephfsClient["Module"]):
     def __init__(self, mgr):
         super().__init__(mgr)
         # volume specification
