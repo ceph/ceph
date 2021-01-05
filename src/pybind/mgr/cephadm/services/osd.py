@@ -10,6 +10,7 @@ from ceph.utils import datetime_to_str, str_to_datetime
 
 from datetime import datetime
 import orchestrator
+from cephadm.serve import CephadmServe
 from cephadm.utils import forall_hosts
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
@@ -106,7 +107,7 @@ class OSDService(CephService):
                     host=host,
                     daemon_type='osd',
                 )
-                self.mgr._create_daemon(
+                CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)
 
