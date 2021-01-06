@@ -1565,6 +1565,8 @@ def exec_test():
             opt_rotate_logs = True
         elif f == '--run-all-tests':
             opt_exit_on_test_failure = False
+        elif f == '--debug':
+            log.setLevel(logging.DEBUG)
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
