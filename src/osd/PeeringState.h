@@ -379,7 +379,8 @@ public:
     /// Notification of removal complete, t must be populated to complete removal
     virtual void on_removal(ObjectStore::Transaction &t) = 0;
     /// Perform incremental removal work
-    virtual void do_delete_work(ObjectStore::Transaction &t) = 0;
+    virtual ghobject_t do_delete_work(ObjectStore::Transaction &t,
+      ghobject_t _next) = 0;
 
     // ======================= PG Merge =========================
     virtual void clear_ready_to_merge() = 0;
@@ -1220,6 +1221,8 @@ public:
       boost::statechart::custom_reaction< DeleteSome >,
       boost::statechart::transition<DeleteInterrupted, WaitDeleteReserved>
       > reactions;
+    ghobject_t next;
+    ceph::mono_clock::time_point start;
     explicit Deleting(my_context ctx);
     boost::statechart::result react(const DeleteSome &evt);
     void exit();

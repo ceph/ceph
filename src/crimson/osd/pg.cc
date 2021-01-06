@@ -297,7 +297,8 @@ void PG::prepare_write(pg_info_t &info,
   }
 }
 
-void PG::do_delete_work(ceph::os::Transaction &t)
+ghobject_t PG::do_delete_work(ceph::os::Transaction &t,
+  ghobject_t _next)
 {
   // TODO
   shard_services.dec_pg_num();

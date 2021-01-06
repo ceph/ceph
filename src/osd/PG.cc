@@ -3812,7 +3812,8 @@ void PG::C_DeleteMore::complete(int r) {
   delete this;
 }
 
-void PG::do_delete_work(ObjectStore::Transaction &t)
+ghobject_t PG::do_delete_work(ObjectStore::Transaction &t,
+                        ghobject_t _next)
 {
   dout(10) << __func__ << dendl;
 
@@ -3838,24 +3839,44 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
       osd->sleep_timer.add_event_at(delete_schedule_time,
 				    delete_requeue_callback);
       dout(20) << __func__ << " Delete scheduled at " << delete_schedule_time << dendl;
-      return;
+      return _next;
     }
   }
 
   delete_needs_sleep = true;
 
+  ghobject_t next;
+
   vector<ghobject_t> olist;
   int max = std::min(osd->store->get_ideal_list_max(),
 		     (int)cct->_conf->osd_target_transaction_size);
-  ghobject_t next;
+
   osd->store->collection_list(
     ch,
-    next,
+    _next,
     ghobject_t::get_max(),
     max,
     &olist,
     &next);
   dout(20) << __func__ << " " << olist << dendl;
+
+  // make sure we've removed everything
+  // by one more listing from the beginning
+  if (_next != ghobject_t() && olist.empty()) {
+    next = ghobject_t();
+    osd->store->collection_list(
+      ch,
+      next,
+      ghobject_t::get_max(),
+      max,
+      &olist,
+      &next);
+    if (!olist.empty()) {
+      dout(0) << __func__ << " additional unexpected onode list"
+              <<" (new onodes has appeared since PG removal started"
+              << olist << dendl;
+    }
+  }
 
   OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
   int64_t num = 0;
@@ -3879,7 +3900,6 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
     Context *fin = new C_DeleteMore(this, get_osdmap_epoch());
     t.register_on_commit(fin);
   } else {
-    dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
       _exit(1);
     }
@@ -3914,6 +3934,7 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
       osd->logger->dec(l_osd_pg_removing);
     }
   }
+  return next;
 }
 
 int PG::pg_stat_adjust(osd_stat_t *ns)

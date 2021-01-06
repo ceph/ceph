@@ -469,7 +469,8 @@ public:
     return std::make_unique<PG::PGLogEntryHandler>(this, &t);
   }
 
-  void do_delete_work(ObjectStore::Transaction &t) override;
+  ghobject_t do_delete_work(ObjectStore::Transaction &t,
+    ghobject_t _next) override;
 
   void clear_ready_to_merge() override;
   void set_not_ready_to_merge_target(pg_t pgid, pg_t src) override;

@@ -273,7 +273,8 @@ public:
   void on_removal(ceph::os::Transaction &t) final {
     // TODO
   }
-  void do_delete_work(ceph::os::Transaction &t) final;
+  ghobject_t do_delete_work(ceph::os::Transaction &t,
+    ghobject_t _next) final;
 
   // merge/split not ready
   void clear_ready_to_merge() final {}
