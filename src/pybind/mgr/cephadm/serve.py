@@ -136,8 +136,8 @@ class CephadmServe:
 
             if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
                 self.log.debug(f"Logging `{host}` into custom registry")
-                r = self.mgr._registry_login(host, self.mgr.registry_url,
-                                             self.mgr.registry_username, self.mgr.registry_password)
+                r = self._registry_login(host, self.mgr.registry_url,
+                                         self.mgr.registry_username, self.mgr.registry_password)
                 if r:
                     bad_hosts.append(r)
 
@@ -797,8 +797,8 @@ class CephadmServe:
                 daemon_spec.extra_args.append('--allow-ptrace')
 
             if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
-                self.mgr._registry_login(daemon_spec.host, self.mgr.registry_url,
-                                         self.mgr.registry_username, self.mgr.registry_password)
+                self._registry_login(daemon_spec.host, self.mgr.registry_url,
+                                     self.mgr.registry_username, self.mgr.registry_password)
 
             daemon_spec.extra_args.extend(['--config-json', '-'])
 
@@ -973,8 +973,8 @@ class CephadmServe:
         if not host:
             raise OrchestratorError('no hosts defined')
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
-            self.mgr._registry_login(host, self.mgr.registry_url,
-                                     self.mgr.registry_username, self.mgr.registry_password)
+            self._registry_login(host, self.mgr.registry_url,
+                                 self.mgr.registry_username, self.mgr.registry_password)
         out, err, code = self._run_cephadm(
             host, '', 'pull', [],
             image=image_name,
@@ -996,3 +996,19 @@ class CephadmServe:
             msg = 'Failed to pull %s on %s: Cannot decode JSON' % (image_name, host)
             self.log.exception('%s: \'%s\'' % (msg, '\n'.join(out)))
             raise OrchestratorError(msg)
+
+    # function responsible for logging single host into custom registry
+    def _registry_login(self, host: str, url: Optional[str], username: Optional[str], password: Optional[str]) -> Optional[str]:
+        self.log.debug(f"Attempting to log host {host} into custom registry @ {url}")
+        # want to pass info over stdin rather than through normal list of args
+        args_str = json.dumps({
+            'url': url,
+            'username': username,
+            'password': password,
+        })
+        out, err, code = self._run_cephadm(
+            host, 'mon', 'registry-login',
+            ['--registry-json', '-'], stdin=args_str, error_ok=True)
+        if code:
+            return f"Host {host} failed to login to {url} as {username} with given password"
+        return None
