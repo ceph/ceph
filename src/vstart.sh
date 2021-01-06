@@ -408,8 +408,7 @@ case $1 in
         shift
         ;;
     -o)
-        extra_conf="$extra_conf	$2
-"
+        extra_conf+=$'\n'"$2"
         shift
         ;;
     --cache)
@@ -549,6 +548,21 @@ done
 
 }
 
+format_conf() {
+    local opts=$1
+    local indent="        "
+    local opt
+    local formatted
+    while read -r opt; do
+        if [ -z "$formatted" ]; then
+            formatted="${opt}"
+        else
+            formatted+=$'\n'${indent}${opt}
+        fi
+    done <<< "$opts"
+    echo "$formatted"
+}
+
 prepare_conf() {
     local DAEMONOPTS="
         log file = $CEPH_OUT_DIR/\$name.log
@@ -565,22 +579,16 @@ prepare_conf() {
 
     local msgr_conf=''
     if [ $msgr -eq 21 ]; then
-        msgr_conf="
-        ms bind msgr2 = true
-        ms bind msgr1 = true
-";
+        msgr_conf="ms bind msgr2 = true
+                   ms bind msgr1 = true"
     fi
     if [ $msgr -eq 2 ]; then
-	msgr_conf="
-        ms bind msgr2 = true
-        ms bind msgr1 = false
-";
+        msgr_conf="ms bind msgr2 = true
+                   ms bind msgr1 = false"
     fi
     if [ $msgr -eq 1 ]; then
-	msgr_conf="
-        ms bind msgr2 = false
-        ms bind msgr1 = true
-";
+        msgr_conf="ms bind msgr2 = false
+                   ms bind msgr1 = true"
     fi
 
     wconf <<EOF
@@ -608,8 +616,8 @@ prepare_conf() {
         enable experimental unrecoverable data corrupting features = *
         osd_crush_chooseleaf_type = 0
         debug asok assert abort = true
-$msgr_conf
-$extra_conf
+        $(format_conf "${msgr_conf}")
+        $(format_conf "${extra_conf}")
 EOF
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF
@@ -683,8 +691,7 @@ EOF
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
-
-$extra_conf
+        $(format_conf "${extra_conf}")
 EOF
 	do_rgw_conf
 	wconf << EOF
@@ -693,13 +700,13 @@ $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
         mds root ino uid = `id -u`
         mds root ino gid = `id -g`
-$extra_conf
+        $(format_conf "${extra_conf}")
 [mgr]
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
         cephadm path = $CEPH_ROOT/src/cephadm/cephadm
 $DAEMONOPTS
-$extra_conf
+        $(format_conf "${extra_conf}")
 [osd]
 $DAEMONOPTS
         osd_check_max_object_name_len_on_startup = false
@@ -726,12 +733,12 @@ $BLUESTORE_OPTS
         kstore fsck on mount = true
         osd objectstore = $objectstore
 $COSDSHORT
-$extra_conf
+        $(format_conf "${extra_conf}")
 [mon]
         mgr initial modules = $mgr_modules
 $DAEMONOPTS
 $CMONDEBUG
-$extra_conf
+        $(format_conf "${extra_conf}")
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
 EOF
