@@ -22,11 +22,11 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_UPGRADE_ORDER
+    CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo
 from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
 
 if TYPE_CHECKING:
-    from cephadm.module import CephadmOrchestrator, ContainerInspectInfo
+    from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,9 @@ class CephadmServe:
     """
     This module contains functions that are executed in the
     serve() thread. Thus they don't block the CLI.
+
+    Please see the `Note regarding network calls from CLI handlers`
+    chapter in the cephadm developer guide.
 
     On the other hand, These function should *not* be called form
     CLI handlers, to avoid blocking the CLI
@@ -691,7 +694,7 @@ class CephadmServe:
         digests: Dict[str, ContainerInspectInfo] = {}
         for container_image_ref in set(settings.values()):
             if not is_repo_digest(container_image_ref):
-                image_info = self.mgr._get_container_image_info(container_image_ref)
+                image_info = self._get_container_image_info(container_image_ref)
                 if image_info.repo_digest:
                     assert is_repo_digest(image_info.repo_digest), image_info
                 digests[container_image_ref] = image_info
@@ -960,3 +963,36 @@ class CephadmServe:
                     'cephadm exited with an error code: %d, stderr:%s' % (
                         code, '\n'.join(err)))
             return out, err, code
+
+    def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
+        # pick a random host...
+        host = None
+        for host_name in self.mgr.inventory.keys():
+            host = host_name
+            break
+        if not host:
+            raise OrchestratorError('no hosts defined')
+        if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
+            self.mgr._registry_login(host, self.mgr.registry_url,
+                                     self.mgr.registry_username, self.mgr.registry_password)
+        out, err, code = self._run_cephadm(
+            host, '', 'pull', [],
+            image=image_name,
+            no_fsid=True,
+            error_ok=True)
+        if code:
+            raise OrchestratorError('Failed to pull %s on %s: %s' % (
+                image_name, host, '\n'.join(out)))
+        try:
+            j = json.loads('\n'.join(out))
+            r = ContainerInspectInfo(
+                j['image_id'],
+                j.get('ceph_version'),
+                j.get('repo_digest')
+            )
+            self.log.debug(f'image {image_name} -> {r}')
+            return r
+        except (ValueError, KeyError) as _:
+            msg = 'Failed to pull %s on %s: Cannot decode JSON' % (image_name, host)
+            self.log.exception('%s: \'%s\'' % (msg, '\n'.join(out)))
+            raise OrchestratorError(msg)

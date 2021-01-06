@@ -142,12 +142,6 @@ def host_exists(hostname_position: int = 1) -> Callable:
     return inner
 
 
-class ContainerInspectInfo(NamedTuple):
-    image_id: str
-    ceph_version: Optional[str]
-    repo_digest: Optional[str]
-
-
 class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                           metaclass=CLICommandMeta):
 
@@ -2231,39 +2225,6 @@ To check that the host is reachable:
     def apply_cephadm_exporter(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
-    def _get_container_image_info(self, image_name: str) -> ContainerInspectInfo:
-        # pick a random host...
-        host = None
-        for host_name in self.inventory.keys():
-            host = host_name
-            break
-        if not host:
-            raise OrchestratorError('no hosts defined')
-        if self.cache.host_needs_registry_login(host) and self.registry_url:
-            self._registry_login(host, self.registry_url,
-                                 self.registry_username, self.registry_password)
-        out, err, code = CephadmServe(self)._run_cephadm(
-            host, '', 'pull', [],
-            image=image_name,
-            no_fsid=True,
-            error_ok=True)
-        if code:
-            raise OrchestratorError('Failed to pull %s on %s: %s' % (
-                image_name, host, '\n'.join(out)))
-        try:
-            j = json.loads('\n'.join(out))
-            r = ContainerInspectInfo(
-                j['image_id'],
-                j.get('ceph_version'),
-                j.get('repo_digest')
-            )
-            self.log.debug(f'image {image_name} -> {r}')
-            return r
-        except (ValueError, KeyError) as _:
-            msg = 'Failed to pull %s on %s: Cannot decode JSON' % (image_name, host)
-            self.log.exception('%s: \'%s\'' % (msg, '\n'.join(out)))
-            raise OrchestratorError(msg)
-
     @trivial_completion
     def upgrade_check(self, image: str, version: str) -> str:
         if self.inventory.get_host_with_state("maintenance"):
@@ -2276,7 +2237,7 @@ To check that the host is reachable:
         else:
             raise OrchestratorError('must specify either image or version')
 
-        image_info = self._get_container_image_info(target_name)
+        image_info = CephadmServe(self)._get_container_image_info(target_name)
         self.log.debug(f'image info {image} -> {image_info}')
         r: dict = {
             'target_name': target_name,
