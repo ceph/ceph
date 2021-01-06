@@ -24,6 +24,7 @@
 #include "include/uuid.h"
 #include "include/ceph_fs.h"
 #include "common/dout.h"
+#include "common/ref.h"
 #include "common/strtol.h"
 #include "common/RefCountedObj.h"
 #include "osdc/Striper.h"
@@ -126,17 +127,17 @@ using namespace libradosstriper;
  * struct handling the data needed to pass to the call back
  * function in asynchronous operations
  */
-struct CompletionData : RefCountedObject {
+struct CompletionData : RefCountedObject, CompletionCounter {
   /// complete method
   void complete(int r);
   /// striper to be used to handle the write completion
-  libradosstriper::RadosStriperImpl *m_striper;
+  ceph::ref_t<libradosstriper::RadosStriperImpl> m_striper;
   /// striped object concerned by the write operation
   std::string m_soid;
   /// shared lock to be released at completion
   std::string m_lockCookie;
   /// completion handler
-  librados::IoCtxImpl::C_aio_Complete *m_ack;
+  librados::IoCtxImpl::C_aio_Complete *m_ack = nullptr;
 protected:
   CompletionData(libradosstriper::RadosStriperImpl * striper,
 		 const std::string& soid,
@@ -152,8 +153,8 @@ CompletionData::CompletionData
  const std::string& lockCookie,
  librados::AioCompletionImpl *userCompletion) :
   RefCountedObject(striper->cct()),
-  m_striper(striper), m_soid(soid), m_lockCookie(lockCookie), m_ack(0) {
-  m_striper->get();
+  CompletionCounter(striper),
+  m_striper(striper), m_soid(soid), m_lockCookie(lockCookie) {
   if (userCompletion) {
     m_ack = new librados::IoCtxImpl::C_aio_Complete(userCompletion);
     userCompletion->io = striper->m_ioCtxImpl;
@@ -162,7 +163,6 @@ CompletionData::CompletionData
 
 CompletionData::~CompletionData() {
   if (m_ack) delete m_ack;
-  m_striper->put();
 }
 
 void CompletionData::complete(int r) {
@@ -322,9 +322,9 @@ private:
  * struct handling the data needed to pass to the call back
  * function in asynchronous truncate operations
  */
-struct TruncateCompletionData : RefCountedObject {
+struct TruncateCompletionData : RefCountedObject, CompletionCounter {
   /// striper to be used
-  libradosstriper::RadosStriperImpl *m_striper;
+  ceph::ref_t<libradosstriper::RadosStriperImpl> m_striper;
   /// striped object concerned by the truncate operation
   std::string m_soid;
   /// the final size of the truncated object
@@ -337,20 +337,18 @@ private:
 			 const std::string& soid,
 			 uint64_t size) :
     RefCountedObject(striper->cct()),
+    CompletionCounter(striper),
     m_striper(striper), m_soid(soid), m_size(size) {
-    m_striper->get();
   }
   /// destructor
-  ~TruncateCompletionData() override {
-    m_striper->put();
-  }
+  ~TruncateCompletionData() override {}
 };
 
 /**
  * struct handling the data needed to pass to the call back
  * function in asynchronous read operations of a Rados File
  */
-struct RadosReadCompletionData : RefCountedObject {
+struct RadosReadCompletionData : RefCountedObject, CompletionCounter {
   /// the multi asynch io completion object to be used
   ceph::ref_t<MultiAioCompletionImpl> m_multiAioCompl;
   /// the expected number of bytes
@@ -367,6 +365,7 @@ private:
 			  bufferlist *bl,
 			  CephContext *context) :
     RefCountedObject(context),
+    CompletionCounter(striper),
     m_multiAioCompl(std::move(multiAioCompl)),
     m_expectedBytes(expectedBytes),
     m_bl(bl) {}
@@ -454,7 +453,7 @@ private:
 ///////////////////////// constructor /////////////////////////////
 
 libradosstriper::RadosStriperImpl::RadosStriperImpl(librados::IoCtx& ioctx, librados::IoCtxImpl *ioctx_impl) :
-  m_refCnt(0), m_radosCluster(ioctx), m_ioCtx(ioctx), m_ioCtxImpl(ioctx_impl),
+  m_radosCluster(ioctx), m_ioCtx(ioctx), m_ioCtxImpl(ioctx_impl),
   m_layout(default_file_layout) {}
 
 ///////////////////////// layout /////////////////////////////
@@ -772,7 +771,7 @@ int libradosstriper::RadosStriperImpl::aio_flush()
     return ret;
   //wait all CompletionData are released
   std::unique_lock l{lock};
-  cond.wait(l, [this] {return m_refCnt <= 1;});
+  cond.wait(l, [this] {return completions == 0;});
   return ret;
 }
 

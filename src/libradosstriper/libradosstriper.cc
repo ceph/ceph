@@ -153,7 +153,6 @@ int libradosstriper::RadosStriper::striper_create(librados::IoCtx& ioctx,
 {
   try {
     striper->rados_striper_impl = new libradosstriper::RadosStriperImpl(ioctx, ioctx.io_ctx_impl);
-    striper->rados_striper_impl->get();
   } catch (int rc) {
     return rc;
   }

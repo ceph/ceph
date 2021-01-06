@@ -17,8 +17,6 @@
 
 #include <string>
 
-#include <boost/intrusive_ptr.hpp>
-
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/radosstriper/libradosstriper.h"
@@ -29,10 +27,11 @@
 #include "librados/AioCompletionImpl.h"
 #include "common/RefCountedObj.h"
 #include "common/ceph_context.h"
+#include "common/ref.h"
 
 namespace libradosstriper {
 
-struct RadosStriperImpl {
+struct RadosStriperImpl : RefCountedObject {
 
   /**
    * exception wrapper around an error code
@@ -108,23 +107,6 @@ struct RadosStriperImpl {
   // done via a syncrhonous call after the completion of all other removals.
   // These are done asynchrounously and in parallel
   int aio_remove(const std::string& soid, librados::AioCompletionImpl *c, int flags=0);
-
-  // reference counting
-  void get() {
-    std::lock_guard l{lock};
-    m_refCnt ++ ;
-  }
-  void put() {
-    bool deleteme = false;
-    lock.lock();
-    m_refCnt --;
-    if (m_refCnt == 0)
-      deleteme = true;
-    cond.notify_all();
-    lock.unlock();
-    if (deleteme)
-      delete this;
-  }
 
   // objectid manipulation
   std::string getObjectId(const object_t& soid, long long unsigned objectno);
@@ -255,11 +237,11 @@ struct RadosStriperImpl {
     return (CephContext*)m_radosCluster.cct();
   }
 
-  // reference counting
-  std::condition_variable cond;
-  int m_refCnt;
-  std::mutex lock;
-
+  // Completion count
+  ceph::condition_variable cond;
+  ceph::mutex lock = ceph::make_mutex("libradosstriper::CompletionCounter_lock");
+  unsigned completions = 0;
+  friend class CompletionCounter;
 
   // Context
   librados::Rados m_radosCluster;
@@ -269,5 +251,21 @@ struct RadosStriperImpl {
   // Default layout
   ceph_file_layout m_layout;
 };
+
+class CompletionCounter {
+protected:
+  CompletionCounter(ceph::ref_t<RadosStriperImpl> s) : striper(std::move(s)) {
+    std::scoped_lock locker(striper->lock);
+    striper->completions++;
+  }
+  virtual ~CompletionCounter() {
+    std::scoped_lock locker(striper->lock);
+    --striper->completions;
+    striper->cond.notify_all();
+  }
+private:
+  ceph::ref_t<RadosStriperImpl> striper;
+};
+
 }
 #endif
