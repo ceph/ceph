@@ -9176,11 +9176,11 @@ void Server::_logged_peer_rename(MDRequestRef& mdr,
       encode(exported_client_metadata_map, reply->inode_export);
       reply->inode_export.claim_append(inodebl);
       reply->inode_export_v = srcdnl->get_inode()->get_version();
+      mdr->more()->is_inode_exporter = true;
     }
 
     // remove mdr auth pin
     mdr->auth_unpin(srcdnl->get_inode());
-    mdr->more()->is_inode_exporter = true;
 
     if (srcdnl->get_inode()->is_dirty())
       srcdnl->get_inode()->mark_clean();
