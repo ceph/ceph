@@ -1114,55 +1114,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                                    executable_path))
         return executable_path
 
-    @contextmanager
-    def _remote_connection(self,
-                           host: str,
-                           addr: Optional[str] = None,
-                           ) -> Iterator[Tuple["BaseConnection", Any]]:
-        if not addr and host in self.inventory:
-            addr = self.inventory.get_addr(host)
-
-        self.offline_hosts_remove(host)
-
-        try:
-            try:
-                if not addr:
-                    raise OrchestratorError("host address is empty")
-                conn, connr = self._get_connection(addr)
-            except OSError as e:
-                self._reset_con(host)
-                msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there: {str(e)}"
-                raise execnet.gateway_bootstrap.HostNotFound(msg)
-
-            yield (conn, connr)
-
-        except execnet.gateway_bootstrap.HostNotFound as e:
-            # this is a misleading exception as it seems to be thrown for
-            # any sort of connection failure, even those having nothing to
-            # do with "host not found" (e.g., ssh key permission denied).
-            self.offline_hosts.add(host)
-            self._reset_con(host)
-
-            user = self.ssh_user if self.mode == 'root' else 'cephadm'
-            if str(e).startswith("Can't communicate"):
-                msg = str(e)
-            else:
-                msg = f'''Failed to connect to {host} ({addr}).
-Please make sure that the host is reachable and accepts connections using the cephadm SSH key
-
-To add the cephadm SSH key to the host:
-> ceph cephadm get-pub-key > ~/ceph.pub
-> ssh-copy-id -f -i ~/ceph.pub {user}@{host}
-
-To check that the host is reachable:
-> ceph cephadm get-ssh-config > ssh_config
-> ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
-> ssh -F ssh_config -i ~/cephadm_private_key {user}@{host}'''
-            raise OrchestratorError(msg) from e
-        except Exception as ex:
-            self.log.exception(ex)
-            raise
-
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         if daemon_type in CEPH_TYPES or \

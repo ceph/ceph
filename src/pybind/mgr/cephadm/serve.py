@@ -2,12 +2,14 @@ import datetime
 import json
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, Callable, cast, Set, Dict, Any, Union, Tuple
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Optional, List, Callable, cast, Set, Dict, Any, Union, Tuple, Iterator
 
 from cephadm import remotes
 
 try:
     import remoto
+    import execnet.gateway_bootstrap
 except ImportError:
     remoto = None
 
@@ -27,6 +29,7 @@ from orchestrator._interface import daemon_type_to_service, service_to_daemon_ty
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
+    from remoto.backends import BaseConnection
 
 logger = logging.getLogger(__name__)
 
@@ -348,7 +351,7 @@ class CephadmServe:
         config = self.mgr.get_minimal_ceph_conf()
 
         try:
-            with self.mgr._remote_connection(host) as tpl:
+            with self._remote_connection(host) as tpl:
                 conn, connr = tpl
                 out, err, code = remoto.process.check(
                     conn,
@@ -890,7 +893,7 @@ class CephadmServe:
 
         bypass_image = ('cephadm-exporter',)
 
-        with self.mgr._remote_connection(host, addr) as tpl:
+        with self._remote_connection(host, addr) as tpl:
             conn, connr = tpl
             assert image or entity
             # Skip the image check for daemons deployed that are not ceph containers
@@ -1016,10 +1019,59 @@ class CephadmServe:
     def _deploy_cephadm_binary(self, host: str) -> bool:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
-        with self.mgr._remote_connection(host) as tpl:
+        with self._remote_connection(host) as tpl:
             conn, _connr = tpl
             _out, _err, code = remoto.process.check(
                 conn,
                 ['tee', '-', '/var/lib/ceph/{}/cephadm'.format(self.mgr._cluster_fsid)],
                 stdin=self.mgr._cephadm.encode('utf-8'))
         return code == 0
+
+    @contextmanager
+    def _remote_connection(self,
+                           host: str,
+                           addr: Optional[str] = None,
+                           ) -> Iterator[Tuple["BaseConnection", Any]]:
+        if not addr and host in self.mgr.inventory:
+            addr = self.mgr.inventory.get_addr(host)
+
+        self.mgr.offline_hosts_remove(host)
+
+        try:
+            try:
+                if not addr:
+                    raise OrchestratorError("host address is empty")
+                conn, connr = self.mgr._get_connection(addr)
+            except OSError as e:
+                self.mgr._reset_con(host)
+                msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there: {str(e)}"
+                raise execnet.gateway_bootstrap.HostNotFound(msg)
+
+            yield (conn, connr)
+
+        except execnet.gateway_bootstrap.HostNotFound as e:
+            # this is a misleading exception as it seems to be thrown for
+            # any sort of connection failure, even those having nothing to
+            # do with "host not found" (e.g., ssh key permission denied).
+            self.mgr.offline_hosts.add(host)
+            self.mgr._reset_con(host)
+
+            user = self.mgr.ssh_user if self.mgr.mode == 'root' else 'cephadm'
+            if str(e).startswith("Can't communicate"):
+                msg = str(e)
+            else:
+                msg = f'''Failed to connect to {host} ({addr}).
+Please make sure that the host is reachable and accepts connections using the cephadm SSH key
+
+To add the cephadm SSH key to the host:
+> ceph cephadm get-pub-key > ~/ceph.pub
+> ssh-copy-id -f -i ~/ceph.pub {user}@{host}
+
+To check that the host is reachable:
+> ceph cephadm get-ssh-config > ssh_config
+> ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
+> ssh -F ssh_config -i ~/cephadm_private_key {user}@{host}'''
+            raise OrchestratorError(msg) from e
+        except Exception as ex:
+            self.log.exception(ex)
+            raise
