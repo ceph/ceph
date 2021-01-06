@@ -576,7 +576,7 @@ class TestCephadm(object):
             (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.add_cephadm_exporter),
         ]
     )
-    @mock.patch("cephadm.module.CephadmOrchestrator._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
+    @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_daemon_add(self, spec: ServiceSpec, meth, cephadm_module):
@@ -743,7 +743,7 @@ class TestCephadm(object):
             (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.apply_cephadm_exporter),
         ]
     )
-    @mock.patch("cephadm.module.CephadmOrchestrator._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
+    @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
