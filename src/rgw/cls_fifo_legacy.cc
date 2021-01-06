@@ -32,10 +32,6 @@
 #include "cls/fifo/cls_fifo_types.h"
 #include "cls/fifo/cls_fifo_ops.h"
 
-#include "librados/AioCompletionImpl.h"
-
-#include "rgw_tools.h"
-
 #include "cls_fifo_legacy.h"
 
 namespace rgw::cls::fifo {
@@ -379,67 +375,6 @@ struct partinfo_completion : public lr::ObjectOperationCompletion {
     if (rp) {
       *rp = r;
     }
-  }
-};
-
-template<typename T>
-struct Completion {
-private:
-  lr::AioCompletion* _cur = nullptr;
-  lr::AioCompletion* _super;
-public:
-
-  using Ptr = std::unique_ptr<T>;
-
-  lr::AioCompletion* cur() const {
-    return _cur;
-  }
-  lr::AioCompletion* super() const {
-    return _super;
-  }
-
-  Completion(lr::AioCompletion* super) : _super(super) {
-    super->pc->get();
-  }
-
-  ~Completion() {
-    if (_super) {
-      _super->pc->put();
-    }
-    if (_cur)
-      _cur->release();
-    _super = nullptr;
-    _cur = nullptr;
-  }
-
-  // The only times that aio_operate can return an error are:
-  // 1. The completion contains a null pointer. This should just
-  //    crash, and in our case it does.
-  // 2. An attempt is made to write to a snapshot. RGW doesn't use
-  //    snapshots, so we don't care.
-  //
-  // So we will just assert that initiating an Aio operation succeeds
-  // and not worry about recovering.
-  static lr::AioCompletion* call(Ptr&& p) {
-    p->_cur = lr::Rados::aio_create_completion(static_cast<void*>(p.get()),
-					       &cb);
-    auto c = p->_cur;
-    p.release();
-    return c;
-  }
-  static void complete(Ptr&& p, int r) {
-    auto c = p->_super;
-    p->_super = nullptr;
-    c->pc->put();
-    rgw_complete_aio_completion(c, r);
-  }
-
-  static void cb(lr::completion_t, void* arg) {
-    auto t = static_cast<T*>(arg);
-    auto r = t->_cur->get_return_value();
-    t->_cur->release();
-    t->_cur = nullptr;
-    t->handle(Ptr(t), r);
   }
 };
 
