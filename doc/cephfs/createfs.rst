@@ -77,6 +77,12 @@ If you have created more than one file system, and a client does not
 specify a file system when mounting, you can control which file system
 they will see by using the `ceph fs set-default` command.
 
+Adding a Data Pool to the File System 
+-------------------------------------
+
+See :ref:`adding-data-pool-to-file-system`.
+
+
 Using Erasure Coded pools with CephFS
 =====================================
 
