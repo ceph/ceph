@@ -244,4 +244,13 @@ cursorgen(std::string_view cursor_) {
   return { *gen_id, cursor };
 }
 
+inline std::pair<uint64_t, std::string_view>
+cursorgeno(std::optional<std::string_view> cursor) {
+  if (cursor) {
+    return cursorgen(*cursor);
+  } else {
+    return { 0, ""s };
+  }
+}
+
 #endif

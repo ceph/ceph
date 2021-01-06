@@ -13,6 +13,8 @@
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
+#include <boost/smart_ptr/intrusive_ptr.hpp>
+#include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #undef FMT_HEADER_ONLY
 #define FMT_HEADER_ONLY 1
@@ -119,12 +121,37 @@ class RGWDataChangesLog;
 
 class RGWDataChangesBE;
 
+class DataLogBackends
+  : private bc::flat_map<uint64_t, boost::intrusive_ptr<RGWDataChangesBE>> {
+  friend class GenTrim;
+
+  std::mutex m;
+public:
+
+  boost::intrusive_ptr<RGWDataChangesBE> head() {
+    std::unique_lock l(m);
+    auto i = end();
+    --i;
+    return i->second;
+  }
+  int list(int shard, int max_entries,
+	   std::vector<rgw_data_change_log_entry>& entries,
+	   std::optional<std::string_view> marker,
+	   std::string* out_marker, bool* truncated);
+  int trim_entries(int shard_id, std::string_view marker);
+  void trim_entries(int shard_id, std::string_view marker,
+		    librados::AioCompletion* c);
+  void set_zero(RGWDataChangesBE* be) {
+    emplace(0, be);
+  }
+};
+
 class RGWDataChangesLog {
   CephContext *cct;
   librados::IoCtx ioctx;
   rgw::BucketChangeObserver *observer = nullptr;
   const RGWZone* zone;
-  std::unique_ptr<RGWDataChangesBE> be;
+  DataLogBackends bes;
 
   const int num_shards;
   std::string get_prefix() {
@@ -213,16 +240,15 @@ public:
     bucket_filter = std::move(f);
   }
   // a marker that compares greater than any other
-  std::string_view max_marker() const;
+  std::string max_marker() const;
   std::string get_oid(uint64_t gen_id, int shard_id) const;
 };
 
-class RGWDataChangesBE {
+class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
 protected:
   librados::IoCtx& ioctx;
   CephContext* const cct;
   RGWDataChangesLog& datalog;
-  uint64_t gen_id;
 
   std::string get_oid(int shard_id) {
     return datalog.get_oid(gen_id, shard_id);
@@ -230,6 +256,8 @@ protected:
 public:
   using entries = std::variant<std::list<cls_log_entry>,
 			       std::vector<ceph::buffer::list>>;
+
+  const uint64_t gen_id;
 
   RGWDataChangesBE(librados::IoCtx& ioctx,
 		   RGWDataChangesLog& datalog,
