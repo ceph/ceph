@@ -24,6 +24,7 @@ from fnmatch import fnmatch
 from prettytable import PrettyTable, HEADER
 from signal import signal, SIGWINCH
 from termios import TIOCGWINSZ
+from typing import Optional
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -32,7 +33,9 @@ LONG_RUNNING_AVG = 0x4
 READ_CHUNK_SIZE = 4096
 
 
-def admin_socket(asok_path, cmd, format=''):
+def admin_socket(asok_path: str,
+                 cmd: str,
+                 format: Optional[str] = '') -> bytes:
     """
     Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
     path to the admin socket; cmd is a list of strings; format may be
