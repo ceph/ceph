@@ -2161,8 +2161,8 @@ class C_IO_Dir_Commit_Ops : public Context {
 public:
   C_IO_Dir_Commit_Ops(CDir *d, int pr,
 		      vector<CDir::dentry_commit_item> &&s, bufferlist &&bl,
-		      vector<dentry_key_t> &&r,
-		      mempool::mds_co::compact_set<mempool::mds_co::string> &&stale) :
+		      vector<string> &&r,
+		      mempool::mds_co::compact_set<mempool::mds_co::string> &&stales) :
     dir(d), op_prio(pr) {
     metapool = dir->mdcache->mds->mdsmap->get_metadata_pool();
     version = dir->get_version();
@@ -2170,7 +2170,7 @@ public:
     to_set.swap(s);
     dfts.swap(bl);
     to_remove.swap(r);
-    stale_items.swap(stale);
+    stale_items.swap(stales);
   }
 
   void finish(int r) override {
@@ -2186,14 +2186,14 @@ private:
   bool is_new;
   vector<CDir::dentry_commit_item> to_set;
   bufferlist dfts;
-  vector<dentry_key_t> to_remove;
+  vector<string> to_remove;
   mempool::mds_co::compact_set<mempool::mds_co::string> stale_items;
 };
 
 // This is not locked by mds_lock
 void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t version, bool _new,
 			    vector<dentry_commit_item> &to_set, bufferlist &dfts,
-                            vector<dentry_key_t>& to_remove,
+                            vector<string>& to_remove,
 			    mempool::mds_co::compact_set<mempool::mds_co::string> &stales)
 {
   dout(10) << __func__ << dendl;
@@ -2261,9 +2261,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     _rm.emplace(key);
   }
 
-  for (auto &k : to_remove) {
-    string key;
-    k.encode(key);
+  for (auto &key : to_remove) {
     unsigned size = key.length() + sizeof(__u32);
     if (write_size + size > max_write_size)
       commit_one();
@@ -2276,9 +2274,6 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   bufferlist bl;
   using ceph::encode;
   for (auto &item : to_set) {
-    string key;
-    item.key.encode(key);
-
     encode(item.first, bl);
     if (item.is_remote) {
       bl.append('L');         // remote link
@@ -2318,12 +2313,12 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
     }
     off += item.dft_len;
 
-    unsigned size = key.length() + bl.length() + 2 * sizeof(__u32);
+    unsigned size = item.key.length() + bl.length() + 2 * sizeof(__u32);
     if (write_size + size > max_write_size)
       commit_one();
 
     write_size += size;
-    _set[std::move(key)].swap(bl);
+    _set[std::move(item.key)].swap(bl);
   }
 
   commit_one(true);
@@ -2360,7 +2355,7 @@ void CDir::_omap_commit(int op_prio)
       ++count;
   }
 
-  vector<dentry_key_t> to_remove;
+  vector<string> to_remove;
   // reverve enough memories, which maybe larger than the actually needed
   to_remove.reserve(count);
 
@@ -2371,18 +2366,19 @@ void CDir::_omap_commit(int op_prio)
   bufferlist dfts(CEPH_PAGE_SIZE);
 
   auto write_one = [&](CDentry *dn) {
-    auto key = dn->key();
+    string key;
+    dn->key().encode(key);
 
     if (dn->last != CEPH_NOSNAP &&
 	snaps && try_trim_snap_dentry(dn, *snaps)) {
       dout(10) << " rm " << key << dendl;
-      to_remove.push_back(key);
+      to_remove.emplace_back(std::move(key));
       return;
     }
 
     if (dn->get_linkage()->is_null()) {
       dout(10) << " rm " << dn->get_name() << " " << *dn << dendl;
-      to_remove.push_back(key);
+      to_remove.emplace_back(std::move(key));
     } else {
       dout(10) << " set " << dn->get_name() << " " << *dn << dendl;
 
@@ -2394,7 +2390,7 @@ void CDir::_omap_commit(int op_prio)
         dfts.reserve(left + CEPH_PAGE_SIZE);
 
       auto& item = to_set.emplace_back();
-      item.key = key;
+      item.key = std::move(key);
       _parse_dentry(dn, item, snaps, dfts);
       item.dft_len = dfts.length() - off;
     }
