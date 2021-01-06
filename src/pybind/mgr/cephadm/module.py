@@ -1896,17 +1896,6 @@ To check that the host is reachable:
                 deps.append(dd.name())
         return sorted(deps)
 
-    def _deploy_cephadm_binary(self, host: str) -> bool:
-        # Use tee (from coreutils) to create a copy of cephadm on the target machine
-        self.log.info(f"Deploying cephadm binary to {host}")
-        with self._remote_connection(host) as tpl:
-            conn, _connr = tpl
-            _out, _err, code = remoto.process.check(
-                conn,
-                ['tee', '-', '/var/lib/ceph/{}/cephadm'.format(self._cluster_fsid)],
-                stdin=self._cephadm.encode('utf-8'))
-        return code == 0
-
     @forall_hosts
     def _remove_daemons(self, name: str, host: str) -> str:
         return CephadmServe(self)._remove_daemon(name, host)
