@@ -25,7 +25,6 @@ cmd2==1.2.1               # via cliff
 colorama==0.4.3           # via cmd2
 configobj==5.0.6          # via -r requirements.in
 configparser==3.5.0       # via -r requirements.in
-contextlib2==0.6.0.post1  # via raven
 cryptography==3.2         # via -r requirements.in, ansible, openstacksdk, paramiko, pyopenssl
 debtcollector==2.1.0      # via oslo.config, oslo.utils, python-keystoneclient
 decorator==4.4.2          # via dogpile.cache, openstacksdk
@@ -86,11 +85,11 @@ python-novaclient==17.1.0  # via -r requirements.in, python-openstackclient
 python-openstackclient==5.3.1  # via -r requirements.in
 pytz==2020.1              # via oslo.serialization, oslo.utils
 pyyaml==5.1.2             # via -r requirements.in, ansible, cliff, openstacksdk, oslo.config
-raven==6.0.0              # via -r requirements.in
 requests==2.22.0          # via -r requirements.in, apache-libcloud, keystoneauth1, oslo.config, python-cinderclient, python-keystoneclient
 requestsexceptions==1.4.0  # via openstacksdk
 rfc3986==1.4.0            # via oslo.config
 s3transfer==0.2.1         # via boto3
+sentry-sdk==0.19.5        # via teuthology
 simplejson==3.17.0        # via osc-lib, python-cinderclient, python-novaclient
 six==1.14.0               # via -r requirements.in, bcrypt, cliff, configobj, cryptography, debtcollector, keystoneauth1, munch, oslo.i18n, oslo.utils, pip-tools, pynacl, pyopenssl, pytest, python-cinderclient, python-dateutil, python-keystoneclient, python-openstackclient, tox, virtualenv
 stevedore==3.1.0          # via cliff, keystoneauth1, osc-lib, oslo.config, python-keystoneclient, python-openstackclient
