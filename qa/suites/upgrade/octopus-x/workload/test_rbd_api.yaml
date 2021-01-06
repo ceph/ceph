@@ -3,10 +3,10 @@ meta:
    librbd C and C++ api tests
 workload:
   full_sequential:
-    - print: "**** done start rbd/test_librbd.sh"
+    - print: "**** done start test_rbd_api.yaml"
     - workunit:
         branch: octopus
         clients:
           client.0:
               - rbd/test_librbd.sh
-    - print: "**** done end rbd/test_librbd.sh"
+    - print: "**** done end test_rbd_api.yaml"
