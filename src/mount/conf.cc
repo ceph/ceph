@@ -20,6 +20,7 @@
 
 extern "C" void mount_ceph_get_config_info(const char *config_file,
 					   const char *name,
+					   bool v2_addrs,
 					   struct ceph_config_info *cci)
 {
   int err;
@@ -53,9 +54,17 @@ extern "C" void mount_ceph_get_config_info(const char *config_file,
   for (const auto& mon : monc.monmap.addr_mons) {
     auto& eaddr = mon.first;
 
-    // For now, kernel client only accepts legacy addrs
-    if (!eaddr.is_legacy())
-      continue;
+    /*
+     * Filter v1 addrs if we're running in ms_mode=legacy. Filter
+     * v2 addrs for any other ms_mode.
+     */
+    if (v2_addrs) {
+      if (!eaddr.is_msgr2())
+	continue;
+    } else {
+      if (!eaddr.is_legacy())
+	continue;
+    }
 
     std::string addr;
     addr += eaddr.ip_only_to_str();
