@@ -25,6 +25,7 @@ openstack:
     size: 10 # GB
 overrides:
   ceph:
+    create_rbd_pool: true
     conf:
       osd:
         osd shutdown pgref assert: true
