@@ -466,22 +466,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.log.debug('_kick_serve_loop')
         self.event.set()
 
-    # function responsible for logging single host into custom registry
-    def _registry_login(self, host: str, url: Optional[str], username: Optional[str], password: Optional[str]) -> Optional[str]:
-        self.log.debug(f"Attempting to log host {host} into custom registry @ {url}")
-        # want to pass info over stdin rather than through normal list of args
-        args_str = json.dumps({
-            'url': url,
-            'username': username,
-            'password': password,
-        })
-        out, err, code = CephadmServe(self)._run_cephadm(
-            host, 'mon', 'registry-login',
-            ['--registry-json', '-'], stdin=args_str, error_ok=True)
-        if code:
-            return f"Host {host} failed to login to {url} as {username} with given password"
-        return None
-
     def serve(self) -> None:
         """
         The main loop of cephadm.
@@ -893,7 +877,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             break
         if not host:
             raise OrchestratorError('no hosts defined')
-        r = self._registry_login(host, url, username, password)
+        r = CephadmServe(self)._registry_login(host, url, username, password)
         if r is not None:
             return 1, '', r
         # if logins succeeded, store info
