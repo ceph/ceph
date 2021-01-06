@@ -9,9 +9,7 @@ Copyright (C) 2013 Inktank Storage, Inc.
 
 LGPL-2.1 or LGPL-3.0.  See file COPYING.
 """
-from __future__ import print_function
 import copy
-import errno
 import math
 import json
 import os
@@ -23,14 +21,18 @@ import sys
 import threading
 import uuid
 
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+
+
 # Flags are from MonCommand.h
 class Flag:
     NOFORWARD = (1 << 0)
     OBSOLETE = (1 << 1)
     DEPRECATED = (1 << 2)
-    MGR = (1<<3)
+    MGR = (1 << 3)
     POLL = (1 << 4)
     HIDDEN = (1 << 5)
+
 
 KWARG_EQUALS = "--([^=]+)=(.+)"
 KWARG_SPACE = "--([^=]+)"
@@ -168,10 +170,10 @@ class CephInt(CephArgtype):
             raise ArgumentValid("{0} doesn't represent an int".format(s))
         if len(self.range) == 2:
             if val < self.range[0] or val > self.range[1]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         elif len(self.range) == 1:
             if val < self.range[0]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         self.val = val
 
     def __str__(self):
@@ -203,10 +205,10 @@ class CephFloat(CephArgtype):
             raise ArgumentValid("{0} doesn't represent a float".format(s))
         if len(self.range) == 2:
             if val < self.range[0] or val > self.range[1]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         elif len(self.range) == 1:
             if val < self.range[0]:
-                raise ArgumentValid("{0} not in range {1}".format(val, self.range))
+                raise ArgumentValid(f"{val} not in range {self.range}")
         self.val = val
 
     def __str__(self):
@@ -226,7 +228,7 @@ class CephString(CephArgtype):
         from string import printable
         try:
             re.compile(goodchars)
-        except:
+        except re.error:
             raise ValueError('CephString(): "{0}" is not a valid RE'.
                              format(goodchars))
         self.goodchars = goodchars
@@ -291,7 +293,7 @@ class CephIPAddr(CephArgtype):
                 p = None
             try:
                 socket.inet_pton(socket.AF_INET, a)
-            except:
+            except OSError:
                 raise ArgumentValid('{0}: invalid IPv4 address'.format(a))
         else:
             # v6
@@ -302,7 +304,7 @@ class CephIPAddr(CephArgtype):
                 if s[end + 1] == ':':
                     try:
                         p = int(s[end + 2])
-                    except:
+                    except ValueError:
                         raise ArgumentValid('{0}: bad port number'.format(s))
                 a = s[1:end]
             else:
@@ -310,7 +312,7 @@ class CephIPAddr(CephArgtype):
                 p = None
             try:
                 socket.inet_pton(socket.AF_INET6, a)
-            except:
+            except OSError:
                 raise ArgumentValid('{0} not valid IPv6 address'.format(s))
         if p is not None and int(p) > 65535:
             raise ArgumentValid("{0} not a valid port number".format(p))
@@ -425,7 +427,7 @@ class CephName(CephArgtype):
                 if i != '*':
                     try:
                         i = int(i)
-                    except:
+                    except ValueError:
                         raise ArgumentFormat('osd id ' + i + ' not integer')
             self.nametype = t
         self.val = s
@@ -458,7 +460,7 @@ class CephOsdName(CephArgtype):
             i = s
         try:
             i = int(i)
-        except:
+        except ValueError:
             raise ArgumentFormat('osd id ' + i + ' not integer')
         if i < 0:
             raise ArgumentFormat('osd id {0} is less than 0'.format(i))
@@ -755,7 +757,7 @@ def descsort(sh1, sh2):
     return cmp(descsort_key(sh1), descsort_key(sh2))
 
 
-def parse_funcsig(sig):
+def parse_funcsig(sig: Sequence[Union[str, Dict[str, str]]]) -> List[argdesc]:
     """
     parse a single descriptor (array of strings or dicts) into a
     dict of function descriptor/validators (objects of CephXXX type)
@@ -798,7 +800,8 @@ def parse_funcsig(sig):
     return newsig
 
 
-def parse_json_funcsigs(s, consumer):
+def parse_json_funcsigs(s: str,
+                        consumer: str) -> Dict[str, Dict[str, List[argdesc]]]:
     """
     A function signature is mostly an array of argdesc; it's represented
     in JSON as
@@ -907,7 +910,12 @@ def matchnum(args, signature, partial=False):
     return matchcnt
 
 
-def store_arg(desc, d):
+ValidatedArgs = Dict[str, Union[bool, int, float, str,
+                                Tuple[str, str],
+                                Sequence[str]]]
+
+
+def store_arg(desc: argdesc, d: ValidatedArgs):
     '''
     Store argument described by, and held in, thanks to valid(),
     desc into the dictionary d, keyed by desc.name.  Three cases:
@@ -932,7 +940,10 @@ def store_arg(desc, d):
         d[desc.name] = desc.instance.val
 
 
-def validate(args, signature, flags=0, partial=False):
+def validate(args: List[str],
+             signature: Sequence[argdesc],
+             flags: Optional[int] = 0,
+             partial: Optional[bool] = False) -> ValidatedArgs:
     """
     validate(args, signature, flags=0, partial=False)
 
@@ -1107,7 +1118,7 @@ def validate(args, signature, flags=0, partial=False):
         raise ArgumentError("unused arguments: " + str(myargs))
 
     if flags & Flag.MGR:
-        d['target'] = ('mon-mgr','')
+        d['target'] = ('mon-mgr', '')
 
     if flags & Flag.POLL:
         d['poll'] = True
@@ -1116,7 +1127,9 @@ def validate(args, signature, flags=0, partial=False):
     return d
 
 
-def validate_command(sigdict, args, verbose=False):
+def validate_command(sigdict: Dict[str, Dict[str, Any]],
+                     args: Sequence[str],
+                     verbose: Optional[bool] = False) -> ValidatedArgs:
     """
     Parse positional arguments into a parameter dict, according to
     the command descriptions.
@@ -1217,14 +1230,15 @@ def validate_command(sigdict, args, verbose=False):
     else:
         bestcmds = [c for c in bestcmds
                     if not c.get('flags', 0) & (Flag.DEPRECATED | Flag.HIDDEN)]
-        bestcmds = bestcmds[:10] # top 10
-        print('no valid command found; {0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
+        bestcmds = bestcmds[:10]  # top 10
+        print('no valid command found; {0} closest matches:'.format(len(bestcmds)),
+              file=sys.stderr)
         for cmd in bestcmds:
             print(concise_sig(cmd['sig']), file=sys.stderr)
     return valid_dict
 
 
-def find_cmd_target(childargs):
+def find_cmd_target(childargs: List[str]) -> Tuple[str, str]:
     """
     Using a minimal validation, figure out whether the command
     should be sent to a monitor or an osd.  We do this before even
@@ -1307,9 +1321,10 @@ class RadosThread(threading.Thread):
             self.exception = e
 
 
-def run_in_thread(func, *args, **kwargs):
+def run_in_thread(func: Callable[[Any, Any], int],
+                  *args: Any, **kwargs: Any) -> int:
     timeout = kwargs.pop('timeout', 0)
-    if timeout == 0 or timeout == None:
+    if timeout == 0 or timeout is None:
         # python threading module will just get blocked if timeout is `None`,
         # otherwise it will keep polling until timeout or thread stops.
         # timeout in integer when converting it to nanoseconds, but since
@@ -1340,7 +1355,7 @@ def run_in_thread(func, *args, **kwargs):
         return t.retval
 
 
-def send_command_retry(*args, **kwargs):
+def send_command_retry(*args: Any, **kwargs: Any) -> Tuple[int, bytes, str]:
     while True:
         try:
             return send_command(*args, **kwargs)
@@ -1353,8 +1368,13 @@ def send_command_retry(*args, **kwargs):
             else:
                 raise
 
-def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
-                 verbose=False):
+
+def send_command(cluster,
+                 target: Optional[Tuple[str, str]] = ('mon', ''),
+                 cmd: Optional[List[str]] = None,
+                 inbuf: Optional[bytes] = b'',
+                 timeout: Optional[int] = 0,
+                 verbose: Optional[bool] = False) -> Tuple[int, bytes, str]:
     """
     Send a command to a daemon using librados's
     mon_command, osd_command, mgr_command, or pg_command.  Any bulk input data
@@ -1449,8 +1469,13 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
     return ret, outbuf, outs
 
 
-def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
-                 inbuf=b'', timeout=0, verbose=False):
+def json_command(cluster,
+                 target: Optional[Tuple[str, str]] = ('mon', ''),
+                 prefix: Optional[str] = None,
+                 argdict: Optional[Dict[str, str]] = None,
+                 inbuf: Optional[bytes] = b'',
+                 timeout: Optional[int] = 0,
+                 verbose: Optional[bool] = False) -> Tuple[int, bytes, str]:
     """
     Serialize a command and up a JSON command and send it with send_command() above.
     Prefix may be supplied separately or in argdict.  Any bulk input
