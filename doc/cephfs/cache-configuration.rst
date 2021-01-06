@@ -77,6 +77,11 @@ life for the counter. If the MDS is continually removing items from its cache,
 it will reach a steady state of ``-ln(0.5)/rate*threshold`` items removed per
 second.
 
+.. note:: Increasing the value of the confguration setting
+          ``mds_cache_trim_decay_rate`` leads to the MDS spending less time
+          trimming the cache. To increase the cache trimming rate, set a lower
+          value.
+
 The defaults are conservative and may need to be changed for production MDS with
 large cache sizes.
 
