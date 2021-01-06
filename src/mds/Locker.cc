@@ -2468,6 +2468,7 @@ bool Locker::revoke_stale_caps(Session *session)
 
   // invalidate all caps
   session->inc_cap_gen();
+  bool can_evict = !session->is_importing();
 
   bool ret = true;
   std::vector<CInode*> to_eval;
@@ -2486,7 +2487,7 @@ bool Locker::revoke_stale_caps(Session *session)
     if (!revoking)
       continue;
 
-    if (revoking & CEPH_CAP_ANY_WR) {
+    if ((revoking & CEPH_CAP_ANY_WR) && can_evict) {
       ret = false;
       break;
     }
