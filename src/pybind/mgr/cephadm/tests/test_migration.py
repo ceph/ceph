@@ -12,7 +12,7 @@ from cephadm.serve import CephadmServe
 from tests import mock
 
 
-@mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
 @mock.patch("cephadm.services.cephadmservice.RgwService.create_realm_zonegroup_zone", lambda _, __, ___: None)
 def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1', refresh_hosts=False):
@@ -60,7 +60,7 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
                 hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])]
 
 
-@mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
 def test_migrate_service_id_mon_one(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
         cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon.wrong', json.dumps({
@@ -92,7 +92,7 @@ def test_migrate_service_id_mon_one(cephadm_module: CephadmOrchestrator):
         )
 
 
-@mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
 def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
         cephadm_module.set_store(SPEC_STORE_PREFIX + 'mon', json.dumps({
@@ -135,7 +135,7 @@ def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
         )
 
 
-@mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('[]'))
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
 def test_migrate_service_id_mds_one(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
         cephadm_module.set_store(SPEC_STORE_PREFIX + 'mds', json.dumps({

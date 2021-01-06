@@ -2,7 +2,9 @@ import datetime
 import json
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, Callable, cast, Set, Dict, Any
+from typing import TYPE_CHECKING, Optional, List, Callable, cast, Set, Dict, Any, Union, Tuple
+
+from cephadm import remotes
 
 try:
     import remoto
@@ -19,8 +21,8 @@ import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 from cephadm.schedule import HostAssignment
-from cephadm.upgrade import CEPH_UPGRADE_ORDER
-from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest
+from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
+    CephadmNoImage, CEPH_UPGRADE_ORDER
 from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
 
 if TYPE_CHECKING:
@@ -193,7 +195,7 @@ class CephadmServe:
             return None
         self.log.debug(' checking %s' % host)
         try:
-            out, err, code = self.mgr._run_cephadm(
+            out, err, code = self._run_cephadm(
                 host, cephadmNoImage, 'check-host', [],
                 error_ok=True, no_fsid=True)
             self.mgr.cache.update_last_host_check(host)
@@ -211,7 +213,7 @@ class CephadmServe:
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self.mgr._run_cephadm(
+            out, err, code = self._run_cephadm(
                 host, 'mon', 'ls', [], no_fsid=True)
             if code:
                 return 'host %s cephadm ls returned %d: %s' % (
@@ -268,7 +270,7 @@ class CephadmServe:
 
     def _refresh_facts(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self.mgr._run_cephadm(
+            out, err, code = self._run_cephadm(
                 host, cephadmNoImage, 'gather-facts', [],
                 error_ok=True, no_fsid=True)
 
@@ -283,7 +285,7 @@ class CephadmServe:
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self.mgr._run_cephadm(
+            out, err, code = self._run_cephadm(
                 host, 'osd',
                 'ceph-volume',
                 ['--', 'inventory', '--format=json', '--filter-for-batch'])
@@ -298,7 +300,7 @@ class CephadmServe:
         except Exception as e:
             return 'host %s ceph-volume inventory failed: %s' % (host, e)
         try:
-            out, err, code = self.mgr._run_cephadm(
+            out, err, code = self._run_cephadm(
                 host, 'mon',
                 'list-networks',
                 [],
@@ -801,7 +803,7 @@ class CephadmServe:
                 'Reconfiguring' if reconfig else 'Deploying',
                 daemon_spec.name(), daemon_spec.host))
 
-            out, err, code = self.mgr._run_cephadm(
+            out, err, code = self._run_cephadm(
                 daemon_spec.host, daemon_spec.name(), 'deploy',
                 [
                     '--name', daemon_spec.name(),
@@ -850,7 +852,7 @@ class CephadmServe:
 
             args = ['--name', name, '--force']
             self.log.info('Removing daemon %s from %s' % (name, host))
-            out, err, code = self.mgr._run_cephadm(
+            out, err, code = self._run_cephadm(
                 host, name, 'rm-daemon', args)
             if not code:
                 # remove item from cache
@@ -860,3 +862,101 @@ class CephadmServe:
             self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].post_remove(daemon)
 
             return "Removed {} from host '{}'".format(name, host)
+
+    def _run_cephadm(self,
+                     host: str,
+                     entity: Union[CephadmNoImage, str],
+                     command: str,
+                     args: List[str],
+                     addr: Optional[str] = "",
+                     stdin: Optional[str] = "",
+                     no_fsid: Optional[bool] = False,
+                     error_ok: Optional[bool] = False,
+                     image: Optional[str] = "",
+                     env_vars: Optional[List[str]] = None,
+                     ) -> Tuple[List[str], List[str], int]:
+        """
+        Run cephadm on the remote host with the given command + args
+
+        Important: You probably don't want to run _run_cephadm from CLI handlers
+
+        :env_vars: in format -> [KEY=VALUE, ..]
+        """
+        self.log.debug(f"_run_cephadm : command = {command}")
+        self.log.debug(f"_run_cephadm : args = {args}")
+
+        bypass_image = ('cephadm-exporter',)
+
+        with self.mgr._remote_connection(host, addr) as tpl:
+            conn, connr = tpl
+            assert image or entity
+            # Skip the image check for daemons deployed that are not ceph containers
+            if not str(entity).startswith(bypass_image):
+                if not image and entity is not cephadmNoImage:
+                    image = self.mgr._get_container_image(entity)
+
+            final_args = []
+
+            if env_vars:
+                for env_var_pair in env_vars:
+                    final_args.extend(['--env', env_var_pair])
+
+            if image:
+                final_args.extend(['--image', image])
+            final_args.append(command)
+
+            if not no_fsid:
+                final_args += ['--fsid', self.mgr._cluster_fsid]
+
+            if self.mgr.container_init:
+                final_args += ['--container-init']
+
+            final_args += args
+
+            self.log.debug('args: %s' % (' '.join(final_args)))
+            if self.mgr.mode == 'root':
+                if stdin:
+                    self.log.debug('stdin: %s' % stdin)
+                script = 'injected_argv = ' + json.dumps(final_args) + '\n'
+                if stdin:
+                    script += 'injected_stdin = ' + json.dumps(stdin) + '\n'
+                script += self.mgr._cephadm
+                python = connr.choose_python()
+                if not python:
+                    raise RuntimeError(
+                        'unable to find python on %s (tried %s in %s)' % (
+                            host, remotes.PYTHONS, remotes.PATH))
+                try:
+                    out, err, code = remoto.process.check(
+                        conn,
+                        [python, '-u'],
+                        stdin=script.encode('utf-8'))
+                except RuntimeError as e:
+                    self.mgr._reset_con(host)
+                    if error_ok:
+                        return [], [str(e)], 1
+                    raise
+            elif self.mgr.mode == 'cephadm-package':
+                try:
+                    out, err, code = remoto.process.check(
+                        conn,
+                        ['sudo', '/usr/bin/cephadm'] + final_args,
+                        stdin=stdin)
+                except RuntimeError as e:
+                    self.mgr._reset_con(host)
+                    if error_ok:
+                        return [], [str(e)], 1
+                    raise
+            else:
+                assert False, 'unsupported mode'
+
+            self.log.debug('code: %d' % code)
+            if out:
+                self.log.debug('out: %s' % '\n'.join(out))
+            if err:
+                self.log.debug('err: %s' % '\n'.join(err))
+            if code and not error_ok:
+                raise OrchestratorError(
+                    'cephadm exited with an error code: %d, stderr:%s' % (
+                        code, '\n'.join(err)))
+            return out, err, code

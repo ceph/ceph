@@ -67,7 +67,7 @@ class OSDService(CephService):
                     code, '\n'.join(err)))
 
         # check result
-        out, err, code = self.mgr._run_cephadm(
+        out, err, code = CephadmServe(self.mgr)._run_cephadm(
             host, 'osd', 'ceph-volume',
             [
                 '--',
@@ -263,7 +263,7 @@ class OSDService(CephService):
         split_cmd = cmd.split(' ')
         _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
-        out, err, code = self.mgr._run_cephadm(
+        out, err, code = CephadmServe(self.mgr)._run_cephadm(
             host, 'osd', 'ceph-volume',
             _cmd,
             env_vars=env_vars,

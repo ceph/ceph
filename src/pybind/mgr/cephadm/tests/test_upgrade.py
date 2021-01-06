@@ -10,7 +10,7 @@ from cephadm.serve import CephadmServe
 from .fixtures import _run_cephadm, wait, cephadm_module, with_host, with_service
 
 
-@mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_start(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):
         assert wait(cephadm_module, cephadm_module.upgrade_start(
@@ -26,7 +26,7 @@ def test_upgrade_start(cephadm_module: CephadmOrchestrator):
         assert wait(cephadm_module, cephadm_module.upgrade_stop()) == 'Stopped upgrade to image_id'
 
 
-@mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 @pytest.mark.parametrize("use_repo_digest",
                          [
                              False,
@@ -52,7 +52,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
 
             cephadm_module._mon_command_mock_versions = _versions_mock
 
-            with mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(json.dumps({
+            with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
                 'image_id': 'image_id',
                 'repo_digest': 'to_image@repo_digest',
             }))):
@@ -61,7 +61,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
 
             assert cephadm_module.upgrade_status is not None
 
-            with mock.patch("cephadm.module.CephadmOrchestrator._run_cephadm", _run_cephadm(
+            with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
                 json.dumps([
                     dict(
                         name=list(cephadm_module.cache.daemons['test'].keys())[0],
