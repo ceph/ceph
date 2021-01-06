@@ -56,6 +56,7 @@
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
 
+using namespace TOPNSPC::common;
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
@@ -839,7 +840,13 @@ public:
             ss << "session dropped for command ";
           }
         }
-        ss << "cmd='" << m->cmd << "': finished";
+        cmdmap_t cmdmap;
+        stringstream ds;
+        string prefix;
+        cmdmap_from_json(m->cmd, &cmdmap, ds);
+        cmd_getval(cmdmap, "prefix", prefix);
+        if (prefix != "config set" && prefix != "config-key set")
+          ss << "cmd='" << m->cmd << "': finished";
 
         mon->audit_clog->info() << ss.str();
 	mon->reply_command(op, rc, rs, rdata, version);

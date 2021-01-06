@@ -612,7 +612,10 @@ PyObject *ActivePyModules::get_typed_config(
         derr << "Module '" << module_name << "' is not available" << dendl;
         Py_RETURN_NONE;
     }
-    dout(10) << __func__ << " " << final_key << " found: " << value << dendl;
+    // removing value to hide sensitive data going into mgr logs
+    // leaving this for debugging purposes
+    // dout(10) << __func__ << " " << final_key << " found: " << value << dendl;
+    dout(10) << __func__ << " " << final_key << " found" << dendl;
     return module->get_typed_option_value(key, value);
   }
   PyEval_RestoreThread(tstate);

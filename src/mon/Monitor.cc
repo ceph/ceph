@@ -3336,18 +3336,20 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
-    (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-      << "from='" << session->name << " " << session->addrs << "' "
-      << "entity='" << session->entity_name << "' "
-      << "cmd=" << m->cmd << ":  access denied";
+    if (prefix != "config set" && prefix != "config-key set")
+      (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+        << "from='" << session->name << " " << session->addrs << "' "
+        << "entity='" << session->entity_name << "' "
+        << "cmd=" << m->cmd << ":  access denied";
     reply_command(op, -EACCES, "access denied", 0);
     return;
   }
 
-  (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-      << "from='" << session->name << " " << session->addrs << "' "
-      << "entity='" << session->entity_name << "' "
-      << "cmd=" << m->cmd << ": dispatch";
+  if (prefix != "config set" && prefix != "config-key set")
+    (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+        << "from='" << session->name << " " << session->addrs << "' "
+        << "entity='" << session->entity_name << "' "
+        << "cmd=" << m->cmd << ": dispatch";
 
   // compat kludge for legacy clients trying to tell commands that are
   // new.  see bottom of MonCommands.h.  we need to handle both (1)
