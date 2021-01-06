@@ -265,26 +265,23 @@ class TestClusterResize(CephFSTestCase):
 
         self.fs.grow(2)
 
+        # Now add a delay which should slow down how quickly rank 1 stops
+        self.config_set('mds', 'ms_inject_delay_max', '5.0')
+        self.config_set('mds', 'ms_inject_delay_probability', '1.0')
         self.fs.set_max_mds(1)
         log.info("status = {0}".format(self.fs.status()))
 
-        self.fs.set_max_mds(3)
         # Don't wait for rank 1 to stop
+        self.fs.set_max_mds(3)
+        log.info("status = {0}".format(self.fs.status()))
 
+        # Now check that the mons didn't try to promote a standby to rank 2
         self.fs.set_max_mds(2)
-        # Prevent another MDS from taking rank 1
-        # XXX This is a little racy because rank 1 may have stopped and a
-        #     standby assigned to rank 1 before joinable=0 is set.
-        self.fs.set_joinable(False) # XXX keep in mind changing max_mds clears this flag
-
+        status = self.fs.status()
         try:
             status = self.fs.wait_for_daemons(timeout=90)
-            raise RuntimeError("should not be able to successfully shrink cluster!")
-        except:
-            # could not shrink to max_mds=2 and reach 2 actives (because joinable=False)
-            status = self.fs.status()
             ranks = set([info['rank'] for info in status.get_ranks(fscid)])
-            self.assertTrue(ranks == set([0]))
+            self.assertEqual(ranks, set([0, 1]))
         finally:
             log.info("status = {0}".format(status))
 
