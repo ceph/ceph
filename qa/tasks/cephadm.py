@@ -1019,25 +1019,24 @@ def crush_setup(ctx, config):
 
 @contextlib.contextmanager
 def create_rbd_pool(ctx, config):
-    cluster_name = config['cluster']
-    log.info('Waiting for OSDs to come up')
-    teuthology.wait_until_osds_up(
-        ctx,
-        cluster=ctx.cluster,
-        remote=ctx.ceph[cluster_name].bootstrap_remote,
-        ceph_cluster=cluster_name,
-    )
-    if config.get('create_rbd_pool', True):
-        log.info('Creating RBD pool')
-        _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
-            args=['sudo', 'ceph', '--cluster', cluster_name,
-                  'osd', 'pool', 'create', 'rbd', '8'])
-        _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
-            args=[
-                'sudo', 'ceph', '--cluster', cluster_name,
+    if config.get('create_rbd_pool', False):
+      cluster_name = config['cluster']
+      log.info('Waiting for OSDs to come up')
+      teuthology.wait_until_osds_up(
+          ctx,
+          cluster=ctx.cluster,
+          remote=ctx.ceph[cluster_name].bootstrap_remote,
+          ceph_cluster=cluster_name,
+      )
+      log.info('Creating RBD pool')
+      _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+          args=['sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'pool', 'create', 'rbd', '8'])
+      _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
+          args=['sudo', 'ceph', '--cluster', cluster_name,
                 'osd', 'pool', 'application', 'enable',
                 'rbd', 'rbd', '--yes-i-really-mean-it'
-            ])
+          ])
     yield
 
 @contextlib.contextmanager
