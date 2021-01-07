@@ -519,7 +519,8 @@ static Rep to_microseconds(T t) {
 } // namespace ceph
 
 namespace std {
-ostream& operator<<(ostream& m, const ::ceph::timespan& t);
+template<typename Rep, typename Period>
+ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t);
 }
 
 #endif // COMMON_CEPH_TIME_H

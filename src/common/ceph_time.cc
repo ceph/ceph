@@ -322,10 +322,31 @@ std::chrono::seconds parse_timespan(const std::string& s)
 }
 
 namespace std {
-ostream& operator<<(ostream& m, const ::ceph::timespan& t) {
-  static_assert(is_unsigned_v<::ceph::timespan::rep>);
-  using seconds_t = chrono::duration<float>;
-  ::fmt::print(m, "{:.9}", chrono::duration_cast<seconds_t>(t));
+template<typename Rep, typename Period>
+ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t) {
+  if constexpr (chrono::treat_as_floating_point_v<Rep>) {
+    using seconds_t = chrono::duration<float>;
+    ::fmt::print(m, "{:.9}", chrono::duration_cast<seconds_t>(t));
+  } else {
+    ::fmt::print(m, "{}", t);
+  }
   return m;
 }
+
+template ostream&
+operator<< <::ceph::timespan::rep,
+            ::ceph::timespan::period> (ostream&, const ::ceph::timespan&);
+
+template ostream&
+operator<< <::ceph::signedspan::rep,
+            ::ceph::signedspan::period> (ostream&, const ::ceph::signedspan&);
+
+template ostream&
+operator<< <chrono::seconds::rep,
+            chrono::seconds::period> (ostream&, const chrono::seconds&);
+
+template ostream&
+operator<< <chrono::milliseconds::rep,
+            chrono::milliseconds::period> (ostream&, const chrono::milliseconds&);
+
 } // namespace std
