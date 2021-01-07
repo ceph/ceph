@@ -164,7 +164,7 @@ class Sig:
     @staticmethod
     def _param_to_sig(p):
         try:
-            return {kv.split('=')[0]: kv.split('=')[1] for kv in p.split(',')}
+            return {kv.split('=')[0]: kv.split('=')[1] for kv in p.split(',') if kv}
         except IndexError:
             return p
 
