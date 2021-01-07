@@ -101,6 +101,10 @@ class Inventory:
     def all_specs(self) -> List[HostSpec]:
         return list(map(self.spec_from_dict, self._inventory.values()))
 
+    def get_host_with_state(self, state: str = "") -> List[str]:
+        """return a list of host names in a specific state"""
+        return [h for h in self._inventory if self._inventory[h].get("status", "").lower() == state]
+
     def save(self) -> None:
         self.mgr.set_store('inventory', json.dumps(self._inventory))
 
@@ -448,6 +452,13 @@ class HostCache():
                 if d.daemon_type == service_type:
                     result.append(d)
         return result
+
+    def get_daemon_types(self, hostname: str) -> List[str]:
+        """Provide a list of the types of daemons on the host"""
+        result = set()
+        for _d, dm in self.daemons[hostname].items():
+            result.add(dm.daemon_type)
+        return list(result)
 
     def get_daemon_names(self):
         # type: () -> List[str]
