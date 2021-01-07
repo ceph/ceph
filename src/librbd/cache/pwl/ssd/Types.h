@@ -7,11 +7,12 @@
 #include "acconfig.h"
     
 #include "librbd/io/Types.h"
-#include "Types.h" //generic type = to be renamed
+#include "librbd/cache/pwl/Types.h"
 
 namespace librbd {
 namespace cache {
 namespace pwl {
+namespace ssd {
 
 struct SuperBlock{
   WriteLogPoolRoot root;
@@ -33,10 +34,11 @@ struct SuperBlock{
   }
 };
 
+} // namespace ssd
 } // namespace pwl
 } // namespace cache
 } // namespace librbd
 
-WRITE_CLASS_DENC(librbd::cache::pwl::SuperBlock)
+WRITE_CLASS_DENC(librbd::cache::pwl::ssd::SuperBlock)
 
 #endif // CEPH_LIBRBD_CACHE_SSD_TYPES_H

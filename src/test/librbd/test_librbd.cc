@@ -4148,7 +4148,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
 
 TYPED_TEST(DiffIterateTest, DiffIterateStress)
 {
-  REQUIRE(!is_rbd_rwl_enabled((CephContext *)this->_rados.cct()));
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)this->_rados.cct()));
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
@@ -6876,7 +6876,7 @@ TEST_F(TestLibRBD, ExclusiveLock)
 TEST_F(TestLibRBD, BreakLock)
 {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
-  REQUIRE(!is_rbd_rwl_enabled((CephContext *)_rados.cct()));
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
 
   static char buf[10];
 

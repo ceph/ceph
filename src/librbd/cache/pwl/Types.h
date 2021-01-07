@@ -203,11 +203,11 @@ public:
 POBJ_LAYOUT_BEGIN(rbd_pwl);
 POBJ_LAYOUT_ROOT(rbd_pwl, struct WriteLogPoolRoot);
 POBJ_LAYOUT_TOID(rbd_pwl, uint8_t);
-POBJ_LAYOUT_TOID(rbd_pwl, struct WriteLogPmemEntry);
+POBJ_LAYOUT_TOID(rbd_pwl, struct WriteLogCacheEntry);
 POBJ_LAYOUT_END(rbd_pwl);
 #endif
 
-struct WriteLogPmemEntry {
+struct WriteLogCacheEntry {
   uint64_t sync_gen_number = 0;
   uint64_t write_sequence_number = 0;
   uint64_t image_offset_bytes;
@@ -216,7 +216,7 @@ struct WriteLogPmemEntry {
   TOID(uint8_t) write_data;
   #endif
   #ifdef WITH_RBD_SSD_CACHE
-  uint64_t write_data_pos; /* SSD data offset */
+  uint64_t write_data_pos = 0; /* SSD data offset */
   #endif
   union {
     uint8_t flags;
@@ -233,7 +233,7 @@ struct WriteLogPmemEntry {
   uint32_t ws_datalen = 0;  /* Length of data buffer (writesame only) */
   uint32_t entry_index = 0; /* For debug consistency check. Can be removed if
                              * we need the space */
-  WriteLogPmemEntry(const uint64_t image_offset_bytes=0, const uint64_t write_bytes=0)
+  WriteLogCacheEntry(uint64_t image_offset_bytes=0, uint64_t write_bytes=0)
     : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes),
       entry_valid(0), sync_point(0), sequenced(0), has_data(0), discard(0), writesame(0) {
   }
@@ -258,9 +258,9 @@ struct WriteLogPmemEntry {
     return is_write() || is_discard() || is_writesame();
   }
   friend std::ostream& operator<<(std::ostream& os,
-                                  const WriteLogPmemEntry &entry);
+                                  const WriteLogCacheEntry &entry);
   #ifdef WITH_RBD_SSD_CACHE
-  DENC(WriteLogPmemEntry, v, p) {
+  DENC(WriteLogCacheEntry, v, p) {
     DENC_START(1, 1, p);
     denc(v.sync_gen_number, p);
     denc(v.write_sequence_number, p);
@@ -274,7 +274,7 @@ struct WriteLogPmemEntry {
   }
   #endif
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(list<WriteLogPmemEntry*>& ls);
+  static void generate_test_instances(list<WriteLogCacheEntry*>& ls);
 };
 
 struct WriteLogPoolRoot {
@@ -285,7 +285,7 @@ struct WriteLogPoolRoot {
     };
     uint64_t _u64;
   } header;
-  TOID(struct WriteLogPmemEntry) log_entries;   /* contiguous array of log entries */
+  TOID(struct WriteLogCacheEntry) log_entries;   /* contiguous array of log entries */
   #endif
   #ifdef WITH_RBD_SSD_CACHE
   uint64_t layout_version = 0;
@@ -377,7 +377,7 @@ std::string unique_lock_name(const std::string &name, void *address);
 } // namespace librbd
 
 #ifdef WITH_RBD_SSD_CACHE
-WRITE_CLASS_DENC(librbd::cache::pwl::WriteLogPmemEntry)
+WRITE_CLASS_DENC(librbd::cache::pwl::WriteLogCacheEntry)
 WRITE_CLASS_DENC(librbd::cache::pwl::WriteLogPoolRoot)
 #endif
 
