@@ -6306,6 +6306,74 @@ def command_exporter():
     exporter.run()
         
 
+##################################
+
+def systemd_target_state(target_name: str, subsystem: str = 'ceph') -> bool:
+    # TODO: UNITTEST
+    return os.path.exists(
+        os.path.join(
+            UNIT_DIR,
+            f"{subsystem}.target.wants",
+            target_name
+        )
+    )
+
+
+@infer_fsid
+def command_maintenance():
+    if not args.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
+    target = f"ceph-{args.fsid}.target"
+    
+    if args.maintenance_action.lower() == 'enter':
+        logger.info("Requested to place host into maintenance")
+        if systemd_target_state(target):
+            _out, _err, code = call(
+                ['systemctl', 'disable', target],
+                verbose_on_failure=False
+            )
+            if code:
+                logger.error(f"Failed to disable the {target} target")
+                return "failed - to disable the target"
+            else:
+                # stopping a target waits by default
+                _out, _err, code = call(
+                    ['systemctl', 'stop', target],
+                    verbose_on_failure=False
+                )
+                if code:
+                    logger.error(f"Failed to stop the {target} target")
+                    return "failed - to disable the target"
+                else:
+                    return f"success - systemd target {target} disabled"
+
+        else:
+            return "skipped - target already disabled"
+
+    else:
+        logger.info("Requested to exit maintenance state")
+        # exit maintenance request
+        if not systemd_target_state(target):
+            _out, _err, code = call(
+                ['systemctl', 'enable', target],
+                verbose_on_failure=False
+            )
+            if code:
+                logger.error(f"Failed to enable the {target} target")
+                return "failed - unable to enable the target"
+            else:
+                # starting a target waits by default
+                _out, _err, code = call(
+                    ['systemctl', 'start', target],
+                    verbose_on_failure=False
+                )
+                if code:
+                    logger.error(f"Failed to start the {target} target")
+                    return "failed - unable to start the target"
+                else:
+                    return f"success - systemd target {target} enabled and started"
+
 
 ##################################
 
@@ -6868,6 +6936,18 @@ def _get_parser():
         default=get_hostname().split('.')[0],
         help='daemon identifer for the exporter')
     parser_exporter.set_defaults(func=command_exporter)
+
+    parser_maintenance = subparsers.add_parser(
+        'host-maintenance', help='Manage the maintenance state of a host')
+    parser_maintenance.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_maintenance.add_argument(
+        "maintenance_action",
+        type=str, 
+        choices=['enter', 'exit'],
+        help="Maintenance action - enter maintenance, or exit maintenance")
+    parser_maintenance.set_defaults(func=command_maintenance)
 
     return parser
 
