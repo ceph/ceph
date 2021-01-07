@@ -422,7 +422,7 @@ void WriteLog<I>::load_existing_entries(DeferredContexts &later) {
     std::shared_ptr<GenericLogEntry> log_entry = nullptr;
     ceph_assert(pmem_entry->entry_index == entry_index);
 
-    this->update_entries(log_entry, pmem_entry, missing_sync_points,
+    this->update_entries(&log_entry, pmem_entry, missing_sync_points,
         sync_point_entries, entry_index);
 
     log_entry->ram_entry = *pmem_entry;
