@@ -106,13 +106,6 @@ std::ostream& operator<<(std::ostream& m,
 	   << 's';
 }
 
-std::ostream& operator<<(std::ostream& m, const timespan& t) {
-  static_assert(std::is_unsigned_v<timespan::rep>);
-  using seconds_t = std::chrono::duration<float>;
-  fmt::print(m, "{:.9}", std::chrono::duration_cast<seconds_t>(t));
-  return m;
-}
-
 template<typename Clock,
 	 typename std::enable_if<!Clock::is_steady>::type*>
 std::ostream& operator<<(std::ostream& m,
@@ -327,3 +320,12 @@ std::chrono::seconds parse_timespan(const std::string& s)
 }
 
 }
+
+namespace std {
+ostream& operator<<(ostream& m, const ::ceph::timespan& t) {
+  static_assert(is_unsigned_v<::ceph::timespan::rep>);
+  using seconds_t = chrono::duration<float>;
+  ::fmt::print(m, "{:.9}", chrono::duration_cast<seconds_t>(t));
+  return m;
+}
+} // namespace std
