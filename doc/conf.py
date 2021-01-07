@@ -102,6 +102,7 @@ extensions = [
     'sphinx_autodoc_typehints',
     'sphinx_substitution_extensions',
     'breathe',
+    'ceph_commands',
     'ceph_releases',
     'sphinxcontrib.openapi'
     ]
