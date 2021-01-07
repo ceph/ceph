@@ -62,7 +62,7 @@ common:
 
 cephadm:
   - doc/cephadm/**
-  - doc/dev/cephadm.rst
+  - doc/dev/cephadm/**
   - doc/man/8/cephadm.rst
   - qa/suites/rados/cephadm/**
   - qa/tasks/cephadm.py
