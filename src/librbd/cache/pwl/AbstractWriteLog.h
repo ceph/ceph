@@ -331,7 +331,7 @@ protected:
   void wake_up();
 
   void update_entries(
-      std::shared_ptr<pwl::GenericLogEntry> log_entry,
+      std::shared_ptr<pwl::GenericLogEntry> *log_entry,
       pwl::WriteLogCacheEntry *cache_entry,
       std::map<uint64_t, bool> &missing_sync_points,
       std::map<uint64_t,
