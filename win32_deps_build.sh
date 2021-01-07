@@ -301,11 +301,12 @@ EOL
 
 ./b2 install --user-config=user-config.jam toolset=gcc-mingw32 \
     target-os=windows release \
+    link=static,shared \
     threadapi=pthread --prefix=$boostDir \
     address-model=64 architecture=x86 \
     binary-format=pe abi=ms -j $NUM_WORKERS \
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \
-    --without-python --without-mpi
+    --without-python --without-mpi --without-log --without-wave
 
 cd $depsSrcDir
 if [[ ! -d $backtraceSrcDir ]]; then

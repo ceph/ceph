@@ -20,7 +20,7 @@ if(ENABLE_SHARED)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -Wl,--exclude-libs,ALL")
   endif()
-  if(HAVE_LINK_VERSION_SCRIPT)
+  if(HAVE_LINK_VERSION_SCRIPT AND NOT WIN32)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/librados.map")
   endif()
