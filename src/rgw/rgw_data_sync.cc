@@ -3527,7 +3527,7 @@ struct next_bilog_result {
 struct bilog_list_result {
   list<rgw_bi_log_entry> entries;
   bool truncated{false};
-  next_bilog_result next_log;
+  std::optional<next_bilog_result> next_log;
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("entries", entries, obj);
@@ -4169,7 +4169,7 @@ public:
     set_status("init");
     rules = sync_pipe.get_rules();
     target_location_key = sync_pipe.info.dest_bs.bucket.get_key();
-    generation = sync_pipe.source_bucket_info.layout.logs.back().gen;
+    generation = 0; // remove once datalog shard is done
   }
 
   bool check_key_handled(const rgw_obj_key& key) {

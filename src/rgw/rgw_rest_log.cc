@@ -588,7 +588,8 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
       return;
     }
   }
-  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, gen_id, start_marker, end_marker);
+  const auto& log = bucket_info.layout.logs.back().gen;
+  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, gen, start_marker, end_marker);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }

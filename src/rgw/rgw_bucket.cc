@@ -1034,16 +1034,16 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *at
 
   int shards_num = bucket_info.layout.current_index.layout.normal.num_shards? bucket_info.layout.current_index.layout.normal.num_shards : 1;
   int shard_id = bucket_info.layout.current_index.layout.normal.num_shards? 0 : -1;
-  auto gen_id = bucket_info.layout.current_index.gen;
+  const auto& log = bucket_info.layout.logs.back().gen;
 
   if (!sync) {
-    r = store->svc()->bilog_rados->log_stop(bucket_info, -1, gen_id);
+    r = store->svc()->bilog_rados->log_stop(bucket_info, -1, gen);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing stop bilog:" + cpp_strerror(-r));
       return r;
     }
   } else {
-    r = store->svc()->bilog_rados->log_start(bucket_info, -1, gen_id);
+    r = store->svc()->bilog_rados->log_start(bucket_info, -1, gen);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing resync bilog:" + cpp_strerror(-r));
       return r;
