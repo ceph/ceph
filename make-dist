@@ -126,6 +126,22 @@ download_pmdk() {
     rm -rf src/pmdk
 }
 
+download_rpma() {
+    rpma_version=$1
+    shift
+    rpma_sha256=$1
+    shift
+    rpma_fname=${rpma_version}.tar.gz
+    download_from $rpma_fname $rpma_sha256 $*
+    tar xzf $rpma_fname -C src \
+	    --exclude="rpma-${rpma_version}/doc" \
+	    --exclude="rpma-${rpma_version}/examples" \
+	    --exclude="rpma-${rpma_version}/tests"
+    mv src/rpma-${rpma_version} src/rpma
+    tar cf ${outfile}.rpma.tar ${outfile}/src/rpma
+    rm -rf src/rpma
+}
+
 build_dashboard_frontend() {
   CURR_DIR=`pwd`
   TEMP_DIR=`mktemp -d`
@@ -189,6 +205,9 @@ download_liburing 0.7 8e2842cfe947f3a443af301bdd6d034455536c38a455c7a700d0c1ad16
 pmdk_version=1.10
 download_pmdk $pmdk_version 08dafcf94db5ac13fac9139c92225d9aa5f3724ea74beee4e6ca19a01a2eb20c \
                https://github.com/pmem/pmdk/releases/download/$pmdk_version
+rpma_version=0.10.0
+download_rpma $rpma_version d15f3fbbfdfbfdc8a113d276996d048284bb38fa13f5ef099184ff0fad21c7f6 \
+	       https://github.com/pmem/rpma/archive/refs/tags
 build_dashboard_frontend
 generate_rook_ceph_client
 for tarball in $outfile.version   \
