@@ -451,21 +451,22 @@ There are a few ways to create new OSDs:
     ceph orch apply osd -i spec.yml
 
 
-Deploy MDSs
-===========
+Deploy CephFS
+=============
 
 One or more MDS daemons is required to use the CephFS file system.
 These are created automatically if the newer ``ceph fs volume``
-interface is used to create a new file system.  For more information,
+interface is used to create a new file system. For more information,
 see :ref:`fs-volumes-and-subvolumes`.
 
-To deploy metadata servers:
+For example:
 
 .. prompt:: bash #
 
-  ceph orch apply mds *<fs-name>* --placement="*<num-daemons>* [*<host1>* ...]"
+  ceph fs volume create <fs_name> --placement=""<placement spec>""
 
-See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
+See :ref:`orchestrator-cli-stateless-services` for manually deploying
+MDS daemons.
 
 Deploy RGWs
 ===========
