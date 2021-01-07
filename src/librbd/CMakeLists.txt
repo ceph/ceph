@@ -16,7 +16,7 @@ endif()
 add_library(rbd_types STATIC
   ${librbd_types_srcs})
 
-if (WITH_RBD_RWL AND WITH_RBD_SSD_CACHE)
+if (WITH_RBD_RWL)
   target_link_libraries(rbd_types
     PRIVATE pmem::pmemobj)
 endif()
@@ -275,12 +275,17 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     if(WITH_RBD_SSD_CACHE)
       set(rbd_plugin_pwl_srcs
         ${rbd_plugin_pwl_srcs}
-        cache/pwl/SSDWriteLog.cc)
+        cache/pwl/ssd/LogEntry.cc
+        cache/pwl/ssd/Request.cc
+        cache/pwl/ssd/WriteLog.cc)
     endif()
     if(WITH_RBD_RWL)
       set(rbd_plugin_pwl_srcs
         ${rbd_plugin_pwl_srcs}
-        cache/pwl/ReplicatedWriteLog.cc)
+        cache/pwl/rwl/WriteLog.cc
+        cache/pwl/rwl/LogEntry.cc
+        cache/pwl/rwl/LogOperation.cc
+        cache/pwl/rwl/Request.cc)
     endif()
 
   add_library(librbd_plugin_pwl_cache SHARED

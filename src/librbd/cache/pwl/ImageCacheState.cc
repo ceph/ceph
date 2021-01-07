@@ -41,6 +41,7 @@ ImageCacheState<I>::ImageCacheState(I *image_ctx, plugin::Api<I>& plugin_api) :
 
   ConfigProxy &config = image_ctx->config;
   log_periodic_stats = config.get_val<bool>("rbd_rwl_log_periodic_stats");
+  cache_type = config.get_val<std::string>("rbd_persistent_cache_mode");
 }
 
 template <typename I>
@@ -93,7 +94,7 @@ void ImageCacheState<I>::dump(ceph::Formatter *f) const {
   ::encode_json("present", present, f);
   ::encode_json("empty", empty, f);
   ::encode_json("clean", clean, f);
-  ::encode_json("cache_type", (int)get_image_cache_type(), f);
+  ::encode_json("cache_type", cache_type, f);
   ::encode_json("pwl_host", host, f);
   ::encode_json("pwl_path", path, f);
   ::encode_json("pwl_size", size, f);
@@ -143,6 +144,7 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
     int cache_type = (int)f["cache_type"];
 
     switch (cache_type) {
+      case IMAGE_CACHE_TYPE_SSD:
       case IMAGE_CACHE_TYPE_RWL:
         if (!cache_exists) {
           cache_state = new ImageCacheState<I>(image_ctx, plugin_api);

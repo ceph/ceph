@@ -21,10 +21,10 @@ TYPE(rbd::mirror::image_map::PolicyData)
 
 #if defined(WITH_RBD) && defined(WITH_RBD_SSD_CACHE)
 #include "librbd/cache/pwl/Types.h"
-#include "librbd/cache/pwl/SSDTypes.h"
-TYPE(librbd::cache::pwl::WriteLogPmemEntry)
+#include "librbd/cache/pwl/ssd/Types.h"
+TYPE(librbd::cache::pwl::WriteLogCacheEntry)
 TYPE(librbd::cache::pwl::WriteLogPoolRoot)
-TYPE(librbd::cache::pwl::SuperBlock)
+TYPE(librbd::cache::pwl::ssd::SuperBlock)
 #endif
 
 #ifdef WITH_RBD

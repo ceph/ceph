@@ -128,12 +128,21 @@ set(unittest_librbd_srcs
   watcher/test_mock_RewatchRequest.cc
   )
 
-if(WITH_RBD_RWL)
+if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
    set(unittest_librbd_srcs
      ${unittest_librbd_srcs}
-     cache/pwl/test_mock_ReplicatedWriteLog.cc
      cache/pwl/test_WriteLogMap.cc)
-endif(WITH_RBD_RWL)
+   if(WITH_RBD_RWL)
+     set(unittest_librbd_srcs
+       ${unittest_librbd_srcs}
+       cache/pwl/test_mock_ReplicatedWriteLog.cc)
+   endif()
+   if(WITH_RBD_SSD_CACHE)
+     set(unittest_librbd_srcs
+       ${unittest_librbd_srcs}
+       cache/pwl/test_mock_SSDWriteLog.cc)
+   endif()
+endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND unittest_librbd_srcs

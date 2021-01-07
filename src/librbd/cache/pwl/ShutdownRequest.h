@@ -13,7 +13,6 @@ class ImageCtx;
 namespace plugin { template <typename> struct Api; }
 
 namespace cache {
-
 namespace pwl {
 
 template<typename>

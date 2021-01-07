@@ -25,8 +25,8 @@
 #undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::pwl::AbstractWriteLog: " << this << " " \
-                           <<  __func__ << ": "
+#define dout_prefix *_dout << "librbd::cache::pwl::AbstractWriteLog: " << this \
+                           << " " <<  __func__ << ": "
 
 namespace librbd {
 namespace cache {
@@ -38,16 +38,19 @@ typedef AbstractWriteLog<ImageCtx>::Extent Extent;
 typedef AbstractWriteLog<ImageCtx>::Extents Extents;
 
 template <typename I>
-AbstractWriteLog<I>::AbstractWriteLog(I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state,
-    cache::ImageWritebackInterface& image_writeback,
+AbstractWriteLog<I>::AbstractWriteLog(
+    I &image_ctx, librbd::cache::pwl::ImageCacheState<I>* cache_state,
+    Builder<This> *builder, cache::ImageWritebackInterface& image_writeback,
     plugin::Api<I>& plugin_api)
-  : m_write_log_guard(image_ctx.cct),
+  : m_builder(builder),
+    m_write_log_guard(image_ctx.cct),
     m_deferred_dispatch_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_deferred_dispatch_lock", this))),
     m_blockguard_lock(ceph::make_mutex(pwl::unique_lock_name(
       "librbd::cache::pwl::AbstractWriteLog::m_blockguard_lock", this))),
     m_thread_pool(
-        image_ctx.cct, "librbd::cache::pwl::AbstractWriteLog::thread_pool", "tp_pwl", 4, ""),
+        image_ctx.cct, "librbd::cache::pwl::AbstractWriteLog::thread_pool",
+        "tp_pwl", 4, ""),
     m_cache_state(cache_state),
     m_image_ctx(image_ctx),
     m_log_pool_config_size(DEFAULT_POOL_SIZE),
@@ -92,7 +95,8 @@ AbstractWriteLog<I>::~AbstractWriteLog() {
 
 template <typename I>
 void AbstractWriteLog<I>::perf_start(std::string name) {
-  PerfCountersBuilder plb(m_image_ctx.cct, name, l_librbd_pwl_first, l_librbd_pwl_last);
+  PerfCountersBuilder plb(m_image_ctx.cct, name, l_librbd_pwl_first,
+                          l_librbd_pwl_last);
 
   // Latency axis configuration for op histograms, values are in nanoseconds
   PerfHistogramCommon::axis_config_d op_hist_x_axis_config{
@@ -336,50 +340,50 @@ void AbstractWriteLog<I>::arm_periodic_stats() {
 
 template <typename I>
 void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> log_entry,
-    WriteLogPmemEntry *pmem_entry, std::map<uint64_t, bool> &missing_sync_points,
+    WriteLogCacheEntry *cache_entry, std::map<uint64_t, bool> &missing_sync_points,
     std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> &sync_point_entries,
     int entry_index) {
-    bool writer = pmem_entry->is_writer();
-    if (pmem_entry->is_sync_point()) {
+    bool writer = cache_entry->is_writer();
+    if (cache_entry->is_sync_point()) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
-                                 << " is a sync point. pmem_entry=[" << *pmem_entry << "]" << dendl;
-      auto sync_point_entry = std::make_shared<SyncPointLogEntry>(pmem_entry->sync_gen_number);
+                                 << " is a sync point. cache_entry=[" << *cache_entry << "]" << dendl;
+      auto sync_point_entry = std::make_shared<SyncPointLogEntry>(cache_entry->sync_gen_number);
       log_entry = sync_point_entry;
-      sync_point_entries[pmem_entry->sync_gen_number] = sync_point_entry;
-      missing_sync_points.erase(pmem_entry->sync_gen_number);
-      m_current_sync_gen = pmem_entry->sync_gen_number;
-    } else if (pmem_entry->is_write()) {
+      sync_point_entries[cache_entry->sync_gen_number] = sync_point_entry;
+      missing_sync_points.erase(cache_entry->sync_gen_number);
+      m_current_sync_gen = cache_entry->sync_gen_number;
+    } else if (cache_entry->is_write()) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
-                                 << " is a write. pmem_entry=[" << *pmem_entry << "]" << dendl;
+                                 << " is a write. cache_entry=[" << *cache_entry << "]" << dendl;
       auto write_entry =
-        std::make_shared<WriteLogEntry>(nullptr, pmem_entry->image_offset_bytes, pmem_entry->write_bytes);
-      write_data_to_buffer(write_entry, pmem_entry);
+        m_builder->create_write_log_entry(nullptr, cache_entry->image_offset_bytes, cache_entry->write_bytes);
+      write_data_to_buffer(write_entry, cache_entry);
       log_entry = write_entry;
-    } else if (pmem_entry->is_writesame()) {
+    } else if (cache_entry->is_writesame()) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
-                                 << " is a write same. pmem_entry=[" << *pmem_entry << "]" << dendl;
+                                 << " is a write same. cache_entry=[" << *cache_entry << "]" << dendl;
       auto ws_entry =
-        std::make_shared<WriteSameLogEntry>(nullptr, pmem_entry->image_offset_bytes,
-                                            pmem_entry->write_bytes, pmem_entry->ws_datalen);
-      write_data_to_buffer(ws_entry, pmem_entry);
+        m_builder->create_writesame_log_entry(nullptr, cache_entry->image_offset_bytes,
+                                              cache_entry->write_bytes, cache_entry->ws_datalen);
+      write_data_to_buffer(ws_entry, cache_entry);
       log_entry = ws_entry;
-    } else if (pmem_entry->is_discard()) {
+    } else if (cache_entry->is_discard()) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
-                                 << " is a discard. pmem_entry=[" << *pmem_entry << "]" << dendl;
+                                 << " is a discard. cache_entry=[" << *cache_entry << "]" << dendl;
       auto discard_entry =
-        std::make_shared<DiscardLogEntry>(nullptr, pmem_entry->image_offset_bytes, pmem_entry->write_bytes,
+        std::make_shared<DiscardLogEntry>(nullptr, cache_entry->image_offset_bytes, cache_entry->write_bytes,
                                           m_discard_granularity_bytes);
       log_entry = discard_entry;
     } else {
       lderr(m_image_ctx.cct) << "Unexpected entry type in entry " << entry_index
-                             << ", pmem_entry=[" << *pmem_entry << "]" << dendl;
+                             << ", cache_entry=[" << *cache_entry << "]" << dendl;
     }
 
     if (writer) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
-                                 << " writes. pmem_entry=[" << *pmem_entry << "]" << dendl;
-      if (!sync_point_entries[pmem_entry->sync_gen_number]) {
-        missing_sync_points[pmem_entry->sync_gen_number] = true;
+                                 << " writes. cache_entry=[" << *cache_entry << "]" << dendl;
+      if (!sync_point_entries[cache_entry->sync_gen_number]) {
+        missing_sync_points[cache_entry->sync_gen_number] = true;
       }
     }
 }
@@ -387,7 +391,7 @@ void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> log_en
 template <typename I>
 void AbstractWriteLog<I>::update_sync_points(std::map<uint64_t, bool> &missing_sync_points,
     std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> &sync_point_entries,
-    DeferredContexts &later) {
+    DeferredContexts &later, uint32_t alloc_size ) {
   /* Create missing sync points. These must not be appended until the
    * entry reload is complete and the write map is up to
    * date. Currently this is handled by the deferred contexts object
@@ -440,7 +444,7 @@ void AbstractWriteLog<I>::update_sync_points(std::map<uint64_t, bool> &missing_s
           }
           if (log_entry->write_bytes() == log_entry->bytes_dirty()) {
             /* This entry is a basic write */
-            uint64_t bytes_allocated = MIN_WRITE_ALLOC_SIZE;
+            uint64_t bytes_allocated = alloc_size;
             if (gen_write_entry->ram_entry.write_bytes > bytes_allocated) {
               bytes_allocated = gen_write_entry->ram_entry.write_bytes;
             }
@@ -738,14 +742,14 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
         uint64_t map_entry_buffer_offset = entry_image_extent.first - map_entry.log_entry->ram_entry.image_offset_bytes;
         /* Offset into the log entry buffer of this read hit */
         uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
-        /* Create buffer object referring to pmem pool for this read hit */
+        /* Create buffer object referring to cache pool for this read hit */
         auto write_entry = map_entry.log_entry;
 
         /* Make a bl for this hit extent. This will add references to the write_entry->pmem_bp */
         buffer::list hit_bl;
 
         buffer::list entry_bl_copy;
-        write_entry->copy_pmem_bl(&entry_bl_copy);
+        write_entry->copy_cache_bl(&entry_bl_copy);
         entry_bl_copy.begin(read_buffer_offset).copy(entry_hit_length, hit_bl);
 
         ceph_assert(hit_bl.length() == entry_hit_length);
@@ -798,9 +802,9 @@ void AbstractWriteLog<I>::write(Extents &&image_extents,
 
   ceph_assert(m_initialized);
 
-  auto *write_req =
-    new C_WriteRequestT(*this, now, std::move(image_extents), std::move(bl), fadvise_flags,
-                        m_lock, m_perfcounter, on_finish);
+  C_WriteRequestT *write_req =
+    m_builder->create_write_request(*this, now, std::move(image_extents), std::move(bl),
+                                    fadvise_flags, m_lock, m_perfcounter, on_finish);
   m_perfcounter->inc(l_librbd_pwl_wr_bytes, write_req->image_extents_summary.total_bytes);
 
   /* The lambda below will be called when the block guard for all
@@ -934,9 +938,9 @@ void AbstractWriteLog<I>::writesame(uint64_t offset, uint64_t length,
    * as long as the length of the bl here, which is the pattern that's repeated
    * in the image for the entire length of this WS. Read hits and flushing of
    * write sames are different than normal writes. */
-  auto *ws_req =
-    new C_WriteSameRequestT(*this, now, std::move(ws_extents), std::move(bl),
-                            fadvise_flags, m_lock, m_perfcounter, on_finish);
+  C_WriteSameRequestT *ws_req =
+    m_builder->create_writesame_request(*this, now, std::move(ws_extents), std::move(bl),
+                                        fadvise_flags, m_lock, m_perfcounter, on_finish);
   m_perfcounter->inc(l_librbd_pwl_ws_bytes, ws_req->image_extents_summary.total_bytes);
 
   /* The lambda below will be called when the block guard for all
@@ -966,9 +970,10 @@ void AbstractWriteLog<I>::compare_and_write(Extents &&image_extents,
   /* A compare and write request is also a write request. We only allocate
    * resources and dispatch this write request if the compare phase
    * succeeds. */
-  auto *cw_req =
-    new C_CompAndWriteRequestT(*this, now, std::move(image_extents), std::move(cmp_bl), std::move(bl),
-                               mismatch_offset, fadvise_flags, m_lock, m_perfcounter, on_finish);
+  C_WriteRequestT *cw_req =
+    m_builder->create_comp_and_write_request(
+        *this, now, std::move(image_extents), std::move(cmp_bl), std::move(bl),
+        mismatch_offset, fadvise_flags, m_lock, m_perfcounter, on_finish);
   m_perfcounter->inc(l_librbd_pwl_cmp_bytes, cw_req->image_extents_summary.total_bytes);
 
   /* The lambda below will be called when the block guard for all
@@ -1199,19 +1204,6 @@ void AbstractWriteLog<I>::append_scheduled(GenericLogOperations &ops, bool &ops_
 }
 
 template <typename I>
-void AbstractWriteLog<I>::enlist_op_appender()
-{
-  m_async_append_ops++;
-  m_async_op_tracker.start_op();
-  Context *append_ctx = new LambdaContext([this](int r) {
-      append_scheduled_ops();
-      m_async_append_ops--;
-      m_async_op_tracker.finish_op();
-    });
-  m_work_queue.queue(append_ctx);
-}
-
-template <typename I>
 void AbstractWriteLog<I>::schedule_append(GenericLogOperationsVector &ops)
 {
   GenericLogOperations to_append(ops.begin(), ops.end());
@@ -1244,6 +1236,9 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
     if (op->is_writing_op()) {
       op->mark_log_entry_completed();
       dirty_entries.push_back(log_entry);
+    }
+    if (log_entry->is_write_entry()) {
+      release_ram(log_entry);
     }
     if (op->reserved_allocated()) {
       published_reserves++;
@@ -1447,7 +1442,7 @@ bool AbstractWriteLog<I>::check_allocation(C_BlockIORequestT *req,
   }
 
   if (alloc_succeeds) {
-    reserve_pmem(req, alloc_succeeds, no_space);
+    reserve_cache(req, alloc_succeeds, no_space);
   }
 
   if (alloc_succeeds) {
@@ -1999,7 +1994,7 @@ void AbstractWriteLog<I>::internal_flush(bool invalidate, Context *on_finish) {
 template <typename I>
 void AbstractWriteLog<I>::add_into_log_map(GenericWriteLogEntries &log_entries,
                                            C_BlockIORequestT *req) {
-  copy_pmem(req);
+  req->copy_cache();
   m_blocks_to_log_entries.add_log_entries(log_entries);
 }
 
