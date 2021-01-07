@@ -98,13 +98,7 @@ monitor daemon.  This is normally just the IP for the first host.  If there
 are multiple networks and interfaces, be sure to choose one that will
 be accessible by any host accessing the Ceph cluster.
 
-To bootstrap the cluster, first create an ``/etc/ceph`` directory:
-
-.. prompt:: bash # 
-
-   mkdir -p /etc/ceph
-
-Then run the ``ceph bootstrap`` command:
+Run the ``ceph bootstrap`` command:
 
 .. prompt:: bash # 
 
