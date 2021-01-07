@@ -3284,8 +3284,8 @@ def command_bootstrap():
             cli(['cephadm', 'generate-exporter-config'])
         #
         # deploy the service (commented out until the cephadm changes are in the ceph container build)
-        # logger.info('Deploying cephadm exporter service with default placement...')
-        # cli(['orch', 'apply', 'cephadm-exporter'])
+        logger.info('Deploying cephadm exporter service with default placement...')
+        cli(['orch', 'apply', 'cephadm-exporter'])
 
 
     if not args.skip_dashboard:
