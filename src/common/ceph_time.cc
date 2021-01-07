@@ -14,6 +14,10 @@
 
 // For ceph_timespec
 #include "ceph_time.h"
+
+#include <fmt/chrono.h>
+#include <fmt/ostream.h>
+
 #include "log/LogClock.h"
 #include "config.h"
 #include "strtol.h"
@@ -104,14 +108,9 @@ std::ostream& operator<<(std::ostream& m,
 
 std::ostream& operator<<(std::ostream& m, const timespan& t) {
   static_assert(std::is_unsigned_v<timespan::rep>);
-  m << std::chrono::duration_cast<std::chrono::seconds>(t).count();
-  if (auto ns = (t % 1s).count(); ns > 0) {
-    char oldfill = m.fill();
-    m.fill('0');
-    m << '.' << std::setw(9) << ns;
-    m.fill(oldfill);
-  }
-  return m << 's';
+  using seconds_t = std::chrono::duration<float>;
+  fmt::print(m, "{:.9}", std::chrono::duration_cast<seconds_t>(t));
+  return m;
 }
 
 template<typename Clock,
