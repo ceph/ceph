@@ -17,18 +17,18 @@ Cephadm management of the following components are currently well-supported:
 - OSDs
 - CephFS file systems
 - rbd-mirror
+- NFS
+- iSCSI
 
 The following components are working with cephadm, but the
 documentation is not as complete as we would like, and there may be some
 changes in the near future:
 
 - RGW
-- dmcrypt OSDs
 
 Cephadm support for the following features is still under development:
 
-- NFS
-- iSCSI
+- RGW-HA
 
 If you run into problems, you can always pause cephadm with::
 
