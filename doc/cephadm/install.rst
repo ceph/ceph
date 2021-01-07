@@ -6,6 +6,12 @@ Cephadm creates a new Ceph cluster by "bootstrapping" on a single
 host, expanding the cluster to encompass any additional hosts, and
 then deploying the needed services.
 
+Each host should be prepared as follows for deployment:
+
+- Allow SSH for the root user
+- For the first "bootstrapping" host and any other hosts intended to be monitors, set up passwordless SSH to all other hosts
+- Ensure that each host has a unique hostname (unique IP addresses are not sufficient for the instructions below)
+
 .. highlight:: console
 
 Requirements
@@ -97,6 +103,7 @@ You need to know which *IP address* to use for the cluster's first
 monitor daemon.  This is normally just the IP for the first host.  If there
 are multiple networks and interfaces, be sure to choose one that will
 be accessible by any host accessing the Ceph cluster.
+
 
 To bootstrap the cluster, first create an ``/etc/ceph`` directory:
 
@@ -236,6 +243,16 @@ To add each new host to the cluster, perform two steps:
 
      ceph orch host add host2
      ceph orch host add host3
+
+
+   If you have not configured your hostnames as aliases for IP addresses, you can provide the IP address after the hostname.  For example:
+
+   .. prompt:: bash #
+
+     ceph orch host add host2 192.168.1.41
+     ceph orch host add host3 192.168.1.42
+     
+   Additional options including adding multiple hosts are documented in the Orchestrator CLI.
 
 
 .. _deploy_additional_monitors:
