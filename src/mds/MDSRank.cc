@@ -3367,8 +3367,33 @@ void MDSRank::create_logger()
     mds_plb.add_u64_counter(l_mds_traverse_lock, "traverse_lock",
                             "Traverse locks");
     mds_plb.add_u64(l_mds_dispatch_queue_len, "q", "Dispatch queue length");
+
     mds_plb.add_u64_counter(l_mds_exported, "exported", "Exports");
     mds_plb.add_u64_counter(l_mds_imported, "imported", "Imports");
+    mds_plb.add_u64_counter(l_mds_export_fail, "export_fail", "Export failures");
+    mds_plb.add_u64_counter(l_mds_export_authpin_fail, "export_authpin_fail",
+			   "Export failures caused by authpin");
+    mds_plb.add_u64_counter(l_mds_export_trylock_fail, "export_trylock_fail",
+			    "Export failures caused by locking");
+    mds_plb.add_u64_counter(l_mds_export_freeze_fail, "export_freeze_fail",
+			    "Export failures at freezing tree");
+    mds_plb.add_u64_counter(l_mds_export_discover_fail, "export_discover_fail",
+			    "Export failures caused discover nack");
+    mds_plb.add_u64_counter(l_mds_export_prep_fail, "export_prep_fail",
+			    "Export failures caused by prep nack");
+    mds_plb.add_u64_counter(l_mds_export_peer_fail, "export_peer_fail",
+			    "Export failures caused by peer failover");
+
+    mds_plb.add_u64_counter(l_mds_import_fail, "import_fail", "Import failures");
+    mds_plb.add_u64_counter(l_mds_import_peer_cancel, "import_peer_cancel",
+			    "Imports cancelled by peer");
+    mds_plb.add_u64_counter(l_mds_import_trylock_fail, "import_trylock_fail",
+			    "Import failures caused by locking");
+    mds_plb.add_u64_counter(l_mds_import_peer_fail, "import_peer_fail",
+			    "Import failures caused by peer failover");
+    mds_plb.add_u64_counter(l_mds_import_resolve_fail, "import_resolve_fail",
+			    "Import failures caused by resolve nack");
+
     mds_plb.add_u64_counter(l_mds_openino_backtrace_fetch, "openino_backtrace_fetch",
                             "OpenIno backtrace fetchings");
     mds_plb.add_u64_counter(l_mds_openino_peer_discover, "openino_peer_discover",
