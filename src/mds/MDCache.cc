@@ -3667,6 +3667,13 @@ void MDCache::rejoin_send_rejoins(mds_rank_t target)
 {
   dout(10) << "rejoin_send_rejoins with recovery_set " << recovery_set << dendl;
 
+  if (target == MDS_RANK_NONE) {
+    rejoins_pending = false;
+    if (!mds->mdsmap->is_rejoining()) {
+      dout(7) << "rejoin_send_rejoins no longer in joint rejoining state, noop" << dendl;
+      return;
+    }
+  }
   if (rejoin_gather.count(mds->get_nodeid())) {
     dout(7) << "rejoin_send_rejoins still processing imported caps, delaying" << dendl;
     ceph_assert(target == MDS_RANK_NONE);
@@ -3882,7 +3889,6 @@ void MDCache::rejoin_send_rejoins(mds_rank_t target)
     mds->send_message_mds(p.second, p.first);
   }
   rejoin_ack_gather.insert(mds->get_nodeid());   // we need to complete rejoin_gather_finish, too
-  rejoins_pending = false;
 
   // nothing?
   if (mds->is_rejoin() && rejoin_gather.empty()) {
