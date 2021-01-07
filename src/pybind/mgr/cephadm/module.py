@@ -173,7 +173,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         },
         {
             'name': 'container_image_grafana',
-            'default': 'docker.io/ceph/ceph-grafana:6.6.2',
+            'default': 'docker.io/ceph/ceph-grafana:6.7.4',
             'desc': 'Prometheus container image',
         },
         {
