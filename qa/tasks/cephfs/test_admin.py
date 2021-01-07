@@ -193,6 +193,10 @@ class TestAdminCommands(CephFSTestCase):
             self._check_pool_application_metadata_key_value(
                 pool_names[i], 'cephfs', keys[i], fs_name)
 
+class TestRequiredClientFeatures(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
     def test_required_client_features(self):
         """
         That `ceph fs required_client_features` command functions.
