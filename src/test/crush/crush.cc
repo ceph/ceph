@@ -35,7 +35,7 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
 
   int rootno;
   c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-		5, 0, NULL, NULL, &rootno);
+		5, 0, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
   map<string,string> loc;
@@ -47,7 +47,7 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
     for (int h=0; h<num_host; ++h) {
       loc["host"] = string("host-") + stringify(r) + string("-") + stringify(h);
       for (int o=0; o<num_osd; ++o, ++osd) {
-	c->insert_item(cct, osd, 1.0, string("osd.") + stringify(osd), loc);
+	c->insert_item(cct, osd, 1.0, 0, string("osd.") + stringify(osd), loc);
       }
     }
   }
@@ -273,10 +273,11 @@ TEST_F(CRUSHTest, straw_zero) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int n = 5;
-  int items[n], weights[n];
+  int items[n], weights[n], performances[n];
   for (int i=0; i <n; ++i) {
     items[i] = i;
     weights[i] = 0x10000 * (n-i-1);
+    performances[i] = 0;
   }
 
   c->set_max_devices(n);
@@ -284,7 +285,7 @@ TEST_F(CRUSHTest, straw_zero) {
   string root_name0("root0");
   int root0;
   EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-			     ROOT_TYPE, n, items, weights, &root0));
+			     ROOT_TYPE, n, items, weights, performances, &root0));
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
@@ -295,7 +296,7 @@ TEST_F(CRUSHTest, straw_zero) {
   string root_name1("root1");
   int root1;
   EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-			     ROOT_TYPE, n-1, items, weights, &root1));
+			     ROOT_TYPE, n-1, items, weights, performances, &root1));
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
@@ -338,7 +339,7 @@ TEST_F(CRUSHTest, straw_same) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int n = 10;
-  int items[n], weights[n];
+  int items[n], weights[n], performances[n];
   for (int i=0; i <n; ++i) {
     items[i] = i;
     weights[i] = 0x10000 * ((i+1)/2 + 1);
@@ -349,7 +350,7 @@ TEST_F(CRUSHTest, straw_same) {
   string root_name0("root0");
   int root0;
   EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-			     ROOT_TYPE, n, items, weights, &root0));
+			     ROOT_TYPE, n, items, weights, performances, &root0));
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
@@ -365,7 +366,7 @@ TEST_F(CRUSHTest, straw_same) {
   string root_name1("root1");
   int root1;
   EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-			     ROOT_TYPE, n, items, weights, &root1));
+			     ROOT_TYPE, n, items, weights, performances, &root1));
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
@@ -427,7 +428,7 @@ TEST_F(CRUSHTest, straw_same) {
   ASSERT_LT(ratio, .001);
 }
 
-double calc_straw2_stddev(int *weights, int n, bool verbose)
+double calc_straw2_stddev(int *weights, int *performances, int n, bool verbose)
 {
   std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   const int ROOT_TYPE = 2;
@@ -448,7 +449,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   int root0;
   crush_bucket *b0 = crush_make_bucket(c->get_crush_map(),
 				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
-				       ROOT_TYPE, n, items, weights);
+				       ROOT_TYPE, n, items, weights, performances);
   crush_add_bucket(c->get_crush_map(), 0, b0, &root0);
   c->set_item_name(root0, root_name0);
 
@@ -515,6 +516,7 @@ TEST_F(CRUSHTest, straw2_stddev)
 {
   int n = 15;
   int weights[n];
+  int performances[n];
   cout << "maxskew\tstddev\n";
   for (double step = 1.0; step < 2; step += .25) {
     int w = 0x10000;
@@ -522,7 +524,7 @@ TEST_F(CRUSHTest, straw2_stddev)
       weights[i] = w;
       w *= step;
     }
-    double stddev = calc_straw2_stddev(weights, n, true);
+    double stddev = calc_straw2_stddev(weights, performances, n, true);
     cout << ((double)weights[n-1]/(double)weights[0])
 	 << "\t" << stddev << std::endl;
   }
@@ -533,6 +535,25 @@ TEST_F(CRUSHTest, straw2_reweight) {
   // we should *only* see movement from or to that item, never
   // between other items.
   int weights[] = {
+    0x10000,
+    0x10000,
+    0x20000,
+    0x20000,
+    0x30000,
+    0x50000,
+    0x8000,
+    0x20000,
+    0x10000,
+    0x10000,
+    0x20000,
+    0x10000,
+    0x10000,
+    0x20000,
+    0x300000,
+    0x10000,
+    0x20000
+  };
+  int performances[] = {
     0x10000,
     0x10000,
     0x20000,
@@ -573,7 +594,7 @@ TEST_F(CRUSHTest, straw2_reweight) {
   int root0;
   crush_bucket *b0 = crush_make_bucket(c->get_crush_map(),
 				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
-				       ROOT_TYPE, n, items, weights);
+				       ROOT_TYPE, n, items, weights, performances);
   EXPECT_EQ(0, crush_add_bucket(c->get_crush_map(), 0, b0, &root0));
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
@@ -589,7 +610,7 @@ TEST_F(CRUSHTest, straw2_reweight) {
   int root1;
   crush_bucket *b1 = crush_make_bucket(c->get_crush_map(),
 				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
-				       ROOT_TYPE, n, items, weights);
+				       ROOT_TYPE, n, items, weights, performances);
   EXPECT_EQ(0, crush_add_bucket(c->get_crush_map(), 0, b1, &root1));
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 

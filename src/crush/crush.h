@@ -234,6 +234,7 @@ struct crush_bucket {
 	__u8 hash;       /* which hash function to use, CRUSH_HASH_* */
 	/*! @endcond */
 	__u32 weight;    /*!< 16.16 fixed point cumulated children weight */
+        __u32 performance; /*!< cumulated children performance, for now, we didn't use it */
 	__u32 size;      /*!< size of the __items__ array */
         __s32 *items;    /*!< array of children: < 0 are buckets, >= 0 items */
 };
@@ -340,6 +341,7 @@ struct crush_bucket_straw {
 struct crush_bucket_straw2 {
         struct crush_bucket h; /*!< generic bucket information */
 	__u32 *item_weights;   /*!< 16.16 fixed point weight for each item */
+        __u32 *item_performances; /*!< performance for each item */
 };
 
 
@@ -474,6 +476,7 @@ struct crush_map {
  * @returns the 16.16 fixed point item weight
  */
 extern int crush_get_bucket_item_weight(const struct crush_bucket *b, int pos);
+extern int crush_get_bucket_item_performance(const struct crush_bucket *b, int pos);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);

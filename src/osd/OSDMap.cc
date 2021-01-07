@@ -3859,6 +3859,7 @@ public:
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PERFORMANCE", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
     tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
@@ -3874,7 +3875,7 @@ public:
       Parent::dump(tbl);
       for (int i = 0; i < osdmap->get_max_osd(); i++) {
 	if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
-	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0), tbl);
+	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0, 0), tbl);
 	}
       }
     }
@@ -3887,7 +3888,8 @@ protected:
       c = "";
     *tbl << qi.id
 	 << c
-	 << weightf_t(qi.weight);
+	 << weightf_t(qi.weight)
+   << si_u_t(qi.performance);
 
     ostringstream name;
     for (int k = 0; k < qi.depth; k++)
@@ -3965,7 +3967,7 @@ public:
       f->open_array_section("stray");
       for (int i = 0; i < osdmap->get_max_osd(); i++) {
 	if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
-	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0, 0), f);
       }
       f->close_section();
     }
@@ -4239,7 +4241,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   int root_type = _build_crush_types(crush);
   int rootid;
   int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT,
-			   root_type, 0, NULL, NULL, &rootid);
+			   root_type, 0, NULL, NULL, NULL, &rootid);
   ceph_assert(r == 0);
   crush.set_item_name(rootid, "default");
 
@@ -4251,7 +4253,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     ldout(cct, 10) << " adding osd." << o << " at " << loc << dendl;
     char name[32];
     snprintf(name, sizeof(name), "osd.%d", o);
-    crush.insert_item(cct, o, 1.0, name, loc);
+    crush.insert_item(cct, o, 1.0, 0, name, loc);
   }
 
   build_simple_crush_rules(cct, crush, "default", ss);
@@ -4274,7 +4276,7 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
   int rootid;
   int r = crush.add_bucket(0, 0,
 			   CRUSH_HASH_DEFAULT,
-			   root_type, 0, NULL, NULL, &rootid);
+			   root_type, 0, NULL, NULL, NULL, &rootid);
   ceph_assert(r == 0);
   crush.set_item_name(rootid, "default");
 
@@ -4320,7 +4322,7 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
     loc["root"] = "default";
 
     ldout(cct, 5) << " adding osd." << o << " at " << loc << dendl;
-    crush.insert_item(cct, o, 1.0, section, loc);
+    crush.insert_item(cct, o, 1.0, 0, section, loc);
   }
 
   build_simple_crush_rules(cct, crush, "default", ss);
@@ -5148,7 +5150,7 @@ protected:
   void dump_stray(F *f) {
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !this->is_touched(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+	dump_item(CrushTreeDumper::Item(i, 0, 0, 0, 0), f);
     }
   }
 

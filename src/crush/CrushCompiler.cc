@@ -660,6 +660,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     size = std::max(size, *used_items.rbegin());
   vector<int> items(size);
   vector<int> weights(size);
+  vector<int> performances(size, 0);
 
   int curpos = 0;
   unsigned bucketweight = 0;
@@ -754,7 +755,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   ceph_assert(id != 0);
   int idout;
   int r = crush.add_bucket(id, alg, hash, type, size,
-                           items.data(), weights.data(), &idout);
+                           items.data(), weights.data(), performances.data(), &idout);
   if (r < 0) {
     if (r == -EEXIST)
       err << "Duplicate bucket id " << id << std::endl;

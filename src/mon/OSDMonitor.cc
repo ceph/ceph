@@ -9916,7 +9916,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int bucketno;
     err = newcrush.add_bucket(0, 0,
 			      CRUSH_HASH_DEFAULT, type, 0, NULL,
-			      NULL, &bucketno);
+			      NULL, NULL, &bucketno);
     if (err < 0) {
       ss << "add_bucket error: '" << cpp_strerror(err) << "'";
       goto reply;
@@ -9929,7 +9929,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (!loc.empty()) {
       if (!newcrush.check_item_loc(cct, bucketno, loc,
-          (int *)NULL)) {
+          (int *)NULL, (int *)NULL)) {
         err = newcrush.move_bucket(cct, bucketno, loc);
         if (err < 0) {
           ss << "error moving bucket '" << name << "' to location " << loc;
@@ -10097,8 +10097,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (osdid_present &&
 	     (prefix == "osd crush set" || prefix == "osd crush add")) {
     // <OsdName> is 'osd.<id>' or '<id>', passed as int64_t id
-    // osd crush set <OsdName> <weight> <loc1> [<loc2> ...]
-    // osd crush add <OsdName> <weight> <loc1> [<loc2> ...]
+    // osd crush set <OsdName> <weight> <performance> <loc1> [<loc2> ...]
+    // osd crush add <OsdName> <weight> <performance> <loc1> [<loc2> ...]
 
     if (!osdmap.exists(osdid)) {
       err = -ENOENT;
@@ -10111,6 +10111,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!cmd_getval(cmdmap, "weight", weight)) {
       ss << "unable to parse weight value '"
          << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    double performance;
+    if (!cmd_getval(cmdmap, "performance", performance)) {
+      ss << "unable to parse performance value '"
+         << cmd_vartype_stringify(cmdmap.at("performance")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -10138,12 +10146,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string action;
     if (prefix == "osd crush set" ||
-        newcrush.check_item_loc(cct, osdid, loc, (int *)NULL)) {
+        newcrush.check_item_loc(cct, osdid, loc, (int *)NULL, (int *)NULL)) {
       action = "set";
-      err = newcrush.update_item(cct, osdid, weight, osd_name, loc);
+      err = newcrush.update_item(cct, osdid, weight, performance, osd_name, loc);
     } else {
       action = "add";
-      err = newcrush.insert_item(cct, osdid, weight, osd_name, loc);
+      err = newcrush.insert_item(cct, osdid, weight, performance, osd_name, loc);
       if (err == 0)
         err = 1;
     }
@@ -10153,14 +10161,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (err == 0 && !_have_pending_crush()) {
       ss << action << " item id " << osdid << " name '" << osd_name
-	 << "' weight " << weight << " at location " << loc << ": no change";
+	 << "' weight " << weight << "' performance " << performance << " at location " << loc << ": no change";
       goto reply;
     }
 
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     ss << action << " item id " << osdid << " name '" << osd_name << "' weight "
-       << weight << " at location " << loc << " to crush map";
+       << weight << "' performance " << performance << " at location " << loc << " to crush map";
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						      get_last_committed() + 1));
@@ -10239,7 +10247,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       int id = newcrush.get_item_id(name);
 
-      if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL)) {
+      if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL, (int *)NULL)) {
 	if (id >= 0) {
 	  err = newcrush.create_or_move_item(
 	    cct, id, 0, name, loc,
@@ -10329,7 +10337,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else {
       dout(5) << "resolved crush name '" << name << "' to id " << id << dendl;
     }
-    if (osdmap.crush->check_item_loc(cct, id, loc, (int*) NULL)) {
+    if (osdmap.crush->check_item_loc(cct, id, loc, (int*) NULL, (int *)NULL)) {
       ss << "no need to move item id " << id << " name '" << name
 	 << "' to location " << loc << " in crush map";
       err = 0;
@@ -10346,7 +10354,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     } else {
       int id = newcrush.get_item_id(name);
-      if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL)) {
+      if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL, (int *)NULL)) {
 	err = newcrush.link_bucket(cct, id, loc);
 	if (err >= 0) {
 	  ss << "linked item id " << id << " name '" << name

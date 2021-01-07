@@ -563,14 +563,16 @@ COMMAND("osd crush rename-bucket "
 COMMAND("osd crush set "
 	"name=id,type=CephOsdName "
 	"name=weight,type=CephFloat,range=0.0 "
+	"name=performance,type=CephFloat,range=0.0 "
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]",
-	"update crushmap position and weight for <name> to <weight> with location <args>",
+	"update crushmap position and weight for <name> to <weight>/performance with location <args>",
 	"osd", "rw")
 COMMAND("osd crush add "
 	"name=id,type=CephOsdName "
 	"name=weight,type=CephFloat,range=0.0 "
+	"name=performance,type=CephFloat,range=0.0 "
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]",
-	"add or update crushmap position and weight for <name> with <weight> and location <args>",
+	"add or update crushmap position and weight/performance for <name> with <weight>/<performance> and location <args>",
 	"osd", "rw")
 COMMAND("osd crush set-all-straw-buckets-to-straw2",
         "convert all CRUSH current straw buckets to use the straw2 algorithm",

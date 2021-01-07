@@ -43,6 +43,18 @@ int crush_get_bucket_item_weight(const struct crush_bucket *b, int p)
 	return 0;
 }
 
+int crush_get_bucket_item_performance(const struct crush_bucket *b, int p)
+{
+	if ((__u32)p >= b->size)
+		return 0;
+
+	switch (b->alg) {
+	case CRUSH_BUCKET_STRAW2:
+		return ((struct crush_bucket_straw2 *)b)->item_performances[p];
+	}
+	return 0;
+}
+
 void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b)
 {
 	kfree(b->h.items);
@@ -74,6 +86,7 @@ void crush_destroy_bucket_straw(struct crush_bucket_straw *b)
 
 void crush_destroy_bucket_straw2(struct crush_bucket_straw2 *b)
 {
+	kfree(b->item_performances);
 	kfree(b->item_weights);
 	kfree(b->h.items);
 	kfree(b);

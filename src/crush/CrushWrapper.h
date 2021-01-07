@@ -668,14 +668,17 @@ public:
    */
   bool check_item_loc(CephContext *cct, int item,
 		      const std::map<std::string,std::string>& loc,
-		      int *iweight);
+		      int *iweight, int *performance);
   bool check_item_loc(CephContext *cct, int item,
 		      const std::map<std::string,std::string>& loc,
-		      float *weight) {
+		      float *weight, float *performance) {
     int iweight;
-    bool ret = check_item_loc(cct, item, loc, &iweight);
+    int _performance;
+    bool ret = check_item_loc(cct, item, loc, &iweight, &_performance);
     if (weight)
       *weight = (float)iweight / (float)0x10000;
+    if (performance)
+      *performance = _performance;
     return ret;
   }
 
@@ -810,12 +813,13 @@ public:
    * @param cct cct
    * @param id item id
    * @param weight item weight
+   * @param performance item performance
    * @param name item name
    * @param loc location (map of type to bucket names)
    * @param init_weight_sets initialize weight-set weights to weight (vs 0)
    * @return 0 for success, negative on error
    */
-  int insert_item(CephContext *cct, int id, float weight, std::string name,
+  int insert_item(CephContext *cct, int id, float weight, float performance, std::string name,
 		  const std::map<std::string,std::string>& loc,
 		  bool init_weight_sets=true);
 
@@ -866,11 +870,12 @@ public:
    * @param cct cct
    * @param id item id
    * @param weight item weight
+   * @param performance item performance
    * @param name item name
    * @param loc location (map of type to bucket names)
    * @return 0 for no change, 1 for successful change, negative on error
    */
-  int update_item(CephContext *cct, int id, float weight, std::string name,
+  int update_item(CephContext *cct, int id, float weight, float performance, std::string name,
 		  const std::map<std::string, std::string>& loc);
 
   /**
@@ -979,6 +984,7 @@ public:
   }
   int adjust_item_weight(CephContext *cct, int id, int weight,
 			 bool update_weight_sets=true);
+  int adjust_item_performance(CephContext *cct, int id, int performance);
   int adjust_item_weightf(CephContext *cct, int id, float weight,
 			  bool update_weight_sets=true) {
     int r = validate_weightf(weight);
@@ -991,9 +997,13 @@ public:
   int adjust_item_weight_in_bucket(CephContext *cct, int id, int weight,
 				   int bucket_id,
 				   bool update_weight_sets);
+  int adjust_item_performance_in_bucket(CephContext *cct, int id, int performance,
+				   int bucket_id);
   int adjust_item_weight_in_loc(CephContext *cct, int id, int weight,
 				const std::map<std::string,std::string>& loc,
 				bool update_weight_sets=true);
+  int adjust_item_performance_in_loc(CephContext *cct, int id, int performance,
+				const std::map<std::string,std::string>& loc);
   int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight,
 				 const std::map<std::string,std::string>& loc,
 				 bool update_weight_sets=true) {
@@ -1271,6 +1281,11 @@ public:
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->weight;
   }
+  int get_bucket_performance(int id) const {
+    const crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return b->performance;
+  }
   float get_bucket_weightf(int id) const {
     const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return 0;
@@ -1308,6 +1323,11 @@ public:
     if (IS_ERR(b)) return PTR_ERR(b);
     return crush_get_bucket_item_weight(b, pos);
   }
+  int get_bucket_item_performance(int id, int pos) const {
+    const crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return crush_get_bucket_item_performance(b, pos);
+  }
   float get_bucket_item_weightf(int id, int pos) const {
     const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return 0;
@@ -1316,12 +1336,14 @@ public:
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
-		 int *items, int *weights, int *idout);
-  int bucket_add_item(crush_bucket *bucket, int item, int weight);
+		 int *items, int *weights, int *performances, int *idout);
+  int bucket_add_item(crush_bucket *bucket, int item, int weight, int performance);
   int bucket_remove_item(struct crush_bucket *bucket, int item);
   int bucket_adjust_item_weight(
     CephContext *cct, struct crush_bucket *bucket, int item, int weight,
     bool adjust_weight_sets);
+  int bucket_adjust_item_performance(
+    CephContext *cct, struct crush_bucket *bucket, int item, int performance);
 
   void finalize() {
     ceph_assert(crush);

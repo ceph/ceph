@@ -597,7 +597,8 @@ crush_make_straw2_bucket(struct crush_map *map,
 			 int type,
 			 int size,
 			 int *items,
-			 int *weights)
+			 int *weights,
+			 int *performances)
 {
 	struct crush_bucket_straw2 *bucket;
 	int i;
@@ -618,15 +619,23 @@ crush_make_straw2_bucket(struct crush_map *map,
         if (!bucket->item_weights)
                 goto err;
 
+	bucket->item_performances = malloc(sizeof(__u32)*size);
+        if (!bucket->item_performances)
+                goto err;
+
         bucket->h.weight = 0;
+		bucket->h.performance = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->h.weight += weights[i];
 		bucket->item_weights[i] = weights[i];
+		bucket->h.performance += performances[i];
+		bucket->item_performances[i] = performances[i];
 	}
 
 	return bucket;
 err:
+		free(bucket->item_performances);
         free(bucket->item_weights);
         free(bucket->h.items);
         free(bucket);
@@ -639,7 +648,8 @@ struct crush_bucket*
 crush_make_bucket(struct crush_map *map,
 		  int alg, int hash, int type, int size,
 		  int *items,
-		  int *weights)
+		  int *weights,
+		  int *performances)
 {
 	int item_weight;
 
@@ -660,7 +670,7 @@ crush_make_bucket(struct crush_map *map,
 	case CRUSH_BUCKET_STRAW:
 		return (struct crush_bucket *)crush_make_straw_bucket(map, hash, type, size, items, weights);
 	case CRUSH_BUCKET_STRAW2:
-		return (struct crush_bucket *)crush_make_straw2_bucket(map, hash, type, size, items, weights);
+		return (struct crush_bucket *)crush_make_straw2_bucket(map, hash, type, size, items, weights, performances);
 	}
 	return 0;
 }
@@ -831,7 +841,7 @@ int crush_add_straw_bucket_item(struct crush_map *map,
 
 int crush_add_straw2_bucket_item(struct crush_map *map,
 				 struct crush_bucket_straw2 *bucket,
-				 int item, int weight)
+				 int item, int weight, int performance)
 {
 	int newsize = bucket->h.size + 1;
 
@@ -847,21 +857,28 @@ int crush_add_straw2_bucket_item(struct crush_map *map,
 	} else {
 		bucket->item_weights = _realloc;
 	}
+	if ((_realloc = realloc(bucket->item_performances, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_performances = _realloc;
+	}
 
 	bucket->h.items[newsize-1] = item;
 	bucket->item_weights[newsize-1] = weight;
+	bucket->item_performances[newsize-1] = performance;
 
 	if (crush_addition_is_unsafe(bucket->h.weight, weight))
                 return -ERANGE;
 
 	bucket->h.weight += weight;
+	bucket->h.performance += performance;
 	bucket->h.size++;
 
 	return 0;
 }
 
 int crush_bucket_add_item(struct crush_map *map,
-			  struct crush_bucket *b, int item, int weight)
+			  struct crush_bucket *b, int item, int weight, int performance)
 {
 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
@@ -873,7 +890,7 @@ int crush_bucket_add_item(struct crush_map *map,
 	case CRUSH_BUCKET_STRAW:
 		return crush_add_straw_bucket_item(map, (struct crush_bucket_straw *)b, item, weight);
 	case CRUSH_BUCKET_STRAW2:
-		return crush_add_straw2_bucket_item(map, (struct crush_bucket_straw2 *)b, item, weight);
+		return crush_add_straw2_bucket_item(map, (struct crush_bucket_straw2 *)b, item, weight, performance);
 	default:
 		return -1;
 	}
@@ -1081,9 +1098,16 @@ int crush_remove_straw2_bucket_item(struct crush_map *map,
 				bucket->h.weight -= bucket->item_weights[i];
 			else
 				bucket->h.weight = 0;
+			// performance
+			if (bucket->item_performances[i] < bucket->h.performance)
+				bucket->h.performance -= bucket->item_performances[i];
+			else
+				bucket->h.performance = 0;
 			for (j = i; j < bucket->h.size - 1; j++) {
 				bucket->h.items[j] = bucket->h.items[j+1];
 				bucket->item_weights[j] = bucket->item_weights[j+1];
+				bucket->item_performances[j] = bucket->item_performances[j+1];
+
 			}
 			break;
 		}
@@ -1108,6 +1132,11 @@ int crush_remove_straw2_bucket_item(struct crush_map *map,
 		return -ENOMEM;
 	} else {
 		bucket->item_weights = _realloc;
+	}
+	if ((_realloc = realloc(bucket->item_performances, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_performances = _realloc;
 	}
 
 	return 0;
@@ -1260,6 +1289,40 @@ int crush_bucket_adjust_item_weight(struct crush_map *map,
 		return crush_adjust_straw2_bucket_item_weight(map,
 							      (struct crush_bucket_straw2 *)b,
 							     item, weight);
+	default:
+		return -1;
+	}
+}
+
+int crush_adjust_straw2_bucket_item_performance(struct crush_map *map,
+					   struct crush_bucket_straw2 *bucket,
+					   int item, int performance)
+{
+	unsigned idx;
+	int diff;
+
+	for (idx = 0; idx < bucket->h.size; idx++)
+		if (bucket->h.items[idx] == item)
+			break;
+	if (idx == bucket->h.size)
+		return 0;
+
+	diff = performance - bucket->item_performances[idx];
+	bucket->item_performances[idx] = performance;
+	bucket->h.performance += diff;
+
+	return diff;
+}
+
+int crush_bucket_adjust_item_performance(struct crush_map *map,
+				    struct crush_bucket *b,
+				    int item, int performance)
+{
+	switch (b->alg) {
+	case CRUSH_BUCKET_STRAW2:
+		return crush_adjust_straw2_bucket_item_performance(map,
+							      (struct crush_bucket_straw2 *)b,
+							     item, performance);
 	default:
 		return -1;
 	}

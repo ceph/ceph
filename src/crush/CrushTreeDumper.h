@@ -54,10 +54,11 @@ namespace CrushTreeDumper {
     int parent;
     int depth;
     float weight;
+    float performance;
     std::list<int> children;
 
-    Item() : id(0), parent(0), depth(0), weight(0) {}
-    Item(int i, int p, int d, float w) : id(i), parent(p), depth(d), weight(w) {}
+    Item() : id(0), parent(0), depth(0), weight(0), performance(0) {}
+    Item(int i, int p, int d, float w, float per) : id(i), parent(p), depth(d), weight(w), performance(per) {}
 
     bool is_bucket() const { return id < 0; }
   };
@@ -118,7 +119,7 @@ namespace CrushTreeDumper {
 	  ++root;
 	if (root == roots.end())
 	  return false;
-	push_back(Item(*root, 0, 0, crush->get_bucket_weightf(*root)));
+	push_back(Item(*root, 0, 0, crush->get_bucket_weightf(*root), crush->get_bucket_performance(*root)));
 	++root;
       }
 
@@ -129,7 +130,7 @@ namespace CrushTreeDumper {
       if (qi.is_bucket()) {
 	// queue bucket contents, sorted by (class, name)
 	int s = crush->get_bucket_size(qi.id);
-	std::map<std::string, std::pair<int,float>> sorted;
+	std::map<std::string, std::tuple<int, float, float> > sorted;
 	for (int k = s - 1; k >= 0; k--) {
 	  int id = crush->get_bucket_item(qi.id, k);
 	  if (should_dump(id)) {
@@ -145,14 +146,15 @@ namespace CrushTreeDumper {
 	      sort_by = "_";
 	      sort_by += crush->get_item_name(id);
 	    }
-	    sorted[sort_by] = std::make_pair(
-	      id, crush->get_bucket_item_weightf(qi.id, k));
+	    sorted[sort_by] = std::make_tuple(id,
+                        crush->get_bucket_item_weightf(qi.id, k),
+                        crush->get_bucket_item_performance(qi.id, k));
 	  }
 	}
 	for (auto p = sorted.rbegin(); p != sorted.rend(); ++p) {
-	  qi.children.push_back(p->second.first);
-	  push_front(Item(p->second.first, qi.id, qi.depth + 1,
-			  p->second.second));
+	  qi.children.push_back(std::get<0>(p->second));
+    push_front(Item(std::get<0>(p->second), qi.id, qi.depth+1,
+                    std::get<1>(p->second), std::get<2>(p->second)));
 	}
       }
       return true;
