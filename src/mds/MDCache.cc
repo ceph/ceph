@@ -904,7 +904,7 @@ void MDCache::populate_mydir()
 
 void MDCache::open_foreign_mdsdir(inodeno_t ino, MDSContext *fin)
 {
-  discover_base_ino(ino, fin, mds_rank_t(ino & (MAX_MDS-1)));
+  discover_base_ino(ino, fin, MDS_INO_MDSDIR_OWNER(ino));
 }
 
 CDir *MDCache::get_stray_dir(CInode *in)
