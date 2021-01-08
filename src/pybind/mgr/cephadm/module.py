@@ -44,7 +44,7 @@ from .services.cephadmservice import MonService, MgrService, MdsService, RgwServ
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
-from .services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
+from .services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 from .schedule import HostAssignment
@@ -354,7 +354,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache.load()
 
         self.rm_util = RemoveUtil(self)
-        self.to_remove_osds = OSDQueue()
+        self.to_remove_osds = OSDRemovalQueue()
         self.rm_util.load_from_store()
 
         self.spec_store = SpecStore(self)

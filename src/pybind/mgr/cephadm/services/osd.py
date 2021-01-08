@@ -675,7 +675,7 @@ class OSD:
         return f"<OSD>(osd_id={self.osd_id}, draining={self.draining})"
 
 
-class OSDQueue(Set):
+class OSDRemovalQueue(Set):
 
     def __init__(self) -> None:
         super().__init__()
