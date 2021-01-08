@@ -662,13 +662,13 @@ class OSDRemovalQueue(object):
         # self could change while this is processing (osds get added from the CLI)
         # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
         # osds that were added while this method was executed'
-        self.intersection_update(new_queue)
+        self.osds.intersection_update(new_queue)
         self.save_to_store()
 
     def cleanup(self) -> None:
         # OSDs can always be cleaned up manually. This ensures that we run on existing OSDs
         for osd in self.not_in_cluster():
-            self.remove(osd)
+            self.osds.remove(osd)
 
     def save_to_store(self) -> None:
         osd_queue = [osd.to_json() for osd in self.all_osds()]
@@ -720,15 +720,6 @@ class OSDRemovalQueue(object):
         except KeyError:
             logger.debug(f"Could not find {osd} in queue.")
             raise KeyError
-
-    def remove(self, osd: OSD) -> None:
-        self.osds.remove(osd)
-
-    def add(self, osd: OSD) -> None:
-        self.osds.add(osd)
-
-    def intersection_update(self, other: Set[OSD]) -> None:
-        self.osds.intersection_update(other)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, OSDRemovalQueue):
