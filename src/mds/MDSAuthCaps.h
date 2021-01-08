@@ -14,7 +14,7 @@
 #ifndef MDS_AUTH_CAPS_H
 #define MDS_AUTH_CAPS_H
 
-#include <sstream>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
