@@ -218,15 +218,16 @@ describe('HealthComponent', () => {
   });
 
   it('event binding "prepareReadWriteRatio" is called', () => {
-    const prepareReadWriteRatio = spyOn(component, 'prepareReadWriteRatio');
+    const prepareReadWriteRatio = spyOn(component, 'prepareReadWriteRatio').and.callThrough();
 
     const payload = _.cloneDeep(healthPayload);
     payload.client_perf['read_op_per_sec'] = 1;
-    payload.client_perf['write_op_per_sec'] = 1;
+    payload.client_perf['write_op_per_sec'] = 3;
     getHealthSpy.and.returnValue(of(payload));
     fixture.detectChanges();
 
     expect(prepareReadWriteRatio).toHaveBeenCalled();
+    expect(prepareReadWriteRatio.calls.mostRecent().args[0].dataset[0].data).toEqual([25, 75]);
   });
 
   it('event binding "prepareRawUsage" is called', () => {
