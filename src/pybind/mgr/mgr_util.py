@@ -331,7 +331,7 @@ def format_units(n, width, colored, decimal):
         else:
             color = YELLOW, False
         return bold(colorize(formatted[0:-1], color[0], color[1])) \
-            + bold(colorize(formatted[-1], BLACK, False))
+            + bold(colorize(formatted[-1], YELLOW, False))
     else:
         return formatted
 
