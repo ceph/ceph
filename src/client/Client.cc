@@ -2712,7 +2712,7 @@ bool Client::ms_dispatch2(const MessageRef &m)
              << "+" << inode_map.size() << dendl;
     uint64_t size = lru.lru_get_size() + inode_map.size();
     trim_cache();
-    if (size < lru.lru_get_size() + inode_map.size()) {
+    if (size > lru.lru_get_size() + inode_map.size()) {
       ldout(cct, 10) << "unmounting: trim pass, cache shrank, poking unmount()" << dendl;
       mount_cond.notify_all();
     } else {
@@ -3121,7 +3121,7 @@ void Client::handle_lease(const MConstRef<MClientLease>& m)
 
 void Client::_put_inode(Inode *in, int n)
 {
-  ldout(cct, 10) << __func__ << " on " << *in << dendl;
+  ldout(cct, 10) << __func__ << " on " << *in << " n = " << n << dendl;
 
   int left = in->_put(n);
   if (left == 0) {
@@ -3155,6 +3155,9 @@ void Client::delay_put_inodes(bool wakeup)
     std::scoped_lock dl(delay_i_lock);
     release.swap(delay_i_release);
   }
+
+  if (release.empty())
+    return;
 
   for (auto &[in, cnt] : release)
     _put_inode(in, cnt);
