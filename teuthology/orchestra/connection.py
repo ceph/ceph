@@ -104,8 +104,7 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
                 try:
                     ssh.connect(**connect_args)
                     break
-                except paramiko.AuthenticationException:
-                    log.exception(
-                        "Error connecting to {host}".format(host=host))
+                except paramiko.AuthenticationException as e:
+                    log.error(f"Error authenticating with {host}: {str(e)}")
     ssh.get_transport().set_keepalive(keep_alive)
     return ssh
