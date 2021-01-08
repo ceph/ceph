@@ -1,4 +1,3 @@
-import datetime
 import json
 from contextlib import contextmanager
 from unittest.mock import ANY
@@ -20,12 +19,13 @@ from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
     NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
+from ceph.utils import datetime_to_str, datetime_now
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, assert_rm_service, _deploy_cephadm_binary
-from cephadm.module import CephadmOrchestrator, CEPH_DATEFMT
+from cephadm.module import CephadmOrchestrator
 
 """
 TODOs:
@@ -202,7 +202,7 @@ class TestCephadm(object):
 
                 # Make sure, _check_daemons does a redeploy due to monmap change:
                 cephadm_module._store['_ceph_get/mon_map'] = {
-                    'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
+                    'modified': datetime_to_str(datetime_now()),
                     'fsid': 'foobar',
                 }
                 cephadm_module.notify('mon_map', None)
@@ -221,7 +221,7 @@ class TestCephadm(object):
 
                     # Make sure, _check_daemons does a redeploy due to monmap change:
                     cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
-                        'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
+                        'modified': datetime_to_str(datetime_now()),
                         'fsid': 'foobar',
                     })
                     cephadm_module.notify('mon_map', None)
@@ -301,7 +301,7 @@ class TestCephadm(object):
 
                 # Make sure, _check_daemons does a redeploy due to monmap change:
                 cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
-                    'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
+                    'modified': datetime_to_str(datetime_now()),
                     'fsid': 'foobar',
                 })
                 cephadm_module.notify('mon_map', None)
@@ -512,7 +512,7 @@ class TestCephadm(object):
                                                       force=False,
                                                       hostname='test',
                                                       fullname='osd.0',
-                                                      process_started_at=datetime.datetime.utcnow(),
+                                                      process_started_at=datetime_now(),
                                                       remove_util=cephadm_module.rm_util
                                                       ))
             cephadm_module.rm_util.process_removal_queue()
@@ -877,7 +877,7 @@ class TestCephadm(object):
 
             # Make sure, _check_daemons does a redeploy due to monmap change:
             cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
-                'modified': datetime.datetime.utcnow().strftime(CEPH_DATEFMT),
+                'modified': datetime_to_str(datetime_now()),
                 'fsid': 'foobar',
             })
             cephadm_module.notify('mon_map', mock.MagicMock())
