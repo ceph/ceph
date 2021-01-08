@@ -187,6 +187,11 @@ public:
 
   void request_complete() override {
     --outstanding_requests;
+    if (auto c = counters();
+        c != nullptr) {
+      c->inc(throttle_counters::l_outstanding, -1);
+    }
+
   }
 
 private:
@@ -196,6 +201,7 @@ private:
     if (outstanding_requests++ >= max_requests) {
       if (auto c = counters();
           c != nullptr) {
+        c->inc(throttle_counters::l_outstanding);
         c->inc(throttle_counters::l_throttle);
       }
       return -EAGAIN;
