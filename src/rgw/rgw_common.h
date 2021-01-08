@@ -1669,6 +1669,33 @@ struct rgw_obj_key {
     instance = k.instance;
   }
 
+// Since bucket index entries are stored in sequence, and the elements
+// with namespaces can be between those without, we need a way to skip
+// past namespaced elements; this returns a marker that will do so.
+//
+// Consider the following sequence: ASP, _BAT_cat, __DOG, _eel_FOX,
+// goat; the 2nd and 4th entries are namespaced, but the 3rd is not,
+// it's just an entry that begins with an underscore, which will be
+// quoted with another underscore putting it between two potential
+// namespaced blocks
+  static const rgw_obj_index_key& after_namespace_marker(const std::string& after) {
+    // this is just before "__", so will allow finding non-namespaced
+    // entries that begin with an underscore (and therefore are entered
+    // as starting with "__".
+    static const rgw_obj_index_key result1(std::string("_^") + char(255));
+
+    // this is just before entries that do not begin with an
+    // underscore and will allow skipping past the second namespace
+    // block
+    static const rgw_obj_index_key result2(std::string("_") + char(255));
+
+    if (after < result1.name) {
+      return result1;
+    } else {
+      return result2;
+    }
+  }
+
   static void parse_index_key(const string& key, string *name, string *ns) {
     if (key[0] != '_') {
       *name = key;

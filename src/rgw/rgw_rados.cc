@@ -2468,8 +2468,13 @@ int RGWRados::Bucket::List::list_objects_ordered(
     }
   }
 
+  // allows us to skip over entries in two conditions: 1) when using a
+  // delimiter and we can skip over "subdirectories" and 2) when
+  // searching for elements in the empty namespace we can skip over
+  // namespaced elements
+  rgw_obj_index_key marker_skip_ahead;
+
   rgw_obj_index_key prev_marker;
-  string skip_after_delim;
   for (uint16_t attempt = 1; /* empty */; ++attempt) {
     ldout(cct, 20) << "RGWRados::Bucket::List::" << __func__ <<
       " starting attempt " << attempt << dendl;
@@ -2484,33 +2489,34 @@ int RGWRados::Bucket::List::list_objects_ordered(
     }
     prev_marker = cur_marker;
 
-    if (skip_after_delim > cur_marker.name) {
-      cur_marker = skip_after_delim;
-
-      ldout(cct, 20) << "setting cur_marker="
-		     << cur_marker.name
-		     << "[" << cur_marker.instance << "]"
-		     << dendl;
+    // see whether we found a way to skip ahead in the previous
+    // iteration
+    if (marker_skip_ahead > cur_marker) {
+      cur_marker = marker_skip_ahead;
+      ldout(cct, 20) << "advancing cur_marker=" << cur_marker << dendl;
     }
 
     std::map<string, rgw_bucket_dir_entry> ent_map;
+    const size_t num_requested = read_ahead + 1 - count;
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
 					   shard_id,
 					   cur_marker,
 					   cur_prefix,
-					   read_ahead + 1 - count,
+					   num_requested,
 					   params.list_versions,
 					   attempt,
 					   ent_map,
 					   &truncated,
 					   &cur_marker);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
 
     for (auto eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
+      const std::string& key = eiter->first;
       rgw_bucket_dir_entry& entry = eiter->second;
       rgw_obj_index_key index_key = entry.key;
-      rgw_obj_key obj(index_key);
+      rgw_obj_key obj(index_key); // NB: why is this re-set below? can't be const
 
       ldout(cct, 20) << "RGWRados::Bucket::List::" << __func__ <<
 	" considering entry " << entry.key << dendl;
@@ -2527,20 +2533,22 @@ int RGWRados::Bucket::List::list_objects_ordered(
         continue;
       }
 
-      bool matched_ns = (obj.ns == params.ns);
       if (!params.list_versions && !entry.is_visible()) {
         continue;
       }
 
+      const bool matched_ns = (obj.ns == params.ns);
       if (params.enforce_ns && !matched_ns) {
         if (!params.ns.empty()) {
           /* we've iterated past the namespace we're searching -- done now */
           truncated = false;
           goto done;
-        }
-
-        /* we're not looking at the namespace this object is in, next! */
-        continue;
+        } else {
+	  // we're enforcing an empty namespace, so we need to skip
+	  // past the namespace block
+	  marker_skip_ahead = rgw_obj_key::after_namespace_marker(key);
+	  continue;
+	}
       }
 
       if (cur_end_marker_valid && cur_end_marker <= index_key) {
@@ -2553,19 +2561,21 @@ int RGWRados::Bucket::List::list_objects_ordered(
 	next_marker = index_key;
       }
 
-      if (params.filter && !params.filter->filter(obj.name, index_key.name))
+      if (params.filter && !params.filter->filter(obj.name, index_key.name)) {
         continue;
+      }
 
       if (params.prefix.size() &&
-	  (obj.name.compare(0, params.prefix.size(), params.prefix) != 0))
+	  (obj.name.compare(0, params.prefix.size(), params.prefix) != 0)) {
         continue;
+      }
 
       if (!params.delim.empty()) {
         int delim_pos = obj.name.find(params.delim, params.prefix.size());
 
         if (delim_pos >= 0) {
-	  /* extract key -with trailing delimiter- for CommonPrefix */
-          string prefix_key =
+	  /* extract key *with* trailing delimiter for CommonPrefix */
+	  const std::string prefix_key =
 	    obj.name.substr(0, delim_pos + params.delim.length());
 
           if (common_prefixes &&
@@ -2577,10 +2587,13 @@ int RGWRados::Bucket::List::list_objects_ordered(
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
-            skip_after_delim = obj.name.substr(0, delim_pos);
-            skip_after_delim.append(after_delim_s);
-
-            ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
+	    // setting marker_skip_ahead allows the next call to
+	    // cls_bucket_list_ordered to skip over unlisted entries;
+	    // NOTE: after_delim_s
+	    const std::string skip_name = obj.name.substr(0, delim_pos) + after_delim_s;
+	    const rgw_obj_key skip_key(skip_name, "" /* empty instance*/ , obj.ns);
+	    skip_key.get_index_key(&marker_skip_ahead);
+            ldout(cct, 20) << "marker_skip_ahead=" << marker_skip_ahead << dendl;
 
             count++;
           }
@@ -2618,8 +2631,15 @@ int RGWRados::Bucket::List::list_objects_ordered(
   } // for (uint16_t attempt...
 
 done:
-  if (is_truncated)
+
+  auto csz = (common_prefixes) ? common_prefixes->size() : 0;
+  ldout(cct, 10) << "RGWRados::Bucket::List::" << __func__ <<
+    " INFO returning " << result->size() << " entries and "
+		 << csz << " common prefixes" << dendl;
+
+  if (is_truncated) {
     *is_truncated = truncated;
+  }
 
   return 0;
 } // list_objects_ordered
