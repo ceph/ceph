@@ -88,6 +88,10 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
                    ("immutable_object_cache_qos_bps_burst_seconds"));
   }
 
+  if ((cache_watermark <= 0) || (cache_watermark > 1)) {
+    lderr(m_cct) << "Invalid water mark provided, set it to default." << dendl;
+    cache_watermark = 0.9;
+  }
   m_policy = new SimplePolicy(m_cct, cache_max_size, max_inflight_ops,
                               cache_watermark);
 }
@@ -161,7 +165,8 @@ int ObjectCacheStore::do_promote(std::string pool_nspace, uint64_t pool_id,
                    << " snapshot: " << snap_id << dendl;
 
   int ret = 0;
-  std::string cache_file_name = get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
+  std::string cache_file_name =
+    get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
   librados::IoCtx ioctx;
   {
     std::lock_guard _locker{m_ioctx_map_lock};
@@ -247,7 +252,8 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace, uint64_t pool_id,
                    << " in pool ID : " << pool_id << dendl;
 
   int pret = -1;
-  std::string cache_file_name = get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
+  std::string cache_file_name =
+    get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
 
   cache_status_t ret = m_policy->lookup_object(cache_file_name);
 
