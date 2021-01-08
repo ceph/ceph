@@ -353,7 +353,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache = HostCache(self)
         self.cache.load()
 
-        self.rm_util = RemoveUtil(self)
         self.to_remove_osds = OSDRemovalQueue(self)
         self.to_remove_osds.load_from_store()
 
@@ -2237,7 +2236,7 @@ To check that the host is reachable:
                                                 hostname=daemon.hostname,
                                                 fullname=daemon.name(),
                                                 process_started_at=datetime.datetime.utcnow(),
-                                                remove_util=self.rm_util))
+                                                remove_util=self.to_remove_osds.rm_util))
             except NotFoundError:
                 return f"Unable to find OSDs: {osd_ids}"
 
@@ -2254,7 +2253,7 @@ To check that the host is reachable:
         for osd_id in osd_ids:
             try:
                 self.to_remove_osds.rm(OSD(osd_id=int(osd_id),
-                                           remove_util=self.rm_util))
+                                           remove_util=self.to_remove_osds.rm_util))
             except (NotFoundError, KeyError):
                 return f'Unable to find OSD in the queue: {osd_id}'
 
