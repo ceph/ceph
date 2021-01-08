@@ -90,4 +90,8 @@ describe('ServicesComponent', () => {
     component.getServices(new CdTableFetchDataContext(() => {}));
     expect(component.services.length).toBe(2);
   });
+
+  it('should not display doc panel if orchestrator is available', () => {
+    expect(component.showDocPanel).toBeFalsy();
+  });
 });
