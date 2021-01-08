@@ -13,7 +13,6 @@
  */
 
 #include <errno.h>
-#include <fstream>
 #include <ostream>
 #include <string>
 #include <string_view>

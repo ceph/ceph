@@ -19,8 +19,6 @@
 #include "common/Clock.h"
 #include "CInode.h"
 
-#include <fstream>
-
 #define dout_context g_ceph_context
 #undef dout_prefix
 #define dout_prefix *_dout << "mds.mantle "
