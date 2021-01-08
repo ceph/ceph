@@ -510,6 +510,7 @@ Requires:       python%{_python_buildid}-CherryPy
 Requires:       python%{_python_buildid}-PyJWT
 Requires:       python%{_python_buildid}-Routes
 Requires:       python%{_python_buildid}-Werkzeug
+Recommends:     python%{_python_buildid}-python3-saml
 %endif
 %if 0%{?rhel} == 7
 Requires:       pyOpenSSL
