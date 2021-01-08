@@ -13,6 +13,7 @@ set(server_srcs
   crushtool.rst
   ceph-run.rst
   mount.ceph.rst
+  mount.fuse.ceph.rst
   ceph-create-keys.rst)
 if(WITH_TESTS)
 list(APPEND server_srcs
