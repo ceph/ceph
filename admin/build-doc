@@ -64,11 +64,6 @@ install -d -m0755 \
     $TOPDIR/build-doc/output/html \
     $TOPDIR/build-doc/output/man
 
-# required by script/gen_static_command_descriptions.py, which imports ceph_argparse
-export PYTHONPATH=$TOPDIR/src/pybind
-
-$vdir/bin/python $TOPDIR/doc/scripts/gen_mon_command_api.py > $TOPDIR/doc/api/mon_command_api.rst
-
 for opt in "$@"; do
     case $opt in
         html|man|livehtml)
