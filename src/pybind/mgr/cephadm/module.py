@@ -1325,8 +1325,11 @@ To check that the host is reachable:
                                            addr=spec.addr,
                                            error_ok=True, no_fsid=True)
         if code:
-            raise OrchestratorError('New host %s (%s) failed check: %s' % (
-                spec.hostname, spec.addr, err))
+            # err will contain stdout and stderr, so we filter on the message text to 
+            # only show the errors
+            errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
+            raise OrchestratorError('New host %s (%s) failed check(s): %s' % (
+                spec.hostname, spec.addr, errors))
 
         self.inventory.add_host(spec)
         self.cache.prime_empty_host(spec.hostname)
