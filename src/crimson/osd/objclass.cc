@@ -473,7 +473,7 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx,
   return 0;
 }
 
-bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
+int cls_get_manifest_ref_count(cls_method_context_t hctx, string fp_oid)
 {
   return 0;
 }

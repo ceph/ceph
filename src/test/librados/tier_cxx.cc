@@ -5488,7 +5488,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
   // create object
   {
     bufferlist bl;
-    bl.append("there hiHI");
+    bl.append("there HIHI");
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
@@ -5573,7 +5573,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
   }
 
   // set-chunk (dedup)
-  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, hi_fp_oid, "foo");
+  manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, HI_fp_oid, "foo");
   // set-chunk (dedup)
   manifest_set_chunk(cluster, cache_ioctx, ioctx, 8, 2, HI_fp_oid, "foo");
 
@@ -5634,19 +5634,18 @@ TEST_F(LibRadosTwoPoolsPP, ManifestSnapHasChunk) {
     ASSERT_EQ(0, ioctx.write("foo", bl, 1, 6));
   }
 
-  // foo snap[1]:      [hi] [HI]
+  // foo snap[1]:      [HI] [HI]
   // foo snap[0]: [er] [ai] [SI]
   // foo head   : [er] [bi] [SI]
 
   // set-chunk (dedup)
   manifest_set_chunk(cluster, cache_ioctx, ioctx, 6, 2, bi_fp_oid, "foo");
 
-
   {
-    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", SI_fp_oid));
-    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", er_fp_oid));
-    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", ai_fp_oid));
-    ASSERT_EQ(0, cls_cas_references_chunk(ioctx, "foo", HI_fp_oid));
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", SI_fp_oid));
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", er_fp_oid));
+    ASSERT_EQ(1, cls_cas_references_chunk(ioctx, "foo", ai_fp_oid));
+    ASSERT_EQ(2, cls_cas_references_chunk(ioctx, "foo", HI_fp_oid));
     ASSERT_EQ(-ENOLINK, cls_cas_references_chunk(ioctx, "foo", Hi_fp_oid));
   }
 }
