@@ -36,6 +36,7 @@ namespace throttle_counters {
   enum {
         l_first = 437219,
         l_throttle,
+        l_outstanding,
         l_last
   };
 
