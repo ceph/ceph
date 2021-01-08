@@ -4528,7 +4528,7 @@ def command_check_host():
             except Exception as e:
                 logger.debug('Could not locate %s: %s' % (i, e))
         if not container_path:
-            errors.append('Unable to locate any of %s' % CONTAINER_PREFERENCE)
+            errors.append('ERROR: Unable to locate a supported container engine ({})'.format(' or '.join(CONTAINER_PREFERENCE)))
         else:
             logger.info('podman|docker (%s) is present' % container_path)
 
@@ -4537,15 +4537,15 @@ def command_check_host():
             find_program(command)
             logger.info('%s is present' % command)
         except ValueError:
-            errors.append('%s binary does not appear to be installed' % command)
+            errors.append('ERROR: %s binary does not appear to be installed' % command)
 
     # check for configured+running chronyd or ntp
     if not check_time_sync():
-        errors.append('No time synchronization is active')
+        errors.append('ERROR: No time synchronization is active')
 
     if 'expect_hostname' in args and args.expect_hostname:
         if get_hostname().lower() != args.expect_hostname.lower():
-            errors.append('hostname "%s" does not match expected hostname "%s"' % (
+            errors.append('ERROR: hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), args.expect_hostname))
         logger.info('Hostname "%s" matches what is expected.',
                     args.expect_hostname)
