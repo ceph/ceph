@@ -1317,7 +1317,8 @@ public:
 
         // loop until the latest obligation is satisfied, because other callers
         // may update the obligation while we're syncing
-        while (state->progress_timestamp < state->obligation->timestamp &&
+        while ((state->obligation->timestamp == ceph::real_time() ||
+                state->progress_timestamp < state->obligation->timestamp) &&
                obligation_counter != state->counter) {
           obligation_counter = state->counter;
           progress = ceph::real_time{};
