@@ -43,7 +43,7 @@ public:
                std::string& start_marker,
                std::string& end_marker);
   int log_list(const RGWBucketInfo& bucket_info,
-               int shard_id, uint64_t gen_id,
+               int shard_id, uint64_t gen,
                std::string& marker,
                uint32_t max,
                std::list<rgw_bi_log_entry>& result,
