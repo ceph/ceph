@@ -680,6 +680,27 @@ class Filesystem(MDSCluster):
         m.run_shell_payload(cmd)
         m.umount_wait(require_clean=True)
 
+    def _remove_pool(self, name, **kwargs):
+        c = f'osd pool rm {name} {name} --yes-i-really-really-mean-it'
+        return self.mon_manager.ceph(c, **kwargs)
+
+    def rm(self, **kwargs):
+        c = f'fs rm {self.name} --yes-i-really-mean-it'
+        return self.mon_manager.ceph(c, **kwargs)
+
+    def remove_pools(self, data_pools):
+        self._remove_pool(self.get_metadata_pool_name())
+        for poolname in data_pools:
+            try:
+                self._remove_pool(poolname)
+            except CommandFailedError as e:
+                # EBUSY, this data pool is used by two metadata pools, let the
+                # 2nd pass delete it
+                if e.exitstatus == EBUSY:
+                    pass
+                else:
+                    raise
+
     def destroy(self, reset_obj_attrs=True):
         log.info(f'Destroying file system {self.name} and related pools')
 
@@ -690,24 +711,10 @@ class Filesystem(MDSCluster):
         data_pools = self.get_data_pool_names(refresh=True)
 
         # make sure no MDSs are attached to given FS.
-        self.mon_manager.raw_cluster_cmd('fs', 'fail', self.name)
-        self.mon_manager.raw_cluster_cmd(
-            'fs', 'rm', self.name, '--yes-i-really-mean-it')
+        self.fail()
+        self.rm()
 
-        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm',
-            self.get_metadata_pool_name(), self.get_metadata_pool_name(),
-            '--yes-i-really-really-mean-it')
-        for poolname in data_pools:
-            try:
-                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', poolname,
-                    poolname, '--yes-i-really-really-mean-it')
-            except CommandFailedError as e:
-                # EBUSY, this data pool is used by two metadata pools, let the
-                # 2nd pass delete it
-                if e.exitstatus == EBUSY:
-                    pass
-                else:
-                    raise
+        self.remove_pools(data_pools)
 
         if reset_obj_attrs:
             self.id = None

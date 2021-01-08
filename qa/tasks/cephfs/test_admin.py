@@ -5,7 +5,7 @@ from os.path import join as os_path_join
 from teuthology.orchestra.run import CommandFailedError, Raw
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from tasks.cephfs.filesystem import FileLayout
+from tasks.cephfs.filesystem import FileLayout, FSMissing
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.caps_helper import CapsHelper
 
@@ -576,3 +576,29 @@ class TestSubCmdFsAuthorize(CapsHelper):
         mounts = (self.mount_a, )
 
         return filepaths, filedata, mounts, keyring
+
+class TestAdminCommandIdempotency(CephFSTestCase):
+    """
+    Tests for administration command idempotency.
+    """
+
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 1
+
+    def test_rm_idempotency(self):
+        """
+        That a removing a fs twice is idempotent.
+        """
+
+        data_pools = self.fs.get_data_pool_names(refresh=True)
+        self.fs.fail()
+        self.fs.rm()
+        try:
+            self.fs.get_mds_map()
+        except FSMissing:
+            pass
+        else:
+            self.fail("get_mds_map should raise")
+        p = self.fs.rm()
+        self.assertIn("does not exist", p.stderr.getvalue())
+        self.fs.remove_pools(data_pools)
