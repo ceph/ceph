@@ -5794,14 +5794,14 @@ int Client::resolve_mds(
   ceph_assert(targets != nullptr);
 
   mds_role_t role;
-  std::stringstream ss;
-  int role_r = fsmap->parse_role(mds_spec, &role, ss);
+  CachedStackStringStream css;
+  int role_r = fsmap->parse_role(mds_spec, &role, *css);
   if (role_r == 0) {
     // We got a role, resolve it to a GID
-    ldout(cct, 10) << __func__ << ": resolved '" << mds_spec << "' to role '"
-      << role << "'" << dendl;
-    targets->push_back(
-        fsmap->get_filesystem(role.fscid)->mds_map.get_info(role.rank).global_id);
+    auto& info = fsmap->get_filesystem(role.fscid)->mds_map.get_info(role.rank);
+    ldout(cct, 10) << __func__ << ": resolved " << mds_spec << " to role '"
+      << role << "' aka " << info.human_name() << dendl;
+    targets->push_back(info.global_id);
     return 0;
   }
 
@@ -5811,42 +5811,48 @@ int Client::resolve_mds(
     // It is a possible GID
     const mds_gid_t mds_gid = mds_gid_t(rank_or_gid);
     if (fsmap->gid_exists(mds_gid)) {
-      ldout(cct, 10) << __func__ << ": validated GID " << mds_gid << dendl;
+      auto& info = fsmap->get_info_gid(mds_gid);
+      ldout(cct, 10) << __func__ << ": validated gid " << mds_gid << " aka "
+                     << info.human_name() << dendl;
       targets->push_back(mds_gid);
+      return 0;
     } else {
-      lderr(cct) << __func__ << ": GID " << mds_gid << " not in MDS map"
+      lderr(cct) << __func__ << ": gid " << mds_gid << " not in MDS map"
                  << dendl;
+      lderr(cct) << "FSMap: " << *fsmap << dendl;
       return -ENOENT;
     }
   } else if (mds_spec == "*") {
     // It is a wildcard: use all MDSs
-    const auto mds_info = fsmap->get_mds_info();
+    const auto& mds_info = fsmap->get_mds_info();
 
+    ldout(cct, 10) << __func__ << ": resolving `*' to all MDS daemons" << dendl;
     if (mds_info.empty()) {
-      lderr(cct) << __func__ << ": * passed but no MDS daemons found" << dendl;
+      lderr(cct) << __func__ << ": no MDS daemons found" << dendl;
+      lderr(cct) << "FSMap: " << *fsmap << dendl;
       return -ENOENT;
     }
 
-    for (const auto& i : mds_info) {
-      targets->push_back(i.first);
+    for (const auto& [gid, info] : mds_info) {
+      ldout(cct, 10) << __func__ << ": appending " << info.human_name() << " to targets" << dendl;
+      targets->push_back(gid);
     }
+    return 0;
   } else {
     // It did not parse as an integer, it is not a wildcard, it must be a name
     const mds_gid_t mds_gid = fsmap->find_mds_gid_by_name(mds_spec);
     if (mds_gid == 0) {
-      lderr(cct) << "MDS ID '" << mds_spec << "' not found" << dendl;
-
+      lderr(cct) << __func__ << ": no MDS daemons found by name `" << mds_spec << "'" << dendl;
       lderr(cct) << "FSMap: " << *fsmap << dendl;
-
       return -ENOENT;
     } else {
-      ldout(cct, 10) << __func__ << ": resolved ID '" << mds_spec
-                     << "' to GID " << mds_gid << dendl;
+      auto& info = fsmap->get_info_gid(mds_gid);
+      ldout(cct, 10) << __func__ << ": resolved name '" << mds_spec
+                     << "' to " << info.human_name() << dendl;
       targets->push_back(mds_gid);
     }
+    return 0;
   }
-
-  return 0;
 }
 
 
