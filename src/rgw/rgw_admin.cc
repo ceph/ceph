@@ -822,7 +822,7 @@ enum class OPT {
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
-  SCRIPT_PACKAGE_LIST
+  SCRIPT_PACKAGE_LIST,
   SI_PROVIDER_LIST,
   SI_PROVIDER_INFO,
   SI_PROVIDER_FETCH,
@@ -6421,7 +6421,7 @@ int main(int argc, const char **argv)
         data_access_conf.secret = opt_secret;
 
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
+	int ret = zonegroup.init(g_ceph_context, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj, null_yield);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -6450,8 +6450,8 @@ int main(int argc, const char **argv)
 
         }
 
-        zonegroup.post_process_params();
-        ret = zonegroup.update();
+        zonegroup.post_process_params(null_yield);
+        ret = zonegroup.update(null_yield);
         if (ret < 0) {
           cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -10776,7 +10776,7 @@ next:
        return EINVAL;
      }
    }
-   r = provider->get_cur_state(stage_id, shard_id, &marker, &timestamp, &disabled);
+   r = provider->get_cur_state(stage_id, shard_id, &marker, &timestamp, &disabled, null_yield);
    if (r < 0) {
      cerr << "ERROR: failed to trim sync info provider: " << cpp_strerror(-r) << std::endl;
      return -r;

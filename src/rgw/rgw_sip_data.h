@@ -75,7 +75,7 @@ protected:
     return 0;
   }
 
-  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled) const {
+  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled, optional_yield y) const {
     marker->clear(); /* full data, no current incremental state */
     *timestamp = ceph::real_time();
     *disabled = false;
@@ -126,7 +126,7 @@ protected:
   int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
 
   int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const override;
-  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled) const;
+  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled, optional_yield y) const;
 
   int do_trim( int shard_id, const std::string& marker) override;
 public:

@@ -133,7 +133,7 @@ public:
   virtual int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) = 0;
   virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
-                            bool *disabled) = 0;
+                            bool *disabled, optional_yield y) = 0;
 
   virtual const std::string& get_name() const = 0;
   virtual const std::optional<std::string>& get_instance() const = 0;
@@ -201,7 +201,7 @@ protected:
   virtual int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
   virtual int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const = 0;
   virtual int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
-                               bool *disabled) const = 0;
+                               bool *disabled, optional_yield y) const = 0;
   virtual int do_trim(int shard_id, const std::string& marker) = 0;
 public:
   SIProvider_SingleStage(CephContext *_cct,
@@ -245,7 +245,7 @@ public:
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
   int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
-                    bool *disabled) override;
+                    bool *disabled, optional_yield y) override;
 
   int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
@@ -293,7 +293,7 @@ public:
   int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
   int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
   int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
-                    bool *disabled) override;
+                    bool *disabled, optional_yield y) override;
 
   SIProvider::TypeHandlerProvider *get_type_provider() override {
     return &type_provider;
@@ -371,7 +371,7 @@ class SIClient
 public:
   virtual ~SIClient() {}
 
-  virtual int init_markers() = 0;
+  virtual int init_markers(optional_yield y) = 0;
   virtual int fetch(int shard_id, int max, SIProvider::fetch_result *result) = 0;
 
   virtual int load_state() = 0;
@@ -410,7 +410,7 @@ class SIProviderClient : public SIClient
 public:
   SIProviderClient(SIProviderRef& _provider) : provider(_provider) {}
 
-  int init_markers() override;
+  int init_markers(optional_yield y) override;
 
   int fetch(int shard_id, int max, SIProvider::fetch_result *result) override;
 

@@ -271,7 +271,7 @@ int SIProvider_MetaInc::do_get_start_marker(int shard_id, std::string *marker, c
 }
 
 int SIProvider_MetaInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
-                                         bool *disabled) const
+                                         bool *disabled, optional_yield y) const
 {
   RGWMetadataLogInfo info;
 

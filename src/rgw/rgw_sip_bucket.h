@@ -109,7 +109,7 @@ class SIProvider_BucketFull : public SIProvider_SingleStage
   SIProvider::Entry create_entry(rgw_bucket_dir_entry& be) const;
 
   int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
-                       bool *disabled) const  override {
+                       bool *disabled, optional_yield y) const  override {
     marker->clear(); /* full data, no current incremental state */
     *timestamp = ceph::real_time();
     *disabled = false;
@@ -185,7 +185,7 @@ protected:
   }
 
   int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
-                       bool *disabled) const override;
+                       bool *disabled, optional_yield y) const override;
 
   int do_trim( int shard_id, const std::string& marker) override;
 

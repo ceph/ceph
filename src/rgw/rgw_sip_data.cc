@@ -194,7 +194,7 @@ int SIProvider_DataInc::do_get_start_marker(int shard_id, std::string *marker, c
 }
 
 int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
-                                         bool *disabled) const
+                                         bool *disabled, optional_yield y) const
 {
   RGWDataChangesLogInfo info;
   int ret = data_log->get_info(shard_id, &info);

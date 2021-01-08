@@ -282,7 +282,7 @@ RGWCoroutine *SIProviderCRMgr_Local::get_cur_state_cr(const SIProvider::stage_id
                                pos,
                                disabled,
                                [=](rgw_sip_pos *_pos, bool *_disabled) {
-                                 return pvd->get_cur_state(sid, shard_id, &_pos->marker, &_pos->timestamp, _disabled);
+                                 return pvd->get_cur_state(sid, shard_id, &_pos->marker, &_pos->timestamp, _disabled, null_yield);
                                });
 }
 

@@ -5086,7 +5086,7 @@ class SIPClientCRHandler {
     InitMarkersAction(CephContext *_cct, SIClientRef _sipc) : cct(_cct),
                                                               sipc(_sipc) {}
     int operate(const DoutPrefixProvider *dpp) override {
-      int r = sipc->init_markers();
+      int r = sipc->init_markers(null_yield);
       if (r < 0) {
         ldout(cct, 0) << "ERROR: " << __func__ << "(): init_markers() failed (r=" << r << ")" << dendl;
         return r;

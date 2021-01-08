@@ -119,12 +119,12 @@ int SIProvider_SingleStage::get_start_marker(const stage_id_t& sid, int shard_id
 }
 
 int SIProvider_SingleStage::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
-                                          bool *disabled)
+                                          bool *disabled, optional_yield y)
 {
   if (sid != stage_info.sid) {
     return -ERANGE;
   }
-  return do_get_cur_state(shard_id, marker, timestamp, disabled);
+  return do_get_cur_state(shard_id, marker, timestamp, disabled, y);
 }
 
 int SIProvider_SingleStage::trim(const stage_id_t& sid, int shard_id, const std::string& marker)
@@ -316,7 +316,7 @@ int SIProvider_Container::get_start_marker(const stage_id_t& sid, int shard_id, 
 }
 
 int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
-                                        bool *disabled)
+                                        bool *disabled, optional_yield y)
 {
   SIProviderRef provider;
   stage_id_t psid;
@@ -326,7 +326,7 @@ int SIProvider_Container::get_cur_state(const stage_id_t& sid, int shard_id, std
     return -ENOENT;
   }
 
-  return provider->get_cur_state(psid, shard_id, marker, timestamp, disabled);
+  return provider->get_cur_state(psid, shard_id, marker, timestamp, disabled, y);
 }
 
 SIProvider::TypeHandler *SIProvider_Container::TypeProvider::get_type_handler()
@@ -351,7 +351,7 @@ int SIProvider_Container::trim(const stage_id_t& sid, int shard_id, const std::s
   return provider->trim(psid, shard_id, marker);
 }
 
-int SIProviderClient::init_markers()
+int SIProviderClient::init_markers(optional_yield y)
 {
   auto stages = provider->get_stages();
 
@@ -375,7 +375,7 @@ int SIProviderClient::init_markers()
       std::string marker;
       ceph::real_time timestamp;
       bool disabled{false};
-      int r = (!all_history ? provider->get_cur_state(sid, i, &marker, &timestamp, &disabled) : 
+      int r = (!all_history ? provider->get_cur_state(sid, i, &marker, &timestamp, &disabled, y) : 
                               provider->get_start_marker(sid, i, &marker, &timestamp));
       if (r < 0) {
         return r;

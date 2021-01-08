@@ -25,7 +25,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-void RGWOp_SIP_GetInfo::execute() {
+void RGWOp_SIP_GetInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
   if (provider) {
@@ -54,7 +54,7 @@ void RGWOp_SIP_GetInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_SIP_GetStageStatus::execute() {
+void RGWOp_SIP_GetStageStatus::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
   auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
@@ -85,7 +85,7 @@ void RGWOp_SIP_GetStageStatus::execute() {
     return;
   }
 
-  op_ret = sip->get_cur_state(sid, shard_id, &cur_pos.marker, &cur_pos.timestamp, &disabled);
+  op_ret = sip->get_cur_state(sid, shard_id, &cur_pos.marker, &cur_pos.timestamp, &disabled, y);
   if (op_ret < 0) {
     ldout(s->cct, 5) << "ERROR: sip->get_cur_state() returned error: ret=" << op_ret << dendl;
     return;
@@ -112,7 +112,7 @@ void RGWOp_SIP_GetStageStatus::send_response() {
   flusher.flush();
 }
 
-void RGWOp_SIP_GetMarkerInfo::execute() {
+void RGWOp_SIP_GetMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
   auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
@@ -167,7 +167,7 @@ void RGWOp_SIP_GetMarkerInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_SIP_SetMarkerInfo::execute() {
+void RGWOp_SIP_SetMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
   auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
@@ -233,7 +233,7 @@ void RGWOp_SIP_SetMarkerInfo::send_response() {
     return;
 }
 
-void RGWOp_SIP_RemoveMarkerInfo::execute() {
+void RGWOp_SIP_RemoveMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
   auto sip = store->ctl()->si.mgr->find_sip(provider, opt_instance);
@@ -290,7 +290,7 @@ void RGWOp_SIP_RemoveMarkerInfo::send_response() {
     return;
 }
 
-void RGWOp_SIP_List::execute() {
+void RGWOp_SIP_List::execute(optional_yield y) {
   providers = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->list_sip();
 }
 
@@ -306,7 +306,7 @@ void RGWOp_SIP_List::send_response() {
   flusher.flush();
 }
 
-void RGWOp_SIP_Fetch::execute() {
+void RGWOp_SIP_Fetch::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
   auto opt_stage_id = s->info.args.get_std_optional("stage-id");
   auto marker = s->info.args.get("marker");
@@ -380,7 +380,7 @@ void RGWOp_SIP_Fetch::send_response() {
   flusher.flush();
 }
 
-void RGWOp_SIP_Trim::execute() {
+void RGWOp_SIP_Trim::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
   auto opt_stage_id = s->info.args.get_std_optional("stage-id");
   auto marker = s->info.args.get("marker");
