@@ -199,9 +199,9 @@ static int references_chunk(cls_method_context_t hctx,
   }
   CLS_LOG(10, "fp_oid: %s \n", fp_oid.c_str());
 
-  bool ret = cls_has_chunk(hctx, fp_oid);
+  int ret = cls_get_manifest_ref_count(hctx, fp_oid);
   if (ret) {
-    return 0;
+    return ret;
   }
   return -ENOLINK;
 }

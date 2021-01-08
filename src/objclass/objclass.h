@@ -157,7 +157,7 @@ extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
                    ceph::buffer::list *write_inbl, uint32_t op_flags, ceph::buffer::list *set_inbl,
 		   int set_len);
-bool cls_has_chunk(cls_method_context_t hctx, std::string fp_oid);
+int cls_get_manifest_ref_count(cls_method_context_t hctx, std::string fp_oid);
 
 extern uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx);
 extern uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx);
