@@ -63,7 +63,7 @@ class CephadmServe:
                 self._update_paused_health()
 
                 if not self.mgr.paused:
-                    self.mgr.rm_util.process_removal_queue()
+                    self.mgr.to_remove_osds.process_removal_queue()
 
                     self.mgr.migration.migrate()
                     if self.mgr.migration.is_migration_ongoing():
