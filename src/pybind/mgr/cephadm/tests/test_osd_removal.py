@@ -93,7 +93,7 @@ class TestOSDRemoval:
         cephadm_module.to_remove_osds.load_from_store()
 
         expected = OSDRemovalQueue(cephadm_module)
-        expected.add(OSD(osd_id=35, remove_util=rm_util, draining=True))
+        expected.osds.add(OSD(osd_id=35, remove_util=rm_util, draining=True))
         assert cephadm_module.to_remove_osds == expected
 
 
@@ -220,7 +220,7 @@ class TestOSDRemovalQueue:
     def test_queue_size(self, osd_obj):
         q = OSDRemovalQueue(mock.Mock())
         assert q.queue_size() == 0
-        q.add(osd_obj)
+        q.osds.add(osd_obj)
         assert q.queue_size() == 1
 
     @mock.patch("cephadm.services.osd.OSD.start")
@@ -242,6 +242,6 @@ class TestOSDRemovalQueue:
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_rm(self, exist, stop, osd_obj):
         q = OSDRemovalQueue(mock.Mock())
-        q.add(osd_obj)
+        q.osds.add(osd_obj)
         q.rm(osd_obj)
         osd_obj.stop.assert_called_once()
