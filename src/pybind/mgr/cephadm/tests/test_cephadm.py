@@ -515,8 +515,8 @@ class TestCephadm(object):
                                                       process_started_at=datetime_now(),
                                                       remove_util=cephadm_module.rm_util
                                                       ))
-            cephadm_module.rm_util.process_removal_queue()
-            assert cephadm_module.to_remove_osds == OSDRemovalQueue()
+            cephadm_module.to_remove_osds.process_removal_queue()
+            assert cephadm_module.to_remove_osds == OSDRemovalQueue(cephadm_module)
 
             c = cephadm_module.remove_osds_status()
             out = wait(cephadm_module, c)
