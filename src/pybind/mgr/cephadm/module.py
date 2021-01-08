@@ -391,8 +391,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cache.load()
 
         self.rm_util = RemoveUtil(self)
-        self.to_remove_osds = OSDRemovalQueue()
-        self.rm_util.load_from_store()
+        self.to_remove_osds = OSDRemovalQueue(self)
+        self.to_remove_osds.load_from_store()
 
         self.spec_store = SpecStore(self)
         self.spec_store.load()
@@ -527,7 +527,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     self.log.debug(f"Found empty osd. Starting removal process")
                     # if the osd that is now empty is also part of the removal queue
                     # start the process
-                    self.rm_util.process_removal_queue()
+                    self._kick_serve_loop()
 
     def pause(self) -> None:
         if not self.paused:
@@ -1178,7 +1178,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                          addr=spec.addr,
                                                          error_ok=True, no_fsid=True)
         if code:
-            # err will contain stdout and stderr, so we filter on the message text to 
+            # err will contain stdout and stderr, so we filter on the message text to
             # only show the errors
             errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
             raise OrchestratorError('New host %s (%s) failed check(s): %s' % (
