@@ -460,6 +460,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (_.has($event, 'selected')) {
       this.selection.selected = $event['selected'];
     }
+    this.selection.update();
     this.updateSelection.emit(_.clone(this.selection));
   }
 
