@@ -1013,3 +1013,16 @@ To re-enable telemetry (and make this warning go away),::
 To disable telemetry (and make this warning go away),::
 
   ceph telemetry off
+
+DASHBOARD_DEBUG
+_______________
+
+The Dashboard debug mode is enabled. This means, if there is an error
+while processing a REST API request, the HTTP error response contains
+a Python traceback. This behaviour should be disabled in production
+environments because such a traceback might contain and expose sensible
+information.
+
+The debug mode can be disabled with::
+
+  ceph dashboard debug disable
