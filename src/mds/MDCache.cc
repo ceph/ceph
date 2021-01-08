@@ -14,7 +14,7 @@
 
 #include <errno.h>
 #include <fstream>
-#include <sstream>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <map>

@@ -12,12 +12,12 @@
  * 
  */
 
+#include <ostream>
 
 #include "FSMap.h"
 
 #include "common/StackStringStream.h"
 
-#include <sstream>
 #ifdef WITH_SEASTAR
 #include "crimson/common/config_proxy.h"
 #else
