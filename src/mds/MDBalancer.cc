@@ -29,7 +29,6 @@
 #include "msg/Messenger.h"
 
 #include <fstream>
-#include <iostream>
 #include <vector>
 #include <map>
 using std::map;
