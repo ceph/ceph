@@ -78,6 +78,8 @@ def update_archive_setting(ctx, key, value):
     """
     Add logs directory to job's info log file
     """
+    if ctx.archive is None:
+        return
     with open(os.path.join(ctx.archive, 'info.yaml'), 'r+') as info_file:
         info_yaml = yaml.safe_load(info_file)
         info_file.seek(0)
