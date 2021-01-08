@@ -1,11 +1,9 @@
 import logging
-import re
 import json
-import datetime
 import socket
 from enum import Enum
 from functools import wraps
-from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Any
+from typing import Callable, TypeVar, List, NewType, TYPE_CHECKING, Any
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -15,8 +13,6 @@ T = TypeVar('T')
 logger = logging.getLogger(__name__)
 
 ConfEntity = NewType('ConfEntity', str)
-
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 
 class CephadmNoImage(Enum):
@@ -92,14 +88,6 @@ def is_repo_digest(image_name: str) -> bool:
     repo digest are something like "ceph/ceph@sha256:blablabla"
     """
     return '@' in image_name
-
-
-def str_to_datetime(input: str) -> datetime.datetime:
-    return datetime.datetime.strptime(input, DATEFMT)
-
-
-def datetime_to_str(dt: datetime.datetime) -> str:
-    return dt.strftime(DATEFMT)
 
 
 def resolve_ip(hostname: str) -> str:

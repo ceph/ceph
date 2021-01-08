@@ -1,4 +1,3 @@
-import datetime
 import errno
 import json
 from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union
@@ -11,6 +10,7 @@ from prettytable import PrettyTable
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+from ceph.utils import datetime_now
 
 from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
 from mgr_module import MgrModule, HandleCommandResult, Option
@@ -538,7 +538,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             else:
                 return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
         else:
-            now = datetime.datetime.utcnow()
+            now = datetime_now()
             table = PrettyTable(
                 ['NAME', 'RUNNING', 'REFRESHED', 'AGE',
                  'PLACEMENT',
@@ -603,7 +603,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             if len(daemons) == 0:
                 return HandleCommandResult(stdout="No daemons reported")
 
-            now = datetime.datetime.utcnow()
+            now = datetime_now()
             table = PrettyTable(
                 ['NAME', 'HOST', 'STATUS', 'REFRESHED', 'AGE',
                  'VERSION', 'IMAGE NAME', 'IMAGE ID', 'CONTAINER ID'],
