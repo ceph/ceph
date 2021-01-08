@@ -600,6 +600,7 @@ class OSDRemovalQueue(object):
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr: "CephadmOrchestrator" = mgr
         self.osds: Set[OSD] = set()
+        self.rm_util = RemoveUtil(mgr)
 
     def process_removal_queue(self) -> None:
         """
@@ -615,7 +616,7 @@ class OSDRemovalQueue(object):
             f"for removal: {self.all_osds()}")
 
         # find osds that are ok-to-stop and not yet draining
-        ok_to_stop_osds = self.mgr.rm_util.find_osd_stop_threshold(self.idling_osds())
+        ok_to_stop_osds = self.rm_util.find_osd_stop_threshold(self.idling_osds())
         if ok_to_stop_osds:
             # start draining those
             _ = [osd.start_draining() for osd in ok_to_stop_osds]
@@ -678,7 +679,7 @@ class OSDRemovalQueue(object):
         for k, v in self.mgr.get_store_prefix('osd_remove_queue').items():
             for osd in json.loads(v):
                 logger.debug(f"Loading osd ->{osd} from store")
-                osd_obj = OSD.from_json(osd, rm_util=self.mgr.rm_util)
+                osd_obj = OSD.from_json(osd, rm_util=self.rm_util)
                 if osd_obj is not None:
                     self.osds.add(osd_obj)
 

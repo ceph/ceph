@@ -513,7 +513,7 @@ class TestCephadm(object):
                                                       hostname='test',
                                                       fullname='osd.0',
                                                       process_started_at=datetime_now(),
-                                                      remove_util=cephadm_module.rm_util
+                                                      remove_util=cephadm_module.to_remove_osds.rm_util
                                                       ))
             cephadm_module.to_remove_osds.process_removal_queue()
             assert cephadm_module.to_remove_osds == OSDRemovalQueue(cephadm_module)
