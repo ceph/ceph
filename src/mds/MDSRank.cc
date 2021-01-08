@@ -3353,6 +3353,24 @@ void MDSRank::create_logger()
     mds_plb.add_u64_counter(l_mds_openino_peer_discover, "openino_peer_discover",
                             "OpenIno peer inode discovers");
 
+    // scrub stats
+    mds_plb.add_u64(l_mds_scrub_backtrace_fetch, "scrub_backtrace_fetch",
+                    "Scrub backtrace fetchings");
+    mds_plb.add_u64(l_mds_scrub_set_tag, "scrub_set_tag",
+                    "Scrub set tags");
+    mds_plb.add_u64(l_mds_scrub_backtrace_repaired, "scrub_backtrace_repaired",
+                    "Scrub backtraces repaired");
+    mds_plb.add_u64(l_mds_scrub_inotable_repaired, "scrub_inotable_repaired",
+                    "Scrub inotable repaired");
+    mds_plb.add_u64(l_mds_scrub_dir_inodes, "scrub_dir_inodes",
+                    "Scrub directory inodes");
+    mds_plb.add_u64(l_mds_scrub_dir_base_inodes, "scrub_dir_base_inodes",
+                    "Scrub directory base inodes");
+    mds_plb.add_u64(l_mds_scrub_dirfrag_rstats, "scrub_dirfrag_rstats",
+                    "Scrub dirfrags rstates");
+    mds_plb.add_u64(l_mds_scrub_file_inodes, "scrub_file_inodes",
+                    "Scrub file inodes");
+
     logger = mds_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
   }
