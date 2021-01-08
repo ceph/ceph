@@ -36,7 +36,7 @@ class TestNFS(MgrTestCase):
         self.pseudo_path = "/cephfs"
         self.path = "/"
         self.fs_name = "nfs-cephfs"
-        self.expected_name = "nfs.ganesha-test"
+        self.expected_name = "nfs.test"
         self.sample_export = {
          "export_id": 1,
          "path": self.path,
@@ -119,7 +119,7 @@ class TestNFS(MgrTestCase):
         # Disable any running nfs ganesha daemon
         self._check_nfs_server_status()
         self._nfs_cmd('cluster', 'create', self.export_type, self.cluster_id)
-        # Check for expected status and daemon name (nfs.ganesha-<cluster_id>)
+        # Check for expected status and daemon name (nfs.<cluster_id>)
         self._check_nfs_cluster_status('running', 'NFS Ganesha cluster deployment failed')
 
     def _test_delete_cluster(self):
@@ -496,7 +496,7 @@ class TestNFS(MgrTestCase):
             'set', self.cluster_id, '-i', '-'], stdin=config)
         time.sleep(30)
         res = self._sys_cmd(['rados', '-p', pool, '-N', self.cluster_id, 'get',
-                             f'userconf-nfs.ganesha-{user_id}', '-'])
+                             f'userconf-nfs.{user_id}', '-'])
         self.assertEqual(config, res.decode('utf-8'))
         self._test_mnt(pseudo_path, port, ip)
         self._nfs_cmd('cluster', 'config', 'reset', self.cluster_id)
