@@ -5,7 +5,6 @@
 
 #include "include/int_types.h"
 
-#include <math.h>
 #include <ostream>
 #include <set>
 #include <map>

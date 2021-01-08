@@ -52,7 +52,6 @@
 #include "osd/OSDMap.h"
 
 #include <errno.h>
-#include <math.h>
 
 #include <list>
 #include <iostream>
