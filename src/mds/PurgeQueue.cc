@@ -19,8 +19,6 @@
 
 #include "PurgeQueue.h"
 
-#include <string.h>
-
 #define dout_context cct
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
