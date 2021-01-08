@@ -3866,7 +3866,12 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return;
   }
   if (!in) {
-    mdcache->open_ino(ino, (int64_t)-1, new C_MDS_LookupIno2(this, mdr), false);
+    if (MDS_INO_IS_MDSDIR(ino))
+      mdcache->request_forward(mdr, MDS_INO_MDSDIR_OWNER(ino));
+    else if (MDS_INO_IS_STRAY(ino))
+      mdcache->request_forward(mdr, MDS_INO_STRAY_OWNER(ino));
+    else
+      mdcache->open_ino(ino, (int64_t)-1, new C_MDS_LookupIno2(this, mdr), false);
     return;
   }
 
@@ -3976,14 +3981,8 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
     return;
   }
 
-  CInode *diri = NULL;
-  if (parent_ino) {
-    diri = mdcache->get_inode(parent_ino);
-    if (!diri) {
-      mdcache->open_ino(parent_ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr));
-      return;
-    }
-
+  CInode *diri = parent_ino ? mdcache->get_inode(parent_ino) : nullptr;
+  if (diri) {
     if (!diri->is_dir()) {
       respond_to_request(mdr, -CEPHFS_EINVAL);
       return;
@@ -4011,9 +4010,16 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
     }
 
     respond_to_request(mdr, -CEPHFS_ESTALE);
-  } else {
-    mdcache->open_ino(vino.ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr), false);
+    return;
   }
+
+  inodeno_t ino = parent_ino ? parent_ino : vino.ino;
+  if (MDS_INO_IS_MDSDIR(ino))
+    mdcache->request_forward(mdr, MDS_INO_MDSDIR_OWNER(ino));
+  else if (MDS_INO_IS_STRAY(ino))
+    mdcache->request_forward(mdr, MDS_INO_STRAY_OWNER(ino));
+  else
+    mdcache->open_ino(ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr), false);
 }
 
 void Server::_lookup_ino_2(MDRequestRef& mdr, int r)
