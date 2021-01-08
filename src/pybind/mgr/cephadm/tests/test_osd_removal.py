@@ -73,7 +73,7 @@ class TestOSDRemoval:
         rm_util._run_mon_cmd.assert_called_with(
             {'prefix': 'osd purge-actual', 'id': 1, 'yes_i_really_mean_it': True})
 
-    def test_load(self, cephadm_module):
+    def test_load(self, cephadm_module, rm_util):
         data = json.dumps([
             {
                 "osd_id": 35,
@@ -92,8 +92,9 @@ class TestOSDRemoval:
         cephadm_module.set_store('osd_remove_queue', data)
         cephadm_module.rm_util.load_from_store()
 
-        assert repr(
-            cephadm_module.to_remove_osds) == 'OSDRemovalQueue({<OSD>(osd_id=35, draining=True)})'
+        expected = OSDRemovalQueue()
+        expected.add(OSD(osd_id=35, remove_util=rm_util, draining=True))
+        assert cephadm_module.to_remove_osds == expected
 
 
 class TestOSD:
