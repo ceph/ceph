@@ -1398,7 +1398,7 @@ Session *MDSRank::get_session(const cref_t<Message> &m)
     dout(20) << "get_session have " << session << " " << session->info.inst
 	     << " state " << session->get_state_name() << dendl;
     // Check if we've imported an open session since (new sessions start closed)
-    if (session->is_closed()) {
+    if (session->is_closed() && session->get_connection()) {
       Session *imported_session = sessionmap.get_session(session->info.inst.name);
       if (imported_session && imported_session != session) {
         dout(10) << __func__ << " replacing connection bootstrap session "
@@ -1407,7 +1407,7 @@ Session *MDSRank::get_session(const cref_t<Message> &m)
         imported_session->info.auth_name = session->info.auth_name;
         //assert(session->info.auth_name == imported_session->info.auth_name);
         ceph_assert(session->info.inst == imported_session->info.inst);
-        imported_session->set_connection(session->get_connection().get());
+        imported_session->set_connection(session->get_connection());
         // send out any queued messages
         while (!session->preopen_out_queue.empty()) {
           imported_session->get_connection()->send_message2(std::move(session->preopen_out_queue.front()));
@@ -1416,7 +1416,7 @@ Session *MDSRank::get_session(const cref_t<Message> &m)
         imported_session->auth_caps = session->auth_caps;
         imported_session->last_seen = session->last_seen;
         ceph_assert(session->get_nref() == 1);
-        imported_session->get_connection()->set_priv(imported_session->get());
+        imported_session->get_connection()->set_priv(imported_session);
         session = imported_session;
       }
     }
