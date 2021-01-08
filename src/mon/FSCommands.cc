@@ -1355,8 +1355,11 @@ int FileSystemCommandHandler::is_op_allowed(
 
     auto fs = fsmap_copy.get_filesystem(fs_name);
     if (fs == nullptr) {
-      ss << "Filesystem not found: '" << fs_name << "'";
-      return -ENOENT;
+      /* let "fs rm" handle idempotent case where file system does not exist */
+      if (!(get_prefix() == "fs rm" && fsmap.get_filesystem(fs_name) == nullptr)) {
+        ss << "Filesystem not found: '" << fs_name << "'";
+        return -ENOENT;
+      }
     }
 
     if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
