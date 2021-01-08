@@ -6,7 +6,7 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
-from cephadm.services.osd import OSD, OSDQueue
+from cephadm.services.osd import OSD, OSDRemovalQueue
 
 try:
     from typing import Any, List
@@ -516,7 +516,7 @@ class TestCephadm(object):
                                                       remove_util=cephadm_module.rm_util
                                                       ))
             cephadm_module.rm_util.process_removal_queue()
-            assert cephadm_module.to_remove_osds == OSDQueue()
+            assert cephadm_module.to_remove_osds == OSDRemovalQueue()
 
             c = cephadm_module.remove_osds_status()
             out = wait(cephadm_module, c)
