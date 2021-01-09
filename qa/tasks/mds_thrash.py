@@ -13,7 +13,7 @@ from gevent.event import Event
 from teuthology import misc as teuthology
 
 from tasks import ceph_manager
-from tasks.cephfs.filesystem import MDSCluster, Filesystem
+from tasks.cephfs.filesystem import MDSCluster, Filesystem, FSMissing
 from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
@@ -122,6 +122,8 @@ class MDSThrasher(Thrasher, Greenlet):
     def _run(self):
         try:
             self.do_thrash()
+        except FSMissing:
+            pass
         except Exception as e:
             # Log exceptions here so we get the full backtrace (gevent loses them).
             # Also allow successful completion as gevent exception handling is a broken mess:
