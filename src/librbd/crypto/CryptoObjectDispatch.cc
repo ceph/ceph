@@ -352,6 +352,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
         if (io::util::trigger_copyup(image_ctx, object_no, io_context, ctx)) {
           return;
         }
+        delete ctx;
         object_exists = false;
       } else if (r < 0) {
         complete(r);
