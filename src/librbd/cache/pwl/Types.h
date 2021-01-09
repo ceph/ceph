@@ -364,10 +364,20 @@ Context * override_ctx(int r, Context *ctx);
 class ImageExtentBuf : public io::Extent {
 public:
   bufferlist m_bl;
-  ImageExtentBuf(io::Extent extent)
-    : io::Extent(extent) { }
-  ImageExtentBuf(io::Extent extent, bufferlist bl)
-    : io::Extent(extent), m_bl(bl) { }
+  bool need_to_truncate;
+  int truncate_offset;
+  bool writesame;
+  ImageExtentBuf() {}
+  ImageExtentBuf(io::Extent extent,
+                 bool need_to_truncate = false, uint64_t truncate_offset = 0,
+                 bool writesame = false)
+    : io::Extent(extent), need_to_truncate(need_to_truncate),
+      truncate_offset(truncate_offset), writesame(writesame) {}
+  ImageExtentBuf(io::Extent extent, bufferlist bl,
+                 bool need_to_truncate = false, uint64_t truncate_offset = 0,
+                 bool writesame = false)
+    : io::Extent(extent), m_bl(bl), need_to_truncate(need_to_truncate),
+      truncate_offset(truncate_offset), writesame(writesame) {}
 };
 
 std::string unique_lock_name(const std::string &name, void *address);

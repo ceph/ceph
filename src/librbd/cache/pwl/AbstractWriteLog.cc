@@ -17,7 +17,6 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
-#include "librbd/cache/pwl/ReadRequest.h"
 #include "librbd/plugin/Api.h"
 #include <map>
 #include <vector>
@@ -670,7 +669,8 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   // TODO: handle writesame and discard case in later PRs
   CephContext *cct = m_image_ctx.cct;
   utime_t now = ceph_clock_now();
-  C_ReadRequest *read_ctx = new C_ReadRequest(cct, now, m_perfcounter, bl, on_finish);
+  C_ReadRequest *read_ctx = m_builder->create_read_request(
+      cct, now, m_perfcounter, bl, on_finish);
   ldout(cct, 20) << "name: " << m_image_ctx.name << " id: " << m_image_ctx.id
                  << "image_extents=" << image_extents << ", "
                  << "bl=" << bl << ", "
@@ -679,6 +679,22 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   ceph_assert(m_initialized);
   bl->clear();
   m_perfcounter->inc(l_librbd_pwl_rd_req, 1);
+
+  std::vector<WriteLogCacheEntry*> log_entries_to_read;
+  std::vector<bufferlist*> bls_to_read;
+
+  Context *ctx = new LambdaContext(
+    [this, read_ctx, fadvise_flags](int r) {
+      if (read_ctx->miss_extents.empty()) {
+      /* All of this read comes from RWL */
+        read_ctx->complete(0);
+      } else {
+      /* Pass the read misses on to the layer below RWL */
+        m_image_writeback.aio_read(
+            std::move(read_ctx->miss_extents), &read_ctx->miss_bl,
+            fadvise_flags, read_ctx);
+      }
+    });
 
   /*
    * The strategy here is to look up all the WriteLogMapEntries that overlap
@@ -699,14 +715,16 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   for (auto &extent : image_extents) {
     uint64_t extent_offset = 0;
     RWLock::RLocker entry_reader_locker(m_entry_reader_lock);
-    WriteLogMapEntries map_entries = m_blocks_to_log_entries.find_map_entries(block_extent(extent));
+    WriteLogMapEntries map_entries = m_blocks_to_log_entries.find_map_entries(
+        block_extent(extent));
     for (auto &map_entry : map_entries) {
       Extent entry_image_extent(pwl::image_extent(map_entry.block_extent));
       /* If this map entry starts after the current image extent offset ... */
       if (entry_image_extent.first > extent.first + extent_offset) {
         /* ... add range before map_entry to miss extents */
         uint64_t miss_extent_start = extent.first + extent_offset;
-        uint64_t miss_extent_length = entry_image_extent.first - miss_extent_start;
+        uint64_t miss_extent_length = entry_image_extent.first -
+          miss_extent_start;
         Extent miss_extent(miss_extent_start, miss_extent_length);
         read_ctx->miss_extents.push_back(miss_extent);
         /* Add miss range to read extents */
@@ -726,10 +744,13 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
       uint64_t entry_hit_length = min(entry_image_extent.second - entry_offset,
                                       extent.second - extent_offset);
       Extent hit_extent(entry_image_extent.first, entry_hit_length);
-      if (0 == map_entry.log_entry->write_bytes() && 0 < map_entry.log_entry->bytes_dirty()) {
+      if (0 == map_entry.log_entry->write_bytes() &&
+          0 < map_entry.log_entry->bytes_dirty()) {
         /* discard log entry */
         auto discard_entry = map_entry.log_entry;
-        ldout(cct, 20) << "read hit on discard entry: log_entry=" << *discard_entry << dendl;
+        ldout(cct, 20) << "read hit on discard entry: log_entry="
+                       << *discard_entry
+                       << dendl;
         /* Discards read as zero, so we'll construct a bufferlist of zeros */
         bufferlist zero_bl;
         zero_bl.append_zero(entry_hit_length);
@@ -739,24 +760,14 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
       } else {
         /* write and writesame log entry */
         /* Offset of the map entry into the log entry's buffer */
-        uint64_t map_entry_buffer_offset = entry_image_extent.first - map_entry.log_entry->ram_entry.image_offset_bytes;
+        uint64_t map_entry_buffer_offset = entry_image_extent.first -
+          map_entry.log_entry->ram_entry.image_offset_bytes;
         /* Offset into the log entry buffer of this read hit */
         uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
-        /* Create buffer object referring to cache pool for this read hit */
-        auto write_entry = map_entry.log_entry;
-
-        /* Make a bl for this hit extent. This will add references to the write_entry->pmem_bp */
-        buffer::list hit_bl;
-
-        buffer::list entry_bl_copy;
-        write_entry->copy_cache_bl(&entry_bl_copy);
-        entry_bl_copy.begin(read_buffer_offset).copy(entry_hit_length, hit_bl);
-
-        ceph_assert(hit_bl.length() == entry_hit_length);
-
-        /* Add hit extent to read extents */
-        ImageExtentBuf hit_extent_buf(hit_extent, hit_bl);
-        read_ctx->read_extents.push_back(hit_extent_buf);
+        /* Create buffer object referring to pmem pool for this read hit */
+        collect_read_extents(
+            read_buffer_offset, map_entry, log_entries_to_read, bls_to_read,
+            entry_hit_length, hit_extent, read_ctx);
       }
       /* Exclude RWL hit range from buffer and extent */
       extent_offset += entry_hit_length;
@@ -779,13 +790,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
   ldout(cct, 20) << "miss_extents=" << read_ctx->miss_extents << ", "
                  << "miss_bl=" << read_ctx->miss_bl << dendl;
 
-  if (read_ctx->miss_extents.empty()) {
-    /* All of this read comes from RWL */
-    read_ctx->complete(0);
-  } else {
-    /* Pass the read misses on to the layer below RWL */
-    m_image_writeback.aio_read(std::move(read_ctx->miss_extents), &read_ctx->miss_bl, fadvise_flags, read_ctx);
-  }
+  complete_read(log_entries_to_read, bls_to_read, ctx);
 }
 
 template <typename I>

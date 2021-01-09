@@ -42,6 +42,7 @@ public:
   WriteLog(const WriteLog&) = delete;
   WriteLog &operator=(const WriteLog&) = delete;
 
+  typedef io::Extent Extent;
   using This = AbstractWriteLog<ImageCtxT>;
   using C_BlockIORequestT = pwl::C_BlockIORequest<This>;
   using C_WriteRequestT = pwl::C_WriteRequest<This>;
@@ -106,7 +107,16 @@ private:
 
   Builder<This>* create_builder();
   void load_existing_entries(pwl::DeferredContexts &later);
+  void collect_read_extents(
+      uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
+      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<bufferlist*> &bls_to_read, uint64_t entry_hit_length,
+      Extent hit_extent, pwl::C_ReadRequest *read_ctx) override;
+  void complete_read(
+      std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+      std::vector<bufferlist*> &bls_to_read, Context *ctx) override;
   void enlist_op_appender();
+  bool retire_entries(const unsigned long int frees_per_tx);
   bool has_sync_point_logs(GenericLogOperations &ops);
   void append_op_log_entries(GenericLogOperations &ops);
   void alloc_op_log_entries(GenericLogOperations &ops);

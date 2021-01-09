@@ -265,7 +265,6 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     cache/pwl/LogEntry.cc
     cache/pwl/LogMap.cc
     cache/pwl/LogOperation.cc
-    cache/pwl/ReadRequest.cc
     cache/pwl/Request.cc
     cache/pwl/ShutdownRequest.cc
     cache/pwl/SyncPoint.cc
@@ -276,6 +275,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
       set(rbd_plugin_pwl_srcs
         ${rbd_plugin_pwl_srcs}
         cache/pwl/ssd/LogEntry.cc
+        cache/pwl/ssd/ReadRequest.cc
         cache/pwl/ssd/Request.cc
         cache/pwl/ssd/WriteLog.cc)
     endif()
@@ -285,6 +285,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
         cache/pwl/rwl/WriteLog.cc
         cache/pwl/rwl/LogEntry.cc
         cache/pwl/rwl/LogOperation.cc
+        cache/pwl/rwl/ReadRequest.cc
         cache/pwl/rwl/Request.cc)
     endif()
 
