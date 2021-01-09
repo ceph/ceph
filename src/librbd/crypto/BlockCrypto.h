@@ -21,6 +21,7 @@ public:
     }
     BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
                 uint64_t block_size, uint64_t data_offset);
+    ~BlockCrypto();
 
     int encrypt(ceph::bufferlist* data, uint64_t image_offset) override;
     int decrypt(ceph::bufferlist* data, uint64_t image_offset) override;
