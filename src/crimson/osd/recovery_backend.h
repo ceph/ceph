@@ -127,7 +127,7 @@ protected:
     object_stat_sum_t stat;
   };
 
-  class WaitForObjectRecovery : public crimson::osd::BlockerT<WaitForObjectRecovery> {
+  class WaitForObjectRecovery : public crimson::BlockerT<WaitForObjectRecovery> {
     seastar::shared_promise<> readable, recovered, pulled;
     std::map<pg_shard_t, seastar::shared_promise<>> pushes;
   public:
@@ -146,7 +146,7 @@ protected:
     seastar::future<> wait_for_recovered() {
       return recovered.get_shared_future();
     }
-    crimson::osd::blocking_future<>
+    crimson::blocking_future<>
     wait_for_recovered_blocking() {
       return make_blocking_future(
 	  recovered.get_shared_future());

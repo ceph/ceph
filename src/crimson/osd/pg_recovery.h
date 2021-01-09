@@ -22,7 +22,7 @@ public:
   virtual ~PGRecovery() {}
   void start_pglogbased_recovery();
 
-  crimson::osd::blocking_future<bool> start_recovery_ops(size_t max_to_start);
+  crimson::blocking_future<bool> start_recovery_ops(size_t max_to_start);
   void on_backfill_reserved();
   void dispatch_backfill_event(
     boost::intrusive_ptr<const boost::statechart::event_base> evt);
@@ -32,24 +32,24 @@ private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
     size_t max_to_start,
-    std::vector<crimson::osd::blocking_future<>> *out);
+    std::vector<crimson::blocking_future<>> *out);
   size_t start_replica_recovery_ops(
     size_t max_to_start,
-    std::vector<crimson::osd::blocking_future<>> *out);
+    std::vector<crimson::blocking_future<>> *out);
 
   std::vector<pg_shard_t> get_replica_recovery_order() const {
     return pg->get_replica_recovery_order();
   }
-  crimson::osd::blocking_future<> recover_missing(
+  crimson::blocking_future<> recover_missing(
     const hobject_t &soid, eversion_t need);
   size_t prep_object_replica_deletes(
     const hobject_t& soid,
     eversion_t need,
-    std::vector<crimson::osd::blocking_future<>> *in_progress);
+    std::vector<crimson::blocking_future<>> *in_progress);
   size_t prep_object_replica_pushes(
     const hobject_t& soid,
     eversion_t need,
-    std::vector<crimson::osd::blocking_future<>> *in_progress);
+    std::vector<crimson::blocking_future<>> *in_progress);
 
   void on_local_recover(
     const hobject_t& soid,
