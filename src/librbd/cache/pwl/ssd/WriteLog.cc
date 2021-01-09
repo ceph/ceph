@@ -57,6 +57,50 @@ WriteLog<I>::~WriteLog() {
 }
 
 template <typename I>
+void WriteLog<I>::collect_read_extents(
+    uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
+    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<bufferlist*> &bls_to_read,
+    uint64_t entry_hit_length, Extent hit_extent,
+    pwl::C_ReadRequest *read_ctx) {
+    // Make a bl for this hit extent. This will add references to the
+    // write_entry->pmem_bp */
+    auto write_entry = static_pointer_cast<WriteLogEntry>(map_entry.log_entry);
+    buffer::list hit_bl;
+    hit_bl = write_entry->get_cache_bl();
+
+    if(!hit_bl.length()) {
+      ImageExtentBuf hit_extent_buf;
+      bool writesame = write_entry->is_writesame_entry();
+      hit_extent_buf = ImageExtentBuf(
+          {hit_extent, true, read_buffer_offset, writesame});
+      read_ctx->read_extents.push_back(hit_extent_buf);
+      ImageExtentBuf &read_extent = read_ctx->read_extents.back();
+
+      log_entries_to_read.push_back(&write_entry->ram_entry);
+      bls_to_read.push_back(&read_extent.m_bl);
+    } else {
+      buffer::list new_bl;
+      new_bl.substr_of(hit_bl, read_buffer_offset, entry_hit_length);
+      assert(new_bl.length() == entry_hit_length);
+      ImageExtentBuf hit_extent_buf(hit_extent, new_bl);
+      read_ctx->read_extents.push_back(hit_extent_buf);
+    }
+}
+
+template <typename I>
+void WriteLog<I>::complete_read(
+    std::vector<WriteLogCacheEntry*> &log_entries_to_read,
+    std::vector<bufferlist*> &bls_to_read,
+    Context *ctx) {
+  if (!log_entries_to_read.empty()) {
+    aio_read_data_block(log_entries_to_read, bls_to_read, ctx);
+  } else {
+    ctx->complete(0);
+  }
+}
+
+template <typename I>
 void WriteLog<I>::initialize_pool(Context *on_finish,
                                   pwl::DeferredContexts &later) {
   CephContext *cct = m_image_ctx.cct;
@@ -490,6 +534,8 @@ void WriteLog<I>::process_work() {
   CephContext *cct = m_image_ctx.cct;
   int max_iterations = 4;
   bool wake_up_requested = false;
+  uint64_t aggressive_high_water_bytes = m_log_pool_ring_buffer_size * AGGRESSIVE_RETIRE_HIGH_WATER;
+  uint64_t aggressive_high_water_entries = this->m_total_log_entries * AGGRESSIVE_RETIRE_HIGH_WATER;
   uint64_t high_water_bytes = m_log_pool_ring_buffer_size * RETIRE_HIGH_WATER;
   uint64_t high_water_entries = this->m_total_log_entries * RETIRE_HIGH_WATER;
 
@@ -509,11 +555,10 @@ void WriteLog<I>::process_work() {
                                  << ", allocated_entries > high_water="
                                  << (m_log_entries.size() > high_water_entries)
                                  << dendl;
-      //TODO: Implement and uncomment this in next PR
-      /*retire_entries((this->m_shutting_down || this->m_invalidating ||
+      retire_entries((this->m_shutting_down || this->m_invalidating ||
                     (m_bytes_allocated > aggressive_high_water_bytes) ||
                     (m_log_entries.size() > aggressive_high_water_entries))
-                    ? MAX_ALLOC_PER_TRANSACTION : MAX_FREE_PER_TRANSACTION);*/
+                    ? MAX_ALLOC_PER_TRANSACTION : MAX_FREE_PER_TRANSACTION);
     }
     this->dispatch_deferred_writes();
     this->process_writeback_dirty_entries();
@@ -531,6 +576,166 @@ void WriteLog<I>::process_work() {
       this->wake_up();
     }
   }
+}
+
+/**
+ * Retire up to MAX_ALLOC_PER_TRANSACTION of the oldest log entries
+ * that are eligible to be retired. Returns true if anything was
+ * retired.
+ *
+*/
+template <typename I>
+bool WriteLog<I>::retire_entries(const unsigned long int frees_per_tx) {
+  CephContext *cct = m_image_ctx.cct;
+  GenericLogEntriesVector retiring_entries;
+  uint32_t initial_first_valid_entry;
+  uint32_t first_valid_entry;
+
+  std::lock_guard retire_locker(this->m_log_retire_lock);
+  ldout(cct, 20) << "Look for entries to retire" << dendl;
+  {
+    // Entry readers can't be added while we hold m_entry_reader_lock
+    RWLock::WLocker entry_reader_locker(this->m_entry_reader_lock);
+    std::lock_guard locker(m_lock);
+    initial_first_valid_entry = m_first_valid_entry;
+    first_valid_entry = m_first_valid_entry;
+    while (retiring_entries.size() < frees_per_tx && !m_log_entries.empty()) {
+      GenericLogEntriesVector retiring_subentries;
+      auto entry = m_log_entries.front();
+      uint64_t control_block_pos = entry->log_entry_index;
+      uint64_t data_length = 0;
+      for (auto it = m_log_entries.begin(); it != m_log_entries.end(); ++it) {
+        if (this->can_retire_entry(*it)) {
+          // log_entry_index is valid after appending to SSD
+          if ((*it)->log_entry_index != control_block_pos) {
+            ldout(cct, 20) << "Old log_entry_index is " << control_block_pos
+                           << ",New log_entry_index is "
+                           << (*it)->log_entry_index
+                           << ",data length is " << data_length << dendl;
+            ldout(cct, 20) << "The log entry is " << *(*it) << dendl;
+            if ((*it)->log_entry_index < control_block_pos) {
+              ceph_assert((*it)->log_entry_index ==
+                (control_block_pos + data_length + MIN_WRITE_ALLOC_SSD_SIZE)
+                % this->m_log_pool_config_size + DATA_RING_BUFFER_OFFSET);
+            } else {
+              ceph_assert((*it)->log_entry_index == control_block_pos +
+                  data_length + MIN_WRITE_ALLOC_SSD_SIZE);
+            }
+            break;
+          } else {
+            retiring_subentries.push_back(*it);
+            if ((*it)->is_write_entry()) {
+              data_length += (*it)->get_aligned_data_size();
+            }
+          }
+        } else {
+          retiring_subentries.clear();
+          break;
+        }
+      }
+      // SSD: retiring_subentries in a span
+      if (!retiring_subentries.empty()) {
+        for (auto it = retiring_subentries.begin();
+            it != retiring_subentries.end(); it++) {
+          ceph_assert(m_log_entries.front() == *it);
+          m_log_entries.pop_front();
+          if (entry->is_write_entry()) {
+            auto write_entry = static_pointer_cast<WriteLogEntry>(entry);
+            this->m_blocks_to_log_entries.remove_log_entry(write_entry);
+          }
+        }
+        retiring_entries.insert(
+            retiring_entries.end(), retiring_subentries.begin(),
+            retiring_subentries.end());
+      } else {
+        break;
+      }
+    }
+  }
+  if (retiring_entries.size()) {
+    ldout(cct, 1) << "Retiring " << retiring_entries.size()
+                  << " entries" << dendl;
+
+    // Advance first valid entry and release buffers
+    uint64_t flushed_sync_gen;
+    std::lock_guard append_locker(this->m_log_append_lock);
+    {
+      std::lock_guard locker(m_lock);
+      flushed_sync_gen = this->m_flushed_sync_gen;
+    }
+
+    //calculate new first_valid_entry based on last entry to retire
+    auto entry = retiring_entries.back();
+    if (entry->is_write_entry() || entry->is_writesame_entry()) {
+      first_valid_entry = entry->ram_entry.write_data_pos +
+        entry->get_aligned_data_size();
+    } else {
+      first_valid_entry = entry->log_entry_index + MIN_WRITE_ALLOC_SSD_SIZE;
+    }
+    if (first_valid_entry >= this->m_log_pool_config_size) {
+        first_valid_entry = first_valid_entry % this->m_log_pool_config_size +
+          DATA_RING_BUFFER_OFFSET;
+    }
+    ceph_assert(first_valid_entry != initial_first_valid_entry);
+    auto new_root = std::make_shared<WriteLogPoolRoot>(pool_root);
+    new_root->flushed_sync_gen = flushed_sync_gen;
+    new_root->first_valid_entry = first_valid_entry;
+    pool_root.flushed_sync_gen = flushed_sync_gen;
+    pool_root.first_valid_entry = first_valid_entry;
+
+    Context *ctx = new LambdaContext(
+          [this, flushed_sync_gen, first_valid_entry,
+          initial_first_valid_entry, retiring_entries](int r) {
+          uint64_t allocated_bytes = 0;
+          uint64_t cached_bytes = 0;
+          uint64_t former_log_pos = 0;
+          for (auto &entry : retiring_entries) {
+            ceph_assert(entry->log_entry_index != 0);
+            if (entry->log_entry_index != former_log_pos ) {
+              // Space for control blocks
+              allocated_bytes  += MIN_WRITE_ALLOC_SSD_SIZE;
+              former_log_pos = entry->log_entry_index;
+            }
+            if (entry->is_write_entry()) {
+              cached_bytes += entry->write_bytes();
+              //space for userdata
+              allocated_bytes += entry->get_aligned_data_size();
+            }
+          }
+          {
+            std::lock_guard locker(m_lock);
+            m_first_valid_entry = first_valid_entry;
+            ceph_assert(m_first_valid_entry % MIN_WRITE_ALLOC_SSD_SIZE == 0);
+            this->m_free_log_entries += retiring_entries.size();
+            ceph_assert(this->m_bytes_cached >= cached_bytes);
+            this->m_bytes_cached -= cached_bytes;
+
+            ldout(m_image_ctx.cct, 20)
+              << "Finished root update: " << "initial_first_valid_entry="
+              << initial_first_valid_entry << ", " << "m_first_valid_entry="
+              << m_first_valid_entry << "," << "release space = "
+              << allocated_bytes << "," << "m_bytes_allocated="
+              << m_bytes_allocated << "," << "release cached space="
+              << allocated_bytes << "," << "m_bytes_cached="
+              << this->m_bytes_cached << dendl;
+
+            this->m_alloc_failed_since_retire = false;
+            this->wake_up();
+            m_async_update_superblock--;
+            this->m_async_op_tracker.finish_op();
+          }
+
+          this->dispatch_deferred_writes();
+          this->process_writeback_dirty_entries();
+        });
+
+      std::lock_guard locker(m_lock);
+      schedule_update_root(new_root, ctx);
+  } else {
+    ldout(cct, 20) << "Nothing to retire" << dendl;
+    return false;
+  }
+  return true;
 }
 
 template <typename I>

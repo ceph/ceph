@@ -45,6 +45,9 @@ public:
       WriteLogOperationSet &set, uint64_t image_offset_bytes,
       uint64_t write_bytes, uint32_t data_len, CephContext *cct,
       std::shared_ptr<WriteLogEntry> writesame_log_entry) = 0;
+  virtual C_ReadRequest *create_read_request(CephContext *cct, utime_t arrived,
+      PerfCounters *perfcounter, ceph::bufferlist *bl, Context *on_finish) = 0;
+
 };
 
 } // namespace pwl
