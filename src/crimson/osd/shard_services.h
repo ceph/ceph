@@ -88,7 +88,7 @@ public:
   }
 
   // Op Management
-  OperationRegistry registry;
+  OSDOperationRegistry registry;
   OperationThrottler throttler;
 
   template <typename T, typename... Args>
