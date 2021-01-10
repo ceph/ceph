@@ -348,13 +348,14 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     }
 
     // drop locks
-    if (state == EXPORT_LOCKING || state == EXPORT_DISCOVERING) {
-      MDRequestRef mdr = static_cast<MDRequestImpl*>(mut.get());
-      ceph_assert(mdr);
-      mdcache->request_kill(mdr);
-    } else if (mut) {
-      mds->locker->drop_locks(mut.get());
-      mut->cleanup();
+    if (mut) {
+      MDRequestRef mdr = dynamic_cast<MDRequestImpl*>(mut.get());
+      if (mdr) {
+	mdcache->request_kill(mdr);
+      } else {
+	mds->locker->drop_locks(mut.get());
+	mut->cleanup();
+      }
     }
 
     mdcache->show_subtrees();
@@ -1240,11 +1241,13 @@ void Migrator::handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m
     ceph_assert(it->second.state == EXPORT_DISCOVERING);
 
     if (m->is_success()) {
-      // release locks to avoid deadlock
-      MDRequestRef mdr = static_cast<MDRequestImpl*>(it->second.mut.get());
-      ceph_assert(mdr);
-      mdcache->request_finish(mdr);
-      it->second.mut.reset();
+      if (dir->freeze_tree_state->auth_pins > 2) {
+	// release locks to avoid deadlock
+	MDRequestRef mdr = static_cast<MDRequestImpl*>(it->second.mut.get());
+	ceph_assert(mdr);
+	mdcache->request_finish(mdr);
+	it->second.mut.reset();
+      }
       // freeze the subtree
       it->second.state = EXPORT_FREEZING;
       dir->auth_unpin(this);
@@ -1357,22 +1360,23 @@ void Migrator::export_frozen(dirfrag_t df, uint64_t tid)
   ceph_assert(stat.state == EXPORT_FREEZING);
   ceph_assert(dir->is_frozen_tree_root());
 
-  stat.mut = new MutationImpl();
+  if (!stat.mut) {
+    stat.mut = new MutationImpl();
 
-  // ok, try to grab all my locks.
-  CInode *diri = dir->get_inode();
-  if ((diri->is_auth() && diri->is_frozen()) ||
-      !export_try_grab_locks(dir, stat.mut)) {
-    dout(7) << "export_dir couldn't acquire all needed locks, failing. "
-	    << *dir << dendl;
-    if (mds->logger)
-      mds->logger->inc(l_mds_export_trylock_fail);
-    export_try_cancel(dir);
-    return;
+    // ok, try to grab all my locks.
+    CInode *diri = dir->get_inode();
+    if ((diri->is_auth() && diri->is_frozen()) ||
+	!export_try_grab_locks(dir, stat.mut)) {
+      dout(7) << "export_dir couldn't acquire all needed locks, failing. " << *dir << dendl;
+      if (mds->logger)
+	mds->logger->inc(l_mds_export_trylock_fail);
+      export_try_cancel(dir);
+      return;
+    }
+
+    if (diri->is_auth())
+      stat.mut->auth_pin(diri);
   }
-
-  if (diri->is_auth())
-    stat.mut->auth_pin(diri);
 
   mdcache->show_subtrees();
 
@@ -2331,8 +2335,13 @@ void Migrator::export_finish(CDir *dir, export_state_iterator it)
 
   // drop locks, unpin path
   if (it->second.mut) {
-    mds->locker->drop_locks(it->second.mut.get());
-    it->second.mut->cleanup();
+    MDRequestRef mdr = dynamic_cast<MDRequestImpl*>(it->second.mut.get());
+    if (mdr) {
+      mdcache->request_finish(mdr);
+    } else {
+      mds->locker->drop_locks(it->second.mut.get());
+      it->second.mut->cleanup();
+    }
     it->second.mut.reset();
   }
 }
