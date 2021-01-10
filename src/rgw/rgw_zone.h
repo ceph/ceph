@@ -695,32 +695,15 @@ struct RGWTierACLMapping {
   void init(const JSONFormattable& config) {
     const string& t = config["type"];
 
-    if (t == "email") {
-      type = ACL_TYPE_EMAIL_USER;
-    } else if (t == "uri") {
-      type = ACL_TYPE_GROUP;
-    } else {
-      type = ACL_TYPE_CANON_USER;
-    }
-
+    type = get_acl_type(t);
     source_id = config["source_id"];
     dest_id = config["dest_id"];
   }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    string s;
-    switch (type) {
-      case ACL_TYPE_EMAIL_USER:
-        s = "email";
-        break;
-      case ACL_TYPE_GROUP:
-        s = "uri";
-        break;
-      default:
-        s = "id";
-        break;
-    }
+
+    string s = get_acl_type_str(type);
     encode(s, bl);
     encode(source_id, bl);
     encode(dest_id, bl);
@@ -729,15 +712,10 @@ struct RGWTierACLMapping {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-      string s;
-     decode(s, bl);
-     if (s == "email") {
-        type = ACL_TYPE_EMAIL_USER;
-     } else if (s == "uri") {
-        type = ACL_TYPE_GROUP;
-     } else {
-        type = ACL_TYPE_CANON_USER;
-     }
+    string s;
+    decode(s, bl);
+
+    type = get_acl_type(s);
     decode(source_id, bl);
     decode(dest_id, bl);
     DECODE_FINISH(bl);

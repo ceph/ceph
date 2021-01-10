@@ -76,6 +76,36 @@ bool operator!=(const RGWAccessControlPolicy& lhs,
   return !(lhs == rhs);
 }
 
+string get_acl_type_str (const ACLGranteeTypeEnum& type) {
+  string s;
+  switch (type) {
+    case ACL_TYPE_EMAIL_USER:
+      s = "email";
+      break;
+    case ACL_TYPE_GROUP:
+      s = "uri";
+      break;
+    default:
+      s = "id";
+      break;
+  }
+
+  return s;
+}
+
+ACLGranteeTypeEnum get_acl_type (const string& t) {
+  ACLGranteeTypeEnum type;
+  if (t == "email") {
+    type = ACL_TYPE_EMAIL_USER;
+  } else if (t == "uri") {
+    type = ACL_TYPE_GROUP;
+  } else {
+    type = ACL_TYPE_CANON_USER;
+  }
+
+  return type;
+}
+
 void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {
   ACLPermission& perm = grant->get_permission();

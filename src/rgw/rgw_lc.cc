@@ -1251,36 +1251,34 @@ public:
     return need_to_process;
   }
 
- /* find out if the the storage class is remote cloud */
- int get_tier_target(const RGWZoneGroup &zonegroup, rgw_placement_rule& rule,
-         string& storage_class, RGWZoneGroupPlacementTier &tier) {
-   std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
-   titer = zonegroup.placement_targets.find(rule.name);
-   if (titer == zonegroup.placement_targets.end()) {
-     return -1;
-   }
+  /* find out if the the storage class is remote cloud */
+  int get_tier_target(const RGWZoneGroup &zonegroup, rgw_placement_rule& rule,
+                      string& storage_class, RGWZoneGroupPlacementTier &tier) {
+    std::map<std::string, RGWZoneGroupPlacementTarget>::const_iterator titer;
+    titer = zonegroup.placement_targets.find(rule.name);
+    if (titer == zonegroup.placement_targets.end()) {
+      return -ENOENT;
+    }
 
-   if (storage_class.empty()) {
-       storage_class = rule.storage_class;
-   }
+    if (storage_class.empty()) {
+      storage_class = rule.storage_class;
+    }
 
-   const auto& target_rule = titer->second;
-   std::map<std::string, RGWZoneGroupPlacementTier>::const_iterator ttier;
-   ttier = target_rule.tier_targets.find(storage_class);
-   if (ttier != target_rule.tier_targets.end()) {
-       tier = ttier->second;
-   }
-
-   return 0;
- }
+    const auto& target_rule = titer->second;
+    std::map<std::string, RGWZoneGroupPlacementTier>::const_iterator ttier;
+    ttier = target_rule.tier_targets.find(storage_class);
+    if (ttier != target_rule.tier_targets.end()) {
+      tier = ttier->second;
+    }
+    return 0;
+  }
 
   int delete_tier_obj(lc_op_ctx& oc, RGWLCCloudTierCtx& tier_ctx) {
-    int ret = -1;
+    int ret = 0;
 
-    /* XXX: do we need to check for retention/versioning attributes
-     * as done in RGWDeleteObj?
+    /* XXX: do we need to check for retention attributes * as done in RGWDeleteObj?
      */
-    ret = oc.store->getRados()->delete_obj(oc.rctx, oc.bucket->get_info(), oc.obj->get_obj(), tier_ctx.bucket_info.versioning_status());
+    ret = oc.store->getRados()->delete_obj(oc.dpp, oc.rctx, oc.bucket->get_info(), oc.obj->get_obj(), tier_ctx.bucket_info.versioning_status());
 
     return ret;
   }
@@ -1298,7 +1296,7 @@ public:
     read_op.params.attrs = &attrs;
     read_op.params.lastmod = &read_mtime;
 
-    int r = read_op.prepare(null_yield);
+    int r = read_op.prepare(null_yield, oc.dpp);
     if (r < 0) {
       return r;
     }
@@ -1365,7 +1363,7 @@ public:
     attrs.erase(RGW_ATTR_ID_TAG);
     attrs.erase(RGW_ATTR_TAIL_TAG);
 
-    obj_op.write_meta(tier_ctx.o.meta.size, 0, attrs, null_yield);
+    obj_op.write_meta(oc.dpp, tier_ctx.o.meta.size, 0, attrs, null_yield);
     if (r < 0) {
       return r;
     }
@@ -1403,15 +1401,20 @@ public:
       return ret;
     }
 
-    RGWLCCloudTierCtx tier_ctx(oc.cct, oc.o, oc.store, oc.bucket->get_info(),
-                        oc.obj->get_obj(), oc.rctx, conn, bucket_name, oc.tier.target_storage_class,
-                        &http_manager);
+    RGWLCCloudTierCtx tier_ctx(oc.cct, oc.dpp, oc.o, oc.store, oc.bucket->get_info(),
+                        oc.obj->get_obj(), oc.rctx, conn, bucket_name,
+                        oc.tier.target_storage_class, &http_manager);
     tier_ctx.acl_mappings = oc.tier.acl_mappings;
     tier_ctx.multipart_min_part_size = oc.tier.multipart_min_part_size;
     tier_ctx.multipart_sync_threshold = oc.tier.multipart_sync_threshold;
     tier_ctx.storage_class = oc.tier.storage_class;
 
     bool al_tiered = false;
+
+    /* Since multiple zones may try to transition the same object to the cloud,
+     * verify if the object is already transitioned. And since its just a best
+     * effort, do not bail out in case of any errors.
+     */
     ret = crs.run(new RGWLCCloudCheckCR(tier_ctx, &al_tiered));
     
     if (ret < 0) {
@@ -1419,10 +1422,10 @@ public:
     }
 
     if (!al_tiered) {
-        ldout(tier_ctx.cct, 20) << "is_already_tiered false" << dendl;
+       ldout(tier_ctx.cct, 20) << "is already tiered false" << dendl;
 	   ret = crs.run(new RGWLCCloudTierCR(tier_ctx));
     } else {
-        ldout(tier_ctx.cct, 20) << "is_already_tiered true" << dendl;
+        ldout(tier_ctx.cct, 20) << "is already tiered true" << dendl;
     }
     http_manager.stop();
          
@@ -1458,16 +1461,15 @@ public:
     target_placement.inherit_from(oc.bucket->get_placement_rule());
     target_placement.storage_class = transition.storage_class;
 
-    ldpp_dout(oc.dpp, 0) << "XXXXXXXXXXX ERROR: in lifecycle::process" <<  dendl;
     r = get_tier_target(zonegroup, target_placement, target_placement.storage_class, oc.tier);
 
     if (!r && oc.tier.tier_type == "cloud") {
-         ldpp_dout(oc.dpp, 0) << "Found cloud tier: " << target_placement.storage_class << dendl;
-        r = transition_obj_to_cloud(oc);
-        if (r < 0) {
-            ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj to cloud (r=" << r << ")"
-                               << dendl;
-        }
+      ldpp_dout(oc.dpp, 20) << "Found cloud tier: " << target_placement.storage_class << dendl;
+      r = transition_obj_to_cloud(oc);
+      if (r < 0) {
+        ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj to cloud (r=" << r << ")"
+                             << dendl;
+      }
     } else {
       if (!oc.store->get_zone()->get_params().
   	    valid_placement(target_placement)) {
