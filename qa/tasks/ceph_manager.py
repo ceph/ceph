@@ -1346,12 +1346,13 @@ class CephManager:
         kwargs['args'] = prefix + list(kwargs['args'])
         return self.controller.run(**kwargs)
 
-    def raw_cluster_cmd(self, *args):
+    def raw_cluster_cmd(self, *args, **kwargs):
         """
         Start ceph on a raw cluster.  Return count
         """
-        return self.run_cluster_cmd(**{'args': args,
-                                       'stdout': StringIO()}).stdout.getvalue()
+        stdout = kwargs.pop('stdout', StringIO())
+        p = self.run_cluster_cmd(args=args, stdout=stdout, **kwargs)
+        return p.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args, **kwargs):
         """
