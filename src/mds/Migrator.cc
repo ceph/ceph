@@ -2722,12 +2722,16 @@ void Migrator::handle_export_prep(const cref_t<MExportDirPrep> &m, bool did_assi
 
     if (!mdcache->is_readonly() &&
 	// for pinning scatter gather. loner has a higher chance to get wrlock
-	diri->filelock.can_wrlock(diri->get_loner()) &&
-	diri->nestlock.can_wrlock(diri->get_loner())) {
+	(dir->get_fnode()->fragstat == dir->get_fnode()->accounted_fragstat ||
+	 diri->filelock.can_wrlock(diri->get_loner())) &&
+	(dir->get_fnode()->rstat == dir->get_fnode()->accounted_rstat ||
+	 diri->nestlock.can_wrlock(diri->get_loner()))) {
       it->second.mut = new MutationImpl();
       // force some locks.  hacky.
-      mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
-      mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);
+      if (!(dir->get_fnode()->fragstat == dir->get_fnode()->accounted_fragstat))
+	mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
+      if (!(dir->get_fnode()->rstat == dir->get_fnode()->accounted_rstat))
+	mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);
 
       // note that i am an ambiguous auth for this subtree.
       // specify bounds, since the exporter explicitly defines the region.
