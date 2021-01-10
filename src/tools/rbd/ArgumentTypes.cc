@@ -509,6 +509,19 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 }
 
 void validate(boost::any& v, const std::vector<std::string>& values,
+              EncryptionAlgorithm *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  if (s == "aes-128") {
+    v = boost::any(RBD_ENCRYPTION_ALGORITHM_AES128);
+  } else if (s == "aes-256") {
+    v = boost::any(RBD_ENCRYPTION_ALGORITHM_AES256);
+  } else {
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
               ExportFormat *target_type, int) {
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);

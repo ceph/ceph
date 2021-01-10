@@ -18,6 +18,7 @@
 
 #include "acconfig.h"
 #include "include/int_types.h"
+#include "include/scope_guard.h"
 
 #include <libgen.h>
 #include <stdio.h>
@@ -114,6 +115,9 @@ struct Config {
   std::string format;
   bool pretty_format = false;
 
+  std::optional<librbd::encryption_format_t> encryption_format;
+  std::optional<std::string> encryption_passphrase_file;
+
   Command command = None;
   int pid = 0;
 
@@ -141,18 +145,21 @@ static void usage()
             << "               unmap <device|image-or-snap-spec>     Unmap nbd device\n"
             << "               [options] list-mapped                 List mapped nbd devices\n"
             << "Map and attach options:\n"
-            << "  --device <device path>   Specify nbd device path (/dev/nbd{num})\n"
-            << "  --exclusive              Forbid writes by other clients\n"
-            << "  --io-timeout <sec>       Set nbd IO timeout\n"
-            << "  --max_part <limit>       Override for module param max_part\n"
-            << "  --nbds_max <limit>       Override for module param nbds_max\n"
-            << "  --quiesce                Use quiesce callbacks\n"
-            << "  --quiesce-hook <path>    Specify quiesce hook path\n"
-            << "                           (default: " << Config().quiesce_hook << ")\n"
-            << "  --read-only              Map read-only\n"
-            << "  --reattach-timeout <sec> Set nbd re-attach timeout\n"
-            << "                           (default: " << Config().reattach_timeout << ")\n"
-            << "  --try-netlink            Use the nbd netlink interface\n"
+            << "  --device <device path>        Specify nbd device path (/dev/nbd{num})\n"
+            << "  --encryption-format           Image encryption format\n"
+            << "                                (possible values: luks1, luks2)\n"
+            << "  --encryption-passphrase-file  Path of file containing passphrase for unlocking image encryption\n"
+            << "  --exclusive                   Forbid writes by other clients\n"
+            << "  --io-timeout <sec>            Set nbd IO timeout\n"
+            << "  --max_part <limit>            Override for module param max_part\n"
+            << "  --nbds_max <limit>            Override for module param nbds_max\n"
+            << "  --quiesce                     Use quiesce callbacks\n"
+            << "  --quiesce-hook <path>         Specify quiesce hook path\n"
+            << "                                (default: " << Config().quiesce_hook << ")\n"
+            << "  --read-only                   Map read-only\n"
+            << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
+            << "                                (default: " << Config().reattach_timeout << ")\n"
+            << "  --try-netlink                 Use the nbd netlink interface\n"
             << "\n"
             << "List options:\n"
             << "  --format plain|json|xml Output format (default: plain)\n"
@@ -1635,6 +1642,56 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
       goto close_fd;
   }
 
+  if (cfg->encryption_format.has_value()) {
+    if (!cfg->encryption_passphrase_file.has_value()) {
+      r = -EINVAL;
+      cerr << "rbd-nbd: missing encryption-passphrase-file" << std::endl;
+      goto close_fd;
+    }
+    std::ifstream file(cfg->encryption_passphrase_file.value().c_str());
+    if (file.fail()) {
+      r = -errno;
+      std::cerr << "rbd-nbd: unable to open passphrase file:"
+                << cpp_strerror(errno) << std::endl;
+      goto close_fd;
+    }
+    std::string passphrase((std::istreambuf_iterator<char>(file)),
+                           (std::istreambuf_iterator<char>()));
+    auto sg = make_scope_guard([&] {
+      explicit_bzero(&passphrase[0], passphrase.size()); });
+    file.close();
+    if (!passphrase.empty() && passphrase[passphrase.length() - 1] == '\n') {
+      passphrase.erase(passphrase.length() - 1);
+    }
+
+    switch (cfg->encryption_format.value()) {
+      case RBD_ENCRYPTION_FORMAT_LUKS1: {
+        librbd::encryption_luks1_format_options_t opts = {};
+        opts.passphrase = passphrase;
+        r = image.encryption_load(
+                RBD_ENCRYPTION_FORMAT_LUKS1, &opts, sizeof(opts));
+        break;
+      }
+      case RBD_ENCRYPTION_FORMAT_LUKS2: {
+        librbd::encryption_luks2_format_options_t opts = {};
+        opts.passphrase = passphrase;
+        r = image.encryption_load(
+                RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts));
+        break;
+      }
+      default:
+        r = -ENOTSUP;
+        cerr << "rbd-nbd: unsupported encryption format" << std::endl;
+        goto close_fd;
+    }
+
+    if (r != 0) {
+      cerr << "rbd-nbd: failed to load encryption: " << cpp_strerror(r)
+           << std::endl;
+      goto close_fd;
+    }
+  }
+
   r = image.stat(info, sizeof(info));
   if (r < 0)
     goto close_fd;
@@ -1925,6 +1982,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
 
   std::vector<const char*>::iterator i;
   std::ostringstream err;
+  std::string arg_value;
 
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -1996,6 +2054,22 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
       cfg->try_netlink = true;
+    } else if (ceph_argparse_witharg(args, i, &arg_value,
+                                     "--encryption-format", (char *)NULL)) {
+      if (arg_value == "luks1") {
+        cfg->encryption_format =
+                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS1);
+      } else if (arg_value == "luks2") {
+        cfg->encryption_format =
+                std::make_optional(RBD_ENCRYPTION_FORMAT_LUKS2);
+      } else {
+        *err_msg << "rbd-nbd: Invalid encryption format";
+        return -EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &arg_value,
+                                     "--encryption-passphrase-file",
+                                     (char *)NULL)) {
+      cfg->encryption_passphrase_file = std::make_optional(arg_value);
     } else {
       ++i;
     }

@@ -20,6 +20,7 @@ set(rbd_srcs
   action/Device.cc
   action/Diff.cc
   action/DiskUsage.cc
+  action/Encryption.cc
   action/Export.cc
   action/Feature.cc
   action/Flatten.cc
