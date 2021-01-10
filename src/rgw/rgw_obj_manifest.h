@@ -449,7 +449,7 @@ public:
     return max_head_size;
   }
 
-  string get_tier_type() {
+  const string get_tier_type() {
       return tier_type;
   }
 
@@ -472,7 +472,7 @@ public:
       tier_config.is_multipart_upload = t.is_multipart_upload;
   }
 
-  void get_tier_config(RGWObjTier* t) {
+  const void get_tier_config(RGWObjTier* t) {
       if (tier_type != "cloud")
         return;
 

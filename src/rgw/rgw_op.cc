@@ -2211,6 +2211,7 @@ void RGWGetObj::execute(optional_yield y)
     RGWObjManifest m;
     decode(m, attr_iter->second);
     if (m.get_tier_type() == "cloud") {
+      /* XXX: Instead send presigned redirect or read-through */
       op_ret = -ERR_INVALID_OBJECT_STATE;
       ldpp_dout(this, 0) << "ERROR: Cannot get cloud tiered object. Failing with "
 		       << op_ret << dendl;
