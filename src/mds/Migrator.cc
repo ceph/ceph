@@ -577,6 +577,9 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
 
 void Migrator::show_importing()
 {  
+  if (!g_conf()->subsys.should_gather<ceph_subsys_mds, 10>())
+    return;
+
   dout(10) << dendl;
   for (map<dirfrag_t,import_state_t>::iterator p = import_state.begin();
        p != import_state.end();
@@ -596,6 +599,9 @@ void Migrator::show_importing()
 
 void Migrator::show_exporting() 
 {
+  if (!g_conf()->subsys.should_gather<ceph_subsys_mds, 10>())
+    return;
+
   dout(10) << dendl;
   for (const auto& [df, stat] : export_state) {
     if (stat.base) {
@@ -612,6 +618,9 @@ void Migrator::show_exporting()
 
 void Migrator::show_other_importing()
 {
+  if (!g_conf()->subsys.should_gather<ceph_subsys_mds, 10>())
+    return;
+
   dout(10) << dendl;
   for (auto& p : other_ambiguous_imports) {
     CDir *dir = mdcache->get_dirfrag(p.first);
