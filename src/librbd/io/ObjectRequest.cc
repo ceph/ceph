@@ -647,12 +647,17 @@ void AbstractObjectWriteRequest<I>::handle_post_write_object_map_update(int r) {
 }
 
 template <typename I>
-void ObjectWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
+void ObjectWriteRequest<I>::add_write_hint(neorados::WriteOp* wr) {
   if ((m_write_flags & OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
     wr->create(true);
   } else if (m_assert_version.has_value()) {
     wr->assert_version(m_assert_version.value());
   }
+  AbstractObjectWriteRequest<I>::add_write_hint(wr);
+}
+
+template <typename I>
+void ObjectWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
   if (this->m_full_object) {
     wr->write_full(bufferlist{m_write_data});
   } else {
