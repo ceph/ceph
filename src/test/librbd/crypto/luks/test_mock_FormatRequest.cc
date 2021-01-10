@@ -57,11 +57,6 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
             OBJECT_SIZE));
   }
 
-  void expect_crypto_layer_exists_check(bool exists = false) {
-    EXPECT_CALL(*mock_image_ctx->io_object_dispatcher, exists(
-            io::OBJECT_DISPATCH_LAYER_CRYPTO)).WillOnce(Return(exists));
-  }
-                         
   void expect_get_image_size(uint64_t image_size) {
     EXPECT_CALL(*mock_image_ctx, get_image_size(CEPH_NOSNAP)).WillOnce(Return(
             image_size));
@@ -94,13 +89,13 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
     }
   }
 
-  void verify_header(size_t expected_key_length,
+  void verify_header(const char* expected_format, size_t expected_key_length,
                      uint64_t expected_sector_size) {
     Header header(mock_image_ctx->cct);
 
     ASSERT_EQ(0, header.init());
     ASSERT_EQ(0, header.write(header_bl));
-    ASSERT_EQ(0, header.load());
+    ASSERT_EQ(0, header.load(expected_format));
 
     ASSERT_EQ(expected_sector_size, header.get_sector_size());
     ASSERT_EQ(0, header.get_data_offset() % OBJECT_SIZE);
@@ -115,10 +110,9 @@ struct TestMockCryptoLuksFormatRequest : public TestMockFixture {
 
 TEST_F(TestMockCryptoLuksFormatRequest, LUKS1) {
   auto mock_format_request = MockFormatRequest::create(
-          mock_image_ctx, DiskEncryptionFormat::DISK_ENCRYPTION_FORMAT_LUKS1,
-          CipherAlgorithm::CIPHER_ALGORITHM_AES128, std::move(passphrase),
-          on_finish, true);
-  expect_crypto_layer_exists_check();
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS1,
+          RBD_ENCRYPTION_ALGORITHM_AES128, std::move(passphrase), on_finish,
+          true);
   expect_get_object_size();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
@@ -126,15 +120,14 @@ TEST_F(TestMockCryptoLuksFormatRequest, LUKS1) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   complete_aio(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_NO_FATAL_FAILURE(verify_header(32, 512));
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS1, 32, 512));
 }
 
 TEST_F(TestMockCryptoLuksFormatRequest, AES128) {
   auto mock_format_request = MockFormatRequest::create(
-          mock_image_ctx, DiskEncryptionFormat::DISK_ENCRYPTION_FORMAT_LUKS2,
-          CipherAlgorithm::CIPHER_ALGORITHM_AES128, std::move(passphrase),
-          on_finish, true);
-  expect_crypto_layer_exists_check();
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
+          RBD_ENCRYPTION_ALGORITHM_AES128, std::move(passphrase), on_finish,
+          true);
   expect_get_object_size();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
@@ -142,15 +135,14 @@ TEST_F(TestMockCryptoLuksFormatRequest, AES128) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   complete_aio(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_NO_FATAL_FAILURE(verify_header(32, 4096));
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 32, 4096));
 }
 
 TEST_F(TestMockCryptoLuksFormatRequest, AES256) {
   auto mock_format_request = MockFormatRequest::create(
-          mock_image_ctx, DiskEncryptionFormat::DISK_ENCRYPTION_FORMAT_LUKS2,
-          CipherAlgorithm::CIPHER_ALGORITHM_AES256, std::move(passphrase),
-          on_finish, true);
-  expect_crypto_layer_exists_check();
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
+          RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), on_finish,
+          true);
   expect_get_object_size();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
@@ -158,17 +150,7 @@ TEST_F(TestMockCryptoLuksFormatRequest, AES256) {
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   complete_aio(0);
   ASSERT_EQ(0, finished_cond.wait());
-  ASSERT_NO_FATAL_FAILURE(verify_header(62, 4096));
-}
-
-TEST_F(TestMockCryptoLuksFormatRequest, CryptoAlreadyLoaded) {
-  auto mock_format_request = MockFormatRequest::create(
-          mock_image_ctx, DiskEncryptionFormat::DISK_ENCRYPTION_FORMAT_LUKS2,
-          CipherAlgorithm::CIPHER_ALGORITHM_AES256, std::move(passphrase),
-          on_finish, true);
-  expect_crypto_layer_exists_check(true);
-  mock_format_request->send();
-  ASSERT_EQ(-EEXIST, finished_cond.wait());
+  ASSERT_NO_FATAL_FAILURE(verify_header(CRYPT_LUKS2, 62, 4096));
 }
 
 TEST_F(TestMockCryptoLuksFormatRequest, ImageTooSmall) {
@@ -184,10 +166,9 @@ TEST_F(TestMockCryptoLuksFormatRequest, ImageTooSmall) {
 
 TEST_F(TestMockCryptoLuksFormatRequest, WriteFail) {
   auto mock_format_request = MockFormatRequest::create(
-          mock_image_ctx, DiskEncryptionFormat::DISK_ENCRYPTION_FORMAT_LUKS2,
-          CipherAlgorithm::CIPHER_ALGORITHM_AES256, std::move(passphrase),
-          on_finish, true);
-  expect_crypto_layer_exists_check();
+          mock_image_ctx, RBD_ENCRYPTION_FORMAT_LUKS2,
+          RBD_ENCRYPTION_ALGORITHM_AES256, std::move(passphrase), on_finish,
+          true);
   expect_get_object_size();
   expect_get_image_size(IMAGE_SIZE);
   expect_image_write();
