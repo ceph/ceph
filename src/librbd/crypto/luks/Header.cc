@@ -109,6 +109,8 @@ ssize_t Header::read(ceph::bufferlist* bl) {
   if (r < 0) {
     lderr(m_cct) << "error reading header: " << cpp_strerror(r) << dendl;
   }
+
+  ldout(m_cct, 20) << "read size = " << r << dendl;
   return r;
 }
 
@@ -116,6 +118,9 @@ int Header::format(const char* type, const char* alg, size_t key_size,
                    const char* cipher_mode, uint32_t sector_size,
                    uint32_t data_alignment, bool insecure_fast_mode) {
   ceph_assert(m_cd != nullptr);
+
+  ldout(m_cct, 20) << "sector size: " << sector_size << ", data alignment: "
+                   << data_alignment << dendl;
 
   // required for passing libcryptsetup device size check
   if (ftruncate(m_fd, 4096) != 0) {
@@ -132,7 +137,6 @@ int Header::format(const char* type, const char* alg, size_t key_size,
 #else
   size_t converted_data_alignment = data_alignment / 512;
 #endif
-
 
   void* params = nullptr;
   if (strcmp(type, CRYPT_LUKS1) == 0) {
@@ -187,7 +191,7 @@ int Header::add_keyslot(const char* passphrase, size_t passphrase_size) {
   return 0;
 }
 
-int Header::load() {
+int Header::load(const char* type) {
   ceph_assert(m_cd != nullptr);
 
   // libcryptsetup checks if device size matches the header and keyslots size
@@ -198,11 +202,14 @@ int Header::load() {
     return -errno;
   }
 
-  auto r = crypt_load(m_cd, CRYPT_LUKS, NULL);
+  auto r = crypt_load(m_cd, type, NULL);
   if (r != 0) {
     lderr(m_cct) << "crypt_load failed: " << cpp_strerror(r) << dendl;
     return r;
   }
+
+  ldout(m_cct, 20) << "sector size: " << get_sector_size() << ", data offset: "
+                   << get_data_offset() << dendl;
 
   return 0;
 }

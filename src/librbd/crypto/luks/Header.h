@@ -25,7 +25,7 @@ public:
                const char* cipher_mode, uint32_t sector_size,
                uint32_t data_alignment, bool insecure_fast_mode);
     int add_keyslot(const char* passphrase, size_t passphrase_size);
-    int load();
+    int load(const char* type);
     int read_volume_key(const char* passphrase, size_t passphrase_size,
                         char* volume_key, size_t* volume_key_size);
 

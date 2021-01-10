@@ -11,6 +11,9 @@ namespace crypto {
 
 class CryptoImageDispatch : public io::ImageDispatchInterface {
 public:
+  static CryptoImageDispatch* create(uint64_t data_offset) {
+    return new CryptoImageDispatch(data_offset);
+  }
   CryptoImageDispatch(uint64_t data_offset);
 
   io::ImageDispatchLayer get_dispatch_layer() const override {
@@ -87,6 +90,10 @@ public:
       uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override {
+    return false;
+  }
+
+  bool invalidate_cache(Context* on_finish) override {
     return false;
   }
 

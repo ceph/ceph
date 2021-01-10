@@ -10,7 +10,6 @@
 #include "librbd/crypto/openssl/DataCryptor.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ReadResult.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -26,13 +25,15 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 LoadRequest<I>::LoadRequest(
-        I* image_ctx, std::string&& passphrase,
+        I* image_ctx, encryption_format_t format, std::string&& passphrase,
         ceph::ref_t<CryptoInterface>* result_crypto,
-        Context* on_finish) : m_image_ctx(image_ctx), m_on_finish(on_finish),
+        Context* on_finish) : m_image_ctx(image_ctx),
+                              m_format(format),
+                              m_passphrase(std::move(passphrase)),
+                              m_on_finish(on_finish),
                               m_result_crypto(result_crypto),
                               m_initial_read_size(DEFAULT_INITIAL_READ_SIZE),
-                              m_header(image_ctx->cct), m_offset(0),
-                              m_passphrase(std::move(passphrase)) {
+                              m_header(image_ctx->cct), m_offset(0) {
 }
 
 template <typename I>
@@ -42,12 +43,6 @@ void LoadRequest<I>::set_initial_read_size(uint64_t read_size) {
 
 template <typename I>
 void LoadRequest<I>::send() {
-  if (m_image_ctx->io_object_dispatcher->exists(
-          io::OBJECT_DISPATCH_LAYER_CRYPTO)) {
-    finish(-EEXIST);
-    return;
-  }
-
   // setup interface with libcryptsetup
   auto r = m_header.init();
   if (r < 0) {
@@ -100,8 +95,23 @@ void LoadRequest<I>::handle_read_header(int r) {
     return;
   }
 
+  const char* type;
+  switch (m_format) {
+    case RBD_ENCRYPTION_FORMAT_LUKS1:
+      type = CRYPT_LUKS1;
+      break;
+    case RBD_ENCRYPTION_FORMAT_LUKS2:
+      type = CRYPT_LUKS2;
+      break;
+    default:
+      lderr(m_image_ctx->cct) << "unsupported format type: " << m_format
+                              << dendl;
+      finish(-EINVAL);
+      return;
+  }
+
   // parse header via libcryptsetup
-  r = m_header.load();
+  r = m_header.load(type);
   if (r != 0) {
     if (m_offset < MAXIMUM_HEADER_SIZE) {
       // perhaps we did not feed the entire header to libcryptsetup, retry
