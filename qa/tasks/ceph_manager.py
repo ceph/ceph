@@ -13,6 +13,7 @@ import logging
 import threading
 import traceback
 import os
+import shlex
 
 from io import BytesIO, StringIO
 from subprocess import DEVNULL
@@ -1325,6 +1326,17 @@ class CephManager:
                 self.pools[pool] = self.get_pool_int_property(pool, 'pg_num')
             except CommandFailedError:
                 self.log('Failed to get pg_num from pool %s, ignoring' % pool)
+
+    def ceph(self, cmd, **kwargs):
+        """
+        Simple Ceph admin command wrapper around run_cluster_cmd.
+        """
+
+        kwargs.pop('args', None)
+        args = shlex.split(cmd)
+        stdout = kwargs.pop('stdout', StringIO())
+        stderr = kwargs.pop('stderr', StringIO())
+        return self.run_cluster_cmd(args=args, stdout=stdout, stderr=stderr, **kwargs)
 
     def run_cluster_cmd(self, **kwargs):
         """
