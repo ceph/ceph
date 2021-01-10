@@ -190,11 +190,11 @@ NewChunk::NewChunk(my_context ctx) : my_base(ctx)
   bool got_a_chunk = scrbr->select_range();
   if (got_a_chunk) {
     dout(15) << __func__ << " selection OK" << dendl;
-    post_event(boost::intrusive_ptr<SelectedChunkFree>(new SelectedChunkFree{}));
+    post_event(SelectedChunkFree{});
   } else {
     dout(10) << __func__ << " selected chunk is busy" << dendl;
     // wait until we are available (transitioning to Blocked)
-    post_event(boost::intrusive_ptr<ChunkIsBusy>(new ChunkIsBusy{}));
+    post_event(ChunkIsBusy{});
   }
 }
 
@@ -212,7 +212,7 @@ sc::result NewChunk::react(const SelectedChunkFree&)
 WaitPushes::WaitPushes(my_context ctx) : my_base(ctx)
 {
   dout(10) << " -- state -->> Act/WaitPushes" << dendl;
-  post_event(boost::intrusive_ptr<ActivePushesUpd>(new ActivePushesUpd{}));
+  post_event(ActivePushesUpd{});
 }
 
 /*
@@ -237,7 +237,7 @@ sc::result WaitPushes::react(const ActivePushesUpd&)
 WaitLastUpdate::WaitLastUpdate(my_context ctx) : my_base(ctx)
 {
   dout(10) << " -- state -->> Act/WaitLastUpdate" << dendl;
-  post_event(boost::intrusive_ptr<UpdatesApplied>(new UpdatesApplied{}));
+  post_event(UpdatesApplied{});
 }
 
 void WaitLastUpdate::on_new_updates(const UpdatesApplied&)
@@ -246,7 +246,7 @@ void WaitLastUpdate::on_new_updates(const UpdatesApplied&)
   dout(10) << "WaitLastUpdate::on_new_updates(const UpdatesApplied&)" << dendl;
 
   if (scrbr->has_pg_marked_new_updates()) {
-    post_event(boost::intrusive_ptr<InternalAllUpdates>(new InternalAllUpdates{}));
+    post_event(InternalAllUpdates{});
   } else {
     // will be requeued by op_applied
     dout(10) << "wait for EC read/modify/writes to queue" << dendl;
@@ -280,7 +280,7 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx)
     // we were preempted, either directly or by a replica
     dout(10) << __func__ << " preempted!!!" << dendl;
     scrbr->mark_local_map_ready();
-    post_event(boost::intrusive_ptr<IntBmPreempted>(new IntBmPreempted{}));
+    post_event(IntBmPreempted{});
 
   } else {
 
@@ -295,12 +295,12 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx)
 
       dout(10) << "BuildMap::BuildMap() Error! Aborting. Ret: " << ret << dendl;
       // scrbr->mark_local_map_ready();
-      post_event(boost::intrusive_ptr<InternalError>(new InternalError{}));
+      post_event(InternalError{});
 
     } else {
 
       // the local map was created
-      post_event(boost::intrusive_ptr<IntLocalMapDone>(new IntLocalMapDone{}));
+      post_event(IntLocalMapDone{});
     }
   }
 }
@@ -320,7 +320,7 @@ DrainReplMaps::DrainReplMaps(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> Act/DrainReplMaps" << dendl;
   // we may have received all maps already. Send the event that will make us check.
-  post_event(boost::intrusive_ptr<GotReplicas>(new GotReplicas{}));
+  post_event(GotReplicas{});
 }
 
 sc::result DrainReplMaps::react(const GotReplicas&)
@@ -343,7 +343,7 @@ sc::result DrainReplMaps::react(const GotReplicas&)
 WaitReplicas::WaitReplicas(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> Act/WaitReplicas" << dendl;
-  post_event(boost::intrusive_ptr<GotReplicas>(new GotReplicas{}));
+  post_event(GotReplicas{});
 }
 
 sc::result WaitReplicas::react(const GotReplicas&)
@@ -379,7 +379,7 @@ WaitDigestUpdate::WaitDigestUpdate(my_context ctx) : my_base(ctx)
   // perform an initial check: maybe we already
   // have all the updates we need:
   // (note that DigestUpdate is usually an external event)
-  post_event(boost::intrusive_ptr<DigestUpdate>(new DigestUpdate{}));
+  post_event(DigestUpdate{});
 }
 
 sc::result WaitDigestUpdate::react(const DigestUpdate&)
@@ -473,7 +473,7 @@ ActiveReplica::ActiveReplica(my_context ctx) : my_base(ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "-- state -->> ActiveReplica" << dendl;
   scrbr->on_replica_init();  // as we might have skipped ReplicaWaitUpdates
-  post_event(boost::intrusive_ptr<SchedReplica>(new SchedReplica{}));
+  post_event(SchedReplica{});
 }
 
 sc::result ActiveReplica::react(const SchedReplica&)
