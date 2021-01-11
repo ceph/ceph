@@ -72,6 +72,13 @@ Add and remove hosts::
     ceph orch host add <hostname> [<addr>] [<labels>...]
     ceph orch host rm <hostname>
 
+Place a host in and out of maintenance mode (stops all Ceph daemons on host)::
+
+    ceph orch host maintenance enter <hostname> [--force]
+    ceph orch host maintenace exit <hostname>
+
+Where the force flag when entering maintenance allows the user to bypass warnings (but not alerts)
+
 For cephadm, see also :ref:`cephadm-fqdn` and :ref:`cephadm-removing-hosts`.
 
 Host Specification

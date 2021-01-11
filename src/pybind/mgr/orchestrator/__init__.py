@@ -16,4 +16,4 @@ from ._interface import \
     DaemonDescription, \
     OrchestratorEvent, set_exception_subject, \
     InventoryHost, DeviceLightLoc, \
-    UpgradeStatusSpec
+    UpgradeStatusSpec, daemon_type_to_service, service_to_daemon_types

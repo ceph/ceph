@@ -1,6 +1,9 @@
+import errno
 import logging
 import os
 from typing import List, Any, Tuple, Dict
+
+from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec
@@ -79,6 +82,12 @@ class GrafanaService(CephadmService):
             'dashboard set-grafana-api-url',
             service_url
         )
+
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Grafana', 1)
+        if warn and not force:
+            return HandleCommandResult(-errno.EBUSY, None, warn_message)
+        return HandleCommandResult(0, warn_message, None)
 
 
 class AlertmanagerService(CephadmService):
@@ -164,6 +173,12 @@ class AlertmanagerService(CephadmService):
             'dashboard set-alertmanager-api-host',
             service_url
         )
+
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Alertmanager', 1)
+        if warn and not force:
+            return HandleCommandResult(-errno.EBUSY, None, warn_message)
+        return HandleCommandResult(0, warn_message, None)
 
 
 class PrometheusService(CephadmService):
@@ -263,6 +278,12 @@ class PrometheusService(CephadmService):
             service_url
         )
 
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Prometheus', 1)
+        if warn and not force:
+            return HandleCommandResult(-errno.EBUSY, None, warn_message)
+        return HandleCommandResult(0, warn_message, None)
+
 
 class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
@@ -274,3 +295,9 @@ class NodeExporterService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         return {}, []
+
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # since node exporter runs on each host and cannot compromise data, no extra checks required
+        names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
+        out = f'It is presumed safe to stop {names}'
+        return HandleCommandResult(0, out, None)
