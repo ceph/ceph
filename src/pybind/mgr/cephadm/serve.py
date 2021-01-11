@@ -574,7 +574,8 @@ class CephadmServe:
         def _ok_to_stop(remove_daemon_hosts: Set[orchestrator.DaemonDescription]) -> bool:
             daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
             assert None not in daemon_ids
-            r = self.mgr.cephadm_services[service_type].ok_to_stop(cast(List[str], daemon_ids))
+            # setting force flag retains previous behavior, should revisit later.
+            r = self.mgr.cephadm_services[service_type].ok_to_stop(cast(List[str], daemon_ids), force=True)
             return not r.retval
 
         while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):

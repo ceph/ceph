@@ -208,7 +208,7 @@ class CephadmService(metaclass=ABCMeta):
             except MonCommandFailed as e:
                 logger.warning('Failed to set Dashboard config for %s: %s', service_name, e)
 
-    def ok_to_stop(self, daemon_ids: List[str]) -> HandleCommandResult:
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'
         err = f'It is NOT safe to stop {names}'
@@ -230,6 +230,27 @@ class CephadmService(metaclass=ABCMeta):
         out = f'{out}: {r.stdout}' if r.stdout else out
         logger.info(out)
         return HandleCommandResult(r.retval, out, r.stderr)
+
+    def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int) -> Tuple[bool, str]:
+        # Provides a warning about if it possible or not to stop <n> daemons in a service
+        names = [f'{daemon_type}.{d_id}' for d_id in daemon_ids]
+        number_of_running_daemons = len(
+            [daemon for daemon in self.mgr.cache.get_daemons_by_type(daemon_type) if daemon.status == 1])
+        if (number_of_running_daemons - len(daemon_ids)) >= low_limit:
+            return False, f'It is presumed safe to stop {names}'
+
+        num_daemons_left = number_of_running_daemons - len(daemon_ids)
+
+        def plural(count: int) -> str:
+            return 'daemon' if count == 1 else 'daemons'
+
+        daemon_count = "only" if number_of_running_daemons == 1 else number_of_running_daemons
+        left_count = "no" if num_daemons_left == 0 else num_daemons_left
+
+        out = (f'WARNING: Stopping {len(daemon_ids)} out of {number_of_running_daemons} daemons in {service} service. '
+               f'Service will not be operational with {left_count} {plural(num_daemons_left)} left. '
+               f'At least {low_limit} {plural(low_limit)} must be running to guarantee service. ')
+        return True, out
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
         """
