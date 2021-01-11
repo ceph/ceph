@@ -115,6 +115,8 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
   } else {
     add_to_dirty(next);
   }
+
+  prev->state = CachedExtent::extent_state_t::INVALID;
 }
 
 CachedExtentRef Cache::alloc_new_extent_by_type(
