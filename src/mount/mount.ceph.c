@@ -19,6 +19,7 @@
 
 bool verboseflag = false;
 bool skip_mtab_flag = false;
+bool v2_addrs = false;
 static const char * const EMPTY_STRING = "";
 
 /* TODO duplicates logic from kernel */
@@ -155,7 +156,7 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 		ret = drop_capabilities();
 		if (ret)
 			exit(1);
-		mount_ceph_get_config_info(cmi->cmi_conf, cmi->cmi_name, cci);
+		mount_ceph_get_config_info(cmi->cmi_conf, cmi->cmi_name, v2_addrs, cci);
 		exit(0);
 	} else {
 		/* parent */
@@ -317,6 +318,14 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			}
 			/* keep pointer to value */
 			name = value;
+			skip = false;
+		} else if (strcmp(data, "ms_mode") == 0) {
+			if (!value || !*value) {
+				fprintf(stderr, "mount option ms_mode requires a value.\n");
+				return -EINVAL;
+			}
+			/* Only legacy ms_mode needs v1 addrs */
+			v2_addrs = strcmp(value, "legacy");
 			skip = false;
 		} else {
 			/* unrecognized mount options, passing to kernel */
