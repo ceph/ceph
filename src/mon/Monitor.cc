@@ -3610,7 +3610,9 @@ void Monitor::handle_command(MonOpRequestRef op)
       string plain;
       healthmon()->get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
       if (f) {
-	f->flush(rdata);
+	f->flush(ds);
+	ds << '\n';
+	rdata.append(ds);
       } else {
 	rdata.append(plain);
       }
