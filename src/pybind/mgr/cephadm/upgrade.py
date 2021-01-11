@@ -2,11 +2,12 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, List
+from typing import TYPE_CHECKING, Optional, Dict, List, cast
 
 import orchestrator
 from cephadm.serve import CephadmServe
-from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER
+from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
+    config_dump, ConfEntity
 from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service, service_to_daemon_types
 
 if TYPE_CHECKING:
@@ -267,17 +268,14 @@ class CephadmUpgrade:
             return
         self.mgr.set_store('upgrade_state', json.dumps(self.upgrade_state.to_json()))
 
-    def get_distinct_container_image_settings(self) -> Dict[str, str]:
+    def get_distinct_container_image_settings(self) -> Dict[ConfEntity, str]:
+
         # get all distinct container_image settings
         image_settings = {}
-        ret, out, err = self.mgr.check_mon_command({
-            'prefix': 'config dump',
-            'format': 'json',
-        })
-        config = json.loads(out)
+        config = config_dump(self.mgr)
         for opt in config:
-            if opt['name'] == 'container_image':
-                image_settings[opt['section']] = opt['value']
+            if opt.name == 'container_image':
+                image_settings[opt.section] = opt.value
         return image_settings
 
     def _prepare_for_mds_upgrade(
@@ -545,7 +543,7 @@ class CephadmUpgrade:
                         (count, daemon_type, short_version, target_version))
 
             # push down configs
-            if image_settings.get(daemon_type) != target_image:
+            if image_settings.get(cast(ConfEntity, daemon_type)) != target_image:
                 logger.info('Upgrade: Setting container_image for all %s' %
                             daemon_type)
                 self.mgr.set_container_image(name_to_config_section(daemon_type), target_image)
