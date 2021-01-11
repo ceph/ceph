@@ -17,7 +17,7 @@ from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
-    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
+    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, HA_RGWSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
     ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec
 
@@ -765,7 +765,7 @@ Examples:
                 self._orchestrator_wait([completion])
                 data = completion.result
                 if format == 'plain':
-                    out = generate_preview_tables(data , True)
+                    out = generate_preview_tables(data, True)
                 else:
                     out = to_format(data, format, many=True, cls=None)
             return HandleCommandResult(stdout=out)

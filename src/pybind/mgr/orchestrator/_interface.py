@@ -22,7 +22,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec
+    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -889,6 +889,7 @@ class Orchestrator(object):
             'prometheus': self.apply_prometheus,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
+            'ha-rgw': self.apply_ha_rgw,
             'host': self.add_host,
             'cephadm-exporter': self.apply_cephadm_exporter,
         }
@@ -1055,6 +1056,10 @@ class Orchestrator(object):
         """Update RGW cluster"""
         raise NotImplementedError()
 
+    def apply_ha_rgw(self, spec: HA_RGWSpec) -> Completion[str]:
+        """Update ha-rgw daemons"""
+        raise NotImplementedError()
+
     def add_rbd_mirror(self, spec: ServiceSpec) -> Completion[List[str]]:
         """Create rbd-mirror daemon(s)"""
         raise NotImplementedError()
@@ -1171,6 +1176,51 @@ def json_to_generic_spec(spec: dict) -> GenericSpec:
         return ServiceSpec.from_json(spec)
 
 
+def daemon_type_to_service(dtype: str) -> str:
+    mapping = {
+        'mon': 'mon',
+        'mgr': 'mgr',
+        'mds': 'mds',
+        'rgw': 'rgw',
+        'osd': 'osd',
+        'haproxy': 'ha-rgw',
+        'keepalived': 'ha-rgw',
+        'iscsi': 'iscsi',
+        'rbd-mirror': 'rbd-mirror',
+        'nfs': 'nfs',
+        'grafana': 'grafana',
+        'alertmanager': 'alertmanager',
+        'prometheus': 'prometheus',
+        'node-exporter': 'node-exporter',
+        'crash': 'crash',
+        'container': 'container',
+        'cephadm-exporter': 'cephadm-exporter',
+    }
+    return mapping[dtype]
+
+
+def service_to_daemon_types(stype: str) -> List[str]:
+    mapping = {
+        'mon': ['mon'],
+        'mgr': ['mgr'],
+        'mds': ['mds'],
+        'rgw': ['rgw'],
+        'osd': ['osd'],
+        'ha-rgw': ['haproxy', 'keepalived'],
+        'iscsi': ['iscsi'],
+        'rbd-mirror': ['rbd-mirror'],
+        'nfs': ['nfs'],
+        'grafana': ['grafana'],
+        'alertmanager': ['alertmanager'],
+        'prometheus': ['prometheus'],
+        'node-exporter': ['node-exporter'],
+        'crash': ['crash'],
+        'container': ['container'],
+        'cephadm-exporter': ['cephadm-exporter'],
+    }
+    return mapping[stype]
+
+
 class UpgradeStatusSpec(object):
     # Orchestrator's report on what's going on with any ongoing upgrade
     def __init__(self):
@@ -1236,6 +1286,8 @@ class DaemonDescription(object):
         # The type of service (osd, mon, mgr, etc.)
         self.daemon_type = daemon_type
 
+        assert daemon_type not in ['HA_RGW', 'ha-rgw']
+
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
@@ -1271,7 +1323,7 @@ class DaemonDescription(object):
 
     def matches_service(self, service_name: Optional[str]) -> bool:
         if service_name:
-            return self.name().startswith(service_name + '.')
+            return (daemon_type_to_service(self.daemon_type) + '.' + self.daemon_id).startswith(service_name + '.')
         return False
 
     def service_id(self):
@@ -1318,15 +1370,15 @@ class DaemonDescription(object):
             # daemon_id == "service_id"
             return self.daemon_id
 
-        if self.daemon_type in ServiceSpec.REQUIRES_SERVICE_ID:
+        if daemon_type_to_service(self.daemon_type) in ServiceSpec.REQUIRES_SERVICE_ID:
             return _match()
 
         return self.daemon_id
 
     def service_name(self):
-        if self.daemon_type in ServiceSpec.REQUIRES_SERVICE_ID:
-            return f'{self.daemon_type}.{self.service_id()}'
-        return self.daemon_type
+        if daemon_type_to_service(self.daemon_type) in ServiceSpec.REQUIRES_SERVICE_ID:
+            return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
+        return daemon_type_to_service(self.daemon_type)
 
     def __repr__(self):
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
