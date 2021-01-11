@@ -2,7 +2,7 @@ overrides:
   ceph:
     conf:
       mgr:
-        debug client: 10
+        debug client: 20
     log-ignorelist:
       - OSD full dropping all updates
       - OSD near full

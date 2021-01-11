@@ -12163,6 +12163,7 @@ void Client::_setxattr_maybe_wait_for_osdmap(const char *name, const void *value
   // For setting pool of layout, MetaRequest need osdmap epoch.
   // There is a race which create a new data pool but client and mds both don't have.
   // Make client got the latest osdmap which make mds quickly judge whether get newer osdmap.
+  ldout(cct, 15) << __func__ << ": name = " << name << dendl;
   if (strcmp(name, "ceph.file.layout.pool") == 0 || strcmp(name, "ceph.dir.layout.pool") == 0 ||
       strcmp(name, "ceph.file.layout") == 0 || strcmp(name, "ceph.dir.layout") == 0) {
     string rest(strstr(name, "layout"));
@@ -12173,7 +12174,9 @@ void Client::_setxattr_maybe_wait_for_osdmap(const char *name, const void *value
 
     if (r == -ENOENT) {
       bs::error_code ec;
+      ldout(cct, 20) << __func__ << ": waiting for latest osdmap" << dendl;
       objecter->wait_for_latest_osdmap(ca::use_blocked[ec]);
+      ldout(cct, 20) << __func__ << ": got latest osdmap: " << ec << dendl;
     }
   }
 }
