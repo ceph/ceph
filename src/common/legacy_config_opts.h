@@ -1097,6 +1097,7 @@ OPTION(bluestore_log_collection_list_age, OPT_DOUBLE)
 OPTION(bluestore_volume_selection_policy, OPT_STR)
 OPTION(bluestore_volume_selection_reserved_factor, OPT_DOUBLE)
 OPTION(bluestore_volume_selection_reserved, OPT_INT)
+OPTION(bluestore_kv_sync_util_logging_s, OPT_DOUBLE)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
