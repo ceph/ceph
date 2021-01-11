@@ -156,6 +156,7 @@ public:
       ref->set_io_wait();
       ref->set_paddr(offset);
       ref->state = CachedExtent::extent_state_t::CLEAN;
+      add_extent(ref);
 
       return segment_manager.read(
 	offset,
@@ -167,7 +168,6 @@ public:
 
 	    ref->on_clean_read();
 	    ref->complete_io();
-	    add_extent(ref);
 	    return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	      std::move(ref));
 	  },
