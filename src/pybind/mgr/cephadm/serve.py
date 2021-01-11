@@ -24,7 +24,8 @@ from orchestrator import OrchestratorError, set_exception_subject, OrchestratorE
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo
+    CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo, name_to_config_section, \
+    config_dump
 from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
 
 if TYPE_CHECKING:
@@ -866,6 +867,16 @@ class CephadmServe:
             self.mgr.cache.invalidate_host_daemons(host)
 
             self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].post_remove(daemon)
+
+            config_entry = name_to_config_section(daemon.name())
+            if daemon_id in config_entry:
+                for conf in config_dump(self.mgr):
+                    if conf.section == config_entry:
+                        self.mgr.check_mon_command({
+                            'prefix': 'config rm',
+                            'name': conf.name,
+                            'who': conf.section,
+                        })
 
             return "Removed {} from host '{}'".format(name, host)
 
