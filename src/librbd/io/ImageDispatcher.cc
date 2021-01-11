@@ -261,13 +261,13 @@ void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
 }
 
 template <typename I>
-void ImageDispatcher<I>::remap_extents(Extents&& image_extents,
+void ImageDispatcher<I>::remap_extents(Extents& image_extents,
                                        ImageExtentsMapType type) {
   auto loop = [&image_extents, type](auto begin, auto end) {
       for (auto it = begin; it != end; ++it) {
         auto& image_dispatch_meta = it->second;
         auto image_dispatch = image_dispatch_meta.dispatch;
-        image_dispatch->remap_extents(std::move(image_extents), type);
+        image_dispatch->remap_extents(image_extents, type);
       }
   };
 

@@ -90,7 +90,7 @@ public:
     return false;
   }
 
-  void remap_extents(io::Extents&& image_extents,
+  void remap_extents(io::Extents& image_extents,
                      io::ImageExtentsMapType type) override;
 
 private:
