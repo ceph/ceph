@@ -180,7 +180,7 @@ public:
     head.flags = head.flags | CEPH_MDS_FLAG_ASYNC;
   }
 
-  void set_alternate_name(std::string&& _alternate_name) {
+  void set_alternate_name(std::string _alternate_name) {
     alternate_name = std::move(_alternate_name);
   }
   void set_alternate_name(bufferptr&& cipher) {

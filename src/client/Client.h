@@ -136,11 +136,12 @@ struct dir_result_t {
 
   struct dentry {
     int64_t offset;
-    string name;
+    std::string name;
+    std::string alternate_name;
     InodeRef inode;
     explicit dentry(int64_t o) : offset(o) {}
-    dentry(int64_t o, const string& n, const InodeRef& in) :
-      offset(o), name(n), inode(in) {}
+    dentry(int64_t o, std::string n, std::string an, InodeRef in) :
+      offset(o), name(std::move(n)), alternate_name(std::move(an)), inode(std::move(in)) {}
   };
   struct dentry_off_lt {
     bool operator()(const dentry& d, int64_t off) const {
@@ -247,6 +248,11 @@ public:
   using clock = ceph::coarse_mono_clock;
 
   typedef int (*add_dirent_cb_t)(void *p, struct dirent *de, struct ceph_statx *stx, off_t off, Inode *in);
+
+  struct walk_dentry_result {
+    InodeRef in;
+    std::string alternate_name;
+  };
 
   class CommandHook : public AdminSocketHook {
   public:
@@ -363,19 +369,22 @@ public:
   loff_t telldir(dir_result_t *dirp);
   void seekdir(dir_result_t *dirp, loff_t offset);
 
-  int link(const char *existing, const char *newname, const UserPerm& perm);
+  int link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
   int unlink(const char *path, const UserPerm& perm);
-  int rename(const char *from, const char *to, const UserPerm& perm);
+  int rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
 
   // dirs
-  int mkdir(const char *path, mode_t mode, const UserPerm& perm);
+  int mkdir(const char *path, mode_t mode, const UserPerm& perm, std::string alternate_name="");
   int mkdirs(const char *path, mode_t mode, const UserPerm& perms);
   int rmdir(const char *path, const UserPerm& perms);
 
   // symlinks
   int readlink(const char *path, char *buf, loff_t size, const UserPerm& perms);
 
-  int symlink(const char *existing, const char *newname, const UserPerm& perms);
+  int symlink(const char *existing, const char *newname, const UserPerm& perms, std::string alternate_name="");
+
+  // path traversal for high-level interface
+  int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true);
 
   // inode stuff
   unsigned statx_to_mask(unsigned int flags, unsigned int want);
@@ -413,10 +422,12 @@ public:
 
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
-  int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0);
+  int open(const char *path, int flags, const UserPerm& perms, mode_t mode=0, std::string alternate_name="") {
+    return open(path, flags, perms, mode, 0, 0, 0, NULL, alternate_name);
+  }
   int open(const char *path, int flags, const UserPerm& perms,
 	   mode_t mode, int stripe_unit, int stripe_count, int object_size,
-	   const char *data_pool);
+	   const char *data_pool, std::string alternate_name="");
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 		  const UserPerm& perms);
   int lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
@@ -867,6 +878,10 @@ protected:
   void handle_client_reply(const MConstRef<MClientReply>& reply);
   bool is_dir_operation(MetaRequest *request);
 
+  int path_walk(const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true, int mask=0);
+  int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
+		bool followsym=true, int mask=0);
+
   // fake inode number for 32-bits ino_t
   void _assign_faked_ino(Inode *in);
   void _assign_faked_root(Inode *in);
@@ -935,10 +950,6 @@ protected:
    */
   Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn);
   void unlink(Dentry *dn, bool keepdir, bool keepdentry);
-
-  // path traversal for high-level interface
-  int path_walk(const filepath& fp, InodeRef *end, const UserPerm& perms,
-		bool followsym=true, int mask=0);
 
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
@@ -1217,17 +1228,18 @@ private:
 		 const UserPerm& perms);
 
   int _lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
-	      const UserPerm& perm);
+	      const UserPerm& perm, std::string* alternate_name=nullptr);
 
-  int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm,
+  int _link(Inode *in, Inode *dir, const char *name, const UserPerm& perm, std::string alternate_name,
 	    InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
-  int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm);
+  int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& perm,
-	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={});
+	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},
+             std::string alternate_name="");
   int _rmdir(Inode *dir, const char *name, const UserPerm& perms);
   int _symlink(Inode *dir, const char *name, const char *target,
-	       const UserPerm& perms, InodeRef *inp = 0);
+	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
   int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
@@ -1266,7 +1278,8 @@ private:
   int _renew_caps(Inode *in);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
-	      const char *data_pool, bool *created, const UserPerm &perms);
+	      const char *data_pool, bool *created, const UserPerm &perms,
+              std::string alternate_name);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
