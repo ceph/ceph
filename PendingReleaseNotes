@@ -194,6 +194,12 @@
 
 * MGR: progress module can now be turned on/off, using the commands:
   ``ceph progress on`` and ``ceph progress off``.
+
+* The ceph_volume_client.py library used for manipulating legacy "volumes" in
+  CephFS is removed. All remaining users should use the "fs volume" interface
+  exposed by the ceph-mgr:
+  https://docs.ceph.com/en/latest/cephfs/fs-volumes/
+
 * An AWS-compliant API: "GetTopicAttributes" was added to replace the existing "GetTopic" API. The new API
   should be used to fetch information about topics used for bucket notifications.
 

@@ -167,7 +167,6 @@ cephfs:
   - src/mds/**
   - src/mon/MDSMonitor.*
   - src/mon/FSCommands.*
-  - src/pybind/ceph_volume_client.py
   - src/pybind/cephfs/**
   - src/pybind/mgr/mds_autoscaler/**
   - src/pybind/mgr/status/**
