@@ -718,6 +718,14 @@ storage system.  This package provides a REST gateway to the
 object store that aims to implement a superset of Amazon's S3
 service as well as the OpenStack Object Storage ("Swift") API.
 
+%package -n cephfs-top
+Summary:    top(1) like utility for Ceph Filesystem
+BuildArch:  noarch
+Requires:   python%{python3_pkgversion}-rados
+%description -n cephfs-top
+This package provides a top(1) like utility to display Ceph Filesystem metrics
+in realtime.
+
 %if %{with ocf}
 %package resource-agents
 Summary:	OCF-compliant resource agents for Ceph daemons
@@ -2174,6 +2182,11 @@ fi
 %{python3_sitelib}/cephfs_shell-*.egg-info
 %{_bindir}/cephfs-shell
 %endif
+
+%files -n cephfs-top
+%{python3_sitelib}/cephfs_top-*.egg-info
+%{_bindir}/cephfs-top
+%{_mandir}/man8/cephfs-top.8*
 
 %if 0%{with ceph_test_package}
 %files -n ceph-test
