@@ -247,7 +247,7 @@ commands, refer to `Virsh Command Reference`_.
 
 #. Get the ``client.libvirt`` key and save the key string to a file. ::
 
-	ceph auth get-key client.libvirt | sudo tee client.libvirt.key
+	ceph auth get-key client.libvirt | sudo tee -i client.libvirt.key
 
 #. Set the UUID of the secret. :: 
 
