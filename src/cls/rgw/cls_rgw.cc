@@ -969,9 +969,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   entry.index_ver = header.ver;
   /* resetting entry flags, entry might have been previously a delete
    * marker */
-  entry.flags = (entry.key.instance.empty() ?
-		 0 :
-		 rgw_bucket_dir_entry::FLAG_VER);
+  entry.flags &= rgw_bucket_dir_entry::FLAG_VER;
 
   if (op.tag.size()) {
     map<string, rgw_bucket_pending_info>::iterator pinter = entry.pending_map.find(op.tag);
