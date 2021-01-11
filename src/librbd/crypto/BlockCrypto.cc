@@ -20,6 +20,14 @@ BlockCrypto<T>::BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
 }
 
 template <typename T>
+BlockCrypto<T>::~BlockCrypto() {
+  if (m_data_cryptor != nullptr) {
+    delete m_data_cryptor;
+    m_data_cryptor = nullptr;
+  }
+}
+
+template <typename T>
 int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
                            CipherMode mode) {
   if (image_offset % m_block_size != 0) {
@@ -38,6 +46,7 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
 
   bufferlist src = *data;
   data->clear();
+  src.rebuild_aligned_size_and_memory(m_block_size, CEPH_PAGE_SIZE);
 
   auto ctx = m_data_cryptor->get_context(mode);
   if (ctx == nullptr) {

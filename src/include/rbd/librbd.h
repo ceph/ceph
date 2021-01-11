@@ -372,6 +372,30 @@ enum {
   RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = (1U<<0), /* fully allocated zeroed extent */
 };
 
+typedef enum {
+    RBD_ENCRYPTION_FORMAT_LUKS1 = 0,
+    RBD_ENCRYPTION_FORMAT_LUKS2 = 1
+} rbd_encryption_format_t;
+
+typedef enum {
+    RBD_ENCRYPTION_ALGORITHM_AES128 = 0,
+    RBD_ENCRYPTION_ALGORITHM_AES256 = 1
+} rbd_encryption_algorithm_t;
+
+typedef void *rbd_encryption_options_t;
+
+typedef struct {
+    rbd_encryption_algorithm_t alg;
+    const char* passphrase;
+    size_t passphrase_size;
+} rbd_encryption_luks1_format_options_t;
+
+typedef struct {
+    rbd_encryption_algorithm_t alg;
+    const char* passphrase;
+    size_t passphrase_size;
+} rbd_encryption_luks2_format_options_t;
+
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_set_string(rbd_image_options_t opts,
@@ -790,6 +814,16 @@ CEPH_RBD_API int rbd_deep_copy_with_progress(rbd_image_t image,
                                              rbd_image_options_t dest_opts,
                                              librbd_progress_fn_t cb,
                                              void *cbdata);
+
+/* encryption */
+CEPH_RBD_API int rbd_encryption_format(rbd_image_t image,
+                                       rbd_encryption_format_t format,
+                                       rbd_encryption_options_t opts,
+                                       size_t opts_size);
+CEPH_RBD_API int rbd_encryption_load(rbd_image_t image,
+                                     rbd_encryption_format_t format,
+                                     rbd_encryption_options_t opts,
+                                     size_t opts_size);
 
 /* snapshots */
 CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,

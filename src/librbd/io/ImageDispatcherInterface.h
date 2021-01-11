@@ -29,7 +29,7 @@ public:
   virtual void wait_on_writes_unblocked(Context *on_unblocked) = 0;
 
   virtual void invalidate_cache(Context* on_finish) = 0;
-  virtual void remap_extents(Extents&& image_extents,
+  virtual void remap_extents(Extents& image_extents,
                              ImageExtentsMapType type) = 0;
 };
 

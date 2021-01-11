@@ -11,6 +11,9 @@ namespace crypto {
 
 class CryptoImageDispatch : public io::ImageDispatchInterface {
 public:
+  static CryptoImageDispatch* create(uint64_t data_offset) {
+    return new CryptoImageDispatch(data_offset);
+  }
   CryptoImageDispatch(uint64_t data_offset);
 
   io::ImageDispatchLayer get_dispatch_layer() const override {
@@ -90,7 +93,11 @@ public:
     return false;
   }
 
-  void remap_extents(io::Extents&& image_extents,
+  bool invalidate_cache(Context* on_finish) override {
+    return false;
+  }
+
+  void remap_extents(io::Extents& image_extents,
                      io::ImageExtentsMapType type) override;
 
 private:

@@ -49,7 +49,7 @@ DataCryptor::~DataCryptor() {
   if (m_key != nullptr) {
     ceph_memzero_s(m_key, EVP_CIPHER_key_length(m_cipher),
                    EVP_CIPHER_key_length(m_cipher));
-    delete m_key;
+    delete [] m_key;
     m_key = nullptr;
   }
 }

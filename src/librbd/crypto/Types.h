@@ -12,16 +12,6 @@ enum CipherMode {
     CIPHER_MODE_DEC,
 };
 
-enum DiskEncryptionFormat {
-    DISK_ENCRYPTION_FORMAT_LUKS1,
-    DISK_ENCRYPTION_FORMAT_LUKS2,
-};
-
-enum CipherAlgorithm {
-    CIPHER_ALGORITHM_AES128,
-    CIPHER_ALGORITHM_AES256,
-};
-
 } // namespace crypto
 } // namespace librbd
 
