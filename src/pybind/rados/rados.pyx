@@ -90,6 +90,12 @@ class InvalidArgumentError(Error):
         super(InvalidArgumentError, self).__init__(
             "RADOS invalid argument (%s)" % message, errno)
 
+class ObjectVerMismatch(Error):
+    def __init__(self, message, errno=None):
+        super(ObjectVerMismatch, self).__init__(
+            "The object's version does not equal \
+             the asserted version (%s)" % message, errno)
+
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
@@ -228,6 +234,8 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.EISCONN   : IsConnected,
         errno.EINVAL    : InvalidArgumentError,
         errno.ENOTCONN  : NotConnected,
+        errno.ERANGE    : ObjectVerMismatch,
+        errno.EOVERFLOW : ObjectVerMismatch
     }
 ELSE:
     cdef errno_to_exception = {
@@ -245,6 +253,8 @@ ELSE:
         errno.EISCONN   : IsConnected,
         errno.EINVAL    : InvalidArgumentError,
         errno.ENOTCONN  : NotConnected,
+        errno.ERANGE    : ObjectVerMismatch,
+        errno.EOVERFLOW : ObjectVerMismatch
     }
 
 
@@ -1905,6 +1915,17 @@ cdef class ReadOp(object):
         with nogil:
             rados_release_read_op(self.read_op)
 
+    def assert_version(self, version: int):
+        """
+        Check if object's version is the expected one.
+        :param version: expected version of the object
+        :param type: int
+        """
+        cdef:
+            uint64_t _version = version
+        with nogil:
+            rados_read_op_assert_version(self.read_op, _version)
+   
     def set_flags(self, flags: int = LIBRADOS_OPERATION_NOFLAG):
         """
         Set flags for the last operation added to this read_op.
