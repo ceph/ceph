@@ -38,6 +38,7 @@ list(APPEND man_srcs
   ${osd_srcs}
   ${mon_srcs}
   ceph-mds.rst
+  cephfs-top.rst
   librados-config.rst
   cephadm.rst)
 

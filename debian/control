@@ -1184,6 +1184,15 @@ Description: interactive shell for the Ceph distributed file system
  .
  This package contains a CLI for interacting with the CephFS.
 
+Package: cephfs-top
+Architecture: all
+Depends: ${misc:Depends}
+         ${python3:Depends}
+Description: This package provides a top(1) like utility to display various
+ filesystem metrics in realtime.
+ .
+ This package contains utility for displaying filesystem metrics.
+
 Package: ceph-grafana-dashboards
 Architecture: all
 Description: grafana dashboards for the ceph dashboard
