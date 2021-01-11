@@ -4464,6 +4464,13 @@ void RGWPutMetadataBucket::execute(optional_yield y)
     return;
   }
 
+  bufferlist in_data;
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
   op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       /* Encode special metadata first as we're using std::map::emplace under
        * the hood. This method will add the new items only if the map doesn't
@@ -7665,6 +7672,13 @@ int RGWDeleteBucketPolicy::verify_permission(optional_yield y)
 
 void RGWDeleteBucketPolicy::execute(optional_yield y)
 {
+  bufferlist in_data;
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
   op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_IAM_POLICY);
@@ -8105,6 +8119,13 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission(optional_yield y)
 
 void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
 {
+  bufferlist in_data;
+  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
   op_ret = retry_raced_bucket_write(s->bucket.get(), [this] {
       rgw::sal::RGWAttrs attrs(s->bucket_attrs);
       attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
