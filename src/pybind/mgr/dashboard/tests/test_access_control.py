@@ -566,8 +566,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     def test_set_user_password_empty(self):
         with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('ac-user-set-password', username='admin', inbuf='\n',
-                          force_password=True)
+            self.exec_cmd('ac-user-set-password', username='admin', inbuf='\n')
 
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
         self.assertEqual(str(ctx.exception), ERROR_MSG_EMPTY_INPUT_FILE)

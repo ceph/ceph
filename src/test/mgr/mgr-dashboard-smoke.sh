@@ -54,7 +54,7 @@ function TEST_dashboard() {
 
     DASHBOARD_ADMIN_SECRET_FILE="/tmp/dashboard-admin-secret.txt"
     printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
-    ceph_adm dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}"
+    ceph_adm tell mgr dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}"
 
     tries=0
     while [[ $tries < 30 ]] ; do

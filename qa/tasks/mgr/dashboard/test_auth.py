@@ -33,7 +33,7 @@ class AuthTest(DashboardTestCase):
 
     def test_login_without_password(self):
         with self.assertRaises(CommandFailedError):
-            self.create_user('admin2', '', ['administrator'], force_password=True)
+            self.create_user('admin2', '', ['administrator'])
 
     def test_a_set_login_credentials(self):
         self.create_user('admin2', 'admin2', ['administrator'])

@@ -830,7 +830,7 @@ EOF
         if $with_mgr_dashboard; then
             DASHBOARD_ADMIN_SECRET_FILE="${CEPH_CONF_PATH}/dashboard-admin-secret.txt"
             printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
-            ceph_adm dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}" \
+            ceph_adm tell mgr dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}" \
                 administrator
             if [ "$ssl" != "0" ]; then
                 if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then

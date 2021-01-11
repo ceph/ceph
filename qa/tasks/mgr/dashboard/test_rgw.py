@@ -332,8 +332,8 @@ class RgwDaemonTest(DashboardTestCase):
             '--system', '--access-key=admin', '--secret=admin'
         ])
         self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
 
         data = self._get('/api/rgw/status')
         self.assertStatus(200)
