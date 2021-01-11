@@ -1103,10 +1103,6 @@ std::vector<Option> get_global_options() {
     .set_description("Entity type to inject delays for")
     .set_flag(Option::FLAG_RUNTIME),
 
-    Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("")
-    .set_description("Message type to inject delays for"),
-
     Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1)
     .set_description("Max delay to inject"),
