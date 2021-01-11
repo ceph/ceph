@@ -2781,6 +2781,10 @@ class CephContainer:
             '--rm',
             '--ipc=host',
         ]
+
+        if 'podman' in container_path and os.path.exists('/etc/ceph/podman-auth.json'):
+            cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
+
         envs: List[str] = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
@@ -2923,6 +2927,8 @@ def _pull_image(image):
     ]
 
     cmd = [container_path, 'pull', image]
+    if 'podman' in container_path and os.path.exists('/etc/ceph/podman-auth.json'):
+            cmd.append('--authfile=/etc/ceph/podman-auth.json')
     cmd_str = ' '.join(cmd)
 
     for sleep_secs in [1, 4, 25]:
@@ -3584,10 +3590,14 @@ def command_registry_login():
 def registry_login(url, username, password):
     logger.info("Logging into custom registry.")
     try:
-        out, _, _ = call_throws([container_path, 'login',
-                                   '-u', username,
-                                   '-p', password,
-                                   url])
+        cmd = [container_path, 'login',
+               '-u', username, '-p', password,
+               url]
+        if 'podman' in container_path:
+            cmd.append('--authfile=/etc/ceph/podman-auth.json')
+        out, _, _ = call_throws(cmd)
+        if 'podman' in container_path:
+            os.chmod('/etc/ceph/podman-auth.json', 0o600)
     except:
         raise Error("Failed to login to custom registry @ %s as %s with given password" % (args.registry_url, args.registry_username))
 
@@ -4078,7 +4088,7 @@ def list_daemons(detail=True, legacy_dir=None):
             elif is_fsid(i):
                 fsid = str(i)  # convince mypy that fsid is a str here
                 for j in os.listdir(os.path.join(data_dir, i)):
-                    if '.' in j:
+                    if '.' in j and os.path.isdir(os.path.join(data_dir, fsid, j)):
                         name = j
                         (daemon_type, daemon_id) = j.split('.', 1)
                         unit_name = get_unit_name(fsid,
