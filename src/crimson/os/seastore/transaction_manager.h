@@ -332,6 +332,8 @@ private:
   Cache &cache;
   LBAManager &lba_manager;
   Journal &journal;
+
+  WritePipeline write_pipeline;
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
