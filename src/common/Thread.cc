@@ -70,7 +70,7 @@ Thread::~Thread()
 {
 }
 
-void *Thread::_entry_func(void *arg) {
+void *Thread::_entry_func(void *arg) noexcept {
   void *r = ((Thread*)arg)->entry_wrapper();
   return r;
 }
