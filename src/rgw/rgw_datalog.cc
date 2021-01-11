@@ -860,7 +860,7 @@ RGWDataChangesLog::~RGWDataChangesLog() {
   }
 }
 
-void RGWDataChangesLog::renew_run() {
+void RGWDataChangesLog::renew_run() noexcept {
   for (;;) {
     dout(2) << "RGWDataChangesLog::ChangesRenewThread: start" << dendl;
     int r = renew_entries();
