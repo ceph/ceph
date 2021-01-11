@@ -398,6 +398,7 @@ protected:
     if (!addr.is_relative()) {
       return addr;
     } else if (is_mutation_pending()) {
+      assert(addr.is_record_relative());
       return addr;
     } else {
       ceph_assert(is_initial_pending());
@@ -495,6 +496,7 @@ public:
   }
 
   void erase(CachedExtent &extent) {
+    assert(extent.parent_index);
     extent_index.erase(extent);
     extent.parent_index = nullptr;
   }
@@ -538,6 +540,8 @@ public:
       extent_index.erase(l);
     }
   }
+
+  ~ExtentIndex() { assert(extent_index.empty()); }
 };
 
 class LogicalCachedExtent;
