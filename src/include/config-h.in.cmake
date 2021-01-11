@@ -369,6 +369,9 @@
 /* Define if libcryptsetup version < 2.0.5 */
 #cmakedefine LIBCRYPTSETUP_LEGACY_DATA_ALIGNMENT
 
+/* Define if libcryptsetup can be used (linux only) */
+#cmakedefine HAVE_LIBCRYPTSETUP
+
 /* Shared library extension, such as .so, .dll or .dylib */
 #cmakedefine CMAKE_SHARED_LIBRARY_SUFFIX "@CMAKE_SHARED_LIBRARY_SUFFIX@"
 

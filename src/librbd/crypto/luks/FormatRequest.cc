@@ -9,7 +9,6 @@
 #include "librbd/crypto/luks/Header.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -24,54 +23,49 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 FormatRequest<I>::FormatRequest(
-        I* image_ctx, DiskEncryptionFormat type, CipherAlgorithm cipher,
+        I* image_ctx, encryption_format_t format, encryption_algorithm_t alg,
         std::string&& passphrase, Context* on_finish,
-        bool insecure_fast_mode) : m_image_ctx(image_ctx), m_type(type),
-                                   m_cipher(cipher), m_on_finish(on_finish),
+        bool insecure_fast_mode) : m_image_ctx(image_ctx), m_format(format),
+                                   m_alg(alg),
+                                   m_passphrase(std::move(passphrase)),
+                                   m_on_finish(on_finish),
                                    m_insecure_fast_mode(insecure_fast_mode),
-                                   m_header(image_ctx->cct),
-                                   m_passphrase(std::move(passphrase)) {
+                                   m_header(image_ctx->cct) {
 }
 
 template <typename I>
 void FormatRequest<I>::send() {
-  if (m_image_ctx->io_object_dispatcher->exists(
-          io::OBJECT_DISPATCH_LAYER_CRYPTO)) {
-    finish(-EEXIST);
-    return;
-  }
-
   const char* type;
   size_t sector_size;
-  switch(m_type) {
-    case DISK_ENCRYPTION_FORMAT_LUKS1:
+  switch (m_format) {
+    case RBD_ENCRYPTION_FORMAT_LUKS1:
       type = CRYPT_LUKS1;
       sector_size = 512;
       break;
-    case DISK_ENCRYPTION_FORMAT_LUKS2:
+    case RBD_ENCRYPTION_FORMAT_LUKS2:
       type = CRYPT_LUKS2;
       sector_size = 4096;
       break;
     default:
-      lderr(m_image_ctx->cct) << "unsupported disk encryption type: " << m_type
+      lderr(m_image_ctx->cct) << "unsupported format type: " << m_format
                               << dendl;
       finish(-EINVAL);
       return;
   }
 
-  const char* alg;
+  const char* cipher;
   size_t key_size;
-  switch (m_cipher) {
-    case CIPHER_ALGORITHM_AES128:
-      alg = "aes";
+  switch (m_alg) {
+    case RBD_ENCRYPTION_ALGORITHM_AES128:
+      cipher = "aes";
       key_size = 32;
       break;
-    case CIPHER_ALGORITHM_AES256:
-      alg = "aes";
+    case RBD_ENCRYPTION_ALGORITHM_AES256:
+      cipher = "aes";
       key_size = 64;
       break;
     default:
-      lderr(m_image_ctx->cct) << "unsupported cipher algorithm: " << m_cipher
+      lderr(m_image_ctx->cct) << "unsupported cipher algorithm: " << m_alg
                               << dendl;
       finish(-EINVAL);
       return;
@@ -85,10 +79,21 @@ void FormatRequest<I>::send() {
   }
 
   // format (create LUKS header)
-  r = m_header.format(type, alg, key_size, "xts-plain64", sector_size,
+  r = m_header.format(type, cipher, key_size, "xts-plain64", sector_size,
                       m_image_ctx->get_object_size(), m_insecure_fast_mode);
   if (r != 0) {
     finish(r);
+    return;
+  }
+
+  m_image_ctx->image_lock.lock_shared();
+  uint64_t image_size = m_image_ctx->get_image_size(CEPH_NOSNAP);
+  m_image_ctx->image_lock.unlock_shared();
+
+  if (m_header.get_data_offset() >= image_size) {
+    lderr(m_image_ctx->cct) << "image is too small. format requires more than "
+                            << m_header.get_data_offset() << " bytes" << dendl;
+    finish(-ENOSPC);
     return;
   }
 

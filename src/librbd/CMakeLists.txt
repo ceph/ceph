@@ -54,6 +54,7 @@ set(librbd_internal_srcs
   api/PoolMetadata.cc
   api/Snapshot.cc
   api/Trash.cc
+  api/Utils.cc
   asio/ContextWQ.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
@@ -63,6 +64,8 @@ set(librbd_internal_srcs
   crypto/CryptoContextPool.cc
   crypto/CryptoImageDispatch.cc
   crypto/CryptoObjectDispatch.cc
+  crypto/FormatRequest.cc
+  crypto/LoadRequest.cc
   crypto/openssl/DataCryptor.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
@@ -209,6 +212,7 @@ endif()
 
 if(LINUX AND HAVE_LIBCRYPTSETUP)
   list(APPEND librbd_internal_srcs
+          crypto/luks/EncryptionFormat.cc
           crypto/luks/Header.cc
           crypto/luks/FormatRequest.cc
           crypto/luks/LoadRequest.cc)

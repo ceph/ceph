@@ -280,6 +280,7 @@ public:
 
 protected:
   void add_write_ops(neorados::WriteOp *wr) override;
+  void add_write_hint(neorados::WriteOp *wr) override;
 
 private:
   ceph::bufferlist m_write_data;
