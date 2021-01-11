@@ -18,7 +18,7 @@ DEVICE_HEALTH_IN_USE = 'DEVICE_HEALTH_IN_USE'
 DEVICE_HEALTH_TOOMANY = 'DEVICE_HEALTH_TOOMANY'
 HEALTH_MESSAGES = {
     DEVICE_HEALTH: '%d device(s) expected to fail soon',
-    DEVICE_HEALTH_IN_USE: '%d daemons(s) expected to fail soon and still contain data',
+    DEVICE_HEALTH_IN_USE: '%d daemon(s) expected to fail soon and still contain data',
     DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 

@@ -1317,13 +1317,17 @@ def registries_add_mirror_to_docker_io(conf, mirror):
         }
     else:
         v2 = config  # type: ignore
-    dockers = [r for r in v2['registry'] if r['prefix'] == 'docker.io']
+    dockers = [
+        r for r in v2['registry'] if
+           r.get('prefix') == 'docker.io' or r.get('location') == 'docker.io'
+    ]
     if dockers:
         docker = dockers[0]
-        docker['mirror'] = [{
-            "location": mirror,
-            "insecure": True,
-        }]
+        if 'mirror' not in docker:
+            docker['mirror'] = [{
+                "location": mirror,
+                "insecure": True,
+            }]
     return v2
 
 

@@ -17,6 +17,7 @@ class IscsiService(CephService):
 
     def config(self, spec: IscsiServiceSpec) -> None:
         assert self.TYPE == spec.service_type
+        assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
         logger.info('Saving service %s spec with placement %s' % (
@@ -76,27 +77,39 @@ class IscsiService(CephService):
         def get_set_cmd_dicts(out: str) -> List[dict]:
             gateways = json.loads(out)['gateways']
             cmd_dicts = []
+            spec = cast(IscsiServiceSpec,
+                        self.mgr.spec_store.specs.get(daemon_descrs[0].service_name(), None))
+            if spec.api_secure and spec.ssl_cert and spec.ssl_key:
+                cmd_dicts.append({
+                    'prefix': 'dashboard set-iscsi-api-ssl-verification',
+                    'value': "false"
+                })
+            else:
+                cmd_dicts.append({
+                    'prefix': 'dashboard set-iscsi-api-ssl-verification',
+                    'value': "true"
+                })
             for dd in daemon_descrs:
                 spec = cast(IscsiServiceSpec,
                             self.mgr.spec_store.specs.get(dd.service_name(), None))
                 if not spec:
                     logger.warning('No ServiceSpec found for %s', dd)
                     continue
-                if not all([spec.api_user, spec.api_password]):
-                    reason = 'api_user or api_password is not specified in ServiceSpec'
-                    logger.warning(
-                        'Unable to add iSCSI gateway to the Dashboard for %s: %s', dd, reason)
-                    continue
-                host = self._inventory_get_addr(dd.hostname)
-                service_url = 'http://{}:{}@{}:{}'.format(
-                    spec.api_user, spec.api_password, host, spec.api_port or '5000')
-                gw = gateways.get(host)
+                ip = utils.resolve_ip(dd.hostname)
+                protocol = "http"
+                if spec.api_secure and spec.ssl_cert and spec.ssl_key:
+                    protocol = "https"
+                service_url = '{}://{}:{}@{}:{}'.format(
+                    protocol, spec.api_user or 'admin', spec.api_password or 'admin', ip, spec.api_port or '5000')
+                gw = gateways.get(dd.hostname)
                 if not gw or gw['service_url'] != service_url:
-                    logger.info('Adding iSCSI gateway %s to Dashboard', service_url)
+                    safe_service_url = '{}://{}:{}@{}:{}'.format(
+                        protocol, '<api-user>', '<api-password>', ip, spec.api_port or '5000')
+                    logger.info('Adding iSCSI gateway %s to Dashboard', safe_service_url)
                     cmd_dicts.append({
                         'prefix': 'dashboard iscsi-gateway-add',
                         'service_url': service_url,
-                        'name': host
+                        'name': dd.hostname
                     })
             return cmd_dicts
 

@@ -84,13 +84,13 @@ class CephadmServe:
             self._serve_sleep()
         self.log.debug("serve exit")
 
-    def _serve_sleep(self):
+    def _serve_sleep(self) -> None:
         sleep_interval = 600
         self.log.debug('Sleeping for %d seconds', sleep_interval)
         ret = self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
 
-    def _update_paused_health(self):
+    def _update_paused_health(self) -> None:
         if self.mgr.paused:
             self.mgr.health_checks['CEPHADM_PAUSED'] = {
                 'severity': 'warning',
@@ -109,7 +109,8 @@ class CephadmServe:
         failures = []
 
         @forall_hosts
-        def refresh(host):
+        def refresh(host: str) -> None:
+
             if self.mgr.cache.host_needs_check(host):
                 r = self._check_host(host)
                 if r is not None:
@@ -130,6 +131,12 @@ class CephadmServe:
             if self.mgr.cache.host_needs_device_refresh(host):
                 self.log.debug('refreshing %s devices' % host)
                 r = self._refresh_host_devices(host)
+                if r:
+                    failures.append(r)
+
+            if self.mgr.cache.host_needs_facts_refresh(host):
+                self.log.info(('refreshing %s facts' % host))
+                r = self._refresh_facts(host)
                 if r:
                     failures.append(r)
 
@@ -173,9 +180,9 @@ class CephadmServe:
         if health_changed:
             self.mgr.set_health_checks(self.mgr.health_checks)
 
-    def _check_host(self, host):
+    def _check_host(self, host: str) -> Optional[str]:
         if host not in self.mgr.inventory:
-            return
+            return None
         self.log.debug(' checking %s' % host)
         try:
             out, err, code = self.mgr._run_cephadm(
@@ -192,17 +199,22 @@ class CephadmServe:
         except Exception as e:
             self.log.debug(' host %s failed check' % host)
             return 'host %s failed check: %s' % (host, e)
+        return None
 
-    def _refresh_host_daemons(self, host) -> Optional[str]:
+    def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
             out, err, code = self.mgr._run_cephadm(
                 host, 'mon', 'ls', [], no_fsid=True)
             if code:
                 return 'host %s cephadm ls returned %d: %s' % (
                     host, code, err)
+            ls = json.loads(''.join(out))
+        except ValueError:
+            msg = 'host %s scrape failed: Cannot decode JSON' % host
+            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
+            return msg
         except Exception as e:
             return 'host %s scrape failed: %s' % (host, e)
-        ls = json.loads(''.join(out))
         dm = {}
         for d in ls:
             if not d['style'].startswith('cephadm'):
@@ -246,7 +258,22 @@ class CephadmServe:
         self.mgr.cache.save_host(host)
         return None
 
-    def _refresh_host_devices(self, host) -> Optional[str]:
+    def _refresh_facts(self, host: str) -> Optional[str]:
+        try:
+            out, err, code = self.mgr._run_cephadm(
+                host, cephadmNoImage, 'gather-facts', [],
+                error_ok=True, no_fsid=True)
+
+            if code:
+                return 'host %s gather-facts returned %d: %s' % (
+                    host, code, err)
+        except Exception as e:
+            return 'host %s gather facts failed: %s' % (host, e)
+        self.log.debug('Refreshed host %s facts' % (host))
+        self.mgr.cache.update_host_facts(host, json.loads(''.join(out)))
+        return None
+
+    def _refresh_host_devices(self, host: str) -> Optional[str]:
         try:
             out, err, code = self.mgr._run_cephadm(
                 host, 'osd',
@@ -255,9 +282,13 @@ class CephadmServe:
             if code:
                 return 'host %s ceph-volume inventory returned %d: %s' % (
                     host, code, err)
+            devices = json.loads(''.join(out))
+        except ValueError:
+            msg = 'host %s scrape failed: Cannot decode JSON' % host
+            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
+            return msg
         except Exception as e:
             return 'host %s ceph-volume inventory failed: %s' % (host, e)
-        devices = json.loads(''.join(out))
         try:
             out, err, code = self.mgr._run_cephadm(
                 host, 'mon',
@@ -267,9 +298,13 @@ class CephadmServe:
             if code:
                 return 'host %s list-networks returned %d: %s' % (
                     host, code, err)
+            networks = json.loads(''.join(out))
+        except ValueError:
+            msg = 'host %s scrape failed: Cannot decode JSON' % host
+            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
+            return msg
         except Exception as e:
             return 'host %s list-networks failed: %s' % (host, e)
-        networks = json.loads(''.join(out))
         self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
             host, len(devices), len(networks)))
         devices = inventory.Devices.from_json(devices)
@@ -278,13 +313,13 @@ class CephadmServe:
         self.mgr.cache.save_host(host)
         return None
 
-    def _refresh_host_osdspec_previews(self, host) -> bool:
+    def _refresh_host_osdspec_previews(self, host: str) -> Optional[str]:
         self.update_osdspec_previews(host)
         self.mgr.cache.save_host(host)
         self.log.debug(f'Refreshed OSDSpec previews for host <{host}>')
-        return True
+        return None
 
-    def update_osdspec_previews(self, search_host: str = ''):
+    def update_osdspec_previews(self, search_host: str = '') -> None:
         # Set global 'pending' flag for host
         self.mgr.cache.loading_osdspec_preview.add(search_host)
         previews = []
@@ -370,7 +405,7 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.health_checks['CEPHADM_STRAY_DAEMON'] = {
                     'severity': 'warning',
-                    'summary': '%d stray daemons(s) not managed by cephadm' % (
+                    'summary': '%d stray daemon(s) not managed by cephadm' % (
                         len(daemon_detail)),
                     'count': len(daemon_detail),
                     'detail': daemon_detail,
@@ -393,7 +428,7 @@ class CephadmServe:
 
         return r
 
-    def _config_fn(self, service_type) -> Optional[Callable[[ServiceSpec], None]]:
+    def _config_fn(self, service_type: str) -> Optional[Callable[[ServiceSpec], None]]:
         fn = {
             'mds': self.mgr.mds_service.config,
             'rgw': self.mgr.rgw_service.config,
@@ -615,7 +650,7 @@ class CephadmServe:
                 self.mgr.requires_post_actions.remove(daemon_type)
                 self.mgr._get_cephadm_service(daemon_type).daemon_check_post(daemon_descs)
 
-    def convert_tags_to_repo_digest(self):
+    def convert_tags_to_repo_digest(self) -> None:
         if not self.mgr.use_repo_digest:
             return
         settings = self.mgr.upgrade.get_distinct_container_image_settings()

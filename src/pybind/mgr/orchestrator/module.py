@@ -71,14 +71,26 @@ def to_format(what, format: str, many: bool, cls):
         raise OrchestratorError(f'unsupported format type: {format}')
 
 
-def generate_preview_tables(data):
+def generate_preview_tables(data, osd_only=False):
     error = [x.get('error') for x in data if x.get('error')]
     if error:
         return json.dumps(error)
     warning = [x.get('warning') for x in data if x.get('warning')]
     osd_table = preview_table_osd(data)
     service_table = preview_table_services(data)
-    tables = f"""
+
+    if osd_only:
+        tables = f"""
+{''.join(warning)}
+
+################
+OSDSPEC PREVIEWS
+################
+{osd_table}
+"""
+        return tables
+    else:
+        tables = f"""
 {''.join(warning)}
 
 ####################
@@ -91,7 +103,7 @@ OSDSPEC PREVIEWS
 ################
 {osd_table}
 """
-    return tables
+        return tables
 
 
 def preview_table_osd(data):
@@ -407,7 +419,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
             table._align['SIZE'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for host_ in completion.result:  # type: InventoryHost
+            for host_ in sorted(completion.result, key=lambda h: h.name):  # type: InventoryHost
                 for d in host_.devices.devices:  # type: Device
 
                     led_ident = 'N/A'
@@ -603,6 +615,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
                     ukn(s.container_image_id)[0:12],
                     ukn(s.container_id)))
 
+            remove_column = 'CONTAINER ID'
+            if table.get_string(fields=[remove_column], border=False,
+                    header=False).count('<unknown>') == len(daemons):
+                try:
+                    table.del_column(remove_column)
+                except AttributeError as e:
+                    # del_column method was introduced in prettytable 2.0
+                    if str(e) != "del_column":
+                        raise
+                    table.field_names.remove(remove_column)
+                    table._rows = [row[:-1] for row in table._rows]
+
             return HandleCommandResult(stdout=table.get_string())
 
     @_cli_write_command(
@@ -669,34 +693,36 @@ Examples:
         if inbuf:
             if unmanaged is not None:
                 return HandleCommandResult(-errno.EINVAL, stderr=usage)
+
             try:
-                drivegroups = yaml.safe_load_all(inbuf)
+                drivegroups = [_dg for _dg in yaml.safe_load_all(inbuf)]
+            except yaml.scanner.ScannerError as e:
+                msg = f"Invalid YAML received : {str(e)}"
+                self.log.exception(e)
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-                dg_specs = []
-                for dg in drivegroups:
-                    spec = DriveGroupSpec.from_json(dg)
-                    if dry_run:
-                        spec.preview_only = True
-                    dg_specs.append(spec)
+            dg_specs = []
+            for dg in drivegroups:
+                spec = DriveGroupSpec.from_json(dg)
+                if dry_run:
+                    spec.preview_only = True
+                dg_specs.append(spec)
 
-                completion = self.apply(dg_specs)
+            completion = self.apply(dg_specs)
+            self._orchestrator_wait([completion])
+            raise_if_exception(completion)
+            out = completion.result_str()
+            if dry_run:
+                completion = self.plan(dg_specs)
                 self._orchestrator_wait([completion])
                 raise_if_exception(completion)
-                out = completion.result_str()
-                if dry_run:
-                    completion = self.plan(dg_specs)
-                    self._orchestrator_wait([completion])
-                    raise_if_exception(completion)
-                    data = completion.result
-                    if format == 'plain':
-                        out = preview_table_osd(data)
-                    else:
-                        out = to_format(data, format, many=True, cls=None)
-                return HandleCommandResult(stdout=out)
+                data = completion.result
+                if format == 'plain':
+                    out = generate_preview_tables(data, True)
+                else:
+                    out = to_format(data, format, many=True, cls=None)
+            return HandleCommandResult(stdout=out)
 
-            except ValueError as e:
-                msg = 'Failed to read JSON/YAML input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
         if all_available_devices:
             if unmanaged is None:
                 unmanaged = False
@@ -719,7 +745,7 @@ Examples:
                 self._orchestrator_wait([completion])
                 data = completion.result
                 if format == 'plain':
-                    out = preview_table_osd(data)
+                    out = generate_preview_tables(data , True)
                 else:
                     out = to_format(data, format, many=True, cls=None)
             return HandleCommandResult(stdout=out)
