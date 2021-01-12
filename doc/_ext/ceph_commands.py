@@ -245,8 +245,7 @@ class CephMgrCommands(Directive):
                         'dateutil',
                         'dateutil.parser']
         # make dashboard happy
-        mock_imports += ['ceph_argparse',
-                         'OpenSSL',
+        mock_imports += ['OpenSSL',
                          'jwt',
                          'bcrypt',
                          'scipy',
