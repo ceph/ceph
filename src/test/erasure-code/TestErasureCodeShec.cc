@@ -2373,7 +2373,7 @@ TEST(ErasureCodeShec, create_rule_1_2)
 
   int rootno;
   crush->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1, 2, 0, NULL,
-		    NULL, NULL, &rootno);
+		    NULL, NULL, NULL, &rootno);
   crush->set_item_name(rootno, "default");
 
   map < string, string > loc;
@@ -2385,7 +2385,7 @@ TEST(ErasureCodeShec, create_rule_1_2)
   for (int h = 0; h < num_host; ++h) {
     loc["host"] = string("host-") + stringify(h);
     for (int o = 0; o < num_osd; ++o, ++osd) {
-      crush->insert_item(g_ceph_context, osd, 1.0, 0,
+      crush->insert_item(g_ceph_context, osd, 1.0, 0, 0,
 			 string("osd.") + stringify(osd), loc);
     }
   }
@@ -2431,7 +2431,7 @@ TEST(ErasureCodeShec, create_rule_4)
 
   int rootno;
   crush->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1, 2, 0, NULL,
-		    NULL, NULL, &rootno);
+		    NULL, NULL, NULL, &rootno);
   crush->set_item_name(rootno, "default");
 
   map < string, string > loc;
@@ -2443,7 +2443,7 @@ TEST(ErasureCodeShec, create_rule_4)
   for (int h = 0; h < num_host; ++h) {
     loc["host"] = string("host-") + stringify(h);
     for (int o = 0; o < num_osd; ++o, ++osd) {
-      crush->insert_item(g_ceph_context, osd, 1.0, 0,
+      crush->insert_item(g_ceph_context, osd, 1.0, 0, 0,
 			 string("osd.") + stringify(osd), loc);
     }
   }
@@ -2482,7 +2482,7 @@ TEST(ErasureCodeShec, create_rule2_1)
 
   int rootno;
   crush->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1, 2, 0, NULL,
-		    NULL, NULL, &rootno);
+		    NULL, NULL, NULL, &rootno);
   crush->set_item_name(rootno, "default");
 
   map < string, string > loc;
@@ -2494,7 +2494,7 @@ TEST(ErasureCodeShec, create_rule2_1)
   for (int h = 0; h < num_host; ++h) {
     loc["host"] = string("host-") + stringify(h);
     for (int o = 0; o < num_osd; ++o, ++osd) {
-      crush->insert_item(g_ceph_context, osd, 1.0, 0,
+      crush->insert_item(g_ceph_context, osd, 1.0, 0, 0,
 			 string("osd.") + stringify(osd), loc);
     }
   }
@@ -2541,7 +2541,7 @@ TEST(ErasureCodeShec, create_rule2_3)
 
   int rootno;
   crush->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1, 2, 0, NULL,
-		    NULL, NULL, &rootno);
+		    NULL, NULL, NULL, &rootno);
   crush->set_item_name(rootno, "default");
 
   map < string, string > loc;
@@ -2553,7 +2553,7 @@ TEST(ErasureCodeShec, create_rule2_3)
   for (int h = 0; h < num_host; ++h) {
     loc["host"] = string("host-") + stringify(h);
     for (int o = 0; o < num_osd; ++o, ++osd) {
-      crush->insert_item(g_ceph_context, osd, 1.0, 0,
+      crush->insert_item(g_ceph_context, osd, 1.0, 0, 0,
 			 string("osd.") + stringify(osd), loc);
     }
   }
@@ -2726,7 +2726,7 @@ void* thread3(void* pParam)
 
   int rootno;
   crush->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1, 2, 0, NULL,
-		    NULL, NULL, &rootno);
+		    NULL, NULL, NULL, &rootno);
   crush->set_item_name(rootno, "default");
 
   map < string, string > loc;
@@ -2738,7 +2738,7 @@ void* thread3(void* pParam)
   for (int h = 0; h < num_host; ++h) {
     loc["host"] = string("host-") + stringify(h);
     for (int o = 0; o < num_osd; ++o, ++osd) {
-      crush->insert_item(g_ceph_context, osd, 1.0, 0,
+      crush->insert_item(g_ceph_context, osd, 1.0, 0, 0,
 			 string("osd.") + stringify(osd), loc);
     }
   }

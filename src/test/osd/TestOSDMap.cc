@@ -114,7 +114,7 @@ public:
     }
     int id = newcrush.get_item_id(name);
     int err;
-    if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL, (int *)NULL)) {
+    if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL, NULL, NULL)) {
       if (id >= 0) {
         err = newcrush.create_or_move_item(g_ceph_context, id, 0, name, loc);
       } else {

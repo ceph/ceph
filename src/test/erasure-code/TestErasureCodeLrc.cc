@@ -103,7 +103,7 @@ TEST(ErasureCodeTest, create_rule)
 
   int rootno;
   c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-		root_type, 0, NULL, NULL, NULL, &rootno);
+		root_type, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
   map<string,string> loc;
@@ -123,7 +123,7 @@ TEST(ErasureCodeTest, create_rule)
     for (int h=0; h<num_host; ++h) {
       loc["host"] = string("host-") + stringify(r) + string("-") + stringify(h);
       for (int o=0; o<num_osd; ++o, ++osd) {
-	c->insert_item(g_ceph_context, osd, 1.0, 0, string("osd.") + stringify(osd), loc);
+	c->insert_item(g_ceph_context, osd, 1.0, 0, 0, string("osd.") + stringify(osd), loc);
       }
     }
   }

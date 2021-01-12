@@ -307,7 +307,7 @@ int do_add_bucket(CephContext* cct,
     cerr << me << " bad bucket type: " << add_type << std::endl;
     return -EINVAL;
   }
-  if (int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT, type, 0, nullptr, nullptr, nullptr, &bucketno);
+  if (int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT, type, 0, nullptr, nullptr, nullptr, nullptr, &bucketno);
       r < 0) {
     cerr << me << " unable to add bucket: " << cpp_strerror(r) << std::endl;
     return r;
@@ -317,7 +317,7 @@ int do_add_bucket(CephContext* cct,
     return r;
   }
   if (!add_loc.empty()) {
-    if (!crush.check_item_loc(cct, bucketno, add_loc, (int*)nullptr, (int*)nullptr)) {
+    if (!crush.check_item_loc(cct, bucketno, add_loc, (int*)nullptr, nullptr, nullptr)) {
       if (int r = crush.move_bucket(cct, bucketno, add_loc); r < 0) {
 	cerr << me << " error moving bucket '" << add_name << "' to " << add_loc << std::endl;
 	return r;
@@ -343,7 +343,7 @@ int do_move_item(CephContext* cct,
     cerr << me << " expecting additional --loc argument to --move" << std::endl;
     return -EINVAL;
   }
-  if (crush.check_item_loc(cct, id, loc, (int*)nullptr, (int*)nullptr)) {
+  if (crush.check_item_loc(cct, id, loc, (int*)nullptr, nullptr, nullptr)) {
     // it's already there
     cerr << me << " item '" << name << "' already at " << loc << std::endl;
     return 1;
@@ -983,7 +983,7 @@ int main(int argc, const char **argv)
 
 	int items[num_osds];
 	int weights[num_osds];
-  int performances[num_osds];
+  int performance_range_set_num[num_osds];
 
 	int weight = 0;
 	int j;
@@ -993,13 +993,13 @@ int main(int argc, const char **argv)
 	  items[j] = lower_items[lower_pos];
 	  weights[j] = lower_weights[lower_pos];
 	  weight += weights[j];
-    performances[j] = 0;
+    performance_range_set_num[j] = 0;
 	  lower_pos++;
 	  dout(2) << "  item " << items[j] << " weight " << weights[j] << dendl;
 	}
 
 	int id;
-	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights, performances, &id);
+	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights, NULL, performance_range_set_num, &id);
 	if (r < 0) {
           cerr << " Couldn't add bucket: " << cpp_strerror(r) << std::endl;
           return r;
@@ -1122,9 +1122,9 @@ int main(int argc, const char **argv)
   if (add_item >= 0) {
     int r;
     if (update_item) {
-      r = crush.update_item(g_ceph_context, add_item, add_weight, 0, add_name.c_str(), add_loc);
+      r = crush.update_item(g_ceph_context, add_item, add_weight, 0, 0, add_name.c_str(), add_loc);
     } else {
-      r = crush.insert_item(g_ceph_context, add_item, add_weight, 0, add_name.c_str(), add_loc);
+      r = crush.insert_item(g_ceph_context, add_item, add_weight, 0, 0, add_name.c_str(), add_loc);
     }
     if (r >= 0) {
       modified = true;

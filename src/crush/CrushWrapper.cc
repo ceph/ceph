@@ -708,7 +708,7 @@ int CrushWrapper::parse_loc_multimap(const std::vector<string>& args,
 }
 
 bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,string>& loc,
-				  int *weight, int *performance)
+				  int *weight, __u32 **performance_range_set, int *performance_range_set_num)
 {
   ldout(cct, 5) << "check_item_loc item " << item << " loc " << loc << dendl;
 
@@ -746,8 +746,11 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
 	ldout(cct, 2) << "check_item_loc " << item << " exists in bucket " << b->id << dendl;
 	if (weight)
 	  *weight = crush_get_bucket_item_weight(b, j);
-  if (performance)
-    *performance = crush_get_bucket_item_performance(b, j);
+  if (performance_range_set) {
+    *performance_range_set = crush_get_bucket_item_performance_range_set(b, j);
+    *performance_range_set_num = crush_get_bucket_item_performance_range_set_num(b, j);
+  }
+    
 	return true;
       }
     }
@@ -1095,7 +1098,8 @@ int CrushWrapper::get_leaves(const string &name, set<int> *leaves) const
 }
 
 int CrushWrapper::insert_item(
-  CephContext *cct, int item, float weight, float performance, string name,
+  CephContext *cct, int item, float weight, __u32 *performance_range_set, \
+  int performance_range_set_num, string name,
   const map<string,string>& loc,  // typename -> bucketname
   bool init_weight_sets)
 {
@@ -1146,7 +1150,7 @@ int CrushWrapper::insert_item(
       ldout(cct, 5) << "insert_item creating bucket " << q->second << dendl;
       int empty = 0, newid;
       int r = add_bucket(0, 0,
-			 CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, &empty, &newid);
+			 CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, NULL, &empty, &newid);
       if (r < 0) {
         ldout(cct, 1) << "add_bucket failure error: " << cpp_strerror(r)
 		      << dendl;
@@ -1191,7 +1195,7 @@ int CrushWrapper::insert_item(
 
     ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
 		  << " to bucket " << id << dendl;
-    [[maybe_unused]] int r = bucket_add_item(b, cur, 0, 0);
+    [[maybe_unused]] int r = bucket_add_item(b, cur, 0, NULL, 0);
     ceph_assert(!r);
     break;
   }
@@ -1199,7 +1203,7 @@ int CrushWrapper::insert_item(
   // adjust the item's weight&performance in location
   if (adjust_item_weightf_in_loc(cct, item, weight, loc,
 				 item >= 0 && init_weight_sets) > 0 &&
-      adjust_item_performance_in_loc(cct, item, performance, loc) > 0) {
+      adjust_item_performance_in_loc(cct, item, performance_range_set, performance_range_set_num, loc) > 0) {
     if (item >= crush->max_devices) {
       crush->max_devices = item + 1;
       ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices
@@ -1237,7 +1241,7 @@ int CrushWrapper::move_bucket(
   int bucket_weight = detach_bucket(cct, id);
 
   // insert the bucket back into the hierarchy
-  return insert_item(cct, id, bucket_weight / (float)0x10000, 0, id_name, loc,
+  return insert_item(cct, id, bucket_weight / (float)0x10000, NULL, 0, id_name, loc,
 		     false);
 }
 
@@ -1277,12 +1281,13 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
 
   // check that we're happy
   int test_weight = 0;
-  int test_performance = 0;
+  __u32 *test_performance_range_set;
+  int test_performance_range_set_num;
   map<string,string> test_location;
   test_location[ bucket_location.first ] = (bucket_location.second);
 
   bool successful_detach = !(check_item_loc(cct, item, test_location,
-					    &test_weight, &test_performance));
+					    &test_weight, &test_performance_range_set, &test_performance_range_set_num));
   ceph_assert(successful_detach);
   ceph_assert(test_weight == 0);
 
@@ -1321,15 +1326,18 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
 
   // swap items
   map<int,unsigned> tmp;
-  map<int,unsigned> tmp1;
+  map<int,__u32 *> tmp1;
+  map<int,unsigned> tmp2;
   unsigned as = a->size;
   unsigned bs = b->size;
   for (unsigned i = 0; i < as; ++i) {
     int item = a->items[0];
     int itemw = crush_get_bucket_item_weight(a, 0);
     tmp[item] = itemw;
-    int itemp = crush_get_bucket_item_performance(a, 0);
-    tmp1[item] = itemp;
+    __u32 *itemp_range_set = crush_get_bucket_item_performance_range_set(a, 0);
+    int itemp_range_set_num = crush_get_bucket_item_performance_range_set_num(a, 0);
+    tmp1[item] = itemp_range_set;
+    tmp2[item] = itemp_range_set_num;
     bucket_remove_item(a, item);
   }
   ceph_assert(a->size == 0);
@@ -1337,14 +1345,15 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
   for (unsigned i = 0; i < bs; ++i) {
     int item = b->items[0];
     int itemw = crush_get_bucket_item_weight(b, 0);
-    int itemp = crush_get_bucket_item_performance(b, 0);
+    __u32 *itemp_range_set = crush_get_bucket_item_performance_range_set(b, 0);
+    int itemp_range_set_num = crush_get_bucket_item_performance_range_set_num(b, 0);
     bucket_remove_item(b, item);
-    bucket_add_item(a, item, itemw, itemp);
+    bucket_add_item(a, item, itemw, itemp_range_set, itemp_range_set_num);
   }
   ceph_assert(a->size == bs);
   ceph_assert(b->size == 0);
   for (auto t : tmp) {
-    bucket_add_item(b, t.first, t.second, tmp1[t.first]);
+    bucket_add_item(b, t.first, t.second, tmp1[t.first], tmp2[t.first]);
   }
   ceph_assert(a->size == bs);
   ceph_assert(b->size == as);
@@ -1370,7 +1379,7 @@ int CrushWrapper::link_bucket(
   crush_bucket *b = get_bucket(id);
   unsigned bucket_weight = b->weight;
 
-  return insert_item(cct, id, bucket_weight / (float)0x10000, 0, id_name, loc);
+  return insert_item(cct, id, bucket_weight / (float)0x10000, NULL, 0, id_name, loc);
 }
 
 int CrushWrapper::create_or_move_item(
@@ -1380,12 +1389,13 @@ int CrushWrapper::create_or_move_item(
 {
   int ret = 0;
   int old_iweight;
-  int old_performance;
+  __u32 *old_performance_range_set;
+  int old_performance_range_set_num;
 
   if (!is_valid_crush_name(name))
     return -EINVAL;
 
-  if (check_item_loc(cct, item, loc, &old_iweight, &old_performance)) {
+  if (check_item_loc(cct, item, loc, &old_iweight, &old_performance_range_set, &old_performance_range_set_num)) {
     ldout(cct, 5) << "create_or_move_item " << item << " already at " << loc
 		  << dendl;
   } else {
@@ -1398,7 +1408,7 @@ int CrushWrapper::create_or_move_item(
     ldout(cct, 5) << "create_or_move_item adding " << item
 		  << " weight " << weight
 		  << " at " << loc << dendl;
-    ret = insert_item(cct, item, weight, 0, name, loc,
+    ret = insert_item(cct, item, weight, NULL, 0, name, loc,
 		      item >= 0 && init_weight_sets);
     if (ret == 0)
       ret = 1;  // changed
@@ -1407,11 +1417,16 @@ int CrushWrapper::create_or_move_item(
 }
 
 int CrushWrapper::update_item(
-  CephContext *cct, int item, float weight, float performance, string name,
+  CephContext *cct, int item, float weight, __u32 *performance_range_set, int performance_range_set_num, string name,
   const map<string,string>& loc)  // typename -> bucketname
 {
-  ldout(cct, 5) << "update_item item " << item << " weight " << weight << " performance " << performance
-		<< " name " << name << " loc " << loc << dendl;
+  int i;
+
+  ldout(cct, 5) << "update_item item " << item << " weight " << weight << " performance " << dendl;
+  for (i=0; i<performance_range_set_num; i++)
+    ldout(cct, 5) << performance_range_set[i] << " " << dendl;
+	ldout(cct, 5)	<< " name " << name << " loc " << loc << dendl;
+
   int ret = 0;
 
   if (!is_valid_crush_name(name))
@@ -1428,8 +1443,9 @@ int CrushWrapper::update_item(
   // compare quantized (fixed-point integer) weights!  
   int iweight = (int)(weight * (float)0x10000);
   int old_iweight;
-  int old_performance;
-  if (check_item_loc(cct, item, loc, &old_iweight, &old_performance)) {
+  __u32 *old_performance_range_set;
+  int old_performance_range_set_num;
+  if (check_item_loc(cct, item, loc, &old_iweight, &old_performance_range_set, &old_performance_range_set_num)) {
     ldout(cct, 5) << "update_item " << item << " already at " << loc << dendl;
     if (old_iweight != iweight) {
       ldout(cct, 5) << "update_item " << item << " adjusting weight "
@@ -1438,11 +1454,16 @@ int CrushWrapper::update_item(
       adjust_item_weight_in_loc(cct, item, iweight, loc);
       ret = 1;
     }
-    if (old_performance != performance) {
-      ldout(cct, 5) << "update_item " << item << " adjusting performance "
-		    << old_performance << " -> " << performance
-		    << dendl;
-      adjust_item_performance_in_loc(cct, item, performance, loc);
+    if (!is_same_performance_range_set(old_performance_range_set, old_performance_range_set_num, \
+        performance_range_set, performance_range_set_num)) {
+      ldout(cct, 5) << "update_item " << item << " adjusting performance " << dendl;;
+      for (i=0; i<old_performance_range_set_num; i++)
+        ldout(cct, 5) << old_performance_range_set[i] << " " << dendl; 
+      ldout(cct, 5) << " -> " << dendl;
+      for (i=0; i<performance_range_set_num; i++)
+        ldout(cct, 5) << performance_range_set[i] << " " << dendl;
+		  ldout(cct, 5) << dendl;
+      adjust_item_performance_in_loc(cct, item, performance_range_set, performance_range_set_num, loc);
       ret = 1;
     }
     if (get_item_name(item) != name) {
@@ -1457,7 +1478,7 @@ int CrushWrapper::update_item(
     }
     ldout(cct, 5) << "update_item adding " << item << " weight " << weight
 		  << " at " << loc << dendl;
-    ret = insert_item(cct, item, weight, performance, name, loc);
+    ret = insert_item(cct, item, weight, performance_range_set, performance_range_set_num, name, loc);
     if (ret == 0)
       ret = 1;  // changed
   }
@@ -1519,16 +1540,21 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight,
   return changed;
 }
 
-int CrushWrapper::adjust_item_performance(CephContext *cct, int id, int performance)
+int CrushWrapper::adjust_item_performance(CephContext *cct, int id, __u32 *performance_range_set, int performance_range_set_num)
 {
-  ldout(cct, 5) << __func__ << " " << id << " performance " << performance
-		<< dendl;
+  int i;
+
+  ldout(cct, 5) << __func__ << " " << id << " performance " << dendl;
+  for (i=0; i<performance_range_set_num; i++)
+    ldout(cct, 5) << performance_range_set[i] << " " << dendl;
+	ldout(cct, 5) << dendl;
+
   int changed = 0;
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     if (!crush->buckets[bidx]) {
       continue;
     }
-    int r = adjust_item_performance_in_bucket(cct, id, performance, -1-bidx);
+    int r = adjust_item_performance_in_bucket(cct, id, performance_range_set, performance_range_set_num, -1-bidx);
     if (r > 0) {
       ++changed;
     }
@@ -1593,12 +1619,16 @@ int CrushWrapper::adjust_item_weight_in_bucket(
 }
 
 int CrushWrapper::adjust_item_performance_in_bucket(
-  CephContext *cct, int id, int performance,
-  int bucket_id)
+  CephContext *cct, int id, __u32 *performance_range_set,
+  int performance_range_set_num, int bucket_id)
 {
-  ldout(cct, 5) << __func__ << " " << id << " performance " << performance
-		<< " in bucket " << bucket_id
-		<< dendl;
+  int i;
+
+  ldout(cct, 5) << __func__ << " " << id << " performance range set " << dendl;;
+  for (i=0; i<performance_range_set_num; i++)
+    ldout(cct, 5) << performance_range_set[i] << " " << dendl;
+	ldout(cct, 5) << " in bucket " << bucket_id << dendl;
+
   int changed = 0;
   if (!bucket_exists(bucket_id)) {
     return -ENOENT;
@@ -1606,10 +1636,10 @@ int CrushWrapper::adjust_item_performance_in_bucket(
   crush_bucket *b = get_bucket(bucket_id);
   for (unsigned int i = 0; i < b->size; i++) {
     if (b->items[i] == id) {
-      int diff = bucket_adjust_item_performance(cct, b, id, performance);
-      ldout(cct, 5) << __func__ << " " << id << " diff " << diff
-		    << " in bucket " << bucket_id << dendl;
-      adjust_item_performance(cct, bucket_id, b->performance);
+      int diff = bucket_adjust_item_performance(cct, b, id, performance_range_set, performance_range_set_num);
+      if (diff < 0)
+        return diff;
+      adjust_item_performance(cct, bucket_id, b->performance_range_set, b->performance_range_set_num);
       changed++;
     }
   }
@@ -1646,18 +1676,22 @@ int CrushWrapper::adjust_item_weight_in_loc(
 }
 
 int CrushWrapper::adjust_item_performance_in_loc(
-  CephContext *cct, int id, int performance,
-  const map<string,string>& loc)
+  CephContext *cct, int id, __u32 *performance_range_set,
+  int performance_range_set_num, const map<string,string>& loc)
 {
-  ldout(cct, 5) << "adjust_item_performance_in_loc " << id << " performance " << performance
-		<< " in " << loc
-		<< dendl;
+  int i;
+
+  ldout(cct, 5) << "adjust_item_performance_in_loc " << id << " performance range set " << dendl;
+  for (i=0; i<performance_range_set_num; i++)
+    ldout(cct, 5) << performance_range_set[i] << " " << dendl;
+	ldout(cct, 5) << " in " << loc << dendl;
+
   int changed = 0;
   for (auto l = loc.begin(); l != loc.end(); ++l) {
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
-    int r = adjust_item_performance_in_bucket(cct, id, performance, bid);
+    int r = adjust_item_performance_in_bucket(cct, id, performance_range_set, performance_range_set_num, bid);
     if (r > 0) {
       ++changed;
     }
@@ -2042,7 +2076,7 @@ int CrushWrapper::reclassify(
 						bucket->alg,
 						bucket->hash,
 						bucket->type,
-						0, NULL, NULL, NULL);
+						0, NULL, NULL, NULL, NULL);
       crush->buckets[-1-id]->id = id;
       for (auto& i : choose_args) {
 	i.second.args[-1-new_id] = i.second.args[-1-id];
@@ -2152,7 +2186,7 @@ int CrushWrapper::reclassify(
 						       b->alg,
 						       b->hash,
 						       b->type,
-						       0, NULL, NULL, NULL);
+						       0, NULL, NULL, NULL, NULL);
 	crush->buckets[-1-base_id]->id = base_id;
 	name_map[base_id] = basename;
 	new_bucket_by_name[basename] = base_id;
@@ -2200,7 +2234,7 @@ int CrushWrapper::reclassify(
 	from_loc[get_type_name(from->type)] = get_item_name(from->id);
 	auto w = get_item_weightf_in_loc(item, from_loc);
 	r = insert_item(cct, item,
-			w, 0,
+			w, 0, 0,
 			get_item_name(item),
 			to_loc);
       } else {
@@ -2571,14 +2605,14 @@ int CrushWrapper::bucket_adjust_item_weight(
 }
 
 int CrushWrapper::bucket_adjust_item_performance(
-  CephContext *cct, crush_bucket *bucket, int item, int performance)
+  CephContext *cct, crush_bucket *bucket, int item, __u32 *performance_range_set, int performance_range_set_num)
 {
-  return crush_bucket_adjust_item_performance(crush, bucket, item, performance);
+  return crush_bucket_adjust_item_performance(crush, bucket, item, performance_range_set, performance_range_set_num);
 }
 
 int CrushWrapper::add_bucket(
   int bucketno, int alg, int hash, int type, int size,
-  int *items, int *weights, int *performances, int *idout)
+  int *items, int *weights, __u32 **performance_range_sets, int *performance_range_sets_num, int *idout)
 {
   if (alg == 0) {
     alg = get_default_bucket_alg();
@@ -2586,7 +2620,7 @@ int CrushWrapper::add_bucket(
       return -EINVAL;
   }
   crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items,
-				      weights, performances);
+				      weights, performance_range_sets, performance_range_sets_num);
   ceph_assert(b);
   ceph_assert(idout);
   int r = crush_add_bucket(crush, bucketno, b, idout);
@@ -2629,10 +2663,10 @@ int CrushWrapper::add_bucket(
   return r;
 }
 
-int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight, int performance)
+int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight, __u32 *performance_range_set, int performance_range_set_num)
 {
   __u32 new_size = bucket->size + 1;
-  int r = crush_bucket_add_item(crush, bucket, item, weight, performance);
+  int r = crush_bucket_add_item(crush, bucket, item, weight, performance_range_set, performance_range_set_num);
   if (r < 0) {
     return r;
   }
@@ -2796,17 +2830,18 @@ int CrushWrapper::device_class_clone(
 					 original->alg,
 					 original->hash,
 					 original->type,
-					 0, NULL, NULL, NULL);
+					 0, NULL, NULL, NULL, NULL);
   ceph_assert(copy);
 
   vector<unsigned> item_orig_pos;  // new item pos -> orig item pos
   for (unsigned i = 0; i < original->size; i++) {
     int item = original->items[i];
     int weight = crush_get_bucket_item_weight(original, i);
-    int performance = crush_get_bucket_item_performance(original, i);
+    __u32 *performance_range_set = crush_get_bucket_item_performance_range_set(original, i);
+    int performance_range_set_num = crush_get_bucket_item_performance_range_set_num(original, i);
     if (item >= 0) {
       if (class_map.count(item) != 0 && class_map[item] == device_class) {
-	int res = crush_bucket_add_item(crush, copy, item, weight, performance);
+	int res = crush_bucket_add_item(crush, copy, item, weight, performance_range_set, performance_range_set_num);
 	if (res)
 	  return res;
       } else {
@@ -2822,7 +2857,7 @@ int CrushWrapper::device_class_clone(
       crush_bucket *child_copy = get_bucket(child_copy_id);
       ceph_assert(!IS_ERR(child_copy));
       res = crush_bucket_add_item(crush, copy, child_copy_id,
-				  child_copy->weight, child_copy->performance);
+				  child_copy->weight, child_copy->performance_range_set, child_copy->performance_range_set_num);
       if (res)
 	return res;
     }
@@ -3055,7 +3090,9 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
     encode(crush->buckets[i]->alg, bl);
     encode(crush->buckets[i]->hash, bl);
     encode(crush->buckets[i]->weight, bl);
-    encode(crush->buckets[i]->performance, bl);
+    encode(crush->buckets[i]->performance_range_set_num, bl);
+    for (unsigned int j=0; j<crush->buckets[i]->performance_range_set_num; j++)
+      encode(crush->buckets[i]->performance_range_set[j], bl);
     encode(crush->buckets[i]->size, bl);
     for (unsigned j=0; j<crush->buckets[i]->size; j++)
       encode(crush->buckets[i]->items[j], bl);
@@ -3097,10 +3134,14 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
 	  encode(weights[j], bl);
 	}
-  __u32 *performances;
-  performances = (reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_performances;
+  __u32 **performance_range_sets;
+  __u32 *performance_range_sets_num;
+  performance_range_sets = (reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_performance_range_sets;
+  performance_range_sets_num = (reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_performance_range_sets_num;
   for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	  encode(performances[j], bl);
+    encode(performance_range_sets_num[j], bl);
+    for (unsigned int k=0; k<performance_range_sets_num[j]; k++)
+      encode(performance_range_sets[j][k], bl);
 	}
       }
       break;
@@ -3373,7 +3414,10 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::const_it
   decode(bucket->alg, blp);
   decode(bucket->hash, blp);
   decode(bucket->weight, blp);
-  decode(bucket->performance, blp);
+  decode(bucket->performance_range_set_num, blp);
+  bucket->performance_range_set = (__u32 *)malloc(sizeof(__u32)*bucket->performance_range_set_num);
+  for (unsigned i=0; i<bucket->performance_range_set_num; i++)
+    decode(bucket->performance_range_set[i], blp);
   decode(bucket->size, blp);
 
   bucket->items = (__s32*)calloc(1, bucket->size * sizeof(__s32));
@@ -3422,13 +3466,19 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::const_it
   case CRUSH_BUCKET_STRAW2: {
     crush_bucket_straw2* cbs = reinterpret_cast<crush_bucket_straw2*>(bucket);
     cbs->item_weights = (__u32*)calloc(1, bucket->size * sizeof(__u32));
-    cbs->item_performances = (__u32*)calloc(1, bucket->size * sizeof(__u32));
+    cbs->item_performance_range_sets = (__u32**)calloc(1, bucket->size * sizeof(__u32 *));
+    cbs->item_performance_range_sets_num = (__u32*)calloc(1, bucket->size * sizeof(__u32));
     for (unsigned j = 0; j < bucket->size; ++j) {
       decode(cbs->item_weights[j], blp);
     }
     // performance
     for (unsigned j = 0; j < bucket->size; ++j) {
-      decode(cbs->item_performances[j], blp);
+      decode(cbs->item_performance_range_sets_num[j], blp);
+      if (cbs->item_performance_range_sets_num[j] != 0) {
+        cbs->item_performance_range_sets[j] = (__u32*)calloc(1, cbs->item_performance_range_sets_num[j] * sizeof(__u32));
+        for (unsigned k = 0; k < cbs->item_performance_range_sets_num[j]; k++)
+          decode(cbs->item_performance_range_sets[j][k], blp);
+      }
     }
     break;
   }
@@ -3536,7 +3586,8 @@ namespace {
       set<int> roots;
       crush->find_roots(&roots);
       for (set<int>::iterator root = roots.begin(); root != roots.end(); ++root) {
-	dump_item(Item(*root, 0, 0, crush->get_bucket_weightf(*root), crush->get_bucket_performance(*root)), f);
+	dump_item(Item(*root, 0, 0, crush->get_bucket_weightf(*root), crush->get_bucket_performance_range_set(*root), \
+            crush->get_bucket_performance_range_set_num(*root)), f);
       }
     }
 
@@ -3560,8 +3611,9 @@ namespace {
       for (int pos = 0; pos < max_pos; pos++) {
 	int id = crush->get_bucket_item(parent.id, pos);
 	float weight = crush->get_bucket_item_weightf(parent.id, pos);
-  float performance = crush->get_bucket_item_performance(parent.id, pos);
-	dump_item(Item(id, parent.id, parent.depth + 1, weight, performance), f);
+  __u32 *performance_range_set = crush->get_bucket_item_performance_range_set(parent.id, pos);
+  int performance_range_set_num = crush->get_bucket_item_performance_range_set_num(parent.id, pos);
+	dump_item(Item(id, parent.id, parent.depth + 1, weight, performance_range_set, performance_range_set_num), f);
       }
       f->close_section();
     }
@@ -3858,7 +3910,7 @@ public:
     }
     for (int32_t i = 0; i <= max_id; i++) {
       if (crush->item_exists(i) && !is_touched(i) && should_dump(i)) {
-        dump_item(CrushTreeDumper::Item(i, 0, 0, 0, 0), f);
+        dump_item(CrushTreeDumper::Item(i, 0, 0, 0, 0, 0), f);
       }
     }
     f->close_section();

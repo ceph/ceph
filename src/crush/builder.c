@@ -598,7 +598,8 @@ crush_make_straw2_bucket(struct crush_map *map,
 			 int size,
 			 int *items,
 			 int *weights,
-			 int *performances)
+			 __u32 **performance_range_sets,
+			 int *performance_range_sets_num)
 {
 	struct crush_bucket_straw2 *bucket;
 	int i;
@@ -619,23 +620,41 @@ crush_make_straw2_bucket(struct crush_map *map,
         if (!bucket->item_weights)
                 goto err;
 
-	bucket->item_performances = malloc(sizeof(__u32)*size);
-        if (!bucket->item_performances)
+	bucket->item_performance_range_sets = malloc(sizeof(__u32 *)*size);
+        if (!bucket->item_performance_range_sets)
                 goto err;
+	memset(bucket->item_performance_range_sets, 0, sizeof(__u32 *)*size);
+
+	bucket->item_performance_range_sets_num = malloc(sizeof(__u32)*size);
+        if (!bucket->item_performance_range_sets_num)
+                goto err;
+	memset(bucket->item_performance_range_sets_num, 0, sizeof(__u32)*size);
 
         bucket->h.weight = 0;
-		bucket->h.performance = 0;
+		bucket->h.performance_range_set = NULL;
+		bucket->h.performance_range_set_num = 0;
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		bucket->h.weight += weights[i];
 		bucket->item_weights[i] = weights[i];
-		bucket->h.performance += performances[i];
-		bucket->item_performances[i] = performances[i];
+		/* deal with performance */
+		union_performance_range_set(&(bucket->h.performance_range_set), &(bucket->h.performance_range_set_num), \
+			(performance_range_sets_num[i] == 0) ? NULL : performance_range_sets[i], performance_range_sets_num[i]);
+		if (performance_range_sets_num[i] != 0) {
+			bucket->item_performance_range_sets[i] = malloc(sizeof(__u32)*performance_range_sets_num[i]);
+			if (!bucket->item_performance_range_sets[i])
+				goto err;
+			memcpy(bucket->item_performance_range_sets[i], performance_range_sets[i], sizeof(__u32)*performance_range_sets_num[i]);
+			bucket->item_performance_range_sets_num[i] = performance_range_sets_num[i];
+		} else {
+			bucket->item_performance_range_sets[i] = NULL;
+			bucket->item_performance_range_sets_num[i] = 0;
+		}
 	}
 
 	return bucket;
 err:
-		free(bucket->item_performances);
+		free(bucket->item_performance_range_sets);
         free(bucket->item_weights);
         free(bucket->h.items);
         free(bucket);
@@ -649,7 +668,8 @@ crush_make_bucket(struct crush_map *map,
 		  int alg, int hash, int type, int size,
 		  int *items,
 		  int *weights,
-		  int *performances)
+		  __u32 **performance_range_sets,
+		  int *performance_range_sets_num)
 {
 	int item_weight;
 
@@ -670,7 +690,7 @@ crush_make_bucket(struct crush_map *map,
 	case CRUSH_BUCKET_STRAW:
 		return (struct crush_bucket *)crush_make_straw_bucket(map, hash, type, size, items, weights);
 	case CRUSH_BUCKET_STRAW2:
-		return (struct crush_bucket *)crush_make_straw2_bucket(map, hash, type, size, items, weights, performances);
+		return (struct crush_bucket *)crush_make_straw2_bucket(map, hash, type, size, items, weights, performance_range_sets, performance_range_sets_num);
 	}
 	return 0;
 }
@@ -841,7 +861,7 @@ int crush_add_straw_bucket_item(struct crush_map *map,
 
 int crush_add_straw2_bucket_item(struct crush_map *map,
 				 struct crush_bucket_straw2 *bucket,
-				 int item, int weight, int performance)
+				 int item, int weight, __u32 *performance_range_set, int performance_range_set_num)
 {
 	int newsize = bucket->h.size + 1;
 
@@ -857,28 +877,38 @@ int crush_add_straw2_bucket_item(struct crush_map *map,
 	} else {
 		bucket->item_weights = _realloc;
 	}
-	if ((_realloc = realloc(bucket->item_performances, sizeof(__u32)*newsize)) == NULL) {
+	if ((_realloc = realloc(bucket->item_performance_range_sets_num, sizeof(__u32)*newsize)) == NULL) {
 		return -ENOMEM;
 	} else {
-		bucket->item_performances = _realloc;
+		bucket->item_performance_range_sets_num = _realloc;
+	}
+	if ((_realloc = realloc(bucket->item_performance_range_sets, sizeof(__u32 *)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_performance_range_sets = _realloc;
 	}
 
 	bucket->h.items[newsize-1] = item;
 	bucket->item_weights[newsize-1] = weight;
-	bucket->item_performances[newsize-1] = performance;
+	bucket->item_performance_range_sets_num[newsize-1] = performance_range_set_num;
+	bucket->item_performance_range_sets[newsize-1] = malloc(sizeof(__u32)*performance_range_set_num);
+	if (!bucket->item_performance_range_sets[newsize-1])
+		return -ENOMEM;
+	memcpy(bucket->item_performance_range_sets[newsize-1], performance_range_set, sizeof(__u32)*performance_range_set_num);
 
 	if (crush_addition_is_unsafe(bucket->h.weight, weight))
                 return -ERANGE;
 
 	bucket->h.weight += weight;
-	bucket->h.performance += performance;
+	union_performance_range_set(&bucket->h.performance_range_set, &bucket->h.performance_range_set_num, \
+								performance_range_set, performance_range_set_num);
 	bucket->h.size++;
 
 	return 0;
 }
 
 int crush_bucket_add_item(struct crush_map *map,
-			  struct crush_bucket *b, int item, int weight, int performance)
+			  struct crush_bucket *b, int item, int weight, __u32 *performance_range_set, int performance_range_set_num)
 {
 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
@@ -890,7 +920,7 @@ int crush_bucket_add_item(struct crush_map *map,
 	case CRUSH_BUCKET_STRAW:
 		return crush_add_straw_bucket_item(map, (struct crush_bucket_straw *)b, item, weight);
 	case CRUSH_BUCKET_STRAW2:
-		return crush_add_straw2_bucket_item(map, (struct crush_bucket_straw2 *)b, item, weight, performance);
+		return crush_add_straw2_bucket_item(map, (struct crush_bucket_straw2 *)b, item, weight, performance_range_set, performance_range_set_num);
 	default:
 		return -1;
 	}
@@ -1099,15 +1129,13 @@ int crush_remove_straw2_bucket_item(struct crush_map *map,
 			else
 				bucket->h.weight = 0;
 			// performance
-			if (bucket->item_performances[i] < bucket->h.performance)
-				bucket->h.performance -= bucket->item_performances[i];
-			else
-				bucket->h.performance = 0;
+			subtract_performance_range_set(&bucket->h.performance_range_set, &bucket->h.performance_range_set_num, \
+										   bucket->item_performance_range_sets[i], bucket->item_performance_range_sets_num[i]);
 			for (j = i; j < bucket->h.size - 1; j++) {
 				bucket->h.items[j] = bucket->h.items[j+1];
 				bucket->item_weights[j] = bucket->item_weights[j+1];
-				bucket->item_performances[j] = bucket->item_performances[j+1];
-
+				bucket->item_performance_range_sets[j] = bucket->item_performance_range_sets[j+1];
+				bucket->item_performance_range_sets_num[j] = bucket->item_performance_range_sets_num[j+1];
 			}
 			break;
 		}
@@ -1133,10 +1161,15 @@ int crush_remove_straw2_bucket_item(struct crush_map *map,
 	} else {
 		bucket->item_weights = _realloc;
 	}
-	if ((_realloc = realloc(bucket->item_performances, sizeof(__u32)*newsize)) == NULL) {
+	if ((_realloc = realloc(bucket->item_performance_range_sets, sizeof(__u32 *)*newsize)) == NULL) {
 		return -ENOMEM;
 	} else {
-		bucket->item_performances = _realloc;
+		bucket->item_performance_range_sets = _realloc;
+	}
+	if ((_realloc = realloc(bucket->item_performance_range_sets_num, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->item_performance_range_sets_num = _realloc;
 	}
 
 	return 0;
@@ -1296,10 +1329,9 @@ int crush_bucket_adjust_item_weight(struct crush_map *map,
 
 int crush_adjust_straw2_bucket_item_performance(struct crush_map *map,
 					   struct crush_bucket_straw2 *bucket,
-					   int item, int performance)
+					   int item, __u32 *performance_range_set, int performance_range_set_num)
 {
 	unsigned idx;
-	int diff;
 
 	for (idx = 0; idx < bucket->h.size; idx++)
 		if (bucket->h.items[idx] == item)
@@ -1307,22 +1339,34 @@ int crush_adjust_straw2_bucket_item_performance(struct crush_map *map,
 	if (idx == bucket->h.size)
 		return 0;
 
-	diff = performance - bucket->item_performances[idx];
-	bucket->item_performances[idx] = performance;
-	bucket->h.performance += diff;
-
-	return diff;
+	subtract_performance_range_set(&bucket->h.performance_range_set, &bucket->h.performance_range_set_num, \
+								   bucket->item_performance_range_sets[idx], bucket->item_performance_range_sets_num[idx]);
+	union_performance_range_set(&bucket->h.performance_range_set, &bucket->h.performance_range_set_num, \
+								   performance_range_set, performance_range_set_num);
+	if (bucket->item_performance_range_sets_num[idx] != 0)
+		free(bucket->item_performance_range_sets[idx]);
+	bucket->item_performance_range_sets_num[idx] = performance_range_set_num;
+	if (bucket->item_performance_range_sets_num[idx] != 0) {
+		bucket->item_performance_range_sets[idx] = malloc(sizeof(__u32)*bucket->item_performance_range_sets_num[idx]);
+		if (!bucket->item_performance_range_sets[idx])
+			return -ENOMEM;
+		memcpy(bucket->item_performance_range_sets[idx], performance_range_set, sizeof(__u32)*bucket->item_performance_range_sets_num[idx]);
+	} else {
+		bucket->item_performance_range_sets[idx] = NULL;
+	}
+	/* I do not know how to define diff. < 0 is wrong. */
+	return 0;
 }
 
 int crush_bucket_adjust_item_performance(struct crush_map *map,
 				    struct crush_bucket *b,
-				    int item, int performance)
+				    int item, __u32 *performance_range_set, int performance_range_set_num)
 {
 	switch (b->alg) {
 	case CRUSH_BUCKET_STRAW2:
 		return crush_adjust_straw2_bucket_item_performance(map,
 							      (struct crush_bucket_straw2 *)b,
-							     item, performance);
+							     item, performance_range_set, performance_range_set_num);
 	default:
 		return -1;
 	}

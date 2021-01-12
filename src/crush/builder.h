@@ -200,7 +200,7 @@ extern int crush_add_bucket(struct crush_map *map,
  *
  * @returns a pointer to the newly created bucket or NULL
  */
-struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash, int type, int size, int *items, int *weights, int *performances);
+struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash, int type, int size, int *items, int *weights, __u32 **performance_range_sets, int *performance_range_sets_num);
 extern struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_positions);
 extern void crush_destroy_choose_args(struct crush_choose_arg *args);
 /** @ingroup API
@@ -220,7 +220,7 @@ extern void crush_destroy_choose_args(struct crush_choose_arg *args);
  *
  * @returns 0 on success, < 0 on error
  */
-extern int crush_bucket_add_item(struct crush_map *map, struct crush_bucket *bucket, int item, int weight, int performance);
+extern int crush_bucket_add_item(struct crush_map *map, struct crush_bucket *bucket, int item, int weight, __u32 *performance_range_set, int performance_range_set_num);
 /** @ingroup API
  *
  * If __bucket->alg__ is ::CRUSH_BUCKET_UNIFORM,
@@ -238,7 +238,7 @@ extern int crush_bucket_add_item(struct crush_map *map, struct crush_bucket *buc
  * @returns the difference between the new weight and the former weight
  */
 extern int crush_bucket_adjust_item_weight(struct crush_map *map, struct crush_bucket *bucket, int item, int weight);
-extern int crush_bucket_adjust_item_performance(struct crush_map *map, struct crush_bucket *bucket, int item, int performance);
+extern int crush_bucket_adjust_item_performance(struct crush_map *map, struct crush_bucket *bucket, int item, __u32 *performance_range_set, int performance_range_set_num);
 /** @ingroup API
  *
  * Recursively update the weight of __bucket__ and its children, deep

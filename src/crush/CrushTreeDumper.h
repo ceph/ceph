@@ -54,11 +54,13 @@ namespace CrushTreeDumper {
     int parent;
     int depth;
     float weight;
-    float performance;
+    __u32 *performance_range_set;
+    int performance_range_set_num;
     std::list<int> children;
 
-    Item() : id(0), parent(0), depth(0), weight(0), performance(0) {}
-    Item(int i, int p, int d, float w, float per) : id(i), parent(p), depth(d), weight(w), performance(per) {}
+    Item() : id(0), parent(0), depth(0), weight(0), performance_range_set(NULL), performance_range_set_num(0) {}
+    Item(int i, int p, int d, float w, __u32 *performance_range_set, int performance_range_set_num) : id(i), \
+        parent(p), depth(d), weight(w), performance_range_set(performance_range_set), performance_range_set_num(performance_range_set_num) {}
 
     bool is_bucket() const { return id < 0; }
   };
@@ -119,7 +121,8 @@ namespace CrushTreeDumper {
 	  ++root;
 	if (root == roots.end())
 	  return false;
-	push_back(Item(*root, 0, 0, crush->get_bucket_weightf(*root), crush->get_bucket_performance(*root)));
+	push_back(Item(*root, 0, 0, crush->get_bucket_weightf(*root), crush->get_bucket_performance_range_set(*root), \
+            crush->get_bucket_performance_range_set_num(*root)));
 	++root;
       }
 
@@ -130,7 +133,7 @@ namespace CrushTreeDumper {
       if (qi.is_bucket()) {
 	// queue bucket contents, sorted by (class, name)
 	int s = crush->get_bucket_size(qi.id);
-	std::map<std::string, std::tuple<int, float, float> > sorted;
+	std::map<std::string, std::tuple<int, float, __u32 *, int> > sorted;
 	for (int k = s - 1; k >= 0; k--) {
 	  int id = crush->get_bucket_item(qi.id, k);
 	  if (should_dump(id)) {
@@ -146,15 +149,21 @@ namespace CrushTreeDumper {
 	      sort_by = "_";
 	      sort_by += crush->get_item_name(id);
 	    }
+      __u32 *performance_range_set;
+      int performance_range_set_num;
+      performance_range_set = crush->get_bucket_item_performance_range_set(qi.id, k);
+      performance_range_set_num = crush->get_bucket_item_performance_range_set_num(qi.id, k);
 	    sorted[sort_by] = std::make_tuple(id,
                         crush->get_bucket_item_weightf(qi.id, k),
-                        crush->get_bucket_item_performance(qi.id, k));
+                        performance_range_set,
+                        performance_range_set_num);
 	  }
 	}
 	for (auto p = sorted.rbegin(); p != sorted.rend(); ++p) {
 	  qi.children.push_back(std::get<0>(p->second));
     push_front(Item(std::get<0>(p->second), qi.id, qi.depth+1,
-                    std::get<1>(p->second), std::get<2>(p->second)));
+                    std::get<1>(p->second), std::get<2>(p->second), 
+                    std::get<3>(p->second)));
 	}
       }
       return true;

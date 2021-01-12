@@ -234,8 +234,9 @@ struct crush_bucket {
 	__u8 hash;       /* which hash function to use, CRUSH_HASH_* */
 	/*! @endcond */
 	__u32 weight;    /*!< 16.16 fixed point cumulated children weight */
-        __u32 performance; /*!< cumulated children performance, for now, we didn't use it */
 	__u32 size;      /*!< size of the __items__ array */
+        __u32 *performance_range_set; /*!< used to record the performance range set of children */
+        __u32 performance_range_set_num; /*!< the element number of performance range set */
         __s32 *items;    /*!< array of children: < 0 are buckets, >= 0 items */
 };
 
@@ -331,6 +332,17 @@ struct crush_bucket_straw {
 	__u32 *straws;         /* 16-bit fixed point */
 };
 
+#define performance_threshold           (1000)
+#define is_same_performance(x, y)       (x - y < performance_threshold || \
+                                         y - x < performance_threshold)
+
+extern void union_performance_range_set(__u32 **target_performance_range_set, __u32 *target_performance_range_set_num, \
+				   const __u32 *performance_range_set, int performance_range_set_num);
+extern void subtract_performance_range_set(__u32 **target_performance_range_set, __u32 *target_performance_range_set_num, \
+				   const __u32 *performance_range_set, int performance_range_set_num);
+extern int is_same_performance_range_set(__u32 *performance_range_set1, int performance_range_set1_num, \
+				   const __u32 *performance_range_set2, int performance_range_set2_num);
+
 /** @ingroup API
  * The weight of each item in the bucket when
  * __h.alg__ == ::CRUSH_BUCKET_STRAW2.
@@ -341,7 +353,8 @@ struct crush_bucket_straw {
 struct crush_bucket_straw2 {
         struct crush_bucket h; /*!< generic bucket information */
 	__u32 *item_weights;   /*!< 16.16 fixed point weight for each item */
-        __u32 *item_performances; /*!< performance for each item */
+        __u32 *item_performance_range_sets_num; /*!< the element number of each item performance range set */
+        __u32 **item_performance_range_sets; /*!< performance range set for each item */
 };
 
 
@@ -476,7 +489,8 @@ struct crush_map {
  * @returns the 16.16 fixed point item weight
  */
 extern int crush_get_bucket_item_weight(const struct crush_bucket *b, int pos);
-extern int crush_get_bucket_item_performance(const struct crush_bucket *b, int pos);
+extern __u32* crush_get_bucket_item_performance_range_set(const struct crush_bucket *b, int pos);
+extern int crush_get_bucket_item_performance_range_set_num(const struct crush_bucket *b, int pos);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);
