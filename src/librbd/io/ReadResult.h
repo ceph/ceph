@@ -30,6 +30,7 @@ public:
     uint64_t buffer_offset = 0;
     Extents image_extents;
     bufferlist bl;
+    bool ignore_enoent = false;
 
     C_ImageReadRequest(AioCompletion *aio_completion,
                        uint64_t buffer_offset,

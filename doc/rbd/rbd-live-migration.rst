@@ -143,8 +143,9 @@ The general format for the ``source-spec`` JSON is as follows::
             }
         }
 
-The following formats are currently supported: ``native`` and ``raw``. The
-following streams are currently supported: ``file``, ``http``, and ``s3``.
+The following formats are currently supported: ``native``, ``qcow``, and
+``raw``. The following streams are currently supported: ``file``, ``http``, and
+``s3``.
 
 Formats
 ~~~~~~~
@@ -174,6 +175,19 @@ it utilizes native Ceph operations. For example, to import from the image
             "pool_namespace": "ns1",
             "image_name": "image1",
             "snap_name": "snap1"
+        }
+
+The ``qcow`` format can be used to describe a QCOW (QEMU copy-on-write) block
+device. Only the original QCOW (v1) format is currently supported, but support
+for QCOW2 will be added in the near future. The ``qcow`` format data can be
+linked to any supported stream source described below. For example,
+its base ``source-spec`` JSON is encoded as follows::
+
+        {
+            "type": "qcow",
+            "stream": {
+                <stream unique parameters for HEAD, non-snapshot revision>
+            }
         }
 
 The ``raw`` format can be used to describe a thick-provisioned, raw block device

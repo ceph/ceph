@@ -63,12 +63,29 @@ remove_images() {
     done
 }
 
+show_diff()
+{
+    local file1=$1
+    local file2=$2
+
+    xxd "${file1}" > "${file1}.xxd"
+    xxd "${file2}" > "${file2}.xxd"
+    sdiff -s "${file1}.xxd" "${file2}.xxd" | head -n 64
+    rm -f "${file1}.xxd" "${file2}.xxd"
+}
+
 compare_images() {
     local src_image=$1
     local dst_image=$2
+    local ret=0
 
     export_raw_image ${dst_image}
-    cmp "${TEMPDIR}/${src_image}" "${TEMPDIR}/${dst_image}"
+    if ! cmp "${TEMPDIR}/${src_image}" "${TEMPDIR}/${dst_image}"
+    then
+        show_diff "${TEMPDIR}/${src_image}" "${TEMPDIR}/${dst_image}"
+        ret=1
+    fi
+    return ${ret}
 }
 
 test_import_native_format() {
@@ -120,6 +137,56 @@ EOF
 
     compare_images "${base_image}@1" "${dest_image}@1"
     compare_images "${base_image}@2" "${dest_image}@2"
+
+    remove_image "${dest_image}"
+}
+
+test_import_qcow_format() {
+    case "$(lsb_release --id --short)" in
+    RedHatEnterpriseWorkstation|RedHatEnterpriseServer|RedHatEnterprise|CentOS)
+        # QCOW format not included in EL variants
+        return
+        ;;
+    *)
+        ;;
+    esac
+
+    local base_image=$1
+    local dest_image=$2
+
+    qemu-img convert -f raw -O qcow rbd:rbd/${base_image} ${TEMPDIR}/${base_image}.qcow
+    qemu-img info -f qcow ${TEMPDIR}/${base_image}.qcow
+
+    cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "qcow",
+  "stream": {
+    "type": "file",
+    "file_path": "${TEMPDIR}/${base_image}.qcow"
+  }
+}
+EOF
+    cat ${TEMPDIR}/spec.json
+
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
+
+    rbd migration abort ${dest_image}
+
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
+
+    rbd migration execute ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
+
+    rbd migration commit ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
 
     remove_image "${dest_image}"
 }
@@ -211,6 +278,7 @@ create_base_image ${IMAGE1}
 export_base_image ${IMAGE1}
 
 test_import_native_format ${IMAGE1} ${IMAGE2}
+test_import_qcow_format ${IMAGE1} ${IMAGE2}
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 
 echo OK
