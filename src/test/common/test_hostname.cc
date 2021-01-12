@@ -62,6 +62,10 @@ TEST(Hostname, short) {
 	 << ", skipping test because env var may or may not be short form"
 	      << std::endl;
   } else {
-    ASSERT_EQ(shn, exec("hostname -s")) ;
+    #ifdef _WIN32
+    ASSERT_EQ(shn, exec("hostname"));
+    #else
+    ASSERT_EQ(shn, exec("hostname -s"));
+    #endif
   }
 }

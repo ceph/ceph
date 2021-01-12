@@ -255,6 +255,7 @@ int main(int argc, const char **argv)
   int ret;
   ceph::mutex safe_timer_lock = ceph::make_mutex("safe_timer_lock");
   SafeTimer safe_timer(g_ceph_context, safe_timer_lock);
+  safe_timer.init();
 
   ret = basic_timer_test <SafeTimer>(safe_timer, &safe_timer_lock);
   if (ret)
@@ -273,6 +274,7 @@ int main(int argc, const char **argv)
     goto done;
 
 done:
+  safe_timer.shutdown();
   print_status(argv[0], ret);
   return ret;
 }

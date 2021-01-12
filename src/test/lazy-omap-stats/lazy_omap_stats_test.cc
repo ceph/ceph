@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "lazy_omap_stats_test.h"
+#include "include/compat.h"
 
 using namespace std;
 namespace bp = boost::process;

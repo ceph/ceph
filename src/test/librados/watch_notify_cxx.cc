@@ -68,7 +68,7 @@ public:
 };
 
 // notify
-static sem_t *sem;
+static sem_t sem;
 
 class WatchNotifyTestCtx : public WatchCtx
 {
@@ -76,12 +76,12 @@ public:
   void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) override
   {
     std::cout << __func__ << std::endl;
-    sem_post(sem);
+    sem_post(&sem);
   }
 };
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -104,13 +104,13 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
     }
   }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   ioctx.unwatch("foo", handle);
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -133,15 +133,15 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
     }
   }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   ioctx.unwatch("foo", handle);
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 // --
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;
@@ -153,12 +153,12 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  sem_close(sem);
+  sem_destroy(&sem);
   ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;
@@ -170,7 +170,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  sem_close(sem);
+  sem_destroy(&sem);
   ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
