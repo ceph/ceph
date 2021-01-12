@@ -413,10 +413,7 @@ ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub)
   dout(15) << "ScrubMachine created " << m_pg_id << dendl;
 }
 
-ScrubMachine::~ScrubMachine()
-{
-  dout(20) << "~ScrubMachine " << m_pg_id << dendl;
-}
+ScrubMachine::~ScrubMachine() = default;
 
 // -------- for replicas -----------------------------------------------------
 
