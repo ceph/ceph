@@ -36,7 +36,7 @@ struct Option {
     case TYPE_ADDR: return "entity_addr_t";
     case TYPE_ADDRVEC: return "entity_addrvec_t";
     case TYPE_UUID: return "uuid_d";
-    case TYPE_SIZE: return "size_t";
+    case TYPE_SIZE: return "uint64_t";
     case TYPE_SECS: return "secs";
     case TYPE_MILLISECS: return "millisecs";
     default: return "unknown";
@@ -127,7 +127,7 @@ struct Option {
   };
 
   struct size_t {
-    std::size_t value;
+    std::uint64_t value;
     operator uint64_t() const {
       return static_cast<uint64_t>(value);
     }
@@ -271,7 +271,7 @@ struct Option {
     case TYPE_BOOL:
       v = bool(new_value); break;
     case TYPE_SIZE:
-      v = size_t{static_cast<std::size_t>(new_value)}; break;
+      v = size_t{static_cast<std::uint64_t>(new_value)}; break;
     case TYPE_SECS:
       v = std::chrono::seconds{new_value}; break;
     case TYPE_MILLISECS:
