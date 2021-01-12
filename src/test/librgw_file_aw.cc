@@ -333,6 +333,14 @@ TEST(LibRGW, DELETE_OBJECT) {
   }
 }
 
+TEST(LibRGW, DELETE_BUCKET) {
+  if (do_delete) {
+    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+}
+
 TEST(LibRGW, CLEANUP) {
   int ret;
   if (object_fh) {
