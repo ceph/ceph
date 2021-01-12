@@ -7,7 +7,7 @@
   },
   "scripts": {
     "ng": "ng",
-    "start": "npm run env_build && ng serve --host 0.0.0.0",
+    "start": "npm run env_build && ng serve --host 0.0.0.0 --ssl",
     "build": "npm run env_build && ng build --configuration=$npm_package_config_locale",
     "build:localize": "node cd --env --pre && ng build --localize",
     "postbuild:localize": "node cd --res",
