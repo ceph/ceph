@@ -407,8 +407,9 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     }
   }
 
-  gen = bucket_info.layout.logs.back().gen;
-  num_shards = bucket_info.layout.logs.back().layout.in_index.layout.num_shards;
+  // get next generation and num_shards
+  auto latest_gen = bucket_info.layout.logs.back().gen;
+  auto num_shards = bucket_info.layout.logs.back().layout.in_index.layout.num_shards;
   unsigned count = 0;
   string err;
 
@@ -416,10 +417,21 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   if (!err.empty())
     max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
+  bucket_log_layout_generation log_layout;
+  auto log_iter = std::find_if(bucket_info.layout.logs.begin(),
+                              bucket_info.layout.logs.end(),
+                              [&gen](const bucket_log_layout_generation& val)
+                              { return val.gen == gen; });
+  if (log_iter != bucket_info.layout.logs.end()) {
+    log_layout = log_iter->layout;
+  } else {
+    return ENOENT;
+  }
+
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, generation,
+    int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, log_layout,
                                                marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {
@@ -473,7 +485,7 @@ void RGWOp_BILog_List::send_response_end() {
     encode_json("truncated", truncated, s->formatter);
 
     s->formatter->open_object_section("next_log");
-    encode_json("generation", gen, s->formatter);
+    encode_json("generation", latest_gen, s->formatter);
     encode_json("num_shards", num_shards, s->formatter);
     s->formatter->close_section(); // next_log
 
@@ -497,7 +509,6 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
 
   int shard_id;
   string bn;
-  uint64_t gen_id;
   op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
   if (op_ret < 0) {
     return;
@@ -521,7 +532,16 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->getRados()->get_bucket_stats(bucket_info, -1, latest_gen, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+
+  const auto& latest_log = bucket_info.layout.logs.back();
+  ceph_assert(latest_log.layout.type == BucketLogType::InIndex); // only type supported
+
+  // convert InIndex log layout to its index layout
+  bucket_index_layout_generation index;
+  index.gen = latest_log.layout.in_index.gen;
+  index.layout.normal = latest_log.layout.in_index.layout;
+
+  int ret =  store->getRados()->get_bucket_stats(bucket_info, -1, index, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;
@@ -568,8 +588,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
 
   int shard_id;
   string bn;
-  uint64_t gen_id;
-  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &gen_id, &shard_id);
+  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
   if (op_ret < 0) {
     return;
   }
@@ -588,8 +607,19 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
       return;
     }
   }
-  const auto& log = bucket_info.layout.logs.back().gen;
-  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, gen, start_marker, end_marker);
+
+  bucket_log_layout_generation log_layout;
+  auto log_iter = std::find_if(bucket_info.layout.logs.begin(),
+                              bucket_info.layout.logs.end(),
+                              [&gen](const bucket_log_layout_generation& val)
+                              { return val.gen == gen; });
+  if (log_iter != bucket_info.layout.logs.end()) {
+    log_layout = log_iter->layout;
+  } else {
+    return ENOENT;
+  }
+
+  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, log_layout, start_marker, end_marker);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }

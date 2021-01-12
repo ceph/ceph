@@ -165,13 +165,13 @@ static void get_bucket_instance_ids(const RGWBucketInfo& bucket_info,
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
                                                std::optional<int> _shard_id,
-                                               std::optional<uint64_t> _gen_id,
+                                               rgw::bucket_index_layout_generation idx_layout,
                                                RGWSI_RADOS::Pool *index_pool,
                                                map<int, string> *bucket_objs,
                                                map<int, string> *bucket_instance_ids)
 {
   int shard_id = _shard_id.value_or(-1);
-  uint64_t gen_id = _gen_id.value_or(0);
+  uint64_t gen_id = idx_layout.gen;
   string bucket_oid_base;
   int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
   if (ret < 0) {
@@ -297,14 +297,14 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 
 int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
                                              int shard_id,
-                                             uint64_t gen_id,
+                                             bucket_index_layout_generation idx_layout,
                                              vector<rgw_bucket_dir_header> *headers,
                                              map<int, string> *bucket_instance_ids,
                                              optional_yield y)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> oids;
-  int r = open_bucket_index(bucket_info, shard_id, gen_id, &index_pool, &oids, bucket_instance_ids);
+  int r = open_bucket_index(bucket_info, shard_id, idx_layout, &index_pool, &oids, bucket_instance_ids);
   if (r < 0)
     return r;
 
@@ -372,7 +372,7 @@ int RGWSI_BucketIndex_RADOS::read_stats(const RGWBucketInfo& bucket_info,
   vector<rgw_bucket_dir_header> headers;
 
   result->bucket = bucket_info.bucket;
-  int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, RGW_DEFAULT_GENERATION, &headers, nullptr, y);
+  int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, bucket_info.layout.current_index, &headers, nullptr, y);
   if (r < 0) {
     return r;
   }
@@ -402,7 +402,7 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
 
   int r = open_bucket_index(bucket_info,
                             std::nullopt,
-                            std::nullopt,
+                            bucket_info.layout.current_index,
                             &index_pool,
                             &bucket_objs,
                             nullptr);
@@ -434,13 +434,13 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
   if (old_sync_enabled != new_sync_enabled) {
     int shards_num = info.layout.current_index.layout.normal.num_shards? info.layout.current_index.layout.normal.num_shards : 1;
     int shard_id = info.layout.current_index.layout.normal.num_shards? 0 : -1;
-    auto gen_id = info.layout.current_index.gen;
+    const auto& log_layout = bucket_info.layout.logs.back();
 
     int ret;
     if (!new_sync_enabled) {
-      ret = svc.bilog->log_stop(info, -1, gen_id);
+      ret = svc.bilog->log_stop(info, -1, log_layout);
     } else {
-      ret = svc.bilog->log_start(info, -1, gen_id);
+      ret = svc.bilog->log_start(info, -1, log_layout);
     }
     if (ret < 0) {
       lderr(cct) << "ERROR: failed writing bilog (bucket=" << info.bucket << "); ret=" << ret << dendl;

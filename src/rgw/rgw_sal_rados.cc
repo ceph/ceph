@@ -200,12 +200,12 @@ int RGWRadosBucket::load_by_name(const std::string& tenant, const std::string& b
   return store->getRados()->get_bucket_instance_info(*rctx, info.bucket, info, NULL, &attrs, y);
 }
 
-int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, uint64_t gen_id,
+int RGWRadosBucket::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, bucket_index_layout_generation idx_layout,
 				     std::string *bucket_ver, std::string *master_ver,
 				     std::map<RGWObjCategory, RGWStorageStats>& stats,
 				     std::string *max_marker, bool *syncstopped)
 {
-  return store->getRados()->get_bucket_stats(bucket_info, shard_id, gen_id, bucket_ver, master_ver, stats, max_marker, syncstopped);
+  return store->getRados()->get_bucket_stats(bucket_info, shard_id, idx_layout, bucket_ver, master_ver, stats, max_marker, syncstopped);
 }
 
 int RGWRadosBucket::read_bucket_stats(optional_yield y)

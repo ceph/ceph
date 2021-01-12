@@ -319,6 +319,10 @@ void usage()
   cout << "                               data sync status\n";
   cout << "                             required for: \n";
   cout << "                               mdlog trim\n";
+  cout << "   --gen=<gen-id>            optional for: \n;
+  cout << "                               bilog list\n";
+  cout << "                               bilog trim\n";
+  cout << "                               bilog status\n";
   cout << "   --max-entries=<entries>   max entries for listing operations\n";
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cout << "   --remote=<remote>         zone or zonegroup id of remote gateway\n";
@@ -3366,6 +3370,13 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       specified_shard_id = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--gen", (char*)NULL)) {
+      gen_id = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse gen id: " << err << std::endl;
+        return EINVAL;
+      }
+      specified_gen_id = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
@@ -6806,8 +6817,9 @@ next:
       RGWRados::ent_map_t result;
       result.reserve(NUM_ENTRIES);
 
+    auto current_index = bucket_info.layout.current_index;
       int r = store->getRados()->cls_bucket_list_ordered(
-	bucket_info, RGW_NO_SHARD, RGW_DEFAULT_GENERATION,
+	bucket_info, RGW_NO_SHARD, current_index,
 	marker, empty_prefix, empty_delimiter,
 	NUM_ENTRIES, true, expansion_factor,
 	result, &is_truncated, &cls_filtered, &marker,
@@ -8141,11 +8153,22 @@ next:
     if (max_entries < 0)
       max_entries = 1000;
 
-    const auto& gen = bucket_info.layout.logs.back().gen;
+    const auto gen = (specified_gen_id ? gen_id : bucket_info.layout.logs.back().gen);
+
+    const bucket_log_layout_generation log_layout;
+    auto log_iter = std::find_if(bucket_info.layout.logs.begin(),
+                                bucket_info.layout.logs.end(),
+                                [&gen](const bucket_log_layout_generation& val)
+                                { return val.gen == gen; });
+    if (log_iter != bucket_info.layout.logs.end()) {
+      log_layout = log_iter->layout;
+    } else {
+      return ENOENT;
+    }
 
     do {
       list<rgw_bi_log_entry> entries;
-      ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, gen, marker, max_entries - count, entries, &truncated);
+      ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, log_layout, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -8628,8 +8651,21 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    const auto& log = bucket_info.layout.logs.back().gen;
-    ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, gen, start_marker, end_marker);
+
+    const auto gen = (specified_gen_id ? gen_id : bucket_info.layout.logs.back().gen);
+
+    const bucket_log_layout_generation log_layout;
+    auto log_iter = std::find_if(bucket_info.layout.logs.begin(),
+                                bucket_info.layout.logs.end(),
+                                [&gen](const bucket_log_layout_generation& val)
+                                { return val.gen == gen; });
+    if (log_iter != bucket_info.layout.logs.end()) {
+      log_layout = log_iter->layout;
+    } else {
+      return ENOENT;
+    }
+
+    ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, log_layout, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8648,8 +8684,21 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    const auto& log = bucket_info.layout.logs.back().gen;
-    ret = store->svc()->bilog_rados->get_log_status(bucket_info, shard_id, gen,
+
+    const auto gen = (specified_gen_id ? gen_id : bucket_info.layout.logs.back().gen);
+
+    bucket_log_layout_generation log_layout;
+    auto log_iter = std::find_if(bucket_info.layout.logs.begin(),
+                                bucket_info.layout.logs.end(),
+                                [&gen](const bucket_log_layout_generation& val)
+                                { return val.gen == gen; });
+    if (log_iter != bucket_info.layout.logs.end()) {
+      log_layout = log_iter->layout;
+    } else {
+      return ENOENT;
+    }
+
+    ret = store->svc()->bilog_rados->get_log_status(bucket_info, shard_id, log_layout,
 						    &markers, null_yield);
     if (ret < 0) {
       cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
