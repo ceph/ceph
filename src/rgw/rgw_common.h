@@ -1995,7 +1995,7 @@ struct perm_state_base {
   CephContext *cct;
   const rgw::IAM::Environment& env;
   rgw::auth::Identity *identity;
-  const RGWBucketInfo& bucket_info;
+  const RGWBucketInfo bucket_info;
   int perm_mask;
   bool defer_to_bucket_acls;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
