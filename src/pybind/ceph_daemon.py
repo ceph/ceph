@@ -194,7 +194,7 @@ class DaemonWatcher(object):
         unit = 0
         while len("%s" % (int(n) // (1000**unit))) > width - 1:
             if unit >= len(units) - 1:
-                break;
+                break
             unit += 1
 
         if unit > 0:
@@ -211,7 +211,7 @@ class DaemonWatcher(object):
             else:
                 color = self.YELLOW, False
             return self.bold(self.colorize(formatted[0:-1], color[0], color[1])) \
-                + self.bold(self.colorize(formatted[-1], self.BLACK, False))
+                + self.bold(self.colorize(formatted[-1], self.YELLOW, False))
         else:
             return formatted
 
