@@ -258,6 +258,17 @@ public:
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
 
+  struct CLSGatherOp {
+    ObjectContextRef obc;
+    OpRequestRef op;
+    std::vector<ceph_tid_t> objecter_tids;
+    int rval;
+
+    CLSGatherOp() {}
+    ~CLSGatherOp() {}
+  };
+  typedef std::shared_ptr<CLSGatherOp> CLSGatherOpRef;
+
   friend struct RefCountCallback;
   struct ManifestOp {
     RefCountCallback *cb;
@@ -1389,6 +1400,11 @@ protected:
   bool is_present_clone(hobject_t coid);
 
   friend struct C_Flush;
+
+  // -- cls_gather --
+  std::map<hobject_t, CLSGatherOpRef> cls_gather_ops;
+  void cancel_cls_gather(CLSGatherOpRef cgop, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   // -- scrub --
   bool _range_available_for_scrub(
