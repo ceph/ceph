@@ -496,9 +496,11 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
 
   if (!m_cache_state->present) {
     m_cache_state->host = ceph_get_short_hostname();
-    m_cache_state->size = m_image_ctx.config.template get_val<uint64_t>("rbd_rwl_size");
+    m_cache_state->size = m_image_ctx.config.template get_val<uint64_t>(
+        "rbd_persistent_cache_size");
 
-    string path = m_image_ctx.config.template get_val<string>("rbd_rwl_path");
+    string path = m_image_ctx.config.template get_val<string>(
+        "rbd_persistent_cache_path");
     std::string pool_name = m_image_ctx.md_ctx.get_pool_name();
     m_cache_state->path = path + "/rbd-pwl." + pool_name + "." + m_image_ctx.id + ".pool";
   }
