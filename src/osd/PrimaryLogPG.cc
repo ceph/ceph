@@ -10080,13 +10080,15 @@ void PrimaryLogPG::cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids)
 
 struct C_gather : public Context {
   PrimaryLogPGRef pg;
+  hobject_t oid;
   PrimaryLogPG::OpContext *ctx;
-  C_gather(PrimaryLogPG *pg_, PrimaryLogPG::OpContext *ctx_) : pg(pg_), ctx(ctx_) {}
+  C_gather(PrimaryLogPG *pg_, hobject_t oid_, PrimaryLogPG::OpContext *ctx_) : pg(pg_), oid(oid_), ctx(ctx_) {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
     // TODO: check errors
     pg->lock();
+    pg->cls_gather_ops.erase(oid);
     pg->execute_ctx(ctx);
     pg->unlock();
   }
@@ -10106,6 +10108,9 @@ int PrimaryLogPG::cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> 
   ObjectContextRef obc = get_object_context(soid, false);
   C_GatherBuilder gather(cct);
 
+  CLSGatherOpRef cgop(std::make_shared<CLSGatherOp>());
+  cgop->obc = obc;
+  cgop->op = op;
   for (std::map<std::string, bufferlist*>::iterator it = src_objs->begin(); it != src_objs->end(); it++) {
     std::string oid = it->first;
     it->second = new bufferlist;
@@ -10117,10 +10122,12 @@ int PrimaryLogPG::cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> 
 					 object_t(oid), oloc, obj_op,
 					 m->get_snapid(), it->second,
 					 flags, gather.new_sub());
+    cgop->objecter_tids.push_back(tid);
     dout(10) << __func__ << " src=" << oid << ", tgt=" << soid << dendl;
   }
-
-  C_gather *fin = new C_gather(this, ctx);
+  cls_gather_ops[soid] = cgop;
+  
+  C_gather *fin = new C_gather(this, soid, ctx);
   gather.set_finisher(new C_OnFinisher(fin,
 				       osd->get_objecter_finisher(get_pg_shard())));
   gather.activate();
@@ -10917,6 +10924,35 @@ bool PrimaryLogPG::is_present_clone(hobject_t coid)
     return true;
   ObjectContextRef obc = get_object_context(coid, false);
   return obc && obc->obs.exists;
+}
+
+// ========================================================================
+// cls gather
+//
+
+void PrimaryLogPG::cancel_cls_gather(CLSGatherOpRef cgop, bool requeue,
+				     vector<ceph_tid_t> *tids)
+{
+  for (std::vector<ceph_tid_t>::iterator p = cgop->objecter_tids.begin(); p != cgop->objecter_tids.end(); p++) {
+    tids->push_back(*p);
+    dout(0) << __func__ << " " << cgop->obc->obs.oi.soid << " tid " << *p << dendl;
+  }
+  cgop->objecter_tids.clear();
+  object_contexts.purge(cgop->obc->obs.oi.soid);
+  if (requeue) {
+    if (cgop->op)
+      requeue_op(cgop->op);
+  }
+  cls_gather_ops.erase(cgop->obc->obs.oi.soid);
+}
+
+void PrimaryLogPG::cancel_cls_gather_ops(bool requeue, vector<ceph_tid_t> *tids)
+{
+  dout(10) << __func__ << dendl;
+  map<hobject_t,CLSGatherOpRef>::iterator p = cls_gather_ops.begin();
+  while (p != cls_gather_ops.end()) {
+    cancel_cls_gather((p++)->second, requeue, tids);
+  }
 }
 
 // ========================================================================
@@ -12531,6 +12567,7 @@ void PrimaryLogPG::on_shutdown()
   cancel_flush_ops(false, &tids);
   cancel_proxy_ops(false, &tids);
   cancel_manifest_ops(false, &tids);
+  cancel_cls_gather_ops(false, &tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
   apply_and_flush_repops(false);
@@ -12648,6 +12685,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   cancel_flush_ops(is_primary(), &tids);
   cancel_proxy_ops(is_primary(), &tids);
   cancel_manifest_ops(is_primary(), &tids);
+  cancel_cls_gather_ops(is_primary(), &tids);
   osd->objecter->op_cancel(tids, -ECANCELED);
 
   // requeue object waiters
