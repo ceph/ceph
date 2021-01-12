@@ -1790,10 +1790,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
   f->close_section();
 }
 
-PgScrubber::~PgScrubber()
-{
-  dout(10) << __func__ << dendl;
-}
+PgScrubber::~PgScrubber() = default;
 
 PgScrubber::PgScrubber(PG* pg)
     : m_pg{pg}
@@ -2041,8 +2038,6 @@ ReplicaReservations::~ReplicaReservations()
   // send un-reserve messages to all reserved replicas. We do not wait for answer (there
   // wouldn't be one). Other incoming messages will be discarded on the way, by our
   // owner.
-  dout(10) << __func__ << " " << m_reserved_peers << dendl;
-
   epoch_t epoch = m_pg->get_osdmap_epoch();
 
   for (auto& p : m_reserved_peers) {
@@ -2149,7 +2144,6 @@ LocalReservation::~LocalReservation()
   if (m_holding_local_reservation) {
     m_holding_local_reservation = false;
     m_osds->dec_scrubs_local();
-    dout(20) << __func__ << ": local OSD scrub resources freed" << dendl;
   }
 }
 
@@ -2179,7 +2173,6 @@ ReservedByRemotePrimary::~ReservedByRemotePrimary()
   if (m_reserved_by_remote_primary) {
     m_reserved_by_remote_primary = false;
     m_osds->dec_scrubs_remote();
-    dout(20) << __func__ << ": scrub resources held for Primary were freed" << dendl;
   }
 }
 
