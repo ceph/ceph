@@ -75,8 +75,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             for p in completions:
                 p.evaluate()
 
-    @CLICommand('test_orchestrator load_data', '', 'load dummy data into test orchestrator', 'w')
+    @CLICommand('test_orchestrator load_data', args='', perm='w')
     def _load_data(self, inbuf):
+        """
+        load dummy data into test orchestrator
+        """
         try:
             data = json.loads(inbuf)
             self._init_data(data)
