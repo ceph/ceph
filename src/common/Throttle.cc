@@ -228,14 +228,16 @@ int64_t Throttle::put(int64_t c)
   ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
+  int64_t new_count;
   {
     std::lock_guard l(lock);
+    new_count = count;
     if (c) {
       if (!conds.empty())
 	conds.front().notify_one();
       // if count goes negative, we failed somewhere!
       ceph_assert(count >= c);
-      count -= c;
+      new_count = count -= c;
     }
   }
   if (logger) {
@@ -244,7 +246,7 @@ int64_t Throttle::put(int64_t c)
     logger->set(l_throttle_val, count);
   }
 
-  return count;
+  return new_count;
 }
 
 void Throttle::reset()
