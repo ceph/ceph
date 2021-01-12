@@ -418,7 +418,34 @@ void mClockScheduler::handle_conf_change(
   const ConfigProxy& conf,
   const std::set<std::string> &changed)
 {
-  client_registry.update_from_config(conf);
+  if (changed.count("osd_mclock_cost_per_io_msec") ||
+      changed.count("osd_mclock_cost_per_io_msec_hdd") ||
+      changed.count("osd_mclock_cost_per_io_msec_ssd")) {
+    set_osd_mclock_cost_per_io();
+  }
+  if (changed.count("osd_mclock_max_capacity_iops") ||
+      changed.count("osd_mclock_max_capacity_iops_hdd") ||
+      changed.count("osd_mclock_max_capacity_iops_ssd")) {
+    set_max_osd_capacity();
+    enable_mclock_profile();
+    client_registry.update_from_config(conf);
+  }
+  if (changed.count("osd_mclock_profile")) {
+    enable_mclock_profile();
+    if (mclock_profile != "custom") {
+      client_registry.update_from_config(conf);
+    }
+  }
+  if (changed.count("osd_mclock_scheduler_client_res") ||
+      changed.count("osd_mclock_scheduler_client_wgt") ||
+      changed.count("osd_mclock_scheduler_client_lim") ||
+      changed.count("osd_mclock_scheduler_background_recovery_res") ||
+      changed.count("osd_mclock_scheduler_background_recovery_wgt") ||
+      changed.count("osd_mclock_scheduler_background_recovery_lim")) {
+    if (mclock_profile == "custom") {
+      client_registry.update_from_config(conf);
+    }
+  }
 }
 
 }
