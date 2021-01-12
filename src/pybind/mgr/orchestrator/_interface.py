@@ -98,7 +98,7 @@ def handle_exception(prefix, perm, func):
             msg = 'This Orchestrator does not support `{}`'.format(prefix)
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
-    # misuse partial to copy `wrapper`
+    # misuse lambda to copy `wrapper`
     wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)
     wrapper_copy._prefix = prefix  # type: ignore
     wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
