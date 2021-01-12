@@ -6,6 +6,7 @@
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "common/ceph_time.h"
+#include "common/Checksummer.h"
 #include "os/bluestore/BlueStore.h"
 #include "os/bluestore/AvlAllocator.h"
 #include "common/ceph_argparse.h"
