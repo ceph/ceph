@@ -428,7 +428,6 @@ inline std::optional<timespan> maybe_timespan(const double d) {
   return d ? std::make_optional(make_timespan(d)) : std::nullopt;
 }
 
-std::ostream& operator<<(std::ostream& m, const timespan& t);
 template<typename Clock,
 	 typename std::enable_if<!Clock::is_steady>::type* = nullptr>
 std::ostream& operator<<(std::ostream& m,
@@ -518,5 +517,10 @@ static Rep to_microseconds(T t) {
 }
 
 } // namespace ceph
+
+namespace std {
+template<typename Rep, typename Period>
+ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t);
+}
 
 #endif // COMMON_CEPH_TIME_H
