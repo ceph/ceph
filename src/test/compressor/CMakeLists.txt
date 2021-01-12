@@ -1,4 +1,5 @@
 add_library(ceph_example SHARED compressor_plugin_example.cc)
+target_link_libraries(ceph_example ceph-common)
 
 # unittest_compression
 add_executable(unittest_compression

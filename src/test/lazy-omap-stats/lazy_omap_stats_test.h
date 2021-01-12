@@ -19,6 +19,7 @@
 #include <regex>
 #include <string>
 
+#include "include/compat.h"
 #include "include/rados/librados.hpp"
 
 struct index_t {

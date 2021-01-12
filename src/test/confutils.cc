@@ -17,6 +17,14 @@
 #include "gtest/gtest.h"
 #include "include/buffer.h"
 
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
+
 #include <errno.h>
 #include <iostream>
 #include <stdlib.h>
@@ -47,10 +55,14 @@ static std::string get_temp_dir()
     ostringstream oss;
     oss << tmpdir << "/confutils_test_dir." << rand() << "." << getpid();
     umask(022);
-    int res = mkdir(oss.str().c_str(), 01777);
-    if (res) {
-      cerr << "failed to create temp directory '" << temp_dir << "'" << std::endl;
-      return "";
+    if (!fs::exists(oss.str())) {
+      std::error_code ec;
+      if (!fs::create_directory(oss.str(), ec)) {
+        cerr << "failed to create temp directory '" << temp_dir << "' "
+             << ec.message() << std::endl;
+        return "";
+      }
+      fs::permissions(oss.str(), fs::perms::sticky_bit | fs::perms::all);
     }
     temp_dir = oss.str();
   }
