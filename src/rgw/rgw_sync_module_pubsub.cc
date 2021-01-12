@@ -1035,7 +1035,7 @@ public:
                                           env(_env),
                                           owner(_owner),
                                           event(_event),
-                                          s3_event(s3_event),
+                                          s3_event(_s3_event),
                                           topics(_topics),
                                           has_subscriptions(false),
                                           event_handled(false) {}
