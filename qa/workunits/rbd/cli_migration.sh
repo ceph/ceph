@@ -191,6 +191,47 @@ EOF
     remove_image "${dest_image}"
 }
 
+test_import_qcow2_format() {
+    local base_image=$1
+    local dest_image=$2
+
+    qemu-img convert -f raw -O qcow2 rbd:rbd/${base_image} ${TEMPDIR}/${base_image}.qcow2
+    qemu-img info -f qcow2 ${TEMPDIR}/${base_image}.qcow2
+
+    cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "qcow",
+  "stream": {
+    "type": "file",
+    "file_path": "${TEMPDIR}/${base_image}.qcow2"
+  }
+}
+EOF
+    cat ${TEMPDIR}/spec.json
+
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
+
+    rbd migration abort ${dest_image}
+
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
+
+    rbd migration execute ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
+
+    rbd migration commit ${dest_image}
+
+    compare_images "${base_image}" "${dest_image}"
+
+    remove_image "${dest_image}"
+}
+
 test_import_raw_format() {
     local base_image=$1
     local dest_image=$2
@@ -279,6 +320,7 @@ export_base_image ${IMAGE1}
 
 test_import_native_format ${IMAGE1} ${IMAGE2}
 test_import_qcow_format ${IMAGE1} ${IMAGE2}
+test_import_qcow2_format ${IMAGE1} ${IMAGE2}
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 
 echo OK

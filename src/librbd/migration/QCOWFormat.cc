@@ -317,9 +317,16 @@ private:
         // table not in cache -- will restart once its loaded
         return;
       } else {
-        *request.cluster_offset = be64toh(l2_table[l2_index]);
-        ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
-                       << "cluster_offset=" << *request.cluster_offset << dendl;
+        *request.cluster_offset = be64toh(l2_table[l2_index]) &
+                                  qcow_format->m_cluster_mask;
+        if (*request.cluster_offset == QCOW_OFLAG_ZERO) {
+          ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
+                         << "cluster_offset=zeroed" << dendl;
+        } else {
+          ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
+                         << "cluster_offset=" << *request.cluster_offset
+                         << dendl;
+        }
       }
     }
 
@@ -538,6 +545,10 @@ private:
       if (cluster_extent.cluster_offset == 0) {
         // QCOW header is at offset 0, implies cluster DNE
         log_ctx->complete(-ENOENT);
+      } else if (cluster_extent.cluster_offset == QCOW_OFLAG_ZERO) {
+        // explicitly zeroed section
+        read_ctx->bl.append_zero(cluster_extent.cluster_length);
+        log_ctx->complete(0);
       } else {
         // request the (sub)cluster from the cluster cache
         qcow_format->m_cluster_cache->get_cluster(
@@ -628,9 +639,14 @@ private:
     if (r == -ENOENT) {
       r = 0;
     } else if (r >= 0 && cluster_extent.cluster_offset != 0) {
+      auto state = io::SPARSE_EXTENT_STATE_DATA;
+      if (cluster_extent.cluster_offset == QCOW_OFLAG_ZERO) {
+        state = io::SPARSE_EXTENT_STATE_ZEROED;
+      }
+
       sparse_extents->insert(
         cluster_extent.image_offset, cluster_extent.cluster_length,
-        {io::SPARSE_EXTENT_STATE_DATA, cluster_extent.cluster_length});
+        {state, cluster_extent.cluster_length});
     }
 
     on_finish->complete(r);
@@ -729,7 +745,7 @@ void QCOWFormat<I>::handle_probe(int r, Context* on_finish) {
   if (header_probe.version == 1) {
     read_v1_header(on_finish);
     return;
-  } else if (header_probe.version == 2) {
+  } else if (header_probe.version >= 2 && header_probe.version <= 3) {
     read_v2_header(on_finish);
     return;
   } else {
@@ -853,8 +869,130 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  // TODO add support for QCOW2
-  on_finish->complete(-ENOTSUP);
+  if (r < 0) {
+    lderr(cct) << "failed to read QCOW2 header: " << cpp_strerror(r) << dendl;
+    on_finish->complete(r);
+    return;
+  }
+
+  auto header = *reinterpret_cast<QCowHeader*>(m_bl.c_str());
+
+  // byte-swap important fields
+  header.magic = be32toh(header.magic);
+  header.version = be32toh(header.version);
+  header.backing_file_offset = be64toh(header.backing_file_offset);
+  header.backing_file_size = be32toh(header.backing_file_size);
+  header.cluster_bits = be32toh(header.cluster_bits);
+  header.size = be64toh(header.size);
+  header.crypt_method = be32toh(header.crypt_method);
+  header.l1_size = be32toh(header.l1_size);
+  header.l1_table_offset = be64toh(header.l1_table_offset);
+  header.nb_snapshots = be32toh(header.nb_snapshots);
+  header.snapshots_offset = be64toh(header.snapshots_offset);
+
+  if (header.version == 2) {
+    // valid only for version >= 3
+    header.incompatible_features = 0;
+    header.compatible_features = 0;
+    header.autoclear_features = 0;
+    header.header_length = 72;
+    header.compression_type = 0;
+  } else {
+    header.incompatible_features = be64toh(header.incompatible_features);
+    header.compatible_features = be64toh(header.compatible_features);
+    header.autoclear_features = be64toh(header.autoclear_features);
+    header.header_length = be32toh(header.header_length);
+  }
+
+  if (header.magic != QCOW_MAGIC || header.version < 2 || header.version > 3) {
+    // honestly shouldn't happen since we've already validated it
+    lderr(cct) << "header is not QCOW2" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  if (header.cluster_bits < QCOW_MIN_CLUSTER_BITS ||
+      header.cluster_bits > QCOW_MAX_CLUSTER_BITS) {
+    lderr(cct) << "invalid cluster bits: " << header.cluster_bits << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  if (header.crypt_method != QCOW_CRYPT_NONE) {
+    lderr(cct) << "invalid or unsupported encryption method" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  m_size = header.size;
+  if (p2roundup(m_size, static_cast<uint64_t>(512)) != m_size) {
+    lderr(cct) << "image size is not a multiple of block size" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  if (header.header_length <= offsetof(QCowHeader, compression_type)) {
+    header.compression_type = 0;
+  }
+
+  if ((header.compression_type != 0) ||
+      ((header.incompatible_features & QCOW2_INCOMPAT_COMPRESSION) != 0)) {
+    lderr(cct) << "invalid or unsupported compression type" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  if ((header.incompatible_features & QCOW2_INCOMPAT_DATA_FILE) != 0) {
+    lderr(cct) << "external data file feature not supported" << dendl;
+    on_finish->complete(-ENOTSUP);
+  }
+
+  if ((header.incompatible_features & QCOW2_INCOMPAT_EXTL2) != 0) {
+    lderr(cct) << "extended L2 table feature not supported" << dendl;
+    on_finish->complete(-ENOTSUP);
+    return;
+  }
+
+  header.incompatible_features &= ~QCOW2_INCOMPAT_MASK;
+  if (header.incompatible_features != 0) {
+    lderr(cct) << "unknown incompatible feature enabled" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  m_backing_file_offset = header.backing_file_offset;
+  m_backing_file_size = header.backing_file_size;
+
+  m_cluster_bits = header.cluster_bits;
+  m_cluster_size = 1UL << header.cluster_bits;
+  m_cluster_offset_mask = (1ULL << (63 - header.cluster_bits)) - 1;
+  m_cluster_mask = ~(QCOW_OFLAG_COMPRESSED | QCOW_OFLAG_COPIED);
+
+  // L2 table is fixed a (1) cluster block to hold 8-byte (3 bit) offsets
+  uint32_t l2_bits = m_cluster_bits - 3;
+  uint32_t shift = m_cluster_bits + l2_bits;
+  m_l1_size = (m_size + (1LL << shift) - 1) >> shift;
+  m_l1_table_offset = header.l1_table_offset;
+  if (m_size > (std::numeric_limits<uint64_t>::max() - (1ULL << shift)) ||
+      m_l1_size > (std::numeric_limits<int32_t>::max() / sizeof(uint64_t))) {
+    lderr(cct) << "image size too big: " << m_size << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  } else if (m_l1_size > header.l1_size) {
+    lderr(cct) << "invalid L1 table size in header (" << header.l1_size
+               << " < " << m_l1_size << ")" << dendl;
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  ldout(cct, 15) << "size=" << m_size << ", "
+                 << "cluster_bits=" << m_cluster_bits << dendl;
+
+  // allocate memory for L1 table and L2 + cluster caches
+  m_l2_table_cache = std::make_unique<L2TableCache>(this, l2_bits);
+  m_cluster_cache = std::make_unique<ClusterCache>(this);
+
+  read_l1_table(on_finish);
 }
 
 template <typename I>

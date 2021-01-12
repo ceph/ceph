@@ -178,10 +178,12 @@ it utilizes native Ceph operations. For example, to import from the image
         }
 
 The ``qcow`` format can be used to describe a QCOW (QEMU copy-on-write) block
-device. Only the original QCOW (v1) format is currently supported, but support
-for QCOW2 will be added in the near future. The ``qcow`` format data can be
-linked to any supported stream source described below. For example,
-its base ``source-spec`` JSON is encoded as follows::
+device. Both the QCOW (v1) and QCOW2 formats are currently supported with the
+exception of advanced features such as compression, encryption, backing
+files, and external data files. Support for these missing features may be added
+in a future release. The ``qcow`` format data can be linked to any supported
+stream source described below. For example, its base ``source-spec`` JSON is
+encoded as follows::
 
         {
             "type": "qcow",
