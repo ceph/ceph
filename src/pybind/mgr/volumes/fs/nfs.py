@@ -463,14 +463,16 @@ class FSExport(object):
         except KeyError:
             pass
 
-    def _create_user_key(self, entity, path, fs_name):
+    def _create_user_key(self, entity, path, fs_name, fs_ro):
         osd_cap = 'allow rw pool={} namespace={}, allow rw tag cephfs data={}'.format(
                 self.rados_pool, self.rados_namespace, fs_name)
+        access_type = 'r' if fs_ro else 'rw'
 
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
             'entity': 'client.{}'.format(entity),
-            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow rw path={}'.format(path)],
+            'caps': ['mon', 'allow r', 'osd', osd_cap, 'mds', 'allow {} path={}'.format(
+                access_type, path)],
             'format': 'json',
             })
 
@@ -563,7 +565,7 @@ class FSExport(object):
             if not self._fetch_export(pseudo_path):
                 ex_id = self._gen_export_id()
                 user_id = f"{cluster_id}{ex_id}"
-                user_out, key = self._create_user_key(user_id, path, fs_name)
+                user_out, key = self._create_user_key(user_id, path, fs_name, read_only)
                 access_type = "RW"
                 if read_only:
                     access_type = "RO"
