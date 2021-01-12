@@ -35,11 +35,15 @@ ceph_test_librgw_file_cd --delete --multi --verbose
 
 # write continuation test
 echo "phase 3.1"
-ceph_test_librgw_file_aw --create --delete --large --verify
+ceph_test_librgw_file_aw --create --large --verify
+echo "phase 3.2"
+ceph_test_librgw_file_aw --delete --large
 
 # continued readdir
 echo "phase 4.1"
 ceph_test_librgw_file_marker --create --marker1 --marker2 --nobjs=100 --verbose
+echo "phase 4.2"
+ceph_test_librgw_file_marker --delete --verbose
 
 # advanced i/o--but skip readv/writev for now--split delete from
 # create and stat ops to avoid fault in sysobject cache
