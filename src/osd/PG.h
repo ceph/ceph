@@ -1690,7 +1690,7 @@ public:
 
     // metadata
     set<pg_shard_t> reserved_peers;
-    bool local_reserved, remote_reserved, reserve_failed;
+    bool local_reserved, remote_reserved, reserve_reject;
     epoch_t epoch_start;
 
     // common to both scrubs

@@ -1129,7 +1129,7 @@ void PG::clear_primary_state()
 }
 
 PG::Scrubber::Scrubber()
- : local_reserved(false), remote_reserved(false), reserve_failed(false),
+ : local_reserved(false), remote_reserved(false), reserve_reject(false),
    epoch_start(0),
    active(false),
    shallow_errors(0), deep_errors(0), fixed(0),
@@ -4516,7 +4516,7 @@ bool PG::sched_scrub()
   }
 
   if (scrubber.local_reserved) {
-    if (scrubber.reserve_failed) {
+    if (scrubber.reserve_reject) {
       dout(20) << __func__ << ": failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
@@ -4721,7 +4721,7 @@ void PG::handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from)
   } else {
     /* One decline stops this pg from being scheduled for scrubbing. */
     dout(10) << " osd." << from << " scrub reserve = fail" << dendl;
-    scrubber.reserve_failed = true;
+    scrubber.reserve_reject = true;
     sched_scrub();
   }
 }
@@ -4784,7 +4784,7 @@ void PG::schedule_recovery_retry(float delay)
 void PG::clear_scrub_reserved()
 {
   scrubber.reserved_peers.clear();
-  scrubber.reserve_failed = false;
+  scrubber.reserve_reject = false;
 
   if (scrubber.local_reserved) {
     scrubber.local_reserved = false;
