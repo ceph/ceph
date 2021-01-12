@@ -9754,9 +9754,9 @@ int BlueStore::_do_read(
   if (r < 0)
     return r;
 
-  int64_t num_ios = length;
+  int64_t num_ios = blobs2read.size();
   if (ioc.has_pending_aios()) {
-    num_ios = -ioc.get_num_ios();
+    num_ios = ioc.get_num_ios();
     bdev->aio_submit(&ioc);
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
