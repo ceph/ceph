@@ -1,0 +1,13 @@
+meta:
+- desc: |
+   rgw ragweed prepare before upgrade
+stress-tasks:
+  - full_sequential:
+     - sequential:
+       - print: "**** done start rgw_ragweed_prepare"
+       - ragweed:
+           client.0:
+             default-branch: ceph-octopus
+             rgw_server: client.0
+             stages: prepare
+       - print: "**** done end rgw_ragweed_prepare"
