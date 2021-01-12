@@ -56,6 +56,9 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy,  # pylint: disable=too-many
 
     @no_type_check
     def handler(self, action):
+        '''
+        Control and report debug status in Ceph-Dashboard
+        '''
         ret = 0
         msg = ''
         if action in [Actions.ENABLE.value, Actions.DISABLE.value]:
@@ -72,7 +75,6 @@ class Debug(SP, I.CanCherrypy, I.ConfiguresCherryPy,  # pylint: disable=too-many
             prefix="dashboard {name}".format(name=NAME),
             args="name=action,type=CephChoices,strings={states}".format(
                 states="|".join(a.value for a in Actions)),
-            desc="Control and report debug status in Ceph-Dashboard",
             handler=handler
         )
     ]

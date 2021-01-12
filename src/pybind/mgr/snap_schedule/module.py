@@ -60,9 +60,11 @@ class Module(MgrModule):
                     'name=path,type=CephString,req=false '
                     'name=subvol,type=CephString,req=false '
                     'name=fs,type=CephString,req=false '
-                    'name=format,type=CephString,req=false',
-                    'List current snapshot schedules')
+                    'name=format,type=CephString,req=false')
     def snap_schedule_get(self, path='/', subvol=None, fs=None, format='plain'):
+        '''
+        List current snapshot schedules
+        '''
         use_fs = fs if fs else self.default_fs
         try:
             ret_scheds = self.client.get_snap_schedules(use_fs, path)
@@ -78,10 +80,12 @@ class Module(MgrModule):
                     'name=recursive,type=CephString,req=false '
                     'name=subvol,type=CephString,req=false '
                     'name=fs,type=CephString,req=false '
-                    'name=format,type=CephString,req=false',
-                    'Get current snapshot schedule for <path>')
+                    'name=format,type=CephString,req=false')
     def snap_schedule_list(self, path, subvol=None, recursive=False, fs=None,
                            format='plain'):
+        '''
+        Get current snapshot schedule for <path>
+        '''
         try:
             use_fs = fs if fs else self.default_fs
             scheds = self.client.list_snap_schedules(use_fs, path, recursive)
@@ -103,14 +107,16 @@ class Module(MgrModule):
                      'name=snap-schedule,type=CephString '
                      'name=start,type=CephString,req=false '
                      'name=fs,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false',
-                     'Set a snapshot schedule for <path>')
+                     'name=subvol,type=CephString,req=false')
     def snap_schedule_add(self,
                           path,
                           snap_schedule,
                           start=None,
                           fs=None,
                           subvol=None):
+        '''
+        Set a snapshot schedule for <path>
+        '''
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
@@ -136,14 +142,16 @@ class Module(MgrModule):
                      'name=repeat,type=CephString,req=false '
                      'name=start,type=CephString,req=false '
                      'name=subvol,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false',
-                     'Remove a snapshot schedule for <path>')
+                     'name=fs,type=CephString,req=false')
     def snap_schedule_rm(self,
                          path,
                          repeat=None,
                          start=None,
                          subvol=None,
                          fs=None):
+        '''
+        Remove a snapshot schedule for <path>
+        '''
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
@@ -159,14 +167,16 @@ class Module(MgrModule):
                      'name=retention-spec-or-period,type=CephString '
                      'name=retention-count,type=CephString,req=false '
                      'name=fs,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false',
-                     'Set a retention specification for <path>')
+                     'name=subvol,type=CephString,req=false')
     def snap_schedule_retention_add(self,
                                     path,
                                     retention_spec_or_period,
                                     retention_count=None,
                                     fs=None,
                                     subvol=None):
+        '''
+        Set a retention specification for <path>
+        '''
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
@@ -184,14 +194,16 @@ class Module(MgrModule):
                      'name=retention-spec-or-period,type=CephString '
                      'name=retention-count,type=CephString,req=false '
                      'name=fs,type=CephString,req=false '
-                     'name=subvol,type=CephString,req=false',
-                     'Remove a retention specification for <path>')
+                     'name=subvol,type=CephString,req=false')
     def snap_schedule_retention_rm(self,
                                    path,
                                    retention_spec_or_period,
                                    retention_count=None,
                                    fs=None,
                                    subvol=None):
+        '''
+        Remove a retention specification for <path>
+        '''
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
@@ -209,14 +221,16 @@ class Module(MgrModule):
                      'name=repeat,type=CephString,req=false '
                      'name=start,type=CephString,req=false '
                      'name=subvol,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false',
-                     'Activate a snapshot schedule for <path>')
+                     'name=fs,type=CephString,req=false')
     def snap_schedule_activate(self,
                                path,
                                repeat=None,
                                start=None,
                                subvol=None,
                                fs=None):
+        '''
+        Activate a snapshot schedule for <path>
+        '''
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)
@@ -232,14 +246,16 @@ class Module(MgrModule):
                      'name=repeat,type=CephString,req=false '
                      'name=start,type=CephString,req=false '
                      'name=subvol,type=CephString,req=false '
-                     'name=fs,type=CephString,req=false',
-                     'Deactivate a snapshot schedule for <path>')
+                     'name=fs,type=CephString,req=false')
     def snap_schedule_deactivate(self,
                                  path,
                                  repeat=None,
                                  start=None,
                                  subvol=None,
                                  fs=None):
+        '''
+        Deactivate a snapshot schedule for <path>
+        '''
         try:
             use_fs = fs if fs else self.default_fs
             abs_path = self.resolve_subvolume_path(fs, subvol, path)

@@ -10,8 +10,10 @@ if TYPE_CHECKING:
         from typing_extensions import Literal
 
 
+import inspect
 import logging
 import errno
+import functools
 import json
 import threading
 from collections import defaultdict, namedtuple
@@ -309,6 +311,8 @@ class CLICommand(object):
 
     def __call__(self, func):
         self.func = func
+        if not self.desc:
+            self.desc = inspect.getdoc(func)
         self.COMMANDS[self.prefix] = self
         return self.func
 
@@ -350,15 +354,16 @@ class CLICommand(object):
         return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
 
 
-def CLIReadCommand(prefix, args="", desc=""):
-    return CLICommand(prefix, args, desc, "r")
+def CLIReadCommand(prefix, args=""):
+    return CLICommand(prefix, args, "r")
 
 
-def CLIWriteCommand(prefix, args="", desc=""):
-    return CLICommand(prefix, args, desc, "w")
+def CLIWriteCommand(prefix, args=""):
+    return CLICommand(prefix, args, "w")
 
 
 def CLICheckNonemptyFileInput(func):
+    @functools.wraps(func)
     def check(*args, **kwargs):
         if not 'inbuf' in kwargs:
             return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
@@ -427,20 +432,20 @@ class Command(dict):
     def __init__(
             self,
             prefix,
+            handler,
             args=None,
             perm="rw",
             desc=None,
             poll=False,
-            handler=None
     ):
         super(Command, self).__init__(
             cmd=prefix + (' ' + args if args else ''),
             perm=perm,
-            desc=desc,
             poll=poll)
         self.prefix = prefix
         self.args = args
         self.handler = handler
+        self['desc'] = inspect.getdoc(self.handler)
 
     def register(self, instance=False):
         """

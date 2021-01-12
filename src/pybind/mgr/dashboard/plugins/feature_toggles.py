@@ -82,9 +82,11 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "name=action,type=CephChoices,strings={} ".format(
                 "|".join(a.value for a in Actions))
             + "name=features,type=CephChoices,strings={},req=false,n=N".format(
-                "|".join(f.value for f in Features)),
-            "Enable or disable features in Ceph-Mgr Dashboard")
+                "|".join(f.value for f in Features)))
         def cmd(mgr, action, features=None):
+            '''
+            Enable or disable features in Ceph-Mgr Dashboard
+            '''
             ret = 0
             msg = []
             if action in [Actions.ENABLE.value, Actions.DISABLE.value]:
