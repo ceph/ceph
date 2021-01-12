@@ -71,6 +71,20 @@ Basic
 :command:`mount_timeout`
     int (seconds), Default: 60
 
+:command:`ms_mode=<legacy|crc|secure|prefer-crc|prefer-secure>`
+    Set the connection mode that the client uses for transport. The available
+    modes are:
+
+    - ``legacy``: use messenger v1 protocol to talk to the cluster
+
+    - ``crc``: use messenger v2, without on-the-wire encryption
+
+    - ``secure``: use messenger v2, with on-the-wire encryption
+
+    - ``prefer-crc``: crc mode, if denied agree to secure mode
+
+    - ``prefer-secure``: secure mode, if denied agree to crc mode
+
 :command:`name`
     RADOS user to authenticate as when using CephX. Default: guest
 
