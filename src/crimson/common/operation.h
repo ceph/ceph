@@ -300,9 +300,9 @@ public:
     Handle() = default;
 
     Handle(const Handle&) = delete;
-    Handle(Handle&&) = delete;
+    Handle(Handle&&) = default;
     Handle &operator=(const Handle&) = delete;
-    Handle &operator=(Handle&&) = delete;
+    Handle &operator=(Handle&&) = default;
 
     /**
      * Returns a future which unblocks when the handle has entered the passed
