@@ -19,6 +19,7 @@ class NFSService(CephService):
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
+        # TODO: Fail here, in case of no spec
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
