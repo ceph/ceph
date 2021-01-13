@@ -247,10 +247,14 @@ EOF
 
     rbd migration execute ${dest_image}
 
+    compare_images "${base_image}@snap1" "${dest_image}@snap1"
+    compare_images "${base_image}@snap2" "${dest_image}@snap2"
     compare_images "${base_image}" "${dest_image}"
 
     rbd migration commit ${dest_image}
 
+    compare_images "${base_image}@snap1" "${dest_image}@snap1"
+    compare_images "${base_image}@snap2" "${dest_image}@snap2"
     compare_images "${base_image}" "${dest_image}"
 
     remove_image "${dest_image}"
