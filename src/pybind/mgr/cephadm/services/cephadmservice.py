@@ -280,7 +280,7 @@ class CephadmService(metaclass=ABCMeta):
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-    def purge(self) -> None:
+    def purge(self, service_name: str) -> None:
         """Called to carry out any purge tasks following service removal"""
         logger.debug(f'Purge called for {self.TYPE} - no action taken')
 
@@ -974,6 +974,6 @@ class CephadmExporter(CephadmService):
         }
         return config, deps
 
-    def purge(self) -> None:
+    def purge(self, service_name: str) -> None:
         logger.info("Purging cephadm-exporter settings from mon K/V store")
         self.mgr._clear_exporter_config_settings()
