@@ -75,6 +75,34 @@ def listdir(fs, dirpath):
         raise VolumeException(-e.args[0], e.args[1])
     return dirs
 
+def is_inherited_snap(snapname):
+    """
+    Returns True if the snapname is inherited else False
+    """
+    return snapname.startswith("_")
+
+def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
+    """
+    Get the snap names from a given snap directory path
+    """
+    if os.path.basename(snapdirpath) != volspec.snapshot_prefix.encode('utf-8'):
+        raise VolumeException(-errno.EINVAL, "Not a snap directory: {0}".format(snapdirpath))
+    snaps = []
+    try:
+        with fs.opendir(snapdirpath) as dir_handle:
+            d = fs.readdir(dir_handle)
+            while d:
+                if (d.d_name not in (b".", b"..")) and d.is_dir():
+                    d_name = d.d_name.decode('utf-8')
+                    if not is_inherited_snap(d_name):
+                        snaps.append(d.d_name)
+                    elif is_inherited_snap(d_name) and not filter_inherited_snaps:
+                        snaps.append(d.d_name)
+                d = fs.readdir(dir_handle)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+    return snaps
+
 def list_one_entry_at_a_time(fs, dirpath):
     """
     Get a directory entry (one entry a time)
