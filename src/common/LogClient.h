@@ -209,7 +209,12 @@ public:
     return create_channel(CLOG_CHANNEL_DEFAULT);
   }
 
-  LogChannelRef create_channel(const std::string& name) {
+  LogChannelRef create_channel(std::string name) {
+    if (name != CLOG_CHANNEL_DEFAULT && name != CLOG_CHANNEL_CLUSTER
+        && name != CLOG_CHANNEL_AUDIT) {
+      name = CLOG_CHANNEL_DEFAULT;
+    }
+
     LogChannelRef c;
     if (channels.count(name))
       c = channels[name];
