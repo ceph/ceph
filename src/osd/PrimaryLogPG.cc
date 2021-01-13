@@ -1014,7 +1014,7 @@ void PrimaryLogPG::do_command(
     handle_query_state(f.get());
     f->close_section();
 
-    if (is_primary() && is_active()) {
+    if (is_primary() && is_active() && m_scrubber) {
       m_scrubber->dump(f.get());
     }
 
@@ -1603,7 +1603,7 @@ int PrimaryLogPG::do_scrub_ls(const MOSDOp *m, OSDOp *osd_op)
   if (arg.interval != 0 && arg.interval != info.history.same_interval_since) {
     r = -EAGAIN;
   } else {
-    bool store_queried = m_scrubber->get_store_errors(arg, result);
+    bool store_queried = m_scrubber && m_scrubber->get_store_errors(arg, result);
     if (store_queried) {
       encode(result, osd_op->outdata); 
     } else {
@@ -1846,6 +1846,10 @@ void PrimaryLogPG::do_request(
 
   case MSG_OSD_SCRUB_RESERVE:
     {
+      if (!m_scrubber) {
+        osd->reply_op_error(op, -EAGAIN);
+        return;
+      }
       auto m = op->get_req<MOSDScrubReserve>();
       switch (m->type) {
       case MOSDScrubReserve::REQUEST:

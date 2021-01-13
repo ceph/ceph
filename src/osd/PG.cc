@@ -2584,7 +2584,7 @@ void PG::handle_query_state(Formatter *f)
 
   // This code has moved to after the close of recovery_state array.
   // I don't think that scrub is a recovery state
-  if (is_primary() && is_active() && m_scrubber->is_scrub_active()) {
+  if (is_primary() && is_active() && m_scrubber && m_scrubber->is_scrub_active()) {
     m_scrubber->handle_query_state(f);
   }
 }
