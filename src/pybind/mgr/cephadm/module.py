@@ -1696,9 +1696,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         found = self.spec_store.rm(service_name)
         if found:
             self._kick_serve_loop()
-            service = self.cephadm_services.get(service_name, None)
-            if service:
-                service.purge()
             return 'Removed service %s' % service_name
         else:
             # must be idempotent: still a success.
