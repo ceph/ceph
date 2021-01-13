@@ -1,0 +1,7 @@
+[Unit]
+Description=Ceph target to start/stop all cephfs-mirror@.service instances
+PartOf=ceph.target
+Before=ceph.target
+
+[Install]
+WantedBy=multi-user.target ceph.target

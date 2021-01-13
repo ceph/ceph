@@ -496,7 +496,7 @@ void Mirror::schedule_mirror_update_task() {
                                      update_fs_mirrors();
                                    });
   double after = g_ceph_context->_conf.get_val<std::chrono::seconds>
-    ("cephfs_mirror_mirror_action_update_interval").count();
+    ("cephfs_mirror_action_update_interval").count();
   dout(20) << ": scheduling fs mirror update (" << m_timer_task << ") after "
            << after << " seconds" << dendl;
   m_timer->add_event_after(after, m_timer_task);

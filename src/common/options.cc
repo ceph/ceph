@@ -8898,23 +8898,41 @@ std::vector<Option> get_cephfs_mirror_options() {
     .set_description("maximum number of concurrent snapshot synchronization threads")
     .set_long_description("maximum number of directory snapshots that can be synchronized concurrently by cephfs-mirror daemon. Controls the number of synchronization threads."),
 
-    Option("cephfs_mirror_directory_choose_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("random")
-    .set_description("policy for choosing directories to mirror snapshots")
-    .set_long_description("policy used by cephfs-mirror daemon to choose directories for snapshot mirroring"),
-
-    Option("cephfs_mirror_mirror_action_update_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    Option("cephfs_mirror_action_update_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(2)
     .set_min(1)
-    .set_description("")
-    .set_long_description(""),
+    .set_description("interval for driving asynchornous mirror actions")
+    .set_long_description("Interval in seconds to process pending mirror update actions."),
 
     Option("cephfs_mirror_restart_mirror_on_blocklist_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(30)
     .set_min(0)
-    .set_description("")
-    .set_long_description(""),
+    .set_description("interval to restart blocklisted instances")
+    .set_long_description("Interval in seconds to restart blocklisted mirror instances. Setting to zero (0) disables restarting blocklisted instances."),
 
+    Option("cephfs_mirror_max_snapshot_sync_per_cycle", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min(1)
+    .set_description("number of snapshots to mirror in one cycle")
+    .set_long_description("maximum number of snapshots to mirror when a directory is picked up for mirroring by worker threads."),
+
+    Option("cephfs_mirror_directory_scan_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_min(1)
+    .set_description("interval to scan directories to mirror snapshots")
+    .set_long_description("interval in seconds to scan configured directories for snapshot mirroring."),
+
+    Option("cephfs_mirror_max_consecutive_failures_per_directory", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_min(0)
+    .set_description("consecutive failed directory synchronization attempts before marking a directory as \"failed\"")
+    .set_long_description("number of consecutive snapshot synchronization failues to mark a directory as \"failed\". failed directories are retried for synchronization less frequently."),
+
+    Option("cephfs_mirror_retry_failed_directories_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_min(1)
+    .set_description("failed directory retry interval for synchronization")
+    .set_long_description("interval in seconds to retry synchronization for failed directories."),
     });
 }
 
