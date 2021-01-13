@@ -16,7 +16,6 @@
 #include "common/errno.h"
 
 #include <string>
-#include <stdio.h>
 
 #include "CInode.h"
 #include "CDir.h"

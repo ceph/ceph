@@ -12,8 +12,6 @@
  *
  */
 
-#include <iostream>
-
 #include "ScrubStack.h"
 #include "common/Finisher.h"
 #include "mds/MDSRank.h"

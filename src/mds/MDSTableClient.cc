@@ -12,8 +12,6 @@
  * 
  */
 
-#include <iostream>
-
 #include "MDSMap.h"
 
 #include "MDSContext.h"
