@@ -14,6 +14,7 @@
 #include "librbd/migration/SnapshotInterface.h"
 #include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/migration/StreamInterface.h"
+#include "librbd/migration/Utils.h"
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <deque>
@@ -609,10 +610,12 @@ class QCOWFormat<I>::ListSnapsRequest {
 public:
   ListSnapsRequest(QCOWFormat* qcow_format, uint32_t l1_size,
                    const uint64_t* l1_table, io::Extents&& image_extents,
-                   io::SparseExtents* sparse_extents, Context* on_finish)
+                   bool require_copied_bit, io::SparseExtents* sparse_extents,
+                   Context* on_finish)
     : qcow_format(qcow_format), l1_size(l1_size),
       l1_table(l1_table), image_extents(std::move(image_extents)),
-      sparse_extents(sparse_extents), on_finish(on_finish) {
+      require_copied_bit(require_copied_bit), sparse_extents(sparse_extents),
+      on_finish(on_finish) {
   }
 
   void send() {
@@ -624,6 +627,7 @@ private:
   uint32_t l1_size;
   const uint64_t* l1_table;
   io::Extents image_extents;
+  bool require_copied_bit;
   io::SparseExtents* sparse_extents;
   Context* on_finish;
 
@@ -665,11 +669,22 @@ private:
                    << "cluster_offset=" << cluster_extent.cluster_offset
                    << dendl;
 
+    // QCOW2 will set the copied bit when a CoW occurs so we know the cluster
+    // is dirty for this snapshot. We can't determine dirty state for compressed
+    // and zeroed clusters so always treat as dirty.
+    auto cluster_offset = cluster_extent.cluster_offset;
+    if (require_copied_bit &&
+        ((cluster_extent.cluster_offset & QCOW_OFLAG_COPIED) == 0) &&
+        ((cluster_extent.cluster_offset & QCOW_OFLAG_COMPRESSED) == 0) &&
+        (cluster_extent.cluster_offset != QCOW_OFLAG_ZERO)) {
+      cluster_offset = 0;
+    }
+
     if (r == -ENOENT) {
       r = 0;
-    } else if (r >= 0 && cluster_extent.cluster_offset != 0) {
+    } else if (r >= 0 && cluster_offset != 0) {
       auto state = io::SPARSE_EXTENT_STATE_DATA;
-      if (cluster_extent.cluster_offset == QCOW_OFLAG_ZERO) {
+      if (cluster_offset == QCOW_OFLAG_ZERO) {
         state = io::SPARSE_EXTENT_STATE_ZEROED;
       }
 
@@ -1312,14 +1327,51 @@ void QCOWFormat<I>::list_snaps(io::Extents&& image_extents,
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
-  // TODO add QCOW2 snapshot support
+  on_finish = new LambdaContext([this, snap_ids=std::move(snap_ids),
+                                 snapshot_delta, on_finish](int r) mutable {
+    handle_list_snaps(r, std::move(snap_ids), snapshot_delta, on_finish);
+  });
 
-  // QCOW does support snapshots so just use cluster existence for delta
-  auto snapshot = &(*snapshot_delta)[{CEPH_NOSNAP, CEPH_NOSNAP}];
+  auto gather_ctx = new C_Gather(cct, on_finish);
+
+  bool require_copied_bit = false;
+  std::optional<uint64_t> previous_size = std::nullopt;
+  for (auto& [snap_id, snapshot] : m_snapshots) {
+    auto sparse_extents = &(*snapshot_delta)[{snap_id, snap_id}];
+    util::zero_shrunk_snapshot(cct, image_extents, snap_id, snapshot.size,
+                               &previous_size, sparse_extents);
+
+    auto list_snaps_request = new ListSnapsRequest(
+      this, snapshot.l1_size, snapshot.l1_table, io::Extents{image_extents},
+      require_copied_bit, sparse_extents, gather_ctx->new_sub());
+    list_snaps_request->send();
+
+    require_copied_bit = false;
+  }
+
+  // HEAD revision
+  auto sparse_extents = &(*snapshot_delta)[{CEPH_NOSNAP, CEPH_NOSNAP}];
+  util::zero_shrunk_snapshot(cct, image_extents, CEPH_NOSNAP, m_size,
+                             &previous_size, sparse_extents);
+
   auto list_snaps_request = new ListSnapsRequest(
-    this, m_l1_size, m_l1_table, io::Extents{image_extents}, snapshot,
-    on_finish);
+    this, m_l1_size, m_l1_table, io::Extents{image_extents}, require_copied_bit,
+    sparse_extents, gather_ctx->new_sub());
   list_snaps_request->send();
+
+  gather_ctx->activate();
+}
+
+template <typename I>
+void QCOWFormat<I>::handle_list_snaps(int r, io::SnapIds&& snap_ids,
+                                      io::SnapshotDelta* snapshot_delta,
+                                      Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << "r=" << r << ", "
+                 << "snapshot_delta=" << snapshot_delta << dendl;
+
+  util::merge_snapshot_delta(snap_ids, snapshot_delta);
+  on_finish->complete(r);
 }
 
 } // namespace migration

@@ -177,6 +177,9 @@ private:
   void handle_read_l1_table(int r, Context* on_finish);
 
   void read_backing_file(Context* on_finish);
+
+  void handle_list_snaps(int r, io::SnapIds&& snap_ids,
+                         io::SnapshotDelta* snapshot_delta, Context* on_finish);
 };
 
 } // namespace migration
