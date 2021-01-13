@@ -195,7 +195,27 @@ test_import_qcow2_format() {
     local base_image=$1
     local dest_image=$2
 
-    qemu-img convert -f raw -O qcow2 rbd:rbd/${base_image} ${TEMPDIR}/${base_image}.qcow2
+    # create new image via qemu-img and its bench tool since we cannot
+    # import snapshot deltas into QCOW2
+    qemu-img create -f qcow2 ${TEMPDIR}/${base_image}.qcow2 1G
+
+    qemu-img bench -f qcow2 -w -c 65536 -d 16 --pattern 65 -s 4096 \
+        -S $((($RANDOM % 262144) * 4096)) ${TEMPDIR}/${base_image}.qcow2
+    qemu-img convert -f qcow2 -O raw ${TEMPDIR}/${base_image}.qcow2 \
+        "${TEMPDIR}/${base_image}@snap1"
+    qemu-img snapshot -c "snap1" ${TEMPDIR}/${base_image}.qcow2
+
+    qemu-img bench -f qcow2 -w -c 16384 -d 16 --pattern 66 -s 4096 \
+        -S $((($RANDOM % 262144) * 4096)) ${TEMPDIR}/${base_image}.qcow2
+    qemu-img convert -f qcow2 -O raw ${TEMPDIR}/${base_image}.qcow2 \
+        "${TEMPDIR}/${base_image}@snap2"
+    qemu-img snapshot -c "snap2" ${TEMPDIR}/${base_image}.qcow2
+
+    qemu-img bench -f qcow2 -w -c 32768 -d 16 --pattern 67 -s 4096 \
+        -S $((($RANDOM % 262144) * 4096)) ${TEMPDIR}/${base_image}.qcow2
+    qemu-img convert -f qcow2 -O raw ${TEMPDIR}/${base_image}.qcow2 \
+        ${TEMPDIR}/${base_image}
+
     qemu-img info -f qcow2 ${TEMPDIR}/${base_image}.qcow2
 
     cat > ${TEMPDIR}/spec.json <<EOF
@@ -212,6 +232,8 @@ EOF
     rbd migration prepare --import-only \
         --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
 
+    compare_images "${base_image}@snap1" "${dest_image}@snap1"
+    compare_images "${base_image}@snap2" "${dest_image}@snap2"
     compare_images "${base_image}" "${dest_image}"
 
     rbd migration abort ${dest_image}
@@ -219,6 +241,8 @@ EOF
     rbd migration prepare --import-only \
         --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
 
+    compare_images "${base_image}@snap1" "${dest_image}@snap1"
+    compare_images "${base_image}@snap2" "${dest_image}@snap2"
     compare_images "${base_image}" "${dest_image}"
 
     rbd migration execute ${dest_image}
@@ -320,7 +344,7 @@ export_base_image ${IMAGE1}
 
 test_import_native_format ${IMAGE1} ${IMAGE2}
 test_import_qcow_format ${IMAGE1} ${IMAGE2}
-test_import_qcow2_format ${IMAGE1} ${IMAGE2}
+test_import_qcow2_format ${IMAGE2} ${IMAGE3}
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 
 echo OK
