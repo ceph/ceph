@@ -19,6 +19,7 @@ class IscsiService(CephService):
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
+        # TODO: remove this:
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
@@ -77,8 +78,9 @@ class IscsiService(CephService):
         def get_set_cmd_dicts(out: str) -> List[dict]:
             gateways = json.loads(out)['gateways']
             cmd_dicts = []
+            # TODO: fail, if we don't have a spec
             spec = cast(IscsiServiceSpec,
-                        self.mgr.spec_store.specs.get(daemon_descrs[0].service_name(), None))
+                        self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
             if spec.api_secure and spec.ssl_cert and spec.ssl_key:
                 cmd_dicts.append({
                     'prefix': 'dashboard set-iscsi-api-ssl-verification',
@@ -91,8 +93,9 @@ class IscsiService(CephService):
                 })
             for dd in daemon_descrs:
                 assert dd.hostname is not None
+                # todo: this can fail:
                 spec = cast(IscsiServiceSpec,
-                            self.mgr.spec_store.specs.get(dd.service_name(), None))
+                            self.mgr.spec_store.all_specs.get(dd.service_name(), None))
                 if not spec:
                     logger.warning('No ServiceSpec found for %s', dd)
                     continue
