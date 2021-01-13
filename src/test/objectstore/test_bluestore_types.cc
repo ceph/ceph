@@ -326,7 +326,7 @@ TEST(bluestore_blob_t, csum_bench)
       b.calc_csum(0, bl);
     }
     ceph::mono_clock::time_point end = ceph::mono_clock::now();
-    auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    auto dur = std::chrono::duration_cast<ceph::timespan>(end - start);
     double mbsec = (double)count * (double)bl.length() / 1000000.0 / (double)dur.count() * 1000000000.0;
     cout << "csum_type " << Checksummer::get_csum_type_string(csum_type)
 	 << ", " << dur << " seconds, "
