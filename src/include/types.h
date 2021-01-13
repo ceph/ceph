@@ -49,7 +49,7 @@ extern "C" {
 #include <map>
 #include <vector>
 #include <optional>
-#include <iostream>
+#include <ostream>
 #include <iomanip>
 
 
