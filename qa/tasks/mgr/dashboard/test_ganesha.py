@@ -40,8 +40,8 @@ class GaneshaTest(DashboardTestCase):
             'user', 'create', '--uid', 'admin', '--display-name', 'admin',
             '--system', '--access-key', 'admin', '--secret', 'admin'
         ])
-        cls._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        cls._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+        cls._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
+        cls._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
 
     @classmethod
     def tearDownClass(cls):

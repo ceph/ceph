@@ -51,7 +51,10 @@ function TEST_dashboard() {
         tries=$((tries+1))
         sleep 1
     done
-    ceph_adm tell mgr dashboard set-login-credentials admin admin
+
+    DASHBOARD_ADMIN_SECRET_FILE="/tmp/dashboard-admin-secret.txt"
+    printf 'admin' > "${DASHBOARD_ADMIN_SECRET_FILE}"
+    ceph_adm tell mgr dashboard ac-user-create admin -i "${DASHBOARD_ADMIN_SECRET_FILE}"
 
     tries=0
     while [[ $tries < 30 ]] ; do
