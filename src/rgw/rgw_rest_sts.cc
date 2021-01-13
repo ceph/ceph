@@ -365,7 +365,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
   string rArn = s->info.args.get("RoleArn");
   const auto& [ret, role] = sts.getRoleInfo(s, rArn, y);
   if (ret < 0) {
-    ldout(s->cct, 0) << "failed to get role info using role arn: " << rArn << dendl;
+    ldpp_dout(this, 0) << "failed to get role info using role arn: " << rArn << dendl;
     return ret;
   }
   string policy = role.get_assume_role_policy();

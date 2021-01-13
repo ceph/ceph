@@ -2579,7 +2579,7 @@ public:
 
   int exec_start() override;
   int exec_continue() override;
-  int exec_finish(const DoutPrefixProvider *dpp) override;
+  int exec_finish() override;
 
   void send_response() override {}
 

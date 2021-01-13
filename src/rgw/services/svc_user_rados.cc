@@ -88,7 +88,7 @@ int RGWSI_User_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 
   int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ, &be_handler);
   if (r < 0) {
-    ldout(ctx(), 0) << "ERROR: failed to create be handler: r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to create be handler: r=" << r << dendl;
     return r;
   }
 
@@ -117,7 +117,7 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
                                const DoutPrefixProvider *dpp)
 {
   if(user.id == RGW_USER_ANON_ID) {
-    ldout(svc.meta_be->ctx(), 20) << "RGWSI_User_RADOS::read_user_info(): anonymous user" << dendl;
+    ldpp_dout(dpp, 20) << "RGWSI_User_RADOS::read_user_info(): anonymous user" << dendl;
     return -ENOENT;
   }
   bufferlist bl;
@@ -135,14 +135,14 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
   try {
     decode(user_id, iter);
     if (user_id.user_id != user) {
-      lderr(svc.meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << user << dendl;
+      ldpp_dout(dpp, -1)  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << user << dendl;
       return -EIO;
     }
     if (!iter.end()) {
       decode(*info, iter);
     }
   } catch (buffer::error& err) {
-    ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
 
@@ -210,7 +210,7 @@ public:
       int r = svc.user->get_user_info_by_swift(ctx, k.id, &inf, nullptr, nullptr, y, dpp);
       if (r >= 0 && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
-        ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
+        ldpp_dout(dpp, 0) << "WARNING: can't store user info, swift id (" << k.id
           << ") already mapped to another user (" << info.user_id << ")" << dendl;
         return -EEXIST;
       }
@@ -225,7 +225,7 @@ public:
       int r = svc.user->get_user_info_by_access_key(ctx, k.id, &inf, nullptr, nullptr, y, dpp);
       if (r >= 0 && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
-        ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
+        ldpp_dout(dpp, 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
         return -EEXIST;
       }
     }
@@ -304,7 +304,7 @@ public:
     if (!old_info.user_id.empty() &&
         old_info.user_id != new_info.user_id) {
       if (old_info.user_id.tenant != new_info.user_id.tenant) {
-        ldout(svc.user->ctx(), 0) << "ERROR: tenant mismatch: " << old_info.user_id.tenant << " != " << new_info.user_id.tenant << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: tenant mismatch: " << old_info.user_id.tenant << " != " << new_info.user_id.tenant << dendl;
         return -EINVAL;
       }
       ret = svc.user->remove_uid_index(ctx, old_info, nullptr, y, dpp);
@@ -438,7 +438,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
 
   auto kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter) {
-    ldout(cct, 10) << "removing key index: " << kiter->first << dendl;
+    ldpp_dout(dpp, 10) << "removing key index: " << kiter->first << dendl;
     ret = remove_key_index(_ctx, kiter->second, y);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: could not remove " << kiter->first << " (access key object), should be fixed (err=" << ret << ")" << dendl;
@@ -449,7 +449,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
   auto siter = info.swift_keys.begin();
   for (; siter != info.swift_keys.end(); ++siter) {
     auto& k = siter->second;
-    ldout(cct, 10) << "removing swift subuser index: " << k.id << dendl;
+    ldpp_dout(dpp, 10) << "removing swift subuser index: " << k.id << dendl;
     /* check if swift mapping exists */
     ret = remove_swift_name_index(_ctx, k.id, y);
     if (ret < 0 && ret != -ENOENT) {
@@ -458,7 +458,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
     }
   }
 
-  ldout(cct, 10) << "removing email index: " << info.user_email << dendl;
+  ldpp_dout(dpp, 10) << "removing email index: " << info.user_email << dendl;
   ret = remove_email_index(_ctx, info.user_email, y);
   if (ret < 0 && ret != -ENOENT) {
     ldout(cct, 0) << "ERROR: could not remove email index object for "
@@ -467,7 +467,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
   }
 
   rgw_raw_obj uid_bucks = get_buckets_obj(info.user_id);
-  ldout(cct, 10) << "removing user buckets index" << dendl;
+  ldpp_dout(dpp, 10) << "removing user buckets index" << dendl;
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   auto sysobj = ctx->obj_ctx->get_obj(uid_bucks);
   ret = sysobj.wop().remove(y);
@@ -487,7 +487,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
 int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
                                        optional_yield y, const DoutPrefixProvider *dpp)
 {
-  ldout(cct, 10) << "removing user index: " << user_info.user_id << dendl;
+  ldpp_dout(dpp, 10) << "removing user index: " << user_info.user_id << dendl;
 
   RGWSI_MBSObj_RemoveParams params;
   int ret = svc.meta_be->remove(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y, dpp);
@@ -495,7 +495,7 @@ int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RG
     string key;
     user_info.user_id.to_str(key);
     rgw_raw_obj uid_obj(svc.zone->get_zone_params().user_uid_pool, key);
-    ldout(cct, 0) << "ERROR: could not remove " << user_info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: could not remove " << user_info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
   }
 
@@ -543,7 +543,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
       return ret;
     }
   } catch (buffer::error& err) {
-    ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
 

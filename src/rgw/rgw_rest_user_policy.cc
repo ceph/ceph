@@ -204,7 +204,7 @@ void RGWGetUserPolicy::execute(optional_yield y)
   map<string, bufferlist> uattrs;
   op_ret = store->ctl()->user->get_attrs_by_uid(s, user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
-    ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
+    ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
@@ -223,12 +223,12 @@ void RGWGetUserPolicy::execute(optional_yield y)
         policy = policies[policy_name];
         dump(s->formatter);
       } else {
-        ldout(s->cct, 0) << "ERROR: policy not found" << policy << dendl;
+        ldpp_dout(this, 0) << "ERROR: policy not found" << policy << dendl;
         op_ret = -ERR_NO_SUCH_ENTITY;
         return;
       }
     } else {
-      ldout(s->cct, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
+      ldpp_dout(this, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
       op_ret = -ERR_NO_SUCH_ENTITY;
       return;
     }
@@ -268,7 +268,7 @@ void RGWListUserPolicies::execute(optional_yield y)
   map<string, bufferlist> uattrs;
   op_ret = store->ctl()->user->get_attrs_by_uid(s, user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
-    ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
+    ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
@@ -291,7 +291,7 @@ void RGWListUserPolicies::execute(optional_yield y)
       s->formatter->close_section();
       s->formatter->close_section();
     } else {
-      ldout(s->cct, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
+      ldpp_dout(this, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
       op_ret = -ERR_NO_SUCH_ENTITY;
       return;
     }

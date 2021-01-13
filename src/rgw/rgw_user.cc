@@ -62,7 +62,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosSto
   do {
     ret = user.list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
     if (ret < 0) {
-      ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
     auto& buckets = user_buckets.get_buckets();
@@ -73,7 +73,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosSto
 
       ret = bucket->get_bucket_info(dpp, y);
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
       }
       ret = bucket->sync_user_stats(y);
@@ -83,7 +83,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosSto
       }
       ret = bucket->check_bucket_shards(dpp);
       if (ret < 0) {
-	ldout(cct, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
+	ldpp_dout(dpp, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }
     }
   } while (user_buckets.is_truncated());
@@ -114,7 +114,7 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
     ret = rgw_read_user_buckets(dpp, store, user_id, buckets, marker,
 				string(), max_entries, false, y);
     if (ret < 0) {
-      ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
     auto& m = buckets.get_buckets();
@@ -124,7 +124,7 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
       auto& bucket_ent = i.second;
       ret = bucket_ent->read_bucket_stats(dpp, y);
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
       }
       cls_user_bucket_entry entry;
@@ -2028,7 +2028,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     }
     user_info.user_email = op_email;
   } else if (op_email.empty() && op_state.user_email_specified) {
-    ldout(store->ctx(), 10) << "removing email index: " << user_info.user_email << dendl;
+    ldpp_dout(dpp, 10) << "removing email index: " << user_info.user_email << dendl;
     /* will be physically removed later when calling update() */
     user_info.user_email.clear();
   }
@@ -2923,7 +2923,7 @@ int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp,
       map<string, RGWBucketEnt>& m = buckets->get_buckets();
       ret = ctl.bucket->read_buckets_stats(m, y, dpp);
       if (ret < 0 && ret != -ENOENT) {
-        ldout(svc.user->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
         return ret;
       }
     }

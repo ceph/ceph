@@ -421,7 +421,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
         continue;
       }
       if (ret < 0) {
-        lderr(store->ctx()) << "ERROR: get obj state returned with error " << ret << dendl;
+        ldpp_dout(dpp, -1) << "ERROR: get obj state returned with error " << ret << dendl;
         return ret;
       }
 
@@ -636,7 +636,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y, const Dou
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter == attrs.end()) {
 	// should never happen; only pre-argonaut buckets lacked this.
-    ldout(store->ctx(), 0) << "WARNING: can't bucket link because no acl on bucket=" << old_bucket.name << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: can't bucket link because no acl on bucket=" << old_bucket.name << dendl;
     set_err_msg(err_msg,
 	"While crossing the Anavros you have displeased the goddess Hera."
 	"  You must sacrifice your ancient bucket " + bucket.bucket_id);
@@ -663,7 +663,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y, const Dou
 
   // now update the user for the bucket...
   if (display_name.empty()) {
-    ldout(store->ctx(), 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
   }
 
   RGWAccessControlPolicy policy_instance;
@@ -1681,7 +1681,7 @@ void get_stale_instances(rgw::sal::RGWRadosStore *store, const std::string& buck
                              std::make_move_iterator(other_instances.end()));
     } else {
       // all bets are off if we can't read the bucket, just return the sureshot stale instances
-      lderr(store->ctx()) << "error: reading bucket info for bucket: "
+      ldpp_dout(dpp, -1) << "error: reading bucket info for bucket: "
                           << bucket << cpp_strerror(-r) << dendl;
     }
     return;
@@ -1943,7 +1943,7 @@ static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
 				 RGWFormatterFlusher& flusher, bool dry_run)
 {
   if (bucket_info.bucket.bucket_id == bucket_info.bucket.marker) {
-    lderr(store->ctx()) << "Not a resharded bucket skipping" << dendl;
+    ldpp_dout(dpp, -1) << "Not a resharded bucket skipping" << dendl;
     return 0;  // not a resharded bucket, move along
   }
 
@@ -2266,7 +2266,7 @@ public:
 
     RGWSI_Bucket_EP_Ctx ctx(op->ctx());
 
-    ldout(cct, 5) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
+    ldpp_dout(dpp, 5) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
@@ -2335,7 +2335,7 @@ public:
                                                                     .set_attrs(&attrs_m)
                                                                     .set_orig_info(&old_bi));
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
       return ret;
     }
 
@@ -2976,7 +2976,7 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   RGWBucketInfo info;
   auto cct = svc.bucket->ctx();
 
-  ldout(cct, 10) << "RGWRados::convert_old_bucket_info(): bucket=" << bucket << dendl;
+  ldpp_dout(dpp, 10) << "RGWRados::convert_old_bucket_info(): bucket=" << bucket << dendl;
 
   int ret = svc.bucket->read_bucket_entrypoint_info(ctx.ep,
                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
@@ -3132,7 +3132,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 {
   int ret = ctl.user->remove_bucket(user_id, bucket, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: error removing bucket from directory: "
+    ldpp_dout(dpp, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
   }
 
@@ -3153,7 +3153,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     return 0;
 
   if (ep.owner != user_id) {
-    ldout(cct, 0) << "bucket entry point user mismatch, can't unlink bucket: " << ep.owner << " != " << user_id << dendl;
+    ldpp_dout(dpp, 0) << "bucket entry point user mismatch, can't unlink bucket: " << ep.owner << " != " << user_id << dendl;
     return -EINVAL;
   }
 
@@ -3228,7 +3228,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
       }
       const auto& aiter = attrs.find(RGW_ATTR_ACL);
       if (aiter == attrs.end()) {
-        ldout(store->ctx(), 0) << "ERROR: no acls found for object " << obj.key.name << " .Continuing with next object." << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: no acls found for object " << obj.key.name << " .Continuing with next object." << dendl;
         continue;
       } else {
         bufferlist& bl = aiter->second;
@@ -3238,7 +3238,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
           decode(policy, bl);
           owner = policy.get_owner();
         } catch (buffer::error& err) {
-          ldout(store->ctx(), 0) << "ERROR: decode policy failed" << err.what()
+          ldpp_dout(dpp, 0) << "ERROR: decode policy failed" << err.what()
 				 << dendl;
           return -EIO;
         }

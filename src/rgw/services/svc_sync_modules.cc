@@ -32,7 +32,7 @@ int RGWSI_SyncModules::do_start(optional_yield, const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  ldout(cct, 20) << "started sync module instance, tier type = " << zone_public_config.tier_type << dendl;
+  ldpp_dout(dpp, 20) << "started sync module instance, tier type = " << zone_public_config.tier_type << dendl;
 
   return 0;
 }

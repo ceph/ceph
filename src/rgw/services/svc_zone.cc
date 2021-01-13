@@ -83,25 +83,25 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   } else if (ret != -ENOENT) {
-    ldout(cct, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
+    ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
     ret = current_period->init(cct, sysobj_svc, realm->get_id(), y,
 			       realm->get_name());
     if (ret < 0 && ret != -ENOENT) {
-      ldout(cct, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    ldout(cct, 20) << "current period " << current_period->get_id() << dendl;  
+    ldpp_dout(dpp, 20) << "current period " << current_period->get_id() << dendl;  
   }
 
   ret = replace_region_with_zonegroup(dpp, y);
   if (ret < 0) {
-    lderr(cct) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   ret = convert_regionmap(dpp, y);
   if (ret < 0) {
-    lderr(cct) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -447,7 +447,7 @@ int RGWSI_Zone::replace_region_with_zonegroup(const DoutPrefixProvider *dpp, opt
     }
     ret = new_realm.create(dpp, y);
     if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 0) <<  __func__ << " Error creating new realm: " << cpp_strerror(-ret)  << dendl;
+      ldpp_dout(dpp, 0) <<  __func__ << " Error creating new realm: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = new_realm.set_as_default(y);
@@ -724,7 +724,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating
     ldout(cct, 10) << "Creating default zonegroup " << dendl;
     ret = zonegroup->create_default(dpp, y);
     if (ret < 0) {
-      ldout(cct, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+      ldpp_dout(dpp, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
       return ret;
     }
@@ -735,7 +735,7 @@ int RGWSI_Zone::init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating
       return ret;
     }
   }
-  ldout(cct, 20) << "zonegroup " << zonegroup->get_name() << dendl;
+  ldpp_dout(dpp, 20) << "zonegroup " << zonegroup->get_name() << dendl;
   if (zonegroup->is_master_zonegroup()) {
     // use endpoints from the zonegroup's master zone
     auto master = zonegroup->zones.find(zonegroup->master_zone);
@@ -807,7 +807,7 @@ int RGWSI_Zone::convert_regionmap(const DoutPrefixProvider *dpp, optional_yield 
     } else if (ret == -ENOENT) {
       ret = zonegroup.create(dpp, y);
       if (ret < 0) {
-	ldout(cct, 0) << "Error could not create " << zonegroup.get_name() << ": " <<
+	ldpp_dout(dpp, 0) << "Error could not create " << zonegroup.get_name() << ": " <<
 	  cpp_strerror(-ret) << dendl;
 	return ret;
       }

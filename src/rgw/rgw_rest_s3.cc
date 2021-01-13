@@ -5369,7 +5369,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
           break;
         default:
-          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
+          ldpp_dout(s, 10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
           throw -ERR_NOT_IMPLEMENTED;
       }
 
@@ -5388,7 +5388,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       /* IMHO "streamed" doesn't fit too good here. I would prefer to call
        * it "chunked" but let's be coherent with Amazon's terminology. */
 
-      dout(10) << "body content detected in multiple chunks" << dendl;
+      ldpp_dout(s, 10) << "body content detected in multiple chunks" << dendl;
 
       /* payload in multiple chunks */
 
@@ -5397,11 +5397,11 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ:
           break;
         default:
-          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
+          ldpp_dout(s, 10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
           throw -ERR_NOT_IMPLEMENTED;
       }
 
-      dout(10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
+      ldpp_dout(s, 10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
 
       /* In the case of streamed payload client sets the x-amz-content-sha256
        * to "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" but uses "UNSIGNED-PAYLOAD"
