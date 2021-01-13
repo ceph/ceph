@@ -350,6 +350,23 @@ class RGWHTTPArgs {
   bool exists(const char *name) const {
     return (val_map.find(name) != std::end(val_map));
   }
+  bool exist_obj_del_unaccept_sub_res() const {
+    const char* const obj_del_unaccept_sub_res[] = {
+        "append", "torrent", "uploads", "partNumber", "acl"};
+    for (int i = 0; i != std::size(obj_del_unaccept_sub_res); i++) {
+      if (sub_resource_exists(obj_del_unaccept_sub_res[i])) return true;
+    }
+    return false;
+  }
+  bool exist_bucket_del_unaccept_sub_res() const {
+    const char* const bucket_del_unaccept_sub_res[] = {
+        "location",       "delete",   "versions",     "versioning",
+        "requestPayment", "position", "policyStatus", "acl"};
+    for (int i = 0; i != std::size(bucket_del_unaccept_sub_res); i++) {
+      if (sub_resource_exists(bucket_del_unaccept_sub_res[i])) return true;
+    }
+    return false;
+  }
   bool sub_resource_exists(const char *name) const {
     return (sub_resources.find(name) != std::end(sub_resources));
   }
