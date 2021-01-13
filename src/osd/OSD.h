@@ -199,8 +199,6 @@ public:
   /// gets ref to next_osdmap and registers the epoch as reserved
   OSDMapRef get_nextmap_reserved() {
     std::lock_guard l(pre_publish_lock);
-    if (!next_osdmap)
-      return OSDMapRef();
     epoch_t e = next_osdmap->get_epoch();
     std::map<epoch_t, unsigned>::iterator i =
       map_reservations.insert(std::make_pair(e, 0)).first;
@@ -235,8 +233,6 @@ public:
   }
   OSDMapRef get_next_osdmap() {
     std::lock_guard l(pre_publish_lock);
-    if (!next_osdmap)
-      return OSDMapRef();
     return next_osdmap;
   }
 
