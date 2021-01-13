@@ -40,7 +40,8 @@ class HostSpec(object):
     def from_json(cls, host_spec):
         _cls = cls(host_spec['hostname'],
                    host_spec['addr'] if 'addr' in host_spec else None,
-                   host_spec['labels'] if 'labels' in host_spec else None)
+                   host_spec['labels'] if 'labels' in host_spec else None,
+                   host_spec['status'] if 'status' in host_spec else None)
         return _cls
 
     def __repr__(self):
