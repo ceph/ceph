@@ -26,6 +26,7 @@ class RGWOp_BILog_List : public RGWRESTOp {
   uint32_t format_ver;
   bool truncated;
   uint64_t gen; // next generation number output from log list
+  uint64_t latest_gen; // part of response
   uint32_t num_shards; // num shards corresponding to next generation number
 
 public:

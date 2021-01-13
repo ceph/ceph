@@ -306,14 +306,9 @@ int BucketAsyncRefreshHandler::init_fetch()
   ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
   const auto& latest_log = bucket_info.layout.logs.back();
-  ceph_assert(latest_log.layout.type == BucketLogType::InIndex); // only type supported
+  const auto& index = log_to_index_layout(latest_log);
 
-  // convert InIndex log layout to its index layout
-  bucket_index_layout_generation index;
-  index.gen = latest_log.layout.in_index.gen;
-  index.layout.normal = latest_log.layout.in_index.layout;
-
-  r = store->getRados()->get_bucket_stats_async(bucket_info, RGW_NO_SHARD, index, this);
+  r = store->getRados()->get_bucket_stats_async(bucket_info, index, RGW_NO_SHARD, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
@@ -386,14 +381,10 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
   string master_ver;
 
   const auto& latest_log = bucket_info.layout.logs.back();
-  ceph_assert(latest_log.layout.type == BucketLogType::InIndex); // only type supported
-
-  // convert InIndex log layout to its index layout
-  bucket_index_layout_generation index;
-  log_to_index_layout(latest_log, index);
+  const auto& index = log_to_index_layout(latest_log);
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  r = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD, index, &bucket_ver,
+  r = store->getRados()->get_bucket_stats(bucket_info, index, RGW_NO_SHARD, &bucket_ver,
                                   &master_ver, bucket_stats, nullptr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket stats for bucket="

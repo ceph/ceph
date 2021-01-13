@@ -120,6 +120,20 @@ inline bucket_log_layout_generation log_layout_from_index(
   return {gen, {BucketLogType::InIndex, {gen, index}}};
 }
 
+inline auto matches_gen(uint64_t gen)
+{
+  return [gen] (const bucket_log_layout_generation& l) { return l.gen == gen; };
+}
+
+inline bucket_index_layout_generation log_to_index_layout(const bucket_log_layout_generation& log_layout)
+{
+  ceph_assert(log_layout.layout.type == BucketLogType::InIndex);
+  bucket_index_layout_generation index;
+  index.gen = log_layout.layout.in_index.gen;
+  index.layout.normal = log_layout.layout.in_index.layout;
+  return index;
+}
+
 enum class BucketReshardState : uint8_t {
   None,
   InProgress,

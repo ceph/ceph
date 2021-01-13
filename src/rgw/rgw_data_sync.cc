@@ -3545,6 +3545,7 @@ class RGWListBucketIndexLogCR: public RGWCoroutine {
   bilog_list_result *result;
   std::optional<PerfGuard> timer;
   uint64_t generation;
+  std::string gen_str = std::to_string(generation);
   uint32_t format_ver{1};
 
 public:
@@ -3563,11 +3564,11 @@ public:
 					{ "format" , "json" },
 					{ "marker" , marker.c_str() },
 					{ "type", "bucket-index" },
-          { "generation", generation},
+          { "generation", gen_str.c_str() },
           { "format-ver", "2"},
 	                                { NULL, NULL } };
 
-        call(new RGWReadRESTResourceC<bilog_list_result>(sync_env->cct, sc->conn, sync_env->http_manager, 
+        call(new RGWReadRESTResourceCR<bilog_list_result>(sync_env->cct, sc->conn, sync_env->http_manager,
                                                       "/admin/log", pairs, result));
       }
       timer.reset();
@@ -4169,7 +4170,7 @@ public:
     set_status("init");
     rules = sync_pipe.get_rules();
     target_location_key = sync_pipe.info.dest_bs.bucket.get_key();
-    generation = 0; // remove once datalog shard is done
+    generation = 0; // TODO: remove once datalog shard is done
   }
 
   bool check_key_handled(const rgw_obj_key& key) {
@@ -4205,8 +4206,8 @@ int RGWBucketShardIncrementalSyncCR::operate()
         return set_cr_error(retcode);
       }
       list_result = std::move(extended_result.entries);
-      next_gen = extended_result.next_log.gen;
-      next_num_shards = extended_result.next_log.num_shards;
+      next_gen = extended_result.next_log->generation;
+      next_num_shards = extended_result.next_log->num_shards;
       truncated = extended_result.truncated;
 
       squash_map.clear();

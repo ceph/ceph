@@ -1771,7 +1771,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
   int shard_id = target->get_shard_id();
-  auto current_index = target->get_bucket_info().layout.current_index;
+  const auto& current_index = target->get_bucket_info().layout.current_index;
 
   int count = 0;
   bool truncated = true;
@@ -1832,8 +1832,8 @@ int RGWRados::Bucket::List::list_objects_ordered(
     ent_map_t ent_map;
     ent_map.reserve(read_ahead);
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
-					   shard_id,
              current_index,
+             shard_id,
 					   cur_marker,
 					   cur_prefix,
 					   params.delim,
@@ -2053,7 +2053,7 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
   int shard_id = target->get_shard_id();
-  auto current_index = target->get_bucket_info().layout.current_index;
+  const auto& current_index = target->get_bucket_info().layout.current_index;
 
   int count = 0;
   bool truncated = true;
@@ -2093,8 +2093,8 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
     ent_list.reserve(read_ahead);
 
     int r = store->cls_bucket_list_unordered(target->get_bucket_info(),
-					     shard_id,
                current_index,
+               shard_id,
 					     cur_marker,
 					     cur_prefix,
 					     read_ahead,
@@ -4589,8 +4589,8 @@ int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info, optional_yield y)
     ent_list.reserve(NUM_ENTRIES);
 
     int r = cls_bucket_list_unordered(bucket_info,
-				      RGW_NO_SHARD,
               bucket_info.layout.current_index,
+              RGW_NO_SHARD,
 				      marker,
 				      prefix,
 				      NUM_ENTRIES,
@@ -7561,12 +7561,12 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, bucket_index_layout_generation idx_layout, string *bucket_ver, string *master_ver,
+int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, string *bucket_ver, string *master_ver,
     map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = cls_bucket_head(bucket_info, -1, idx_layout, headers, &bucket_instance_ids);
+  int r = cls_bucket_head(bucket_info, idx_layout, -1, headers, &bucket_instance_ids);
   if (r < 0) {
     return r;
   }
@@ -7640,12 +7640,12 @@ public:
   }
 };
 
-int RGWRados::get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, bucket_index_layout_generation idx_layout, RGWGetBucketStats_CB *ctx)
+int RGWRados::get_bucket_stats_async(RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *ctx)
 {
   int num_aio = 0;
   RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx, bucket_info.layout.current_index.layout.normal.num_shards ? : 1);
   ceph_assert(get_ctx);
-  int r = cls_bucket_head_async(bucket_info, shard_id, idx_layout, get_ctx, &num_aio);
+  int r = cls_bucket_head_async(bucket_info, idx_layout, shard_id, get_ctx, &num_aio);
   if (r < 0) {
     ctx->put();
     if (num_aio) {
@@ -7782,7 +7782,7 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
       return ret;
     }
 
-    int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, bucket_info.layout.current_index, headers);
+    int r = cls_bucket_head(bucket_info, bucket_info.layout.current_index, RGW_NO_SHARD, headers);
     if (r < 0)
       return r;
 
@@ -8296,8 +8296,8 @@ uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 
 
 int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
-				      const int shard_id,
-              const bucket_index_layout_generation idx_layout,
+              const rgw::bucket_index_layout_generation& idx_layout,
+              const int shard_id,
 				      const rgw_obj_index_key& start_after,
 				      const string& prefix,
 				      const string& delimiter,
@@ -8564,8 +8564,8 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
 
 int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
-					int shard_id,
-          bucket_index_layout_generation idx_layout,
+          const rgw::bucket_index_layout_generation& idx_layout,
+          int shard_id,
 					const rgw_obj_index_key& start_after,
 					const string& prefix,
 					uint32_t num_entries,
@@ -8948,7 +8948,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   return 0;
 }
 
-int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, bucket_index_layout_generation idx_layout, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
+int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> oids;
@@ -8974,7 +8974,7 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, bu
   return 0;
 }
 
-int RGWRados::cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_id, bucket_index_layout_generation idx_layout, RGWGetDirHeader_CB *ctx, int *num_aio)
+int RGWRados::cls_bucket_head_async(const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;

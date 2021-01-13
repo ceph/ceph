@@ -364,11 +364,13 @@ void RGWOp_BILog_List::execute(optional_yield y) {
          bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
          max_entries_str = s->info.args.get("max-entries"),
-         bucket_instance = s->info.args.get("bucket-instance");
-         gen = s->info.args.get("generation");
-         format_version = s->info.args.get("format-ver");
+         bucket_instance = s->info.args.get("bucket-instance"),
+         gen_str = s->info.args.get("generation"),
+         format_version_str = s->info.args.get("format-ver");
   RGWBucketInfo bucket_info;
   unsigned max_entries;
+  uint64_t gen;
+  int format_version;
 
   if (bucket_name.empty() && bucket_instance.empty()) {
     dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
@@ -376,14 +378,22 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     return;
   }
 
-  if (!format_version.empty()) {
-    string err;
-    format_ver = strict_strtoll(format_version.c_str(), 10, &err);
+  string err;
+  gen = (unsigned)strict_strtol(gen_str.c_str(), 10, &err);
+  if (!err.empty()) {
+    ldpp_dout(s, 5) << "Error parsing generation param " << gen_str << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  if (!format_version_str.empty()) {
+    format_ver = strict_strtoll(format_version_str.c_str(), 10, &err);
     if (!err.empty()) {
       ldpp_dout(s, 5) << "Failed to parse format-ver param: " << format_version << dendl;
       op_ret = -EINVAL;
       return;
     }
+  }
 
   int shard_id;
   string bn;
@@ -411,27 +421,26 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   auto latest_gen = bucket_info.layout.logs.back().gen;
   auto num_shards = bucket_info.layout.logs.back().layout.in_index.layout.num_shards;
   unsigned count = 0;
-  string err;
 
   max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
     max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
-  bucket_log_layout_generation log_layout;
-  auto log_iter = std::find_if(bucket_info.layout.logs.begin(),
-                              bucket_info.layout.logs.end(),
-                              [&gen](const bucket_log_layout_generation& val)
-                              { return val.gen == gen; });
-  if (log_iter != bucket_info.layout.logs.end()) {
-    log_layout = log_iter->layout;
-  } else {
-    return ENOENT;
+  const auto& logs = bucket_info.layout.logs;
+  auto log_layout = std::reference_wrapper{logs.back()};
+  if (gen) {
+    auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
+    if (i == logs.end()) {
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
+      op_ret = -ENOENT;
+    }
+    log_layout = *i;
   }
 
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, log_layout,
+    int ret = store->svc()->bilog_rados->log_list(bucket_info, log_layout, shard_id,
                                                marker, max_entries - count,
                                                entries, &truncated);
     if (ret < 0) {
@@ -534,14 +543,9 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   map<RGWObjCategory, RGWStorageStats> stats;
 
   const auto& latest_log = bucket_info.layout.logs.back();
-  ceph_assert(latest_log.layout.type == BucketLogType::InIndex); // only type supported
+  const auto& index = log_to_index_layout(latest_log);
 
-  // convert InIndex log layout to its index layout
-  bucket_index_layout_generation index;
-  index.gen = latest_log.layout.in_index.gen;
-  index.layout.normal = latest_log.layout.in_index.layout;
-
-  int ret =  store->getRados()->get_bucket_stats(bucket_info, -1, index, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret =  store->getRados()->get_bucket_stats(bucket_info, index, -1, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
     op_ret = ret;
     return;
@@ -608,18 +612,19 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     }
   }
 
-  bucket_log_layout_generation log_layout;
-  auto log_iter = std::find_if(bucket_info.layout.logs.begin(),
-                              bucket_info.layout.logs.end(),
-                              [&gen](const bucket_log_layout_generation& val)
-                              { return val.gen == gen; });
-  if (log_iter != bucket_info.layout.logs.end()) {
-    log_layout = log_iter->layout;
-  } else {
-    return ENOENT;
+  const auto& logs = bucket_info.layout.logs;
+  auto log_layout = std::reference_wrapper{logs.back()};
+  auto gen = logs.back().gen; // TODO: remove this once gen is passed here
+  if (gen) {
+    auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
+    if (i == logs.end()) {
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
+      op_ret = -ENOENT;
+    }
+    log_layout = *i;
   }
 
-  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, log_layout, start_marker, end_marker);
+  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, log_layout, shard_id, start_marker, end_marker);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }

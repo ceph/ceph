@@ -1514,7 +1514,6 @@ struct req_state : DoutPrefixProvider {
   string zonegroup_name;
   string zonegroup_endpoint;
   string bucket_instance_id;
-  uint64_t bucket_instance_gen_id;
   int bucket_instance_shard_id{-1};
   string redirect_zone_endpoint;
 

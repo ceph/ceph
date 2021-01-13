@@ -56,7 +56,8 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               string *bucket_obj, int *shard_id);
 
   int cls_bucket_head(const RGWBucketInfo& bucket_info,
-                      int shard_id, rgw::bucket_index_layout_generation idx_layout,
+                      const rgw::bucket_index_layout_generation& idx_layout,
+                      int shard_id,
                       vector<rgw_bucket_dir_header> *headers,
                       map<int, string> *bucket_instance_ids,
                       optional_yield y);
