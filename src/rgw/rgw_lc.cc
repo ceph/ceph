@@ -242,7 +242,7 @@ void *RGWLC::LCWorker::entry() {
 void RGWLC::initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store) {
   cct = _cct;
   store = _store;
-  sal_lc = std::move(store->get_lifecycle());
+  sal_lc = store->get_lifecycle();
   max_objs = cct->_conf->rgw_lc_max_objs;
   if (max_objs > HASH_PRIME)
     max_objs = HASH_PRIME;
@@ -2096,7 +2096,7 @@ int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store,
 
     ret = guard_lc_modify(
       store, sal_lc, bucket_info.bucket, cookie,
-      [&sal_lc, &lc_oid](rgw::sal::Lifecycle* slc,
+      [&lc_oid](rgw::sal::Lifecycle* slc,
 			      const string& oid,
 			      const rgw::sal::Lifecycle::LCEntry& entry) {
 	return slc->set_entry(lc_oid, entry);

@@ -153,7 +153,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
       store(store), bucket(bucket),
       owner(owner),
       obj_ctx(obj_ctx), head_obj(std::move(_head_obj)),
-      writer(aio, store, bucket, obj_ctx, std::move(head_obj->clone()), dpp, y),
+      writer(aio, store, bucket, obj_ctx, head_obj->clone(), dpp, y),
       chunk(&writer, 0), stripe(&chunk, this, 0), dpp(dpp) {
         if (ptail_placement_rule) {
           tail_placement_rule = *ptail_placement_rule;
@@ -238,7 +238,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                            const DoutPrefixProvider *dpp, optional_yield y)
     : ManifestObjectProcessor(aio, store, bucket, ptail_placement_rule,
                               owner, obj_ctx, std::move(_head_obj), dpp, y),
-      target_obj(std::move(head_obj->clone())), upload_id(upload_id),
+      target_obj(head_obj->clone()), upload_id(upload_id),
       part_num(part_num), part_num_str(part_num_str),
       mp(head_obj->get_name(), upload_id)
   {}

@@ -3798,7 +3798,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this->store, dest_bucket, nullptr, user_id,
-                                  obj_ctx, std::move(dest_obj->clone()), olh_epoch,
+                                  obj_ctx, dest_obj->clone(), olh_epoch,
 				  tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
@@ -4459,7 +4459,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   // it causes crashes in the ragweed tests
   AtomicObjectProcessor processor(&aio, this->store, bucket, &dest_placement,
                                   bucket->get_info().owner, obj_ctx,
-                                  std::move(dest_obj->clone()), olh_epoch, tag,
+                                  dest_obj->clone(), olh_epoch, tag,
 				  dpp, null_yield);
   int ret = processor.prepare(y);
   if (ret < 0)
