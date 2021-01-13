@@ -241,15 +241,17 @@ public:
       l2_cache_entries(QCOW_L2_CACHE_SIZE) {
   }
 
-  void get_cluster_offset(uint64_t image_offset, uint64_t* cluster_offset,
+  void get_cluster_offset(uint32_t l1_size, const uint64_t* l1_table,
+                          uint64_t image_offset, uint64_t* cluster_offset,
                           Context* on_finish) {
     auto cct = qcow_format->m_image_ctx->cct;
     ldout(cct, 20) << "image_offset=" << image_offset << dendl;
 
     // cache state machine runs in a single strand thread
+    Request request{l1_size, l1_table, image_offset, cluster_offset, on_finish};
     boost::asio::dispatch(
-      m_strand, [this, image_offset, cluster_offset, on_finish]() {
-        requests.emplace_back(image_offset, cluster_offset, on_finish);
+      m_strand, [this, request=std::move(request)]() {
+        requests.push_back(std::move(request));
       });
     dispatch_get_cluster_offset();
   }
@@ -262,13 +264,17 @@ private:
   boost::asio::io_context::strand m_strand;
 
   struct Request {
+    uint32_t l1_size;
+    const uint64_t* l1_table;
+
     uint64_t image_offset;
     uint64_t* cluster_offset;
     Context* on_finish;
 
-    Request(uint64_t image_offset, uint64_t* cluster_offset, Context* on_finish)
-      : image_offset(image_offset), cluster_offset(cluster_offset),
-        on_finish(on_finish) {
+    Request(uint32_t l1_size, const uint64_t* l1_table, uint64_t image_offset,
+            uint64_t* cluster_offset, Context* on_finish)
+      : l1_size(l1_size), l1_table(l1_table), image_offset(image_offset),
+        cluster_offset(cluster_offset), on_finish(on_finish) {
     }
   };
   typedef std::deque<Request> Requests;
@@ -300,7 +306,8 @@ private:
     auto request = requests.front();
     auto l1_index = request.image_offset >>
                     (l2_bits + qcow_format->m_cluster_bits);
-    auto l2_offset = qcow_format->m_l1_table[l1_index] &
+    auto l2_offset = request.l1_table[
+                       std::min<uint32_t>(l1_index, request.l1_size - 1)] &
                      qcow_format->m_cluster_mask;
     auto l2_index = (request.image_offset >> qcow_format->m_cluster_bits) &
                     (l2_size - 1);
@@ -310,7 +317,10 @@ private:
                    << "l2_index=" << l2_index << dendl;
 
     int r = 0;
-    if (l2_offset == 0) {
+    if (l1_index >= request.l1_size) {
+      lderr(cct) << "L1 index " << l1_index << " out-of-bounds" << dendl;
+      r = -ERANGE;
+    } else if (l2_offset == 0) {
       // L2 table has not been allocated for specified offset
       ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
                      << "cluster_offset=DNE" << dendl;
@@ -459,9 +469,10 @@ template <typename I>
 class QCOWFormat<I>::ReadRequest {
 public:
   ReadRequest(QCOWFormat* qcow_format, io::AioCompletion* aio_comp,
+              uint32_t l1_size, const uint64_t* l1_table,
               io::Extents&& image_extents)
-    : qcow_format(qcow_format), aio_comp(aio_comp),
-      image_extents(std::move(image_extents)) {
+    : qcow_format(qcow_format), aio_comp(aio_comp), l1_size(l1_size),
+      l1_table(l1_table), image_extents(std::move(image_extents)) {
   }
 
   void send() {
@@ -472,7 +483,10 @@ private:
   QCOWFormat* qcow_format;
   io::AioCompletion* aio_comp;
 
+  uint32_t l1_size;
+  const uint64_t* l1_table;
   io::Extents image_extents;
+
   size_t image_extents_idx = 0;
   uint32_t image_extent_offset = 0;
 
@@ -493,7 +507,8 @@ private:
         [this, &cluster_extent, on_finish=gather_ctx->new_sub()](int r) {
           handle_get_cluster_offset(r, cluster_extent, on_finish); });
       qcow_format->m_l2_table_cache->get_cluster_offset(
-        cluster_extent.image_offset, &cluster_extent.cluster_offset, sub_ctx);
+        l1_size, l1_table, cluster_extent.image_offset,
+        &cluster_extent.cluster_offset, sub_ctx);
     }
 
     gather_ctx->activate();
@@ -592,9 +607,11 @@ private:
 template <typename I>
 class QCOWFormat<I>::ListSnapsRequest {
 public:
-  ListSnapsRequest(QCOWFormat* qcow_format, io::Extents&& image_extents,
+  ListSnapsRequest(QCOWFormat* qcow_format, uint32_t l1_size,
+                   const uint64_t* l1_table, io::Extents&& image_extents,
                    io::SparseExtents* sparse_extents, Context* on_finish)
-    : qcow_format(qcow_format), image_extents(std::move(image_extents)),
+    : qcow_format(qcow_format), l1_size(l1_size),
+      l1_table(l1_table), image_extents(std::move(image_extents)),
       sparse_extents(sparse_extents), on_finish(on_finish) {
   }
 
@@ -604,6 +621,8 @@ public:
 
 private:
   QCOWFormat* qcow_format;
+  uint32_t l1_size;
+  const uint64_t* l1_table;
   io::Extents image_extents;
   io::SparseExtents* sparse_extents;
   Context* on_finish;
@@ -630,7 +649,8 @@ private:
             });
         });
       qcow_format->m_l2_table_cache->get_cluster_offset(
-        cluster_extent.image_offset, &cluster_extent.cluster_offset, ctx);
+        l1_size, l1_table, cluster_extent.image_offset,
+        &cluster_extent.cluster_offset, ctx);
     }
 
     gather_ctx->activate();
@@ -1256,17 +1276,28 @@ bool QCOWFormat<I>::read(
   ldout(cct, 20) << "snap_id=" << snap_id << ", "
                  << "image_extents=" << image_extents << dendl;
 
-  if (snap_id != CEPH_NOSNAP) {
-    // TODO add QCOW2 snapshot support
-    lderr(cct) << "snapshots are not supported" << dendl;
-    aio_comp->fail(-EINVAL);
-    return true;
+  uint32_t l1_size;
+  uint64_t* l1_table;
+  if (snap_id == CEPH_NOSNAP) {
+    l1_size = m_l1_size;
+    l1_table = m_l1_table;
+  } else {
+    auto snapshot_it = m_snapshots.find(snap_id);
+    if (snapshot_it == m_snapshots.end()) {
+      aio_comp->fail(-ENOENT);
+      return true;
+    }
+
+    auto& snapshot = snapshot_it->second;
+    l1_size = snapshot.l1_size;
+    l1_table = snapshot.l1_table;
   }
 
   aio_comp->read_result = std::move(read_result);
   aio_comp->read_result.set_image_extents(image_extents);
 
-  auto read_request = new ReadRequest(this, aio_comp, std::move(image_extents));
+  auto read_request = new ReadRequest(this, aio_comp, l1_size, l1_table,
+                                      std::move(image_extents));
   read_request->send();
 
   return true;
@@ -1286,7 +1317,8 @@ void QCOWFormat<I>::list_snaps(io::Extents&& image_extents,
   // QCOW does support snapshots so just use cluster existence for delta
   auto snapshot = &(*snapshot_delta)[{CEPH_NOSNAP, CEPH_NOSNAP}];
   auto list_snaps_request = new ListSnapsRequest(
-    this, io::Extents{image_extents}, snapshot, on_finish);
+    this, m_l1_size, m_l1_table, io::Extents{image_extents}, snapshot,
+    on_finish);
   list_snaps_request->send();
 }
 
