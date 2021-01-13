@@ -122,7 +122,7 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
   ACLGrant grant;
 
   if (user_ctl->get_info_by_uid(dpp, user, &grant_user, null_yield) < 0) {
-    ldout(cct, 10) << "grant user does not exist: " << uid << dendl;
+    ldpp_dout(dpp, 10) << "grant user does not exist: " << uid << dendl;
     /* skipping silently */
     grant.set_canon(user, std::string(), perm);
   } else {
@@ -139,7 +139,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
 {
   for (const auto& uid : uids) {
     boost::optional<ACLGrant> grant;
-    ldout(cct, 20) << "trying to add grant for ACL uid=" << uid << dendl;
+    ldpp_dout(dpp, 20) << "trying to add grant for ACL uid=" << uid << dendl;
 
     /* Let's check whether the item has a separator potentially indicating
      * a special meaning (like an HTTP referral-based grant). */
@@ -192,14 +192,14 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
     std::vector<std::string> uids;
     int r = parse_list(read_list, uids);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: parse_list for read returned r="
+      ldpp_dout(dpp, 0) << "ERROR: parse_list for read returned r="
                     << r << dendl;
       return r;
     }
 
     r = add_grants(dpp, user_ctl, uids, SWIFT_PERM_READ);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: add_grants for read returned r="
+      ldpp_dout(dpp, 0) << "ERROR: add_grants for read returned r="
                     << r << dendl;
       return r;
     }
@@ -209,14 +209,14 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
     std::vector<std::string> uids;
     int r = parse_list(write_list, uids);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: parse_list for write returned r="
+      ldpp_dout(dpp, 0) << "ERROR: parse_list for write returned r="
                     << r << dendl;
       return r;
     }
 
     r = add_grants(dpp, user_ctl, uids, SWIFT_PERM_WRITE);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: add_grants for write returned r="
+      ldpp_dout(dpp, 0) << "ERROR: add_grants for write returned r="
                     << r << dendl;
       return r;
     }
@@ -316,7 +316,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
       rgw_user user(uid);
 
       if (user_ctl->get_info_by_uid(dpp, user, &grant_user, null_yield) < 0) {
-        ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
+        ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
         /* skipping silently */
         grant.set_canon(user, std::string(), perm);
         acl.add_grant(&grant);
@@ -341,7 +341,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
   JSONParser parser;
 
   if (!parser.parse(acl_str.c_str(), acl_str.length())) {
-    ldout(cct, 0) << "ERROR: JSONParser::parse returned error=" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: JSONParser::parse returned error=" << dendl;
     return false;
   }
 
@@ -349,7 +349,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
   if (!iter.end() && (*iter)->is_array()) {
     std::vector<std::string> admin;
     decode_json_obj(admin, *iter);
-    ldout(cct, 0) << "admins: " << admin << dendl;
+    ldpp_dout(dpp, 0) << "admins: " << admin << dendl;
 
     add_grants(dpp, user_ctl, admin, SWIFT_PERM_ADMIN);
   }
@@ -358,7 +358,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
   if (!iter.end() && (*iter)->is_array()) {
     std::vector<std::string> readwrite;
     decode_json_obj(readwrite, *iter);
-    ldout(cct, 0) << "read-write: " << readwrite << dendl;
+    ldpp_dout(dpp, 0) << "read-write: " << readwrite << dendl;
 
     add_grants(dpp, user_ctl, readwrite, SWIFT_PERM_RWRT);
   }
@@ -367,7 +367,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
   if (!iter.end() && (*iter)->is_array()) {
     std::vector<std::string> readonly;
     decode_json_obj(readonly, *iter);
-    ldout(cct, 0) << "read-only: " << readonly << dendl;
+    ldpp_dout(dpp, 0) << "read-only: " << readonly << dendl;
 
     add_grants(dpp, user_ctl, readonly, SWIFT_PERM_READ);
   }
