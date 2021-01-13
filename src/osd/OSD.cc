@@ -7181,8 +7181,7 @@ void OSD::ms_fast_dispatch(Message *m)
     op->set_osd_parent_span(op_req_span);
   }
 #endif
-  if (m->trace)
-    op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
+  op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
 
   // note sender epoch, min req's epoch
   op->sent_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_map_epoch();
@@ -7316,8 +7315,7 @@ void OSD::_dispatch(Message *m)
   case MSG_OSD_PG_CREATE:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
-      if (m->trace)
-        op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
+      op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
       // no map?  starting up?
       if (!get_osdmap()) {
         dout(7) << "no OSDMap, not booted" << dendl;
