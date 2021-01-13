@@ -9,8 +9,6 @@
 #include "mds/FSMap.h"
 #include "Types.h"
 
-class CephContext;
-
 namespace cephfs {
 namespace mirror {
 
