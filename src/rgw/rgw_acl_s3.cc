@@ -489,7 +489,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
 
   RGWUserInfo owner_info;
   if (user_ctl->get_info_by_uid(dpp, owner->get_id(), &owner_info, null_yield) < 0) {
-    ldout(cct, 10) << "owner info does not exist" << dendl;
+    ldpp_dout(dpp, 10) << "owner info does not exist" << dendl;
     err_msg = "Invalid id";
     return -EINVAL;
   }
@@ -497,8 +497,8 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
   dest_owner.set_id(owner->get_id());
   dest_owner.set_name(owner_info.display_name);
 
-  ldout(cct, 20) << "owner id=" << owner->get_id() << dendl;
-  ldout(cct, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
+  ldpp_dout(dpp, 20) << "owner id=" << owner->get_id() << dendl;
+  ldpp_dout(dpp, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
 
   RGWAccessControlList& dst_acl = dest.get_acl();
 
@@ -517,13 +517,13 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
         string email;
         rgw_user u;
         if (!src_grant.get_id(u)) {
-          ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
           return -EINVAL;
         }
         email = u.id;
-        ldout(cct, 10) << "grant user email=" << email << dendl;
+        ldpp_dout(dpp, 10) << "grant user email=" << email << dendl;
         if (user_ctl->get_info_by_email(dpp, email, &grant_user, null_yield) < 0) {
-          ldout(cct, 10) << "grant user email not found or other error" << dendl;
+          ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
           err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
         }
@@ -533,14 +533,14 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
       {
         if (type.get_type() == ACL_TYPE_CANON_USER) {
           if (!src_grant.get_id(uid)) {
-            ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+            ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
             err_msg = "Invalid id";
             return -EINVAL;
           }
         }
     
         if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(dpp, uid, &grant_user, null_yield) < 0) {
-          ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
+          ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
           err_msg = "Invalid id";
           return -EINVAL;
         } else {
@@ -549,7 +549,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
           grant_ok = true;
           rgw_user new_id;
           new_grant.get_id(new_id);
-          ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+          ldpp_dout(dpp, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
         }
       }
       break;
@@ -559,9 +559,9 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
         if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
           new_grant = src_grant;
           grant_ok = true;
-          ldout(cct, 10) << "new grant: " << uri << dendl;
+          ldpp_dout(dpp, 10) << "new grant: " << uri << dendl;
         } else {
-          ldout(cct, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
+          ldpp_dout(dpp, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
           err_msg = "Invalid group uri";
           return -EINVAL;
         }
