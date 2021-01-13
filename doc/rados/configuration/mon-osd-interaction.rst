@@ -351,13 +351,6 @@ Monitor Settings
 OSD Settings
 ------------
 
-``osd_heartbeat_address``
-
-:Description: An Ceph OSD Daemon's network address for heartbeats.
-:Type: Address
-:Default: The host address.
-
-
 ``osd_heartbeat_interval``
 
 :Description: How often an Ceph OSD Daemon pings its peers (in seconds).
@@ -401,12 +394,3 @@ OSD Settings
 
 :Type: 32-bit Integer
 :Default: ``5``
-
-
-``osd_mon_ack_timeout``
-
-:Description: The number of seconds to wait for a Ceph Monitor to acknowledge a
-              request for statistics.
-
-:Type: 32-bit Integer
-:Default: ``30``
