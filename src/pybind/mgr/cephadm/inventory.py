@@ -163,16 +163,8 @@ class SpecStore():
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
         return found
 
-    def find(self, service_name: Optional[str] = None) -> List[ServiceSpec]:
-        specs = []
-        for sn, spec in self.specs.items():
-            if not service_name or \
-                    sn == service_name or \
-                    sn.startswith(service_name + '.'):
-                specs.append(spec)
-        self.mgr.log.debug('SpecStore: find spec for %s returned: %s' % (
-            service_name, specs))
-        return specs
+    def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
+        return self.spec_created.get(spec.service_name())
 
 
 class HostCache():
@@ -196,14 +188,14 @@ class HostCache():
 
     4. `last_etc_ceph_ceph_conf` O(hosts)
 
-    Stores the last refresh time for the /etc/ceph/ceph.conf. Used 
+    Stores the last refresh time for the /etc/ceph/ceph.conf. Used
     to avoid deploying new configs when failing over to a new mgr.
 
     5. `scheduled_daemon_actions`: O(daemons)
 
     Used to run daemon actions after deploying a daemon. We need to
     store it persistently, in order to stay consistent across
-    MGR failovers.   
+    MGR failovers.
     """
 
     def __init__(self, mgr):
