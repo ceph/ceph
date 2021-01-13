@@ -79,14 +79,15 @@ class HA_RGWService(CephService):
 
         service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         # if no service spec, return empty config
-        if not daemon_spec.spec and service_name not in self.mgr.spec_store.specs:
+        # TODO: fail, if we don't have any spec
+        if not daemon_spec.spec and service_name not in self.mgr.spec_store.all_specs:
             config_files = {'files': {}}  # type: Dict[str, Any]
             return config_files, []
         elif daemon_spec.spec:
             spec = daemon_spec.spec
         else:
             # service spec is not attached to daemon spec but is in spec store
-            spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
+            spec = cast(HA_RGWSpec, self.mgr.spec_store.all_specs[service_name])
 
         rgw_daemons = self.mgr.cache.get_daemons_by_type('rgw')
         rgw_servers = []
@@ -126,14 +127,15 @@ class HA_RGWService(CephService):
 
         service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         # if no service spec, return empty config
-        if not daemon_spec.spec and service_name not in self.mgr.spec_store.specs:
+        # TODO: In case of no spec, fail here
+        if not daemon_spec.spec and service_name not in self.mgr.spec_store.all_specs:
             config_file = {'files': {}}  # type: Dict[str, Any]
             return config_file, []
         elif daemon_spec.spec:
             spec = daemon_spec.spec
         else:
             # service spec is not attached to daemon spec but is in spec store
-            spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
+            spec = cast(HA_RGWSpec, self.mgr.spec_store.all_specs[service_name])
 
         all_hosts = []
         for h, network, name in spec.definitive_host_list:

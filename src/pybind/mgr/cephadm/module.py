@@ -1325,7 +1325,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         Placing a host into maintenance disables the cluster's ceph target in systemd
         and stops all ceph daemons. If the host is an osd host we apply the noout flag
-        for the host subtree in crush to prevent data movement during a host maintenance 
+        for the host subtree in crush to prevent data movement during a host maintenance
         window.
 
         :param hostname: (str) name of the host (must match an inventory hostname)
@@ -1394,7 +1394,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Exit maintenance mode and return a host to an operational state
 
         Returning from maintnenance will enable the clusters systemd target and
-        start it, and remove any noout that has been added for the host if the 
+        start it, and remove any noout that has been added for the host if the
         host has osd daemons
 
         :param hostname: (str) host name
@@ -1485,8 +1485,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     if not dd.osdspec_affinity:
                         # If there is no osdspec_affinity, the spec should suffice for displaying
                         continue
-                if n in self.spec_store.specs:
-                    spec = self.spec_store.specs[n]
+                if n in self.spec_store.all_specs:
+                    spec = self.spec_store.all_specs[n]
                 else:
                     spec = ServiceSpec(
                         unmanaged=True,
@@ -1504,7 +1504,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         spec=spec,
                         events=self.events.get_for_service(spec.service_name()),
                     )
-                if n in self.spec_store.specs:
+                if n in self.spec_store.all_specs:
                     if dd.daemon_type == 'osd':
                         """
                         The osd count can't be determined by the Placement spec.
@@ -1533,8 +1533,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     sm[n].container_image_name = 'mix'
                 if dd.daemon_type == 'haproxy' or dd.daemon_type == 'keepalived':
                     # ha-rgw has 2 daemons running per host
-                    sm[n].size = sm[n].size*2
-        for n, spec in self.spec_store.specs.items():
+                    sm[n].size = sm[n].size * 2
+        for n, spec in self.spec_store.all_specs.items():
             if n in sm:
                 continue
             if service_type is not None and service_type != spec.service_type:

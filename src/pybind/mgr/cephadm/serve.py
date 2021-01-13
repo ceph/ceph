@@ -421,7 +421,7 @@ class CephadmServe:
     def _apply_all_services(self) -> bool:
         r = False
         specs = []  # type: List[ServiceSpec]
-        for sn, spec in self.mgr.spec_store.specs.items():
+        for sn, spec in self.mgr.spec_store.active_specs.items():
             specs.append(spec)
         for spec in specs:
             try:
@@ -607,7 +607,7 @@ class CephadmServe:
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
             # orphan?
-            spec = self.mgr.spec_store.specs.get(dd.service_name(), None)
+            spec = self.mgr.spec_store.active_specs.get(dd.service_name(), None)
             assert dd.hostname is not None
             assert dd.daemon_type is not None
             assert dd.daemon_id is not None

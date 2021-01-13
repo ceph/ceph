@@ -639,6 +639,7 @@ class RgwService(CephService):
                 'val': key_data,
             })
 
+        # TODO: fail, if we don't have a spec
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
