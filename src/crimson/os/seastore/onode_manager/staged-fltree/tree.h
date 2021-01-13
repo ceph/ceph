@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -67,6 +67,7 @@ class Btree {
   btree_future<size_t> height(Transaction&);
   btree_future<tree_stats_t> get_stats_slow(Transaction&);
   std::ostream& dump(Transaction&, std::ostream&);
+  std::ostream& print(std::ostream& os) const;
 
   // test_only
   bool test_is_clean() const;
@@ -81,6 +82,9 @@ class Btree {
 
   friend class DummyChildPool;
 };
+inline std::ostream& operator<<(std::ostream& os, const Btree& tree) {
+  return tree.print(os);
+}
 
 class tree_cursor_t;
 class Btree::Cursor {

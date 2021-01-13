@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -46,6 +46,9 @@ inline std::ostream& operator<<(std::ostream &os, const node_type_t& type) {
 struct laddr_packed_t {
   laddr_t value;
 } __attribute__((packed));
+inline std::ostream& operator<<(std::ostream& os, const laddr_packed_t& laddr) {
+  return os << "laddr_packed(0x" << std::hex << laddr.value << std::dec << ")";
+}
 
 using match_stat_t = int8_t;
 constexpr match_stat_t MSTAT_END = -2; // index is search_position_t::end()

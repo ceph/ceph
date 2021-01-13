@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -79,21 +79,21 @@ class node_extent_t {
   // container type system
   using key_get_type = typename FieldType::key_get_type;
   static constexpr auto CONTAINER_TYPE = ContainerType::INDEXABLE;
-  size_t keys() const { return p_fields->num_keys; }
-  key_get_type operator[] (size_t index) const { return p_fields->get_key(index); }
-  node_offset_t size_before(size_t index) const {
+  index_t keys() const { return p_fields->num_keys; }
+  key_get_type operator[] (index_t index) const { return p_fields->get_key(index); }
+  node_offset_t size_before(index_t index) const {
     auto free_size = p_fields->template free_size_before<NODE_TYPE>(index);
     assert(total_size() >= free_size);
     return total_size() - free_size;
   }
-  node_offset_t size_to_nxt_at(size_t index) const;
-  node_offset_t size_overhead_at(size_t index) const {
+  node_offset_t size_to_nxt_at(index_t index) const;
+  node_offset_t size_overhead_at(index_t index) const {
     return FieldType::ITEM_OVERHEAD; }
-  memory_range_t get_nxt_container(size_t index) const;
+  memory_range_t get_nxt_container(index_t index) const;
 
   template <typename T = FieldType>
   std::enable_if_t<T::FIELD_TYPE == field_type_t::N3, const value_t*>
-  get_p_value(size_t index) const {
+  get_p_value(index_t index) const {
     assert(index < keys());
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       return &p_fields->child_addrs[index];
@@ -103,6 +103,17 @@ class node_extent_t {
       assert(range.p_start + ret->size == range.p_end);
       return ret;
     }
+  }
+
+  void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
+    assert(p_node_start == p_start());
+    // nothing to encode as the container range is the entire extent
+  }
+
+  static node_extent_t decode(const char* p_node_start,
+                              ceph::bufferlist::const_iterator& delta) {
+    // nothing to decode
+    return node_extent_t(reinterpret_cast<const FieldType*>(p_node_start));
   }
 
   static void validate(const FieldType& fields) {
@@ -141,7 +152,7 @@ class node_extent_t {
   static const value_t* insert_at(
       NodeExtentMutable& mut, const node_extent_t&,
       const full_key_t<KT>& key, const value_t& value,
-      size_t index, node_offset_t size, const char* p_left_bound) {
+      index_t index, node_offset_t size, const char* p_left_bound) {
     if constexpr (FIELD_TYPE == field_type_t::N3) {
       ceph_abort("not implemented");
     } else {
@@ -153,15 +164,15 @@ class node_extent_t {
   static memory_range_t insert_prefix_at(
       NodeExtentMutable&, const node_extent_t&,
       const full_key_t<KT>& key,
-      size_t index, node_offset_t size, const char* p_left_bound);
+      index_t index, node_offset_t size, const char* p_left_bound);
 
   static void update_size_at(
-      NodeExtentMutable&, const node_extent_t&, size_t index, int change);
+      NodeExtentMutable&, const node_extent_t&, index_t index, int change);
 
   static node_offset_t trim_until(
-      NodeExtentMutable&, const node_extent_t&, size_t index);
+      NodeExtentMutable&, const node_extent_t&, index_t index);
   static node_offset_t trim_at(NodeExtentMutable&, const node_extent_t&,
-                        size_t index, node_offset_t trimmed);
+                        index_t index, node_offset_t trimmed);
 
   template <KeyT KT>
   class Appender;
@@ -186,7 +197,7 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
     p_append_left = p_start + FieldType::HEADER_SIZE;
     p_append_right = p_start + FieldType::SIZE;
   }
-  void append(const node_extent_t& src, size_t from, size_t items);
+  void append(const node_extent_t& src, index_t from, index_t items);
   void append(const full_key_t<KT>&, const value_t&, const value_t*&);
   char* wrap();
   std::tuple<NodeExtentMutable*, char*> open_nxt(const key_get_type&);

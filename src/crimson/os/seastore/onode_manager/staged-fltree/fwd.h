@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -45,10 +45,12 @@ using InternalNodeImplURef = std::unique_ptr<InternalNodeImpl>;
 using NodeImplURef = std::unique_ptr<NodeImpl>;
 
 using level_t = uint8_t;
-constexpr auto INDEX_END = std::numeric_limits<size_t>::max();
-constexpr auto INDEX_LAST = INDEX_END - 0xf;
-constexpr auto INDEX_UPPER_BOUND = INDEX_END - 0xff;
-inline bool is_valid_index(size_t index) { return index < INDEX_UPPER_BOUND; }
+// a type only to index within a node, 32 bits should be enough
+using index_t = uint32_t;
+constexpr auto INDEX_END = std::numeric_limits<index_t>::max();
+constexpr auto INDEX_LAST = INDEX_END - 0x4;
+constexpr auto INDEX_UPPER_BOUND = INDEX_END - 0x8;
+inline bool is_valid_index(index_t index) { return index < INDEX_UPPER_BOUND; }
 
 // TODO: decide by NODE_BLOCK_SIZE
 using node_offset_t = uint16_t;

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -28,17 +28,20 @@ class NodeExtentMutable;
  * #   # next-stage | ns-oid  | back_  #   #
  * #   #  contaner  | strings | offset #   #
  * #...#   range    |         |        #...#
- * ^   ^                           |
- * |   |                           |
- * |   +---------------------------+
- * + p_items_start
+ * ^   ^                           |       ^
+ * |   |                           |       |
+ * |   +---------------------------+       |
+ * + p_items_start             p_items_end +
  */
 template <node_type_t NODE_TYPE>
 class item_iterator_t {
   using value_t = value_type_t<NODE_TYPE>;
  public:
   item_iterator_t(const memory_range_t& range)
-    : p_items_start(range.p_start) { next_item_range(range.p_end); }
+      : p_items_start(range.p_start), p_items_end(range.p_end) {
+    assert(p_items_start < p_items_end);
+    next_item_range(p_items_end);
+  }
 
   const char* p_start() const { return item_range.p_start; }
   const char* p_end() const { return item_range.p_end + sizeof(node_offset_t); }
@@ -48,7 +51,7 @@ class item_iterator_t {
   // container type system
   using key_get_type = const ns_oid_view_t&;
   static constexpr auto CONTAINER_TYPE = ContainerType::ITERATIVE;
-  size_t index() const { return _index; }
+  index_t index() const { return _index; }
   key_get_type get_key() const {
     if (!key.has_value()) {
       key = ns_oid_view_t(item_range.p_end);
@@ -82,6 +85,35 @@ class item_iterator_t {
     key.reset();
     ++_index;
     return *this;
+  }
+  void encode(const char* p_node_start, ceph::bufferlist& encoded) const {
+    int start_offset = p_items_start - p_node_start;
+    int end_offset = p_items_end - p_node_start;
+    assert(start_offset > 0 && start_offset < NODE_BLOCK_SIZE);
+    assert(end_offset > 0 && end_offset <= NODE_BLOCK_SIZE);
+    ceph::encode(static_cast<node_offset_t>(start_offset), encoded);
+    ceph::encode(static_cast<node_offset_t>(end_offset), encoded);
+    ceph::encode(_index, encoded);
+  }
+
+  static item_iterator_t decode(const char* p_node_start,
+                                ceph::bufferlist::const_iterator& delta) {
+    node_offset_t start_offset;
+    ceph::decode(start_offset, delta);
+    node_offset_t end_offset;
+    ceph::decode(end_offset, delta);
+    assert(start_offset < end_offset);
+    assert(end_offset <= NODE_BLOCK_SIZE);
+    index_t index;
+    ceph::decode(index, delta);
+
+    item_iterator_t ret({p_node_start + start_offset,
+                         p_node_start + end_offset});
+    while (index > 0) {
+      ++ret;
+      --index;
+    }
+    return ret;
   }
 
   static node_offset_t header_size() { return 0u; }
@@ -120,10 +152,11 @@ class item_iterator_t {
   }
 
   const char* p_items_start;
+  const char* p_items_end;
   mutable memory_range_t item_range;
   mutable node_offset_t back_offset;
   mutable std::optional<ns_oid_view_t> key;
-  mutable size_t _index = 0u;
+  mutable index_t _index = 0u;
 };
 
 template <node_type_t NODE_TYPE>
@@ -132,7 +165,7 @@ class item_iterator_t<NODE_TYPE>::Appender {
  public:
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {}
-  bool append(const item_iterator_t<NODE_TYPE>& src, size_t& items);
+  bool append(const item_iterator_t<NODE_TYPE>& src, index_t& items);
   char* wrap() { return p_append; }
   std::tuple<NodeExtentMutable*, char*> open_nxt(const key_get_type&);
   std::tuple<NodeExtentMutable*, char*> open_nxt(const full_key_t<KT>&);

@@ -1152,46 +1152,53 @@ TEST_F(c_dummy_test_t, 5_split_internal_node)
   });
 }
 
-struct d_seastore_tree_test_t :
+struct d_seastore_tm_test_t :
     public seastar_test_suite_t, TMTestState {
-  KVPool kvs;
-  std::unique_ptr<TreeBuilder<true>> tree;
-
-  d_seastore_tree_test_t()
-    : kvs{{8, 11, 64, 256, 301, 320},
-          {8, 16, 128, 512, 576, 640},
-          {0, 32}, {0, 10}, {0, 4}} {}
-
   seastar::future<> set_up_fut() override final {
-    return tm_setup().then([this] {
-      tree = std::make_unique<TreeBuilder<true>>(kvs,
-#if 0
-        NodeExtentManager::create_dummy(IS_DUMMY_SYNC)
-#else
-        NodeExtentManager::create_seastore(*tm)
-#endif
-      );
-      return tree->bootstrap();
-    }).handle_error(
-      crimson::ct_error::all_same_way([] {
-        ASSERT_FALSE("Unable to initiate tree");
-      })
-    );
+    return tm_setup();
   }
-
   seastar::future<> tear_down_fut() override final {
-    tree.reset();
     return tm_teardown();
   }
 };
 
-TEST_F(d_seastore_tree_test_t, 6_random_insert_leaf_node)
+TEST_F(d_seastore_tm_test_t, 6_random_insert_leaf_node)
 {
-  run([this] {
-    return tree->run().handle_error(
-      crimson::ct_error::all_same_way([] {
-        ASSERT_FALSE("Test failed");
-      })
-    );
+  run_async([this] {
+    constexpr bool TEST_SEASTORE = true;
+    constexpr bool TRACK_CURSORS = true;
+    KVPool kvs{{8, 11, 64, 256, 301, 320},
+               {8, 16, 128, 512, 576, 640},
+               {0, 32}, {0, 10}, {0, 4}};
+    auto tree = std::make_unique<TreeBuilder<TRACK_CURSORS>>(kvs,
+        (TEST_SEASTORE ? NodeExtentManager::create_seastore(*tm)
+                       : NodeExtentManager::create_dummy(IS_DUMMY_SYNC)));
+    {
+      auto t = tm->create_transaction();
+      tree->bootstrap(*t).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
+    }
+    {
+      auto t = tm->create_transaction();
+      tree->insert(*t).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
+    }
+    {
+      auto t = tm->create_transaction();
+      tree->get_stats(*t).unsafe_get();
+      tm->submit_transaction(std::move(t)).unsafe_get();
+    }
+    if constexpr (TEST_SEASTORE) {
+      logger().info("seastore replay begin");
+      restart();
+      tree->reload(NodeExtentManager::create_seastore(*tm));
+      logger().info("seastore replay end");
+    }
+    {
+      // Note: tm->create_weak_transaction() can also work, but too slow.
+      auto t = tm->create_transaction();
+      tree->validate(*t).unsafe_get();
+    }
+    tree.reset();
   });
 }

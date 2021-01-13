@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "item_iterator_stage.h"
@@ -86,7 +86,7 @@ ITER_TEMPLATE(node_type_t::INTERNAL);
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
-bool APPEND_T::append(const ITER_T& src, size_t& items) {
+bool APPEND_T::append(const ITER_T& src, index_t& items) {
   auto p_end = src.p_end();
   bool append_till_end = false;
   if (is_valid_index(items)) {

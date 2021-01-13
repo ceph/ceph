@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/program_options.hpp>
@@ -6,6 +6,7 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/thread.hh>
 
+#include "crimson/common/log.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree_utils.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "test/crimson/seastore/transaction_manager_test_state.h"
@@ -13,62 +14,58 @@
 using namespace crimson::os::seastore::onode;
 namespace bpo = boost::program_options;
 
+seastar::logger& logger() {
+  return crimson::get_logger(ceph_subsys_test);
+}
+
 template <bool TRACK>
 class PerfTree : public TMTestState {
  public:
   PerfTree(bool is_dummy) : is_dummy{is_dummy} {}
 
   seastar::future<> run(KVPool& kvs) {
-    return start(kvs).then([this] {
-      return tree->run().handle_error(
-        crimson::ct_error::all_same_way([] {
-          ceph_abort("runtime error");
-        })
-      );
+    return tm_setup().then([this, &kvs] {
+      return seastar::async([this, &kvs] {
+        auto tree = std::make_unique<TreeBuilder<TRACK>>(kvs,
+            (is_dummy ? NodeExtentManager::create_dummy(true)
+                      : NodeExtentManager::create_seastore(*tm)));
+        {
+          auto t = tm->create_transaction();
+          tree->bootstrap(*t).unsafe_get();
+          tm->submit_transaction(std::move(t)).unsafe_get();
+        }
+        {
+          auto t = tm->create_transaction();
+          tree->insert(*t).unsafe_get();
+          auto start_time = mono_clock::now();
+          tm->submit_transaction(std::move(t)).unsafe_get();
+          std::chrono::duration<double> duration = mono_clock::now() - start_time;
+          logger().warn("submit_transaction() done! {}s", duration.count());
+        }
+        {
+          auto t = tm->create_transaction();
+          tree->get_stats(*t).unsafe_get();
+          tm->submit_transaction(std::move(t)).unsafe_get();
+        }
+        {
+          // Note: tm->create_weak_transaction() can also work, but too slow.
+          auto t = tm->create_transaction();
+          tree->validate(*t).unsafe_get();
+        }
+        tree.reset();
+      });
     }).then([this] {
-      return stop();
+      return tm_teardown();
     });
   }
 
  private:
-  seastar::future<> start(KVPool& kvs) {
-    if (is_dummy) {
-      tree = std::make_unique<TreeBuilder<TRACK>>(
-          kvs,  NodeExtentManager::create_dummy(true));
-      return tree->bootstrap().handle_error(
-        crimson::ct_error::all_same_way([] {
-          ceph_abort("Unable to mkfs");
-        })
-      );
-    } else {
-      return tm_setup().then([this, &kvs] {
-        tree = std::make_unique<TreeBuilder<TRACK>>(
-            kvs,  NodeExtentManager::create_seastore(*tm));
-        return tree->bootstrap();
-      }).handle_error(
-        crimson::ct_error::all_same_way([] {
-          ceph_abort("Unable to mkfs");
-        })
-      );
-    }
-  }
-
-  seastar::future<> stop() {
-    tree.reset();
-    if (is_dummy) {
-      return seastar::now();
-    } else {
-      return tm_teardown();
-    }
-  }
-
   bool is_dummy;
-  std::unique_ptr<TreeBuilder<TRACK>> tree;
 };
 
 template <bool TRACK>
 seastar::future<> run(const bpo::variables_map& config) {
-  return seastar::async([&config]{
+  return seastar::async([&config] {
     auto backend = config["backend"].as<std::string>();
     bool is_dummy;
     if (backend == "dummy") {

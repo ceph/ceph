@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -73,10 +73,14 @@ class NodeExtentManager {
       Transaction&, laddr_t, extent_len_t) = 0;
   virtual tm_future<NodeExtentRef> alloc_extent(Transaction&, extent_len_t) = 0;
   virtual tm_future<Super::URef> get_super(Transaction&, RootNodeTracker&) = 0;
+  virtual std::ostream& print(std::ostream& os) const = 0;
 
   static NodeExtentManagerURef create_dummy(bool is_sync);
   static NodeExtentManagerURef create_seastore(
       TransactionManager& tm, laddr_t min_laddr = L_ADDR_MIN);
 };
+inline std::ostream& operator<<(std::ostream& os, const NodeExtentManager& nm) {
+  return nm.print(os);
+}
 
 }
