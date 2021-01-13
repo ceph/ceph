@@ -221,6 +221,7 @@ class CephMgrCommands(Directive):
     required_arguments = 1
     optional_arguments = 0
     final_argument_whitespace = False
+    option_spec = {'python_path': directives.unchanged}
 
     def _normalize_path(self, dirname):
         my_dir = os.path.dirname(os.path.realpath(__file__))
@@ -315,6 +316,8 @@ class CephMgrCommands(Directive):
     def run(self):
         module_path = self._normalize_path(self.arguments[0])
         sys.path.insert(0, module_path)
+        for path in self.options.get('python_path', '').split(':'):
+            sys.path.insert(0, self._normalize_path(path))
         os.environ['UNITTEST'] = 'true'
         modules = [name for name in os.listdir(module_path)
                    if self._is_mgr_module(module_path, name)]
