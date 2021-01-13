@@ -10,6 +10,7 @@
 #include "msg/Messenger.h"
 #include "aio_utils.h"
 #include "MirrorWatcher.h"
+#include "FSMirror.h"
 #include "Types.h"
 
 #define dout_context g_ceph_context
@@ -20,11 +21,11 @@
 namespace cephfs {
 namespace mirror {
 
-MirrorWatcher::MirrorWatcher(librados::IoCtx &ioctx, std::string_view addrs,
+MirrorWatcher::MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror,
                              ContextWQ *work_queue)
   : Watcher(ioctx, CEPHFS_MIRROR_OBJECT, work_queue),
     m_ioctx(ioctx),
-    m_addrs(addrs),
+    m_fs_mirror(fs_mirror),
     m_work_queue(work_queue),
     m_lock(ceph::make_mutex("cephfs::mirror::mirror_watcher")),
     m_instance_id(stringify(m_ioctx.get_instance_id())) {
@@ -76,7 +77,9 @@ void MirrorWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
   dout(20) << dendl;
 
   JSONFormatter f;
-  f.dump_string("addr", m_addrs);
+  f.open_object_section("info");
+  encode_json("addr", m_fs_mirror->get_instance_addr(), &f);
+  f.close_section();
 
   bufferlist outbl;
   f.flush(outbl);

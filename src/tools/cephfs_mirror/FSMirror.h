@@ -17,6 +17,7 @@ namespace cephfs {
 namespace mirror {
 
 class MirrorAdminSocketHook;
+class PeerReplayer;
 
 // handle mirroring for a filesystem to a set of peers
 
@@ -48,12 +49,13 @@ public:
   }
 
   Peers get_peers() {
-    Peers peers;
     std::scoped_lock locker(m_lock);
-    for ([[maybe_unused]] auto &[peer, peer_replayer] : m_peer_replayers) {
-      peers.emplace(peer);
-    }
-    return peers;
+    return m_all_peers;
+  }
+
+  std::string get_instance_addr() {
+    std::scoped_lock locker(m_lock);
+    return m_addrs;
   }
 
   // admin socket helpers
@@ -88,44 +90,17 @@ private:
     }
   };
 
-  struct PeerReplayer;
-  class SnapshotReplayerThread : public Thread {
-  public:
-    SnapshotReplayerThread(FSMirror *fs_mirror, PeerReplayer *peer_replayer)
-      : m_fs_mirror(fs_mirror),
-        m_peer_replayer(peer_replayer) {
-    }
-
-    void *entry() override {
-      m_fs_mirror->run(m_peer_replayer);
-      return 0;
-    }
-
-  private:
-    FSMirror *m_fs_mirror;
-    PeerReplayer *m_peer_replayer;
-  };
-
-  typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
-  struct PeerReplayer {
-    SnapshotReplayers replayers;
-    bool stopping = false;
-
-    bool is_stopping() {
-      return stopping;
-    }
-  };
-
+  CephContext *m_cct;
   Filesystem m_filesystem;
   uint64_t m_pool_id;
   std::vector<const char *> m_args;
   ContextWQ *m_work_queue;
 
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::fs_mirror");
-  ceph::condition_variable m_cond;
   SnapListener m_snap_listener;
   std::set<std::string, std::less<>> m_directories;
-  std::map<Peer, PeerReplayer> m_peer_replayers;
+  Peers m_all_peers;
+  std::map<Peer, std::unique_ptr<PeerReplayer>> m_peer_replayers;
 
   RadosRef m_cluster;
   std::string m_addrs;
@@ -141,13 +116,11 @@ private:
 
   MirrorAdminSocketHook *m_asok_hook = nullptr;
 
-  void run(PeerReplayer *peer_replayer);
-  void init_replayers(PeerReplayer *peer_replayer);
-  void shutdown_replayers(PeerReplayer *peer_replayer,
-                          std::unique_lock<ceph::mutex> &locker);
+  MountRef m_mount;
 
-  int connect(std::string_view cluster_name, std::string_view client_name,
-              RadosRef *cluster);
+  int init_replayer(PeerReplayer *peer_replayer);
+  void shutdown_replayer(PeerReplayer *peer_replayer);
+  void cleanup();
 
   void init_instance_watcher(Context *on_finish);
   void handle_init_instance_watcher(int r);
