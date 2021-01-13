@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -16,6 +16,40 @@ struct onode_t {
 
   bool operator==(const onode_t& o) const { return size == o.size && id == o.id; }
   bool operator!=(const onode_t& o) const { return !(*this == o); }
+
+  void encode(ceph::bufferlist& encoded) const {
+    ceph::encode(size, encoded);
+    ceph::encode(id, encoded);
+  }
+  static onode_t decode(ceph::bufferlist::const_iterator& delta) {
+    uint16_t size;
+    ceph::decode(size, delta);
+    uint16_t id;
+    ceph::decode(id, delta);
+    onode_t ret{size, id};
+    return ret;
+  }
+  static void validate_tail_magic(const onode_t& onode) {
+    auto p_target = (const char*)&onode + onode.size - sizeof(uint32_t);
+    uint32_t target;
+    std::memcpy(&target, p_target, sizeof(uint32_t));
+    ceph_assert(target == onode.size * 137);
+  }
+  static std::unique_ptr<char[]> allocate(const onode_t& config) {
+    ceph_assert(config.size >= sizeof(onode_t) + sizeof(uint32_t));
+
+    auto ret = std::make_unique<char[]>(config.size);
+    char* p_mem = ret.get();
+    auto p_onode = reinterpret_cast<onode_t*>(p_mem);
+    *p_onode = config;
+
+    uint32_t tail_magic = config.size * 137;
+    p_mem += (config.size - sizeof(uint32_t));
+    std::memcpy(p_mem, &tail_magic, sizeof(uint32_t));
+    validate_tail_magic(*p_onode);
+
+    return ret;
+  }
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const onode_t& node) {
   return os << "onode(" << node.id << ", " << node.size << "B)";

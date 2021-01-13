@@ -51,7 +51,7 @@ class DummyNodeExtent final: public NodeExtent {
   CachedExtentRef duplicate_for_write() override {
     ceph_abort("impossible path"); }
   extent_types_t get_type() const override {
-    ceph_abort("impossible path"); }
+    return extent_types_t::TEST_BLOCK; }
   ceph::bufferlist get_delta() override {
     ceph_abort("impossible path"); }
   void apply_delta(const ceph::bufferlist&) override {
@@ -103,6 +103,10 @@ class DummyNodeExtentManager final: public NodeExtentManager {
         return get_super_sync(t, tracker);
       });
     }
+  }
+
+  std::ostream& print(std::ostream& os) const override {
+    return os << "DummyNodeExtentManager(sync=" << SYNC << ")";
   }
 
  private:

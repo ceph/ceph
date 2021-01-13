@@ -52,6 +52,14 @@ protected:
     segment_cleaner.reset();
   }
 
+  void restart() {
+    tm->close().unsafe_get();
+    destroy();
+    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
+    init();
+    tm->mount().unsafe_get();
+  }
+
   seastar::future<> tm_setup() {
     return segment_manager->init(
     ).safe_then([this] {

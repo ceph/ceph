@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -140,7 +140,7 @@ struct staged_position_t {
       return false;
     }
   }
-  size_t& index_by_stage(match_stage_t stage) {
+  index_t& index_by_stage(match_stage_t stage) {
     assert(stage <= STAGE);
     if (STAGE == stage) {
       return index;
@@ -178,12 +178,24 @@ struct staged_position_t {
     return *this;
   }
 
+  void encode(ceph::bufferlist& encoded) const {
+    ceph::encode(index, encoded);
+    nxt.encode(encoded);
+  }
+
+  static me_t decode(ceph::bufferlist::const_iterator& delta) {
+    me_t ret;
+    ceph::decode(ret.index, delta);
+    ret.nxt = nxt_t::decode(delta);
+    return ret;
+  }
+
   static me_t begin() { return {0u, nxt_t::begin()}; }
   static me_t end() {
     return {INDEX_END, nxt_t::end()};
   }
 
-  size_t index;
+  index_t index;
   nxt_t nxt;
 };
 template <match_stage_t STAGE>
@@ -210,7 +222,7 @@ struct staged_position_t<STAGE_BOTTOM> {
       return false;
     }
   }
-  size_t& index_by_stage(match_stage_t stage) {
+  index_t& index_by_stage(match_stage_t stage) {
     assert(stage == STAGE_BOTTOM);
     return index;
   }
@@ -241,10 +253,20 @@ struct staged_position_t<STAGE_BOTTOM> {
     return *this;
   }
 
+  void encode(ceph::bufferlist& encoded) const {
+    ceph::encode(index, encoded);
+  }
+
+  static me_t decode(ceph::bufferlist::const_iterator& delta) {
+    me_t ret;
+    ceph::decode(ret.index, delta);
+    return ret;
+  }
+
   static me_t begin() { return {0u}; }
   static me_t end() { return {INDEX_END}; }
 
-  size_t index;
+  index_t index;
 };
 template <>
 inline std::ostream& operator<<(std::ostream& os, const staged_position_t<STAGE_BOTTOM>& pos) {
@@ -350,7 +372,7 @@ struct staged_result_t {
   }
   template <typename T = me_t>
   static std::enable_if_t<STAGE != STAGE_BOTTOM, T> from_nxt(
-      size_t index, const staged_result_t<NODE_TYPE, STAGE - 1>& nxt_stage_result) {
+      index_t index, const staged_result_t<NODE_TYPE, STAGE - 1>& nxt_stage_result) {
     return {{index, nxt_stage_result.position},
             nxt_stage_result.p_value,
             nxt_stage_result.mstat};

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
@@ -82,7 +82,7 @@ const char* fields_start(const FieldType& node) {
 
 template <node_type_t NODE_TYPE, typename FieldType>
 node_range_t fields_free_range_before(
-    const FieldType& node, size_t index) {
+    const FieldType& node, index_t index) {
   assert(index <= node.num_keys);
   node_offset_t offset_start = node.get_key_start_offset(index);
   node_offset_t offset_end =
@@ -137,31 +137,31 @@ struct _node_fields_013_t {
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
   node_offset_t total_size() const { return SIZE; }
-  key_get_type get_key(size_t index) const {
+  key_get_type get_key(index_t index) const {
     assert(index < num_keys);
     return slots[index].key;
   }
-  node_offset_t get_key_start_offset(size_t index) const {
+  node_offset_t get_key_start_offset(index_t index) const {
     assert(index <= num_keys);
     auto offset = HEADER_SIZE + sizeof(SlotType) * index;
     assert(offset < SIZE);
     return offset;
   }
-  node_offset_t get_item_start_offset(size_t index) const {
+  node_offset_t get_item_start_offset(index_t index) const {
     assert(index < num_keys);
     auto offset = slots[index].right_offset;
     assert(offset <= SIZE);
     return offset;
   }
-  const void* p_offset(size_t index) const {
+  const void* p_offset(index_t index) const {
     assert(index < num_keys);
     return &slots[index].right_offset;
   }
-  node_offset_t get_item_end_offset(size_t index) const {
+  node_offset_t get_item_end_offset(index_t index) const {
     return index == 0 ? SIZE : get_item_start_offset(index - 1);
   }
   template <node_type_t NODE_TYPE>
-  node_offset_t free_size_before(size_t index) const {
+  node_offset_t free_size_before(index_t index) const {
     auto range = fields_free_range_before<NODE_TYPE>(*this, index);
     return range.end - range.start;
   }
@@ -170,9 +170,9 @@ struct _node_fields_013_t {
   template <KeyT KT>
   static void insert_at(
       NodeExtentMutable&, const full_key_t<KT>& key,
-      const me_t& node, size_t index, node_offset_t size_right);
+      const me_t& node, index_t index, node_offset_t size_right);
   static void update_size_at(
-      NodeExtentMutable&, const me_t& node, size_t index, int change);
+      NodeExtentMutable&, const me_t& node, index_t index, int change);
   static void append_key(
       NodeExtentMutable&, const key_t& key, char*& p_append);
   template <KeyT KT>
@@ -224,7 +224,7 @@ struct node_fields_2_t {
 
   bool is_level_tail() const { return header.get_is_level_tail(); }
   node_offset_t total_size() const { return SIZE; }
-  key_get_type get_key(size_t index) const {
+  key_get_type get_key(index_t index) const {
     assert(index < num_keys);
     node_offset_t item_end_offset =
       (index == 0 ? SIZE : offsets[index - 1]);
@@ -232,27 +232,27 @@ struct node_fields_2_t {
     const char* p_start = fields_start(*this);
     return key_t(p_start + item_end_offset);
   }
-  node_offset_t get_key_start_offset(size_t index) const {
+  node_offset_t get_key_start_offset(index_t index) const {
     assert(index <= num_keys);
     auto offset = HEADER_SIZE + sizeof(node_offset_t) * num_keys;
     assert(offset <= SIZE);
     return offset;
   }
-  node_offset_t get_item_start_offset(size_t index) const {
+  node_offset_t get_item_start_offset(index_t index) const {
     assert(index < num_keys);
     auto offset = offsets[index];
     assert(offset <= SIZE);
     return offset;
   }
-  const void* p_offset(size_t index) const {
+  const void* p_offset(index_t index) const {
     assert(index < num_keys);
     return &offsets[index];
   }
-  node_offset_t get_item_end_offset(size_t index) const {
+  node_offset_t get_item_end_offset(index_t index) const {
     return index == 0 ? SIZE : get_item_start_offset(index - 1);
   }
   template <node_type_t NODE_TYPE>
-  node_offset_t free_size_before(size_t index) const {
+  node_offset_t free_size_before(index_t index) const {
     auto range = fields_free_range_before<NODE_TYPE>(*this, index);
     return range.end - range.start;
   }
@@ -261,11 +261,11 @@ struct node_fields_2_t {
   template <KeyT KT>
   static void insert_at(
       NodeExtentMutable& mut, const full_key_t<KT>& key,
-      const node_fields_2_t& node, size_t index, node_offset_t size_right) {
+      const node_fields_2_t& node, index_t index, node_offset_t size_right) {
     ceph_abort("not implemented");
   }
   static void update_size_at(
-      NodeExtentMutable& mut, const node_fields_2_t& node, size_t index, int change) {
+      NodeExtentMutable& mut, const node_fields_2_t& node, index_t index, int change) {
     ceph_abort("not implemented");
   }
   static void append_key(
@@ -321,13 +321,13 @@ struct _internal_fields_3_t {
       return SIZE;
     }
   }
-  key_get_type get_key(size_t index) const {
+  key_get_type get_key(index_t index) const {
     assert(index < num_keys);
     return keys[index];
   }
   template <node_type_t NODE_TYPE>
   std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, node_offset_t>
-  free_size_before(size_t index) const {
+  free_size_before(index_t index) const {
     assert(index <= num_keys);
     assert(num_keys <= (is_level_tail() ? MAX_NUM_KEYS - 1 : MAX_NUM_KEYS));
     auto free = (MAX_NUM_KEYS - index) * (sizeof(snap_gen_t) + sizeof(laddr_t));
@@ -344,11 +344,11 @@ struct _internal_fields_3_t {
   template <KeyT KT>
   static void insert_at(
       NodeExtentMutable& mut, const full_key_t<KT>& key,
-      const me_t& node, size_t index, node_offset_t size_right) {
+      const me_t& node, index_t index, node_offset_t size_right) {
     ceph_abort("not implemented");
   }
   static void update_size_at(
-      NodeExtentMutable& mut, const me_t& node, size_t index, int change) {
+      NodeExtentMutable& mut, const me_t& node, index_t index, int change) {
     ceph_abort("not implemented");
   }
 
