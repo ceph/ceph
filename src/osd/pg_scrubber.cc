@@ -1890,8 +1890,6 @@ namespace Scrub {
 
 void ReplicaReservations::release_replica(pg_shard_t peer, epoch_t epoch)
 {
-  dout(15) << __func__ << " <ReplicaReservations> release-> " << peer << dendl;
-
   auto m = new MOSDScrubReserve(spg_t(m_pg->info.pgid.pgid, peer.shard), epoch,
 				MOSDScrubReserve::RELEASE, m_pg->pg_whoami);
   m_osds->send_message_osd_cluster(peer.osd, m, epoch);
