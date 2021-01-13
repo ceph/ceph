@@ -222,7 +222,7 @@ int abort_multipart_upload(const DoutPrefixProvider *dpp,
 			       mp_obj.get_upload_id(), mp_obj.get_meta(),
 			       1000, marker, obj_parts, &marker, &truncated);
     if (ret < 0) {
-      ldout(cct, 20) << __func__ << ": list_multipart_parts returned " <<
+      ldpp_dout(dpp, 20) << __func__ << ": list_multipart_parts returned " <<
 	ret << dendl;
       return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
     }
@@ -259,7 +259,7 @@ int abort_multipart_upload(const DoutPrefixProvider *dpp,
   /* use upload id as tag and do it synchronously */
   ret = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
   if (ret < 0) {
-    ldout(cct, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
+    ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
     if (ret == -ENOENT) {
       return -ERR_NO_SUCH_UPLOAD;
     }
@@ -281,7 +281,7 @@ int abort_multipart_upload(const DoutPrefixProvider *dpp,
   // and also remove the metadata obj
   ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
-    ldout(cct, 20) << __func__ << ": del_op.delete_obj returned " <<
+    ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
   }
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
@@ -323,13 +323,13 @@ int abort_bucket_multiparts(const DoutPrefixProvider *dpp,
     ret = list_bucket_multiparts(dpp, store, bucket_info, prefix, marker, delim,
 				 max, &objs, nullptr, &is_truncated);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << __func__ <<
+      ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
 	"; bucket=\"" << bucket_info.bucket << "\"; prefix=\"" <<
 	prefix << "\"; delim=\"" << delim << "\"" << dendl;
       return ret;
     }
-    ldout(store->ctx(), 20) << __func__ <<
+    ldpp_dout(dpp, 20) << __func__ <<
       " INFO: aborting and cleaning up multipart upload(s); bucket=\"" <<
       bucket_info.bucket << "\"; objs.size()=" << objs.size() <<
       "; is_truncated=" << is_truncated << dendl;
@@ -345,12 +345,12 @@ int abort_bucket_multiparts(const DoutPrefixProvider *dpp,
 	  // we're doing a best-effort; if something cannot be found,
 	  // log it and keep moving forward
 	  if (ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
-	    ldout(store->ctx(), 0) << __func__ <<
+	    ldpp_dout(dpp, 0) << __func__ <<
 	      " ERROR : failed to abort and clean-up multipart upload \"" <<
 	      key.get_oid() << "\"" << dendl;
 	    return ret;
 	  } else {
-	    ldout(store->ctx(), 10) << __func__ <<
+	    ldpp_dout(dpp, 10) << __func__ <<
 	      " NOTE : unable to find part(s) of "
 	      "aborted multipart upload of \"" << key.get_oid() <<
 	      "\" for cleaning up" << dendl;
@@ -359,7 +359,7 @@ int abort_bucket_multiparts(const DoutPrefixProvider *dpp,
         num_deleted++;
       }
       if (num_deleted) {
-        ldout(store->ctx(), 0) << __func__ <<
+        ldpp_dout(dpp, 0) << __func__ <<
 	  " WARNING : aborted " << num_deleted <<
 	  " incomplete multipart uploads" << dendl;
       }

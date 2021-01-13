@@ -222,7 +222,7 @@ namespace rgw {
     virtual int execute() final { ceph_abort(); }
     virtual int exec_start() = 0;
     virtual int exec_continue() = 0;
-    virtual int exec_finish(const DoutPrefixProvider *dpp) = 0;
+    virtual int exec_finish() = 0;
 
   }; /* RGWLibContinuedReq */
 

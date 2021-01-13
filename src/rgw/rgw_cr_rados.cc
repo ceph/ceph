@@ -587,7 +587,7 @@ int RGWAsyncGetBucketInstanceInfo::_send_request()
                                                RGWBucketCtl::BucketInstance::GetParams().set_attrs(&attrs));
   }
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
+    ldpp_dout(dpp, 0) << "ERROR: failed to get bucket instance info for "
         << bucket << dendl;
     return r;
   }
@@ -740,13 +740,13 @@ int RGWAsyncRemoveObj::_send_request()
 
   int ret = store->getRados()->get_obj_state(dpp, &obj_ctx, bucket_info, obj, &state, null_yield);
   if (ret < 0) {
-    ldout(store->ctx(), 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
   }
 
   /* has there been any racing object write? */
   if (del_if_older && (state->mtime > timestamp)) {
-    ldout(store->ctx(), 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << state->mtime << ", request timestamp=" << timestamp << ")" << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << state->mtime << ", request timestamp=" << timestamp << ")" << dendl;
     return 0;
   }
 
@@ -759,7 +759,7 @@ int RGWAsyncRemoveObj::_send_request()
     try {
       policy.decode(bliter);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
       return -EIO;
     }
   }
@@ -785,7 +785,7 @@ int RGWAsyncRemoveObj::_send_request()
 
   ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
-    ldout(store->ctx(), 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }
   return ret;
 }

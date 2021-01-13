@@ -204,7 +204,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 
   if (existed) {
     if (info.owner != user) {
-      ldout(cct, 20) << "NOTICE: bucket already exists under a different user (bucket=" << bucket << " user=" << user << " bucket_owner=" << info.owner << dendl;
+      ldpp_dout(dpp, 20) << "NOTICE: bucket already exists under a different user (bucket=" << bucket << " user=" << user << " bucket_owner=" << info.owner << dendl;
       return -EEXIST;
     }
     bucket = info.bucket;
@@ -215,14 +215,14 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     /* if it exists (or previously existed), don't remove it! */
     int r = store->ctl()->bucket->unlink_bucket(user, bucket, null_yield, dpp);
     if (r < 0) {
-      ldout(cct, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
     }
   } else if (ret == -EEXIST || (ret == 0 && existed)) {
     ret = -ERR_BUCKET_EXISTS;
   }
 
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: bucket creation (bucket=" << bucket << ") return ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: bucket creation (bucket=" << bucket << ") return ret=" << ret << dendl;
   }
 
   return ret;
@@ -247,7 +247,7 @@ int RGWObjectSimplePutCR::Request::_send_request()
 
   ret = obj->put(params.data, params.attrs, dpp, null_yield);
   if (ret < 0) {
-    lderr(cct) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
   }
 
   return 0;
@@ -286,7 +286,7 @@ int RGWBucketGetSyncPolicyHandlerCR::Request::_send_request()
                                                         null_yield,
                                                         dpp);
   if (r < 0) {
-    lderr(cct) << "ERROR: " << __func__ << "(): get_sync_policy_handler() returned " << r << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ << "(): get_sync_policy_handler() returned " << r << dendl;
     return  r;
   }
 

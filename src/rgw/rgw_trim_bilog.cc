@@ -463,7 +463,7 @@ int BucketTrimInstanceCR::operate()
                                                    dpp));
     if (retcode < 0) {
       if (retcode != -ENOENT) {
-        ldout(cct, 0) << "ERROR: failed to fetch policy handler for bucket=" << bucket << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to fetch policy handler for bucket=" << bucket << dendl;
       }
 
       return set_cr_error(retcode);
@@ -900,12 +900,12 @@ int BucketTrimCR::operate()
     if (!last_cold_marker.empty() && status.marker != last_cold_marker) {
       set_status("writing updated trim status");
       status.marker = std::move(last_cold_marker);
-      ldout(cct, 20) << "writing bucket trim marker=" << status.marker << dendl;
+      ldpp_dout(dpp, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
       yield call(new WriteStatus(store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
                                  status, &objv));
       if (retcode < 0) {
-        ldout(cct, 4) << "failed to write updated trim status: "
+        ldpp_dout(dpp, 4) << "failed to write updated trim status: "
             << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
       }
