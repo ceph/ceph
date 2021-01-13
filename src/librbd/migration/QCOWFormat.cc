@@ -51,6 +51,15 @@ struct ClusterExtent {
 
 typedef std::vector<ClusterExtent> ClusterExtents;
 
+void decode_l1_table(uint32_t l1_size, bufferlist& l1_table_bl,
+                     uint64_t** l1_table) {
+  // translate the L1 table (big-endian -> CPU endianess)
+  *l1_table = reinterpret_cast<uint64_t*>(l1_table_bl.c_str());
+  for (auto idx = 0UL; idx < l1_size; ++idx) {
+    (*l1_table)[idx] = be64toh((*l1_table)[idx]);
+  }
+}
+
 void populate_cluster_extents(CephContext* cct, uint64_t cluster_size,
                               const io::Extents& image_extents,
                               ClusterExtents* cluster_extents) {
@@ -985,14 +994,183 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
     return;
   }
 
+  m_snapshot_count = header.nb_snapshots;
+  m_snapshots_offset = header.snapshots_offset;
+
   ldout(cct, 15) << "size=" << m_size << ", "
-                 << "cluster_bits=" << m_cluster_bits << dendl;
+                 << "cluster_bits=" << m_cluster_bits << ", "
+                 << "snapshot_count=" << m_snapshot_count << dendl;
 
   // allocate memory for L1 table and L2 + cluster caches
   m_l2_table_cache = std::make_unique<L2TableCache>(this, l2_bits);
   m_cluster_cache = std::make_unique<ClusterCache>(this);
 
-  read_l1_table(on_finish);
+  read_snapshot(on_finish);
+}
+
+template <typename I>
+void QCOWFormat<I>::read_snapshot(Context* on_finish) {
+  if (m_snapshots_offset == 0 || m_snapshots.size() == m_snapshot_count) {
+    read_l1_table(on_finish);
+    return;
+  }
+
+  // header is always aligned on 8 byte boundary
+  m_snapshots_offset = p2roundup(m_snapshots_offset, static_cast<uint64_t>(8));
+
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "snap_id=" << (m_snapshots.size() + 1) << ", "
+                 << "offset=" << m_snapshots_offset << dendl;
+
+  auto ctx = new LambdaContext([this, on_finish](int r) {
+    handle_read_snapshot(r, on_finish); });
+  m_bl.clear();
+  m_stream->read({{m_snapshots_offset, sizeof(QCowSnapshotHeader)}}, &m_bl,
+                 ctx);
+}
+
+template <typename I>
+void QCOWFormat<I>::handle_read_snapshot(int r, Context* on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << ", "
+                 << "index=" << m_snapshots.size() << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to read QCOW2 snapshot header: " << cpp_strerror(r)
+               << dendl;
+    on_finish->complete(r);
+    return;
+  }
+
+  m_snapshots_offset += m_bl.length();
+  auto header = *reinterpret_cast<QCowSnapshotHeader*>(m_bl.c_str());
+
+  auto& snapshot = m_snapshots[m_snapshots.size() + 1];
+  snapshot.id.resize(be16toh(header.id_str_size));
+  snapshot.name.resize(be16toh(header.name_size));
+  snapshot.l1_table_offset = be64toh(header.l1_table_offset);
+  snapshot.l1_size = be32toh(header.l1_size);
+  snapshot.timestamp.sec_ref() = be32toh(header.date_sec);
+  snapshot.timestamp.nsec_ref() = be32toh(header.date_nsec);
+  snapshot.extra_data_size = be32toh(header.extra_data_size);
+
+  read_snapshot_extra(on_finish);
+}
+
+template <typename I>
+void QCOWFormat<I>::read_snapshot_extra(Context* on_finish) {
+  ceph_assert(!m_snapshots.empty());
+  auto& snapshot = m_snapshots.rbegin()->second;
+
+  uint32_t length = snapshot.extra_data_size +
+                    snapshot.id.size() +
+                    snapshot.name.size();
+  if (length == 0) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    snapshot.name = uuid_gen.to_string();
+
+    read_snapshot(on_finish);
+    return;
+  }
+
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "snap_id=" << m_snapshots.size() << ", "
+                 << "offset=" << m_snapshots_offset << ", "
+                 << "length=" << length << dendl;
+
+  auto offset = m_snapshots_offset;
+  m_snapshots_offset += length;
+
+  auto ctx = new LambdaContext([this, on_finish](int r) {
+    handle_read_snapshot_extra(r, on_finish); });
+  m_bl.clear();
+  m_stream->read({{offset, length}}, &m_bl, ctx);
+}
+
+template <typename I>
+void QCOWFormat<I>::handle_read_snapshot_extra(int r, Context* on_finish) {
+  ceph_assert(!m_snapshots.empty());
+  auto& snapshot = m_snapshots.rbegin()->second;
+
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << ", "
+                 << "snap_id=" << m_snapshots.size() << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to read QCOW2 snapshot header extra: "
+               << cpp_strerror(r) << dendl;
+    on_finish->complete(r);
+    return;
+  }
+
+  if (snapshot.extra_data_size >=
+        offsetof(QCowSnapshotExtraData, disk_size) + sizeof(uint64_t))  {
+    auto extra = reinterpret_cast<const QCowSnapshotExtraData*>(m_bl.c_str());
+    snapshot.size = be64toh(extra->disk_size);
+  } else {
+    snapshot.size = m_size;
+  }
+
+  auto data = reinterpret_cast<const char*>(m_bl.c_str());
+  data += snapshot.extra_data_size;
+
+  if (!snapshot.id.empty()) {
+    snapshot.id = std::string(data, snapshot.id.size());
+    data += snapshot.id.size();
+  }
+
+  if (!snapshot.name.empty()) {
+    snapshot.name = std::string(data, snapshot.name.size());
+    data += snapshot.name.size();
+  } else {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    snapshot.name = uuid_gen.to_string();
+  }
+
+  ldout(cct, 10) << "snap_id=" << m_snapshots.size() << ", "
+                 << "name=" << snapshot.name << ", "
+                 << "size=" << snapshot.size << dendl;
+  read_snapshot_l1_table(on_finish);
+}
+
+template <typename I>
+void QCOWFormat<I>::read_snapshot_l1_table(Context* on_finish) {
+  ceph_assert(!m_snapshots.empty());
+  auto& snapshot = m_snapshots.rbegin()->second;
+
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "snap_id=" << m_snapshots.size() << ", "
+                 << "l1_table_offset=" << snapshot.l1_table_offset
+                 << dendl;
+
+  auto ctx = new LambdaContext([this, on_finish](int r) {
+    handle_read_snapshot_l1_table(r, on_finish); });
+  m_stream->read({{snapshot.l1_table_offset,
+                    snapshot.l1_size * sizeof(uint64_t)}},
+                 &snapshot.l1_table_bl, ctx);
+}
+
+template <typename I>
+void QCOWFormat<I>::handle_read_snapshot_l1_table(int r, Context* on_finish) {
+  ceph_assert(!m_snapshots.empty());
+  auto& snapshot = m_snapshots.rbegin()->second;
+
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "r=" << r << ", "
+                 << "snap_id=" << m_snapshots.size() << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to read snapshot L1 table: " << cpp_strerror(r)
+               << dendl;
+    on_finish->complete(r);
+    return;
+  }
+
+  decode_l1_table(snapshot.l1_size, snapshot.l1_table_bl,
+                  &snapshot.l1_table);
+  read_snapshot(on_finish);
 }
 
 template <typename I>
@@ -1017,12 +1195,7 @@ void QCOWFormat<I>::handle_read_l1_table(int r, Context* on_finish) {
     return;
   }
 
-  // translate the L1 table (big-endian -> CPU endianess)
-  m_l1_table = reinterpret_cast<uint64_t*>(m_l1_table_bl.c_str());
-  for (auto idx = 0UL; idx < m_l1_size; ++idx) {
-    m_l1_table[idx] = be64toh(m_l1_table[idx]);
-  }
-
+  decode_l1_table(m_l1_size, m_l1_table_bl, &m_l1_table);
   read_backing_file(on_finish);
 }
 
@@ -1055,8 +1228,12 @@ void QCOWFormat<I>::get_snapshots(SnapInfos* snap_infos, Context* on_finish) {
   ldout(cct, 10) << dendl;
 
   snap_infos->clear();
+  for (auto& [snap_id, snapshot] : m_snapshots) {
+    SnapInfo snap_info(snapshot.name, cls::rbd::UserSnapshotNamespace{},
+                       snapshot.size, {}, 0, 0, snapshot.timestamp);
+    snap_infos->emplace(snap_id, snap_info);
+  }
 
-  // TODO QCOW2 supports snapshots, not QCOW
   on_finish->complete(0);
 }
 

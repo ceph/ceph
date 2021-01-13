@@ -70,17 +70,30 @@ private:
    *    v
    *  PROBE
    *    |
-   *    |\---> READ V1 HEADER ----\
-   *    |                         |
-   *    \---> READ V2 HEADER ----\|
-   *                              |
-   *                              v
-   *                        READ L1 TABLE
-   *                              |
-   *                              v
-   *                        READ BACKING FILE
-   *                              |
-   *    /-------------------------/
+   *    |\---> READ V1 HEADER ----------\
+   *    |                               |
+   *    \----> READ V2 HEADER           |
+   *              |                     |
+   *              |     /----------\    |
+   *              |     |          |    |
+   *              v     v          |    |
+   *           READ SNAPSHOT       |    |
+   *              |                |    |
+   *              v                |    |
+   *           READ SNAPSHOT EXTRA |    |
+   *              |                |    |
+   *              v                |    |
+   *           READ SNAPSHOT L1 TABLE   |
+   *              |                     |
+   *              \--------------------\|
+   *                                    |
+   *                                    v
+   *                              READ L1 TABLE
+   *                                    |
+   *                                    v
+   *                              READ BACKING FILE
+   *                                    |
+   *    /-------------------------------/
    *    |
    *    v
    * <opened>
@@ -93,6 +106,21 @@ private:
   struct L2TableCache;
   struct ReadRequest;
   struct ListSnapsRequest;
+
+  struct Snapshot {
+    std::string id;
+    std::string name;
+
+    utime_t timestamp;
+    uint64_t size = 0;
+
+    uint32_t l1_size = 0;
+    uint64_t l1_table_offset = 0;
+    uint64_t* l1_table = nullptr;
+    bufferlist l1_table_bl;
+
+    uint32_t extra_data_size = 0;
+  };
 
   ImageCtxT* m_image_ctx;
   json_spirit::mObject m_json_object;
@@ -118,6 +146,10 @@ private:
   uint64_t* m_l1_table = nullptr;
   bufferlist m_l1_table_bl;
 
+  uint32_t m_snapshot_count = 0;
+  uint64_t m_snapshots_offset = 0;
+  std::map<uint64_t, Snapshot> m_snapshots;
+
   std::unique_ptr<L2TableCache> m_l2_table_cache;
   std::unique_ptr<ClusterCache> m_cluster_cache;
 
@@ -131,6 +163,15 @@ private:
 
   void read_v2_header(Context* on_finish);
   void handle_read_v2_header(int r, Context* on_finish);
+
+  void read_snapshot(Context* on_finish);
+  void handle_read_snapshot(int r, Context* on_finish);
+
+  void read_snapshot_extra(Context* on_finish);
+  void handle_read_snapshot_extra(int r, Context* on_finish);
+
+  void read_snapshot_l1_table(Context* on_finish);
+  void handle_read_snapshot_l1_table(int r, Context* on_finish);
 
   void read_l1_table(Context* on_finish);
   void handle_read_l1_table(int r, Context* on_finish);
