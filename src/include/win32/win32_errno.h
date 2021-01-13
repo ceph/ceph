@@ -21,6 +21,8 @@
 
 #include <errno.h>
 
+#include "include/int_types.h"
+
 #ifndef EBADMSG
 #define EBADMSG 104
 #endif
