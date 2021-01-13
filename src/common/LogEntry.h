@@ -24,7 +24,7 @@ namespace ceph {
   class Formatter;
 }
 
-static const std::string CLOG_CHANNEL_NONE    = "none";
+//Adding a new channel should update LogClient::create_channel()
 static const std::string CLOG_CHANNEL_DEFAULT = "cluster";
 static const std::string CLOG_CHANNEL_CLUSTER = "cluster";
 static const std::string CLOG_CHANNEL_AUDIT   = "audit";
