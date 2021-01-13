@@ -3,7 +3,6 @@ import os
 import sys
 import contextlib
 
-from docutils import nodes
 from docutils.parsers.rst import directives
 from docutils.parsers.rst import Directive
 from jinja2 import Template
@@ -81,7 +80,8 @@ class CmdParam(object):
         'CephFilepath': '/path/to/file',
     }
 
-    def __init__(self, type, name, who=None, n=None, req=True, range=None, strings=None,
+    def __init__(self, type, name,
+                 who=None, n=None, req=True, range=None, strings=None,
                  goodchars=None):
         self.type = type
         self.name = name
@@ -134,7 +134,8 @@ class CmdParam(object):
 
 
 class CmdCommand(object):
-    def __init__(self, prefix, args, desc, module=None, perm=None, flags=0, poll=None):
+    def __init__(self, prefix, args, desc,
+                 module=None, perm=None, flags=0, poll=None):
         self.prefix = prefix
         self.params = sorted([CmdParam(**arg) for arg in args],
                              key=lambda p: p.req, reverse=True)
@@ -213,6 +214,7 @@ Required Permissions:
 
 '''
 
+
 class CephMgrCommands(Directive):
     """
     extracts commands from specified mgr modules
@@ -281,6 +283,7 @@ class CephMgrCommands(Directive):
             logger.info(bold(f"loading mgr module '{name}'..."))
             mgr_mod = __import__(name, globals(), locals(), [], 0)
             from tests import M
+
             def subclass(x):
                 try:
                     return issubclass(x, M)
@@ -308,8 +311,8 @@ class CephMgrCommands(Directive):
         rendered = Template(TEMPLATE).render(commands=list(commands))
         lines = rendered.split("\n")
         assert lines
-        source = self.state_machine.input_lines.source(self.lineno -
-                                                       self.state_machine.input_offset - 1)
+        lineno = self.lineno - self.state_machine.input_offset - 1
+        source = self.state_machine.input_lines.source(lineno)
         self.state_machine.insert_input(lines, source)
 
     def run(self):
@@ -326,6 +329,7 @@ class CephMgrCommands(Directive):
         cmds = sorted(cmds, key=lambda cmd: cmd.prefix)
         self._render_cmds(cmds)
         return []
+
 
 class MyProcessor(Preprocessor):
     def __init__(self):
@@ -391,7 +395,6 @@ class CephMonCommands(Directive):
     optional_arguments = 0
     final_argument_whitespace = True
 
-
     def _src_dir(self):
         my_dir = os.path.dirname(os.path.realpath(__file__))
         return os.path.abspath(os.path.join(my_dir, '../..'))
@@ -412,8 +415,8 @@ class CephMonCommands(Directive):
         rendered = Template(TEMPLATE).render(commands=list(commands))
         lines = rendered.split("\n")
         assert lines
-        source = self.state_machine.input_lines.source(self.lineno -
-                                                       self.state_machine.input_offset - 1)
+        lineno = self.lineno - self.state_machine.input_offset - 1
+        source = self.state_machine.input_lines.source(lineno)
         self.state_machine.insert_input(lines, source)
 
     def run(self):
