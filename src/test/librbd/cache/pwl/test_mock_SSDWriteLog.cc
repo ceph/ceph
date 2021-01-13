@@ -85,7 +85,7 @@ struct TestMockCacheSSDWriteLog : public TestMockFixture {
     ASSERT_EQ(host, state.host);
     ASSERT_EQ(path, state.path);
     ASSERT_EQ(size, state.size);
-    ASSERT_EQ(config.get_val<bool>("rbd_rwl_log_periodic_stats"),
+    ASSERT_EQ(config.get_val<bool>("rbd_persistent_cache_log_periodic_stats"),
 	      state.log_periodic_stats);
   }
 

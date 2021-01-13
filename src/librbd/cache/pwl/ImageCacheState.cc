@@ -40,7 +40,7 @@ ImageCacheState<I>::ImageCacheState(I *image_ctx, plugin::Api<I>& plugin_api) :
                             << dendl;
 
   ConfigProxy &config = image_ctx->config;
-  log_periodic_stats = config.get_val<bool>("rbd_rwl_log_periodic_stats");
+  log_periodic_stats = config.get_val<bool>("rbd_persistent_cache_log_periodic_stats");
   cache_type = config.get_val<std::string>("rbd_persistent_cache_mode");
 }
 
@@ -63,7 +63,7 @@ ImageCacheState<I>::ImageCacheState(
 
   // Others from config
   ConfigProxy &config = image_ctx->config;
-  log_periodic_stats = config.get_val<bool>("rbd_rwl_log_periodic_stats");
+  log_periodic_stats = config.get_val<bool>("rbd_persistent_cache_log_periodic_stats");
 }
 
 template <typename I>

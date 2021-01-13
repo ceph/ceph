@@ -8,6 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/cache/WriteLogImageDispatch.h"
 #include "librbd/cache/ImageWriteback.h"
+#include "librbd/cache/Utils.h"
 #include "librbd/cache/pwl/DiscardRequest.h"
 #include "librbd/cache/pwl/InitRequest.h"
 #include "librbd/io/ImageDispatcherInterface.h"
@@ -41,9 +42,8 @@ void WriteLogImageCache<I>::init(I* image_ctx, Api<I>& api,
                                  cache::ImageWritebackInterface& image_writeback,
                                  PluginHookPoints& hook_points_list,
                                  Context* on_finish) {
-  bool rwl_enabled = image_ctx->config.template get_val<bool>(
-    "rbd_rwl_enabled");
-  if (!rwl_enabled || !image_ctx->data_ctx.is_valid()) {
+  bool pwl_enabled = librbd::cache::util::is_pwl_enabled(*image_ctx);
+  if (!pwl_enabled || !image_ctx->data_ctx.is_valid()) {
     on_finish->complete(0);
     return;
   }
