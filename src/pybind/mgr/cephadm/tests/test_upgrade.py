@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import CephadmUpgrade
 from cephadm.serve import CephadmServe
@@ -102,51 +102,10 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                     'who': 'global',
                     'key': 'container_image',
                 })
-
-            cephadm_module._mon_command_mock_versions = _versions_mock
-
-            with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
-                'image_id': 'image_id',
-                'repo_digests': ['to_image@repo_digest'],
-                'ceph_version': 'ceph version 18.2.3 (hash)',
-            }))):
-
-                cephadm_module.upgrade._do_upgrade()
-
-            assert cephadm_module.upgrade_status is not None
-
-            with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
-                json.dumps([
-                    dict(
-                        name=list(cephadm_module.cache.daemons['test'].keys())[0],
-                        style='cephadm',
-                        fsid='fsid',
-                        container_id='container_id',
-                        container_image_id='image_id',
-                        container_image_digests=['to_image@repo_digest'],
-                        version='version',
-                        state='running',
-                    )
-                ])
-            )):
-                CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
-
-            with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
-                'image_id': 'image_id',
-                'repo_digests': ['to_image@repo_digest'],
-                'ceph_version': 'ceph version 18.2.3 (hash)',
-            }))):
-                cephadm_module.upgrade._do_upgrade()
-
-            _, image, _ = cephadm_module.check_mon_command({
-                'prefix': 'config get',
-                'who': 'global',
-                'key': 'container_image',
-            })
-            if use_repo_digest:
-                assert image == 'to_image@repo_digest'
-            else:
-                assert image == 'to_image'
+                if use_repo_digest:
+                    assert image == 'to_image@repo_digest'
+                else:
+                    assert image == 'to_image'
 
 
 def test_upgrade_state_null(cephadm_module: CephadmOrchestrator):
