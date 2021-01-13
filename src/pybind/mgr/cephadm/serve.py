@@ -86,6 +86,8 @@ class CephadmServe:
 
                     self._check_daemons()
 
+                    self._purge_deleted_services()
+
                     if self.mgr.upgrade.continue_upgrade():
                         continue
 
@@ -685,6 +687,21 @@ class CephadmServe:
                 self.mgr.requires_post_actions.remove(daemon_type)
                 self.mgr._get_cephadm_service(daemon_type_to_service(
                     daemon_type)).daemon_check_post(daemon_descs)
+
+    def _purge_deleted_services(self) -> None:
+        existing_services = self.mgr.spec_store.all_specs.items()
+        for service_name, spec in list(existing_services):
+            if service_name not in self.mgr.spec_store.spec_deleted:
+                continue
+            if self.mgr.cache.get_daemons_by_service(service_name):
+                continue
+            if spec.service_type in ['mon', 'mgr']:
+                continue
+
+            logger.info(f'Purge service {service_name}')
+
+            self.mgr.cephadm_services[spec.service_type].purge(service_name)
+            self.mgr.spec_store.finally_rm(service_name)
 
     def convert_tags_to_repo_digest(self) -> None:
         if not self.mgr.use_repo_digest:
