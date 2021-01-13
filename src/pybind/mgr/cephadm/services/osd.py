@@ -10,6 +10,7 @@ from ceph.utils import datetime_to_str, str_to_datetime
 
 from datetime import datetime
 import orchestrator
+from cephadm.serve import CephadmServe
 from cephadm.utils import forall_hosts
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
@@ -66,7 +67,7 @@ class OSDService(CephService):
                     code, '\n'.join(err)))
 
         # check result
-        out, err, code = self.mgr._run_cephadm(
+        out, err, code = CephadmServe(self.mgr)._run_cephadm(
             host, 'osd', 'ceph-volume',
             [
                 '--',
@@ -106,7 +107,7 @@ class OSDService(CephService):
                     host=host,
                     daemon_type='osd',
                 )
-                self.mgr._create_daemon(
+                CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)
 
@@ -262,7 +263,7 @@ class OSDService(CephService):
         split_cmd = cmd.split(' ')
         _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
-        out, err, code = self.mgr._run_cephadm(
+        out, err, code = CephadmServe(self.mgr)._run_cephadm(
             host, 'osd', 'ceph-volume',
             _cmd,
             env_vars=env_vars,
@@ -359,7 +360,7 @@ class RemoveUtil(object):
                 continue
             assert osd.fullname is not None
             assert osd.hostname is not None
-            self.mgr._remove_daemon(osd.fullname, osd.hostname)
+            CephadmServe(self.mgr)._remove_daemon(osd.fullname, osd.hostname)
             logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.hostname}")
             logger.debug(f"Removing {osd.osd_id} from the queue.")
 

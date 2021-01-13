@@ -2,19 +2,16 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict, NamedTuple
+from typing import TYPE_CHECKING, Optional, Dict
 
 import orchestrator
-from cephadm.utils import name_to_config_section
+from cephadm.serve import CephadmServe
+from cephadm.utils import name_to_config_section, CEPH_UPGRADE_ORDER
 from orchestrator import OrchestratorError, DaemonDescription
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-
-# ceph daemon types that use the ceph container image.
-# NOTE: listed in upgrade order!
-CEPH_UPGRADE_ORDER = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror']
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +249,7 @@ class CephadmUpgrade:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
             try:
-                target_id, target_version, repo_digest = self.mgr._get_container_image_info(
+                target_id, target_version, repo_digest = CephadmServe(self.mgr)._get_container_image_info(
                     target_image)
             except OrchestratorError as e:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
@@ -297,13 +294,13 @@ class CephadmUpgrade:
                     continue
 
                 # make sure host has latest container image
-                out, err, code = self.mgr._run_cephadm(
+                out, err, code = CephadmServe(self.mgr)._run_cephadm(
                     d.hostname, '', 'inspect-image', [],
                     image=target_image, no_fsid=True, error_ok=True)
                 if code or json.loads(''.join(out)).get('image_id') != target_id:
                     logger.info('Upgrade: Pulling %s on %s' % (target_image,
                                                                d.hostname))
-                    out, err, code = self.mgr._run_cephadm(
+                    out, err, code = CephadmServe(self.mgr)._run_cephadm(
                         d.hostname, '', 'pull', [],
                         image=target_image, no_fsid=True, error_ok=True)
                     if code:

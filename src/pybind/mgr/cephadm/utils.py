@@ -3,7 +3,7 @@ import json
 import socket
 from enum import Enum
 from functools import wraps
-from typing import Callable, TypeVar, List, NewType, TYPE_CHECKING, Any
+from typing import Optional, Callable, TypeVar, List, NewType, TYPE_CHECKING, Any, NamedTuple
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -19,8 +19,19 @@ class CephadmNoImage(Enum):
     token = 1
 
 
+# ceph daemon types that use the ceph container image.
+# NOTE: listed in upgrade order!
+CEPH_UPGRADE_ORDER = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw', 'rbd-mirror']
+
+
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token
+
+
+class ContainerInspectInfo(NamedTuple):
+    image_id: str
+    ceph_version: Optional[str]
+    repo_digest: Optional[str]
 
 
 def name_to_config_section(name: str) -> ConfEntity:
