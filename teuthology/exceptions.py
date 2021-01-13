@@ -74,9 +74,8 @@ class CommandFailedError(Exception):
         Used by sentry instead of grouping by backtrace.
         """
         return [
-            ' '.join(self.command),
+            self.label or self.command,
             'exit status {}'.format(self.exitstatus),
-            self.label,
             '{{ type }}',
         ]
 
