@@ -1,3 +1,4 @@
+import errno
 import json
 import re
 import logging
@@ -231,7 +232,7 @@ class CephadmService(metaclass=ABCMeta):
         logger.info(out)
         return HandleCommandResult(r.retval, out, r.stderr)
 
-    def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int) -> Tuple[bool, str]:
+    def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int, alert: bool = False) -> Tuple[bool, str]:
         # Provides a warning about if it possible or not to stop <n> daemons in a service
         names = [f'{daemon_type}.{d_id}' for d_id in daemon_ids]
         number_of_running_daemons = len(
@@ -247,9 +248,14 @@ class CephadmService(metaclass=ABCMeta):
         daemon_count = "only" if number_of_running_daemons == 1 else number_of_running_daemons
         left_count = "no" if num_daemons_left == 0 else num_daemons_left
 
-        out = (f'WARNING: Stopping {len(daemon_ids)} out of {number_of_running_daemons} daemons in {service} service. '
-               f'Service will not be operational with {left_count} {plural(num_daemons_left)} left. '
-               f'At least {low_limit} {plural(low_limit)} must be running to guarantee service. ')
+        if alert:
+            out = (f'ALERT: Cannot stop {names} in {service} service. '
+                   f'Not enough remaining {service} daemons. '
+                   f'Please deploy at least {low_limit + 1} {service} daemons before stopping {names}. ')
+        else:
+            out = (f'WARNING: Stopping {len(daemon_ids)} out of {number_of_running_daemons} daemons in {service} service. '
+                   f'Service will not be operational with {left_count} {plural(num_daemons_left)} left. '
+                   f'At least {low_limit} {plural(low_limit)} must be running to guarantee service. ')
         return True, out
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
@@ -520,6 +526,21 @@ class MgrService(CephService):
         mgr_map = self.mgr.get('mgr_map')
         num = len(mgr_map.get('standbys'))
         return bool(num)
+
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # ok to stop if there is more than 1 mgr and not trying to stop the active mgr
+
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Mgr', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+        mgr_daemons = self.mgr.cache.get_daemons_by_type(self.TYPE)
+        active = self.get_active_daemon(mgr_daemons).daemon_id
+        if active in daemon_ids:
+            warn_message = 'ALERT: Cannot stop active Mgr daemon, Please switch active Mgrs with \'ceph mgr fail %s\'' % active
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+        return HandleCommandResult(0, warn_message, '')
 
 
 class MdsService(CephService):
