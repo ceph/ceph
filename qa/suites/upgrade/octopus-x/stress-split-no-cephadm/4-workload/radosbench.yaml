@@ -49,4 +49,4 @@ stress-tasks:
   - radosbench:
       clients: [client.0]
       time: 90
-- print: "**** done radosbench 7-workload"
+- print: "**** done end radosbench.yaml"
