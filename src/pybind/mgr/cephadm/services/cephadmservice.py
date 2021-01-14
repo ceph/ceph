@@ -830,6 +830,36 @@ class RgwService(CephService):
                 raise OrchestratorError(err)
             self.mgr.log.info('updated period')
 
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # if load balancer (ha-rgw) is present block if only 1 daemon up otherwise ok
+        # if no load balancer, warn if > 1 daemon, block if only 1 daemon
+        def ha_rgw_present() -> bool:
+            running_ha_rgw_daemons = [
+                daemon for daemon in self.mgr.cache.get_daemons_by_type('ha-rgw') if daemon.status == 1]
+            running_haproxy_daemons = [
+                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'haproxy']
+            running_keepalived_daemons = [
+                daemon for daemon in running_ha_rgw_daemons if daemon.daemon_type == 'keepalived']
+            # check that there is at least one haproxy and keepalived daemon running
+            if running_haproxy_daemons and running_keepalived_daemons:
+                return True
+            return False
+
+        # if only 1 rgw, alert user (this is not passable with --force)
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'RGW', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+        # if reached here, there is > 1 rgw daemon.
+        # Say okay if load balancer present or force flag set
+        if ha_rgw_present() or force:
+            return HandleCommandResult(0, warn_message, '')
+
+        # if reached here, > 1 RGW daemon, no load balancer and no force flag.
+        # Provide warning
+        warn_message = "WARNING: Removing RGW daemons can cause clients to lose connectivity. "
+        return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
 
 class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
@@ -850,6 +880,14 @@ class RbdMirrorService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
+
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # if only 1 rbd-mirror, alert user (this is not passable with --force)
+        warn, warn_message = self._enough_daemons_to_stop(
+            self.TYPE, daemon_ids, 'Rbdmirror', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+        return HandleCommandResult(0, warn_message, '')
 
 
 class CrashService(CephService):
