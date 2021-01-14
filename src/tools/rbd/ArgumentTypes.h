@@ -125,6 +125,8 @@ struct ExportFormat {};
 
 struct Secret {};
 
+struct EncryptionAlgorithm {};
+
 void add_export_format_option(boost::program_options::options_description *opt);
 
 std::string get_name_prefix(ArgumentModifier modifier);
@@ -216,6 +218,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               Format *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               JournalObjectSize *target_type, int);
+void validate(boost::any& v, const std::vector<std::string>& values,
+              EncryptionAlgorithm *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               Secret *target_type, int);
 

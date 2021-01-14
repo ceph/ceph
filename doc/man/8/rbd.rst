@@ -284,6 +284,13 @@ Commands
 
   The --merge-snapshots will merge snapshots used space into their parent images.
 
+:command:`encryption format` *image-spec* *format* *passphrase-file* [--cipher-alg *alg*]
+  Formats image to an encrypted format.
+  All data previously written to the image will become unreadable.
+  A cloned image cannot be formatted, although encrypted images can be cloned.
+  Supported formats: *luks1*, *luks2*.
+  Supported cipher algorithms: *aes-128*, "aes-256" (default).
+
 :command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Export image to dest path (use - for stdout).
   The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
