@@ -195,7 +195,7 @@ get_cqe:
 
   if (events == 0) {
     struct epoll_event ev;
-    int ret = epoll_wait(d->epoll_fd, &ev, 1, timeout_ms);
+    int ret = TEMP_FAILURE_RETRY(epoll_wait(d->epoll_fd, &ev, 1, timeout_ms));
     if (ret < 0)
       events = -errno;
     else if (ret > 0)
