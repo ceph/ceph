@@ -105,8 +105,15 @@ void Cache::replace_extent(CachedExtentRef next, CachedExtentRef prev)
   assert(next->version == prev->version + 1);
   extents.replace(*next, *prev);
 
-  if (prev->is_dirty()) {
-    ceph_assert(prev->primary_ref_list_hook.is_linked());
+  if (prev->get_type() == extent_types_t::ROOT) {
+    assert(prev->primary_ref_list_hook.is_linked());
+    assert(prev->is_dirty());
+    dirty.erase(dirty.s_iterator_to(*prev));
+    intrusive_ptr_release(&*prev);
+    add_to_dirty(next);
+  } else if (prev->is_dirty()) {
+    assert(prev->dirty_from == next->dirty_from);
+    assert(prev->primary_ref_list_hook.is_linked());
     auto prev_it = dirty.iterator_to(*prev);
     dirty.insert(prev_it, *next);
     dirty.erase(prev_it);
@@ -164,14 +171,14 @@ CachedExtentRef Cache::duplicate_for_write(
     return i;
 
   auto ret = i->duplicate_for_write();
+  ret->prior_instance = i;
+  t.add_mutated_extent(ret);
   if (ret->get_type() == extent_types_t::ROOT) {
     // root must be loaded before mutate
     assert(t.root == i);
     t.root = ret->cast<RootBlock>();
   } else {
     ret->last_committed_crc = i->last_committed_crc;
-    ret->prior_instance = i;
-    t.add_mutated_extent(ret);
   }
 
   ret->version++;
@@ -209,38 +216,39 @@ std::optional<record_t> Cache::try_construct_record(Transaction &t)
 
     assert(i->get_version() > 0);
     auto final_crc = i->get_crc32c();
-    record.deltas.push_back(
-      delta_info_t{
-	i->get_type(),
-	i->get_paddr(),
-	(i->is_logical()
-	? i->cast<LogicalCachedExtent>()->get_laddr()
-	: L_ADDR_NULL),
-	i->last_committed_crc,
-	final_crc,
-	(segment_off_t)i->get_length(),
-	i->get_version() - 1,
-	i->get_delta()
-      });
-    i->last_committed_crc = final_crc;
-  }
-
-  if (t.root) {
-    logger().debug(
-      "{}: writing out root delta for {}",
-      __func__,
-      *t.root);
-    record.deltas.push_back(
-      delta_info_t{
-	extent_types_t::ROOT,
-	paddr_t{},
-	L_ADDR_NULL,
-	0,
-	0,
-	0,
-	t.root->get_version() - 1,
-	t.root->get_delta()
-      });
+    if (i->get_type() == extent_types_t::ROOT) {
+      root = t.root;
+      logger().debug(
+	"{}: writing out root delta for {}",
+	__func__,
+	*t.root);
+      record.deltas.push_back(
+	delta_info_t{
+	  extent_types_t::ROOT,
+	  paddr_t{},
+	  L_ADDR_NULL,
+	  0,
+	  0,
+	  0,
+	  t.root->get_version() - 1,
+	  t.root->get_delta()
+	});
+    } else {
+      record.deltas.push_back(
+	delta_info_t{
+	  i->get_type(),
+	  i->get_paddr(),
+	  (i->is_logical()
+	   ? i->cast<LogicalCachedExtent>()->get_laddr()
+	   : L_ADDR_NULL),
+	  i->last_committed_crc,
+	  final_crc,
+	  (segment_off_t)i->get_length(),
+	  i->get_version() - 1,
+	  i->get_delta()
+	});
+      i->last_committed_crc = final_crc;
+    }
   }
 
   // Transaction is now a go, set up in-memory cache state
@@ -281,16 +289,6 @@ void Cache::complete_commit(
   journal_seq_t seq,
   SegmentCleaner *cleaner)
 {
-  if (t.root) {
-    remove_extent(root);
-    root = t.root;
-    root->state = CachedExtent::extent_state_t::DIRTY;
-    root->on_delta_write(final_block_start);
-    root->dirty_from = seq;
-    add_extent(root);
-    logger().debug("complete_commit: new root {}", *t.root);
-  }
-
   for (auto &i: t.fresh_block_list) {
     i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     i->last_committed_crc = i->get_crc32c();
@@ -322,7 +320,7 @@ void Cache::complete_commit(
       continue;
     }
     i->state = CachedExtent::extent_state_t::DIRTY;
-    if (i->version == 1) {
+    if (i->version == 1 || i->get_type() == extent_types_t::ROOT) {
       i->dirty_from = seq;
     }
   }
@@ -378,8 +376,10 @@ Cache::replay_delta(
 {
   if (delta.type == extent_types_t::ROOT) {
     logger().debug("replay_delta: found root delta");
+    remove_extent(root);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from = journal_seq;
+    add_extent(root);
     return replay_delta_ertr::now();
   } else {
     auto get_extent_if_cached = [this](paddr_t addr)
@@ -435,6 +435,15 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
   for (auto i = dirty.begin(); i != dirty.end(); ++i) {
     CachedExtentRef cand;
     if (i->dirty_from < seq) {
+      logger().debug(
+	"Cache::get_next_dirty_extents: next {}",
+	*i);
+      if (!(ret.empty() || ret.back()->dirty_from <= i->dirty_from)) {
+	logger().debug(
+	  "Cache::get_next_dirty_extents: last {}, next {}",
+	  *ret.back(),
+	  *i);
+      }
       assert(ret.empty() || ret.back()->dirty_from <= i->dirty_from);
       ret.push_back(&*i);
     } else {
@@ -468,6 +477,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
     auto ret = root;
     return ret->wait_io().then([ret, &t] {
       t.root = ret;
+      t.add_to_read_set(ret);
       return get_root_ret(
 	get_root_ertr::ready_future_marker{},
 	ret);
