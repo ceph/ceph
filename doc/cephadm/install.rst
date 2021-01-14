@@ -121,6 +121,13 @@ The default bootstrap behavior will work for the vast majority of
 users.  See below for a few options that may be useful for some users,
 or run ``cephadm bootstrap -h`` to see all available options:
 
+* In production environments it is recommended to have network separation
+  between the public network traffic and the cluster traffic which handles
+  replication, recovery and heartbeats between OSD daemons. To define the 
+  `cluster network`_ you can supply the ``--cluster-network`` option. This
+  parameter must define a subnet in CIDR notation, for example
+  10.90.90.0/24 or fe80::/64.
+
 * Bootstrap writes the files needed to access the new cluster to ``/etc/ceph``,
   so that any Ceph packages installed on the host itself (e.g., to access the
   command line interface) can easily find them.
@@ -542,3 +549,5 @@ See :ref:`orchestrator-cli-placement-spec` for details of the placement specific
 Deploying custom containers
 ===========================
 It is also possible to choose different containers than the default containers to deploy Ceph. See :ref:`containers` for information about your options in this regard.
+
+.. _cluster network: ../rados/configuration/network-config-ref#cluster-network
