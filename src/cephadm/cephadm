@@ -66,10 +66,7 @@ from contextlib import redirect_stdout
 import ssl
 
 
-try:
-    from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
-except ImportError:
-    pass
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
 
 import re
 import uuid
@@ -898,12 +895,6 @@ def check_ip_port(ip, port):
 # https://github.com/benediktschmitt/py-filelock/blob/master/filelock.py
 # that drops all of the compatibility (this is Unix/Linux only).
 
-try:
-    TimeoutError
-except NameError:
-    TimeoutError = OSError
-
-
 class Timeout(TimeoutError):
     """
     Raised when the lock could not be acquired in *timeout*
@@ -1158,8 +1149,10 @@ def call(command,  # type: List[str]
                 message_b = os.read(fd, 1024)
                 if isinstance(message_b, bytes):
                     message = message_b.decode('utf-8')
-                if isinstance(message_b, str):
+                elif isinstance(message_b, str):
                     message = message_b
+                else:
+                    assert False
                 if stop and message:
                     # process has terminated, but have more to read still, so not stopping yet
                     # (os.read returns '' when it encounters EOF)
@@ -1962,6 +1955,8 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             config_dir = 'etc/alertmanager'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
+        else:
+            assert False
 
         # populate the config directory for the component from the config-json
         for fname in required_files:
@@ -2556,6 +2551,9 @@ class Firewalld(object):
         else:
             return
 
+        if not self.cmd:
+            raise RuntimeError("command not defined")
+
         out, err, ret = call([self.cmd, '--permanent', '--query-service', svc], verbose_on_failure=False)
         if ret:
             logger.info('Enabling firewalld service %s in current zone...' % svc)
@@ -2571,6 +2569,9 @@ class Firewalld(object):
         if not self.available:
             logger.debug('Not possible to open ports <%s>. firewalld.service is not available' % fw_ports)
             return
+
+        if not self.cmd:
+            raise RuntimeError("command not defined")
 
         for port in fw_ports:
             tcp_port = str(port) + '/tcp'
@@ -2590,6 +2591,9 @@ class Firewalld(object):
             logger.debug('Not possible to close ports <%s>. firewalld.service is not available' % fw_ports)
             return
 
+        if not self.cmd:
+            raise RuntimeError("command not defined")
+
         for port in fw_ports:
             tcp_port = str(port) + '/tcp'
             out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbose_on_failure=False)
@@ -2608,6 +2612,9 @@ class Firewalld(object):
         # type: () -> None
         if not self.available:
             return
+
+        if not self.cmd:
+            raise RuntimeError("command not defined")
 
         call_throws([self.cmd, '--reload'])
 
@@ -3365,6 +3372,7 @@ def command_bootstrap():
         is_available('mgr epoch %d' % epoch, mgr_has_latest_epoch)
 
     # ssh
+    host: Optional[str] = None
     if not args.skip_ssh:
         cli(['config-key', 'set', 'mgr/cephadm/ssh_user', args.ssh_user])
 
@@ -3976,7 +3984,10 @@ def list_networks():
 
 
 def _list_ipv4_networks():
-    out, _, _ = call_throws([find_executable('ip'), 'route', 'ls'])
+    execstr: Optional[str] = find_executable('ip')
+    if not execstr:
+        raise FileNotFoundError("unable to find 'ip' command")
+    out, _, _ = call_throws([execstr, 'route', 'ls'])
     return _parse_ipv4_route(out)
 
 
@@ -3996,8 +4007,11 @@ def _parse_ipv4_route(out):
 
 
 def _list_ipv6_networks():
-    routes, _, _ = call_throws([find_executable('ip'), '-6', 'route', 'ls'])
-    ips, _, _ = call_throws([find_executable('ip'), '-6', 'addr', 'ls'])
+    execstr: Optional[str] = find_executable('ip')
+    if not execstr:
+        raise FileNotFoundError("unable to find 'ip' command")
+    routes, _, _ = call_throws([execstr, '-6', 'route', 'ls'])
+    ips, _, _ = call_throws([execstr, '-6', 'addr', 'ls'])
     return _parse_ipv6_route(routes, ips)
 
 
@@ -4068,14 +4082,14 @@ def list_daemons(detail=True, legacy_dir=None):
                             cluster, daemon_type, daemon_id,
                             legacy_dir=legacy_dir)
                     legacy_unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
-                    i = {
+                    val: Dict[str, Any] = {
                         'style': 'legacy',
                         'name': '%s.%s' % (daemon_type, daemon_id),
                         'fsid': fsid if fsid is not None else 'unknown',
                         'systemd_unit': legacy_unit_name,
                     }
                     if detail:
-                        (i['enabled'], i['state'], _) = check_unit(legacy_unit_name)
+                        (val['enabled'], val['state'], _) = check_unit(legacy_unit_name)
                         if not host_version:
                             try:
                                 out, err, code = call(['ceph', '-v'])
@@ -4083,8 +4097,8 @@ def list_daemons(detail=True, legacy_dir=None):
                                     host_version = out.split(' ')[2]
                             except Exception:
                                 pass
-                        i['host_version'] = host_version
-                    ls.append(i)
+                        val['host_version'] = host_version
+                    ls.append(val)
             elif is_fsid(i):
                 fsid = str(i)  # convince mypy that fsid is a str here
                 for j in os.listdir(os.path.join(data_dir, i)):
@@ -4096,7 +4110,7 @@ def list_daemons(detail=True, legacy_dir=None):
                                                   daemon_id)
                     else:
                         continue
-                    i = {
+                    val = {
                         'style': 'cephadm:v1',
                         'name': name,
                         'fsid': fsid,
@@ -4104,7 +4118,7 @@ def list_daemons(detail=True, legacy_dir=None):
                     }
                     if detail:
                         # get container id
-                        (i['enabled'], i['state'], _) = check_unit(unit_name)
+                        (val['enabled'], val['state'], _) = check_unit(unit_name)
                         container_id = None
                         image_name = None
                         image_id = None
@@ -4193,20 +4207,20 @@ def list_daemons(detail=True, legacy_dir=None):
                                     image_name = f.read().strip() or None
                             except IOError:
                                 pass
-                        i['container_id'] = container_id
-                        i['container_image_name'] = image_name
-                        i['container_image_id'] = image_id
-                        i['version'] = version
-                        i['started'] = start_stamp
-                        i['created'] = get_file_timestamp(
+                        val['container_id'] = container_id
+                        val['container_image_name'] = image_name
+                        val['container_image_id'] = image_id
+                        val['version'] = version
+                        val['started'] = start_stamp
+                        val['created'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.created')
                         )
-                        i['deployed'] = get_file_timestamp(
+                        val['deployed'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.image'))
-                        i['configured'] = get_file_timestamp(
+                        val['configured'] = get_file_timestamp(
                             os.path.join(data_dir, fsid, j, 'unit.configured'))
 
-                    ls.append(i)
+                    ls.append(val)
 
     return ls
 
@@ -4909,6 +4923,7 @@ class Packager(object):
         except HTTPError as err:
             logger.error('repository not found in shaman (might not be available yet)')
             raise Error('%s, failed to fetch %s' % (err, shaman_url))
+        chacra_url = ''
         try:
             chacra_url = shaman_response.geturl()
             chacra_response = urlopen(chacra_url)
@@ -5773,9 +5788,9 @@ class HostFacts():
         return float(up_secs)
 
     def kernel_security(self):
-        # type: () -> Dict[str, str]
+        # type: () -> Optional[Dict[str, str]]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
-        def _fetch_selinux():
+        def _fetch_selinux() -> Optional[Dict[str, str]]:
             """Read the selinux config file to determine state"""
             security = {}
             for selinux_path in HostFacts._selinux_path_list:
@@ -5792,8 +5807,9 @@ class HostFacts():
                     else:
                         security['description'] = "SELinux: Enabled({}, {})".format(security['SELINUX'], security['SELINUXTYPE'])
                     return security
+            return None
 
-        def _fetch_apparmor():
+        def _fetch_apparmor() -> Optional[Dict[str, str]]:
             """Read the apparmor profiles directly, returning an overview of AppArmor status"""
             security = {}
             for apparmor_path in HostFacts._apparmor_path_list:
@@ -5818,6 +5834,7 @@ class HostFacts():
                         security['description'] += "({})".format(summary_str)
 
                     return security
+            return None
 
         if os.path.exists('/sys/kernel/security/lsm'):
             lsm = read_file(['/sys/kernel/security/lsm']).strip()
@@ -6266,13 +6283,13 @@ class CephadmDaemon():
                     # json, it won't parse
                     stdout = stream.getvalue()
 
+                    data = []
                     if stdout:
                         try:
                             data = json.loads(stdout)
                         except json.decoder.JSONDecodeError:
                             errors.append("ceph-volume thread provided bad json data")
                             logger.warning(errors[-1])
-                            data = []
                     else:
                         errors.append("ceph-volume didn't return any data")
                         logger.warning(errors[-1])
@@ -6505,6 +6522,7 @@ WantedBy=ceph-{fsid}.target
             logger.warning(f"Unable to access the unit.run file @ {unit_run}")
             return
 
+        port = None
         for line in contents.split('\n'):
             if '--port ' in line:
                 try:
