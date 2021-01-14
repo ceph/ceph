@@ -59,7 +59,7 @@ TEST_F(CrushWrapperTest, get_immediate_parent) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
@@ -95,7 +95,7 @@ TEST_F(CrushWrapperTest, move_bucket) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int root0;
-  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 			     ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &root0));
   EXPECT_EQ(0, c->set_item_name(root0, "root0"));
 
@@ -111,7 +111,7 @@ TEST_F(CrushWrapperTest, move_bucket) {
   int host0 = c->get_item_id("host0");
 
   int root1;
-  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 			     ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &root1));
   EXPECT_EQ(0, c->set_item_name(root1, "root1"));
 
@@ -295,7 +295,7 @@ TEST_F(CrushWrapperTest, check_item_loc) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
@@ -351,19 +351,19 @@ TEST_F(CrushWrapperTest, update_item) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
   const string HOST0("host0");
   int host0;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		HOST_TYPE, 0, NULL, NULL, NULL, NULL, &host0);
   c->set_item_name(host0, HOST0);
 
   const string HOST1("host1");
   int host1;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		HOST_TYPE, 0, NULL, NULL, NULL, NULL, &host1);
   c->set_item_name(host1, HOST1);
 
@@ -445,19 +445,19 @@ TEST_F(CrushWrapperTest, adjust_item_weight) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
   const string HOST0("host0");
   int host0;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		HOST_TYPE, 0, NULL, NULL, NULL, NULL, &host0);
   c->set_item_name(host0, HOST0);
 
   const string FAKE("fake");
   int hostfake;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		HOST_TYPE, 0, NULL, NULL, NULL, NULL, &hostfake);
   c->set_item_name(hostfake, FAKE);
 
@@ -564,19 +564,19 @@ TEST_F(CrushWrapperTest, adjust_subtree_weight) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
   const string HOST0("host0");
   int host0;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		HOST_TYPE, 0, NULL, NULL, NULL, NULL, &host0);
   c->set_item_name(host0, HOST0);
 
   const string FAKE("fake");
   int hostfake;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		HOST_TYPE, 0, NULL, NULL, NULL, NULL, &hostfake);
   c->set_item_name(hostfake, FAKE);
 
@@ -657,7 +657,7 @@ TEST_F(CrushWrapperTest, insert_item) {
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
@@ -758,7 +758,7 @@ TEST_F(CrushWrapperTest, insert_item) {
   {
     // create an OSD bucket
     int osdno;
-    int r = c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+    int r = c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 			  10, 0, NULL, NULL, NULL, NULL, &osdno);
     ASSERT_EQ(0, r);
     c->set_item_name(osdno, "myosd");
@@ -792,14 +792,14 @@ TEST_F(CrushWrapperTest, remove_item) {
 
   {
     int root;
-    ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+    ASSERT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 			       ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &root));
     c->set_item_name(root, "root0");
   }
 
   {
     int host;
-    c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+    c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		  HOST_TYPE, 0, NULL, NULL, NULL, NULL, &host);
     c->set_item_name(host, "host0");
   }
@@ -878,7 +878,7 @@ TEST_F(CrushWrapperTest, dump_rules) {
   string failure_domain_type("osd");
   string root_name("default");
   int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+  c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
 		ROOT_TYPE, 0, NULL, NULL, NULL, NULL, &rootno);
   c->set_item_name(rootno, root_name);
 
@@ -947,7 +947,7 @@ TEST_F(CrushWrapperTest, distance) {
   c.set_type_name(2, "rack");
   c.set_type_name(3, "root");
   int bno;
-  int r = c.add_bucket(0, CRUSH_BUCKET_STRAW,
+  int r = c.add_bucket(0, CRUSH_BUCKET_STRAW2,
 		       CRUSH_HASH_DEFAULT, 3, 0, NULL,
 		       NULL, NULL, NULL, &bno);
   ASSERT_EQ(0, r);

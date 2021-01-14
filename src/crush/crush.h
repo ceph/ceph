@@ -1,6 +1,8 @@
 #ifndef CEPH_CRUSH_CRUSH_H
 #define CEPH_CRUSH_CRUSH_H
 
+#include <limits.h>
+
 #ifdef __KERNEL__
 # include <linux/types.h>
 #else
@@ -335,6 +337,7 @@ struct crush_bucket_straw {
 #define performance_threshold           (1000)
 #define is_same_performance(x, y)       (x - y < performance_threshold || \
                                          y - x < performance_threshold)
+#define INVALID_BUCKET_OR_OSD_ID        (INT_MAX)
 
 extern void union_performance_range_set(__u32 **target_performance_range_set, __u32 *target_performance_range_set_num, \
 				   const __u32 *performance_range_set, int performance_range_set_num);
@@ -342,6 +345,7 @@ extern void subtract_performance_range_set(__u32 **target_performance_range_set,
 				   const __u32 *performance_range_set, int performance_range_set_num);
 extern int is_same_performance_range_set(__u32 *performance_range_set1, int performance_range_set1_num, \
 				   const __u32 *performance_range_set2, int performance_range_set2_num);
+extern int does_cover_this(const __u32 *performance_range_set, int performance_range_set_num, int performance);
 
 /** @ingroup API
  * The weight of each item in the bucket when

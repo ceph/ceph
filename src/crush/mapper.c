@@ -360,14 +360,19 @@ static inline __s64 generate_exponential_distribution(int type, int x, int y, in
 
 static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
 				int x, int r, const struct crush_choose_arg *arg,
-                                int position)
+                                int position, int *first_replica_performance)
 {
-	unsigned int i, high = 0;
-	__s64 draw, high_draw = 0;
+	unsigned int i, high = -1;
+	__s64 draw, high_draw = S64_MIN;
         __u32 *weights = get_choose_arg_weights(bucket, arg, position);
         __s32 *ids = get_choose_arg_ids(bucket, arg);
 	for (i = 0; i < bucket->h.size; i++) {
                 dprintk("weight 0x%x item %d\n", weights[i], ids[i]);
+		if (first_replica_performance != NULL && *first_replica_performance != 0) {
+			if (!does_cover_this(bucket->item_performance_range_sets[i], bucket->item_performance_range_sets_num[i], *first_replica_performance))
+				continue;
+		}
+
 		if (weights[i]) {
 			draw = generate_exponential_distribution(bucket->h.hash, x, ids[i], r, weights[i]);
 		} else {
@@ -379,8 +384,15 @@ static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
 			high_draw = draw;
 		}
 	}
-
-	return bucket->h.items[high];
+	if (high == -1) {
+		return INVALID_BUCKET_OR_OSD_ID;
+	} else {
+		/* it mean it is a osd and it is the first replica */
+		if ((bucket->h.items[high] >= 0) && (first_replica_performance != NULL && *first_replica_performance == 0)) {
+			*first_replica_performance = bucket->item_performance_range_sets[high][0];
+		}
+		return bucket->h.items[high];
+	}
 }
 
 
@@ -388,7 +400,8 @@ static int crush_bucket_choose(const struct crush_bucket *in,
 			       struct crush_work_bucket *work,
 			       int x, int r,
                                const struct crush_choose_arg *arg,
-                               int position)
+                               int position,
+							   int *first_replica_performance)
 {
 	dprintk(" crush_bucket_choose %d x=%d r=%d\n", in->id, x, r);
 	BUG_ON(in->size == 0);
@@ -410,7 +423,7 @@ static int crush_bucket_choose(const struct crush_bucket *in,
 	case CRUSH_BUCKET_STRAW2:
 		return bucket_straw2_choose(
 			(const struct crush_bucket_straw2 *)in,
-			x, r, arg, position);
+			x, r, arg, position, first_replica_performance);
 	default:
 		dprintk("unknown bucket %d alg %d\n", in->id, in->alg);
 		return in->items[0];
@@ -456,6 +469,8 @@ static int is_out(const struct crush_map *map,
  * @vary_r: pass r to recursive calls
  * @out2: second output vector for leaf items (if @recurse_to_leaf)
  * @parent_r: r value passed from the parent
+ * @first_replica_performance: if *first_replica_performance equals 0, you do not need to consider performance,
+ * or you should choose the item whose performance range set can cover *first_replica_performance. 
  */
 static int crush_choose_firstn(const struct crush_map *map,
 			       struct crush_work *work,
@@ -473,7 +488,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       unsigned int stable,
 			       int *out2,
 			       int parent_r,
-                               const struct crush_choose_arg *choose_args)
+                               const struct crush_choose_arg *choose_args, 
+				   int *first_replica_performance)
 {
 	int rep;
 	unsigned int ftotal, flocal;
@@ -527,8 +543,8 @@ parent_r %d stable %d\n",
 						in, work->work[-1-in->id],
 						x, r,
                                                 (choose_args ? &choose_args[-1-in->id] : 0),
-                                                outpos);
-				if (item >= map->max_devices) {
+                                                outpos, first_replica_performance);
+				if (item >= map->max_devices || item == INVALID_BUCKET_OR_OSD_ID) {
 					dprintk("   bad item %d\n", item);
 					skip_rep = 1;
 					break;
@@ -585,7 +601,8 @@ parent_r %d stable %d\n",
 							    stable,
 							    NULL,
 							    sub_r,
-                                                            choose_args) <= outpos)
+                                                            choose_args,
+								first_replica_performance) <= outpos)
 							/* didn't get leaf */
 							reject = 1;
 					} else {
@@ -737,7 +754,7 @@ static void crush_choose_indep(const struct crush_map *map,
 					in, work->work[-1-in->id],
 					x, r,
                                         (choose_args ? &choose_args[-1-in->id] : 0),
-                                        outpos);
+                                        outpos, NULL);
 				if (item >= map->max_devices) {
 					dprintk("   bad item %d\n", item);
 					out[rep] = CRUSH_ITEM_NONE;
@@ -933,6 +950,7 @@ int crush_do_rule(const struct crush_map *map,
 
 	int vary_r = map->chooseleaf_vary_r;
 	int stable = map->chooseleaf_stable;
+	int first_replica_performacne = 0;
 
 	if ((__u32)ruleno >= map->max_rules) {
 		dprintk(" bad ruleno %d\n", ruleno);
@@ -1051,7 +1069,8 @@ int crush_do_rule(const struct crush_map *map,
 						stable,
 						c+osize,
 						0,
-						choose_args);
+						choose_args,
+						&first_replica_performacne);
 				} else {
 					out_size = ((numrep < (result_max-osize)) ?
 						    numrep : (result_max-osize));
