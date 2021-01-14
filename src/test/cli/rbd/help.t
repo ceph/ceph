@@ -34,6 +34,7 @@
                                         previous snap, or image creation.
       disk-usage (du)                   Show disk usage stats for pool, image or
                                         snapshot.
+      encryption format                 Format image to an encrypted format.
       export                            Export image to file.
       export-diff                       Export incremental diff to file.
       feature disable                   Disable the specified image feature.
@@ -673,6 +674,27 @@
     --from-snap arg       snapshot starting point
     --exact               compute exact disk usage (slow)
     --merge-snapshots     merge snapshot sizes with its image
+  
+  rbd help encryption format
+  usage: rbd encryption format [--pool <pool>] [--namespace <namespace>] 
+                               [--image <image>] [--cipher-alg <cipher-alg>] 
+                               <image-spec> <format> <passphrase-file> 
+  
+  Format image to an encrypted format.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
+    <format>             encryption format [possible values: luks1, luks2]
+    <passphrase-file>    path of file containing passphrase for unlocking the
+                         image
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --cipher-alg arg     encryption algorithm [possible values: aes-128, aes-256
+                         (default)]
   
   rbd help export
   usage: rbd export [--pool <pool>] [--namespace <namespace>] [--image <image>] 
