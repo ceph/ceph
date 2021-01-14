@@ -158,12 +158,17 @@ if [[ -z $SKIP_BUILD ]]; then
     # We're going to use an associative array having subdirectories as keys
     # and targets as values.
     declare -A make_targets
-    make_targets["src/tools"]="ceph-conf ceph_radosacl ceph_scratchtool rados"
+    make_targets["src/tools"]="ceph-conf rados"
     make_targets["src/tools/immutable_object_cache"]="all"
     make_targets["src/tools/rbd"]="all"
     make_targets["src/tools/rbd_wnbd"]="all"
     make_targets["src/compressor"]="all"
     make_targets["src/test"]="all"
+
+    if [[ -z $SKIP_TESTS ]]; then
+      make_targets["src/tools"]+=" ceph_radosacl ceph_scratchtool"
+      make_targets["src/test"]="all"
+    fi
 
     for target_subdir in "${!make_targets[@]}"; do
       echo "Building $target_subdir: ${make_targets[$target_subdir]}" | tee -a "${BUILD_DIR}/build.log"
