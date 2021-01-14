@@ -262,6 +262,26 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES"
         _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS "RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS"
 
+    ctypedef enum rbd_encryption_format_t:
+        _RBD_ENCRYPTION_FORMAT_LUKS1 "RBD_ENCRYPTION_FORMAT_LUKS1"
+        _RBD_ENCRYPTION_FORMAT_LUKS2 "RBD_ENCRYPTION_FORMAT_LUKS2"
+
+    ctypedef enum rbd_encryption_algorithm_t:
+        _RBD_ENCRYPTION_ALGORITHM_AES128 "RBD_ENCRYPTION_ALGORITHM_AES128"
+        _RBD_ENCRYPTION_ALGORITHM_AES256 "RBD_ENCRYPTION_ALGORITHM_AES256"
+
+    ctypedef struct rbd_encryption_luks1_format_options_t:
+        rbd_encryption_algorithm_t alg
+        const char* passphrase
+        size_t passphrase_size
+
+    ctypedef struct rbd_encryption_luks2_format_options_t:
+        rbd_encryption_algorithm_t alg
+        const char* passphrase
+        size_t passphrase_size
+
+    ctypedef void* rbd_encryption_options_t
+
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
 
     void rbd_version(int *major, int *minor, int *extra)
@@ -690,3 +710,10 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_pool_stats_option_add_uint64(rbd_pool_stats_t stats,
                                          int stat_option, uint64_t* stat_val)
     int rbd_pool_stats_get(rados_ioctx_t io, rbd_pool_stats_t stats)
+
+    int rbd_encryption_format(rbd_image_t image,
+                              rbd_encryption_format_t format,
+                              rbd_encryption_options_t opts, size_t opts_size)
+    int rbd_encryption_load(rbd_image_t image,
+                              rbd_encryption_format_t format,
+                              rbd_encryption_options_t opts, size_t opts_size)
