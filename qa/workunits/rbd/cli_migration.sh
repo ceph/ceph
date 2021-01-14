@@ -142,19 +142,13 @@ EOF
 }
 
 test_import_qcow_format() {
-    case "$(lsb_release --id --short)" in
-    RedHatEnterpriseWorkstation|RedHatEnterpriseServer|RedHatEnterprise|CentOS)
-        # QCOW format not included in EL variants
-        return
-        ;;
-    *)
-        ;;
-    esac
-
     local base_image=$1
     local dest_image=$2
 
-    qemu-img convert -f raw -O qcow rbd:rbd/${base_image} ${TEMPDIR}/${base_image}.qcow
+    if ! qemu-img convert -f raw -O qcow rbd:rbd/${base_image} ${TEMPDIR}/${base_image}.qcow; then
+        echo "skipping QCOW test"
+        return 0
+    fi
     qemu-img info -f qcow ${TEMPDIR}/${base_image}.qcow
 
     cat > ${TEMPDIR}/spec.json <<EOF
