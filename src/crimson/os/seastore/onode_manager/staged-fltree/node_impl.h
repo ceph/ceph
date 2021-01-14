@@ -62,7 +62,9 @@ class NodeImpl {
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
+    crimson::ct_error::erange,
+    crimson::ct_error::eagain
+   >;
   virtual ~NodeImpl() = default;
 
   virtual field_type_t field_type() const = 0;

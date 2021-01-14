@@ -52,13 +52,15 @@ class OMapManager {
   * until these functions future resolved.
   */
 public:
+  using base_ertr = TransactionManager::base_ertr;
+
   /**
    * allocate omap tree root node
    *
    * @param Transaction &t, current transaction
    * @retval return the omap_root_t structure.
    */
-  using initialize_omap_ertr = TransactionManager::alloc_extent_ertr;
+  using initialize_omap_ertr = base_ertr;
   using initialize_omap_ret = initialize_omap_ertr::future<omap_root_t>;
   virtual initialize_omap_ret initialize_omap(Transaction &t) = 0;
 
@@ -70,7 +72,7 @@ public:
    * @param string &key, omap string key
    * @retval return string key->string value mapping pair.
    */
-  using omap_get_value_ertr = TransactionManager::read_extent_ertr;
+  using omap_get_value_ertr = base_ertr;
   using omap_get_value_ret = omap_get_value_ertr::future<std::pair<std::string, std::string>>;
   virtual omap_get_value_ret omap_get_value(const omap_root_t &omap_root, Transaction &t,
 		                            const std::string &key) = 0;
@@ -84,7 +86,7 @@ public:
    * @param string &value, mapped value corresponding key
    * @retval mutation_result_t, status should be success.
    */
-  using omap_set_key_ertr = TransactionManager::read_extent_ertr;
+  using omap_set_key_ertr = base_ertr;
   using omap_set_key_ret = omap_set_key_ertr::future<bool>;
   virtual omap_set_key_ret omap_set_key(omap_root_t &omap_root, Transaction &t,
 		                        const std::string &key, const std::string &value) = 0;
@@ -97,7 +99,7 @@ public:
    * @param string &key, omap string key
    * @retval remove success return true, else return false.
    */
-  using omap_rm_key_ertr = TransactionManager::read_extent_ertr;
+  using omap_rm_key_ertr = base_ertr;
   using omap_rm_key_ret = omap_rm_key_ertr::future<bool>;
   virtual omap_rm_key_ret omap_rm_key(omap_root_t &omap_root, Transaction &t,
 		                                    const std::string &key) = 0;
@@ -113,7 +115,7 @@ public:
    *        it it is not set, list all keys after string start
    * @retval list_keys_result_t, listed keys and next key
    */
-  using omap_list_keys_ertr = TransactionManager::read_extent_ertr;
+  using omap_list_keys_ertr = base_ertr;
   using omap_list_keys_ret = omap_list_keys_ertr::future<list_keys_result_t>;
   virtual omap_list_keys_ret omap_list_keys(const omap_root_t &omap_root, Transaction &t,
                              std::string &start,
@@ -130,7 +132,7 @@ public:
    *        it it is not set, list all keys after string start.
    * @retval list_kvs_result_t, listed key->value mapping and next key.
    */
-  using omap_list_ertr = TransactionManager::read_extent_ertr;
+  using omap_list_ertr = base_ertr;
   using omap_list_ret = omap_list_ertr::future<list_kvs_result_t>;
   virtual omap_list_ret omap_list(const omap_root_t &omap_root, Transaction &t,
                                   std::string &start,
@@ -142,7 +144,7 @@ public:
    * @param omap_root_t &omap_root,  omap btree root information
    * @param Transaction &t,  current transaction
    */
-  using omap_clear_ertr = TransactionManager::read_extent_ertr;
+  using omap_clear_ertr = base_ertr;
   using omap_clear_ret = omap_clear_ertr::future<>;
   virtual omap_clear_ret omap_clear(omap_root_t &omap_root, Transaction &t) = 0;
 

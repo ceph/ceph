@@ -643,7 +643,7 @@ LBALeafNode::get_leaf_entries(laddr_t addr, extent_len_t len)
   return bound(addr, addr + len);
 }
 
-Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
+get_lba_node_ertr::future<LBANodeRef> get_lba_btree_extent(
   op_context_t c,
   depth_t depth,
   paddr_t offset,

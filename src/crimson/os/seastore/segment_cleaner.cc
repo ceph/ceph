@@ -246,7 +246,7 @@ SegmentCleaner::rewrite_dirty_ret SegmentCleaner::rewrite_dirty(
     limit
   ).then([=, &t](auto dirty_list) {
     if (dirty_list.empty()) {
-      return do_immediate_work_ertr::now();
+      return rewrite_dirty_ertr::now();
     } else {
       update_journal_tail_target(dirty_list.front()->get_dirty_from());
     }

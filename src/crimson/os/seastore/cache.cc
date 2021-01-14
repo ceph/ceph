@@ -354,7 +354,10 @@ Cache::mkfs_ertr::future<> Cache::mkfs(Transaction &t)
   return get_root(t).safe_then([this, &t](auto croot) {
     duplicate_for_write(t, croot);
     return mkfs_ertr::now();
-  });
+  }).handle_error(
+    mkfs_ertr::pass_further{},
+    crimson::ct_error::assert_all{}
+  );
 }
 
 Cache::close_ertr::future<> Cache::close()
@@ -383,22 +386,26 @@ Cache::replay_delta(
     return replay_delta_ertr::now();
   } else {
     auto get_extent_if_cached = [this](paddr_t addr)
-      -> replay_delta_ertr::future<CachedExtentRef> {
+      -> get_extent_ertr::future<CachedExtentRef> {
       auto retiter = extents.find_offset(addr);
       if (retiter != extents.end()) {
-	return replay_delta_ertr::make_ready_future<CachedExtentRef>(&*retiter);
+	return seastar::make_ready_future<CachedExtentRef>(&*retiter);
       } else {
-	return replay_delta_ertr::make_ready_future<CachedExtentRef>();
+	return seastar::make_ready_future<CachedExtentRef>();
       }
     };
-    auto extent_fut = delta.pversion == 0 ?
+    auto extent_fut = (delta.pversion == 0 ?
       get_extent_by_type(
 	delta.type,
 	delta.paddr,
 	delta.laddr,
 	delta.length) :
       get_extent_if_cached(
-	delta.paddr);
+	delta.paddr)
+    ).handle_error(
+      replay_delta_ertr::pass_further{},
+      crimson::ct_error::assert_all{}
+    );
     return extent_fut.safe_then([=, &delta](auto extent) {
       if (!extent) {
 	assert(delta.pversion > 0);

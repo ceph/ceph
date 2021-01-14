@@ -271,9 +271,7 @@ struct LBAInternalNode
     return std::make_pair(retl, retr);
   }
 
-  using split_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
+  using split_ertr = base_ertr;
   using split_ret = split_ertr::future<LBANodeRef>;
   split_ret split_entry(
     op_context_t c,
@@ -281,9 +279,7 @@ struct LBAInternalNode
     internal_iterator_t,
     LBANodeRef entry);
 
-  using merge_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
+  using merge_ertr = base_ertr;
   using merge_ret = merge_ertr::future<LBANodeRef>;
   merge_ret merge_entry(
     op_context_t c,

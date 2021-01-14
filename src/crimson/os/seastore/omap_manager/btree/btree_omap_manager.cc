@@ -73,9 +73,15 @@ BtreeOMapManager::handle_root_merge(omap_root_t &omap_root, omap_context_t oc,
   omap_root.omap_root_laddr = iter->get_node_key().laddr;
   omap_root.depth -= 1;
   omap_root.state = omap_root_state_t::MUTATED;
-  return oc.tm.dec_ref(oc.t, root->get_laddr()).safe_then([] (auto &&ret) {
+  return oc.tm.dec_ref(oc.t, root->get_laddr()
+  ).safe_then([] (auto &&ret) {
     return handle_root_merge_ertr::make_ready_future<bool>(true);
-  });
+  }).handle_error(
+    handle_root_merge_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in handle_root_merge"
+    }
+  );
 }
 
 
@@ -181,7 +187,12 @@ BtreeOMapManager::omap_clear(omap_root_t &omap_root, Transaction &t)
       omap_root.omap_root_laddr = L_ADDR_NULL;
       return omap_clear_ertr::now();
     });
-  });
+  }).handle_error(
+    omap_clear_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in BtreeOMapManager::omap_clear"
+    }
+  );
 }
 
 }

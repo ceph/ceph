@@ -116,9 +116,7 @@ struct ExtMapNode : LogicalCachedExtent {
     });
   }
 
-  using retire_ertr = crimson::errorator<
-                      crimson::ct_error::enoent,
-                      crimson::ct_error::input_output_error>;
+  using retire_ertr = TransactionManager::ref_ertr;
   using retire_ret = retire_ertr::future<std::list<unsigned>>;
   retire_ret
   extmap_retire_node(ext_context_t ec, std::list<laddr_t> dec_laddrs) {
