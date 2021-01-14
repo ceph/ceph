@@ -33,7 +33,8 @@ class Btree {
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
+    crimson::ct_error::erange,
+    crimson::ct_error::eagain>;
   template <class ValueT=void>
   using btree_future = btree_ertr::future<ValueT>;
 

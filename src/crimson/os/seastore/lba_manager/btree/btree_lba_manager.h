@@ -132,7 +132,7 @@ private:
    *
    * Get a reference to the root LBANode.
    */
-  using get_root_ertr = Cache::get_extent_ertr;
+  using get_root_ertr = base_ertr;
   using get_root_ret = get_root_ertr::future<LBANodeRef>;
   get_root_ret get_root(Transaction &);
 
@@ -141,8 +141,7 @@ private:
    *
    * Insert a lba mapping into the tree
    */
-  using insert_mapping_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
+  using insert_mapping_ertr = base_ertr;
   using insert_mapping_ret = insert_mapping_ertr::future<LBAPinRef>;
   insert_mapping_ret insert_mapping(
     Transaction &t,   ///< [in,out] transaction

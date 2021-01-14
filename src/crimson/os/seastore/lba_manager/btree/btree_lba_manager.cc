@@ -39,7 +39,10 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
         make_record_relative_paddr(0),
         L_ADDR_NULL};
     return mkfs_ertr::now();
-  });
+  }).handle_error(
+    mkfs_ertr::pass_further{},
+    crimson::ct_error::assert_all{}
+  );
 }
 
 BtreeLBAManager::get_root_ret

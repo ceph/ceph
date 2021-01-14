@@ -28,6 +28,8 @@ enum class mutation_status_t : uint8_t {
 };
 
 struct OMapNode : LogicalCachedExtent {
+  using base_ertr = OMapManager::base_ertr;
+
   using OMapNodeRef = TCachedExtentRef<OMapNode>;
 
   struct mutation_result_t {
@@ -49,15 +51,15 @@ struct OMapNode : LogicalCachedExtent {
   OMapNode(const OMapNode &other)
   : LogicalCachedExtent(other) {}
 
-  using get_value_ertr = OMapManager::omap_get_value_ertr;
+  using get_value_ertr = base_ertr;
   using get_value_ret = OMapManager::omap_get_value_ret;
   virtual get_value_ret get_value(omap_context_t oc, const std::string &key) = 0;
 
-  using insert_ertr = TransactionManager::alloc_extent_ertr;
+  using insert_ertr = base_ertr;
   using insert_ret = insert_ertr::future<mutation_result_t>;
   virtual insert_ret insert(omap_context_t oc, const std::string &key, const std::string &value) = 0;
 
-  using rm_key_ertr = TransactionManager::alloc_extent_ertr;
+  using rm_key_ertr = base_ertr;
   using rm_key_ret = rm_key_ertr::future<mutation_result_t>;
   virtual rm_key_ret rm_key(omap_context_t oc, const std::string &key) = 0;
 
@@ -66,19 +68,19 @@ struct OMapNode : LogicalCachedExtent {
   virtual list_keys_ret list_keys(omap_context_t oc, std::string &start,
                                   size_t max_result_size) = 0;
 
-  using list_ertr = OMapManager::omap_list_ertr;
+  using list_ertr = base_ertr;
   using list_ret = OMapManager::omap_list_ret;
   virtual list_ret list(omap_context_t oc, std::string &start, size_t max_result_size) = 0;
 
-  using clear_ertr = OMapManager::omap_clear_ertr;
+  using clear_ertr = base_ertr;
   using clear_ret = clear_ertr::future<>;
   virtual clear_ret clear(omap_context_t oc) = 0;
 
-  using full_merge_ertr = TransactionManager::alloc_extent_ertr;
+  using full_merge_ertr = base_ertr;
   using full_merge_ret = full_merge_ertr::future<OMapNodeRef>;
   virtual full_merge_ret make_full_merge(omap_context_t oc, OMapNodeRef right) = 0;
 
-  using make_balanced_ertr = TransactionManager::alloc_extent_ertr;
+  using make_balanced_ertr = base_ertr;
   using make_balanced_ret = make_balanced_ertr::future
           <std::tuple<OMapNodeRef, OMapNodeRef, std::string>>;
   virtual make_balanced_ret make_balanced(omap_context_t oc, OMapNodeRef _right) = 0;
@@ -93,7 +95,8 @@ struct OMapNode : LogicalCachedExtent {
 
 using OMapNodeRef = OMapNode::OMapNodeRef;
 
-TransactionManager::read_extent_ertr::future<OMapNodeRef>
+using omap_load_extent_ertr = OMapNode::base_ertr;
+omap_load_extent_ertr::future<OMapNodeRef>
 omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth);
 
 }
