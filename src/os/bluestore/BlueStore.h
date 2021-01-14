@@ -59,7 +59,6 @@
 class Allocator;
 class FreelistManager;
 class BlueStoreRepairer;
-
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
@@ -67,7 +66,7 @@ class BlueStoreRepairer;
 
 // constants for Buffer::optimize()
 #define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
-
+#define CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
 enum {
   l_bluestore_first = 732430,
@@ -952,6 +951,8 @@ public:
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
+
+    void provide_shard_info_to_onode(bufferlist v, uint32_t shard_id);
   };
 
   /// Compressed Blob Garbage collector
@@ -2030,6 +2031,7 @@ public:
     bool apply_defer();
   };
 
+  bool has_null_fm();
   // --------------------------------------------------------
   // members
 private:
@@ -2383,7 +2385,7 @@ private:
 	       bool to_repair_db=false,
 	       bool read_only = false);
   void _close_db(bool read_only);
-  int _open_fm(KeyValueDB::Transaction t, bool read_only);
+  int _open_fm(KeyValueDB::Transaction t, bool read_only, bool fm_restore = false);
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
@@ -2411,8 +2413,8 @@ public:
   }
 
   static int _write_bdev_label(CephContext* cct,
-			       std::string path, bluestore_bdev_label_t label);
-  static int _read_bdev_label(CephContext* cct, std::string path,
+			       const std::string &path, bluestore_bdev_label_t label);
+  static int _read_bdev_label(CephContext* cct, const std::string &path,
 			      bluestore_bdev_label_t *label);
 private:
   int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
@@ -3447,8 +3449,96 @@ public:
     mempool::bluestore_fsck::list<std::string>* expecting_shards,
     std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     const BlueStore::FSCK_ObjectCtx& ctx);
-
+#ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
+  int  push_allocation_to_rocksdb();
+  int  read_allocation_from_drive_for_bluestore_tool(bool test_store_and_restore);
+  int  read_allocation_from_drive_for_fsck() { return read_allocation_from_drive_for_bluestore_tool(false); }
+#endif
 private:
+#define MAX_BLOBS_IN_ONODE 128
+  struct  read_alloc_stats_t {
+    //read_alloc_stats_t() { memset(&this, 0, sizeof(read_alloc_stats_t)); }
+    uint32_t onode_count             = 0;
+    uint32_t shard_count             = 0;
+
+    uint32_t skipped_repeated_extent = 0;
+    uint32_t skipped_illegal_extent  = 0;
+
+    uint32_t collection_search       = 0;
+    uint32_t pad_limit_count         = 0;
+
+    uint64_t compressed_blob_count   = 0;
+    uint64_t spanning_blob_count     = 0;
+    uint64_t insert_count            = 0;
+    uint64_t extent_count            = 0;
+
+    uint64_t saved_inplace_count     = 0;
+    uint32_t merge_insert_count      = 0;
+    uint32_t merge_inplace_count     = 0;
+
+    std::array<uint32_t, MAX_BLOBS_IN_ONODE+1>blobs_in_onode = {};
+    //uint32_t blobs_in_onode[MAX_BLOBS_IN_ONODE+1];
+  };
+
+  friend std::ostream& operator<<(std::ostream& out, const read_alloc_stats_t& stats) {
+    out << "==========================================================" << std::endl;
+    out << "NCB::onode_count             = " ;out.width(10);out << stats.onode_count << std::endl
+	<< "NCB::shard_count             = " ;out.width(10);out << stats.shard_count << std::endl
+	<< "NCB::compressed_blob_count   = " ;out.width(10);out << stats.compressed_blob_count << std::endl
+	<< "NCB::spanning_blob_count     = " ;out.width(10);out << stats.spanning_blob_count << std::endl
+	<< "NCB::collection search       = " ;out.width(10);out << stats.collection_search << std::endl
+	<< "NCB::skipped_repeated_extent = " ;out.width(10);out << stats.skipped_repeated_extent << std::endl
+	<< "NCB::skipped_illegal_extent  = " ;out.width(10);out << stats.skipped_illegal_extent << std::endl
+	<< "NCB::extent_count            = " ;out.width(10);out << stats.extent_count << std::endl
+	<< "NCB::insert_count            = " ;out.width(10);out << stats.insert_count << std::endl;
+
+    if (stats.merge_insert_count) {
+      out << "NCB::merge_insert_count      = " ;out.width(10);out << stats.merge_insert_count  << std::endl;
+    }
+    if (stats.merge_inplace_count ) {
+      out << "NCB::merge_inplace_count     = " ;out.width(10);out << stats.merge_inplace_count << std::endl;
+      out << "NCB::saved_inplace_count     = " ;out.width(10);out << stats.saved_inplace_count << std::endl;
+      out << "NCB::saved inplace per call  = " ;out.width(10);out << stats.saved_inplace_count/stats.merge_inplace_count << std::endl;
+    }
+    out << "==========================================================" << std::endl;
+
+    for (unsigned i = 0; i < MAX_BLOBS_IN_ONODE; i++ ) {
+      if (stats.blobs_in_onode[i]) {
+	out << "NCB::We had " ;out.width(9); out << stats.blobs_in_onode[i]
+	    << " ONodes with "; out.width(3); out << i << " blobs" << std::endl;
+      }
+    }
+
+    if (stats.blobs_in_onode[MAX_BLOBS_IN_ONODE]) {
+      out << "NCB::We had " ;out.width(9);out << stats.blobs_in_onode[MAX_BLOBS_IN_ONODE]
+	  << " ONodes with more than " << MAX_BLOBS_IN_ONODE << " blobs" << std::endl;
+    }
+    return out;
+  }
+
+  int  compare_allocators(Allocator* alloc1, Allocator* alloc2, uint64_t req_extent_count, uint64_t memory_target);
+  Allocator* create_bitmap_allocator(uint64_t bdev_size);
+  int  add_existing_bluefs_allocation(Allocator* allocator, read_alloc_stats_t& stats);
+  int  allocator_add_restored_entries(Allocator *allocator, const void *buff, unsigned extent_count, uint64_t *p_read_alloc_size,
+				      uint64_t  *p_extent_count, const void *v_header, BlueFS::FileReader *p_handle, uint64_t offset);
+
+  int  copy_allocator(Allocator* src_alloc, Allocator *dest_alloc, uint64_t* p_num_entries);
+  int  store_allocator(Allocator* allocator);
+  int  invalidate_allocation_file_on_bluefs();
+  int  restore_allocator(Allocator* allocator, uint64_t *num, uint64_t *bytes);
+  int  read_allocation_from_drive_on_startup();
+  int  reconstruct_allocations(Allocator* allocator, read_alloc_stats_t &stats);
+  int  read_allocation_from_onodes(Allocator* allocator, read_alloc_stats_t& stats);
+  int  commit_to_null_manager();
+  int  commit_to_real_manager();
+  int  db_cleanup(int ret);
+  int  reset_fm_for_restore();
+  int  verify_rocksdb_allocations(Allocator *allocator);
+  Allocator* clone_allocator_without_bluefs(Allocator *src_allocator);
+  Allocator* initialize_allocator_from_freelist(FreelistManager *real_fm);
+  void copy_allocator_content_to_fm(Allocator *allocator, FreelistManager *real_fm);
+  void read_allocation_from_single_onode(Allocator* allocator, BlueStore::OnodeRef& onode_ref, read_alloc_stats_t&  stats);
+
   void _fsck_check_object_omap(FSCKDepth depth,
     OnodeRef& o,
     const BlueStore::FSCK_ObjectCtx& ctx);
@@ -3615,6 +3705,7 @@ public:
       return false;
     }
   };
+
 public:
   void fix_per_pool_omap(KeyValueDB *db, int);
   bool remove_key(KeyValueDB *db, const std::string& prefix, const std::string& key);
