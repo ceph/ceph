@@ -3186,7 +3186,17 @@ def get_image_info_from_inspect(out, image):
 
 
 ##################################
-
+def check_subnet(subnet:str) -> Tuple[int, int, str]:
+    """Determine whether the given string is a valid subnet"""
+    version = 0
+    # ensure the format of the string is as expected address/netmask
+    if not re.search(r'\/\d+$', subnet):
+        return 1, 0, "subnet must be in CIDR format (address/netmask)"
+    try:
+        version = ipaddress.ip_network(unicode(subnet)).version
+    except ValueError as e:
+        return 1, 0, str(e)
+    return 0, version, ""
 
 def unwrap_ipv6(address):
     # type: (str) -> str
@@ -3283,6 +3293,19 @@ def prepare_mon_addresses(
         if not mon_network:
             raise Error('Failed to infer CIDR network for mon ip %s; pass '
                         '--skip-mon-network to configure it later' % base_ip)
+    
+    cluster_network = None
+    # the cluster network may not exist on this node, so all we can do is 
+    # validate that the address given is valid ipv4 or ipv6 subnet
+    if args.cluster_network:
+        rc, _cluster_ip_version, error = check_subnet(args.cluster_network)
+        if rc:
+            raise Error(f"Invalid --cluster-network parameter: {error}")
+        cluster_network = args.cluster_network
+    else:
+        logger.warning("{}{}{}".format(termcolor.yellow,
+                                       "Internal network (--cluster-network) has not been provided",
+                                       termcolor.end))
 
     return (addr_arg, ipv6, mon_network)
 
@@ -3674,8 +3697,12 @@ def finish_bootstrap_config(
         ])
 
     if mon_network:
-        logger.info('Setting mon public_network...')
+        logger.info(f"Setting mon public_network to {mon_network}")
         cli(['config', 'set', 'mon', 'public_network', mon_network])
+    
+    if cluster_network:
+        logger.info(f"Setting mon cluster_network to {cluster_network}")
+        cli(['config', 'set', 'mon', 'cluster_network', cluster_network])
 
     if ipv6:
         logger.info('Enabling IPv6 (ms_bind_ipv6)')
@@ -7398,6 +7425,9 @@ def _get_parser():
         '--exporter-config',
         action=CustomValidation,
         help=f'Exporter configuration information in JSON format (providing: {", ".join(CephadmDaemon.config_requirements)}, port information)')
+    parser_bootstrap.add_argument(
+        '--cluster-network',
+        help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
