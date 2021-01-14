@@ -6,6 +6,7 @@
 
 #include <numeric>
 
+#include "include/compat.h"
 #include "include/ceph_assert.h"
 #include "include/types.h"
 #include "include/xlist.h"
