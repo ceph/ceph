@@ -55,6 +55,7 @@ BtreeLBAManager::get_root(Transaction &t)
       unsigned(croot->get_root().lba_depth));
     return get_lba_btree_extent(
       get_context(t),
+      croot,
       croot->get_root().lba_depth,
       croot->get_root().lba_root_addr,
       paddr_t());
@@ -567,6 +568,7 @@ BtreeLBAManager::update_internal_mapping(
 	paddr);
       return get_lba_btree_extent(
 	get_context(t),
+	croot,
 	croot->get_root().lba_depth,
 	croot->get_root().lba_root_addr,
 	paddr_t()).safe_then([=, &t](LBANodeRef broot) {

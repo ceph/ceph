@@ -235,6 +235,11 @@ public:
     return state != extent_state_t::INVALID;
   }
 
+  /// Returns true if extent or prior_instance has been invalidated
+  bool has_been_invalidated() const {
+    return !is_valid() || (prior_instance && !prior_instance->is_valid());
+  }
+
   /**
    * get_dirty_from
    *
@@ -555,6 +560,7 @@ public:
   virtual paddr_t get_paddr() const = 0;
   virtual laddr_t get_laddr() const = 0;
   virtual LBAPinRef duplicate() const = 0;
+  virtual bool has_been_invalidated() const = 0;
 
   virtual ~LBAPin() {}
 };
