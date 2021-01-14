@@ -353,6 +353,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'nfs export update ',
+            'desc': "Update an export of a NFS cluster by `-i <json_file>`",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'nfs cluster create '
                    'name=type,type=CephString '
                    f'name=clusterid,type=CephString,goodchars={goodchars} '
@@ -704,6 +709,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_nfs_export_get(self, inbuf, cmd):
         return self.fs_export.get_export(cluster_id=cmd['clusterid'], pseudo_path=cmd['binding'])
+
+    @mgr_cmd_wrap
+    def _cmd_nfs_export_update(self, inbuf, cmd):
+        # The export <json_file> is passed to -i and it's processing is handled by the Ceph CLI.
+        return self.fs_export.update_export(export_config=inbuf)
 
     @mgr_cmd_wrap
     def _cmd_nfs_cluster_create(self, inbuf, cmd):
