@@ -340,8 +340,7 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
   int r = writer.write_exclusive(data);
   if (r == -EEXIST) {
     // randomize the oid prefix and reprepare the head/manifest
-    std::string oid_rand(32, 0);
-    gen_rand_alphanumeric(store->ctx(), oid_rand.data(), oid_rand.size());
+    std::string oid_rand = gen_rand_alphanumeric(store->ctx(), 32);
 
     mp.init(target_obj.key.name, upload_id, oid_rand);
     manifest.set_prefix(target_obj.key.name + "." + oid_rand);
