@@ -3,6 +3,7 @@ meta:
 ￼   run basic import/export cli tests for rbd
 ￼workload:
 ￼  full_sequential:
+￼    - print: "**** done start rbd_import_export.yaml"
 ￼    - workunit:
 ￼        branch: octopus
 ￼        clients:
