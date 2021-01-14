@@ -258,6 +258,7 @@ using get_lba_node_ertr = base_ertr;
 using get_lba_node_ret = get_lba_node_ertr::future<LBANodeRef>;
 get_lba_node_ret get_lba_btree_extent(
   op_context_t c, ///< [in] context structure
+  CachedExtentRef parent, ///< [in] paddr ref source
   depth_t depth,  ///< [in] depth of node to fetch
   paddr_t offset, ///< [in] physical addr of node
   paddr_t base    ///< [in] depending on user, block addr or record addr

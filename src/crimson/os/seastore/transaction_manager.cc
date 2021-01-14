@@ -289,11 +289,16 @@ TransactionManager::get_extent_if_live_ret TransactionManager::get_extent_if_liv
 	    addr,
 	    laddr,
 	    len).safe_then(
-	      [this, pin=std::move(pin)](CachedExtentRef ret) mutable {
+	      [this, pin=std::move(pin)](CachedExtentRef ret) mutable
+	      -> get_extent_if_live_ret {
 		auto lref = ret->cast<LogicalCachedExtent>();
 		if (!lref->has_pin()) {
-		  lref->set_pin(std::move(pin));
-		  lba_manager.add_pin(lref->get_pin());
+		  if (pin->has_been_invalidated() || lref->has_been_invalidated()) {
+		    return crimson::ct_error::eagain::make();
+		  } else {
+		    lref->set_pin(std::move(pin));
+		    lba_manager.add_pin(lref->get_pin());
+		  }
 		}
 		return get_extent_if_live_ret(
 		  get_extent_if_live_ertr::ready_future_marker{},

@@ -113,10 +113,15 @@ public:
 	    t,
 	    pin->get_paddr(),
 	    pin->get_length()
-	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable {
+	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable
+		      -> read_extent_ertr::future<> {
 	    if (!ref->has_pin()) {
-	      ref->set_pin(std::move(pin));
-	      lba_manager.add_pin(ref->get_pin());
+	      if (pin->has_been_invalidated() || ref->has_been_invalidated()) {
+		return crimson::ct_error::eagain::make();
+	      } else {
+		ref->set_pin(std::move(pin));
+		lba_manager.add_pin(ref->get_pin());
+	      }
 	    }
 	    ret_ref.push_back(std::make_pair(ref->get_laddr(), ref));
 	    crimson::get_logger(ceph_subsys_filestore).debug(

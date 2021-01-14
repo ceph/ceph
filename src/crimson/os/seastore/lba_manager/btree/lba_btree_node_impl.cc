@@ -42,6 +42,7 @@ LBAInternalNode::lookup_ret LBAInternalNode::lookup(
   auto iter = lower_bound(addr);
   return get_lba_btree_extent(
     c,
+    this,
     meta.depth - 1,
     iter->get_val(),
     get_paddr()).safe_then([c, addr, depth](auto child) {
@@ -63,6 +64,7 @@ LBAInternalNode::lookup_range_ret LBAInternalNode::lookup_range(
     [this, c, &result, addr, len](const auto &val) mutable {
       return get_lba_btree_extent(
 	c,
+	this,
 	get_meta().depth - 1,
 	val.get_val(),
 	get_paddr()).safe_then(
@@ -90,6 +92,7 @@ LBAInternalNode::insert_ret LBAInternalNode::insert(
   auto insertion_pt = get_containing_child(laddr);
   return get_lba_btree_extent(
     c,
+    this,
     get_meta().depth - 1,
     insertion_pt->get_val(),
     get_paddr()).safe_then(
@@ -125,6 +128,7 @@ LBAInternalNode::mutate_mapping_ret LBAInternalNode::mutate_mapping_internal(
   }
   return get_lba_btree_extent(
     c,
+    this,
     get_meta().depth - 1,
     mutation_pt->get_val(),
     get_paddr()
@@ -180,6 +184,7 @@ LBAInternalNode::mutate_internal_address_ret LBAInternalNode::mutate_internal_ad
     auto iter = get_containing_child(laddr);
     return get_lba_btree_extent(
       c,
+      this,
       get_meta().depth - 1,
       iter->get_val(),
       get_paddr()
@@ -210,6 +215,7 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
         std::make_optional<laddr_t>(L_ADDR_NULL));
     }
     return get_lba_btree_extent(c,
+				this,
 				get_meta().depth - 1,
 				i->get_val(),
 				get_paddr()).safe_then(
@@ -246,6 +252,7 @@ LBAInternalNode::scan_mappings_ret LBAInternalNode::scan_mappings(
     [=, &f](auto &viter) {
       return get_lba_btree_extent(
 	c,
+	this,
 	get_meta().depth - 1,
 	viter->get_val(),
 	get_paddr()).safe_then([=, &f](auto child) {
@@ -264,6 +271,7 @@ LBAInternalNode::scan_mapped_space_ret LBAInternalNode::scan_mapped_space(
     [=, &f](auto &viter) {
       return get_lba_btree_extent(
 	c,
+	this,
 	get_meta().depth - 1,
 	viter->get_val(),
 	get_paddr()).safe_then([=, &f](auto child) {
@@ -350,6 +358,7 @@ LBAInternalNode::merge_entry(
   auto donor_iter = donor_is_left ? iter - 1 : iter + 1;
   return get_lba_btree_extent(
     c,
+    this,
     get_meta().depth - 1,
     donor_iter->get_val(),
     get_paddr()
@@ -643,8 +652,9 @@ LBALeafNode::get_leaf_entries(laddr_t addr, extent_len_t len)
   return bound(addr, addr + len);
 }
 
-get_lba_node_ertr::future<LBANodeRef> get_lba_btree_extent(
+get_lba_node_ret get_lba_btree_extent(
   op_context_t c,
+  CachedExtentRef parent,
   depth_t depth,
   paddr_t offset,
   paddr_t base)
@@ -659,17 +669,23 @@ get_lba_node_ertr::future<LBANodeRef> get_lba_btree_extent(
     return c.cache.get_extent<LBAInternalNode>(
       c.trans,
       offset,
-      LBA_BLOCK_SIZE).safe_then([c](auto ret) {
+      LBA_BLOCK_SIZE).safe_then([c, parent](auto ret)
+				-> get_lba_node_ret {
 	auto meta = ret->get_meta();
 	if (ret->get_size()) {
 	  ceph_assert(meta.begin <= ret->begin()->get_key());
 	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
 	}
+	if (parent->has_been_invalidated() || ret->has_been_invalidated()) {
+	  return crimson::ct_error::eagain::make();
+	}
 	if (!ret->is_pending() && !ret->pin.is_linked()) {
 	  ret->pin.set_range(meta);
 	  c.pins.add_pin(ret->pin);
 	}
-	return LBANodeRef(ret.detach(), /* add_ref = */ false);
+	return get_lba_node_ret(
+	  get_lba_node_ertr::ready_future_marker{},
+	  LBANodeRef(ret.detach(), /* add_ref = */ false));
       });
   } else {
     logger().debug(
@@ -679,21 +695,28 @@ get_lba_node_ertr::future<LBANodeRef> get_lba_btree_extent(
     return c.cache.get_extent<LBALeafNode>(
       c.trans,
       offset,
-      LBA_BLOCK_SIZE).safe_then([offset, c](auto ret) {
+      LBA_BLOCK_SIZE).safe_then([offset, c, parent](auto ret)
+				-> get_lba_node_ret {
 	logger().debug(
-	  "get_lba_btree_extent: read leaf at offset {} {}",
+	  "get_lba_btree_extent: read leaf at offset {} {}, parent {}",
 	  offset,
-	  *ret);
+	  *ret,
+	  *parent);
 	auto meta = ret->get_meta();
 	if (ret->get_size()) {
 	  ceph_assert(meta.begin <= ret->begin()->get_key());
 	  ceph_assert(meta.end > (ret->end() - 1)->get_key());
 	}
+	if (parent->has_been_invalidated() || ret->has_been_invalidated()) {
+	  return crimson::ct_error::eagain::make();
+	}
 	if (!ret->is_pending() && !ret->pin.is_linked()) {
 	  ret->pin.set_range(meta);
 	  c.pins.add_pin(ret->pin);
 	}
-	return LBANodeRef(ret.detach(), /* add_ref = */ false);
+	return get_lba_node_ret(
+	  get_lba_node_ertr::ready_future_marker{},
+	  LBANodeRef(ret.detach(), /* add_ref = */ false));
       });
   }
 }
