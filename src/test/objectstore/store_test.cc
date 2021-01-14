@@ -8206,24 +8206,36 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   }
 
   bstore->umount();
+  bool err_was_injected = false;
   //////////// leaked pextent fix ////////////
   cerr << "fix leaked pextents" << std::endl;
   ASSERT_EQ(bstore->fsck(false), 0);
   ASSERT_EQ(bstore->repair(false), 0);
   bstore->mount();
-  bstore->inject_leaked(0x30000);
+  if (!bstore->has_null_fm()) {
+    bstore->inject_leaked(0x30000);
+    err_was_injected = true;
+  }
+
   bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 1);
+  if (err_was_injected) {
+    ASSERT_EQ(bstore->fsck(false), 1);
+  }
   ASSERT_EQ(bstore->repair(false), 0);
   ASSERT_EQ(bstore->fsck(false), 0);
 
   //////////// false free fix ////////////
   cerr << "fix false free pextents" << std::endl;
   bstore->mount();
-  bstore->inject_false_free(cid, hoid);
+  if (!bstore->has_null_fm()) {
+    bstore->inject_false_free(cid, hoid);
+    err_was_injected = true;
+  }
   bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 2);
-  ASSERT_EQ(bstore->repair(false), 0);
+  if (err_was_injected) {
+    ASSERT_EQ(bstore->fsck(false), 2);
+    ASSERT_EQ(bstore->repair(false), 0);
+  }
   ASSERT_EQ(bstore->fsck(false), 0);
 
   //////////// verify invalid statfs ///////////
@@ -8266,9 +8278,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   bstore->inject_misreference(cid, hoid, cid, hoid_dup, 0);
   bstore->inject_misreference(cid, hoid, cid, hoid_dup, (offs_base * repeats) / 2);
   bstore->inject_misreference(cid, hoid, cid, hoid_dup, offs_base * (repeats -1) );
-  
+  int expected_errors = bstore->has_null_fm() ? 3 : 6;
   bstore->umount();
-  ASSERT_EQ(bstore->fsck(false), 6);
+  ASSERT_EQ(bstore->fsck(false), expected_errors);
   ASSERT_EQ(bstore->repair(false), 0);
 
   ASSERT_EQ(bstore->fsck(true), 0);
