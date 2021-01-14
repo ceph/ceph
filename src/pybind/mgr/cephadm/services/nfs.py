@@ -1,5 +1,8 @@
+import errno
 import logging
 from typing import Dict, Tuple, Any, List, cast
+
+from mgr_module import HandleCommandResult
 
 from ceph.deployment.service_spec import NFSServiceSpec
 import rados
@@ -152,3 +155,18 @@ class NFSService(CephService):
     def post_remove(self, daemon: DaemonDescription) -> None:
         super().post_remove(daemon)
         self.remove_rgw_keyring(daemon)
+
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # if only 1 nfs, alert user (this is not passable with --force)
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'NFS', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+        # if reached here, there is > 1 nfs daemon.
+        if force:
+            return HandleCommandResult(0, warn_message, '')
+
+        # if reached here, > 1 nfs daemon and no force flag.
+        # Provide warning
+        warn_message = "WARNING: Removing NFS daemons can cause clients to lose connectivity. "
+        return HandleCommandResult(-errno.EBUSY, '', warn_message)
