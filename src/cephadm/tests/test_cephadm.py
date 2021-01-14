@@ -1,4 +1,5 @@
 # type: ignore
+from typing import List, Optional
 import mock
 from mock import patch
 import os
@@ -204,32 +205,38 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
 
         # test normal valid login with url, username and password specified
         call_throws.return_value = '', '', 0
-        args = cd._parse_args(['registry-login', '--registry-url', 'sample-url', '--registry-username', 'sample-user', '--registry-password', 'sample-pass'])
-        cd.args = args
-        retval = cd.command_registry_login()
+        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+            ['registry-login', '--registry-url', 'sample-url',
+            '--registry-username', 'sample-user', '--registry-password',
+            'sample-pass'])
+        assert ctx
+        retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with invalid arguments given
-        args = cd._parse_args(['registry-login', '--registry-url', 'bad-args-url'])
-        cd.args = args
+        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+            ['registry-login', '--registry-url', 'bad-args-url'])
+        assert ctx
         with pytest.raises(Exception) as e:
-            assert cd.command_registry_login()
+            assert cd.command_registry_login(ctx)
         assert str(e.value) == ('Invalid custom registry arguments received. To login to a custom registry include '
                                 '--registry-url, --registry-username and --registry-password options or --registry-json option')
 
         # test normal valid login with json file
         get_parm.return_value = {"url": "sample-url", "username": "sample-username", "password": "sample-password"}
-        args = cd._parse_args(['registry-login', '--registry-json', 'sample-json'])
-        cd.args = args
-        retval = cd.command_registry_login()
+        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+            ['registry-login', '--registry-json', 'sample-json'])
+        assert ctx
+        retval = cd.command_registry_login(ctx)
         assert retval == 0
 
         # test bad login attempt with bad json file
         get_parm.return_value = {"bad-json": "bad-json"}
-        args = cd._parse_args(['registry-login', '--registry-json', 'sample-json'])
-        cd.args = args
+        ctx: Optional[cd.CephadmContext] =  cd.cephadm_init_ctx(
+            ['registry-login', '--registry-json', 'sample-json'])
+        assert ctx
         with pytest.raises(Exception) as e:
-            assert cd.command_registry_login()
+            assert cd.command_registry_login(ctx)
         assert str(e.value) == ("json provided for custom registry login did not include all necessary fields. "
                         "Please setup json file as\n"
                         "{\n"
@@ -240,10 +247,13 @@ default via fe80::2480:28ec:5097:3fe2 dev wlp2s0 proto ra metric 20600 pref medi
 
         # test login attempt with valid arguments where login command fails
         call_throws.side_effect = Exception
-        args = cd._parse_args(['registry-login', '--registry-url', 'sample-url', '--registry-username', 'sample-user', '--registry-password', 'sample-pass'])
-        cd.args = args
+        ctx: Optional[cd.CephadmContext] = cd.cephadm_init_ctx(
+            ['registry-login', '--registry-url', 'sample-url',
+            '--registry-username', 'sample-user', '--registry-password',
+            'sample-pass'])
+        assert ctx
         with pytest.raises(Exception) as e:
-            cd.command_registry_login()
+            cd.command_registry_login(ctx)
         assert str(e.value) == "Failed to login to custom registry @ sample-url as sample-user with given password"
 
     def test_get_image_info_from_inspect(self):
@@ -381,7 +391,7 @@ class TestCustomContainer(unittest.TestCase):
 
 class TestCephadmExporter(object):
     exporter: cd.CephadmDaemon
-    files_created = []
+    files_created: List[str] = []
     crt = """-----BEGIN CERTIFICATE-----
 MIIC1zCCAb8CEFHoZE2MfUVzo53fzzBKAT0wDQYJKoZIhvcNAQENBQAwKjENMAsG
 A1UECgwEQ2VwaDEZMBcGA1UECwwQY2VwaGFkbS1leHBvcnRlcjAeFw0yMDExMjUy
