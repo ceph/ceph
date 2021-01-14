@@ -37,11 +37,33 @@
 #define DEFAULT_UMASK 002
 
 static mode_t umask_cb(void *);
-ceph::async::io_context_pool icp;
+namespace {
+// Set things up this way so we don't start up threads until mount and
+// kill them off when the last mount goes away, but are tolerant to
+// multiple mounts of overlapping duration.
+std::shared_ptr<ceph::async::io_context_pool> get_icp(CephContext* cct)
+{
+  static std::mutex m;
+  static std::weak_ptr<ceph::async::io_context_pool> icwp;
+
+
+  std::unique_lock l(m);
+
+  auto icp = icwp.lock();
+  if (icp)
+    return icp;
+
+  icp = std::make_shared<ceph::async::io_context_pool>();
+  icwp = icp;
+  icp->start(cct->_conf.get_val<std::uint64_t>("client_asio_thread_count"));
+  return icp;
+}
+}
 
 struct ceph_mount_info
 {
   mode_t umask = DEFAULT_UMASK;
+  std::shared_ptr<ceph::async::io_context_pool> icp;
 public:
   explicit ceph_mount_info(CephContext *cct_)
     : default_perms(),
@@ -83,10 +105,10 @@ public:
     if (!cct->_log->is_started()) {
       cct->_log->start();
     }
+    icp = get_icp(cct);
 
-    icp.start(cct->_conf.get_val<std::uint64_t>("client_asio_thread_count"));
     {
-      MonClient mc_bootstrap(cct, icp);
+      MonClient mc_bootstrap(cct, icp->get_io_context());
       ret = mc_bootstrap.get_monmap_and_config();
       if (ret < 0)
 	return ret;
@@ -95,7 +117,7 @@ public:
     common_init_finish(cct);
 
     //monmap
-    monclient = new MonClient(cct, icp);
+    monclient = new MonClient(cct, icp->get_io_context());
     ret = -CEPHFS_ERROR_MON_MAP_BUILD; //defined in libcephfs.h;
     if (monclient->build_initial_monmap() < 0)
       goto fail;
@@ -105,7 +127,7 @@ public:
 
     //at last the client
     ret = -CEPHFS_ERROR_NEW_CLIENT; //defined in libcephfs.h;
-    client = new StandaloneClient(messenger, monclient, icp);
+    client = new StandaloneClient(messenger, monclient, icp->get_io_context());
     if (!client)
       goto fail;
 
@@ -204,7 +226,7 @@ public:
       delete messenger;
       messenger = nullptr;
     }
-    icp.stop();
+    icp.reset();
     if (monclient) {
       delete monclient;
       monclient = nullptr;
