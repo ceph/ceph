@@ -8600,7 +8600,8 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       for (it->lower_bound(string()); it->valid(); it->next()) {
         uint64_t pool;
         uint64_t omap_head;
-        const char *c = it->key().c_str();
+        string k = it->key();
+        const char *c = k.c_str();
         c = _key_decode_u64(c, &pool);
         c = _key_decode_u64(c, &omap_head);
         if (used_omap_head.count(omap_head) == 0 &&
@@ -8620,7 +8621,8 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         uint64_t pool;
         uint32_t hash;
         uint64_t omap_head;
-        const char* c = it->key().c_str();
+        string k = it->key();
+        const char* c = k.c_str();
         c = _key_decode_u64(c, &pool);
         c = _key_decode_u32(c, &hash);
         c = _key_decode_u64(c, &omap_head);
