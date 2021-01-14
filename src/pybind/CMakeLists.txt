@@ -39,7 +39,6 @@ execute_process(
 install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_argparse.py
   ${CMAKE_CURRENT_SOURCE_DIR}/ceph_daemon.py
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_volume_client.py
   DESTINATION ${PYTHON3_INSTDIR})
 
 if(WITH_MGR)
