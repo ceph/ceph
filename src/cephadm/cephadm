@@ -65,6 +65,7 @@ import signal
 import io
 from contextlib import redirect_stdout
 import ssl
+from enum import Enum
 
 
 from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
@@ -1196,10 +1197,6 @@ def call(ctx: CephadmContext,
     - decode utf-8
     - cleanly return out, err, returncode
 
-    If verbose=True, log at info (instead of debug) level.
-
-    :param verbose_on_failure: On a non-zero exit status, it will forcefully set
-                               logging ON for the terminal
     :param timeout: timeout in seconds
     """
 
@@ -1272,9 +1269,9 @@ def call(ctx: CephadmContext,
                     lines = message.split('\n')
                     out_buffer = lines.pop()
                     for line in lines:
-                        if verbose:
+                        if verbosity == CallVerbosity.VERBOSE:
                             logger.info(desc + 'stdout ' + line)
-                        else:
+                        elif verbosity != CallVerbosity.SILENT:
                             logger.debug(desc + 'stdout ' + line)
                 elif fd == process.stderr.fileno():
                     err += message
@@ -1282,32 +1279,32 @@ def call(ctx: CephadmContext,
                     lines = message.split('\n')
                     err_buffer = lines.pop()
                     for line in lines:
-                        if verbose:
+                        if verbosity == CallVerbosity.VERBOSE:
                             logger.info(desc + 'stderr ' + line)
-                        else:
+                        elif verbosity != CallVerbosity.SILENT:
                             logger.debug(desc + 'stderr ' + line)
                 else:
                     assert False
             except (IOError, OSError):
                 pass
-        if verbose:
+        if verbosity == CallVerbosity.VERBOSE:
             logger.debug(desc + 'profile rt=%s, stop=%s, exit=%s, reads=%s'
                 % (time.time()-start_time, stop, process.poll(), reads))
 
     returncode = process.wait()
 
     if out_buffer != '':
-        if verbose:
+        if verbosity == CallVerbosity.VERBOSE:
             logger.info(desc + 'stdout ' + out_buffer)
-        else:
+        elif verbosity != CallVerbosity.SILENT:
             logger.debug(desc + 'stdout ' + out_buffer)
     if err_buffer != '':
-        if verbose:
+        if verbosity == CallVerbosity.VERBOSE:
             logger.info(desc + 'stderr ' + err_buffer)
-        else:
+        elif verbosity != CallVerbosity.SILENT:
             logger.debug(desc + 'stderr ' + err_buffer)
 
-    if returncode != 0 and verbose_on_failure and not verbose:
+    if returncode != 0 and verbosity == CallVerbosity.VERBOSE_ON_FAILURE:
         # dump stdout + stderr
         logger.info('Non-zero exit code %d from %s' % (returncode, ' '.join(command)))
         for line in out.splitlines():
@@ -4197,7 +4194,7 @@ def command_unit(ctx):
         'systemctl',
         ctx.command,
         unit_name],
-        verbose=True,
+        verbosity=CallVerbosity.VERBOSE,
         desc=''
     )
 
@@ -4396,7 +4393,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 '--format', '{{.Id}},{{.Config.Image}},{{%s}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}' % image_field,
                                 'ceph-%s-%s' % (fsid, j)
                             ],
-                            verbose_on_failure=False)
+                            verbosity=CallVerbosity.DEBUG)
                         if not code:
                             (container_id, image_name, image_id, start,
                              version) = out.strip().split(',')
@@ -6866,7 +6863,7 @@ def command_maintenance(ctx: CephadmContext):
         if systemd_target_state(target):
             _out, _err, code = call(ctx,
                 ['systemctl', 'disable', target],
-                verbose_on_failure=False
+                verbosity=CallVerbosity.DEBUG
             )
             if code:
                 logger.error(f"Failed to disable the {target} target")
@@ -6875,7 +6872,7 @@ def command_maintenance(ctx: CephadmContext):
                 # stopping a target waits by default
                 _out, _err, code = call(ctx,
                     ['systemctl', 'stop', target],
-                    verbose_on_failure=False
+                    verbosity=CallVerbosity.DEBUG
                 )
                 if code:
                     logger.error(f"Failed to stop the {target} target")
@@ -6892,7 +6889,7 @@ def command_maintenance(ctx: CephadmContext):
         if not systemd_target_state(target):
             _out, _err, code = call(ctx,
                 ['systemctl', 'enable', target],
-                verbose_on_failure=False
+                verbosity=CallVerbosity.DEBUG
             )
             if code:
                 logger.error(f"Failed to enable the {target} target")
@@ -6901,7 +6898,7 @@ def command_maintenance(ctx: CephadmContext):
                 # starting a target waits by default
                 _out, _err, code = call(ctx,
                     ['systemctl', 'start', target],
-                    verbose_on_failure=False
+                    verbosity=CallVerbosity.DEBUG
                 )
                 if code:
                     logger.error(f"Failed to start the {target} target")
