@@ -64,6 +64,7 @@ import signal
 import io
 from contextlib import redirect_stdout
 import ssl
+from enum import Enum
 
 
 from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
@@ -1078,12 +1079,22 @@ class FileLock(object):
 ##################################
 # Popen wrappers, lifted from ceph-volume
 
-def call(command,  # type: List[str]
-         desc=None,  # type: Optional[str]
-         verbose=False,  # type: bool
-         verbose_on_failure=True,  # type: bool
-         timeout=DEFAULT_TIMEOUT,  # type: Optional[int]
-         **kwargs):
+class CallVerbosity(Enum):
+    SILENT = 0
+    # log stdout/stderr to logger.debug
+    DEBUG = 1
+    # On a non-zero exit status, it will forcefully set
+    # logging ON for the terminal
+    VERBOSE_ON_FAILURE = 2
+    # log at info (instead of debug) level.
+    VERBOSE = 3
+
+
+def call(command: List[str],
+         desc: Optional[str] = None,
+         verbosity: CallVerbosity = CallVerbosity.VERBOSE_ON_FAILURE,
+         timeout: Optional[int] = DEFAULT_TIMEOUT,
+         **kwargs) -> Tuple[str, str, int]:
     """
     Wrap subprocess.Popen to
 
@@ -1091,10 +1102,6 @@ def call(command,  # type: List[str]
     - decode utf-8
     - cleanly return out, err, returncode
 
-    If verbose=True, log at info (instead of debug) level.
-
-    :param verbose_on_failure: On a non-zero exit status, it will forcefully set
-                               logging ON for the terminal
     :param timeout: timeout in seconds
     """
     if desc is None:
@@ -1165,9 +1172,9 @@ def call(command,  # type: List[str]
                     lines = message.split('\n')
                     out_buffer = lines.pop()
                     for line in lines:
-                        if verbose:
+                        if verbosity == CallVerbosity.VERBOSE:
                             logger.info(desc + 'stdout ' + line)
-                        else:
+                        elif verbosity != CallVerbosity.SILENT:
                             logger.debug(desc + 'stdout ' + line)
                 elif fd == process.stderr.fileno():
                     err += message
@@ -1175,32 +1182,32 @@ def call(command,  # type: List[str]
                     lines = message.split('\n')
                     err_buffer = lines.pop()
                     for line in lines:
-                        if verbose:
+                        if verbosity == CallVerbosity.VERBOSE:
                             logger.info(desc + 'stderr ' + line)
-                        else:
+                        elif verbosity != CallVerbosity.SILENT:
                             logger.debug(desc + 'stderr ' + line)
                 else:
                     assert False
             except (IOError, OSError):
                 pass
-        if verbose:
+        if verbosity == CallVerbosity.VERBOSE:
             logger.debug(desc + 'profile rt=%s, stop=%s, exit=%s, reads=%s'
                 % (time.time()-start_time, stop, process.poll(), reads))
 
     returncode = process.wait()
 
     if out_buffer != '':
-        if verbose:
+        if verbosity == CallVerbosity.VERBOSE:
             logger.info(desc + 'stdout ' + out_buffer)
-        else:
+        elif verbosity != CallVerbosity.SILENT:
             logger.debug(desc + 'stdout ' + out_buffer)
     if err_buffer != '':
-        if verbose:
+        if verbosity == CallVerbosity.VERBOSE:
             logger.info(desc + 'stderr ' + err_buffer)
-        else:
+        elif verbosity != CallVerbosity.SILENT:
             logger.debug(desc + 'stderr ' + err_buffer)
 
-    if returncode != 0 and verbose_on_failure and not verbose:
+    if returncode != 0 and verbosity == CallVerbosity.VERBOSE_ON_FAILURE:
         # dump stdout + stderr
         logger.info('Non-zero exit code %d from %s' % (returncode, ' '.join(command)))
         for line in out.splitlines():
@@ -1211,9 +1218,12 @@ def call(command,  # type: List[str]
     return out, err, returncode
 
 
-def call_throws(command, **kwargs):
-    # type: (List[str], Any) -> Tuple[str, str, int]
-    out, err, ret = call(command, **kwargs)
+def call_throws(command: List[str],
+         desc: Optional[str] = None,
+         verbosity: CallVerbosity = CallVerbosity.VERBOSE_ON_FAILURE,
+         timeout: Optional[int] = DEFAULT_TIMEOUT,
+         **kwargs) -> Tuple[str, str, int]:
+    out, err, ret = call(command, desc, verbosity, timeout, **kwargs)
     if ret:
         raise RuntimeError('Failed command: %s' % ' '.join(command))
     return out, err, ret
@@ -1794,7 +1804,7 @@ def check_unit(unit_name):
     installed = False
     try:
         out, err, code = call(['systemctl', 'is-enabled', unit_name],
-                              verbose_on_failure=False)
+                              verbosity=CallVerbosity.DEBUG)
         if code == 0:
             enabled = True
             installed = True
@@ -1808,7 +1818,7 @@ def check_unit(unit_name):
     state = 'unknown'
     try:
         out, err, code = call(['systemctl', 'is-active', unit_name],
-                              verbose_on_failure=False)
+                              verbosity=CallVerbosity.DEBUG)
         out = out.strip()
         if out in ['active']:
             state = 'running'
@@ -2504,9 +2514,9 @@ def deploy_daemon_units(fsid, uid, gid, daemon_type, daemon_id, c,
 
     unit_name = get_unit_name(fsid, daemon_type, daemon_id)
     call(['systemctl', 'stop', unit_name],
-         verbose_on_failure=False)
+         verbosity=CallVerbosity.DEBUG)
     call(['systemctl', 'reset-failed', unit_name],
-         verbose_on_failure=False)
+         verbosity=CallVerbosity.DEBUG)
     if enable:
         call_throws(['systemctl', 'enable', unit_name])
     if start:
@@ -2554,7 +2564,7 @@ class Firewalld(object):
         if not self.cmd:
             raise RuntimeError("command not defined")
 
-        out, err, ret = call([self.cmd, '--permanent', '--query-service', svc], verbose_on_failure=False)
+        out, err, ret = call([self.cmd, '--permanent', '--query-service', svc], verbosity=CallVerbosity.DEBUG)
         if ret:
             logger.info('Enabling firewalld service %s in current zone...' % svc)
             out, err, ret = call([self.cmd, '--permanent', '--add-service', svc])
@@ -2575,7 +2585,7 @@ class Firewalld(object):
 
         for port in fw_ports:
             tcp_port = str(port) + '/tcp'
-            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbose_on_failure=False)
+            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbosity=CallVerbosity.DEBUG)
             if ret:
                 logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
                 out, err, ret = call([self.cmd, '--permanent', '--add-port', tcp_port])
@@ -2596,7 +2606,7 @@ class Firewalld(object):
 
         for port in fw_ports:
             tcp_port = str(port) + '/tcp'
-            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbose_on_failure=False)
+            out, err, ret = call([self.cmd, '--permanent', '--query-port', tcp_port], verbosity=CallVerbosity.DEBUG)
             if not ret:
                 logger.info('Disabling port %s in current zone...' % tcp_port)
                 out, err, ret = call([self.cmd, '--permanent', '--remove-port', tcp_port])
@@ -3922,7 +3932,8 @@ def command_ceph_volume():
         privileged=True,
         volume_mounts=mounts,
     )
-    out, err, code = call_throws(c.run_cmd(), verbose=args.log_output)
+    verbosity = CallVerbosity.VERBOSE if args.log_output else CallVerbosity.VERBOSE_ON_FAILURE
+    out, err, code = call_throws(c.run_cmd(), verbosity=verbosity)
     if not code:
         print(out)
 
@@ -3941,7 +3952,7 @@ def command_unit():
         'systemctl',
         args.command,
         unit_name],
-        verbose=True,
+        verbosity=CallVerbosity.VERBOSE,
         desc=''
     )
 
@@ -4136,7 +4147,7 @@ def list_daemons(detail=True, legacy_dir=None):
                                 '--format', '{{.Id}},{{.Config.Image}},{{%s}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}' % image_field,
                                 'ceph-%s-%s' % (fsid, j)
                             ],
-                            verbose_on_failure=False)
+                            verbosity=CallVerbosity.DEBUG)
                         if not code:
                             (container_id, image_name, image_id, start,
                              version) = out.strip().split(',')
@@ -4314,7 +4325,7 @@ class AdoptOsd(object):
             args=['lvm', 'list', '--format=json'],
             privileged=True
         )
-        out, err, code = call_throws(c.run_cmd(), verbose=False)
+        out, err, code = call_throws(c.run_cmd())
         if not code:
             try:
                 js = json.loads(out)
@@ -4643,11 +4654,11 @@ def command_rm_daemon():
                       'this command may destroy precious data!')
 
     call(['systemctl', 'stop', unit_name],
-         verbose_on_failure=False)
+         verbosity=CallVerbosity.DEBUG)
     call(['systemctl', 'reset-failed', unit_name],
-         verbose_on_failure=False)
+         verbosity=CallVerbosity.DEBUG)
     call(['systemctl', 'disable', unit_name],
-         verbose_on_failure=False)
+         verbosity=CallVerbosity.DEBUG)
     data_dir = get_data_dir(args.fsid, daemon_type, daemon_id)
     if daemon_type in ['mon', 'osd', 'prometheus'] and \
        not args.force_delete_data:
@@ -4684,25 +4695,25 @@ def command_rm_cluster():
             continue
         unit_name = get_unit_name(args.fsid, d['name'])
         call(['systemctl', 'stop', unit_name],
-             verbose_on_failure=False)
+             verbosity=CallVerbosity.DEBUG)
         call(['systemctl', 'reset-failed', unit_name],
-             verbose_on_failure=False)
+             verbosity=CallVerbosity.DEBUG)
         call(['systemctl', 'disable', unit_name],
-             verbose_on_failure=False)
+             verbosity=CallVerbosity.DEBUG)
 
     # cluster units
     for unit_name in ['ceph-%s.target' % args.fsid]:
         call(['systemctl', 'stop', unit_name],
-             verbose_on_failure=False)
+             verbosity=CallVerbosity.DEBUG)
         call(['systemctl', 'reset-failed', unit_name],
-             verbose_on_failure=False)
+             verbosity=CallVerbosity.DEBUG)
         call(['systemctl', 'disable', unit_name],
-             verbose_on_failure=False)
+             verbosity=CallVerbosity.DEBUG)
 
     slice_name = 'system-%s.slice' % (('ceph-%s' % args.fsid).replace('-',
                                                                       '\\x2d'))
     call(['systemctl', 'stop', slice_name],
-         verbose_on_failure=False)
+         verbosity=CallVerbosity.DEBUG)
 
     # rm units
     call_throws(['rm', '-f', args.unit_dir +
@@ -5859,7 +5870,7 @@ class HostFacts():
         """Get kernel parameters required/used in Ceph clusters"""
 
         k_param = {}
-        out, _, _ = call_throws(['sysctl', '-a'])
+        out, _, _ = call_throws(['sysctl', '-a'], verbosity=CallVerbosity.SILENT)
         if out:
             param_list = out.split('\n')
             param_dict = { param.split(" = ")[0]:param.split(" = ")[-1] for param in param_list}
@@ -6505,9 +6516,9 @@ WantedBy=ceph-{fsid}.target
         
         call_throws(['systemctl', 'daemon-reload'])
         call(['systemctl', 'stop', self.unit_name],
-            verbose_on_failure=False)
+            verbosity=CallVerbosity.DEBUG)
         call(['systemctl', 'reset-failed', self.unit_name],
-            verbose_on_failure=False)
+            verbosity=CallVerbosity.DEBUG)
         call_throws(['systemctl', 'enable', '--now', self.unit_name])
 
     @classmethod
@@ -6583,7 +6594,7 @@ def command_maintenance():
         if systemd_target_state(target):
             _out, _err, code = call(
                 ['systemctl', 'disable', target],
-                verbose_on_failure=False
+                verbosity=CallVerbosity.DEBUG
             )
             if code:
                 logger.error(f"Failed to disable the {target} target")
@@ -6592,7 +6603,7 @@ def command_maintenance():
                 # stopping a target waits by default
                 _out, _err, code = call(
                     ['systemctl', 'stop', target],
-                    verbose_on_failure=False
+                    verbosity=CallVerbosity.DEBUG
                 )
                 if code:
                     logger.error(f"Failed to stop the {target} target")
@@ -6609,7 +6620,7 @@ def command_maintenance():
         if not systemd_target_state(target):
             _out, _err, code = call(
                 ['systemctl', 'enable', target],
-                verbose_on_failure=False
+                verbosity=CallVerbosity.DEBUG
             )
             if code:
                 logger.error(f"Failed to enable the {target} target")
@@ -6618,7 +6629,7 @@ def command_maintenance():
                 # starting a target waits by default
                 _out, _err, code = call(
                     ['systemctl', 'start', target],
-                    verbose_on_failure=False
+                    verbosity=CallVerbosity.DEBUG
                 )
                 if code:
                     logger.error(f"Failed to start the {target} target")
