@@ -652,6 +652,22 @@ iMN28C2bKGao5UHvdER1rGy7
         with pytest.raises(HTTPError, match=r"HTTP Error 501: .*") as e:
             urlopen(req)
 
+    def test_ipv4_subnet(self):
+        rc, v, msg = cd.check_subnet('192.168.1.0/24')
+        assert rc == 0 and v == 4
+    
+    def test_ipv6_subnet(self):
+        rc, v, msg = cd.check_subnet('fe80::/64')
+        assert rc == 0 and v == 6
+    
+    def test_subnet_mask_missing(self):
+        rc, v, msg = cd.check_subnet('192.168.1.58')
+        assert rc == 1 and msg
+    
+    def test_subnet_mask_junk(self):
+        rc, v, msg = cd.check_subnet('wah')
+        assert rc == 1 and msg
+
 
 class TestMaintenance:
     systemd_target = "ceph.00000000-0000-0000-0000-000000c0ffee.target"
