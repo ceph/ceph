@@ -143,6 +143,9 @@ public:
   // Set "high_client_ops" profile parameters
   void set_high_client_ops_profile_config();
 
+  // Set recovery specific Ceph settings for profiles
+  void set_global_recovery_options();
+
   // Calculate scale cost per item
   int calc_scaled_cost(op_type_t op_type, int cost);
 
