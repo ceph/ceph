@@ -2202,8 +2202,6 @@ fi
 %files -n python%{python3_pkgversion}-cephfs
 %{python3_sitearch}/cephfs.cpython*.so
 %{python3_sitearch}/cephfs-*.egg-info
-%{python3_sitelib}/ceph_volume_client.py
-%{python3_sitelib}/__pycache__/ceph_volume_client.cpython*.py*
 
 %files -n python%{python3_pkgversion}-ceph-argparse
 %{python3_sitelib}/ceph_argparse.py
