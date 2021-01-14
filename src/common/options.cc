@@ -3213,13 +3213,13 @@ std::vector<Option> get_global_options() {
 
     Option("osd_recovery_max_active_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
-    .set_description("Number of simultaneous active recovery oeprations per OSD (for rotational devices)")
+    .set_description("Number of simultaneous active recovery operations per OSD (for rotational devices)")
     .add_see_also("osd_recovery_max_active")
     .add_see_also("osd_recovery_max_active_ssd"),
 
     Option("osd_recovery_max_active_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description("Number of simultaneous active recovery oeprations per OSD (for non-rotational solid state devices)")
+    .set_description("Number of simultaneous active recovery operations per OSD (for non-rotational solid state devices)")
     .add_see_also("osd_recovery_max_active")
     .add_see_also("osd_recovery_max_active_hdd"),
 
