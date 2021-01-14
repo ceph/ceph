@@ -76,6 +76,9 @@ def _determine_rgw_addr():
     addr = _parse_addr(daemon['addr'])
     port, ssl = _parse_frontend_config(daemon['metadata']['frontend_config#0'])
 
+    logger.info('Auto-detected RGW configuration: addr=%s, port=%d, ssl=%s',
+                addr, port, str(ssl))
+
     return addr, port, ssl
 
 
@@ -240,7 +243,7 @@ class RgwClient(RestClient):
         # Discard all cached instances if any rgw setting has changed
         if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
             RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
-            RgwClient._user_instances.clear()
+            RgwClient.drop_instance()
 
         if not RgwClient._user_instances:
             RgwClient._load_settings()
@@ -266,6 +269,16 @@ class RgwClient(RestClient):
     @staticmethod
     def admin_instance():
         return RgwClient.instance(RgwClient._SYSTEM_USERID)
+
+    @staticmethod
+    def drop_instance(userid=None):
+        """
+        Drop a cached instance by name or all.
+        """
+        if userid:
+            RgwClient._user_instances.pop(userid, None)
+        else:
+            RgwClient._user_instances.clear()
 
     def _reset_login(self):
         if self.userid != RgwClient._SYSTEM_USERID:
