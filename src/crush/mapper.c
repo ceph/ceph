@@ -360,16 +360,25 @@ static inline __s64 generate_exponential_distribution(int type, int x, int y, in
 
 static int bucket_straw2_choose(const struct crush_bucket_straw2 *bucket,
 				int x, int r, const struct crush_choose_arg *arg,
-                                int position, int *first_replica_performance)
+                int *out, int position, int *first_replica_performance, int adjusted_performance_threshold)
 {
-	unsigned int i, high = -1;
+	unsigned int i, j, high = -1;
 	__s64 draw, high_draw = S64_MIN;
         __u32 *weights = get_choose_arg_weights(bucket, arg, position);
         __s32 *ids = get_choose_arg_ids(bucket, arg);
 	for (i = 0; i < bucket->h.size; i++) {
                 dprintk("weight 0x%x item %d\n", weights[i], ids[i]);
 		if (first_replica_performance != NULL && *first_replica_performance != 0) {
-			if (!does_cover_this(bucket->item_performance_range_sets[i], bucket->item_performance_range_sets_num[i], *first_replica_performance))
+			if (!does_cover_this(bucket->item_performance_range_sets[i], bucket->item_performance_range_sets_num[i], *first_replica_performance, adjusted_performance_threshold))
+				continue;
+		}
+		if (out != NULL) {
+			for (j=0; j<position; j++) {
+				if (out[j] == bucket->h.items[i])
+					break;
+			}
+			// we have choosed bucket->h.items[i] already.
+			if (j != position)
 				continue;
 		}
 
@@ -400,8 +409,10 @@ static int crush_bucket_choose(const struct crush_bucket *in,
 			       struct crush_work_bucket *work,
 			       int x, int r,
                                const struct crush_choose_arg *arg,
+							   int *out,
                                int position,
-							   int *first_replica_performance)
+							   int *first_replica_performance,
+							   int adjusted_performance_threshold)
 {
 	dprintk(" crush_bucket_choose %d x=%d r=%d\n", in->id, x, r);
 	BUG_ON(in->size == 0);
@@ -423,7 +434,7 @@ static int crush_bucket_choose(const struct crush_bucket *in,
 	case CRUSH_BUCKET_STRAW2:
 		return bucket_straw2_choose(
 			(const struct crush_bucket_straw2 *)in,
-			x, r, arg, position, first_replica_performance);
+			x, r, arg, out, position, first_replica_performance, adjusted_performance_threshold);
 	default:
 		dprintk("unknown bucket %d alg %d\n", in->id, in->alg);
 		return in->items[0];
@@ -489,7 +500,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       int *out2,
 			       int parent_r,
                                const struct crush_choose_arg *choose_args, 
-				   int *first_replica_performance)
+				   int *first_replica_performance,
+				   int adjusted_performance_threshold)
 {
 	int rep;
 	unsigned int ftotal, flocal;
@@ -499,7 +511,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 	int i;
 	int item = 0;
 	int itemtype;
-	int collide, reject;
+	int collide, reject, not_found_similar_performance_item;
 	int count = out_size;
 
 	dprintk("CHOOSE%s bucket %d x %d outpos %d numrep %d tries %d \
@@ -522,6 +534,7 @@ parent_r %d stable %d\n",
 			flocal = 0;
 			do {
 				collide = 0;
+				not_found_similar_performance_item = 0;
 				retry_bucket = 0;
 				r = rep + parent_r;
 				/* r' = r + f_total */
@@ -543,8 +556,13 @@ parent_r %d stable %d\n",
 						in, work->work[-1-in->id],
 						x, r,
                                                 (choose_args ? &choose_args[-1-in->id] : 0),
-                                                outpos, first_replica_performance);
+                                                out, outpos, first_replica_performance, adjusted_performance_threshold);
 				if (item >= map->max_devices || item == INVALID_BUCKET_OR_OSD_ID) {
+					// this means we did not find a similar performance item.
+					if (item == INVALID_BUCKET_OR_OSD_ID) {
+						not_found_similar_performance_item = 1;
+						goto reject;
+					}
 					dprintk("   bad item %d\n", item);
 					skip_rep = 1;
 					break;
@@ -602,7 +620,8 @@ parent_r %d stable %d\n",
 							    NULL,
 							    sub_r,
                                                             choose_args,
-								first_replica_performance) <= outpos)
+								first_replica_performance,
+								adjusted_performance_threshold) <= outpos)
 							/* didn't get leaf */
 							reject = 1;
 					} else {
@@ -620,9 +639,13 @@ parent_r %d stable %d\n",
 				}
 
 reject:
-				if (reject || collide) {
+				if (reject || collide || not_found_similar_performance_item) {
 					ftotal++;
 					flocal++;
+
+					if (not_found_similar_performance_item)
+						// it we did not find a similar performance items, extend the adjusted_performance_threshold value.
+						adjusted_performance_threshold = adjusted_performance_threshold * 2;
 
 					if (collide && flocal <= local_retries)
 						/* retry locally a few times */
@@ -754,7 +777,7 @@ static void crush_choose_indep(const struct crush_map *map,
 					in, work->work[-1-in->id],
 					x, r,
                                         (choose_args ? &choose_args[-1-in->id] : 0),
-                                        outpos, NULL);
+                                        NULL, outpos, NULL, 0);
 				if (item >= map->max_devices) {
 					dprintk("   bad item %d\n", item);
 					out[rep] = CRUSH_ITEM_NONE;
@@ -1070,7 +1093,8 @@ int crush_do_rule(const struct crush_map *map,
 						c+osize,
 						0,
 						choose_args,
-						&first_replica_performacne);
+						&first_replica_performacne,
+						performance_threshold);
 				} else {
 					out_size = ((numrep < (result_max-osize)) ?
 						    numrep : (result_max-osize));

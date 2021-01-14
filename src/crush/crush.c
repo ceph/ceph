@@ -273,11 +273,12 @@ int is_same_performance_range_set(__u32 *performance_range_set1, int performance
 }
 
 /* 1 means yes, 0 means no. */
-int does_cover_this(const __u32 *performance_range_set, int performance_range_set_num, int performance) {
+int does_cover_this(const __u32 *performance_range_set, int performance_range_set_num, int performance, int adjusted_performance_threshold) {
 	int i;
 
 	for (i=0; i<performance_range_set_num; i++) {
-		if (performance <= performance_range_set[i]+performance_threshold && performance >= performance_range_set[i]-performance_threshold)
+		int performance_element = performance_range_set[i]; 
+		if (performance <= performance_element+adjusted_performance_threshold && performance >= performance_element-adjusted_performance_threshold)
 			return 1;
 	}
 	return 0;

@@ -893,3 +893,116 @@ TEST_F(CRUSHTest, straw2_performance_with_host_failure_domain) {
     }
   }
 }
+
+TEST_F(CRUSHTest, straw2_performance_with_extending_performance_threshold) {
+  // each host has 5 osds
+
+  int n = 15;
+  int i;
+
+  __u32 *performance_range_sets[n];
+  for (i=0; i<n; i++) {
+    performance_range_sets[i] = (__u32 *)malloc(sizeof(__u32));
+    performance_range_sets[i][0] = (i%2) ? 20000 : 10000;
+  }
+  for (i=0; i<5; i++) {
+    performance_range_sets[i][0] = 8000;
+  }
+  for (i=5; i<10; i++) {
+    performance_range_sets[i][0] = 18000;
+  }
+
+  int performance_range_sets_num[n];
+  for (i=0; i<n; i++) {
+    performance_range_sets_num[i] = 1;
+  }
+  
+  int weights[] = {
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x30000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+    0x20000,
+  };
+
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int items[n];
+  for (int i=0; i <n; ++i) {
+    items[i] = i;
+  }
+
+  c->set_max_devices(n);
+
+  string root_name("root");
+  int root;
+
+  crush_bucket *root_bucket = crush_make_bucket(c->get_crush_map(),
+				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+				       ROOT_TYPE, 0, NULL, NULL, NULL, 0);
+  EXPECT_EQ(0, crush_add_bucket(c->get_crush_map(), 0, root_bucket, &root));
+  EXPECT_EQ(0, c->set_item_name(root, root_name));
+
+  int b0;
+  crush_bucket *b0_bucket = crush_make_bucket(c->get_crush_map(),
+				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+				       HOST_TYPE, 5, items, weights, (__u32 **)performance_range_sets, performance_range_sets_num);
+  EXPECT_EQ(0, crush_add_bucket(c->get_crush_map(), 0, b0_bucket, &b0));
+
+  int b1;
+  crush_bucket *b1_bucket = crush_make_bucket(c->get_crush_map(),
+				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+				       HOST_TYPE, 5, items + 5, weights + 5, (__u32 **)(performance_range_sets + 5), performance_range_sets_num + 5);
+  EXPECT_EQ(0, crush_add_bucket(c->get_crush_map(), 0, b1_bucket, &b1));
+
+  int b2;
+  crush_bucket *b2_bucket = crush_make_bucket(c->get_crush_map(),
+				       CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+				       HOST_TYPE, 5, items + 10, weights + 10, (__u32 **)(performance_range_sets + 10), performance_range_sets_num + 10);
+  EXPECT_EQ(0, crush_add_bucket(c->get_crush_map(), 0, b2_bucket, &b2));
+
+  c->bucket_add_item(root_bucket, b0, b0_bucket->weight, b0_bucket->performance_range_set, b0_bucket->performance_range_set_num);
+  c->bucket_add_item(root_bucket, b1, b1_bucket->weight, b1_bucket->performance_range_set, b1_bucket->performance_range_set_num);
+  c->bucket_add_item(root_bucket, b2, b2_bucket->weight, b2_bucket->performance_range_set, b2_bucket->performance_range_set_num);
+
+  string name("rule");
+  int rule = c->add_simple_rule(name, root_name, "host", "",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+  EXPECT_EQ(0, rule);
+
+  c->finalize();
+
+  vector<unsigned> reweight(n);
+  for (int i=0; i<n; ++i) {
+    reweight[i] = 0x10000;
+  }
+  for (int i=2; i<4; ++i) {
+    vector<int> out;
+    c->do_rule(rule, i, out, i, reweight, 0);
+    ASSERT_EQ(i, out.size());
+    for (int j=0; j<i; j++) {
+      std::cout << out[j] << " ";
+      for (int k=0; k<j; k++) {
+        // check items are from different hosts
+        ASSERT_NE(out[k]/5, out[j]/5);
+      }
+    }
+    std::cout << std::endl;
+  }
+}

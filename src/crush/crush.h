@@ -345,7 +345,7 @@ extern void subtract_performance_range_set(__u32 **target_performance_range_set,
 				   const __u32 *performance_range_set, int performance_range_set_num);
 extern int is_same_performance_range_set(__u32 *performance_range_set1, int performance_range_set1_num, \
 				   const __u32 *performance_range_set2, int performance_range_set2_num);
-extern int does_cover_this(const __u32 *performance_range_set, int performance_range_set_num, int performance);
+extern int does_cover_this(const __u32 *performance_range_set, int performance_range_set_num, int performance, int adjusted_performance_threshold);
 
 /** @ingroup API
  * The weight of each item in the bucket when
