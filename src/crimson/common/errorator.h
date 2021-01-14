@@ -428,6 +428,8 @@ private:
 
     using base_t::available;
     using base_t::failed;
+    // need this because of the legacy in PG::do_osd_ops().
+    using base_t::handle_exception_type;
 
     [[gnu::always_inline]]
     _future(base_t&& base)
