@@ -2606,8 +2606,9 @@ void PG::C_DeleteMore::complete(int r) {
   delete this;
 }
 
-ghobject_t PG::do_delete_work(ObjectStore::Transaction &t,
-                        ghobject_t _next)
+std::pair<ghobject_t, bool> PG::do_delete_work(
+  ObjectStore::Transaction &t,
+  ghobject_t _next)
 {
   dout(10) << __func__ << dendl;
 
@@ -2633,7 +2634,7 @@ ghobject_t PG::do_delete_work(ObjectStore::Transaction &t,
       osd->sleep_timer.add_event_at(delete_schedule_time,
 				    delete_requeue_callback);
       dout(20) << __func__ << " Delete scheduled at " << delete_schedule_time << dendl;
-      return _next;
+      return std::make_pair(_next, true);
     }
   }
 
@@ -2689,6 +2690,7 @@ ghobject_t PG::do_delete_work(ObjectStore::Transaction &t,
     t.remove(coll, oid);
     ++num;
   }
+  bool running = true;
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, get_osdmap_epoch());
@@ -2725,10 +2727,10 @@ ghobject_t PG::do_delete_work(ObjectStore::Transaction &t,
       // exit() methods don't run when that happens.
       osd->local_reserver.cancel_reservation(info.pgid);
 
-      osd->logger->dec(l_osd_pg_removing);
+      running = false;
     }
   }
-  return next;
+  return {next, running};
 }
 
 int PG::pg_stat_adjust(osd_stat_t *ns)
