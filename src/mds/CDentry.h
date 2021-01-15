@@ -359,7 +359,7 @@ protected:
   friend class C_MDC_XlockRequest;
 
   CDir *dir = nullptr;     // containing dirfrag
-  linkage_t linkage;
+  linkage_t linkage; /* durable */
   mempool::mds_co::list<linkage_t> projected;
 
   version_t version = 0;  // dir version when last touched.
