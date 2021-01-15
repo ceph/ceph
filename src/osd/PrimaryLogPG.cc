@@ -3364,11 +3364,9 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
       obc_g ? &(obc_g->obs.oi.manifest) : nullptr ,
       nullptr,
       refs);
-    if (!refs.is_empty()) {
-      for (auto p = refs.begin(); p != refs.end(); ++p) {
-	if (p->first.oid.name == fp_oid && p->second > 0) {
-	  cnt += p->second;
-	}
+    for (auto p = refs.begin(); p != refs.end(); ++p) {
+      if (p->first.oid.name == fp_oid && p->second > 0) {
+	cnt += p->second;
       }
     }
   }
