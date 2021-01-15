@@ -112,12 +112,12 @@ class InternalNodeImpl : public NodeImpl {
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const laddr_packed_t* insert(
-      const key_view_t&, const laddr_packed_t&, search_position_t&, match_stage_t&, node_offset_t&) {
+      const key_view_t&, const laddr_t&, search_position_t&, match_stage_t&, node_offset_t&) {
     ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual std::tuple<search_position_t, bool, const laddr_packed_t*> split_insert(
-      NodeExtentMutable&, NodeImpl&, const key_view_t&, const laddr_packed_t&,
+      NodeExtentMutable&, NodeImpl&, const key_view_t&, const laddr_t&,
       search_position_t&, match_stage_t&, node_offset_t&) {
     ceph_abort("impossible path");
   }

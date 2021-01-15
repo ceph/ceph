@@ -10,7 +10,7 @@ namespace crimson::os::seastore::onode {
 template <KeyT KT>
 const laddr_packed_t* internal_sub_items_t::insert_at(
     NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
-    const full_key_t<KT>& key, const laddr_packed_t& value,
+    const full_key_t<KT>& key, const laddr_t& value,
     index_t index, node_offset_t size, const char* p_left_bound) {
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
@@ -20,14 +20,15 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
   mut.shift_absolute(p_shift_start, p_shift_end - p_shift_start, -(int)size);
 
   auto p_insert = const_cast<char*>(p_shift_end) - size;
-  auto item = internal_sub_item_t{snap_gen_t::from_key<KT>(key), value};
+  auto item = internal_sub_item_t{
+    snap_gen_t::from_key<KT>(key), laddr_packed_t{value}};
   mut.copy_in_absolute(p_insert, item);
   return &reinterpret_cast<internal_sub_item_t*>(p_insert)->value;
 }
 #define IA_TEMPLATE(KT)                                                     \
   template const laddr_packed_t* internal_sub_items_t::insert_at<KT>(       \
     NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KT>&, \
-    const laddr_packed_t&, index_t, node_offset_t, const char*)
+    const laddr_t&, index_t, node_offset_t, const char*)
 IA_TEMPLATE(KeyT::VIEW);
 IA_TEMPLATE(KeyT::HOBJ);
 
@@ -57,10 +58,11 @@ void internal_sub_items_t::Appender<KT>::append(
 
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
-    const full_key_t<KT>& key, const laddr_packed_t& value,
+    const full_key_t<KT>& key, const laddr_t& value,
     const laddr_packed_t*& p_value) {
   p_append -= sizeof(internal_sub_item_t);
-  auto item = internal_sub_item_t{snap_gen_t::from_key<KT>(key), value};
+  auto item = internal_sub_item_t{
+    snap_gen_t::from_key<KT>(key), laddr_packed_t{value}};
   p_mut->copy_in_absolute(p_append, item);
   p_value = &reinterpret_cast<internal_sub_item_t*>(p_append)->value;
 }

@@ -27,7 +27,7 @@ class DeltaRecorderT final: public DeltaRecorder {
   using node_stage_t = typename layout_t::node_stage_t;
   using position_t = typename layout_t::position_t;
   using StagedIterator = typename layout_t::StagedIterator;
-  using value_t = typename layout_t::value_t;
+  using value_input_t = typename layout_t::value_input_t;
   static constexpr auto FIELD_TYPE = layout_t::FIELD_TYPE;
 
   ~DeltaRecorderT() override = default;
@@ -35,7 +35,7 @@ class DeltaRecorderT final: public DeltaRecorder {
   template <KeyT KT>
   void encode_insert(
       const full_key_t<KT>& key,
-      const value_t& value,
+      const value_input_t& value,
       const position_t& insert_pos,
       const match_stage_t& insert_stage,
       const node_offset_t& insert_size) {
@@ -58,7 +58,7 @@ class DeltaRecorderT final: public DeltaRecorder {
   void encode_split_insert(
       const StagedIterator& split_at,
       const full_key_t<KT>& key,
-      const value_t& value,
+      const value_input_t& value,
       const position_t& insert_pos,
       const match_stage_t& insert_stage,
       const node_offset_t& insert_size,
@@ -105,7 +105,7 @@ class DeltaRecorderT final: public DeltaRecorder {
         auto key = key_hobj_t::decode(delta);
 
         std::unique_ptr<char[]> value_storage_heap;
-        value_t value_storage_stack;
+        value_input_t value_storage_stack;
         auto p_value = decode_value(delta, value_storage_heap, value_storage_stack);
 
         auto insert_pos = position_t::decode(delta);
@@ -133,7 +133,7 @@ class DeltaRecorderT final: public DeltaRecorder {
         auto key = key_hobj_t::decode(delta);
 
         std::unique_ptr<char[]> value_storage_heap;
-        value_t value_storage_stack;
+        value_input_t value_storage_stack;
         auto p_value = decode_value(delta, value_storage_heap, value_storage_stack);
 
         auto insert_pos = position_t::decode(delta);
@@ -174,11 +174,11 @@ class DeltaRecorderT final: public DeltaRecorder {
   }
 
  private:
-  static void encode_value(const value_t& value, ceph::bufferlist& encoded) {
-    if constexpr (std::is_same_v<value_t, laddr_packed_t>) {
+  static void encode_value(const value_input_t& value, ceph::bufferlist& encoded) {
+    if constexpr (std::is_same_v<value_input_t, laddr_t>) {
       // NODE_TYPE == node_type_t::INTERNAL
-      ceph::encode(value.value, encoded);
-    } else if constexpr (std::is_same_v<value_t, onode_t>) {
+      ceph::encode(value, encoded);
+    } else if constexpr (std::is_same_v<value_input_t, onode_t>) {
       // NODE_TYPE == node_type_t::LEAF
       value.encode(encoded);
     } else {
@@ -186,16 +186,16 @@ class DeltaRecorderT final: public DeltaRecorder {
     }
   }
 
-  static value_t* decode_value(ceph::bufferlist::const_iterator& delta,
-                               std::unique_ptr<char[]>& value_storage_heap,
-                               value_t& value_storage_stack) {
-    if constexpr (std::is_same_v<value_t, laddr_packed_t>) {
+  static value_input_t* decode_value(ceph::bufferlist::const_iterator& delta,
+                                     std::unique_ptr<char[]>& value_storage_heap,
+                                     value_input_t& value_storage_stack) {
+    if constexpr (std::is_same_v<value_input_t, laddr_t>) {
       // NODE_TYPE == node_type_t::INTERNAL
       laddr_t value;
       ceph::decode(value, delta);
-      value_storage_stack.value = value;
+      value_storage_stack = value;
       return &value_storage_stack;
-    } else if constexpr (std::is_same_v<value_t, onode_t>) {
+    } else if constexpr (std::is_same_v<value_input_t, onode_t>) {
       // NODE_TYPE == node_type_t::LEAF
       auto value_config = onode_t::decode(delta);
       value_storage_heap = onode_t::allocate(value_config);
@@ -225,6 +225,7 @@ class NodeExtentAccessorT {
   using position_t = typename layout_t::position_t;
   using recorder_t = DeltaRecorderT<FieldType, NODE_TYPE>;
   using StagedIterator = typename layout_t::StagedIterator;
+  using value_input_t = typename layout_t::value_input_t;
   using value_t = typename layout_t::value_t;
   static constexpr auto FIELD_TYPE = layout_t::FIELD_TYPE;
 
@@ -284,7 +285,7 @@ class NodeExtentAccessorT {
   template <KeyT KT>
   const value_t* insert_replayable(
       const full_key_t<KT>& key,
-      const value_t& value,
+      const value_input_t& value,
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
@@ -326,7 +327,7 @@ class NodeExtentAccessorT {
   const value_t* split_insert_replayable(
       StagedIterator& split_at,
       const full_key_t<KT>& key,
-      const value_t& value,
+      const value_input_t& value,
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {

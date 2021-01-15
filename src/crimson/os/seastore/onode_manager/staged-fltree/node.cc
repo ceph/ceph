@@ -296,7 +296,6 @@ node_future<> InternalNode::apply_child_split(
 
   auto left_key = left_child->impl->get_largest_key_view();
   auto left_child_addr = left_child->impl->laddr();
-  auto left_child_addr_packed = laddr_packed_t{left_child_addr};
   auto right_key = right_child->impl->get_largest_key_view();
   auto right_child_addr = right_child->impl->laddr();
   logger().debug("OTree::Internal::Insert: "
@@ -313,7 +312,7 @@ node_future<> InternalNode::apply_child_split(
   if (free_size >= insert_size) {
     // insert
     [[maybe_unused]] auto p_value = impl->insert(
-        left_key, left_child_addr_packed, insert_pos, insert_stage, insert_size);
+        left_key, left_child_addr, insert_pos, insert_stage, insert_size);
     assert(impl->free_size() == free_size - insert_size);
     assert(insert_pos <= pos);
     assert(p_value->value == left_child_addr);
@@ -331,9 +330,8 @@ node_future<> InternalNode::apply_child_split(
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
     auto left_child_addr = left_child->impl->laddr();
-    auto left_child_addr_packed = laddr_packed_t{left_child_addr};
     auto [split_pos, is_insert_left, p_value] = impl->split_insert(
-        fresh_right.mut, *right_node->impl, left_key, left_child_addr_packed,
+        fresh_right.mut, *right_node->impl, left_key, left_child_addr,
         insert_pos, insert_stage, insert_size);
     assert(p_value->value == left_child_addr);
     track_split(split_pos, right_node);

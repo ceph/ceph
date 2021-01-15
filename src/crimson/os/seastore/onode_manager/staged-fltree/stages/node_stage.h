@@ -25,6 +25,7 @@ class NodeExtentMutable;
 template <typename FieldType, node_type_t _NODE_TYPE>
 class node_extent_t {
  public:
+  using value_input_t = value_input_type_t<_NODE_TYPE>;
   using value_t = value_type_t<_NODE_TYPE>;
   using num_keys_t = typename FieldType::num_keys_t;
   static constexpr node_type_t NODE_TYPE = _NODE_TYPE;
@@ -137,7 +138,7 @@ class node_extent_t {
 
   template <KeyT KT>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>& key, const value_t& value) {
+      const full_key_t<KT>& key, const value_input_t& value) {
     auto size = FieldType::estimate_insert_one();
     if constexpr (FIELD_TYPE == field_type_t::N2) {
       size += ns_oid_view_t::estimate_size<KT>(key);
@@ -151,7 +152,7 @@ class node_extent_t {
   template <KeyT KT>
   static const value_t* insert_at(
       NodeExtentMutable& mut, const node_extent_t&,
-      const full_key_t<KT>& key, const value_t& value,
+      const full_key_t<KT>& key, const value_input_t& value,
       index_t index, node_offset_t size, const char* p_left_bound) {
     if constexpr (FIELD_TYPE == field_type_t::N3) {
       ceph_abort("not implemented");
@@ -198,7 +199,7 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
     p_append_right = p_start + FieldType::SIZE;
   }
   void append(const node_extent_t& src, index_t from, index_t items);
-  void append(const full_key_t<KT>&, const value_t&, const value_t*&);
+  void append(const full_key_t<KT>&, const value_input_t&, const value_t*&);
   char* wrap();
   std::tuple<NodeExtentMutable*, char*> open_nxt(const key_get_type&);
   std::tuple<NodeExtentMutable*, char*> open_nxt(const full_key_t<KT>&);
