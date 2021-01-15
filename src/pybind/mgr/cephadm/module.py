@@ -1467,7 +1467,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 else:
                     spec = ServiceSpec(
                         unmanaged=True,
-                        service_type=dd.daemon_type,
+                        service_type=daemon_type_to_service(dd.daemon_type),
                         service_id=dd.service_id(),
                         placement=PlacementSpec(
                             hosts=[dd.hostname]

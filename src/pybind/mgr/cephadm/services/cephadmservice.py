@@ -13,6 +13,7 @@ from mgr_module import HandleCommandResult, MonCommandFailed
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
 from cephadm import utils
 from mgr_util import create_self_signed_cert, ServerConfigException, verify_tls
 
@@ -234,7 +235,6 @@ class CephadmService(metaclass=ABCMeta):
         """
         Called before the daemon is removed.
         """
-        assert daemon.daemon_type is not None
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Pre remove daemon {self.TYPE}.{daemon.daemon_id}')
 
@@ -242,7 +242,6 @@ class CephadmService(metaclass=ABCMeta):
         """
         Called after the daemon is removed.
         """
-        assert daemon.daemon_type is not None
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
@@ -274,7 +273,9 @@ class CephService(CephadmService):
         """
         Map the daemon id to a cephx keyring entity name
         """
-        if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi", 'haproxy', 'keepalived']:
+        # despite this mapping entity names to daemons, self.TYPE within
+        # the CephService class refers to service types, not daemon types
+        if self.TYPE in ['rgw', 'rbd-mirror', 'nfs', "iscsi", 'ha-rgw']:
             return AuthEntity(f'client.{self.TYPE}.{daemon_id}')
         elif self.TYPE == 'crash':
             if host == "":
