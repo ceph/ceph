@@ -297,6 +297,8 @@ public:
     }
     //if (!get_filepath().empty()) 
     out << " " << get_filepath();
+    if (alternate_name.size())
+      out << " (" << alternate_name << ") ";
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
     if (stamp != utime_t())

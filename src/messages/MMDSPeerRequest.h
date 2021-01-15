@@ -118,6 +118,7 @@ public:
   // for rename prep
   filepath srcdnpath;
   filepath destdnpath;
+  std::string alternate_name;
   std::set<mds_rank_t> witnesses;
   ceph::buffer::list inode_export;
   version_t inode_export_v;
@@ -192,6 +193,7 @@ public:
     encode(straybl, payload);
     encode(srci_snapbl, payload);
     encode(desti_snapbl, payload);
+    encode(alternate_name, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -213,6 +215,7 @@ public:
     decode(straybl, p);
     decode(srci_snapbl, p);
     decode(desti_snapbl, p);
+    decode(alternate_name, p);
   }
 
   std::string_view get_type_name() const override { return "peer_request"; }

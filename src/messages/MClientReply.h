@@ -24,6 +24,7 @@
 #include "msg/Message.h"
 #include "include/ceph_features.h"
 #include "common/errno.h"
+#include "common/strescape.h"
 
 /***
  *
@@ -48,12 +49,12 @@
 
 struct LeaseStat {
   // this matches ceph_mds_reply_lease
-  __u16 mask;
-  __u32 duration_ms;  
-  __u32 seq;
+  __u16 mask = 0;
+  __u32 duration_ms = 0;
+  __u32 seq = 0;
   std::string alternate_name;
 
-  LeaseStat() : mask(0), duration_ms(0), seq(0) {}
+  LeaseStat() = default;
   LeaseStat(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
 
   void decode(ceph::buffer::list::const_iterator &bl, const uint64_t features) {
@@ -76,7 +77,11 @@ struct LeaseStat {
 };
 
 inline std::ostream& operator<<(std::ostream& out, const LeaseStat& l) {
-  return out << "lease(mask " << l.mask << " dur " << l.duration_ms << ")";
+  out << "lease(mask " << l.mask << " dur " << l.duration_ms;
+  if (l.alternate_name.size()) {
+    out << " altn " << binstrprint(l.alternate_name, 128) << ")";
+  }
+  return out << ")";
 }
 
 struct DirStat {

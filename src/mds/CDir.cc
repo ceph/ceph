@@ -345,7 +345,7 @@ CDentry* CDir::add_null_dentry(std::string_view dname,
   ceph_assert(lookup_exact_snap(dname, last) == 0);
    
   // create dentry
-  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), "", first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
 
@@ -382,13 +382,14 @@ CDentry* CDir::add_null_dentry(std::string_view dname,
 
 
 CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
+                                  mempool::mds_co::string alternate_name,
 				  snapid_t first, snapid_t last) 
 {
   // primary
   ceph_assert(lookup_exact_snap(dname, last) == 0);
   
   // create dentry
-  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   if (is_auth() || !inode->is_stray()) {
@@ -431,13 +432,14 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
 }
 
 CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
+                                 mempool::mds_co::string alternate_name,
 				 snapid_t first, snapid_t last) 
 {
   // foreign
   ceph_assert(lookup_exact_snap(dname, last) == 0);
 
   // create dentry
-  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), ino, d_type, first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), ino, d_type, first, last);
   if (is_auth()) 
     dn->state_set(CDentry::STATE_AUTH);
   mdcache->lru.lru_insert_mid(dn);
@@ -1769,8 +1771,6 @@ CDentry *CDir::_load_dentry(
     mempool::mds_co::string alternate_name;
 
     CDentry::decode_remote(type, ino, d_type, alternate_name, q);
-    if (alternate_name.length())
-      dn->set_alternate_name(std::move(alternate_name));
 
     if (stale) {
       if (!dn) {
@@ -1787,14 +1787,15 @@ CDentry *CDir::_load_dentry(
 	  dnl->is_remote() &&
 	  dn->is_dirty() &&
 	  ino == dnl->get_remote_ino() &&
-	  d_type == dnl->get_remote_d_type()) {
+	  d_type == dnl->get_remote_d_type() &&
+          alternate_name == dn->get_alternate_name()) {
 	// see comment below
 	dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
 	dn->mark_clean();
       }
     } else {
       // (remote) link
-      dn = add_remote_dentry(dname, ino, d_type, first, last);
+      dn = add_remote_dentry(dname, ino, d_type, std::move(alternate_name), first, last);
 
       // link to inode?
       CInode *in = mdcache->get_inode(ino);   // we may or may not have it.
@@ -1808,12 +1809,14 @@ CDentry *CDir::_load_dentry(
   }
   else if (type == 'I' || type == 'i') {
     InodeStore inode_data;
+    mempool::mds_co::string alternate_name;
     // inode
     // Load inode data before looking up or constructing CInode
     if (type == 'i') {
       DECODE_START(2, q);
-      if (struct_v >= 2)
-        dn->decode_alternate_name(q);
+      if (struct_v >= 2) {
+        decode(alternate_name, q);
+      }
       inode_data.decode(q);
       DECODE_FINISH(q);
     } else {
@@ -1891,7 +1894,7 @@ CDentry *CDir::_load_dentry(
 
         if (!undef_inode) {
           mdcache->add_inode(in); // add
-          dn = add_primary_dentry(dname, in, first, last); // link
+          dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last); // link
         }
         dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
 
@@ -1904,7 +1907,7 @@ CDentry *CDir::_load_dentry(
         //num_new_inodes_loaded++;
       } else if (g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata")) {
 	dout(20) << "hack: adding duplicate dentry for " << *in << dendl;
-	dn = add_primary_dentry(dname, in, first, last);
+	dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last);
       } else {
         dout(0) << "_fetched  badness: got (but i already had) " << *in
                 << " mode " << in->get_inode()->mode
@@ -2233,7 +2236,6 @@ void CDir::_encode_primary_inode_base(dentry_commit_item &item, bufferlist &dfts
 
   encode(item.oldest_snap, bl);
   encode(item.damage_flags, bl);
-  encode(item.alternate_name, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2330,6 +2332,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       bl.append('i');         // inode
 
       ENCODE_START(2, 1, bl);
+      encode(item.alternate_name, bl);
       _encode_primary_inode_base(item, dfts, bl);
       ENCODE_FINISH(bl);
     }
@@ -2450,19 +2453,17 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
 
   item.first = dn->first;
 
-  // Only in very rare case the dn->alternate_name not empty,
-  // so it won't cost much to copy it here
-  item.alternate_name = dn->get_alternate_name();
-
   // primary or remote?
-  if (dn->linkage.is_remote()) {
+  auto& linkage = dn->linkage;
+  item.alternate_name = dn->get_alternate_name();
+  if (linkage.is_remote()) {
     item.is_remote = true;
-    item.ino = dn->linkage.get_remote_ino();
-    item.d_type = dn->linkage.get_remote_d_type();
+    item.ino = linkage.get_remote_ino();
+    item.d_type = linkage.get_remote_d_type();
     dout(14) << " dn '" << dn->get_name() << "' remote ino " << item.ino << dendl;
-  } else if (dn->linkage.is_primary()) {
+  } else if (linkage.is_primary()) {
     // primary link
-    CInode *in = dn->linkage.get_inode();
+    CInode *in = linkage.get_inode();
     ceph_assert(in);
 
     dout(14) << " dn '" << dn->get_name() << "' inode " << *in << dendl;
@@ -2491,7 +2492,7 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
     item.oldest_snap = in->oldest_snap;
     item.damage_flags = in->damage_flags;
   } else {
-    ceph_assert(!dn->linkage.is_null());
+    ceph_assert(!linkage.is_null());
   }
 }
 

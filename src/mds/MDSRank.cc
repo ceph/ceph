@@ -3689,6 +3689,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_session_cap_acquisition_throttle",
     "mds_session_max_caps_throttle_ratio",
     "mds_cap_acquisition_throttle_retry_request_time",
+    "mds_alternate_name_max",
     NULL
   };
   return KEYS;
