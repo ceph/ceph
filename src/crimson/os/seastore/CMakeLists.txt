@@ -18,7 +18,6 @@ add_library(crimson-seastore STATIC
   onode_manager/staged-fltree/node.cc
   onode_manager/staged-fltree/node_extent_manager.cc
   onode_manager/staged-fltree/node_extent_manager/seastore.cc
-  onode_manager/staged-fltree/node_extent_mutable.cc
   onode_manager/staged-fltree/node_impl.cc
   onode_manager/staged-fltree/stages/item_iterator_stage.cc
   onode_manager/staged-fltree/stages/key_layout.cc

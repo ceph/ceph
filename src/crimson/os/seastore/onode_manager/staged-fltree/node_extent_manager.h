@@ -41,7 +41,9 @@ class NodeExtent : public LogicalCachedExtent {
   NodeExtent(T&&... t) : LogicalCachedExtent(std::forward<T>(t)...) {}
 
   NodeExtentMutable do_get_mutable() {
-    return NodeExtentMutable(*this);
+    assert(is_pending() || // during mutation
+           is_clean());    // during replay
+    return NodeExtentMutable(get_bptr().c_str(), get_length());
   }
 
   /**
@@ -51,9 +53,6 @@ class NodeExtent : public LogicalCachedExtent {
    * - CacheExtent::get_delta() -> ceph::bufferlist
    * - LogicalCachedExtent::apply_delta(const ceph::bufferlist) -> void
    */
-
- private:
-  friend class NodeExtentMutable;
 };
 
 using crimson::os::seastore::TransactionManager;
