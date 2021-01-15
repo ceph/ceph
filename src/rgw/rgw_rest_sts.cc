@@ -434,9 +434,10 @@ int RGWSTSGetSessionToken::get_params()
     }
 
     if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
-            duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
+            duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration) {
       ldout(s->cct, 0) << "Invalid duration in secs: " << duration_in_secs << dendl;
       return -EINVAL;
+    }
   }
 
   return 0;
