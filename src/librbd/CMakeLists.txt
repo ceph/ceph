@@ -140,6 +140,7 @@ set(librbd_internal_srcs
   migration/ImageDispatch.cc
   migration/NativeFormat.cc
   migration/OpenSourceImageRequest.cc
+  migration/QCOWFormat.cc
   migration/RawFormat.cc
   migration/RawSnapshot.cc
   migration/S3Stream.cc
