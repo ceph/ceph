@@ -62,12 +62,13 @@ class tree_cursor_t final
   : public boost::intrusive_ref_counter<
            tree_cursor_t, boost::thread_unsafe_counter> {
  public:
-  // public to Btree
   ~tree_cursor_t();
   tree_cursor_t(const tree_cursor_t&) = delete;
   tree_cursor_t(tree_cursor_t&&) = delete;
   tree_cursor_t& operator=(const tree_cursor_t&) = delete;
   tree_cursor_t& operator=(tree_cursor_t&&) = delete;
+
+  // public to Btree
 
   /**
    * is_end
@@ -79,38 +80,72 @@ class tree_cursor_t final
   bool is_end() const { return position.is_end(); }
 
   /// Returns the key view in tree if it is not an end cursor.
-  const key_view_t& get_key_view() const;
+  const key_view_t& get_key_view() const {
+    maybe_update_cache();
+    return cache.get_key_view();
+  }
 
   /// Returns the value pointer in tree if it is not an end cursor.
-  const onode_t* get_p_value() const;
+  const onode_t* get_p_value() const {
+    maybe_update_cache();
+    return cache.get_p_value();
+  }
 
  private:
   tree_cursor_t(Ref<LeafNode>, const search_position_t&);
   tree_cursor_t(Ref<LeafNode>, const search_position_t&,
-                const key_view_t& key, const onode_t*, layout_version_t);
+                const key_view_t&, const onode_t*);
   // lookup reaches the end, contain leaf node for further insert
   tree_cursor_t(Ref<LeafNode>);
+
   const search_position_t& get_position() const { return position; }
-  Ref<LeafNode> get_leaf_node() { return leaf_node; }
+  Ref<LeafNode> get_leaf_node() { return ref_leaf_node; }
   template <bool VALIDATE>
   void update_track(Ref<LeafNode>, const search_position_t&);
-  void update_kv(const key_view_t&, const onode_t*, layout_version_t) const;
-  void ensure_kv() const;
+  void update_cache(LeafNode&, const key_view_t&, const onode_t*) const;
+  void maybe_update_cache() const;
 
- private:
   /**
    * Reversed resource management (tree_cursor_t)
    *
    * tree_cursor_t holds a reference to the LeafNode, so the LeafNode will be
    * alive as long as any of it's cursors is still referenced by user.
    */
-  Ref<LeafNode> leaf_node;
+  Ref<LeafNode> ref_leaf_node;
   search_position_t position;
 
-  // cached information
-  mutable std::optional<key_view_t> key_view;
-  mutable const onode_t* p_value;
-  mutable layout_version_t node_version;
+  /** Cache
+   *
+   * Cached memory pointers or views which may be outdated due to
+   * asynchronous leaf node updates.
+   */
+  class Cache {
+   public:
+    Cache();
+    bool is_latest() const;
+    void invalidate() { valid = false; }
+    void update(LeafNode&, const key_view_t&, const onode_t*);
+    void validate_is_latest(const LeafNode&, const search_position_t&) const;
+
+    const key_view_t& get_key_view() const {
+      assert(is_latest());
+      assert(key_view.has_value());
+      return *key_view;
+    }
+    const onode_t* get_p_value() const {
+      assert(is_latest());
+      assert(p_value);
+      return p_value;
+    }
+
+   private:
+    LeafNode* p_leaf_node = nullptr;
+    std::optional<key_view_t> key_view;
+    const onode_t* p_value = nullptr;
+    layout_version_t version;
+    bool valid = false;
+  };
+  mutable Cache cache;
 
   friend class LeafNode;
   friend class Node; // get_position(), get_leaf_node()
@@ -393,8 +428,8 @@ class LeafNode final : public Node {
 
   bool is_level_tail() const;
   layout_version_t get_layout_version() const { return layout_version; }
-  std::tuple<key_view_t, const onode_t*, layout_version_t> get_kv(
-      const search_position_t&) const;
+  std::tuple<key_view_t, const onode_t*> get_kv(const search_position_t&) const;
+
   template <bool VALIDATE>
   void do_track_cursor(tree_cursor_t& cursor) {
     if constexpr (VALIDATE) {
