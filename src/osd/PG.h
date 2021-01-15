@@ -176,6 +176,10 @@ public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
 
+  bool get_reserve_failed() const { return scrubber.reserve_failed; }
+  void set_reserve_failed() { scrubber.reserve_failed = true; }
+  void clear_reserve_failed() { scrubber.reserve_failed = false; }
+
 public:
   // -- members --
   const coll_t coll;
@@ -1144,6 +1148,9 @@ public:
     // this flag indicates that if a regular scrub detects errors <= osd_scrub_auto_repair_num_errors,
     // we should deep scrub in order to auto repair
     bool deep_scrub_on_error;
+    // This PG could not get all the scrub reservations
+    bool reserve_failed;
+
 
     // Maps from objects with errors to missing/inconsistent peers
     map<hobject_t, set<pg_shard_t>> missing;
@@ -1261,6 +1268,7 @@ public:
       auto_repair = false;
       check_repair = false;
       deep_scrub_on_error = false;
+      reserve_failed = false;
 
       state = PG::Scrubber::INACTIVE;
       start = hobject_t();

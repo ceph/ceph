@@ -7467,6 +7467,14 @@ void OSD::sched_scrub()
       PGRef pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
+
+      // If this one couldn't reserve, skip for now
+      if (pg->get_reserve_failed()) {
+	pg->unlock();
+	dout(20) << __func__ << " pg  " << scrub.pgid << " reserve failed, skipped" << dendl;
+        continue;
+      }
+
       // This has already started, so go on to the next scrub job
       if (pg->scrubber.active) {
 	pg->unlock();
@@ -7484,8 +7492,8 @@ void OSD::sched_scrub()
       // If it is reserving, let it resolve before going to the next scrub job
       if (pg->scrubber.local_reserved && !pg->scrubber.active) {
 	pg->unlock();
-	dout(30) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
-	break;
+	dout(10) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
+	goto out;
       }
       dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
 	       << (pg->get_must_scrub() ? ", explicitly requested" :
@@ -7493,11 +7501,35 @@ void OSD::sched_scrub()
 	       << dendl;
       if (pg->sched_scrub()) {
 	pg->unlock();
-	break;
+        dout(10) << __func__ << " scheduled a scrub!" << " (~" << scrub.pgid << "~)" << dendl;
+	goto out;
       }
+      // If this is set now we must have had a local reserve failure, so can't scrub anything right now
+      if (pg->get_reserve_failed()) {
+	pg->unlock();
+	dout(20) << __func__ << " pg  " << scrub.pgid << " local reserve failed, nothing to be done now" << dendl;
+        goto out;
+      }
+
       pg->unlock();
     } while (service.next_scrub_stamp(scrub, &scrub));
+
+    // Clear reserve_failed from all pending PGs, so we try again
+    if (service.first_scrub_stamp(&scrub)) {
+      do {
+        if (scrub.sched_time > now)
+	  break;
+        PGRef pg = _lookup_lock_pg(scrub.pgid);
+	// If we can't lock, it's ok we can get it next time
+        if (!pg)
+	  continue;
+        pg->clear_reserve_failed();
+        pg->unlock();
+      } while (service.next_scrub_stamp(scrub, &scrub));
+    }
   }
+
+out:
   dout(20) << "sched_scrub done" << dendl;
 }
 

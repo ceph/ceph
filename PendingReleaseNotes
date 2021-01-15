@@ -28,3 +28,6 @@
   ``--mon-host-override <ip>`` command-line switch. This generally should only
   be used for debugging and only affects initial communication with Ceph's
   monitor cluster.
+
+* Scubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
+  It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.
