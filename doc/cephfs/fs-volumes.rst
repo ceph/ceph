@@ -167,6 +167,10 @@ List cephx auth IDs authorized to access fs subvolume::
 
     $ ceph fs subvolume authorized_list <vol_name> <sub_name> [--group_name=<group_name>]
 
+Evict fs clients based on auth ID and subvolume mounted::
+
+    $ ceph fs subvolume evict <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
+
 Fetch the absolute path of a subvolume using::
 
     $ ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]

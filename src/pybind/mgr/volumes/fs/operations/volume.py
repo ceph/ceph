@@ -201,6 +201,17 @@ def gen_pool_names(volname):
     """
     return "cephfs.{}.meta".format(volname), "cephfs.{}.data".format(volname)
 
+def get_mds_map(mgr, volname):
+    """
+    return mdsmap for a volname
+    """
+    mds_map = None
+    fs_map = mgr.get("fs_map")
+    for f in fs_map['filesystems']:
+        if volname == f['mdsmap']['fs_name']:
+            return f['mdsmap']
+    return mds_map
+
 def get_pool_names(mgr, volname):
     """
     return metadata and data pools (list) names of volume as a tuple
