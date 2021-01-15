@@ -208,34 +208,38 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
     "LBAInternalNode::find_hole min={}, max={}, len={}, *this={}",
     min_addr, max_addr, len, *this);
   auto [begin, end] = bound(min_addr, max_addr);
-  return seastar::repeat_until_value(
-    [i=begin, e=end, c, min_addr, len, this]() mutable {
-    if (i == e) {
-      return seastar::make_ready_future<std::optional<laddr_t>>(
-        std::make_optional<laddr_t>(L_ADDR_NULL));
-    }
-    return get_lba_btree_extent(c,
-				this,
-				get_meta().depth - 1,
-				i->get_val(),
-				get_paddr()).safe_then(
-      [c, min_addr, len, i](auto extent) mutable {
-      auto lb = std::max(min_addr, i->get_key());
-      auto ub = i->get_next_key_or_max();
-      logger().debug("LBAInternalNode::find_hole extent {} lb {} ub {}",
-		     *extent, lb, ub);
-      return extent->find_hole(c, lb, ub, len);
-    }).safe_then([&i](auto addr) mutable -> std::optional<laddr_t> {
-      if (addr == L_ADDR_NULL) {
-        ++i;
-        return {};
-      } else {
-        return addr;
-      }
-    },
-    // TODO: GCC enters a dead loop if crimson::do_until() is used
-    //       or erroratorized future is returned
-    crimson::ct_error::assert_all{ "fix me - APIv6" });
+  return seastar::do_with(
+    begin,
+    L_ADDR_NULL,
+    [this, c, min_addr, len, end](auto &i, auto &ret) {
+      return crimson::do_until([=, &i, &ret]() -> find_hole_ertr::future<bool> {
+	if (i == end) {
+	  return seastar::make_ready_future<bool>(true);
+	}
+	return get_lba_btree_extent(
+	  c,
+	  this,
+	  get_meta().depth - 1,
+	  i->get_val(),
+	  get_paddr()
+	).safe_then([=, &i](auto extent) mutable {
+	  auto lb = std::max(min_addr, i->get_key());
+	  auto ub = i->get_next_key_or_max();
+	  logger().debug("LBAInternalNode::find_hole extent {} lb {} ub {}",
+			 *extent, lb, ub);
+	  return extent->find_hole(c, lb, ub, len);
+	}).safe_then([&i, &ret](auto addr) mutable {
+	  if (addr == L_ADDR_NULL) {
+	    ++i;
+	    return false;
+	  } else {
+	    ret = addr;
+	    return true;
+	  }
+	});
+      }).safe_then([&ret, ref=LBANodeRef(this)] {
+	return ret;
+      });
   });
 }
 
