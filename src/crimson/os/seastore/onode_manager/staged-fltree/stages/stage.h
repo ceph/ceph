@@ -1174,7 +1174,7 @@ struct staged {
 
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::LEAF, T> evaluate_insert(
-      const full_key_t<KeyT::HOBJ>& key, const onode_t& value,
+      const full_key_t<KeyT::HOBJ>& key, const value_config_t& value,
       const MatchHistory& history, match_stat_t mstat, position_t& position) {
     match_stage_t insert_stage = STAGE_TOP;
     while (*history.get_by_stage(insert_stage) == MatchKindCMP::EQ) {
@@ -1408,7 +1408,7 @@ struct staged {
         size_t kv_logical_size = index_key.size_logical();
         size_t value_size;
         if constexpr (NODE_TYPE == node_type_t::LEAF) {
-          value_size = iter.get_p_value()->size;
+          value_size = iter.get_p_value()->allocation_size();
         } else {
           value_size = sizeof(value_t);
         }

@@ -13,7 +13,7 @@
 #include "node_extent_manager.h"
 #include "stages/key_layout.h"
 #include "super.h"
-#include "tree_types.h"
+#include "value.h"
 
 /**
  * tree.h
@@ -33,6 +33,7 @@ namespace crimson::os::seastore::onode {
 class Node;
 class tree_cursor_t;
 
+template <typename ValueImpl>
 class Btree {
  public:
   using btree_ertr = crimson::errorator<
@@ -77,12 +78,14 @@ class Btree {
     // XXX: return key_view_t to avoid unecessary ghobject_t constructions
     ghobject_t get_ghobj() const {
       assert(!is_end());
-      return p_cursor->get_key_view().to_ghobj();
+      return p_cursor->get_key_view(
+          p_tree->value_builder.get_header_magic()).to_ghobj();
     }
 
-    const onode_t* value() const {
+    ValueImpl value() {
       assert(!is_end());
-      return p_cursor->get_p_value();
+      return p_tree->value_builder.build_value(
+          *p_tree->nm, p_tree->value_builder, p_cursor);
     }
 
     bool operator==(const Cursor& x) const {
@@ -195,14 +198,17 @@ class Btree {
    * modifiers
    */
 
-  // TODO: replace onode_t
+  struct tree_value_config_t {
+    value_size_t payload_size = 256;
+  };
   btree_future<std::pair<Cursor, bool>>
-  insert(Transaction& t, const ghobject_t& obj, const onode_t& value) {
+  insert(Transaction& t, const ghobject_t& obj, tree_value_config_t _vconf) {
+    value_config_t vconf{value_builder.get_header_magic(), _vconf.payload_size};
     return seastar::do_with(
       full_key_t<KeyT::HOBJ>(obj),
-      [this, &t, &value](auto& key) -> btree_future<std::pair<Cursor, bool>> {
-        return get_root(t).safe_then([this, &t, &key, &value](auto root) {
-          return root->insert(get_context(t), key, value);
+      [this, &t, vconf](auto& key) -> btree_future<std::pair<Cursor, bool>> {
+        return get_root(t).safe_then([this, &t, &key, vconf](auto root) {
+          return root->insert(get_context(t), key, vconf);
         }).safe_then([this](auto ret) {
           auto& [cursor, success] = ret;
           return std::make_pair(Cursor(this, cursor), success);
@@ -284,7 +290,7 @@ class Btree {
 
  private:
   context_t get_context(Transaction& t) {
-    return {*nm, t};
+    return {*nm, value_builder, t};
   }
 
   btree_future<Ref<Node>> get_root(Transaction& t) {
@@ -297,11 +303,14 @@ class Btree {
   }
 
   NodeExtentManagerURef nm;
+  const ValueBuilderImpl<ValueImpl> value_builder;
   RootNodeTrackerURef root_tracker;
 
   friend class DummyChildPool;
 };
-inline std::ostream& operator<<(std::ostream& os, const Btree& tree) {
+
+template <typename ValueImpl>
+inline std::ostream& operator<<(std::ostream& os, const Btree<ValueImpl>& tree) {
   return tree.print(os);
 }
 

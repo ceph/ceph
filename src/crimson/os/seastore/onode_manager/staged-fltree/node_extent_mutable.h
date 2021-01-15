@@ -52,6 +52,15 @@ class NodeExtentMutable {
     shift_absolute(get_write() + src_offset, len, offset);
   }
 
+  void set_absolute(void* dst, int value, extent_len_t len) {
+    assert(is_safe(dst, len));
+    std::memset(dst, value, len);
+  }
+  void set_relative(extent_len_t dst_offset, int value, extent_len_t len) {
+    auto dst = get_write() + dst_offset;
+    set_absolute(dst, value, len);
+  }
+
   template <typename T>
   void validate_inplace_update(const T& updated) {
     assert(is_safe(&updated, sizeof(T)));
@@ -60,6 +69,23 @@ class NodeExtentMutable {
   const char* get_read() const { return p_start; }
   char* get_write() { return p_start; }
   extent_len_t get_length() const { return length; }
+  node_offset_t get_node_offset() const { return node_offset; }
+
+  NodeExtentMutable get_mutable_absolute(const void* dst, node_offset_t len) const {
+    assert(node_offset == 0);
+    assert(is_safe(dst, len));
+    assert((const char*)dst != get_read());
+    auto ret = *this;
+    node_offset_t offset = (const char*)dst - get_read();
+    ret.p_start += offset;
+    ret.length = len;
+    ret.node_offset = offset;
+    return ret;
+  }
+  NodeExtentMutable get_mutable_relative(
+      node_offset_t offset, node_offset_t len) const {
+    return get_mutable_absolute(get_read() + offset, len);
+  }
 
  private:
   NodeExtentMutable(char* p_start, extent_len_t length)
@@ -71,6 +97,7 @@ class NodeExtentMutable {
 
   char* p_start;
   extent_len_t length;
+  node_offset_t node_offset = 0;
 
   friend class NodeExtent;
 };

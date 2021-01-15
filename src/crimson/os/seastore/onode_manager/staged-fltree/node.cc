@@ -37,10 +37,10 @@ tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
 
 tree_cursor_t::tree_cursor_t(
     Ref<LeafNode> node, const search_position_t& pos,
-    const key_view_t& key_view, const onode_t* p_value)
+    const key_view_t& key_view, const value_header_t* p_value_header)
       : ref_leaf_node{node}, position{pos} {
   assert(!is_end());
-  update_cache(*node, key_view, p_value);
+  update_cache(*node, key_view, p_value_header);
   ref_leaf_node->do_track_cursor<true>(*this);
 }
 
@@ -54,6 +54,14 @@ tree_cursor_t::~tree_cursor_t() {
   if (!is_end()) {
     ref_leaf_node->do_untrack_cursor(*this);
   }
+}
+
+node_future<> tree_cursor_t::extend_value(context_t c, value_size_t extend_size) {
+  return ref_leaf_node->extend_value(c, position, extend_size);
+}
+
+node_future<> tree_cursor_t::trim_value(context_t c, value_size_t trim_size) {
+  return ref_leaf_node->trim_value(c, position, trim_size);
 }
 
 template <bool VALIDATE>
@@ -73,18 +81,23 @@ template void tree_cursor_t::update_track<false>(Ref<LeafNode>, const search_pos
 
 void tree_cursor_t::update_cache(LeafNode& node,
                                  const key_view_t& key_view,
-                                 const onode_t* p_value) const {
+                                 const value_header_t* p_value_header) const {
   assert(!is_end());
   assert(ref_leaf_node.get() == &node);
-  cache.update(node, key_view, p_value);
+  cache.update(node, key_view, p_value_header);
   cache.validate_is_latest(node, position);
 }
 
-void tree_cursor_t::maybe_update_cache() const {
+void tree_cursor_t::maybe_update_cache(value_magic_t magic) const {
   assert(!is_end());
   if (!cache.is_latest()) {
-    auto [key_view, p_value] = ref_leaf_node->get_kv(position);
-    cache.update(*ref_leaf_node, key_view, p_value);
+    auto [key_view, p_value_header] = ref_leaf_node->get_kv(position);
+    if (p_value_header->magic != magic) {
+      logger().error("OTree::Value::Load: magic mismatch, expect {} but got {}",
+                     magic, p_value_header->magic);
+      ceph_abort();
+    }
+    cache.update(*ref_leaf_node, key_view, p_value_header);
   }
   cache.validate_is_latest(*ref_leaf_node, position);
 }
@@ -97,12 +110,14 @@ bool tree_cursor_t::Cache::is_latest() const {
 
 void tree_cursor_t::Cache::update(LeafNode& node,
                                   const key_view_t& _key_view,
-                                  const onode_t* _p_value) {
-  assert(_p_value);
+                                  const value_header_t* _p_value_header) {
+  assert(_p_value_header);
   p_leaf_node = &node;
   version = node.get_layout_version();
   key_view = _key_view;
-  p_value = _p_value;
+  p_value_header = _p_value_header;
+  value_payload_mut.reset();
+  p_value_recorder = nullptr;
   valid = true;
   assert(is_latest());
 }
@@ -112,10 +127,23 @@ void tree_cursor_t::Cache::validate_is_latest(const LeafNode& node,
   assert(p_leaf_node == &node);
   assert(is_latest());
 #ifndef NDEBUG
-  auto [_key_view, _p_value] = node.get_kv(pos);
+  auto [_key_view, _p_value_header] = node.get_kv(pos);
   assert(*key_view == _key_view);
-  assert(p_value == _p_value);
+  assert(p_value_header == _p_value_header);
 #endif
+}
+
+std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+tree_cursor_t::Cache::prepare_mutate_value_payload(context_t c) {
+  assert(is_latest());
+  assert(p_leaf_node && p_value_header);
+  assert(p_value_header->magic == c.vb.get_header_magic());
+  if (!value_payload_mut.has_value()) {
+    auto value_mutable = p_leaf_node->prepare_mutate_value_payload(c);
+    value_payload_mut = p_value_header->get_payload_mutable(value_mutable.first);
+    p_value_recorder = value_mutable.second;
+  }
+  return {*value_payload_mut, p_value_recorder};
 }
 
 /*
@@ -147,18 +175,18 @@ node_future<Node::search_result_t> Node::lower_bound(
 }
 
 node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
-    context_t c, const key_hobj_t& key, const onode_t& value) {
+    context_t c, const key_hobj_t& key, value_config_t vconf) {
   return seastar::do_with(
-    MatchHistory(), [this, c, &key, &value](auto& history) {
+    MatchHistory(), [this, c, &key, vconf](auto& history) {
       return lower_bound_tracked(c, key, history
-      ).safe_then([c, &key, &value, &history](auto result) {
+      ).safe_then([c, &key, vconf, &history](auto result) {
         if (result.match() == MatchKindBS::EQ) {
           return node_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
               std::make_pair(result.p_cursor, false));
         } else {
           auto leaf_node = result.p_cursor->get_leaf_node();
           return leaf_node->insert_value(
-              c, key, value, result.p_cursor->get_position(), history, result.mstat
+              c, key, vconf, result.p_cursor->get_position(), history, result.mstat
           ).safe_then([](auto p_cursor) {
             return node_ertr::make_ready_future<std::pair<Ref<tree_cursor_t>, bool>>(
                 std::make_pair(p_cursor, true));
@@ -588,11 +616,28 @@ bool LeafNode::is_level_tail() const {
   return impl->is_level_tail();
 }
 
-std::tuple<key_view_t, const onode_t*>
+std::tuple<key_view_t, const value_header_t*>
 LeafNode::get_kv(const search_position_t& pos) const {
   key_view_t key_view;
-  auto p_value = impl->get_p_value(pos, &key_view);
-  return {key_view, p_value};
+  auto p_value_header = impl->get_p_value(pos, &key_view);
+  return {key_view, p_value_header};
+}
+
+node_future<> LeafNode::extend_value(
+    context_t c, const search_position_t& pos, value_size_t extend_size) {
+  ceph_abort("not implemented");
+  return node_ertr::now();
+}
+
+node_future<> LeafNode::trim_value(
+    context_t c, const search_position_t& pos, value_size_t trim_size) {
+  ceph_abort("not implemented");
+  return node_ertr::now();
+}
+
+std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+LeafNode::prepare_mutate_value_payload(context_t c) {
+  return impl->prepare_mutate_value_payload(c);
 }
 
 node_future<Ref<tree_cursor_t>>
@@ -604,9 +649,9 @@ LeafNode::lookup_smallest(context_t) {
   }
   auto pos = search_position_t::begin();
   key_view_t index_key;
-  auto p_value = impl->get_p_value(pos, &index_key);
+  auto p_value_header = impl->get_p_value(pos, &index_key);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
-      get_or_track_cursor(pos, index_key, p_value));
+      get_or_track_cursor(pos, index_key, p_value_header));
 }
 
 node_future<Ref<tree_cursor_t>>
@@ -617,11 +662,11 @@ LeafNode::lookup_largest(context_t) {
         new tree_cursor_t(this));
   }
   search_position_t pos;
-  const onode_t* p_value = nullptr;
+  const value_header_t* p_value_header = nullptr;
   key_view_t index_key;
-  impl->get_largest_slot(pos, index_key, &p_value);
+  impl->get_largest_slot(pos, index_key, &p_value_header);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
-      get_or_track_cursor(pos, index_key, p_value));
+      get_or_track_cursor(pos, index_key, p_value_header));
 }
 
 node_future<Node::search_result_t>
@@ -670,7 +715,7 @@ node_future<> LeafNode::test_clone_root(
 }
 
 node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
-    context_t c, const key_hobj_t& key, const onode_t& value,
+    context_t c, const key_hobj_t& key, value_config_t vconf,
     const search_position_t& pos, const MatchHistory& history,
     match_stat_t mstat) {
 #ifndef NDEBUG
@@ -680,20 +725,20 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
 #endif
   logger().debug("OTree::Leaf::Insert: "
                  "pos({}), {}, {}, {}, mstat({}) ...",
-                 pos, key, value, history, mstat);
+                 pos, key, vconf, history, mstat);
   search_position_t insert_pos = pos;
   auto [insert_stage, insert_size] = impl->evaluate_insert(
-      key, value, history, mstat, insert_pos);
+      key, vconf, history, mstat, insert_pos);
   auto free_size = impl->free_size();
   if (free_size >= insert_size) {
     // insert
     on_layout_change();
     impl->prepare_mutate(c);
-    auto p_value = impl->insert(key, value, insert_pos, insert_stage, insert_size);
+    auto p_value_header = impl->insert(key, vconf, insert_pos, insert_stage, insert_size);
     assert(impl->free_size() == free_size - insert_size);
     assert(insert_pos <= pos);
-    assert(p_value->size == value.size);
-    auto ret = track_insert(insert_pos, insert_stage, p_value);
+    assert(p_value_header->payload_size == vconf.payload_size);
+    auto ret = track_insert(insert_pos, insert_stage, p_value_header);
     validate_tracked_cursors();
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(ret);
   }
@@ -702,22 +747,22 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
   return (is_root() ? upgrade_root(c) : node_ertr::now()
   ).safe_then([this, c] {
     return LeafNode::allocate(c, impl->field_type(), impl->is_level_tail());
-  }).safe_then([this_ref, this, c, &key, &value,
+  }).safe_then([this_ref, this, c, &key, vconf,
                 insert_pos, insert_stage=insert_stage, insert_size=insert_size](auto fresh_right) mutable {
     auto right_node = fresh_right.node;
     // no need to bump version for right node, as it is fresh
     on_layout_change();
     impl->prepare_mutate(c);
-    auto [split_pos, is_insert_left, p_value] = impl->split_insert(
-        fresh_right.mut, *right_node->impl, key, value,
+    auto [split_pos, is_insert_left, p_value_header] = impl->split_insert(
+        fresh_right.mut, *right_node->impl, key, vconf,
         insert_pos, insert_stage, insert_size);
-    assert(p_value->size == value.size);
+    assert(p_value_header->payload_size == vconf.payload_size);
     track_split(split_pos, right_node);
     Ref<tree_cursor_t> ret;
     if (is_insert_left) {
-      ret = track_insert(insert_pos, insert_stage, p_value);
+      ret = track_insert(insert_pos, insert_stage, p_value_header);
     } else {
-      ret = right_node->track_insert(insert_pos, insert_stage, p_value);
+      ret = right_node->track_insert(insert_pos, insert_stage, p_value_header);
     }
     validate_tracked_cursors();
     right_node->validate_tracked_cursors();
@@ -746,18 +791,18 @@ node_future<Ref<LeafNode>> LeafNode::allocate_root(
 
 Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
     const search_position_t& position,
-    const key_view_t& key, const onode_t* p_value) {
+    const key_view_t& key, const value_header_t* p_value_header) {
   assert(!position.is_end());
-  assert(p_value);
+  assert(p_value_header);
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
-    p_cursor = new tree_cursor_t(this, position, key, p_value);
+    p_cursor = new tree_cursor_t(this, position, key, p_value_header);
   } else {
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
     assert(p_cursor->get_position() == position);
-    p_cursor->update_cache(*this, key, p_value);
+    p_cursor->update_cache(*this, key, p_value_header);
   }
   return p_cursor;
 }
@@ -766,15 +811,16 @@ void LeafNode::validate_cursor(tree_cursor_t& cursor) const {
 #ifndef NDEBUG
   assert(this == cursor.get_leaf_node().get());
   assert(!cursor.is_end());
-  auto [key, p_value] = get_kv(cursor.get_position());
-  assert(key == cursor.get_key_view());
-  assert(p_value == cursor.get_p_value());
+  auto [key, p_value_header] = get_kv(cursor.get_position());
+  auto magic = p_value_header->magic;
+  assert(key == cursor.get_key_view(magic));
+  assert(p_value_header == cursor.read_value_header(magic));
 #endif
 }
 
 Ref<tree_cursor_t> LeafNode::track_insert(
     const search_position_t& insert_pos, match_stage_t insert_stage,
-    const onode_t* p_onode) {
+    const value_header_t* p_value_header) {
   // update cursor position
   auto pos_upper_bound = insert_pos;
   pos_upper_bound.index_by_stage(insert_stage) = INDEX_UPPER_BOUND;

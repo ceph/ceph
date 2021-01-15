@@ -14,7 +14,7 @@
 #include "stages/key_layout.h"
 #include "stages/stage_types.h"
 #include "super.h"
-#include "tree_types.h"
+#include "value.h"
 
 /**
  * Tree example (2 levels):
@@ -62,6 +62,14 @@ class tree_cursor_t final
   : public boost::intrusive_ref_counter<
            tree_cursor_t, boost::thread_unsafe_counter> {
  public:
+  using ertr = crimson::errorator<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::invarg,
+    crimson::ct_error::enoent,
+    crimson::ct_error::erange>;
+  template <class ValueT=void>
+  using future = ertr::future<ValueT>;
+
   ~tree_cursor_t();
   tree_cursor_t(const tree_cursor_t&) = delete;
   tree_cursor_t(tree_cursor_t&&) = delete;
@@ -80,21 +88,36 @@ class tree_cursor_t final
   bool is_end() const { return position.is_end(); }
 
   /// Returns the key view in tree if it is not an end cursor.
-  const key_view_t& get_key_view() const {
-    maybe_update_cache();
+  const key_view_t& get_key_view(value_magic_t magic) const {
+    maybe_update_cache(magic);
     return cache.get_key_view();
   }
 
-  /// Returns the value pointer in tree if it is not an end cursor.
-  const onode_t* get_p_value() const {
-    maybe_update_cache();
-    return cache.get_p_value();
+  // public to Value
+
+  /// Get the latest value_header_t pointer for read.
+  const value_header_t* read_value_header(value_magic_t magic) const {
+    maybe_update_cache(magic);
+    return cache.get_p_value_header();
   }
+
+  /// Prepare the node extent to be mutable and recorded.
+  std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+  prepare_mutate_value_payload(context_t c) {
+    maybe_update_cache(c.vb.get_header_magic());
+    return cache.prepare_mutate_value_payload(c);
+  }
+
+  /// Extends the size of value payload.
+  future<> extend_value(context_t, value_size_t);
+
+  /// Trim and shrink the value payload.
+  future<> trim_value(context_t, value_size_t);
 
  private:
   tree_cursor_t(Ref<LeafNode>, const search_position_t&);
   tree_cursor_t(Ref<LeafNode>, const search_position_t&,
-                const key_view_t&, const onode_t*);
+                const key_view_t&, const value_header_t*);
   // lookup reaches the end, contain leaf node for further insert
   tree_cursor_t(Ref<LeafNode>);
 
@@ -102,8 +125,8 @@ class tree_cursor_t final
   Ref<LeafNode> get_leaf_node() { return ref_leaf_node; }
   template <bool VALIDATE>
   void update_track(Ref<LeafNode>, const search_position_t&);
-  void update_cache(LeafNode&, const key_view_t&, const onode_t*) const;
-  void maybe_update_cache() const;
+  void update_cache(LeafNode&, const key_view_t&, const value_header_t*) const;
+  void maybe_update_cache(value_magic_t magic) const;
 
   /**
    * Reversed resource management (tree_cursor_t)
@@ -124,7 +147,7 @@ class tree_cursor_t final
     Cache();
     bool is_latest() const;
     void invalidate() { valid = false; }
-    void update(LeafNode&, const key_view_t&, const onode_t*);
+    void update(LeafNode&, const key_view_t&, const value_header_t*);
     void validate_is_latest(const LeafNode&, const search_position_t&) const;
 
     const key_view_t& get_key_view() const {
@@ -132,16 +155,23 @@ class tree_cursor_t final
       assert(key_view.has_value());
       return *key_view;
     }
-    const onode_t* get_p_value() const {
+    const value_header_t* get_p_value_header() const {
       assert(is_latest());
-      assert(p_value);
-      return p_value;
+      assert(p_value_header);
+      return p_value_header;
     }
+    std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+    prepare_mutate_value_payload(context_t);
 
    private:
     LeafNode* p_leaf_node = nullptr;
     std::optional<key_view_t> key_view;
-    const onode_t* p_value = nullptr;
+    const value_header_t* p_value_header = nullptr;
+
+    // to update value payload
+    std::optional<NodeExtentMutable> value_payload_mut;
+    ValueDeltaRecorder* p_value_recorder = nullptr;
+
     layout_version_t version;
     bool valid = false;
   };
@@ -239,7 +269,7 @@ class Node
    * - If false, the returned cursor points to the conflicting element in tree;
    */
   node_future<std::pair<Ref<tree_cursor_t>, bool>> insert(
-      context_t, const key_hobj_t&, const onode_t&);
+      context_t, const key_hobj_t&, value_config_t);
 
   /// Recursively collects the statistics of the sub-tree formed by this node
   node_future<tree_stats_t> get_tree_stats(context_t);
@@ -428,7 +458,7 @@ class LeafNode final : public Node {
 
   bool is_level_tail() const;
   layout_version_t get_layout_version() const { return layout_version; }
-  std::tuple<key_view_t, const onode_t*> get_kv(const search_position_t&) const;
+  std::tuple<key_view_t, const value_header_t*> get_kv(const search_position_t&) const;
 
   template <bool VALIDATE>
   void do_track_cursor(tree_cursor_t& cursor) {
@@ -447,6 +477,12 @@ class LeafNode final : public Node {
     assert(removed);
   }
 
+  node_future<> extend_value(context_t, const search_position_t&, value_size_t);
+  node_future<> trim_value(context_t, const search_position_t&, value_size_t);
+
+  std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+  prepare_mutate_value_payload(context_t);
+
  protected:
   node_future<Ref<tree_cursor_t>> lookup_smallest(context_t) override;
   node_future<Ref<tree_cursor_t>> lookup_largest(context_t) override;
@@ -459,7 +495,7 @@ class LeafNode final : public Node {
  private:
   LeafNode(LeafNodeImpl*, NodeImplURef&&);
   node_future<Ref<tree_cursor_t>> insert_value(
-      context_t, const key_hobj_t&, const onode_t&,
+      context_t, const key_hobj_t&, value_config_t,
       const search_position_t&, const MatchHistory&,
       match_stat_t mstat);
   static node_future<Ref<LeafNode>> allocate_root(context_t, RootNodeTracker&);
@@ -469,9 +505,9 @@ class LeafNode final : public Node {
   // XXX: extract a common tracker for InternalNode to track Node,
   // and LeafNode to track tree_cursor_t.
   Ref<tree_cursor_t> get_or_track_cursor(
-      const search_position_t&, const key_view_t&, const onode_t*);
+      const search_position_t&, const key_view_t&, const value_header_t*);
   Ref<tree_cursor_t> track_insert(
-      const search_position_t&, match_stage_t, const onode_t*);
+      const search_position_t&, match_stage_t, const value_header_t*);
   void track_split(const search_position_t&, Ref<LeafNode>);
   void validate_tracked_cursors() const {
 #ifndef NDEBUG
