@@ -226,7 +226,9 @@ SegmentCleaner::do_immediate_work_ret SegmentCleaner::do_immediate_work(
     return do_gc(t, get_immediate_bytes_to_gc());
   }).handle_error(
     do_immediate_work_ertr::pass_further{},
-    crimson::ct_error::assert_all{}
+    crimson::ct_error::assert_all{
+      "Invalid error in SegmentCleaner::do_immediate_work"
+    }
   );
 }
 

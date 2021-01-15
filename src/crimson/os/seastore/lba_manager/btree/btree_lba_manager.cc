@@ -41,7 +41,9 @@ BtreeLBAManager::mkfs_ret BtreeLBAManager::mkfs(
     return mkfs_ertr::now();
   }).handle_error(
     mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{}
+    crimson::ct_error::assert_all{
+      "Invalid error in BtreeLBAManager::mkfs"
+    }
   );
 }
 
@@ -380,7 +382,9 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
       }).safe_then([nlextent](auto e) {}).handle_error(
 	rewrite_extent_ertr::pass_further{},
         /* ENOENT in particular should be impossible */
-	crimson::ct_error::assert_all{}
+	crimson::ct_error::assert_all{
+	  "Invalid error in BtreeLBAManager::rewrite_extent after update_mapping"
+	}
       );
   } else if (is_lba_node(*extent)) {
     auto lba_extent = extent->cast<LBANode>();
@@ -414,7 +418,9 @@ BtreeLBAManager::rewrite_extent_ret BtreeLBAManager::rewrite_extent(
       nlba_extent->get_paddr()).safe_then(
 	[](auto) {},
 	rewrite_extent_ertr::pass_further {},
-	crimson::ct_error::assert_all{});
+	crimson::ct_error::assert_all{
+	  "Invalid error in BtreeLBAManager::rewrite_extent update_internal_mapping"
+	});
   } else {
     return rewrite_extent_ertr::now();
   }
