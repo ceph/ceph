@@ -81,7 +81,7 @@ void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl) {
   auto node = do_get_mutable();
   auto p = bl.cbegin();
   while (p != bl.end()) {
-    recorder->apply_delta(p, node);
+    recorder->apply_delta(p, node, get_laddr());
   }
 }
 

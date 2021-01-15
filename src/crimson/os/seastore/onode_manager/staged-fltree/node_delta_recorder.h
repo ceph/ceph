@@ -32,7 +32,8 @@ class DeltaRecorder {
   virtual node_type_t node_type() const = 0;
   virtual field_type_t field_type() const = 0;
   virtual void apply_delta(ceph::bufferlist::const_iterator&,
-                           NodeExtentMutable&) = 0;
+                           NodeExtentMutable&,
+                           laddr_t) = 0;
 
  protected:
   DeltaRecorder() = default;

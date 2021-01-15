@@ -99,7 +99,8 @@ class DeltaRecorderT final: public DeltaRecorder {
   node_type_t node_type() const override { return NODE_TYPE; }
   field_type_t field_type() const override { return FIELD_TYPE; }
   void apply_delta(ceph::bufferlist::const_iterator& delta,
-                   NodeExtentMutable& node) override {
+                   NodeExtentMutable& node,
+                   laddr_t node_laddr) override {
     assert(is_empty());
     node_stage_t stage(reinterpret_cast<const FieldType*>(node.get_read()));
     op_t op;
@@ -169,12 +170,12 @@ class DeltaRecorderT final: public DeltaRecorder {
       }
       default:
         logger().error("OTree::Extent::Replay: got unknown op {} when replay {:#x}",
-                       op, node.get_laddr());
+                       op, node_laddr);
         ceph_abort();
       }
     } catch (buffer::error& e) {
       logger().error("OTree::Extent::Replay: got decode error {} when replay {:#x}",
-                     e, node.get_laddr());
+                     e, node_laddr);
       ceph_abort();
     }
   }
