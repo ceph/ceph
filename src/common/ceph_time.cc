@@ -324,7 +324,8 @@ std::chrono::seconds parse_timespan(const std::string& s)
 namespace std {
 template<typename Rep, typename Period>
 ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t) {
-  if constexpr (chrono::treat_as_floating_point_v<Rep>) {
+  if constexpr (chrono::treat_as_floating_point_v<Rep> ||
+                Period::den > 1) {
     using seconds_t = chrono::duration<float>;
     ::fmt::print(m, "{:.9}", chrono::duration_cast<seconds_t>(t));
   } else {
