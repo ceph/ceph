@@ -338,7 +338,7 @@ void AbstractWriteLog<I>::arm_periodic_stats() {
 }
 
 template <typename I>
-void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> log_entry,
+void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> *log_entry,
     WriteLogCacheEntry *cache_entry, std::map<uint64_t, bool> &missing_sync_points,
     std::map<uint64_t, std::shared_ptr<SyncPointLogEntry>> &sync_point_entries,
     int entry_index) {
@@ -347,7 +347,7 @@ void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> log_en
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
                                  << " is a sync point. cache_entry=[" << *cache_entry << "]" << dendl;
       auto sync_point_entry = std::make_shared<SyncPointLogEntry>(cache_entry->sync_gen_number);
-      log_entry = sync_point_entry;
+      *log_entry = sync_point_entry;
       sync_point_entries[cache_entry->sync_gen_number] = sync_point_entry;
       missing_sync_points.erase(cache_entry->sync_gen_number);
       m_current_sync_gen = cache_entry->sync_gen_number;
@@ -357,7 +357,7 @@ void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> log_en
       auto write_entry =
         m_builder->create_write_log_entry(nullptr, cache_entry->image_offset_bytes, cache_entry->write_bytes);
       write_data_to_buffer(write_entry, cache_entry);
-      log_entry = write_entry;
+      *log_entry = write_entry;
     } else if (cache_entry->is_writesame()) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
                                  << " is a write same. cache_entry=[" << *cache_entry << "]" << dendl;
@@ -365,14 +365,14 @@ void AbstractWriteLog<I>::update_entries(std::shared_ptr<GenericLogEntry> log_en
         m_builder->create_writesame_log_entry(nullptr, cache_entry->image_offset_bytes,
                                               cache_entry->write_bytes, cache_entry->ws_datalen);
       write_data_to_buffer(ws_entry, cache_entry);
-      log_entry = ws_entry;
+      *log_entry = ws_entry;
     } else if (cache_entry->is_discard()) {
       ldout(m_image_ctx.cct, 20) << "Entry " << entry_index
                                  << " is a discard. cache_entry=[" << *cache_entry << "]" << dendl;
       auto discard_entry =
         std::make_shared<DiscardLogEntry>(nullptr, cache_entry->image_offset_bytes, cache_entry->write_bytes,
                                           m_discard_granularity_bytes);
-      log_entry = discard_entry;
+      *log_entry = discard_entry;
     } else {
       lderr(m_image_ctx.cct) << "Unexpected entry type in entry " << entry_index
                              << ", cache_entry=[" << *cache_entry << "]" << dendl;

@@ -462,6 +462,16 @@ void MDSDaemon::clean_up_admin_socket()
 
 int MDSDaemon::init()
 {
+#ifdef _WIN32
+  // Some file related flags and types are stubbed on Windows. In order to avoid
+  // incorrect behavior, we're going to prevent the MDS from running on Windows
+  // until those limitations are addressed. MDS clients, however, are allowed
+  // to run on Windows.
+  derr << "The Ceph MDS does not support running on Windows at the moment."
+       << dendl;
+  return -ENOSYS;
+#endif // _WIN32
+
   dout(10) << "Dumping misc struct sizes:" << dendl;
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;

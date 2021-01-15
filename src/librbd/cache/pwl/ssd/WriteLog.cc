@@ -270,7 +270,7 @@ void WriteLog<I>::load_existing_entries(pwl::DeferredContexts &later) {
     std::shared_ptr<GenericLogEntry> log_entry = nullptr;
 
     for (auto it = ssd_log_entries.begin(); it != ssd_log_entries.end(); ++it) {
-      this->update_entries(log_entry, &*it, missing_sync_points,
+      this->update_entries(&log_entry, &*it, missing_sync_points,
                            sync_point_entries, curr_log_pos);
       log_entry->ram_entry = *it;
       log_entry->log_entry_index = curr_log_pos;
