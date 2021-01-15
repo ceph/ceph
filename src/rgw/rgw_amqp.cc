@@ -547,9 +547,9 @@ private:
   std::atomic<size_t> dequeued;
   CephContext* const cct;
   mutable std::mutex connections_lock;
-  std::thread runner;
   const ceph::coarse_real_clock::duration idle_time;
   const ceph::coarse_real_clock::duration reconnect_time;
+  std::thread runner;
 
   void publish_internal(message_wrapper_t* message) {
     const std::unique_ptr<message_wrapper_t> msg_owner(message);
@@ -819,9 +819,9 @@ public:
     queued(0),
     dequeued(0),
     cct(_cct),
-    runner(&Manager::run, this),
     idle_time(std::chrono::milliseconds(idle_time_ms)),
-    reconnect_time(std::chrono::milliseconds(reconnect_time_ms)) {
+    reconnect_time(std::chrono::milliseconds(reconnect_time_ms)),
+    runner(&Manager::run, this) {
       // The hashmap has "max connections" as the initial number of buckets, 
       // and allows for 10 collisions per bucket before rehash.
       // This is to prevent rehashing so that iterators are not invalidated 
