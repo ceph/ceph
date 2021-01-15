@@ -285,6 +285,18 @@ public:
   int mount(const std::string &mount_root, const UserPerm& perms,
 	    bool require_mds=false, const std::string &fs_name="");
   void unmount();
+  bool is_unmounting() const {
+    return mount_state.check_current_state(CLIENT_UNMOUNTING);
+  }
+  bool is_mounted() const {
+    return mount_state.check_current_state(CLIENT_MOUNTED);
+  }
+  bool is_mounting() const {
+    return mount_state.check_current_state(CLIENT_MOUNTING);
+  }
+  bool is_initialized() const {
+    return initialize_state.check_current_state(CLIENT_INITIALIZED);
+  }
   void abort_conn();
 
   void set_uuid(const std::string& uuid);
@@ -1038,7 +1050,7 @@ protected:
 
   struct mount_state_t : public RWRefState<state_t> {
     public:
-      bool is_valid_state(state_t state) override {
+      bool is_valid_state(state_t state) const override {
         switch (state) {
 	  case Client::CLIENT_MOUNTING:
 	  case Client::CLIENT_MOUNTED:
@@ -1050,7 +1062,7 @@ protected:
         }
       }
 
-      int check_reader_state(state_t require) override {
+      int check_reader_state(state_t require) const override {
         if (require == Client::CLIENT_MOUNTING &&
             (state == Client::CLIENT_MOUNTING || state == Client::CLIENT_MOUNTED))
           return true;
@@ -1059,7 +1071,7 @@ protected:
       }
 
       /* The state migration check */
-      int check_writer_state(state_t require) override {
+      int check_writer_state(state_t require) const override {
         if (require == Client::CLIENT_MOUNTING &&
             state == Client::CLIENT_UNMOUNTED)
           return true;
@@ -1083,7 +1095,7 @@ protected:
 
   struct initialize_state_t : public RWRefState<state_t> {
     public:
-      bool is_valid_state(state_t state) override {
+      bool is_valid_state(state_t state) const override {
         switch (state) {
 	  case Client::CLIENT_NEW:
           case Client::CLIENT_INITIALIZING:
@@ -1094,7 +1106,7 @@ protected:
         }
       }
 
-      int check_reader_state(state_t require) override {
+      int check_reader_state(state_t require) const override {
         if (require == Client::CLIENT_INITIALIZED &&
             state >= Client::CLIENT_INITIALIZED)
           return true;
@@ -1103,7 +1115,7 @@ protected:
       }
 
       /* The state migration check */
-      int check_writer_state(state_t require) override {
+      int check_writer_state(state_t require) const override {
         if (require == Client::CLIENT_INITIALIZING &&
             (state == Client::CLIENT_NEW))
           return true;
@@ -1123,20 +1135,7 @@ protected:
   };
 
   struct mount_state_t mount_state;
-  bool is_unmounting() {
-    return mount_state.check_current_state(CLIENT_UNMOUNTING);
-  }
-  bool is_mounted() {
-    return mount_state.check_current_state(CLIENT_MOUNTED);
-  }
-  bool is_mounting() {
-    return mount_state.check_current_state(CLIENT_MOUNTING);
-  }
-
   struct initialize_state_t initialize_state;
-  bool is_initialized() {
-    return initialize_state.check_current_state(CLIENT_INITIALIZED);
-  }
 
 private:
   struct C_Readahead : public Context {
