@@ -7,6 +7,7 @@ import pytest
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
 from cephadm.services.osd import OSD, OSDRemovalQueue
+from cephadm.utils import CephadmNoImage
 
 try:
     from typing import Any, List
@@ -963,3 +964,31 @@ class TestCephadm(object):
                 assert image == 'image@repo_digest'
             else:
                 assert image == 'image'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_ceph_volume_no_filter_for_batch(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+
+        error_message = """cephadm exited with an error code: 1, stderr:/usr/bin/podman:stderr usage: ceph-volume inventory [-h] [--format {plain,json,json-pretty}] [path]/usr/bin/podman:stderr ceph-volume inventory: error: unrecognized arguments: --filter-for-batch
+Traceback (most recent call last):
+  File "<stdin>", line 6112, in <module>
+  File "<stdin>", line 1299, in _infer_fsid
+  File "<stdin>", line 1382, in _infer_image
+  File "<stdin>", line 3612, in command_ceph_volume
+  File "<stdin>", line 1061, in call_throws"""
+
+        with with_host(cephadm_module, 'test'):
+            _run_cephadm.reset_mock()
+            _run_cephadm.side_effect = OrchestratorError(error_message)
+
+            s = CephadmServe(cephadm_module)._refresh_host_devices('test')
+            assert s == 'host test `cephadm ceph-volume` failed: ' + error_message
+
+            assert _run_cephadm.mock_calls == [
+                mock.call('test', 'osd', 'ceph-volume',
+                          ['--', 'inventory', '--format=json', '--filter-for-batch'], image='',
+                          no_fsid=False),
+                mock.call('test', 'osd', 'ceph-volume',
+                          ['--', 'inventory', '--format=json'], image='',
+                          no_fsid=False),
+            ]
