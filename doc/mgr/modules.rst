@@ -104,8 +104,64 @@ following commands::
 Exposing commands
 -----------------
 
-Set the ``COMMANDS`` class attribute of your module to a list of dicts
-like this::
+There are two approaches for exposing a command. The first one is to
+use the ``@CLICommand`` decorator to decorate the method which handles
+the command. like this
+
+.. code:: python
+
+   @CLICommand('antigravity send to blackhole',
+               perm='rw')
+   def send_to_blackhole(self, oid: str, blackhole: Optional[str] = None, inbuf: Optional[str] = None):
+       '''
+       Send the specified object to black hole
+       '''
+       obj = self.find_object(oid)
+       if obj is None:
+           return HandleCommandResult(-errno.ENOENT, stderr=f"object '{oid}' not found")
+       if blackhole is not None and inbuf is not None:
+           try:
+               location = self.decrypt(blackhole, passphrase=inbuf)
+           except ValueError:
+               return HandleCommandResult(-errno.EINVAL, stderr='unable to decrypt location')
+       else:
+           location = blackhole
+       self.send_object_to(obj, location)
+       return HandleCommandResult(stdout=f'the black hole swallowed '{oid}'")
+
+The first parameter passed to ``CLICommand`` is the "name" of the command.
+Since there are lots of commands in Ceph, we tend to group related commands
+with a common prefix. In this case, "antigravity" is used for this purpose.
+As the author is probably designing a module which is also able to launch
+rockets into the deep space.
+
+The `type annotations <https://www.python.org/dev/peps/pep-0484/>`_ for the
+method parameters are mandatory here, so the usage of the command can be
+properly reported to the ``ceph`` CLI, and the manager daemon can convert
+the serialized command parameters sent by the clients to the expected type
+before passing them to the handler method. With properly implemented types,
+one can also perform some sanity checks against the parameters!
+
+The names of the parameters are part of the command interface, so please
+try to take the backward compatibility into consideration when changing
+them. But you **cannot** change name of ``inbuf`` parameter, it is used
+to pass the content of the file specified by ``ceph --in-file`` option.
+
+The docstring of the method is used for the description of the command.
+
+The manager daemon cooks the usage of the command from these ingredients,
+like::
+
+  antigravity send to blackhole <oid> [<blackhole>]  Send the specified object to black hole
+
+as part of the output of ``ceph --help``.
+
+In addition to ``@CLICommand``, you could also use ``@CLIReadCommand`` or
+``@CLIWriteCommand`` if your command only requires read permissions or
+write permissions respectively.
+
+The second one is to set the ``COMMANDS`` class attribute of your module to
+a list of dicts like this::
 
     COMMANDS = [
         {
