@@ -174,7 +174,7 @@ if 'UNITTEST' in os.environ:
             self._unconfigure_logging = mock.MagicMock()
             self._ceph_log = mock.MagicMock()
             self._ceph_dispatch_remote = lambda *_: None
-            self._ceph_get_mgr_id = mock.MagicMock()
+            self._ceph_get_mgr_id = lambda *_: 'x'  # vstart uses "mgr.x" for the first mgr
 
 
     cm = mock.Mock()

@@ -419,12 +419,12 @@ class TestCephadm(object):
             assert CephadmServe(cephadm_module)._apply_all_services() is False
 
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume',
+                'test', 'mgr.x', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True, stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_called_with(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
+                'test', 'mgr.x', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'])
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -664,7 +664,7 @@ class TestCephadm(object):
             c = cephadm_module.blink_device_light(fault_ident, on_bool, [('test', '', 'dev')])
             on_off = 'on' if on_bool else 'off'
             assert wait(cephadm_module, c) == [f'Set {fault_ident} light for test: {on_off}']
-            _run_cephadm.assert_called_with('test', 'osd', 'shell', [
+            _run_cephadm.assert_called_with('test', 'mgr.x', 'shell', [
                                             '--', 'lsmcli', f'local-disk-{fault_ident}-led-{on_off}', '--path', 'dev'], error_ok=True)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -674,7 +674,7 @@ class TestCephadm(object):
             cephadm_module.set_store('blink_device_light_cmd', 'echo hello')
             c = cephadm_module.blink_device_light('ident', True, [('test', '', '/dev/sda')])
             assert wait(cephadm_module, c) == ['Set ident light for test: on']
-            _run_cephadm.assert_called_with('test', 'osd', 'shell', [
+            _run_cephadm.assert_called_with('test', 'mgr.x', 'shell', [
                                             '--', 'echo', 'hello'], error_ok=True)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -687,7 +687,7 @@ class TestCephadm(object):
                 'fault', True, [('mgr0', 'SanDisk_X400_M.2_2280_512GB_162924424784', '')])
             assert wait(cephadm_module, c) == [
                 'Set fault light for mgr0:SanDisk_X400_M.2_2280_512GB_162924424784 on']
-            _run_cephadm.assert_called_with('mgr0', 'osd', 'shell', [
+            _run_cephadm.assert_called_with('mgr0', 'mgr.x', 'shell', [
                 '--', 'xyz', '--foo', '--fault=on', 'SanDisk_X400_M.2_2280_512GB_162924424784'
             ], error_ok=True)
 
@@ -1000,10 +1000,10 @@ Traceback (most recent call last):
             assert s == 'host test `cephadm ceph-volume` failed: ' + error_message
 
             assert _run_cephadm.mock_calls == [
-                mock.call('test', 'osd', 'ceph-volume',
+                mock.call('test', 'mgr.x', 'ceph-volume',
                           ['--', 'inventory', '--format=json', '--filter-for-batch'], image='',
                           no_fsid=False),
-                mock.call('test', 'osd', 'ceph-volume',
+                mock.call('test', 'mgr.x', 'ceph-volume',
                           ['--', 'inventory', '--format=json'], image='',
                           no_fsid=False),
             ]

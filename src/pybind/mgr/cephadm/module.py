@@ -1741,7 +1741,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def zap_device(self, host: str, path: str) -> str:
         self.log.info('Zap device %s:%s' % (host, path))
         out, err, code = CephadmServe(self)._run_cephadm(
-            host, 'osd', 'ceph-volume',
+            host, self.this_daemon_name, 'ceph-volume',
             ['--', 'lvm', 'zap', '--destroy', path],
             error_ok=True)
         self.cache.invalidate_host_devices(host)
@@ -1776,7 +1776,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             cmd_args = shlex.split(cmd_line)
 
             out, err, code = CephadmServe(self)._run_cephadm(
-                host, 'osd', 'shell', ['--'] + cmd_args,
+                host, self.this_daemon_name, 'shell', ['--'] + cmd_args,
                 error_ok=True)
             if code:
                 raise OrchestratorError(

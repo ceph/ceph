@@ -234,7 +234,7 @@ class CephadmServe:
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
-            ls = self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True)
+            ls = self._run_cephadm_json(host, cephadmNoImage, 'ls', [], no_fsid=True)
         except OrchestratorError as e:
             return str(e)
         dm = {}
@@ -294,11 +294,11 @@ class CephadmServe:
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         try:
             try:
-                devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                devices = self._run_cephadm_json(host, self.mgr.this_daemon_name, 'ceph-volume',
                                                  ['--', 'inventory', '--format=json', '--filter-for-batch'])
             except OrchestratorError as e:
                 if 'unrecognized arguments: --filter-for-batch' in str(e):
-                    devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                    devices = self._run_cephadm_json(host, self.mgr.this_daemon_name, 'ceph-volume',
                                                      ['--', 'inventory', '--format=json'])
                 else:
                     raise
@@ -1028,7 +1028,7 @@ class CephadmServe:
             'password': password,
         })
         out, err, code = self._run_cephadm(
-            host, 'mon', 'registry-login',
+            host, cephadmNoImage, 'registry-login',
             ['--registry-json', '-'], stdin=args_str, error_ok=True)
         if code:
             return f"Host {host} failed to login to {url} as {username} with given password"
