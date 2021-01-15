@@ -7953,6 +7953,11 @@ static std::vector<Option> get_immutable_object_cache_options() {
 
 std::vector<Option> get_mds_options() {
   return std::vector<Option>({
+    Option("mds_alternate_name_max", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(8192)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("set the maximum length of alternate names for dentries"),
+
     Option("mds_numa_node", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(-1)
     .set_flag(Option::FLAG_STARTUP)

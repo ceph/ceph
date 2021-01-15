@@ -109,6 +109,10 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     dn.print_pin_set(out);
   }
 
+  if (dn.get_alternate_name().size()) {
+    out << " altname=" << binstrprint(dn.get_alternate_name(), 16);
+  }
+
   out << " " << &dn;
   out << "]";
   return out;
@@ -235,12 +239,6 @@ void CDentry::make_path(filepath& fp, bool projected) const
   fp.push_dentry(get_name());
 }
 
-void CDentry::set_alternate_name(std::string_view _alternate_name)
-{
-  dout(10) << "setting alternate_name on " << *this << dendl;
-  alternate_name = _alternate_name;
-}
-
 /*
  * we only add ourselves to remote_parents when the linkage is
  * active (no longer projected).  if the passed dnl is projected,
@@ -317,9 +315,11 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);
     }
-  } else if (n.inode) {
-    dir->link_primary_inode(this, n.inode);
-    n.inode->pop_projected_parent();
+  } else {
+    if (n.inode) {
+      dir->link_primary_inode(this, n.inode);
+      n.inode->pop_projected_parent();
+    }
   }
 
   ceph_assert(n.inode == linkage.inode);

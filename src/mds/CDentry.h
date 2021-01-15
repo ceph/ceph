@@ -69,7 +69,7 @@ public:
     unsigned char get_remote_d_type() const { return remote_d_type; }
     std::string get_remote_d_type_string() const;
 
-    void set_remote(inodeno_t ino, unsigned char d_type) { 
+    void set_remote(inodeno_t ino, unsigned char d_type) {
       remote_ino = ino;
       remote_d_type = d_type;
       inode = 0;
@@ -100,22 +100,27 @@ public:
 
 
   CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    name(n)
+    name(n),
+    alternate_name(std::move(alternate_name))
   {}
-  CDentry(std::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
+  CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
+          inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    name(n)
+    name(n),
+    alternate_name(std::move(alternate_name))
   {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
@@ -151,9 +156,15 @@ public:
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
   std::string_view get_name() const { return std::string_view(name); }
-  void set_alternate_name(std::string_view _alternate_name);
-  std::string_view get_alternate_name() const { return std::string_view(alternate_name); }
-  void decode_alternate_name(bufferlist::const_iterator &bl) { decode(alternate_name, bl); }
+  std::string_view get_alternate_name() const {
+    return std::string_view(alternate_name);
+  }
+  void set_alternate_name(mempool::mds_co::string altn) {
+    alternate_name = std::move(altn);
+  }
+  void set_alternate_name(std::string_view altn) {
+    alternate_name = mempool::mds_co::string(altn);
+  }
 
   __u32 get_hash() const { return hash; }
 

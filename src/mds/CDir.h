@@ -370,9 +370,10 @@ public:
 
   CDentry* add_null_dentry(std::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_primary_dentry(std::string_view dname, CInode *in,
+  CDentry* add_primary_dentry(std::string_view dname, CInode *in, mempool::mds_co::string alternate_name,
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
+                             mempool::mds_co::string alternate_name,
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);

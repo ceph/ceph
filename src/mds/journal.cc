@@ -444,7 +444,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
 // EMetaBlob::fullbit
 
 void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   encode(dn, bl);
   encode(dnfirst, bl);
   encode(dnlast, bl);
@@ -471,11 +471,12 @@ void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
   if (!inode->is_dir())
     encode(snapbl, bl);
   encode(oldest_snap, bl);
+  encode(alternate_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
-  DECODE_START(8, bl);
+  DECODE_START(9, bl);
   decode(dn, bl);
   decode(dnfirst, bl);
   decode(dnlast, bl);
@@ -509,6 +510,9 @@ void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
     decode(snapbl, bl);
   }
   decode(oldest_snap, bl);
+  if (struct_v >= 9) {
+    decode(alternate_name, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -553,6 +557,7 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
     }
     f->close_section(); // old inodes
   }
+  f->dump_string("alternate_name", alternate_name);
 }
 
 void EMetaBlob::fullbit::generate_test_instances(std::list<EMetaBlob::fullbit*>& ls)
@@ -561,7 +566,7 @@ void EMetaBlob::fullbit::generate_test_instances(std::list<EMetaBlob::fullbit*>&
   fragtree_t fragtree;
   auto _xattrs = CInode::allocate_xattr_map();
   bufferlist empty_snapbl;
-  fullbit *sample = new fullbit("/testdn", 0, 0, 0,
+  fullbit *sample = new fullbit("/testdn", "", 0, 0, 0,
                                 _inode, fragtree, _xattrs, "", 0, empty_snapbl,
                                 false, NULL);
   ls.push_back(sample);
@@ -635,7 +640,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 
 void EMetaBlob::remotebit::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(dn, bl);
   encode(dnfirst, bl);
   encode(dnlast, bl);
@@ -643,12 +648,13 @@ void EMetaBlob::remotebit::encode(bufferlist& bl) const
   encode(ino, bl);
   encode(d_type, bl);
   encode(dirty, bl);
+  encode(alternate_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(dn, bl);
   decode(dnfirst, bl);
   decode(dnlast, bl);
@@ -656,6 +662,8 @@ void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
   decode(ino, bl);
   decode(d_type, bl);
   decode(dirty, bl);
+  if (struct_v >= 3)
+    decode(alternate_name, bl);
   DECODE_FINISH(bl);
 }
 
@@ -688,12 +696,15 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
   }
   f->dump_string("d_type", type_string);
   f->dump_string("dirty", dirty ? "true" : "false");
+  f->dump_string("alternate_name", alternate_name);
 }
 
 void EMetaBlob::remotebit::
 generate_test_instances(std::list<EMetaBlob::remotebit*>& ls)
 {
-  remotebit *remote = new remotebit("/test/dn", 0, 10, 15, 1, IFTODT(S_IFREG), false);
+  remotebit *remote = new remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), false);
+  ls.push_back(remote);
+  remote = new remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), false);
   ls.push_back(remote);
 }
 
@@ -1352,7 +1363,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     for (const auto& rb : lump.get_dremote()) {
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
       if (!dn) {
-	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.d_type, rb.dnfirst, rb.dnlast);
+	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
@@ -1368,6 +1379,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
 	  }
 	  dir->unlink_inode(dn, false);
 	}
+        dn->set_alternate_name(mempool::mds_co::string(rb.alternate_name));
 	dir->link_remote_inode(dn, rb.ino, rb.d_type);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);

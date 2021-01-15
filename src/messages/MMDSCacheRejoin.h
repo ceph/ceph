@@ -86,15 +86,15 @@ public:
 
   struct dn_strong {
     snapid_t first;
-    inodeno_t ino;
-    inodeno_t remote_ino;
-    unsigned char remote_d_type;
-    uint32_t nonce;
-    int32_t lock;
-    dn_strong() : 
-      ino(0), remote_ino(0), remote_d_type(0), nonce(0), lock(0) {}
-    dn_strong(snapid_t f, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int l) : 
-      first(f), ino(pi), remote_ino(ri), remote_d_type(rdt), nonce(n), lock(l) {}
+    std::string alternate_name;
+    inodeno_t ino = 0;
+    inodeno_t remote_ino = 0;
+    unsigned char remote_d_type = 0;
+    uint32_t nonce = 0;
+    int32_t lock = 0;
+    dn_strong() = default;
+    dn_strong(snapid_t f, std::string_view altn, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int l) :
+      first(f), alternate_name(altn), ino(pi), remote_ino(ri), remote_d_type(rdt), nonce(n), lock(l) {}
     bool is_primary() const { return ino > 0; }
     bool is_remote() const { return remote_ino > 0; }
     bool is_null() const { return ino == 0 && remote_ino == 0; }
@@ -106,6 +106,7 @@ public:
       encode(remote_d_type, bl);
       encode(nonce, bl);
       encode(lock, bl);
+      encode(alternate_name, bl);
     }
     void decode(ceph::buffer::list::const_iterator &bl) {
       using ceph::decode;
@@ -115,14 +116,15 @@ public:
       decode(remote_d_type, bl);
       decode(nonce, bl);
       decode(lock, bl);
+      decode(alternate_name, bl);
     }
   };
   WRITE_CLASS_ENCODER(dn_strong)
 
   struct dn_weak {
     snapid_t first;
-    inodeno_t ino;
-    dn_weak() : ino(0) {}
+    inodeno_t ino = 0;
+    dn_weak() = default;
     dn_weak(snapid_t f, inodeno_t pi) : first(f), ino(pi) {}
     void encode(ceph::buffer::list &bl) const {
       using ceph::encode;
@@ -241,8 +243,9 @@ public:
   void add_weak_primary_dentry(inodeno_t dirino, std::string_view dname, snapid_t first, snapid_t last, inodeno_t ino) {
     weak[dirino][string_snap_t(dname, last)] = dn_weak(first, ino);
   }
-  void add_strong_dentry(dirfrag_t df, std::string_view dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
-    strong_dentries[df][string_snap_t(dname, last)] = dn_strong(first, pi, ri, rdt, n, ls);
+  void add_strong_dentry(dirfrag_t df, std::string_view dname, std::string_view altn, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+    auto& m = strong_dentries[df];
+    m.insert_or_assign(string_snap_t(dname, last), dn_strong(first, altn, pi, ri, rdt, n, ls));
   }
   void add_dentry_authpin(dirfrag_t df, std::string_view dname, snapid_t last,
 			  const metareqid_t& ri, __u32 attempt) {

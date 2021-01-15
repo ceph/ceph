@@ -4252,7 +4252,7 @@ void Locker::issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask,
     lstat.mask = CEPH_LEASE_VALID | mask;
     lstat.duration_ms = (uint32_t)(1000 * mdcache->client_lease_durations[pool]);
     lstat.seq = ++l->seq;
-    lstat.alternate_name = mempool::mds_co::string(dn->get_alternate_name());
+    lstat.alternate_name = std::string(dn->alternate_name);
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease seq " << lstat.seq << " dur " << lstat.duration_ms << "ms "
 	     << " on " << *dn << dendl;
@@ -4260,7 +4260,7 @@ void Locker::issue_client_lease(CDentry *dn, MDRequestRef &mdr, int mask,
     // null lease
     LeaseStat lstat;
     lstat.mask = mask;
-    lstat.alternate_name = mempool::mds_co::string(dn->get_alternate_name());
+    lstat.alternate_name = std::string(dn->alternate_name);
     encode_lease(bl, session->info, lstat);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }
