@@ -434,7 +434,9 @@ public:
 	  [&t, &f](auto &e) { return f(t, e); });
       }).handle_error(
 	init_cached_extents_ertr::pass_further{},
-	crimson::ct_error::assert_all{}
+	crimson::ct_error::assert_all{
+	  "Invalid error in Cache::init_cached_extents"
+	}
       );
   }
 
