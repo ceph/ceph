@@ -1,5 +1,7 @@
 import errno
 
+from enum import Enum, unique
+
 from ..exception import VolumeException
 
 class GroupTemplate(object):
@@ -33,14 +35,36 @@ class GroupTemplate(object):
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
+@unique
+class SubvolumeOpType(Enum):
+    CREATE          = 'create'
+    REMOVE          = 'rm'
+    REMOVE_FORCE    = 'rm-force'
+    PIN             = 'pin'
+    LIST            = 'ls'
+    GETPATH         = 'getpath'
+    INFO            = 'info'
+    RESIZE          = 'resize'
+    SNAP_CREATE     = 'snap-create'
+    SNAP_REMOVE     = 'snap-rm'
+    SNAP_LIST       = 'snap-ls'
+    SNAP_INFO       = 'snap-info'
+    SNAP_PROTECT    = 'snap-protect'
+    SNAP_UNPROTECT  = 'snap-unprotect'
+    CLONE_SOURCE    = 'clone-source'
+    CLONE_CREATE    = 'clone-create'
+    CLONE_STATUS    = 'clone-status'
+    CLONE_CANCEL    = 'clone-cancel'
+    CLONE_INTERNAL  = 'clone_internal'
+
 class SubvolumeTemplate(object):
-    VERSION = None
+    VERSION = None # type: int
 
     @staticmethod
     def version():
         return SubvolumeTemplate.VERSION
 
-    def open(self, need_complete=True, expected_types=[]):
+    def open(self, op_type):
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
     def status(self):
@@ -120,15 +144,6 @@ class SubvolumeTemplate(object):
 
         :param: subvolume snapshot name
         :return: None
-        """
-        raise VolumeException(-errno.ENOTSUP, "operation not supported.")
-
-    def snapshot_path(self, snapname):
-        """
-        return the snapshot path for a given snapshot name
-
-        :param: subvolume snapshot name
-        :return: snapshot path
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
