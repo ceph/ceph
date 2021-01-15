@@ -639,23 +639,40 @@ int mirror_group_instance_list_finish(
 int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
                    const std::string &start, uint64_t max_return,
                    std::map<std::string, std::string> *groups);
+void group_dir_add(librados::ObjectWriteOperation *op,
+                   const std::string &name, const std::string &id);
 int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
                   const std::string &name, const std::string &id);
 int group_dir_rename(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &src, const std::string &dest,
                      const std::string &id);
+void group_dir_remove(librados::ObjectWriteOperation *op,
+                      const std::string &name, const std::string &id);
 int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &name, const std::string &id);
+void group_image_remove(librados::ObjectWriteOperation *op,
+                        const cls::rbd::GroupImageSpec &spec);
 int group_image_remove(librados::IoCtx *ioctx, const std::string &oid,
                        const cls::rbd::GroupImageSpec &spec);
+void group_image_list_start(librados::ObjectReadOperation *op,
+                            const cls::rbd::GroupImageSpec &start,
+                            uint64_t max_return);
+int group_image_list_finish(ceph::buffer::list::const_iterator *iter,
+                            std::vector<cls::rbd::GroupImageStatus> *images);
 int group_image_list(librados::IoCtx *ioctx, const std::string &oid,
                      const cls::rbd::GroupImageSpec &start,
                      uint64_t max_return,
                      std::vector<cls::rbd::GroupImageStatus> *images);
+void group_image_set(librados::ObjectWriteOperation *op,
+                     const cls::rbd::GroupImageStatus &st);
 int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupImageStatus &st);
+void image_group_add(librados::ObjectWriteOperation *op,
+                     const cls::rbd::GroupSpec &group_spec);
 int image_group_add(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupSpec &group_spec);
+void image_group_remove(librados::ObjectWriteOperation *op,
+                        const cls::rbd::GroupSpec &group_spec);
 int image_group_remove(librados::IoCtx *ioctx, const std::string &oid,
                        const cls::rbd::GroupSpec &group_spec);
 void image_group_get_start(librados::ObjectReadOperation *op);
@@ -663,6 +680,8 @@ int image_group_get_finish(ceph::buffer::list::const_iterator *iter,
                            cls::rbd::GroupSpec *group_spec);
 int image_group_get(librados::IoCtx *ioctx, const std::string &oid,
                     cls::rbd::GroupSpec *group_spec);
+void group_snap_set(librados::ObjectWriteOperation *op,
+                    const cls::rbd::GroupSnapshot &snapshot);
 int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
                    const cls::rbd::GroupSnapshot &snapshot);
 int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
@@ -675,6 +694,10 @@ void group_snap_list_start(librados::ObjectReadOperation *op,
                            uint64_t max_return);
 int group_snap_list_finish(ceph::buffer::list::const_iterator *iter,
                            std::vector<cls::rbd::GroupSnapshot> *snapshots);
+void group_snap_get_by_id_start(librados::ObjectReadOperation *op,
+                                const std::string &snap_id);
+int group_snap_get_by_id_finish(ceph::buffer::list::const_iterator *iter,
+                                cls::rbd::GroupSnapshot *snapshot);
 int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupSnapshot &start,
                     uint64_t max_return,
@@ -687,7 +710,6 @@ int group_snap_list_order_finish(ceph::buffer::list::const_iterator *iter,
 int group_snap_list_order(librados::IoCtx *ioctx, const std::string &oid,
                           const std::string &snap_id, uint64_t max_return,
                           std::map<std::string, uint64_t> *snap_order);
- 
 // operations on rbd_trash object
 void trash_add(librados::ObjectWriteOperation *op,
                const std::string &id,

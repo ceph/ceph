@@ -3002,13 +3002,20 @@ int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
   return 0;
 }
 
+void group_dir_add(librados::ObjectWriteOperation *op,
+                   const std::string &name, const std::string &id) {
+  bufferlist bl;
+  encode(name, bl);
+  encode(id, bl);
+  op->exec("rbd", "group_dir_add", bl);
+}
+
 int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
-                  const std::string &name, const std::string &id)
-{
-  bufferlist in, out;
-  encode(name, in);
-  encode(id, in);
-  return ioctx->exec(oid, "rbd", "group_dir_add", in, out);
+                  const std::string &name, const std::string &id) {
+  librados::ObjectWriteOperation op;
+  group_dir_add(&op, name, id);
+
+  return ioctx->operate(oid, &op);
 }
 
 int group_dir_rename(librados::IoCtx *ioctx, const std::string &oid,
@@ -3022,41 +3029,50 @@ int group_dir_rename(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->exec(oid, "rbd", "group_dir_rename", in, out);
 }
 
+void group_dir_remove(librados::ObjectWriteOperation *op,
+                      const std::string &name, const std::string &id) {
+  bufferlist bl;
+  encode(name, bl);
+  encode(id, bl);
+  op->exec("rbd", "group_dir_remove", bl);
+}
+
 int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
-                     const std::string &name, const std::string &id)
-{
-  bufferlist in, out;
-  encode(name, in);
-  encode(id, in);
-  return ioctx->exec(oid, "rbd", "group_dir_remove", in, out);
+                     const std::string &name, const std::string &id) {
+  librados::ObjectWriteOperation op;
+  group_dir_remove(&op, name, id);
+
+  return ioctx->operate(oid, &op);
+}
+
+void group_image_remove(librados::ObjectWriteOperation *op,
+                       const cls::rbd::GroupImageSpec &spec) {
+  bufferlist bl;
+  encode(spec, bl);
+  op->exec("rbd", "group_image_remove", bl);
 }
 
 int group_image_remove(librados::IoCtx *ioctx, const std::string &oid,
-                       const cls::rbd::GroupImageSpec &spec)
-{
-  bufferlist bl, bl2;
-  encode(spec, bl);
+                       const cls::rbd::GroupImageSpec &spec) {
+  librados::ObjectWriteOperation op;
+  group_image_remove(&op, spec);
 
-  return ioctx->exec(oid, "rbd", "group_image_remove", bl, bl2);
+  return ioctx->operate(oid, &op);
 }
 
-int group_image_list(librados::IoCtx *ioctx,
-                     const std::string &oid,
-                     const cls::rbd::GroupImageSpec &start,
-                     uint64_t max_return,
-                     std::vector<cls::rbd::GroupImageStatus> *images)
-{
-  bufferlist bl, bl2;
+void group_image_list_start(librados::ObjectReadOperation *op,
+                            const cls::rbd::GroupImageSpec &start,
+                            uint64_t max_return) {
+  bufferlist bl;
   encode(start, bl);
   encode(max_return, bl);
+  op->exec("rbd", "group_image_list", bl);
+}
 
-  int r = ioctx->exec(oid, "rbd", "group_image_list", bl, bl2);
-  if (r < 0)
-    return r;
-
-  auto iter = bl2.cbegin();
+int group_image_list_finish(bufferlist::const_iterator *iter,
+                            std::vector<cls::rbd::GroupImageStatus> *images) {
   try {
-    decode(*images, iter);
+    decode(*images, *iter);
   } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
@@ -3064,31 +3080,68 @@ int group_image_list(librados::IoCtx *ioctx,
   return 0;
 }
 
-int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
-                    const cls::rbd::GroupImageStatus &st)
-{
-  bufferlist bl, bl2;
-  encode(st, bl);
+int group_image_list(librados::IoCtx *ioctx,
+                     const std::string &oid,
+                     const cls::rbd::GroupImageSpec &start,
+                     uint64_t max_return,
+                     std::vector<cls::rbd::GroupImageStatus> *images) {
+  librados::ObjectReadOperation op;
+  group_image_list_start(&op, start, max_return);
 
-  return ioctx->exec(oid, "rbd", "group_image_set", bl, bl2);
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto it = out_bl.cbegin();
+  return group_image_list_finish(&it, images);
+}
+
+void group_image_set(librados::ObjectWriteOperation *op,
+                     const cls::rbd::GroupImageStatus &state) {
+  bufferlist bl;
+  encode(state, bl);
+  op->exec("rbd", "group_image_set", bl);
+}
+
+int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
+                    const cls::rbd::GroupImageStatus &state) {
+  librados::ObjectWriteOperation op;
+  group_image_set(&op, state);
+
+  return ioctx->operate(oid, &op);
+}
+
+void image_group_add(librados::ObjectWriteOperation *op,
+                     const cls::rbd::GroupSpec &group_spec) {
+  bufferlist bl;
+  encode(group_spec, bl);
+  op->exec("rbd", "image_group_add", bl);
 }
 
 int image_group_add(librados::IoCtx *ioctx, const std::string &oid,
-                    const cls::rbd::GroupSpec &group_spec)
-{
-  bufferlist bl, bl2;
-  encode(group_spec, bl);
+                    const cls::rbd::GroupSpec &group_spec) {
+  librados::ObjectWriteOperation op;
+  image_group_add(&op, group_spec);
 
-  return ioctx->exec(oid, "rbd", "image_group_add", bl, bl2);
+  return ioctx->operate(oid, &op);
+}
+
+void image_group_remove(librados::ObjectWriteOperation *op,
+                        const cls::rbd::GroupSpec &group_spec) {
+  bufferlist bl;
+  encode(group_spec, bl);
+  op->exec("rbd", "image_group_remove", bl);
 }
 
 int image_group_remove(librados::IoCtx *ioctx, const std::string &oid,
                        const cls::rbd::GroupSpec &group_spec)
 {
-  bufferlist bl, bl2;
-  encode(group_spec, bl);
+  librados::ObjectWriteOperation op;
+  image_group_remove(&op, group_spec);
 
-  return ioctx->exec(oid, "rbd", "image_group_remove", bl, bl2);
+  return ioctx->operate(oid, &op);
 }
 
 void image_group_get_start(librados::ObjectReadOperation *op)
@@ -3124,14 +3177,20 @@ int image_group_get(librados::IoCtx *ioctx, const std::string &oid,
   return image_group_get_finish(&iter, group_spec);
 }
 
+void group_snap_set(librados::ObjectWriteOperation *op,
+                    const cls::rbd::GroupSnapshot &snapshot) {
+  bufferlist bl;
+  encode(snapshot, bl);
+  op->exec("rbd", "group_snap_set", bl);
+}
+
 int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
                    const cls::rbd::GroupSnapshot &snapshot)
 {
-  using ceph::encode;
-  bufferlist inbl, outbl;
-  encode(snapshot, inbl);
-  int r = ioctx->exec(oid, "rbd", "group_snap_set", inbl, outbl);
-  return r;
+  librados::ObjectWriteOperation op;
+  group_snap_set(&op, snapshot);
+
+  return ioctx->operate(oid, &op);
 }
 
 int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
@@ -3145,25 +3204,38 @@ int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
 
 int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
                          const std::string &snap_id,
-                         cls::rbd::GroupSnapshot *snapshot)
-{
-  using ceph::encode;
-  using ceph::decode;
-  bufferlist inbl, outbl;
+                         cls::rbd::GroupSnapshot *snapshot) {
+  librados::ObjectReadOperation op;
+  group_snap_get_by_id_start(&op, snap_id);
 
-  encode(snap_id, inbl);
-  int r = ioctx->exec(oid, "rbd", "group_snap_get_by_id", inbl, outbl);
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
   if (r < 0) {
     return r;
   }
 
-  auto iter = outbl.cbegin();
+  auto iter = out_bl.cbegin();
+  r = group_snap_get_by_id_finish(&iter, snapshot);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void group_snap_get_by_id_start(librados::ObjectReadOperation *op,
+                                const std::string &snap_id) {
+  bufferlist bl;
+  encode(snap_id, bl);
+  op->exec("rbd", "group_snap_get_by_id", bl);
+}
+
+int group_snap_get_by_id_finish(ceph::buffer::list::const_iterator *iter,
+                                cls::rbd::GroupSnapshot *snapshot) {
   try {
-    decode(*snapshot, iter);
+    decode(*snapshot, *iter);
   } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
-
   return 0;
 }
 
