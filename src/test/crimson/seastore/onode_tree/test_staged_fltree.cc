@@ -97,7 +97,7 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
   onode_t value = {2};
 #define _STAGE_T(NodeType) node_to_stage_t<typename NodeType::node_stage_t>
 #define NXT_T(StageType)  staged<typename StageType::next_param_t>
-  laddr_packed_t i_value{0};
+  laddr_t i_value{0};
   logger().info("\n"
     "Bytes of a key-value insertion (full-string):\n"
     "  s-p-c, 'n'-'o', s-g => onode_t(2): typically internal 41B, leaf 35B\n"

@@ -98,14 +98,14 @@ class internal_sub_items_t {
 
   template <KeyT KT>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>&, const laddr_packed_t&) {
+      const full_key_t<KT>&, const laddr_t&) {
     return sizeof(internal_sub_item_t);
   }
 
   template <KeyT KT>
   static const laddr_packed_t* insert_at(
       NodeExtentMutable&, const internal_sub_items_t&,
-      const full_key_t<KT>&, const laddr_packed_t&,
+      const full_key_t<KT>&, const laddr_t&,
       index_t index, node_offset_t size, const char* p_left_bound);
 
   static node_offset_t trim_until(NodeExtentMutable&, internal_sub_items_t&, index_t);
@@ -124,7 +124,7 @@ class internal_sub_items_t::Appender {
   Appender(NodeExtentMutable* p_mut, char* p_append)
     : p_mut{p_mut}, p_append{p_append} {}
   void append(const internal_sub_items_t& src, index_t from, index_t items);
-  void append(const full_key_t<KT>&, const laddr_packed_t&, const laddr_packed_t*&);
+  void append(const full_key_t<KT>&, const laddr_t&, const laddr_packed_t*&);
   char* wrap() { return p_append; }
  private:
   NodeExtentMutable* p_mut;

@@ -356,6 +356,13 @@ struct memory_range_t {
 
 enum class ContainerType { ITERATIVE, INDEXABLE };
 
+// the input type to construct the value during insert.
+template <node_type_t> struct value_input_type;
+template<> struct value_input_type<node_type_t::INTERNAL> { using type = laddr_t; };
+template<> struct value_input_type<node_type_t::LEAF> { using type = onode_t; };
+template <node_type_t NODE_TYPE>
+using value_input_type_t = typename value_input_type<NODE_TYPE>::type;
+
 template <node_type_t> struct value_type;
 template<> struct value_type<node_type_t::INTERNAL> { using type = laddr_packed_t; };
 template<> struct value_type<node_type_t::LEAF> { using type = onode_t; };

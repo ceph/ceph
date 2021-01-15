@@ -242,7 +242,7 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items) {
 template <typename FieldType, node_type_t NODE_TYPE>
 template <KeyT KT>
 void APPEND_T::append(
-    const full_key_t<KT>& key, const value_t& value, const value_t*& p_value) {
+    const full_key_t<KT>& key, const value_input_t& value, const value_t*& p_value) {
   if constexpr (FIELD_TYPE == field_type_t::N3) {
     ceph_abort("not implemented");
   } else {
