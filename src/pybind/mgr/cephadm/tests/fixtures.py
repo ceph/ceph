@@ -65,13 +65,13 @@ def with_cephadm_module(module_options=None, store=None):
         yield m
 
 
-@pytest.yield_fixture()
+@pytest.fixture()
 def cephadm_module():
     with with_cephadm_module({}) as m:
         yield m
 
 
-@pytest.yield_fixture()
+@pytest.fixture()
 def rm_util():
     with with_cephadm_module({}) as m:
         r = RemoveUtil.__new__(RemoveUtil)
@@ -79,7 +79,7 @@ def rm_util():
         yield r
 
 
-@pytest.yield_fixture()
+@pytest.fixture()
 def osd_obj():
     with mock.patch("cephadm.services.osd.RemoveUtil"):
         o = OSD(0, mock.MagicMock())
