@@ -22,13 +22,6 @@ namespace crimson::os::seastore::onode {
  */
 template <typename FieldType, node_type_t NODE_TYPE>
 class DeltaRecorderT final: public DeltaRecorder {
-  enum class op_t : uint8_t {
-    INSERT,
-    SPLIT,
-    SPLIT_INSERT,
-    UPDATE_CHILD_ADDR,
-  };
-
  public:
   using layout_t = NodeLayoutReplayableT<FieldType, NODE_TYPE>;
   using node_stage_t = typename layout_t::node_stage_t;
@@ -46,7 +39,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       const position_t& insert_pos,
       const match_stage_t& insert_stage,
       const node_offset_t& insert_size) {
-    ceph::encode(op_t::INSERT, encoded);
+    ceph::encode(node_delta_op_t::INSERT, encoded);
     encode_key<KT>(key, encoded);
     encode_value(value, encoded);
     insert_pos.encode(encoded);
@@ -57,7 +50,7 @@ class DeltaRecorderT final: public DeltaRecorder {
   void encode_split(
       const StagedIterator& split_at,
       const char* p_node_start) {
-    ceph::encode(op_t::SPLIT, encoded);
+    ceph::encode(node_delta_op_t::SPLIT, encoded);
     split_at.encode(p_node_start, encoded);
   }
 
@@ -70,7 +63,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       const match_stage_t& insert_stage,
       const node_offset_t& insert_size,
       const char* p_node_start) {
-    ceph::encode(op_t::SPLIT_INSERT, encoded);
+    ceph::encode(node_delta_op_t::SPLIT_INSERT, encoded);
     split_at.encode(p_node_start, encoded);
     encode_key<KT>(key, encoded);
     encode_value(value, encoded);
@@ -83,7 +76,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       const laddr_t new_addr,
       const laddr_packed_t* p_addr,
       const char* p_node_start) {
-    ceph::encode(op_t::UPDATE_CHILD_ADDR, encoded);
+    ceph::encode(node_delta_op_t::UPDATE_CHILD_ADDR, encoded);
     ceph::encode(new_addr, encoded);
     int node_offset = reinterpret_cast<const char*>(p_addr) - p_node_start;
     assert(node_offset > 0 && node_offset <= NODE_BLOCK_SIZE);
@@ -103,11 +96,11 @@ class DeltaRecorderT final: public DeltaRecorder {
                    laddr_t node_laddr) override {
     assert(is_empty());
     node_stage_t stage(reinterpret_cast<const FieldType*>(node.get_read()));
-    op_t op;
+    node_delta_op_t op;
     try {
       ceph::decode(op, delta);
       switch (op) {
-      case op_t::INSERT: {
+      case node_delta_op_t::INSERT: {
         logger().debug("OTree::Extent::Replay: decoding INSERT ...");
         auto key = key_hobj_t::decode(delta);
 
@@ -127,14 +120,14 @@ class DeltaRecorderT final: public DeltaRecorder {
           node, stage, key, *p_value, insert_pos, insert_stage, insert_size);
         break;
       }
-      case op_t::SPLIT: {
+      case node_delta_op_t::SPLIT: {
         logger().debug("OTree::Extent::Replay: decoding SPLIT ...");
         auto split_at = StagedIterator::decode(stage.p_start(), delta);
         logger().debug("OTree::Extent::Replay: apply split_at={} ...", split_at);
         layout_t::split(node, stage, split_at);
         break;
       }
-      case op_t::SPLIT_INSERT: {
+      case node_delta_op_t::SPLIT_INSERT: {
         logger().debug("OTree::Extent::Replay: decoding SPLIT_INSERT ...");
         auto split_at = StagedIterator::decode(stage.p_start(), delta);
         auto key = key_hobj_t::decode(delta);
@@ -155,7 +148,7 @@ class DeltaRecorderT final: public DeltaRecorder {
           node, stage, split_at, key, *p_value, insert_pos, insert_stage, insert_size);
         break;
       }
-      case op_t::UPDATE_CHILD_ADDR: {
+      case node_delta_op_t::UPDATE_CHILD_ADDR: {
         logger().debug("OTree::Extent::Replay: decoding UPDATE_CHILD_ADDR ...");
         laddr_t new_addr;
         ceph::decode(new_addr, delta);
