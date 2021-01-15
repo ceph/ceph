@@ -51,6 +51,8 @@ public:
     }
   };
 
+  using OSDMapBlockerTimedPtr = typename OSDMapBlocker::TimedPtr;
+
   // order the promises in ascending order of the waited osdmap epoch,
   // so we can access all the waiters expecting a map whose epoch is less
   // than or equal to a given epoch
@@ -71,5 +73,10 @@ public:
   void got_map(epoch_t epoch);
   seastar::future<> stop();
 };
+
+template <> constexpr auto EVENT_NAMES<OSDMapGate<OSDMapGateType::OSD>::OSDMapBlockerTimedPtr> =
+  "OSDMapGate<OSD>::OSDMapBlockerTimedPtr";
+template <> constexpr auto EVENT_NAMES<OSDMapGate<OSDMapGateType::PG>::OSDMapBlockerTimedPtr> =
+  "OSDMapGate<PG>::OSDMapBlockerTimedPtr";
 
 }

@@ -16,6 +16,8 @@
 #include <seastar/core/lowres_clock.hh>
 
 #include "include/ceph_assert.h"
+#include "include/utime.h"
+#include "common/Clock.h"
 #include "crimson/osd/scheduler/scheduler.h"
 
 namespace ceph {
@@ -379,12 +381,75 @@ private:
   void release_throttle();
 };
 
+// the main template. by default an operation has no extenral
+// event handler (the empty tuple). specializing the template
+// allows to define backends on per-operation-type manner.
+// NOTE: basically this could be a function but C++ disallows
+// differentiating return type among specializations.
+template <class T>
+struct EventBackendRegistry {
+  template <typename...> static constexpr bool always_false = false;
+
+  static std::tuple<> get_backends() {
+    static_assert(always_false<T>, "Registry specializarion not found");
+    return {};
+  }
+};
+
+template <class T>
+constexpr static auto EVENT_NAMES = "UnknownEvent";
+
+void dump_event_default(const char name[],
+                        const utime_t& timestamp,
+                        ceph::Formatter* f);
+
+template <class T>
+struct Event {
+  // IDEA 0: should this be ExternalBackend? Or ExtraBackend?
+  struct Backend {
+    virtual void handle(T&, const Operation&) = 0;
+  };
+
+  struct InternalBackend final : Backend {
+    utime_t timestamp;
+    void handle(T&, const Operation&) override {
+      timestamp = ceph_clock_now();
+    }
+  } internal_backend;
+
+  // QUESTION: how to convey get_registered_backends() and glue it
+  // with particular Operation? The `events` are supposed to vary.
+  // QUESTION: do we need to handle any other Operation than Client
+  // Request when it comes to Historic?
+  template <class U>
+  void trigger(U& op) {
+    internal_backend.handle(static_cast<T&>(*this), op);
+
+    std::apply([&op, this] (auto... backend) {
+      (..., backend.handle(static_cast<T&>(*this), op));
+    }, EventBackendRegistry<U>::get_backends());
+  }
+
+  void dump(ceph::Formatter* f) const {
+    dump_event_default(EVENT_NAMES<T>, internal_backend.timestamp, f);
+  }
+};
+
+
+struct EnqueuedEvent : Event<EnqueuedEvent> {
+};
+template <> constexpr auto EVENT_NAMES<EnqueuedEvent> = "EnqueuedEvent";
+
+struct ResponseEvent : Event<ResponseEvent> {
+};
+template <> constexpr auto EVENT_NAMES<ResponseEvent> = "ResponseEvent";
+
+
 // TODO: replace Blocker with TimedBlocker
 template <class T>
 struct TimedBlocker {
-  struct TimedPtr {
+  struct TimedPtr : Event<typename T::TimedPtr> {
     T* blocker = nullptr;
-    std::uint64_t timestamp = 0;
   };
 
   // having a dedicated `blocking_future` enforces type safety but imposes
@@ -394,7 +459,6 @@ struct TimedBlocker {
   template <typename U>
   decltype(auto) make_blocking_future2(TimedPtr& handle,
                                       seastar::future<U> &&f) {
-    handle.timestamp++;
     handle.blocker = static_cast<T*>(this);
     return std::move(f);
   }
@@ -466,10 +530,16 @@ struct OrderedPipelinePhaseT : public OrderedPipelinePhase,
 };
 
 template <class T>
+void track_event(const T& blocker, std::uint64_t timestamp);
+
+template <class T>
 // TODO: class BlockingPhasedOperationT : public OperationT<T> {
 class BlockingOperationT : public OperationT<T> {
   T* that() {
     return static_cast<T*>(this);
+  }
+  const T* that() const {
+    return static_cast<const T*>(this);
   }
 
   // TODO: drop thr `2` after transitioning to `with_blocker<T>()`.
@@ -486,10 +556,16 @@ public:
     auto fut = std::forward<Func>(f)(new_timedref);
     // mimic the with_blocking_future's behaviour exactly; don't worry
     // about correct timestamping yet.
+
+    // the idea is to have a visitor-like interface that allows to double
+    // dispatch (backend, blocker type)
+    assert(new_timedref.blocker);
+    std::get<HandleT>(that()->blockers).trigger(static_cast<T&>(*this));
     if (fut.available()) {
       return fut;
     } else {
-      std::get<HandleT>(that()->blockers) = std::move(new_timedref);
+      // FIXME: use after std::move
+      std::get<HandleT>(that()->blockers).blocker = new_timedref.blocker;
       return std::move(fut).then_wrapped([this] (auto&& arg) {
         std::get<HandleT>(that()->blockers).blocker = nullptr;
         return std::move(arg);
@@ -503,6 +579,12 @@ public:
     return with_blocker<PhaseT>([this, &new_phase] (auto& new_timedref) {
       return handle2.enter(new_phase, new_timedref);
     });
+  }
+
+  void dump_detail(ceph::Formatter* f) const override {
+    std::apply([f] (auto... event) {
+      (..., event.dump(f));
+    }, that()->blockers);
   }
 };
 

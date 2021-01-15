@@ -38,6 +38,7 @@ public:
   };
 
   std::tuple<
+    EnqueuedEvent,
              OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr,
              OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker::TimedPtr
   > blockers;
@@ -143,6 +144,5 @@ public:
 
   virtual ~LocalPeeringEvent();
 };
-
 
 }

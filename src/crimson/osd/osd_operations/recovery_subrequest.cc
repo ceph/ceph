@@ -2,6 +2,7 @@
 #include <fmt/ostream.h>
 
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
+#include "crimson/osd/osd_operation_tracking.h"
 
 namespace {
   seastar::logger& logger() {

@@ -12,6 +12,7 @@
 #include "common/Formatter.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
+#include "crimson/osd/osd_operation_tracking.h"
 
 namespace {
   seastar::logger& logger() {
@@ -33,6 +34,9 @@ void ClientRequest::print(std::ostream &lhs) const
 
 void ClientRequest::dump_detail(Formatter *f) const
 {
+  std::apply([f] (auto... event) {
+    (..., event.dump(f));
+  }, blockers);
 }
 
 ClientRequest::ConnectionPipeline &ClientRequest::cp()
@@ -56,6 +60,7 @@ seastar::future<> ClientRequest::start()
 {
   logger().debug("{}: start", *this);
 
+  std::get<EnqueuedEvent>(blockers).trigger(*this);
   IRef opref = this;
   return crimson::common::handle_system_shutdown(
     [this, opref=std::move(opref)]() mutable {
@@ -63,6 +68,7 @@ seastar::future<> ClientRequest::start()
       return enter_phase(cp().await_map2)
       .then([this]() {
         using OSDMapBlocker = OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker;
+        logger().info("{}: track &blocker={}", __LINE__, (void*)&std::get<OSDMapBlocker::TimedPtr>(blockers));
 	return with_blocker<OSDMapBlocker>([this] (auto& bhandle) {
           return osd.osdmap_gate.wait_for_map(bhandle, m->get_min_epoch());
         });
@@ -79,7 +85,9 @@ seastar::future<> ClientRequest::start()
 	  handle.enter(pp(pg).await_map)
 	).then([this, &pg]() mutable {
           using OSDMapBlockerPG = OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker;
+          logger().info("{}: track &blocker={}", __LINE__, (void*)&std::get<OSDMapBlockerPG::TimedPtr>(blockers));
 	  return with_blocker<OSDMapBlockerPG>([this, &pg] (auto& bhandle) {
+            logger().info("{}: track", __LINE__);
             return pg.osdmap_gate.wait_for_map(bhandle, m->get_min_epoch());
           });
 	}).then([this, &pg](auto map) mutable {

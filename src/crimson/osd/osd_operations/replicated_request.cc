@@ -9,6 +9,7 @@
 #include "crimson/osd/osd.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/osd_operation_tracking.h"
 
 namespace {
   seastar::logger& logger() {

@@ -3,6 +3,13 @@
 
 #include "osd_operation.h"
 #include "common/Formatter.h"
+#include "crimson/common/log.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
 
 namespace crimson::osd {
 
@@ -13,6 +20,17 @@ void OperationRegistry::dump_client_requests(ceph::Formatter* f) const
   for (const auto& op : client_registry) {
     op.dump(f);
   }
+}
+
+
+void dump_event_default(const char name[],
+                        const utime_t& timestamp,
+                        ceph::Formatter* f)
+{
+  f->open_object_section("event");
+  f->dump_string("name", name);
+  f->dump_stream("initiated_at") << timestamp;
+  f->close_section();
 }
 
 void Operation::dump(ceph::Formatter* f) const
@@ -26,6 +44,11 @@ void Operation::dump(ceph::Formatter* f) const
     f->close_section();
   }
   f->open_array_section("blockers");
+  for (auto &blocker : blockers) {
+    blocker->dump(f);
+  }
+  f->close_section();
+  f->open_array_section("events");
   for (auto &blocker : blockers) {
     blocker->dump(f);
   }

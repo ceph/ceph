@@ -34,6 +34,9 @@ public:
     } get_pg2;
 
     friend class ClientRequest;
+    friend class TrackingBackend;
+    friend class LttngBackend;
+    friend class HistoricBackend;
   };
   class PGPipeline {
     OrderedPipelinePhase await_map = {
@@ -56,6 +59,7 @@ public:
 
 
   std::tuple<
+    EnqueuedEvent,
     ConnectionPipeline::AwaitMap::TimedPtr,
     OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr,
     ConnectionPipeline::GetPG::TimedPtr,

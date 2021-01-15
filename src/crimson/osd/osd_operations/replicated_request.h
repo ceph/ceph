@@ -41,6 +41,7 @@ public:
   };
 
   std::tuple<
+    EnqueuedEvent,
              OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr
   > blockers;
 
