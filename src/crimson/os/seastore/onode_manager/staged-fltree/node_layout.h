@@ -391,7 +391,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        * - I > 2 + 2/S (S > 1)
        *
        * Now back to NODE_BLOCK_SIZE calculation, if we have limits of at most
-       * X KiB ns-oid string and Y KiB of onode_t to store in this BTree, then:
+       * X KiB ns-oid string and Y KiB of value to store in this BTree, then:
        * - largest_insert_size ~= X+Y KiB
        * - 1/S == X/(X+Y)
        * - I > (4X+2Y)/(X+Y)
@@ -558,7 +558,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
    * LeafNodeImpl
    */
   void get_largest_slot(search_position_t& pos,
-                        key_view_t& index_key, const onode_t** pp_value) const override {
+                        key_view_t& index_key,
+                        const value_header_t** pp_value) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
       STAGE_T::template lookup_largest_slot<true, true, true>(
           extent.read(), &cast_down_fill_0<STAGE>(pos), &index_key, pp_value);
@@ -568,7 +569,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   std::tuple<match_stage_t, node_offset_t> evaluate_insert(
-      const key_hobj_t& key, const onode_t& value,
+      const key_hobj_t& key, const value_config_t& value,
       const MatchHistory& history, match_stat_t mstat,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
@@ -582,6 +583,11 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       ceph_abort("impossible path");
     }
+  }
+
+  std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+  prepare_mutate_value_payload(context_t c) {
+    return extent.prepare_mutate_value_payload(c);
   }
 
  private:

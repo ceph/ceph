@@ -100,8 +100,8 @@ class node_extent_t {
       return &p_fields->child_addrs[index];
     } else {
       auto range = get_nxt_container(index);
-      auto ret = reinterpret_cast<const onode_t*>(range.p_start);
-      assert(range.p_start + ret->size == range.p_end);
+      auto ret = reinterpret_cast<const value_header_t*>(range.p_start);
+      assert(range.p_start + ret->allocation_size() == range.p_end);
       return ret;
     }
   }
@@ -144,7 +144,7 @@ class node_extent_t {
       size += ns_oid_view_t::estimate_size<KT>(key);
     } else if constexpr (FIELD_TYPE == field_type_t::N3 &&
                          NODE_TYPE == node_type_t::LEAF) {
-      size += value.size;
+      size += value.allocation_size();
     }
     return size;
   }
