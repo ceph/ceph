@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/migration/QCOWFormat.h"
+#include "common/Clock.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/intarith.h"
@@ -133,7 +134,6 @@ private:
   boost::asio::io_context::strand m_strand;
 
   std::shared_ptr<Cluster> cluster;
-  std::unordered_map<uint64_t, std::shared_ptr<Cluster>> clusters;
   std::unordered_map<uint64_t, Completions> cluster_completions;
 
   void execute_get_cluster(uint64_t cluster_offset, uint64_t cluster_length,
@@ -152,14 +152,12 @@ private:
     }
 
     // record callback for cluster
+    bool new_request = (cluster_completions.count(cluster_offset) == 0);
     cluster_completions[cluster_offset].emplace_back(
       intra_cluster_offset, cluster_length, bl, on_finish);
-    if (clusters.count(cluster_offset) == 0) {
+    if (new_request) {
       // start the new read request
-      auto cluster = std::make_shared<Cluster>(cluster_offset);
-      clusters[cluster_offset] = cluster;
-
-      read_cluster(cluster);
+      read_cluster(std::make_shared<Cluster>(cluster_offset));
     }
   }
 
@@ -196,7 +194,6 @@ private:
 
     auto completions = std::move(cluster_completions[cluster->cluster_offset]);
     cluster_completions.erase(cluster->cluster_offset);
-    clusters.erase(cluster->cluster_offset);
 
     if (r < 0) {
       lderr(cct) << "failed to read cluster offset " << cluster->cluster_offset
@@ -210,6 +207,9 @@ private:
         lderr(cct) << "support for compressed clusters is not available"
                    << dendl;
         r = -EINVAL;
+      } else {
+        // cache the MRU cluster in case of sequential IO
+        this->cluster = cluster;
       }
     }
 
@@ -285,6 +285,7 @@ private:
     uint64_t* l2_table = nullptr;
     bufferlist l2_table_bl;
 
+    utime_t timestamp;
     uint32_t count = 0;
     bool in_flight = false;
 
@@ -376,9 +377,12 @@ private:
 
         if (l2_cache.ret_val < 0) {
           ldout(cct, 20) << "l2_offset=" << l2_offset << ", "
-                         << "index=" << idx << " (error)" << dendl;
+                         << "index=" << idx << " (error): "
+                         << cpp_strerror(l2_cache.ret_val) << dendl;
+          int r = l2_cache.ret_val;
           l2_cache = L2Cache{};
-          return l2_cache.ret_val;
+
+          return r;
         }
 
         ++l2_cache.count;
@@ -396,6 +400,7 @@ private:
     // find the least used entry
     int32_t min_idx = -1;
     uint32_t min_count = std::numeric_limits<uint32_t>::max();
+    utime_t min_timestamp;
     for (uint32_t idx = 0U; idx < l2_cache_entries.size(); ++idx) {
       auto& l2_cache = l2_cache_entries[idx];
       if (l2_cache.in_flight) {
@@ -405,9 +410,13 @@ private:
       if (l2_cache.count > 0) {
         --l2_cache.count;
       }
-      if (l2_cache.count < min_count) {
-        min_count = l2_cache.count;
-        min_idx = idx;
+
+      if (l2_cache.count <= min_count) {
+        if (min_timestamp.is_zero() || l2_cache.timestamp < min_timestamp) {
+          min_timestamp = l2_cache.timestamp;
+          min_count = l2_cache.count;
+          min_idx = idx;
+        }
       }
     }
 
@@ -422,6 +431,7 @@ private:
                    << "index=" << min_idx << " (loading)" << dendl;
     auto& l2_cache = l2_cache_entries[min_idx];
     l2_cache.l2_offset = l2_offset;
+    l2_cache.timestamp = ceph_clock_now();
     l2_cache.count = 1;
     l2_cache.in_flight = true;
 
@@ -586,7 +596,9 @@ private:
   }
 
   void handle_read_cluster(CephContext* cct, int r, uint64_t image_offset,
-                           uint64_t image_length, Context* on_finish) {
+                           uint64_t image_length, Context* on_finish) const {
+    // NOTE: treat as static function, expect object has been deleted
+
     ldout(cct, 20) << "r=" << r << ", "
                    << "image_offset=" << image_offset << ", "
                    << "image_length=" << image_length << dendl;
