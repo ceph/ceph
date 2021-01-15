@@ -262,16 +262,24 @@ class CephadmServe:
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         try:
-            devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
-                                             ['--', 'inventory', '--format=json', '--filter-for-batch'])
+            try:
+                devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                                                 ['--', 'inventory', '--format=json', '--filter-for-batch'])
+            except OrchestratorError as e:
+                if 'unrecognized arguments: --filter-for-batch' in str(e):
+                    devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                                                     ['--', 'inventory', '--format=json'])
+                else:
+                    raise
+
             networks = self._run_cephadm_json(host, 'mon', 'list-networks', [], no_fsid=True)
         except OrchestratorError as e:
             return str(e)
 
         self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
             host, len(devices), len(networks)))
-        devices = inventory.Devices.from_json(devices)
-        self.mgr.cache.update_host_devices_networks(host, devices.devices, networks)
+        ret = inventory.Devices.from_json(devices)
+        self.mgr.cache.update_host_devices_networks(host, ret.devices, networks)
         self.update_osdspec_previews(host)
         self.mgr.cache.save_host(host)
         return None
