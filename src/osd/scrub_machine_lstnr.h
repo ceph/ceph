@@ -114,6 +114,10 @@ struct ScrubMachineListener {
 
   virtual void unreserve_replicas() = 0;
 
+  [[nodiscard]] virtual bool get_reserve_failed() const = 0;
+  virtual void set_reserve_failed() = 0;
+  virtual void clear_reserve_failed() = 0;
+
   /**
    * the FSM interface into the "are we waiting for maps, either our own or from
    * replicas" state.
