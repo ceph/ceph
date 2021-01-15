@@ -3,7 +3,6 @@ import os
 import sys
 import contextlib
 
-from docutils import nodes
 from docutils.parsers.rst import directives
 from docutils.parsers.rst import Directive
 from jinja2 import Template
@@ -81,7 +80,8 @@ class CmdParam(object):
         'CephFilepath': '/path/to/file',
     }
 
-    def __init__(self, type, name, who=None, n=None, req=True, range=None, strings=None,
+    def __init__(self, type, name,
+                 who=None, n=None, req=True, range=None, strings=None,
                  goodchars=None):
         self.type = type
         self.name = name
@@ -134,18 +134,16 @@ class CmdParam(object):
 
 
 class CmdCommand(object):
-    def __init__(self, sig, desc, module=None, perm=None, flags=0, poll=None):
-        self.sig = [s for s in sig if isinstance(s, str)]
-        self.params = sorted([CmdParam(**s) for s in sig if not isinstance(s, str)],
+    def __init__(self, prefix, args, desc,
+                 module=None, perm=None, flags=0, poll=None):
+        self.prefix = prefix
+        self.params = sorted([CmdParam(**arg) for arg in args],
                              key=lambda p: p.req, reverse=True)
         self.help = desc
         self.module = module
         self.perm = perm
         self.flags = Flags(flags)
         self.needs_overload = False
-
-    def prefix(self):
-        return ' '.join(self.sig)
 
     def is_reasonably_simple(self):
         if len(self.params) > 3:
@@ -156,22 +154,28 @@ class CmdCommand(object):
 
     def mk_bash_example(self):
         simple = self.is_reasonably_simple()
-        line = ' '.join(['ceph', self.prefix()] + [p.mk_bash_example(simple) for p in self.params])
+        line = ' '.join(['ceph', self.prefix] + [p.mk_bash_example(simple) for p in self.params])
         return line
 
 
 class Sig:
     @staticmethod
-    def _param_to_sig(p):
+    def _parse_arg_desc(desc):
         try:
-            return {kv.split('=')[0]: kv.split('=')[1] for kv in p.split(',') if kv}
-        except IndexError:
-            return p
+            return dict(kv.split('=') for kv in desc.split(',') if kv)
+        except ValueError:
+            return desc
 
     @staticmethod
-    def from_cmd(cmd):
-        sig = cmd.split()
-        return [Sig._param_to_sig(s) or s for s in sig]
+    def parse_cmd(cmd):
+        parsed = [Sig._parse_arg_desc(s) or s for s in cmd.split()]
+        prefix = [s for s in parsed if isinstance(s, str)]
+        params = [s for s in parsed if not isinstance(s, str)]
+        return ' '.join(prefix), params
+
+    @staticmethod
+    def parse_args(args):
+        return [Sig._parse_arg_desc(arg) for arg in args.split()]
 
 
 TEMPLATE = '''
@@ -179,8 +183,8 @@ TEMPLATE = '''
 
 {% for command in commands %}
 
-{{ command.prefix() }}
-{{ command.prefix() | length * '^' }}
+{{ command.prefix }}
+{{ command.prefix | length * '^' }}
 
 {{ command.help | wordwrap(70)}}
 
@@ -210,6 +214,7 @@ Required Permissions:
 
 '''
 
+
 class CephMgrCommands(Directive):
     """
     extracts commands from specified mgr modules
@@ -218,6 +223,7 @@ class CephMgrCommands(Directive):
     required_arguments = 1
     optional_arguments = 0
     final_argument_whitespace = False
+    option_spec = {'python_path': directives.unchanged}
 
     def _normalize_path(self, dirname):
         my_dir = os.path.dirname(os.path.realpath(__file__))
@@ -241,8 +247,7 @@ class CephMgrCommands(Directive):
                         'dateutil',
                         'dateutil.parser']
         # make dashboard happy
-        mock_imports += ['ceph_argparse',
-                         'OpenSSL',
+        mock_imports += ['OpenSSL',
                          'jwt',
                          'bcrypt',
                          'scipy',
@@ -278,6 +283,7 @@ class CephMgrCommands(Directive):
             logger.info(bold(f"loading mgr module '{name}'..."))
             mgr_mod = __import__(name, globals(), locals(), [], 0)
             from tests import M
+
             def subclass(x):
                 try:
                     return issubclass(x, M)
@@ -292,8 +298,11 @@ class CephMgrCommands(Directive):
     def _normalize_command(self, command):
         if 'handler' in command:
             del command['handler']
-        command['sig'] = Sig.from_cmd(command['cmd'])
-        del command['cmd']
+        if 'cmd' in command:
+            command['prefix'], command['args'] = Sig.parse_cmd(command['cmd'])
+            del command['cmd']
+        else:
+            command['args'] = Sig.parse_args(command['args'])
         command['flags'] = (1 << 3)
         command['module'] = 'mgr'
         return command
@@ -302,22 +311,25 @@ class CephMgrCommands(Directive):
         rendered = Template(TEMPLATE).render(commands=list(commands))
         lines = rendered.split("\n")
         assert lines
-        source = self.state_machine.input_lines.source(self.lineno -
-                                                       self.state_machine.input_offset - 1)
+        lineno = self.lineno - self.state_machine.input_offset - 1
+        source = self.state_machine.input_lines.source(lineno)
         self.state_machine.insert_input(lines, source)
 
     def run(self):
         module_path = self._normalize_path(self.arguments[0])
         sys.path.insert(0, module_path)
+        for path in self.options.get('python_path', '').split(':'):
+            sys.path.insert(0, self._normalize_path(path))
         os.environ['UNITTEST'] = 'true'
         modules = [name for name in os.listdir(module_path)
                    if self._is_mgr_module(module_path, name)]
         commands = sum([self._collect_module_commands(name) for name in modules], [])
         cmds = [CmdCommand(**self._normalize_command(c)) for c in commands]
         cmds = [cmd for cmd in cmds if 'hidden' not in cmd.flags]
-        cmds = sorted(cmds, key=lambda cmd: cmd.sig)
+        cmds = sorted(cmds, key=lambda cmd: cmd.prefix)
         self._render_cmds(cmds)
         return []
+
 
 class MyProcessor(Preprocessor):
     def __init__(self):
@@ -383,7 +395,6 @@ class CephMonCommands(Directive):
     optional_arguments = 0
     final_argument_whitespace = True
 
-
     def _src_dir(self):
         my_dir = os.path.dirname(os.path.realpath(__file__))
         return os.path.abspath(os.path.join(my_dir, '../..'))
@@ -396,7 +407,7 @@ class CephMonCommands(Directive):
     def _normalize_command(self, command):
         if 'handler' in command:
             del command['handler']
-        command['sig'] = Sig.from_cmd(command['cmd'])
+        command['prefix'], command['args'] = Sig.parse_cmd(command['cmd'])
         del command['cmd']
         return command
 
@@ -404,8 +415,8 @@ class CephMonCommands(Directive):
         rendered = Template(TEMPLATE).render(commands=list(commands))
         lines = rendered.split("\n")
         assert lines
-        source = self.state_machine.input_lines.source(self.lineno -
-                                                       self.state_machine.input_offset - 1)
+        lineno = self.lineno - self.state_machine.input_offset - 1
+        source = self.state_machine.input_lines.source(lineno)
         self.state_machine.insert_input(lines, source)
 
     def run(self):
@@ -413,7 +424,7 @@ class CephMonCommands(Directive):
         commands = self._parse_headers(headers)
         cmds = [CmdCommand(**self._normalize_command(c)) for c in commands]
         cmds = [cmd for cmd in cmds if 'hidden' not in cmd.flags]
-        cmds = sorted(cmds, key=lambda cmd: cmd.sig)
+        cmds = sorted(cmds, key=lambda cmd: cmd.prefix)
         self._render_cmds(cmds)
         return []
 
