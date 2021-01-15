@@ -147,6 +147,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'fs subvolume evict '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=auth_id,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Evict clients based on auth IDs and subvolume mounted",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolumegroup getpath '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString ',
@@ -552,6 +561,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.authorized_list(vol_name=cmd['vol_name'],
                                        sub_name=cmd['sub_name'],
                                        group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_evict(self, inbuf, cmd):
+        """
+        :return: a 3-tuple of return code(int), empyt string(str), error message (str)
+        """
+        return self.vc.evict(vol_name=cmd['vol_name'],
+                             sub_name=cmd['sub_name'],
+                             auth_id=cmd['auth_id'],
+                             group_name=cmd.get('group_name', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_ls(self, inbuf, cmd):

@@ -17,10 +17,12 @@ from .subvolume_base import SubvolumeBase
 from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
 from ..access import allow_access, deny_access
-from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException
+from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException, EvictionError
 from ...fs_util import listsnaps, is_inherited_snap
 from ..template import SubvolumeOpType
 from ..group import Group
+from ..rankevicter import RankEvicter
+from ..volume import get_mds_map
 
 from ..clone_index import open_clone_index, create_clone_index
 
@@ -582,6 +584,53 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     auths.append({auth: auth_data['access_level']})
 
             return auths
+
+    def evict(self, volname, auth_id, timeout=30):
+        """
+        Evict all clients based on the authorization ID and the subvolume path mounted.
+        Assumes that the authorization key has been revoked prior to calling this function.
+
+        This operation can throw an exception if the mon cluster is unresponsive, or
+        any individual MDS daemon is unresponsive for longer than the timeout passed in.
+        """
+
+        client_spec = ["auth_name={0}".format(auth_id), ]
+        client_spec.append("client_metadata.root={0}".
+                           format(self.path.decode('utf-8')))
+
+        log.info("evict clients with {0}".format(', '.join(client_spec)))
+
+        mds_map = get_mds_map(self.mgr, volname)
+        if not mds_map:
+            raise VolumeException(-errno.ENOENT, "mdsmap for volume {0} not found".format(volname))
+
+        up = {}
+        for name, gid in mds_map['up'].items():
+            # Quirk of the MDSMap JSON dump: keys in the up dict are like "mds_0"
+            assert name.startswith("mds_")
+            up[int(name[4:])] = gid
+
+        # For all MDS ranks held by a daemon
+        # Do the parallelism in python instead of using "tell mds.*", because
+        # the latter doesn't give us per-mds output
+        threads = []
+        for rank, gid in up.items():
+            thread = RankEvicter(self.mgr, self.fs, client_spec, volname, rank, gid, mds_map, timeout)
+            thread.start()
+            threads.append(thread)
+
+        for t in threads:
+            t.join()
+
+        log.info("evict: joined all")
+
+        for t in threads:
+            if not t.success:
+                msg = ("Failed to evict client with {0} from mds {1}/{2}: {3}".
+                       format(', '.join(client_spec), t.rank, t.gid, t.exception)
+                      )
+                log.error(msg)
+                raise EvictionError(msg)
 
     def _get_clone_source(self):
         try:
