@@ -4,3 +4,6 @@
 * $pid expansion in config paths like `admin_socket` will now properly expand
   to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
   `ceph-fuse`/`rbd-nbd` expanded `$pid` with the actual daemon pid.
+
+* Scubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
+  It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.

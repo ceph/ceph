@@ -1138,6 +1138,7 @@ PG::Scrubber::Scrubber()
    auto_repair(false),
    check_repair(false),
    deep_scrub_on_error(false),
+   reserve_failed(false),
    num_digest_updates_pending(0),
    state(INACTIVE),
    deep(false)
@@ -4511,6 +4512,7 @@ bool PG::sched_scrub()
       scrub_reserve_replicas();
     } else {
       dout(20) << __func__ << ": failed to reserve locally" << dendl;
+      set_reserve_failed();
       return false;
     }
   }
@@ -4520,6 +4522,7 @@ bool PG::sched_scrub()
       dout(20) << __func__ << ": failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
+      set_reserve_failed();
       return false;
     } else if (scrubber.reserved_peers.size() == actingset.size()) {
       dout(20) << __func__ << ": success, reserved self and replicas" << dendl;
