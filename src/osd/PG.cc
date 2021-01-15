@@ -1365,6 +1365,7 @@ bool PG::sched_scrub()
   // be retried by the OSD later on.
   if (!m_scrubber->reserve_local()) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
+    set_reserve_failed();
     return false;
   }
 
