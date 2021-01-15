@@ -1,6 +1,6 @@
 import ceph_module  # noqa
 
-from typing import Set, Tuple, Iterator, Any, Dict, Optional, Callable, List, \
+from typing import Set, Tuple, Iterator, Any, Dict, Generic, Optional, Callable, List, \
     Union, TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import sys
@@ -8,7 +8,6 @@ if TYPE_CHECKING:
         from typing import Literal
     else:
         from typing_extensions import Literal
-
 
 import inspect
 import logging
@@ -19,8 +18,23 @@ import threading
 from collections import defaultdict, namedtuple
 import rados
 import re
+import sys
 import time
+from ceph_argparse import CephArgtype
 from mgr_util import profile_method
+
+if sys.version_info >= (3, 8):
+    from typing import get_args, get_origin
+else:
+    def get_args(tp):
+        if tp is Generic:
+            return tp
+        else:
+            return getattr(tp, '__args__', ())
+
+    def get_origin(tp):
+        return getattr(tp, '__origin__', None)
+
 
 ERROR_MSG_EMPTY_INPUT_FILE = 'Empty content: please add a password/secret to the file.'
 ERROR_MSG_NO_INPUT_FILE = 'Please specify the file containing the password/secret with "-i" option.'
@@ -286,57 +300,80 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 class CLICommand(object):
     COMMANDS = {}  # type: Dict[str, CLICommand]
 
-    def __init__(self, prefix, args="", desc="", perm="rw"):
+    def __init__(self, prefix, perm="rw"):
         self.prefix = prefix
-        self.args = args
-        self.args_dict = {}
-        self.desc = desc
         self.perm = perm
         self.func = None  # type: Optional[Callable]
-        self._parse_args()
+        self.arg_spec = {}    # type: Dict[str, Any]
+        self.first_default = -1
 
-    def _parse_args(self):
-        if not self.args:
-            return
-        args = self.args.split(" ")
-        for arg in args:
-            arg_desc = arg.strip().split(",")
-            arg_d = {}
-            for kv in arg_desc:
-                k, v = kv.split("=")
-                if k != "name":
-                    arg_d[k] = v
-                else:
-                    self.args_dict[v] = arg_d
+    KNOWN_ARGS = '_', 'self', 'mgr', 'inbuf', 'return'
+
+    @staticmethod
+    def load_func_metadata(f):
+        desc = inspect.getdoc(f) or ''
+        full_argspec = inspect.getfullargspec(f)
+        arg_spec = full_argspec.annotations
+        first_default = len(arg_spec)
+        if full_argspec.defaults:
+            first_default -= len(full_argspec.defaults)
+        args = []
+        for index, arg in enumerate(full_argspec.args):
+            if arg in CLICommand.KNOWN_ARGS:
+                continue
+            assert arg in arg_spec, \
+                f"'{arg}' is not annotated for {f}: {full_argspec}"
+            has_default = index >= first_default
+            args.append(CephArgtype.to_argdesc(arg_spec[arg],
+                                               dict(name=arg),
+                                               has_default))
+        return desc, arg_spec, first_default, ' '.join(args)
+
+    def store_func_metadata(self, f):
+        self.desc, self.arg_spec, self.first_default, self.args = \
+            self.load_func_metadata(f)
 
     def __call__(self, func):
+        self.store_func_metadata(func)
         self.func = func
-        if not self.desc:
-            self.desc = inspect.getdoc(func)
         self.COMMANDS[self.prefix] = self
         return self.func
 
-    def call(self, mgr, cmd_dict, inbuf):
+    def _get_arg_value(self, kwargs_switch, key, val):
+        def start_kwargs():
+            if isinstance(val, str) and '=' in val:
+                k, v = val.split('=', 1)
+                if k in self.arg_spec:
+                    return True
+            else:
+                return False
+        if not kwargs_switch:
+            kwargs_switch = start_kwargs()
+
+        if kwargs_switch:
+            k, v = val.split('=', 1)
+        else:
+            k, v = key, val
+        return kwargs_switch, k.replace('-', '_'), v
+
+    def _collect_args_by_argspec(self, cmd_dict):
         kwargs = {}
         kwargs_switch = False
-        for a, d in self.args_dict.items():
-            if 'req' in d and d['req'] == "false" and a not in cmd_dict:
+        for index, (name, tp) in enumerate(self.arg_spec.items()):
+            if name in CLICommand.KNOWN_ARGS:
                 continue
+            assert self.first_default >= 0
+            raw_v = cmd_dict.get(name)
+            if index >= self.first_default:
+                if raw_v is None:
+                    continue
+            kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
+                                                      name, raw_v)
+            kwargs[k] = CephArgtype.cast_to(tp, v)
+        return kwargs
 
-            if isinstance(cmd_dict[a], str) and '=' in cmd_dict[a]:
-                k, arg = cmd_dict[a].split('=', 1)
-                if k in self.args_dict:
-                    kwargs_switch = True
-
-            if kwargs_switch:
-                try:
-                    k, arg = cmd_dict[a].split('=', 1)
-                except ValueError as e:
-                    mgr.log.error('found positional arg after switching to kwarg parsing')
-                    return -errno.EINVAL, '', 'Error EINVAL: postitional arg not allowed after kwarg'
-                kwargs[k.replace("-", "_")] = arg
-            else:
-                kwargs[a.replace("-", "_")] = cmd_dict[a]
+    def call(self, mgr, cmd_dict, inbuf):
+        kwargs = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
             kwargs['inbuf'] = inbuf
         assert self.func
@@ -354,23 +391,24 @@ class CLICommand(object):
         return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
 
 
-def CLIReadCommand(prefix, args=""):
-    return CLICommand(prefix, args, "r")
+def CLIReadCommand(prefix):
+    return CLICommand(prefix, "r")
 
 
-def CLIWriteCommand(prefix, args=""):
-    return CLICommand(prefix, args, "w")
+def CLIWriteCommand(prefix):
+    return CLICommand(prefix, "w")
 
 
 def CLICheckNonemptyFileInput(func):
     @functools.wraps(func)
     def check(*args, **kwargs):
-        if not 'inbuf' in kwargs:
+        if 'inbuf' not in kwargs:
             return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
         if not kwargs['inbuf'] or (isinstance(kwargs['inbuf'], str)
                                    and not kwargs['inbuf'].strip('\n')):
             return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
         return func(*args, **kwargs)
+    check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
 
 
@@ -433,19 +471,22 @@ class Command(dict):
             self,
             prefix,
             handler,
-            args=None,
             perm="rw",
-            desc=None,
             poll=False,
     ):
-        super(Command, self).__init__(
-            cmd=prefix + (' ' + args if args else ''),
-            perm=perm,
-            poll=poll)
+        super().__init__(perm=perm,
+                         poll=poll)
         self.prefix = prefix
-        self.args = args
         self.handler = handler
-        self['desc'] = inspect.getdoc(self.handler)
+
+    @staticmethod
+    def returns_command_result(instance, f):
+        @functools.wraps(f)
+        def wrapper(mgr, *args, **kwargs):
+            retval, stdout, stderr = f(instance or mgr, *args, **kwargs)
+            return HandleCommandResult(retval, stdout, stderr)
+        wrapper.__signature__ = inspect.signature(f)  # type: ignore[attr-defined]
+        return wrapper
 
     def register(self, instance=False):
         """
@@ -455,15 +496,8 @@ class Command(dict):
         It also uses HandleCommandResult helper to return a wrapped a tuple of 3
         items.
         """
-        return CLICommand(
-            prefix=self.prefix,
-            args=self.args,
-            desc=self['desc'],
-            perm=self['perm']
-        )(
-            func=lambda mgr, *args, **kwargs: HandleCommandResult(*self.handler(
-                *((instance or mgr,) + args), **kwargs))
-        )
+        cmd = CLICommand(prefix=self.prefix, perm=self['perm'])
+        return cmd(self.returns_command_result(instance, self.handler))
 
 
 class CPlusPlusHandler(logging.Handler):
@@ -1230,13 +1264,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         self._ceph_set_health_checks(checks)
 
-    def _handle_command(self, inbuf, cmd):
+    def _handle_command(self, inbuf: str, cmd: Dict[str, Any]):
         if cmd['prefix'] not in CLICommand.COMMANDS:
             return self.handle_command(inbuf, cmd)
 
         return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
 
-    def handle_command(self, inbuf, cmd):
+    def handle_command(self, inbuf: str, cmd: Dict[str, Any]):
         """
         Called by ceph-mgr to request the plugin to handle one
         of the commands that it declared in self.COMMANDS

@@ -16,7 +16,7 @@ from tests import mock
 from orchestrator import raise_if_exception, Completion, ProgressReference
 from orchestrator import InventoryHost, DaemonDescription, ServiceDescription
 from orchestrator import OrchestratorValidationError
-from orchestrator.module import to_format, OrchestratorCli, preview_table_osd
+from orchestrator.module import to_format, Format, OrchestratorCli, preview_table_osd
 
 
 def _test_resource(data, resource_class, extra=None):
@@ -281,11 +281,11 @@ events:
         data = yaml.safe_load(y)
         object = cls.from_json(data)
 
-        assert to_format(object, 'yaml', False, cls) == y
-        assert to_format([object], 'yaml', True, cls) == y
+        assert to_format(object, Format.yaml, False, cls) == y
+        assert to_format([object], Format.yaml, True, cls) == y
 
-        j = json.loads(to_format(object, 'json', False, cls))
-        assert to_format(cls.from_json(j), 'yaml', False, cls) == y
+        j = json.loads(to_format(object, Format.json, False, cls))
+        assert to_format(cls.from_json(j), Format.yaml, False, cls) == y
 
 
 def test_event_multiline():

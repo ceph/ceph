@@ -8,7 +8,8 @@ from mgr_module import MgrModule, CommandResult, CLICommand, Option
 import operator
 import rados
 from threading import Event
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta
+from typing import Optional
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
@@ -21,7 +22,7 @@ HEALTH_MESSAGES = {
     DEVICE_HEALTH_TOOMANY: 'Too many daemons are expected to fail soon',
 }
 
-MAX_SAMPLES=500
+MAX_SAMPLES = 500
 
 
 class Module(MgrModule):
@@ -97,20 +98,17 @@ class Module(MgrModule):
         self.has_device_pool = False
 
     def is_valid_daemon_name(self, who):
-        l = who.split('.')
-        if len(l) != 2:
+        parts = who.split('.')
+        if len(parts) != 2:
             return False
-        if l[0] not in ('osd', 'mon'):
-            return False;
-        return True;
+        return parts[0] in ('osd', 'mon')
 
     def handle_command(self, _, cmd):
         self.log.error("handle_command")
 
     @CLICommand('device query-daemon-health-metrics',
-                args='name=who,type=CephString',
                 perm='r')
-    def do_query_daemon_health_metrics(self, who=''):
+    def do_query_daemon_health_metrics(self, who: str):
         '''
         Get device health metrics for a given daemon
         '''
@@ -125,9 +123,8 @@ class Module(MgrModule):
         return result.wait()
 
     @CLICommand('device scrape-daemon-health-metrics',
-                args='name=who,type=CephString',
                 perm='r')
-    def do_scrape_daemon_health_metrics(self, who=''):
+    def do_scrape_daemon_health_metrics(self, who: str):
         '''
         Scrape and store device health metrics for a given daemon
         '''
@@ -137,9 +134,8 @@ class Module(MgrModule):
         return self.scrape_daemon(daemon_type, daemon_id)
 
     @CLICommand('device scrape-daemon-health-metrics',
-                args='name=devid,type=CephString,req=False',
                 perm='r')
-    def do_scrape_health_metrics(self, devid=None):
+    def do_scrape_health_metrics(self, devid: Optional[str] = None):
         '''
         Scrape and store device health metrics
         '''
@@ -149,10 +145,8 @@ class Module(MgrModule):
             return self.scrape_device(devid)
 
     @CLICommand('device get-health-metrics',
-                args=('name=devid,type=CephString ' +
-                      'name=sample,type=CephString,req=False'),
                 perm='r')
-    def do_get_health_metrics(self, devid, sample=None):
+    def do_get_health_metrics(self, devid: str, sample: Optional[str] = None):
         '''
         Show stored device metrics for the device
         '''
@@ -185,9 +179,8 @@ class Module(MgrModule):
         self.set_health_checks({})  # avoid stuck health alerts
 
     @CLICommand('device predict-life-expectancy',
-                args='name=devid,type=CephString,req=true',
                 perm='r')
-    def do_predict_life_expectancy(self, devid):
+    def do_predict_life_expectancy(self, devid: str):
         '''
         Predict life expectancy with local predictor
         '''
@@ -217,8 +210,8 @@ class Module(MgrModule):
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def notify(self, notify_type, notify_id):
-       # create device_health_metrics pool if it doesn't exist
-       if notify_type == "osd_map" and self.enable_monitoring:
+        # create device_health_metrics pool if it doesn't exist
+        if notify_type == "osd_map" and self.enable_monitoring:
             if not self.has_device_pool:
                 self.create_device_pool()
                 self.has_device_pool = True
@@ -256,7 +249,7 @@ class Module(MgrModule):
         if ls:
             try:
                 last_scrape = datetime.strptime(ls, TIME_FORMAT)
-            except ValueError as e:
+            except ValueError:
                 pass
         self.log.debug('Last scrape %s', last_scrape)
 
@@ -406,7 +399,8 @@ class Module(MgrModule):
         erase = []
         try:
             with rados.ReadOpCtx() as op:
-                omap_iter, ret = ioctx.get_omap_keys(op, "", MAX_SAMPLES)  # fixme
+                # FIXME
+                omap_iter, ret = ioctx.get_omap_keys(op, "", MAX_SAMPLES)
                 assert ret == 0
                 ioctx.operate_read_op(op, devid)
                 for key, _ in list(omap_iter):
@@ -604,7 +598,8 @@ class Module(MgrModule):
         }), '')
         r, outb, outs = result.wait()
         if r != 0:
-            self.log.warning('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]' % (osd_ids, r, outb, outs))
+            self.log.warning('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]',
+                             osd_ids, r, outb, outs)
         for osd_id in osd_ids:
             result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
@@ -615,7 +610,9 @@ class Module(MgrModule):
             }), '')
             r, outb, outs = result.wait()
             if r != 0:
-                self.log.warning('Could not set osd.%s primary-affinity, r: [%s], outs: [%s]' % (osd_id, r, outb, outs))
+                self.log.warning('Could not set osd.%s primary-affinity, '
+                                 'r: [%s], outb: [%s], outs: [%s]',
+                                 osd_id, r, outb, outs)
 
     def extract_smart_features(self, raw):
         # FIXME: extract and normalize raw smartctl --json output and
