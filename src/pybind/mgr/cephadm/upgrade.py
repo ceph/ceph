@@ -433,8 +433,8 @@ class CephadmUpgrade:
                 assert d.daemon_id is not None
 
                 if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
-                    logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
-                                self.mgr.get_mgr_id())
+                    logger.info('Upgrade: Need to upgrade myself (%s)',
+                                self.mgr.this_daemon_name)
                     need_upgrade_self = True
                     continue
 

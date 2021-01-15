@@ -511,9 +511,9 @@ class MgrService(CephService):
     def fail_over(self) -> None:
         if not self.mgr_map_has_standby():
             raise OrchestratorError('Need standby mgr daemon', event_kind_subject=(
-                'daemon', 'mgr' + self.mgr.get_mgr_id()))
+                'daemon', self.mgr.this_daemon_name))
 
-        self.mgr.events.for_daemon('mgr' + self.mgr.get_mgr_id(),
+        self.mgr.events.for_daemon(self.mgr.this_daemon_name,
                                    'INFO', 'Failing over to other MGR')
         logger.info('Failing over to other MGR')
 
