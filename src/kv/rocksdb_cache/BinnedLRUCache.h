@@ -18,6 +18,7 @@
 #include "common/dout.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
+#include "common/admin_socket.h"
 
 namespace rocksdb_cache {
 
@@ -52,7 +53,8 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     size_t capacity,
     int num_shard_bits = -1,
     bool strict_capacity_limit = false,
-    double high_pri_pool_ratio = 0.0);
+    double high_pri_pool_ratio = 0.0,
+    const std::string& name = "");
 
 struct BinnedLRUHandle {
   void* value;
@@ -74,6 +76,7 @@ struct BinnedLRUHandle {
   uint32_t hash;     // Hash of key(); used for fast sharding and comparisons
 
   char* key_data = nullptr;  // Beginning of key
+  ceph::mono_clock::time_point touch; // timestamp of creation/access
 
   rocksdb::Slice key() const {
     // For cheaper lookups, we allow a temporary Handle object
@@ -170,8 +173,9 @@ class BinnedLRUHandleTable {
 
 // A single shard of sharded cache.
 class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
+  friend class BinnedLRUCache;
  public:
-  BinnedLRUCacheShard(size_t capacity, bool strict_capacity_limit,
+  BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
                 double high_pri_pool_ratio);
   virtual ~BinnedLRUCacheShard();
 
@@ -224,7 +228,23 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // Retrieves high pri pool usage
   size_t GetHighPriPoolUsage() const;
 
+  // Collect internal stats of shard
+  void add_stats(size_t& capacity,
+		 size_t& high_pri_pool_usage,
+		 size_t& usage,
+		 size_t& lru_usage,
+		 uint64_t& inserts_low,
+		 uint64_t& inserts_high,
+		 uint64_t& lookups,
+		 uint64_t& lookup_hits_low,
+		 uint64_t& lookup_hits_high,
+		 uint64_t& erases,
+		 uint64_t& erases_low,
+		 uint64_t& erases_high,
+		 uint64_t& evicts_low,
+		 uint64_t& evicts_high) const;
  private:
+  CephContext *cct;
   void LRU_Remove(BinnedLRUHandle* e);
   void LRU_Insert(BinnedLRUHandle* e);
 
@@ -289,12 +309,24 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // We don't count mutex_ as the cache's internal state so semantically we
   // don't mind mutex_ invoking the non-const actions.
   mutable std::mutex mutex_;
+
+  std::atomic<uint64_t> inserts_low = 0;
+  std::atomic<uint64_t> inserts_high = 0;
+  std::atomic<uint64_t> lookups = 0;
+  std::atomic<uint64_t> lookup_hits_low = 0;
+  std::atomic<uint64_t> lookup_hits_high = 0;
+  std::atomic<uint64_t> erases = 0;
+  std::atomic<uint64_t> erases_low = 0;
+  std::atomic<uint64_t> erases_high = 0;
+  std::atomic<uint64_t> evicts_low = 0;
+  std::atomic<uint64_t> evicts_high = 0;
 };
 
-class BinnedLRUCache : public ShardedCache {
+ class BinnedLRUCache : public ShardedCache, public AdminSocketHook {
  public:
   BinnedLRUCache(CephContext *c, size_t capacity, int num_shard_bits,
-      bool strict_capacity_limit, double high_pri_pool_ratio);
+		 bool strict_capacity_limit, double high_pri_pool_ratio,
+		 const std::string& name);
   virtual ~BinnedLRUCache();
   virtual const char* Name() const override { return "BinnedLRUCache"; }
   virtual CacheShard* GetShard(int shard) override;
@@ -323,6 +355,8 @@ class BinnedLRUCache : public ShardedCache {
   virtual std::string get_cache_name() const {
     return "RocksDB Binned LRU Cache";
   }
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f, std::ostream& ss, bufferlist& out) override;
 
  private:
   CephContext *cct;
