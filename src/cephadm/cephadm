@@ -1025,7 +1025,7 @@ class FileLock(object):
         # os.open() function.
         # This file lock is only NOT None, if the object currently holds the
         # lock.
-        self._lock_file_fd = None
+        self._lock_file_fd: Optional[int] = None
         self.timeout = timeout
         # The lock counter is used for implementing the nested locking
         # mechanism. Whenever the lock is acquired, the counter is increased and
