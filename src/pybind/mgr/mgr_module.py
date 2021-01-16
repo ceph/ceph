@@ -1,7 +1,7 @@
 import ceph_module  # noqa
 
-from typing import Set, Tuple, Iterator, Any, Dict, Generic, Optional, Callable, List, \
-    Union, TYPE_CHECKING, NamedTuple
+from typing import Tuple, Any, Dict, Generic, Optional, Callable, List, \
+    Union, TYPE_CHECKING
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -415,6 +415,7 @@ def CLICheckNonemptyFileInput(func):
 def _get_localized_key(prefix, key):
     return '{}/{}'.format(prefix, key)
 
+
 """
 MODULE_OPTIONS types and Option Class
 """
@@ -436,16 +437,16 @@ class Option(Dict):
     def __init__(
             self,
             name: str,
-            default: OptionValue=None,
-            type: 'OptionTypeLabel'='str',
-            desc: Optional[str]=None,
-            long_desc: Optional[str]=None,
-            min: OptionValue=None,
-            max: OptionValue=None,
-            enum_allowed: Optional[List[str]]=None,
-            tags: Optional[List[str]]=None,
-            see_also: Optional[List[str]]=None,
-            runtime: bool=False,
+            default: OptionValue = None,
+            type: 'OptionTypeLabel' = 'str',
+            desc: Optional[str] = None,
+            long_desc: Optional[str] = None,
+            min: OptionValue = None,
+            max: OptionValue = None,
+            enum_allowed: Optional[List[str]] = None,
+            tags: Optional[List[str]] = None,
+            see_also: Optional[List[str]] = None,
+            runtime: bool = False,
     ):
         super(Option, self).__init__(
             (k, v) for k, v in vars().items()
@@ -574,7 +575,10 @@ class MgrModuleLoggingMixin(object):
     def _unconfigure_logging(self):
         # remove existing handlers:
         rm_handlers = [
-            h for h in self._root_logger.handlers if isinstance(h, CPlusPlusHandler) or isinstance(h, FileHandler) or isinstance(h, ClusterLogHandler)]
+            h for h in self._root_logger.handlers
+            if (isinstance(h, CPlusPlusHandler) or
+                isinstance(h, FileHandler) or
+                isinstance(h, ClusterLogHandler))]
         for h in rm_handlers:
             self._root_logger.removeHandler(h)
         self.log_to_file = False
@@ -596,7 +600,8 @@ class MgrModuleLoggingMixin(object):
 
         if not self._module_level and not module_level:
             level = self._ceph_log_level_to_python(mgr_level)
-            self.getLogger().debug("setting log level based on debug_mgr: %s (%s)", level, mgr_level)
+            self.getLogger().debug("setting log level based on debug_mgr: %s (%s)",
+                                   level, mgr_level)
         elif self._module_level and not module_level:
             level = self._ceph_log_level_to_python(mgr_level)
             self.getLogger().warning("unsetting module log level, falling back to "
@@ -730,7 +735,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_mgr_id(self):
         return self._ceph_get_mgr_id()
 
-    def get_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
+    def get_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
 
@@ -757,7 +762,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
     def get_active_uri(self):
         return self._ceph_get_active_uri()
 
-    def get_localized_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
+    def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
             return self.MODULE_OPTION_DEFAULTS.get(key, default)
@@ -1175,7 +1180,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
 
-    def check_mon_command(self, cmd_dict: dict, inbuf: Optional[str]=None) -> HandleCommandResult:
+    def check_mon_command(self, cmd_dict: dict, inbuf: Optional[str] = None) -> HandleCommandResult:
         """
         Wrapper around :func:`~mgr_module.MgrModule.mon_command`, but raises,
         if ``retval != 0``.
@@ -1186,7 +1191,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             raise MonCommandFailed(f'{cmd_dict["prefix"]} failed: {r.stderr} retval: {r.retval}')
         return r
 
-    def mon_command(self, cmd_dict: dict, inbuf: Optional[str]=None):
+    def mon_command(self, cmd_dict: dict, inbuf: Optional[str] = None):
         """
         Helper for modules that do simple, synchronous mon command
         execution.
@@ -1215,7 +1220,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             svc_id: str,
             command: str,
             tag: str,
-            inbuf: Optional[str]=None):
+            inbuf: Optional[str] = None):
         """
         Called by the plugin to send a command to the mon
         cluster.
@@ -1321,14 +1326,16 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         else:
             return r
 
-    def get_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
+    def get_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
         """
         self._validate_module_option(key)
         return self._get_module_option(key, default)
 
-    def get_module_option_ex(self, module: str, key: str, default: OptionValue=None) -> OptionValue:
+    def get_module_option_ex(self, module: str,
+                             key: str,
+                             default: OptionValue = None) -> OptionValue:
         """
         Retrieve the value of a persistent configuration setting
         for the specified module.
@@ -1357,7 +1364,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def _set_localized(self, key, val, setter):
         return setter(_get_localized_key(self.get_mgr_id(), key), val)
 
-    def get_localized_module_option(self, key: str, default: OptionValue=None) -> OptionValue:
+    def get_localized_module_option(self, key: str, default: OptionValue = None) -> OptionValue:
         """
         Retrieve localized configuration for this ceph-mgr instance
         """
