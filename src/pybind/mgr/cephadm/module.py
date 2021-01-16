@@ -367,6 +367,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         path = self.get_ceph_option('cephadm_path')
         try:
+            assert isinstance(path, str)
             with open(path, 'r') as f:
                 self._cephadm = f.read()
         except (IOError, TypeError) as e:
