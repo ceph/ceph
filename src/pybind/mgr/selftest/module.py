@@ -152,10 +152,10 @@ class Module(MgrModule):
             return self._insights_set_now_offset(inbuf, command)
         elif command['prefix'] == 'mgr self-test cluster-log':
             priority_map = {
-                'info': self.CLUSTER_LOG_PRIO_INFO,
-                'security': self.CLUSTER_LOG_PRIO_SEC,
-                'warning': self.CLUSTER_LOG_PRIO_WARN,
-                'error': self.CLUSTER_LOG_PRIO_ERROR
+                'info': self.ClusterLogPrio.INFO,
+                'security': self.ClusterLogPrio.SEC,
+                'warning': self.ClusterLogPrio.WARN,
+                'error': self.ClusterLogPrio.ERROR
             }
             self.cluster_log(command['channel'],
                              priority_map[command['priority']],
