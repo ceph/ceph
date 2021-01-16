@@ -35,6 +35,7 @@ extern "C" {
 }
 
 #include "common/Formatter.h"
+#include "common/StackStringStream.h"
 #include "OSDMap.h"
 #include "osd_types.h"
 #include "os/Transaction.h"
@@ -43,11 +44,9 @@ using std::list;
 using std::make_pair;
 using std::map;
 using std::ostream;
-using std::ostringstream;
 using std::pair;
 using std::set;
 using std::string;
-using std::stringstream;
 using std::unique_ptr;
 using std::vector;
 
@@ -1061,10 +1060,10 @@ void coll_t::decode(ceph::buffer::list::const_iterator& bl)
 
   default:
     {
-      ostringstream oss;
-      oss << "coll_t::decode(): don't know how to decode version "
-	  << struct_v;
-      throw std::domain_error(oss.str());
+      CachedStackStringStream css;
+      *css << "coll_t::decode(): don't know how to decode version "
+	   << struct_v;
+      throw std::domain_error(css->str());
     }
   }
 }
@@ -1091,90 +1090,90 @@ void coll_t::generate_test_instances(list<coll_t*>& o)
 
 std::string pg_vector_string(const vector<int32_t> &a)
 {
-  ostringstream oss;
-  oss << "[";
+  CachedStackStringStream css;
+  *css << "[";
   for (auto i = a.cbegin(); i != a.cend(); ++i) {
     if (i != a.begin())
-      oss << ",";
+      *css << ",";
     if (*i != CRUSH_ITEM_NONE)
-      oss << *i;
+      *css << *i;
     else
-      oss << "NONE";
+      *css << "NONE";
   }
-  oss << "]";
-  return oss.str();
+  *css << "]";
+  return css->str();
 }
 
 std::string pg_state_string(uint64_t state)
 {
-  ostringstream oss;
+  CachedStackStringStream css;
   if (state & PG_STATE_STALE)
-    oss << "stale+";
+    *css << "stale+";
   if (state & PG_STATE_CREATING)
-    oss << "creating+";
+    *css << "creating+";
   if (state & PG_STATE_ACTIVE)
-    oss << "active+";
+    *css << "active+";
   if (state & PG_STATE_ACTIVATING)
-    oss << "activating+";
+    *css << "activating+";
   if (state & PG_STATE_CLEAN)
-    oss << "clean+";
+    *css << "clean+";
   if (state & PG_STATE_RECOVERY_WAIT)
-    oss << "recovery_wait+";
+    *css << "recovery_wait+";
   if (state & PG_STATE_RECOVERY_TOOFULL)
-    oss << "recovery_toofull+";
+    *css << "recovery_toofull+";
   if (state & PG_STATE_RECOVERING)
-    oss << "recovering+";
+    *css << "recovering+";
   if (state & PG_STATE_FORCED_RECOVERY)
-    oss << "forced_recovery+";
+    *css << "forced_recovery+";
   if (state & PG_STATE_DOWN)
-    oss << "down+";
+    *css << "down+";
   if (state & PG_STATE_RECOVERY_UNFOUND)
-    oss << "recovery_unfound+";
+    *css << "recovery_unfound+";
   if (state & PG_STATE_BACKFILL_UNFOUND)
-    oss << "backfill_unfound+";
+    *css << "backfill_unfound+";
   if (state & PG_STATE_UNDERSIZED)
-    oss << "undersized+";
+    *css << "undersized+";
   if (state & PG_STATE_DEGRADED)
-    oss << "degraded+";
+    *css << "degraded+";
   if (state & PG_STATE_REMAPPED)
-    oss << "remapped+";
+    *css << "remapped+";
   if (state & PG_STATE_PREMERGE)
-    oss << "premerge+";
+    *css << "premerge+";
   if (state & PG_STATE_SCRUBBING)
-    oss << "scrubbing+";
+    *css << "scrubbing+";
   if (state & PG_STATE_DEEP_SCRUB)
-    oss << "deep+";
+    *css << "deep+";
   if (state & PG_STATE_INCONSISTENT)
-    oss << "inconsistent+";
+    *css << "inconsistent+";
   if (state & PG_STATE_PEERING)
-    oss << "peering+";
+    *css << "peering+";
   if (state & PG_STATE_REPAIR)
-    oss << "repair+";
+    *css << "repair+";
   if (state & PG_STATE_BACKFILL_WAIT)
-    oss << "backfill_wait+";
+    *css << "backfill_wait+";
   if (state & PG_STATE_BACKFILLING)
-    oss << "backfilling+";
+    *css << "backfilling+";
   if (state & PG_STATE_FORCED_BACKFILL)
-    oss << "forced_backfill+";
+    *css << "forced_backfill+";
   if (state & PG_STATE_BACKFILL_TOOFULL)
-    oss << "backfill_toofull+";
+    *css << "backfill_toofull+";
   if (state & PG_STATE_INCOMPLETE)
-    oss << "incomplete+";
+    *css << "incomplete+";
   if (state & PG_STATE_PEERED)
-    oss << "peered+";
+    *css << "peered+";
   if (state & PG_STATE_SNAPTRIM)
-    oss << "snaptrim+";
+    *css << "snaptrim+";
   if (state & PG_STATE_SNAPTRIM_WAIT)
-    oss << "snaptrim_wait+";
+    *css << "snaptrim_wait+";
   if (state & PG_STATE_SNAPTRIM_ERROR)
-    oss << "snaptrim_error+";
+    *css << "snaptrim_error+";
   if (state & PG_STATE_FAILED_REPAIR)
-    oss << "failed_repair+";
+    *css << "failed_repair+";
   if (state & PG_STATE_LAGGY)
-    oss << "laggy+";
+    *css << "laggy+";
   if (state & PG_STATE_WAIT)
-    oss << "wait+";
-  string ret(oss.str());
+    *css << "wait+";
+  auto ret = css->str();
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
   else
@@ -6339,9 +6338,9 @@ void object_info_t::dump(Formatter *f) const
   f->dump_object("manifest", manifest);
   f->open_object_section("watchers");
   for (auto p = watchers.cbegin(); p != watchers.cend(); ++p) {
-    stringstream ss;
-    ss << p->first.second;
-    f->open_object_section(ss.str().c_str());
+    CachedStackStringStream css;
+    *css << p->first.second;
+    f->open_object_section(css->strv());
     p->second.dump(f);
     f->close_section();
   }
