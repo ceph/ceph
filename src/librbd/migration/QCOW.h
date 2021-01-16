@@ -33,7 +33,6 @@
 #include "include/ceph_assert.h"
 #include "include/int_types.h"
 #include "librbd/migration/QCOW.h"
-#include <endian.h>
 
 #define QCOW_MAGIC (('Q' << 24) | ('F' << 16) | ('I' << 8) | 0xfb)
 
