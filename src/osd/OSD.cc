@@ -5792,6 +5792,11 @@ void OSD::heartbeat()
        i != heartbeat_peers.end();
        ++i) {
     int peer = i->first;
+    Session *s = static_cast<Session*>(i->second.con_back->get_priv().get());
+    if (!s) {
+      dout(30) << "heartbeat osd." << peer << " has no open con" << dendl;
+      continue;
+    }
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
 
     i->second.last_tx = now;
@@ -5802,7 +5807,6 @@ void OSD::heartbeat()
     if (i->second.hb_interval_start == utime_t())
       i->second.hb_interval_start = now;
 
-    Session *s = static_cast<Session*>(i->second.con_back->get_priv().get());
     std::optional<ceph::signedspan> delta_ub;
     s->stamps->sent_ping(&delta_ub);
 
