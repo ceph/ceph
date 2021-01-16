@@ -300,9 +300,10 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 class CLICommand(object):
     COMMANDS = {}  # type: Dict[str, CLICommand]
 
-    def __init__(self, prefix, perm="rw"):
+    def __init__(self, prefix, perm="rw", poll=False):
         self.prefix = prefix
         self.perm = perm
+        self.poll = poll
         self.func = None  # type: Optional[Callable]
         self.arg_spec = {}    # type: Dict[str, Any]
         self.first_default = -1
@@ -383,7 +384,8 @@ class CLICommand(object):
         return {
             'cmd': '{} {}'.format(self.prefix, self.args),
             'desc': self.desc,
-            'perm': self.perm
+            'perm': self.perm,
+            'poll': self.poll,
         }
 
     @classmethod
@@ -391,12 +393,12 @@ class CLICommand(object):
         return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
 
 
-def CLIReadCommand(prefix):
-    return CLICommand(prefix, "r")
+def CLIReadCommand(prefix, poll=False):
+    return CLICommand(prefix, "r", poll)
 
 
-def CLIWriteCommand(prefix):
-    return CLICommand(prefix, "w")
+def CLIWriteCommand(prefix, poll=False):
+    return CLICommand(prefix, "w", poll)
 
 
 def CLICheckNonemptyFileInput(func):
