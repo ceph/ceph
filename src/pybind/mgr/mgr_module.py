@@ -16,6 +16,7 @@ import functools
 import json
 import threading
 from collections import defaultdict, namedtuple
+from enum import IntEnum
 import rados
 import re
 import sys
@@ -523,11 +524,11 @@ class ClusterLogHandler(logging.Handler):
 
     def emit(self, record):
         levelmap = {
-            'DEBUG': MgrModule.CLUSTER_LOG_PRIO_DEBUG,
-            'INFO': MgrModule.CLUSTER_LOG_PRIO_INFO,
-            'WARNING': MgrModule.CLUSTER_LOG_PRIO_WARN,
-            'ERROR': MgrModule.CLUSTER_LOG_PRIO_ERROR,
-            'CRITICAL': MgrModule.CLUSTER_LOG_PRIO_ERROR,
+            'DEBUG': MgrModule.ClusterLogPrio.DEBUG,
+            'INFO': MgrModule.ClusterLogPrio.INFO,
+            'WARNING': MgrModule.ClusterLogPrio.WARN,
+            'ERROR': MgrModule.ClusterLogPrio.ERROR,
+            'CRITICAL': MgrModule.ClusterLogPrio.ERROR,
         }
         level = levelmap[record.levelname]
         if record.levelno >= self.level:
@@ -799,11 +800,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     NONE = 1
 
     # Cluster log priorities
-    CLUSTER_LOG_PRIO_DEBUG = 0
-    CLUSTER_LOG_PRIO_INFO = 1
-    CLUSTER_LOG_PRIO_SEC = 2
-    CLUSTER_LOG_PRIO_WARN = 3
-    CLUSTER_LOG_PRIO_ERROR = 4
+    class ClusterLogPrio(IntEnum):
+        DEBUG = 0
+        INFO = 1
+        SEC = 2
+        WARN = 3
+        ERROR = 4
 
     def __init__(self, module_name, py_modules_ptr, this_ptr):
         self.module_name = module_name
@@ -871,16 +873,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def cluster_log(self, channel, priority, message):
         """
         :param channel: The log channel. This can be 'cluster', 'audit', ...
-        :type channel: str
-        :param priority: The log message priority. This can be
-                         CLUSTER_LOG_PRIO_DEBUG, CLUSTER_LOG_PRIO_INFO,
-                         CLUSTER_LOG_PRIO_SEC, CLUSTER_LOG_PRIO_WARN or
-                         CLUSTER_LOG_PRIO_ERROR.
-        :type priority: int
+        :param priority: The log message priority.
         :param message: The message to log.
-        :type message: str
         """
-        self._ceph_cluster_log(channel, priority, message)
+        self._ceph_cluster_log(channel, priority.value, message)
 
     @property
     def version(self):
