@@ -19,7 +19,6 @@
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <deque>
-#include <endian.h>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
