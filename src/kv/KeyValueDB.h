@@ -338,9 +338,19 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual int64_t get_cache_usage(std::string prefix) const {
+    return -EOPNOTSUPP;
+  }
+
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
     return nullptr;
   }
+
+  virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache(std::string prefix) const {
+    return nullptr;
+  }
+
+
 
   virtual ~KeyValueDB() {}
 
