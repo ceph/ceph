@@ -1791,21 +1791,22 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     }
     
     if (dn->get_linkage()->is_remote()) {
-      // remote link
-      exportbl.append("L", 1);  // remote link
-      
       inodeno_t ino = dn->get_linkage()->get_remote_ino();
       unsigned char d_type = dn->get_linkage()->get_remote_d_type();
-      encode(ino, exportbl);
-      encode(d_type, exportbl);
+      auto& alternate_name = dn->alternate_name;
+      // remote link
+      CDentry::encode_remote(ino, d_type, alternate_name, exportbl);
       continue;
     }
 
     // primary link
     // -- inode
-    exportbl.append("I", 1);    // inode dentry
-    
+    exportbl.append("i", 1);    // inode dentry
+
+    ENCODE_START(2, 1, exportbl);
     encode_export_inode(in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
+    encode(dn->alternate_name, exportbl);
+    ENCODE_FINISH(exportbl);
 
     // directory?
     auto&& dfs = in->get_dirfrags();
@@ -3443,23 +3444,36 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       
       // fall thru
     }
-    else if (icode == 'L') {
+    else if (icode == 'L' || icode == 'l') {
       // remote link
       inodeno_t ino;
       unsigned char d_type;
-      decode(ino, blp);
-      decode(d_type, blp);
+      mempool::mds_co::string alternate_name;
+
+      CDentry::decode_remote(icode, ino, d_type, alternate_name, blp);
+
       if (dn->get_linkage()->is_remote()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
+        ceph_assert(dn->get_alternate_name() == alternate_name);
       } else {
 	dir->link_remote_inode(dn, ino, d_type);
+        dn->set_alternate_name(std::move(alternate_name));
       }
     }
-    else if (icode == 'I') {
+    else if (icode == 'I' || icode == 'i') {
       // inode
       ceph_assert(le);
-      decode_import_inode(dn, blp, oldauth, ls,
-			  peer_exports, updated_scatterlocks);
+      if (icode == 'i') {
+        DECODE_START(2, blp);
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+        ceph_assert(!dn->is_projected());
+        decode(dn->alternate_name, blp);
+        DECODE_FINISH(blp);
+      } else {
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+      }
     }
     
     // add dentry to journal entry

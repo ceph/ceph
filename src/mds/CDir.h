@@ -64,6 +64,7 @@ public:
 
     inodeno_t ino;
     unsigned char d_type;
+    mempool::mds_co::string alternate_name;
 
     bool snaprealm = false;
     sr_t srnode;
@@ -369,9 +370,10 @@ public:
 
   CDentry* add_null_dentry(std::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_primary_dentry(std::string_view dname, CInode *in,
+  CDentry* add_primary_dentry(std::string_view dname, CInode *in, mempool::mds_co::string alternate_name,
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   CDentry* add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
+                             mempool::mds_co::string alternate_name,
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
@@ -675,6 +677,8 @@ protected:
 			vector<dentry_commit_item> &to_set, bufferlist &dfts,
 			vector<string> &to_remove,
 			mempool::mds_co::compact_set<mempool::mds_co::string> &_stale);
+  void _encode_primary_inode_base(dentry_commit_item &item, bufferlist &dfts,
+                                  bufferlist &bl);
   void _omap_commit(int op_prio);
   void _parse_dentry(CDentry *dn, dentry_commit_item &item,
                      const set<snapid_t> *snaps, bufferlist &bl);

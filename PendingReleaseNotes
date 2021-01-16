@@ -3,6 +3,10 @@
 * New bluestore_rocksdb_options_annex config parameter. Complements
   bluestore_rocksdb_options and allows setting rocksdb options without repeating
   the existing defaults.
+* The cephfs addes two new CDentry tags, 'I' --> 'i' and 'L' --> 'l', and
+  on-RADOS metadata is no longer backwards compatible after upgraded to Pacific
+  or a later release.
+
 * $pid expansion in config paths like `admin_socket` will now properly expand
   to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
   `ceph-fuse`/`rbd-nbd` expanded `$pid` with the actual daemon pid.

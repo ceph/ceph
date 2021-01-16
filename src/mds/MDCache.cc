@@ -505,7 +505,7 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
     CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
     CachedStackStringStream css;
     *css << "stray" << i;
-    CDentry *sdn = mydir->add_primary_dentry(css->str(), stray);
+    CDentry *sdn = mydir->add_primary_dentry(css->str(), stray, "");
     sdn->_mark_dirty(mds->mdlog->get_current_segment());
 
     stray->_get_inode()->dirstat = straydir->get_fnode()->fragstat;
@@ -1664,8 +1664,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	dn->first = dir_follows+1;
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
 	  CDir *dir = dn->dir;
-	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), in->ino(), in->d_type(),
-						  oldfirst, dir_follows);
+	  CDentry *olddn = dir->add_remote_dentry(dn->get_name(), in->ino(), in->d_type(), dn->alternate_name, oldfirst, dir_follows);
 	  dout(10) << " olddn " << *olddn << dendl;
 	  ceph_assert(dir->is_projected());
 	  olddn->set_projected_version(dir->get_projected_version());
@@ -1739,7 +1738,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       mut->add_cow_inode(oldin);
       if (pcow_inode)
 	*pcow_inode = oldin;
-      CDentry *olddn = dir->add_primary_dentry(dn->get_name(), oldin, oldfirst, follows);
+      CDentry *olddn = dir->add_primary_dentry(dn->get_name(), oldin, dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
       bool need_snapflush = !oldin->client_snap_caps.empty();
       if (need_snapflush) {
@@ -1751,8 +1750,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       mut->add_cow_dentry(olddn);
     } else {
       ceph_assert(dnl->is_remote());
-      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(),
-						  oldfirst, follows);
+      CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
 
       olddn->set_projected_version(dir->get_projected_version());
@@ -4332,7 +4330,8 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
       }
 
       dout(15) << " add_strong_dentry " << *dn << dendl;
-      rejoin->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->first, dn->last,
+      rejoin->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
+                                dn->first, dn->last,
 				dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 				dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 				dnl->is_remote() ? dnl->get_remote_d_type():0, 
@@ -4554,7 +4553,8 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
       unsigned dnonce = dn->add_replica(from);
       dout(10) << " have " << *dn << dendl;
       if (ack) 
-	ack->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->first, dn->last,
+	ack->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
+                               dn->first, dn->last,
 			       dnl->get_inode()->ino(), inodeno_t(0), 0, 
 			       dnonce, dn->lock.get_replica_state());
 
@@ -4805,13 +4805,13 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
         }
         if (!dn) {
 	  if (d.is_remote()) {
-	    dn = dir->add_remote_dentry(ss.name, d.remote_ino, d.remote_d_type, d.first, ss.snapid);
+	    dn = dir->add_remote_dentry(ss.name, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
 	  } else if (d.is_null()) {
 	    dn = dir->add_null_dentry(ss.name, d.first, ss.snapid);
 	  } else {
 	    CInode *in = get_inode(d.ino, ss.snapid);
 	    if (!in) in = rejoin_invent_inode(d.ino, ss.snapid);
-	    dn = dir->add_primary_dentry(ss.name, in, d.first, ss.snapid);
+	    dn = dir->add_primary_dentry(ss.name, in, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
 	  }
 	  dout(10) << " invented " << *dn << dendl;
         }
@@ -6163,7 +6163,8 @@ void MDCache::rejoin_send_acks()
 	  auto it = acks.find(r.first);
 	  if (it == acks.end())
 	    continue;
-	  it->second->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->first, dn->last,
+	  it->second->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
+                                           dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_d_type():0,
@@ -10658,7 +10659,7 @@ void MDCache::encode_replica_dir(CDir *dir, mds_rank_t to, bufferlist& bl)
 
 void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(dn->get_name(), bl);
   encode(dn->last, bl);
 
@@ -10670,6 +10671,7 @@ void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
   dn->lock.encode_state_for_replica(bl);
   bool need_recover = mds->get_state() < MDSMap::STATE_ACTIVE;
   encode(need_recover, bl);
+  encode(dn->alternate_name, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -10774,11 +10776,19 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
   bool need_recover;
   decode(need_recover, p);
 
+  mempool::mds_co::string alternate_name;
+  if (struct_v >= 2) {
+    decode(alternate_name, p);
+  }
+
   if (is_new) {
+    dn->set_alternate_name(std::move(alternate_name));
     if (rino)
       dir->link_remote_inode(dn, rino, rdtype);
     if (need_recover)
       dn->lock.mark_need_recover();
+  } else {
+    ceph_assert(dn->alternate_name == alternate_name);
   }
 
   dir->take_dentry_waiting(name, dn->first, dn->last, finished);
