@@ -8,25 +8,66 @@
            class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
       <div class="card-body">
-        <!-- Username -->
+        <!-- User ID -->
         <div class="form-group row">
           <label class="cd-col-form-label"
                  [ngClass]="{'required': !editing}"
-                 for="uid"
-                 i18n>Username</label>
+                 for="user_id"
+                 i18n>User ID</label>
           <div class="cd-col-form-input">
-            <input id="uid"
+            <input id="user_id"
                    class="form-control"
                    type="text"
-                   formControlName="uid"
+                   formControlName="user_id"
+                   [readonly]="editing">
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('user_id', frm, 'required')"
+                    i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('user_id', frm, 'pattern')"
+                  i18n>The value is not valid.</span>
+            <span class="invalid-feedback"
+                  *ngIf="!userForm.getValue('show_tenant') && userForm.showError('user_id', frm, 'notUnique')"
+                  i18n>The chosen user ID is already in use.</span>
+          </div>
+        </div>
+
+          <!-- Show Tenant -->
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="show_tenant"
+                       type="checkbox"
+                       (click)="updateFieldsWhenTenanted()"
+                       formControlName="show_tenant"
+                       [readonly]="true">
+                <label class="custom-control-label"
+                       for="show_tenant"
+                       i18n>Show Tenant</label>
+              </div>
+            </div>
+          </div>
+
+        <!-- Tenant -->
+        <div class="form-group row"
+             *ngIf="userForm.getValue('show_tenant')">
+          <label class="cd-col-form-label"
+                 for="tenant"
+                 i18n>Tenant</label>
+          <div class="cd-col-form-input">
+            <input id="tenant"
+                   class="form-control"
+                   type="text"
+                   formControlName="tenant"
                    [readonly]="editing"
                    autofocus>
             <span class="invalid-feedback"
-                  *ngIf="userForm.showError('uid', frm, 'required')"
-                  i18n>This field is required.</span>
+                  *ngIf="userForm.showError('tenant', frm, 'pattern')"
+                  i18n>The value is not valid.</span>
             <span class="invalid-feedback"
-                  *ngIf="userForm.showError('uid', frm, 'notUnique')"
-                  i18n>The chosen user ID is already in use.</span>
+                  *ngIf="userForm.showError('tenant', frm, 'notUnique')"
+                  i18n>The chosen user ID exists in this tenant.</span>
           </div>
         </div>
 

@@ -62,13 +62,13 @@ describe('RgwUserDetailsComponent', () => {
     const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
       '.table.table-striped.table-bordered tr td'
     );
-    expect(detailsTab[6].textContent).toEqual('System');
-    expect(detailsTab[7].textContent).toEqual('Yes');
+    expect(detailsTab[10].textContent).toEqual('System');
+    expect(detailsTab[11].textContent).toEqual('Yes');
 
     component.selection.system = 'false';
     component.ngOnChanges();
     fixture.detectChanges();
 
-    expect(detailsTab[7].textContent).toEqual('No');
+    expect(detailsTab[11].textContent).toEqual('No');
   });
 });

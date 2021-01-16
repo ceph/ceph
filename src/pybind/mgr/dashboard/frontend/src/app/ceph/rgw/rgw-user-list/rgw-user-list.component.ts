@@ -55,6 +55,11 @@ export class RgwUserListComponent extends ListWithDetails {
         flexGrow: 1
       },
       {
+        name: $localize`Tenant`,
+        prop: 'tenant',
+        flexGrow: 1
+      },
+      {
         name: $localize`Full name`,
         prop: 'display_name',
         flexGrow: 1

@@ -46,6 +46,9 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   subuserLabel: string;
   s3keyLabel: string;
   capabilityLabel: string;
+  usernameExists: boolean;
+  showTenant = false;
+  previousTenant: string = null;
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -69,10 +72,31 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   createForm() {
     this.userForm = this.formBuilder.group({
       // General
-      uid: [
+      user_id: [
         null,
-        [Validators.required],
-        this.editing ? [] : [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
+        [Validators.required, Validators.pattern(/^[a-zA-Z0-9!@#%^&*()_-]+$/)],
+        this.editing
+          ? []
+          : [
+              CdValidators.unique(this.rgwUserService.exists, this.rgwUserService, () =>
+                this.userForm.getValue('tenant')
+              )
+            ]
+      ],
+      show_tenant: [this.editing],
+      tenant: [
+        null,
+        [Validators.pattern(/^[a-zA-Z0-9!@#%^&*()_-]+$/)],
+        this.editing
+          ? []
+          : [
+              CdValidators.unique(
+                this.rgwUserService.exists,
+                this.rgwUserService,
+                () => this.userForm.getValue('user_id'),
+                true
+              )
+            ]
       ],
       display_name: [null, [Validators.required]],
       email: [
@@ -241,7 +265,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       this.goToListView();
       return;
     }
-    const uid = this.userForm.getValue('uid');
+    const uid = this.getUID();
     if (this.editing) {
       // Edit
       if (this._isGeneralDirty()) {
@@ -278,6 +302,27 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     });
   }
 
+  updateFieldsWhenTenanted() {
+    this.showTenant = this.userForm.getValue('show_tenant');
+    if (!this.showTenant) {
+      this.userForm.get('user_id').markAsUntouched();
+      this.userForm.get('tenant').patchValue(this.previousTenant);
+    } else {
+      this.userForm.get('user_id').markAsTouched();
+      this.previousTenant = this.userForm.get('tenant').value;
+      this.userForm.get('tenant').patchValue(null);
+    }
+  }
+
+  getUID(): string {
+    let uid = this.userForm.getValue('user_id');
+    const tenant = this.userForm?.getValue('tenant');
+    if (tenant && tenant.length > 0) {
+      uid = `${this.userForm.getValue('tenant')}$${uid}`;
+    }
+    return uid;
+  }
+
   /**
    * Validate the quota maximum size, e.g. 1096, 1K, 30M or 1.9MiB.
    */
@@ -303,7 +348,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       'full-control': 'full',
       'read-write': 'readwrite'
     };
-    const uid = this.userForm.getValue('uid');
+    const uid = this.getUID();
     const args = {
       subuser: subuser.id,
       access:
@@ -341,9 +386,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   deleteSubuser(index: number) {
     const subuser = this.subusers[index];
     // Create an observable to delete the subuser when the form is submitted.
-    this.submitObservables.push(
-      this.rgwUserService.deleteSubuser(this.userForm.getValue('uid'), subuser.id)
-    );
+    this.submitObservables.push(this.rgwUserService.deleteSubuser(this.getUID(), subuser.id));
     // Remove the associated S3 keys.
     this.s3Keys = this.s3Keys.filter((key) => {
       return key.user !== subuser.id;
@@ -362,7 +405,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * Add/Update a capability.
    */
   setCapability(cap: RgwUserCapability, index?: number) {
-    const uid = this.userForm.getValue('uid');
+    const uid = this.getUID();
     if (_.isNumber(index)) {
       // Modify
       const oldCap = this.capabilities[index];
@@ -394,7 +437,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     const cap = this.capabilities[index];
     // Create an observable to delete the capability when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteCapability(this.userForm.getValue('uid'), cap.type, cap.perm)
+      this.rgwUserService.deleteCapability(this.getUID(), cap.type, cap.perm)
     );
     // Remove the capability to update the UI.
     this.capabilities.splice(index, 1);
@@ -452,9 +495,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   deleteS3Key(index: number) {
     const key = this.s3Keys[index];
     // Create an observable to delete the S3 key when the form is submitted.
-    this.submitObservables.push(
-      this.rgwUserService.deleteS3Key(this.userForm.getValue('uid'), key.access_key)
-    );
+    this.submitObservables.push(this.rgwUserService.deleteS3Key(this.getUID(), key.access_key));
     // Remove the S3 key to update the UI.
     this.s3Keys.splice(index, 1);
     // Mark the form as dirty to be able to submit it.
@@ -466,7 +507,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @param {number | undefined} index The subuser to show.
    */
   showSubuserModal(index?: number) {
-    const uid = this.userForm.getValue('uid');
+    const uid = this.getUID();
     const modalRef = this.modalService.show(RgwUserSubuserModalComponent);
     if (_.isNumber(index)) {
       // Edit
@@ -587,7 +628,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _getCreateArgs() {
     const result = {
-      uid: this.userForm.getValue('uid'),
+      uid: this.getUID(),
       display_name: this.userForm.getValue('display_name'),
       suspended: this.userForm.getValue('suspended'),
       email: '',
@@ -689,7 +730,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   private _getS3KeyUserCandidates() {
     let result = [];
     // Add the current user id.
-    const uid = this.userForm.getValue('uid');
+    const uid = this.getUID();
     if (_.isString(uid) && !_.isEmpty(uid)) {
       result.push(uid);
     }

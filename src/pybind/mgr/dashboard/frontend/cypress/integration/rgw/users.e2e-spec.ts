@@ -2,7 +2,9 @@ import { UsersPageHelper } from './users.po';
 
 describe('RGW users page', () => {
   const users = new UsersPageHelper();
-  const user_name = 'e2e_000user_create_edit_delete';
+  const tenant = 'e2e_000tenant';
+  const user_id = 'e2e_000user_create_edit_delete';
+  const user_name = tenant + '$' + user_id;
 
   beforeEach(() => {
     cy.login();
@@ -19,8 +21,8 @@ describe('RGW users page', () => {
   describe('create, edit & delete user tests', () => {
     it('should create user', () => {
       users.navigateTo('create');
-      users.create(user_name, 'Some Name', 'original@website.com', '1200');
-      users.getFirstTableCell(user_name).should('exist');
+      users.create(tenant, user_id, 'Some Name', 'original@website.com', '1200');
+      users.getFirstTableCell(user_id).should('exist');
     });
 
     it('should edit users full name, email and max buckets', () => {
