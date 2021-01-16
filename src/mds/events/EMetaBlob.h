@@ -23,6 +23,7 @@
 #include "../LogSegment.h"
 
 #include "include/interval_set.h"
+#include "common/strescape.h"
 
 class MDSRank;
 class MDLog;
@@ -65,6 +66,7 @@ public:
     static const int STATE_NEED_SNAPFLUSH = (1<<3);
     static const int STATE_EPHEMERAL_RANDOM = (1<<4);
     std::string  dn;         // dentry
+    std::string alternate_name;
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
     CInode::inode_const_ptr inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
@@ -76,12 +78,12 @@ public:
     __u8 state{0};
     CInode::old_inode_map_const_ptr old_inodes; // XXX should not be part of mempool; wait for std::pmr to simplify
 
-    fullbit(std::string_view d, snapid_t df, snapid_t dl, 
+    fullbit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl,
 	    version_t v, const CInode::inode_const_ptr& i, const fragtree_t &dft,
 	    const CInode::xattr_map_const_ptr& xa, std::string_view sym,
 	    snapid_t os, const bufferlist &sbl, __u8 st,
 	    const CInode::old_inode_map_const_ptr& oi) :
-      dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
+      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
       oldest_snap(os), state(st), old_inodes(oi)
     {
       if (i->is_symlink())
@@ -93,7 +95,7 @@ public:
     explicit fullbit(bufferlist::const_iterator &p) {
       decode(p);
     }
-    fullbit() {}
+    fullbit() = default;
     fullbit(const fullbit&) = delete;
     ~fullbit() {}
     fullbit& operator=(const fullbit&) = delete;
@@ -113,7 +115,11 @@ public:
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " inode " << inode->ino
-	  << " state=" << state << std::endl;
+	  << " state=" << state;
+      if (!alternate_name.empty()) {
+          out << " altn " << binstrprint(alternate_name, 8);
+      }
+      out << std::endl;
     }
     string state_string() const {
       string state_string;
@@ -136,24 +142,28 @@ public:
    */
   struct remotebit {
     std::string dn;
-    snapid_t dnfirst, dnlast;
-    version_t dnv;
-    inodeno_t ino;
-    unsigned char d_type;
-    bool dirty;
+    std::string alternate_name;
+    snapid_t dnfirst = 0, dnlast = 0;
+    version_t dnv = 0;
+    inodeno_t ino = 0;
+    unsigned char d_type = '\0';
+    bool dirty = false;
 
-    remotebit(std::string_view d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
-      dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
+    remotebit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     explicit remotebit(bufferlist::const_iterator &p) { decode(p); }
-    remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
-	d_type('\0'), dirty(false) {}
+    remotebit() = default;
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator &bl);
     void print(ostream& out) const {
       out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
-	  << " dirty=" << dirty << std::endl;
+	  << " dirty=" << dirty;
+      if (!alternate_name.empty()) {
+        out << " altn " << binstrprint(alternate_name, 8);
+      }
+      out << std::endl;
     }
     void dump(Formatter *f) const;
     static void generate_test_instances(std::list<remotebit*>& ls);
@@ -425,7 +435,7 @@ private:
       rdt = dn->get_projected_linkage()->get_remote_d_type();
     }
     lump.nremote++;
-    lump.add_dremote(dn->get_name(), dn->first, dn->last,
+    lump.add_dremote(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last,
 		     dn->get_projected_version(), rino, rdt, dirty);
   }
 
@@ -460,7 +470,7 @@ private:
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.add_dfull(dn->get_name(), dn->first, dn->last, dn->get_projected_version(),
+    lump.add_dfull(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last, dn->get_projected_version(),
 		   pi, in->dirfragtree, in->get_projected_xattrs(), in->symlink,
 		   in->oldest_snap, snapbl, state, in->get_old_inodes());
 
@@ -518,7 +528,7 @@ private:
     }
 
     string empty;
-    roots.emplace_back(empty, in->first, in->last, 0, pi, pdft, px, in->symlink,
+    roots.emplace_back(empty, "", in->first, in->last, 0, pi, pdft, px, in->symlink,
 		       in->oldest_snap, snapbl, (dirty ? fullbit::STATE_DIRTY : 0),
 		       in->get_old_inodes());
   }

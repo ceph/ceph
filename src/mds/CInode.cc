@@ -3996,7 +3996,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode(oi->ino, bl);
     encode(snapid, bl);
     encode(oi->rdev, bl);
@@ -4041,6 +4041,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(snap_btime, bl);
     encode(file_i->rstat.rsnaps, bl);
     encode(snap_metadata, bl);
+    encode(file_i->fscrypt, bl);
     ENCODE_FINISH(bl);
   }
   else {

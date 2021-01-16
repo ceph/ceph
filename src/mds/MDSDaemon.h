@@ -35,7 +35,7 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 
-#define CEPH_MDS_PROTOCOL    35 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    36 /* cluster internal */
 
 class Messenger;
 class MonClient;

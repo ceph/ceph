@@ -109,6 +109,10 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     dn.print_pin_set(out);
   }
 
+  if (dn.get_alternate_name().size()) {
+    out << " altname=" << binstrprint(dn.get_alternate_name(), 16);
+  }
+
   out << " " << &dn;
   out << "]";
   return out;
@@ -311,9 +315,11 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);
     }
-  } else if (n.inode) {
-    dir->link_primary_inode(this, n.inode);
-    n.inode->pop_projected_parent();
+  } else {
+    if (n.inode) {
+      dir->link_primary_inode(this, n.inode);
+      n.inode->pop_projected_parent();
+    }
   }
 
   ceph_assert(n.inode == linkage.inode);
@@ -528,6 +534,37 @@ void CDentry::_put()
 	in->mdcache->maybe_eval_stray(in, true);
     }
   }
+}
+
+void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl)
+{
+  bl.append('l');  // remote link
+
+  // marker, name, ino
+  ENCODE_START(2, 1, bl);
+  encode(ino, bl);
+  encode(d_type, bl);
+  encode(alternate_name, bl);
+  ENCODE_FINISH(bl);
+}
+
+void CDentry::decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
+                            ceph::buffer::list::const_iterator& bl)
+{
+  if (icode == 'l') {
+    DECODE_START(2, bl);
+    decode(ino, bl);
+    decode(d_type, bl);
+    if (struct_v >= 2)
+      decode(alternate_name, bl);
+    DECODE_FINISH(bl);
+  } else if (icode == 'L') {
+    decode(ino, bl);
+    decode(d_type, bl);
+  } else ceph_assert(0);
 }
 
 void CDentry::dump(Formatter *f) const
