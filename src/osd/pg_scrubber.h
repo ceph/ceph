@@ -191,9 +191,9 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   /// are we waiting for resource reservation grants form our replicas?
   [[nodiscard]] bool is_reserving() const final;
 
-  void send_start_scrub(epoch_t epoch_queued) final;
+  void initiate_regular_scrub(epoch_t epoch_queued) final;
 
-  void send_start_after_repair(epoch_t epoch_queued) final;
+  void initiate_scrub_after_repair(epoch_t epoch_queued) final;
 
   void send_scrub_resched(epoch_t epoch_queued) final;
 
@@ -212,8 +212,6 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   void send_sched_replica(epoch_t epoch_queued) final;
 
   void send_replica_pushes_upd(epoch_t epoch_queued) final;
-
-  void reset_epoch(epoch_t epoch_queued) final;
 
   /**
    *  we allow some number of preemptions of the scrub, which mean we do
@@ -234,6 +232,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from) final;
   void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from) final;
   void handle_scrub_reserve_release(OpRequestRef op) final;
+  void discard_replica_reservations() final;
   void clear_scrub_reservations() final;  // PG::clear... fwds to here
   void unreserve_replicas() final;
 
@@ -422,9 +421,14 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   ScrubMap clean_meta_map();
 
-  void run_callbacks();
+  /**
+   *  mark down some parameters of the initiated scrub:
+   *  - the epoch when started;
+   *  - the depth of the scrub requested (from the PG_STATE variable)
+   */
+  void reset_epoch(epoch_t epoch_queued);
 
-  void send_interval_changed();
+  void run_callbacks();
 
   // -----     methods used to verify the relevance of incoming events:
 
@@ -457,15 +461,18 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
    * check the 'no scrub' configuration options.
    */
   [[nodiscard]] bool should_abort() const;
+
+  /**
+   * Check the 'no scrub' configuration flags.
+   *
+   * Reset everything if the abort was not handled before.
+   * @returns false if the message was discarded due to abort flag.
+   */
   [[nodiscard]] bool verify_against_abort(epoch_t epoch_to_verify);
 
-  bool check_interval(epoch_t epoch_to_verify);
-  bool check_interval_replica(epoch_t epoch_to_verify);
+  [[nodiscard]] bool check_interval(epoch_t epoch_to_verify);
 
-  epoch_t m_last_dead_interval{};
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
-
-
 
   /**
    * return true if any inconsistency/missing is repaired, false otherwise

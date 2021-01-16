@@ -4,6 +4,9 @@
 #include "scrub_machine.h"
 
 #include <chrono>
+#include <typeinfo>
+
+#include <boost/core/demangle.hpp>
 
 #include "OSD.h"
 #include "OpRequest.h"
@@ -14,7 +17,6 @@
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix *_dout << " scrubberFSM "
-
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
@@ -32,19 +34,19 @@ namespace Scrub {
 
 void on_event_creation(std::string_view nm)
 {
-  dout(20) << " scrubberFSM event: --vvvv---- " << nm << dendl;
+  dout(20) << " event: --vvvv---- " << nm << dendl;
 }
 
 void on_event_discard(std::string_view nm)
 {
-  dout(20) << " scrubberFSM event: --^^^^---- " << nm << dendl;
+  dout(20) << " event: --^^^^---- " << nm << dendl;
 }
 
 void ScrubMachine::my_states() const
 {
   for (auto si = state_begin(); si != state_end(); ++si) {
     const auto& siw{*si};  // prevents a warning re side-effects
-    dout(20) << __func__ << " : scrub-states : " << typeid(siw).name() << dendl;
+    dout(20) << " state: " << boost::core::demangle(typeid(siw).name()) << dendl;
   }
 }
 
@@ -73,12 +75,6 @@ template <class T> static ostream& _prefix(std::ostream* _dout, T* t)
 NotActive::NotActive(my_context ctx) : my_base(ctx)
 {
   dout(10) << "-- state -->> NotActive" << dendl;
-}
-
-sc::result NotActive::react(const IntervalChanged&)
-{
-  dout(15) << "NotActive::react(const IntervalChanged&)" << dendl;
-  return discard_event();
 }
 
 // ----------------------- ReservingReplicas ---------------------------------
@@ -273,7 +269,7 @@ BuildMap::BuildMap(my_context ctx) : my_base(ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   // no need to check for an epoch change, as all possible flows that brought us here have
-  // an check_interval() verification of their final event.
+  // a check_interval() verification of their final event.
 
   if (scrbr->get_preemptor().was_preempted()) {
 
@@ -426,16 +422,6 @@ ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx) : my_base(ctx)
   scrbr->on_replica_init();
 }
 
-sc::result ReplicaWaitUpdates::react(const IntervalChanged&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaWaitUpdates::react(const IntervalChanged&)" << dendl;
-
-  // note: the master's reservation of us was just discarded by our caller
-  scrbr->replica_handling_done();
-  return transit<NotActive>();
-}
-
 /*
  * Triggered externally, by the entity that had an update re pushes
  */
@@ -512,16 +498,6 @@ sc::result ActiveReplica::react(const SchedReplica&)
 
 
   // the local map was created. Send it to the primary.
-  scrbr->send_replica_map(PreemptionNoted::no_preemption);
-  scrbr->replica_handling_done();
-  return transit<NotActive>();
-}
-
-sc::result ActiveReplica::react(const IntervalChanged&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ActiveReplica::react(const IntervalChanged&) " << dendl;
-
   scrbr->send_replica_map(PreemptionNoted::no_preemption);
   scrbr->replica_handling_done();
   return transit<NotActive>();

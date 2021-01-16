@@ -54,8 +54,6 @@ void on_event_discard(std::string_view nm);
 MEV(RemotesReserved)	 ///< all replicas have granted our reserve request
 MEV(ReservationFailure)	 ///< a reservation request has failed
 
-MEV(IntervalChanged)  ///< ... from what it was when this chunk started
-
 MEV(StartScrub)	 ///< initiate a new scrubbing session (relevant if we are a Primary)
 MEV(AfterRepairScrub)  ///< initiate a new scrubbing session. Only triggered at Recovery
 		       ///< completion.
@@ -130,15 +128,12 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
 struct NotActive : sc::state<NotActive, ScrubMachine> {
   explicit NotActive(my_context ctx);
 
-  using reactions = mpl::list<sc::custom_reaction<IntervalChanged>,
-			      sc::transition<StartScrub, ReservingReplicas>,
+  using reactions = mpl::list<sc::transition<StartScrub, ReservingReplicas>,
 			      // a scrubbing that was initiated at recovery completion,
 			      // and requires no resource reservations:
 			      sc::transition<AfterRepairScrub, ActiveScrubbing>,
 			      sc::transition<StartReplica, ReplicaWaitUpdates>,
 			      sc::transition<StartReplicaNoWait, ActiveReplica>>;
-
-  sc::result react(const IntervalChanged&);
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine> {
@@ -299,24 +294,20 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing> {
  */
 struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine> {
   explicit ReplicaWaitUpdates(my_context ctx);
-  using reactions = mpl::list<sc::custom_reaction<ReplicaPushesUpd>,
-			      sc::custom_reaction<FullReset>,
-			      sc::custom_reaction<IntervalChanged>>;
+  using reactions =
+    mpl::list<sc::custom_reaction<ReplicaPushesUpd>, sc::custom_reaction<FullReset>>;
 
   sc::result react(const ReplicaPushesUpd&);
-  sc::result react(const IntervalChanged&);
   sc::result react(const FullReset&);
 };
 
 
 struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine> {
   explicit ActiveReplica(my_context ctx);
-  using reactions = mpl::list<sc::custom_reaction<IntervalChanged>,
-			      sc::custom_reaction<SchedReplica>,
-			      sc::custom_reaction<FullReset>>;
+  using reactions =
+    mpl::list<sc::custom_reaction<SchedReplica>, sc::custom_reaction<FullReset>>;
 
   sc::result react(const SchedReplica&);
-  sc::result react(const IntervalChanged&);
   sc::result react(const FullReset&);
 };
 
