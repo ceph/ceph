@@ -1,18 +1,7 @@
-
-from mgr_module import MgrModule
+from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule
 
 
 class Module(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "iostat",
-            "desc": "Get IO rates",
-            "perm": "r",
-            "poll": True
-        },
-    ]
-
-
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
@@ -26,7 +15,11 @@ class Module(MgrModule):
         assert('num_write' in r['pg_stats_delta']['stat_sum'])
         assert('num_read' in r['pg_stats_delta']['stat_sum'])
 
-    def handle_command(self, inbuf, command):
+    @CLIReadCommand('iostat', poll=True)
+    def iostat(self, width: int = 80, print_header: bool = False):
+        """
+        Get IO rates
+        """
         rd = 0
         wr = 0
         total = 0
@@ -35,39 +28,33 @@ class Module(MgrModule):
         total_ops = 0
         ret = ''
 
-        if command['prefix'] == 'iostat':
-            r = self.get('io_rate')
+        r = self.get('io_rate')
 
-            stamp_delta = float(r['pg_stats_delta']['stamp_delta'])
-            if (stamp_delta > 0):
-                rd = int(r['pg_stats_delta']['stat_sum']['num_read_kb']) / stamp_delta
-                wr = int(r['pg_stats_delta']['stat_sum']['num_write_kb']) / stamp_delta
-                # The values are in kB, but to_pretty_iec() requires them to be in bytes
-                rd = int(rd) << 10
-                wr = int(wr) << 10
-                total = rd + wr
+        stamp_delta = float(r['pg_stats_delta']['stamp_delta'])
+        if (stamp_delta > 0):
+            rd = int(r['pg_stats_delta']['stat_sum']['num_read_kb']) / stamp_delta
+            wr = int(r['pg_stats_delta']['stat_sum']['num_write_kb']) / stamp_delta
+            # The values are in kB, but to_pretty_iec() requires them to be in bytes
+            rd = int(rd) << 10
+            wr = int(wr) << 10
+            total = rd + wr
 
-                rd_ops = int(r['pg_stats_delta']['stat_sum']['num_read']) / stamp_delta
-                wr_ops = int(r['pg_stats_delta']['stat_sum']['num_write']) / stamp_delta
-                total_ops = rd_ops + wr_ops
+            rd_ops = int(r['pg_stats_delta']['stat_sum']['num_read']) / stamp_delta
+            wr_ops = int(r['pg_stats_delta']['stat_sum']['num_write']) / stamp_delta
+            total_ops = rd_ops + wr_ops
 
-            if 'width' in command:
-                width = command['width']
-            else:
-                width = 80
+        if print_header:
+            elems = ['Read', 'Write', 'Total', 'Read IOPS', 'Write IOPS', 'Total IOPS']
+            ret += self.get_pretty_header(elems, width)
 
-            if command.get('print_header', False):
-                elems = ['Read', 'Write', 'Total', 'Read IOPS', 'Write IOPS', 'Total IOPS']
-                ret += self.get_pretty_header(elems, width)
-
-            elems = [
-                self.to_pretty_iec(rd) + 'B/s',
-                self.to_pretty_iec(wr) + 'B/s',
-                self.to_pretty_iec(total) + 'B/s',
-                int(rd_ops),
-                int(wr_ops),
-                int(total_ops)
+        elems = [
+            self.to_pretty_iec(rd) + 'B/s',
+            self.to_pretty_iec(wr) + 'B/s',
+            self.to_pretty_iec(total) + 'B/s',
+            int(rd_ops),
+            int(wr_ops),
+            int(total_ops)
             ]
-            ret += self.get_pretty_row(elems, width)
+        ret += self.get_pretty_row(elems, width)
 
-        return 0, '', ret
+        return HandleCommandResult(stdout=ret)
