@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { of as observableOf } from 'rxjs';
+import { of as observableOf, throwError } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
 import { RgwUserService } from './rgw-user.service';
@@ -138,21 +138,19 @@ describe('RgwUserService', () => {
     expect(req.request.method).toBe('DELETE');
   });
 
-  it('should call exists with an existent uid', () => {
-    spyOn(service, 'enumerate').and.returnValue(observableOf(['foo', 'bar']));
-    let result;
+  it('should call exists with an existent uid', (done) => {
+    spyOn(service, 'get').and.returnValue(observableOf({}));
     service.exists('foo').subscribe((res) => {
-      result = res;
+      expect(res).toBe(true);
+      done();
     });
-    expect(result).toBe(true);
   });
 
-  it('should call exists with a non existent uid', () => {
-    spyOn(service, 'enumerate').and.returnValue(observableOf(['foo', 'bar']));
-    let result;
+  it('should call exists with a non existent uid', (done) => {
+    spyOn(service, 'get').and.returnValue(throwError('bar'));
     service.exists('baz').subscribe((res) => {
-      result = res;
+      expect(res).toBe(false);
+      done();
     });
-    expect(result).toBe(false);
   });
 });
