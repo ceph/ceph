@@ -15,6 +15,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/deep_copy/Handler.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_sync/SyncPointCreateRequest.h"
 #include "tools/rbd_mirror/image_sync/SyncPointPruneRequest.h"
 #include "tools/rbd_mirror/image_sync/Types.h"
@@ -51,6 +52,7 @@ public:
 template <typename I>
 ImageSync<I>::ImageSync(
     Threads<I>* threads,
+    GroupCtx *local_group_ctx,
     I *local_image_ctx,
     I *remote_image_ctx,
     const std::string &local_mirror_uuid,
@@ -71,6 +73,12 @@ ImageSync<I>::ImageSync(
     m_update_sync_point_interval(
       m_local_image_ctx->cct->_conf.template get_val<double>(
         "rbd_mirror_sync_point_update_age")) {
+  if (local_group_ctx == nullptr) {
+    m_sync_id = m_local_image_ctx->id;
+  } else {
+    m_sync_id = stringify(m_local_image_ctx->md_ctx.get_id()) + ":" +
+        m_local_image_ctx->id;
+  }
 }
 
 template <typename I>
@@ -93,7 +101,7 @@ void ImageSync<I>::cancel() {
 
   m_canceled = true;
 
-  if (m_instance_watcher->cancel_sync_request(m_local_image_ctx->id)) {
+  if (m_instance_watcher->cancel_sync_request(m_sync_id)) {
     return;
   }
 
@@ -118,7 +126,7 @@ void ImageSync<I>::send_notify_sync_request() {
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<
       ImageSync<I>, &ImageSync<I>::handle_notify_sync_request>(this));
-  m_instance_watcher->notify_sync_request(m_local_image_ctx->id, ctx);
+  m_instance_watcher->notify_sync_request(m_sync_id, ctx);
   m_lock.unlock();
 }
 
@@ -459,7 +467,7 @@ template <typename I>
 void ImageSync<I>::finish(int r) {
   dout(20) << ": r=" << r << dendl;
 
-  m_instance_watcher->notify_sync_complete(m_local_image_ctx->id);
+  m_instance_watcher->notify_sync_complete(m_sync_id);
   CancelableRequest::finish(r);
 }
 

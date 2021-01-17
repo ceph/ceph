@@ -134,9 +134,10 @@ public:
   }
 
   ImageSync<> *create_request(Context *ctx) {
-    return new ImageSync<>(m_threads, m_local_image_ctx, m_remote_image_ctx,
-                           "mirror-uuid", m_sync_point_handler,
-                           m_instance_watcher, nullptr, ctx);
+    return new ImageSync<>(m_threads, nullptr, m_local_image_ctx,
+                           m_remote_image_ctx, "mirror-uuid",
+                           m_sync_point_handler, m_instance_watcher, nullptr,
+                           ctx);
   }
 
   librbd::ImageCtx *m_remote_image_ctx;

@@ -165,11 +165,14 @@ void MirrorStatusUpdater<I>::finalize_shutdown(int r, Context* on_finish) {
 }
 
 template <typename I>
-bool MirrorStatusUpdater<I>::exists(const std::string& global_image_id) {
-  dout(15) << "global_image_id=" << global_image_id << dendl;
-
+bool MirrorStatusUpdater<I>::mirror_image_exists(
+    const std::string& global_image_id) const {
   std::unique_lock locker(m_lock);
-  return (m_global_image_status.count(global_image_id) > 0);
+  bool exists = (m_global_image_status.count(global_image_id) > 0);
+
+  dout(15) << "global_image_id=" << global_image_id << ": " << exists << dendl;
+
+  return exists;
 }
 
 template <typename I>
@@ -247,6 +250,127 @@ bool MirrorStatusUpdater<I>::try_remove_mirror_image_status(
 }
 
 template <typename I>
+bool MirrorStatusUpdater<I>::mirror_group_exists(
+    const std::string& global_group_id) const {
+  std::unique_lock locker(m_lock);
+  bool exists = (m_global_group_status.count(global_group_id) > 0);
+
+  dout(15) << "global_group_id=" << global_group_id << ": " << exists << dendl;
+
+  return exists;
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::set_mirror_group_status(
+    const std::string& global_group_id,
+    const cls::rbd::MirrorGroupSiteStatus& mirror_group_site_status,
+    bool immediate_update) {
+  dout(15) << "global_group_id=" << global_group_id << ", "
+           << "mirror_group_site_status=" << mirror_group_site_status << dendl;
+
+  std::unique_lock locker(m_lock);
+
+  m_global_group_status[global_group_id] = mirror_group_site_status;
+  if (immediate_update) {
+    m_update_global_group_ids.insert(global_group_id);
+    queue_update_task(std::move(locker));
+  }
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::remove_mirror_group_status(
+    const std::string& global_group_id, Context* on_finish) {
+  if (try_remove_mirror_group_status(global_group_id, on_finish)) {
+    m_threads->work_queue->queue(on_finish, 0);
+  }
+}
+
+template <typename I>
+bool MirrorStatusUpdater<I>::try_remove_mirror_group_status(
+    const std::string& global_group_id, Context* on_finish) {
+  dout(15) << "global_group_id=" << global_group_id << dendl;
+
+  std::unique_lock locker(m_lock);
+  if ((m_update_in_flight &&
+       m_updating_global_group_ids.count(global_group_id) > 0) ||
+      ((m_update_in_progress || m_update_requested) &&
+       m_update_global_group_ids.count(global_group_id) > 0)) {
+    // if update is scheduled/in-progress, wait for it to complete
+    on_finish = new LambdaContext(
+      [this, global_group_id, on_finish](int r) {
+        if (try_remove_mirror_group_status(global_group_id, on_finish)) {
+          on_finish->complete(0);
+        }
+      });
+    m_update_on_finish_ctxs.push_back(on_finish);
+    return false;
+  }
+
+  m_global_group_status.erase(global_group_id);
+  return true;
+}
+
+template <typename I>
+bool MirrorStatusUpdater<I>::mirror_group_image_exists(
+    const std::string& global_group_id, int64_t image_pool_id,
+    const std::string& global_image_id) const {
+  std::unique_lock locker(m_lock);
+  auto it = m_global_group_status.find(global_group_id);
+  bool exists = (it != m_global_group_status.end() &&
+                 it->second.mirror_images.count({image_pool_id,
+                                                 global_image_id}) > 0);
+
+  dout(15) << "global_group_id=" << global_group_id
+           << ", image_pool_id=" << image_pool_id
+           << ", global_image_id=" << global_image_id
+           << ": " << exists << dendl;
+  return exists;
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::set_mirror_group_image_status(
+    const std::string& global_group_id,
+    int64_t image_pool_id, const std::string& global_image_id,
+    const cls::rbd::MirrorImageSiteStatus& mirror_image_site_status,
+    bool immediate_update) {
+  dout(15) << "global_group_id=" << global_group_id << ", "
+           << "image_pool_id=" << image_pool_id << ", "
+           << "global_image_id=" << global_image_id << ", "
+           << "mirror_image_site_status=" << mirror_image_site_status << dendl;
+
+  std::unique_lock locker(m_lock);
+
+  auto it = m_global_group_status.find(global_group_id);
+  ceph_assert(it != m_global_group_status.end());
+
+  it->second.mirror_images[{image_pool_id, global_image_id}] =
+      mirror_image_site_status;
+  if (immediate_update) {
+    m_update_global_group_ids.insert(global_group_id);
+    queue_update_task(std::move(locker));
+  }
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::remove_mirror_group_image_status(
+    const std::string& global_group_id, int64_t image_pool_id,
+    const std::string& global_image_id, Context* on_finish) {
+  dout(15) << "global_group_id=" << global_group_id << ", "
+           << "image_pool_id=" << image_pool_id << ", "
+           << "global_image_id=" << global_image_id << dendl;
+
+  std::unique_lock locker(m_lock);
+
+  auto it = m_global_group_status.find(global_group_id);
+  ceph_assert(it != m_global_group_status.end());
+
+  it->second.mirror_images.erase({image_pool_id, global_image_id});
+  m_update_global_group_ids.insert(global_group_id);
+  m_update_on_finish_ctxs.push_back(on_finish);
+  queue_update_task(std::move(locker));
+}
+
+template <typename I>
 void MirrorStatusUpdater<I>::schedule_timer_task() {
   dout(10) << dendl;
 
@@ -268,8 +392,11 @@ void MirrorStatusUpdater<I>::handle_timer_task(int r) {
   schedule_timer_task();
 
   std::unique_lock locker(m_lock);
-  for (auto& pair : m_global_image_status) {
-    m_update_global_image_ids.insert(pair.first);
+  for (auto &[global_image_id, _] : m_global_image_status) {
+    m_update_global_image_ids.insert(global_image_id);
+  }
+  for (auto&[global_group_id, _] : m_global_group_status) {
+    m_update_global_group_ids.insert(global_group_id);
   }
 
   queue_update_task(std::move(locker));
@@ -314,12 +441,16 @@ void MirrorStatusUpdater<I>::update_task(int r) {
   std::swap(m_updating_global_image_ids, m_update_global_image_ids);
   auto updating_global_image_ids = m_updating_global_image_ids;
   auto global_image_status = m_global_image_status;
+
+  std::swap(m_updating_global_group_ids, m_update_global_group_ids);
+  auto updating_global_group_ids = m_updating_global_group_ids;
+  auto global_group_status = m_global_group_status;
   locker.unlock();
 
   Context* ctx = create_context_callback<
     MirrorStatusUpdater<I>,
     &MirrorStatusUpdater<I>::handle_update_task>(this);
-  if (updating_global_image_ids.empty()) {
+  if (updating_global_image_ids.empty() && updating_global_group_ids.empty()) {
     ctx->complete(0);
     return;
   }
@@ -355,6 +486,33 @@ void MirrorStatusUpdater<I>::update_task(int r) {
     aio_comp->release();
   }
 
+  auto group_it = updating_global_group_ids.begin();
+  while (group_it != updating_global_group_ids.end()) {
+    librados::ObjectWriteOperation op;
+    uint32_t op_count = 0;
+
+    while (group_it != updating_global_group_ids.end() &&
+           op_count < MAX_UPDATES_PER_OP) {
+      auto &global_group_id = *group_it;
+      ++group_it;
+
+      auto status_it = global_group_status.find(global_group_id);
+      if (status_it == global_group_status.end()) {
+        continue;
+      }
+
+      status_it->second.mirror_uuid = m_local_mirror_uuid;
+      librbd::cls_client::mirror_group_status_set(&op, global_group_id,
+                                                  status_it->second);
+      ++op_count;
+    }
+
+    auto aio_comp = create_rados_callback(gather->new_sub());
+    int r = m_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
+    ceph_assert(r == 0);
+    aio_comp->release();
+  }
+
   gather->activate();
 }
 
@@ -378,6 +536,7 @@ void MirrorStatusUpdater<I>::handle_update_task(int r) {
   m_update_in_flight = false;
 
   m_updating_global_image_ids.clear();
+  m_updating_global_group_ids.clear();
 
   if (m_update_requested) {
     m_update_requested = false;
