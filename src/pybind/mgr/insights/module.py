@@ -3,6 +3,7 @@ import json
 import re
 import threading
 
+from mgr_module import CLICommand, CLIReadCommand, HandleCommandResult
 from mgr_module import MgrModule, CommandResult
 from . import health as health_util
 
@@ -17,22 +18,8 @@ INSIGHTS_HEALTH_CHECK = "MGR_INSIGHTS_WARNING"
 # version tag for persistent data format
 ON_DISK_VERSION = 1
 
-class Module(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "insights",
-            "desc": "Retrieve insights report",
-            "perm": "r",
-            "poll": False,
-        },
-        {
-            'cmd': 'insights prune-health name=hours,type=CephString',
-            'desc': 'Remove health history older than <hours> hours',
-            'perm': 'rw',
-            "poll": False,
-        },
-    ]
 
+class Module(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
@@ -240,7 +227,11 @@ class Module(MgrModule):
                     ret={}, outs=\"{}\"".format(ret, outs))
             return [], ["Failed to read monitor config dump"]
 
-    def do_report(self, inbuf, command):
+    @CLIReadCommand('insights')
+    def do_report(self):
+        '''
+        Retrieve insights report
+        '''
         health_check_details = []
         report = {}
 
@@ -291,17 +282,16 @@ class Module(MgrModule):
                 }
             })
 
-        return 0, json.dumps(report, indent=2, cls=health_util.HealthEncoder), ""
+        result = json.dumps(report, indent=2, cls=health_util.HealthEncoder)
+        return HandleCommandResult(stdout=result)
 
-    def do_prune_health(self, inbuf, command):
-        try:
-            hours = int(command['hours'])
-        except ValueError:
-            return errno.EINVAL, '', 'hours argument must be integer'
-
+    @CLICommand('insights prune-health')
+    def do_prune_health(self, hours: int):
+        '''
+        Remove health history older than <hours> hours
+        '''
         self._health_prune_history(hours)
-
-        return 0, "", ""
+        return HandleCommandResult()
 
     def testing_set_now_time_offset(self, hours):
         """
@@ -315,11 +305,3 @@ class Module(MgrModule):
             hours = int(hours)
         health_util.NOW_OFFSET = datetime.timedelta(hours = hours)
         self.log.warning("Setting now time offset {}".format(health_util.NOW_OFFSET))
-
-    def handle_command(self, inbuf, command):
-        if command["prefix"] == "insights":
-            return self.do_report(inbuf, command)
-        elif command["prefix"] == "insights prune-health":
-            return self.do_prune_health(inbuf, command)
-        else:
-            raise NotImplementedError(cmd["prefix"])
