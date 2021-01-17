@@ -42,21 +42,23 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
   static ImageReplayer *create(
-      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
-      const std::string &global_image_id, Threads<ImageCtxT> *threads,
-      InstanceWatcher<ImageCtxT> *instance_watcher,
+      librados::IoCtx &local_io_ctx, GroupCtx *local_group_ctx,
+      const std::string &local_mirror_uuid, const std::string &global_image_id,
+      Threads<ImageCtxT> *threads, InstanceWatcher<ImageCtxT> *instance_watcher,
       MirrorStatusUpdater<ImageCtxT>* local_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache* pool_meta_cache) {
-    return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
-                             threads, instance_watcher, local_status_updater,
-                             cache_manager_handler, pool_meta_cache);
+    return new ImageReplayer(local_io_ctx, local_group_ctx, local_mirror_uuid,
+                             global_image_id, threads, instance_watcher,
+                             local_status_updater, cache_manager_handler,
+                             pool_meta_cache);
   }
   void destroy() {
     delete this;
   }
 
   ImageReplayer(librados::IoCtx &local_io_ctx,
+                GroupCtx *local_group_ctx,
                 const std::string &local_mirror_uuid,
                 const std::string &global_image_id,
                 Threads<ImageCtxT> *threads,
@@ -68,11 +70,27 @@ public:
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
 
-  bool is_stopped() { std::lock_guard l{m_lock}; return is_stopped_(); }
-  bool is_running() { std::lock_guard l{m_lock}; return is_running_(); }
-  bool is_replaying() { std::lock_guard l{m_lock}; return is_replaying_(); }
+  inline bool is_stopped() const {
+    std::lock_guard l{m_lock};
+    return is_stopped_();
+  }
+  inline bool is_running() const {
+    std::lock_guard l{m_lock};
+    return is_running_();
+  }
+  inline bool is_replaying() const {
+    std::lock_guard l{m_lock};
+    return is_replaying_();
+  }
 
-  std::string get_name() { std::lock_guard l{m_lock}; return m_image_spec; };
+  inline std::string get_name() const {
+    std::lock_guard l{m_lock};
+    return m_image_spec;
+  };
+  inline std::string get_state_description() const {
+    std::lock_guard l{m_lock};
+    return m_state_desc;
+  }
   void set_state_description(int r, const std::string &desc);
 
   // TODO temporary until policy handles release of image replayers
@@ -96,6 +114,16 @@ public:
 
   inline int64_t get_local_pool_id() const {
     return m_local_io_ctx.get_id();
+  }
+  inline int64_t get_remote_pool_id() const {
+    std::unique_lock locker{m_lock};
+    if (m_remote_image_peer.io_ctx.is_valid()) {
+      return m_remote_image_peer.io_ctx.get_id();
+    }
+    if (!m_peers.empty()) {
+      return m_peers.begin()->io_ctx.get_id();
+    }
+    return -1;
   }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
@@ -178,6 +206,7 @@ private:
   };
 
   librados::IoCtx &m_local_io_ctx;
+  GroupCtx *m_local_group_ctx;
   std::string m_local_mirror_uuid;
   std::string m_global_image_id;
   Threads<ImageCtxT> *m_threads;

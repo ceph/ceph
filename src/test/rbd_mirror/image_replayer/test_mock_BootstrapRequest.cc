@@ -54,6 +54,7 @@ struct ImageSync<librbd::MockTestImageCtx> {
 
   static ImageSync* create(
       Threads<librbd::MockTestImageCtx>* threads,
+      GroupCtx *local_group_ctx,
       librbd::MockTestImageCtx *local_image_ctx,
       librbd::MockTestImageCtx *remote_image_ctx,
       const std::string &local_mirror_uuid,
@@ -238,9 +239,10 @@ struct StateBuilder<librbd::MockTestImageCtx> {
   MOCK_CONST_METHOD0(replay_requires_remote_image, bool());
   MOCK_METHOD1(close_remote_image, void(Context*));
 
-  MOCK_METHOD6(create_local_image_request,
+  MOCK_METHOD7(create_local_image_request,
                BaseRequest*(Threads<librbd::MockTestImageCtx>*,
                             librados::IoCtx&,
+                            GroupCtx*,
                             const std::string&,
                             PoolMetaCache*,
                             ProgressContext*,
@@ -419,8 +421,8 @@ public:
   void expect_create_local_image(MockStateBuilder& mock_state_builder,
                                  const std::string& local_image_id, int r) {
     EXPECT_CALL(mock_state_builder,
-                create_local_image_request(_, _, _, _, _, _))
-      .WillOnce(WithArg<5>(
+                create_local_image_request(_, _, _, _, _, _, _))
+      .WillOnce(WithArg<6>(
         Invoke([&mock_state_builder, local_image_id, r](Context* ctx) {
           if (r >= 0) {
             mock_state_builder.local_image_id = local_image_id;
@@ -473,6 +475,7 @@ public:
     return new MockBootstrapRequest(mock_threads,
                                     m_local_io_ctx,
                                     m_remote_io_ctx,
+                                    nullptr,
                                     mock_instance_watcher,
                                     global_image_id,
                                     local_mirror_uuid,

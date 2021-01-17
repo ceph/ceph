@@ -15,6 +15,20 @@
 namespace rbd {
 namespace mirror {
 
+bool PoolMetaCache::local_pool_meta_exists(int64_t pool_id) const {
+  dout(15) << "pool_id=" << pool_id << dendl;
+
+  std::unique_lock locker(m_lock);
+  return m_local_pool_metas.count(pool_id) > 0;
+}
+
+bool PoolMetaCache::remote_pool_meta_exists(int64_t pool_id) const {
+  dout(15) << "pool_id=" << pool_id << dendl;
+
+  std::unique_lock locker(m_lock);
+  return m_remote_pool_metas.count(pool_id) > 0;
+}
+
 int PoolMetaCache::get_local_pool_meta(
     int64_t pool_id,
     LocalPoolMeta* local_pool_meta) const {
