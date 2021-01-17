@@ -23,13 +23,13 @@ class Module(MgrModule):
             "cmd": "insights",
             "desc": "Retrieve insights report",
             "perm": "r",
-            "poll": "false",
+            "poll": False,
         },
         {
             'cmd': 'insights prune-health name=hours,type=CephString',
             'desc': 'Remove health history older than <hours> hours',
             'perm': 'rw',
-            "poll": "false",
+            "poll": False,
         },
     ]
 
