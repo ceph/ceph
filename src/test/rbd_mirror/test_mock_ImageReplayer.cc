@@ -59,7 +59,7 @@ ImageDeleter<librbd::MockTestImageCtx>* ImageDeleter<librbd::MockTestImageCtx>::
 template <>
 struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
 
-  MOCK_METHOD1(exists, bool(const std::string&));
+  MOCK_METHOD1(mirror_image_exists, bool(const std::string&));
   MOCK_METHOD3(set_mirror_image_status,
                void(const std::string&, const cls::rbd::MirrorImageSiteStatus&,
                     bool));
@@ -67,6 +67,18 @@ struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
                                                         Context*));
   MOCK_METHOD3(remove_mirror_image_status, void(const std::string&, bool,
                                                 Context*));
+  MOCK_METHOD1(mirror_group_exists, bool(const std::string&));
+  MOCK_METHOD3(set_mirror_group_status,
+               void(const std::string&, const cls::rbd::MirrorGroupSiteStatus&,
+                    bool));
+  MOCK_METHOD2(remove_mirror_group_status, void(const std::string&, Context*));
+  MOCK_METHOD3(mirror_group_image_exists,
+               bool(const std::string&, int64_t, const std::string&));
+  MOCK_METHOD5(set_mirror_group_image_status,
+               void(const std::string&, int64_t, const std::string&,
+                    const cls::rbd::MirrorImageSiteStatus&, bool));
+  MOCK_METHOD4(remove_mirror_group_image_status,
+               void(const std::string&, int64_t, const std::string&, Context*));
 };
 
 template <>
@@ -105,6 +117,7 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
       Threads<librbd::MockTestImageCtx>* threads,
       librados::IoCtx &local_io_ctx,
       librados::IoCtx& remote_io_ctx,
+      rbd::mirror::GroupCtx *local_group_ctx,
       rbd::mirror::InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
       const std::string &global_image_id,
       const std::string &local_mirror_uuid,
@@ -357,15 +370,15 @@ public:
   }
 
   void expect_mirror_image_status_exists(bool exists) {
-    EXPECT_CALL(m_local_status_updater, exists(_))
+    EXPECT_CALL(m_local_status_updater, mirror_image_exists(_))
       .WillOnce(Return(exists));
-    EXPECT_CALL(m_remote_status_updater, exists(_))
+    EXPECT_CALL(m_remote_status_updater, mirror_image_exists(_))
       .WillOnce(Return(exists));
   }
 
   void create_image_replayer(MockThreads &mock_threads) {
     m_image_replayer = new MockImageReplayer(
-        m_local_io_ctx, "local_mirror_uuid", "global image id",
+        m_local_io_ctx, nullptr, "local_mirror_uuid", "global image id",
         &mock_threads, &m_instance_watcher, &m_local_status_updater, nullptr,
         nullptr);
     m_image_replayer->add_peer({"peer_uuid", m_remote_io_ctx,

@@ -255,7 +255,7 @@ public:
                                 MockSyncPointHandler& mock_sync_point_handler,
                                 MockInstanceWatcher &mock_instance_watcher,
                                 Context *ctx) {
-    return new MockImageSync(&mock_threads, &mock_local_image_ctx,
+    return new MockImageSync(&mock_threads, nullptr, &mock_local_image_ctx,
                              &mock_remote_image_ctx,
                              "mirror-uuid", &mock_sync_point_handler,
                              &mock_instance_watcher, nullptr, ctx);

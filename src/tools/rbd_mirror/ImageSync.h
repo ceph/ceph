@@ -21,6 +21,7 @@ namespace mirror {
 class ProgressContext;
 template <typename> class InstanceWatcher;
 template <typename> class Threads;
+struct GroupCtx;
 
 namespace image_sync { struct SyncPointHandler; }
 
@@ -29,6 +30,7 @@ class ImageSync : public CancelableRequest {
 public:
   static ImageSync* create(
       Threads<ImageCtxT>* threads,
+      GroupCtx *local_group_ctx,
       ImageCtxT *local_image_ctx,
       ImageCtxT *remote_image_ctx,
       const std::string &local_mirror_uuid,
@@ -36,13 +38,15 @@ public:
       InstanceWatcher<ImageCtxT> *instance_watcher,
       ProgressContext *progress_ctx,
       Context *on_finish) {
-    return new ImageSync(threads, local_image_ctx, remote_image_ctx,
-                         local_mirror_uuid, sync_point_handler,
-                         instance_watcher, progress_ctx, on_finish);
+    return new ImageSync(threads, local_group_ctx, local_image_ctx,
+                         remote_image_ctx, local_mirror_uuid,
+                         sync_point_handler, instance_watcher, progress_ctx,
+                         on_finish);
   }
 
   ImageSync(
       Threads<ImageCtxT>* threads,
+      GroupCtx *local_group_ctx,
       ImageCtxT *local_image_ctx,
       ImageCtxT *remote_image_ctx,
       const std::string &local_mirror_uuid,
@@ -100,6 +104,7 @@ private:
 
   ceph::mutex m_lock;
   bool m_canceled = false;
+  std::string m_sync_id;
 
   librbd::DeepCopyRequest<ImageCtxT> *m_image_copy_request = nullptr;
   ImageCopyProgressHandler *m_image_copy_prog_handler = nullptr;
