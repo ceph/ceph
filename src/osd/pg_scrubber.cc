@@ -607,6 +607,11 @@ bool PgScrubber::range_intersects_scrub(const hobject_t& start, const hobject_t&
   return (start < m_max_end && end >= m_start);
 }
 
+Scrub::BlockedRangeWarning PgScrubber::acquire_blocked_alarm()
+{
+  return std::make_unique<blocked_range_t>(m_osds, ceph::timespan{300s}, m_pg_id);
+}
+
 /**
  *  if we are required to sleep:
  *	arrange a callback sometimes later.
@@ -2125,6 +2130,32 @@ ostream& operator<<(ostream& out, const MapsCollectionStatus& sf)
     out << " local ";
   }
   return out << " ] ";
+}
+
+// ///////////////////// blocked_range_t ///////////////////////////////
+
+blocked_range_t::blocked_range_t(OSDService* osds, ceph::timespan waittime, spg_t pg_id)
+    : m_osds{osds}
+{
+  auto now_is = std::chrono::system_clock::now();
+  m_callbk = new LambdaContext([now_is, pg_id]([[maybe_unused]] int r) {
+    std::time_t now_c = std::chrono::system_clock::to_time_t(now_is);
+    char buf[50];
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", std::localtime(&now_c));
+    lgeneric_subdout(g_ceph_context, osd, 10)
+      << "PgScrubber: " << pg_id << " blocked on an object for too long (since " << buf
+      << ")" << dendl;
+    return;
+  });
+
+  std::lock_guard l(m_osds->sleep_lock);
+  m_osds->sleep_timer.add_event_after(waittime, m_callbk);
+}
+
+blocked_range_t::~blocked_range_t()
+{
+  std::lock_guard l(m_osds->sleep_lock);
+  m_osds->sleep_timer.cancel_event(m_callbk);
 }
 
 }  // namespace Scrub

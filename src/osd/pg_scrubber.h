@@ -139,6 +139,7 @@ class MapsCollectionStatus {
   friend ostream& operator<<(ostream& out, const MapsCollectionStatus& sf);
 };
 
+
 }  // namespace Scrub
 
 /**
@@ -323,7 +324,11 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   // -------------------------------------------------------------------------------------------
   // the I/F used by the state-machine (i.e. the implementation of ScrubMachineListener)
 
+
+
   bool select_range() final;
+
+  Scrub::BlockedRangeWarning acquire_blocked_alarm() final;
 
   /// walk the log to find the latest update that affects our chunk
   eversion_t search_log_for_updates() const final;
