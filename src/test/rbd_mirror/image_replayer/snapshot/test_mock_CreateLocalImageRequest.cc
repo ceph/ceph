@@ -65,6 +65,7 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
 
   static CreateImageRequest* create(Threads<librbd::MockTestImageCtx>* threads,
                                     librados::IoCtx &local_io_ctx,
+                                    GroupCtx *local_group_ctx,
                                     const std::string &global_image_id,
                                     const std::string &remote_mirror_uuid,
                                     const std::string &local_image_name,
@@ -200,7 +201,7 @@ public:
       const std::string& global_image_id,
       Context* on_finish) {
     return new MockCreateLocalImageRequest(
-      &mock_threads, m_local_io_ctx, m_mock_remote_image_ctx,
+      &mock_threads, m_local_io_ctx, nullptr, m_mock_remote_image_ctx,
       global_image_id, &m_pool_meta_cache, nullptr, &mock_state_builder,
       on_finish);
   }
