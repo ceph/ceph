@@ -20,6 +20,14 @@ public:
   PoolMetaCache(const PoolMetaCache&) = delete;
   PoolMetaCache& operator=(const PoolMetaCache&) = delete;
 
+  bool local_pool_meta_exists(int64_t pool_id) const {
+    return m_local_pool_metas.count(pool_id) > 0;
+  }
+
+  bool remote_pool_meta_exists(int64_t pool_id) const {
+    return m_remote_pool_metas.count(pool_id) > 0;
+  }
+
   int get_local_pool_meta(int64_t pool_id,
                           LocalPoolMeta* local_pool_meta) const;
   void set_local_pool_meta(int64_t pool_id,

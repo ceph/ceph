@@ -167,7 +167,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
-        m_local_io_ctx, m_local_mirror_uuid, global_image_id,
+        m_local_io_ctx, nullptr, m_local_mirror_uuid, global_image_id,
         m_threads, instance_watcher, m_local_status_updater,
         m_cache_manager_handler, m_pool_meta_cache);
 
@@ -637,6 +637,10 @@ void InstanceReplayer<I>::start_group_replayer(
 
   std::string global_group_id = group_replayer->get_global_group_id();
   if (!group_replayer->is_stopped()) {
+    if (group_replayer->needs_restart()) {
+      stop_group_replayer(group_replayer, new C_TrackedOp(m_async_op_tracker,
+                                                          nullptr));
+    }
     return;
   } else if (group_replayer->is_blocklisted()) {
     derr << "global_group_id=" << global_group_id << ": blocklisted detected "
