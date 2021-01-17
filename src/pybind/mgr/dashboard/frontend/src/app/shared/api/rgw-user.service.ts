@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, of as observableOf } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { catchError, mapTo, mergeMap } from 'rxjs/operators';
 
 import { cdEncode } from '../decorators/cd-encode';
 
@@ -131,10 +131,13 @@ export class RgwUserService {
    * @return {Observable<boolean>}
    */
   exists(uid: string): Observable<boolean> {
-    return this.enumerate().pipe(
-      mergeMap((resp: string[]) => {
-        const index = _.indexOf(resp, uid);
-        return observableOf(-1 !== index);
+    return this.get(uid).pipe(
+      mapTo(true),
+      catchError((error: Event) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return observableOf(false);
       })
     );
   }
