@@ -30,17 +30,17 @@ class Module(MgrModule):
 
         r = self.get('io_rate')
 
-        stamp_delta = float(r['pg_stats_delta']['stamp_delta'])
+        stamp_delta = int(float(r['pg_stats_delta']['stamp_delta']))
         if (stamp_delta > 0):
-            rd = int(r['pg_stats_delta']['stat_sum']['num_read_kb']) / stamp_delta
-            wr = int(r['pg_stats_delta']['stat_sum']['num_write_kb']) / stamp_delta
+            rd = r['pg_stats_delta']['stat_sum']['num_read_kb'] // stamp_delta
+            wr = r['pg_stats_delta']['stat_sum']['num_write_kb'] // stamp_delta
             # The values are in kB, but to_pretty_iec() requires them to be in bytes
-            rd = int(rd) << 10
-            wr = int(wr) << 10
+            rd = rd << 10
+            wr = wr << 10
             total = rd + wr
 
-            rd_ops = int(r['pg_stats_delta']['stat_sum']['num_read']) / stamp_delta
-            wr_ops = int(r['pg_stats_delta']['stat_sum']['num_write']) / stamp_delta
+            rd_ops = r['pg_stats_delta']['stat_sum']['num_read'] // stamp_delta
+            wr_ops = r['pg_stats_delta']['stat_sum']['num_write'] // stamp_delta
             total_ops = rd_ops + wr_ops
 
         if print_header:
@@ -51,9 +51,9 @@ class Module(MgrModule):
             self.to_pretty_iec(rd) + 'B/s',
             self.to_pretty_iec(wr) + 'B/s',
             self.to_pretty_iec(total) + 'B/s',
-            int(rd_ops),
-            int(wr_ops),
-            int(total_ops)
+            str(rd_ops),
+            str(wr_ops),
+            str(total_ops)
             ]
         ret += self.get_pretty_row(elems, width)
 
