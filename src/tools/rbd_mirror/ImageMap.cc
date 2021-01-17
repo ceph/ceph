@@ -319,7 +319,11 @@ void ImageMap<I>::notify_listener_acquire_release_images(
           m_threads->work_queue,
           new C_NotifyInstance(this, global_id, true)));
     } else if (update.entity.type == MIRROR_ENTITY_TYPE_GROUP) {
-      // TODO
+      m_listener.acquire_group(
+        update.entity.global_id, update.instance_id,
+        create_async_context_callback(
+          m_threads->work_queue,
+          new C_NotifyInstance(this, global_id, true)));
     } else {
       ceph_abort_msgf("invalid mirror entity type: %d",
                       (int)update.entity.type);
@@ -335,7 +339,11 @@ void ImageMap<I>::notify_listener_acquire_release_images(
           m_threads->work_queue,
           new C_NotifyInstance(this, global_id, true)));
     } else if (update.entity.type == MIRROR_ENTITY_TYPE_GROUP) {
-      // TODO
+      m_listener.release_group(
+        update.entity.global_id, update.instance_id,
+        create_async_context_callback(
+          m_threads->work_queue,
+          new C_NotifyInstance(this, global_id, true)));
     } else {
       ceph_abort_msgf("invalid mirror entity type: %d",
                       (int)update.entity.type);
@@ -358,7 +366,11 @@ void ImageMap<I>::notify_listener_remove_images(const std::string &mirror_uuid,
           m_threads->work_queue,
           new C_NotifyInstance(this, global_id, false)));
     } else if (update.entity.type == MIRROR_ENTITY_TYPE_GROUP) {
-      // TODO
+      m_listener.remove_group(
+        mirror_uuid, update.entity.global_id, update.instance_id,
+        create_async_context_callback(
+          m_threads->work_queue,
+          new C_NotifyInstance(this, global_id, false)));
     } else {
       ceph_abort_msgf("invalid mirror entity type: %d",
                       (int)update.entity.type);
@@ -441,8 +453,9 @@ void ImageMap<I>::update_images_removed(
       entity_removed = peer_removed && peer_set.empty();
     }
 
-    if (entity_mapped && peer_removed && !mirror_uuid.empty()) {
-      // peer image has been deleted
+    if (entity_mapped && peer_removed &&
+        !(entity.type == MIRROR_ENTITY_TYPE_IMAGE && mirror_uuid.empty())) {
+      // peer entity has been deleted or local non-image entity needs restart
       to_remove.emplace_back(entity, info.instance_id);
     }
 
