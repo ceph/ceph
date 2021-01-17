@@ -3186,17 +3186,31 @@ def get_image_info_from_inspect(out, image):
 
 
 ##################################
-def check_subnet(subnet:str) -> Tuple[int, int, str]:
-    """Determine whether the given string is a valid subnet"""
-    version = 0
-    # ensure the format of the string is as expected address/netmask
-    if not re.search(r'\/\d+$', subnet):
-        return 1, 0, "subnet must be in CIDR format (address/netmask)"
-    try:
-        version = ipaddress.ip_network(unicode(subnet)).version
-    except ValueError as e:
-        return 1, 0, str(e)
-    return 0, version, ""
+def check_subnet(subnets:str) -> Tuple[int, List[int], str]:
+    """Determine whether the given string is a valid subnet
+
+    :param subnets: subnet string, a single definition or comma separated list of CIDR subnets
+    :returns: return code, IP version list of the subnets and msg describing any errors validation errors
+    """
+
+    rc = 0
+    versions = set() 
+    errors = []
+    subnet_list = subnets.split(',')
+    for subnet in subnet_list:
+        # ensure the format of the string is as expected address/netmask
+        if not re.search(r'\/\d+$', subnet):
+            rc = 1
+            errors.append(f"{subnet} is not in CIDR format (address/netmask)")
+            continue
+        try:
+            v = ipaddress.ip_network(unicode(subnet)).version
+            versions.add(v)
+        except ValueError as e:
+            rc = 1
+            errors.append(f"{subnet} invalid: {str(e)}")
+    
+    return rc, list(versions), ", ".join(errors)
 
 def unwrap_ipv6(address):
     # type: (str) -> str
@@ -3295,13 +3309,15 @@ def prepare_mon_addresses(
                         '--skip-mon-network to configure it later' % base_ip)
     
     cluster_network = None
+    ipv6_cluster_network = False
     # the cluster network may not exist on this node, so all we can do is 
     # validate that the address given is valid ipv4 or ipv6 subnet
     if args.cluster_network:
-        rc, _cluster_ip_version, error = check_subnet(args.cluster_network)
+        rc, versions, err_msg = check_subnet(args.cluster_network)
         if rc:
-            raise Error(f"Invalid --cluster-network parameter: {error}")
+            raise Error(f"Invalid --cluster-network parameter: {err_msg}")
         cluster_network = args.cluster_network
+        ipv6_cluster_network = True if 6 in versions else False
     else:
         logger.warning("{}{}{}".format(termcolor.yellow,
                                        "Internal network (--cluster-network) has not been provided",
@@ -3701,11 +3717,11 @@ def finish_bootstrap_config(
         cli(['config', 'set', 'mon', 'public_network', mon_network])
     
     if cluster_network:
-        logger.info(f"Setting mon cluster_network to {cluster_network}")
-        cli(['config', 'set', 'mon', 'cluster_network', cluster_network])
+        logger.info(f"Setting 'global' cluster_network to {cluster_network}")
+        cli(['config', 'set', 'global', 'cluster_network', cluster_network])
 
-    if ipv6:
-        logger.info('Enabling IPv6 (ms_bind_ipv6)')
+    if ipv6 or ipv6_cluster_network:
+        logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
 
 
