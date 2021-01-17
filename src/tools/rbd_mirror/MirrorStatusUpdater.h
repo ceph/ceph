@@ -38,7 +38,7 @@ public:
   void init(Context* on_finish);
   void shut_down(Context* on_finish);
 
-  bool exists(const std::string& global_image_id);
+  bool mirror_image_exists(const std::string& global_image_id) const;
   void set_mirror_image_status(
       const std::string& global_image_id,
       const cls::rbd::MirrorImageSiteStatus& mirror_image_site_status,
@@ -47,6 +47,26 @@ public:
                                   bool immediate_update, Context* on_finish);
   void remove_refresh_mirror_image_status(const std::string& global_image_id,
                                           Context* on_finish);
+
+  bool mirror_group_exists(const std::string& global_group_id) const;
+  void set_mirror_group_status(
+      const std::string& global_group_id,
+      const cls::rbd::MirrorGroupSiteStatus& mirror_group_site_status,
+      bool immediate_update);
+  void remove_mirror_group_status(const std::string& global_group_id,
+                                  Context* on_finish);
+
+  bool mirror_group_image_exists(const std::string& global_group_id,
+                                 int64_t image_pool_id,
+                                 const std::string& global_image_id) const;
+  void set_mirror_group_image_status(
+      const std::string& global_group_id,
+      int64_t image_pool_id, const std::string& global_image_id,
+      const cls::rbd::MirrorImageSiteStatus& mirror_image_site_status,
+      bool immediate_update);
+  void remove_mirror_group_image_status(
+      const std::string& global_group_id, int64_t image_pool_id,
+      const std::string& global_image_id, Context* on_finish);
 
 private:
   /**
@@ -69,6 +89,9 @@ private:
   typedef std::set<std::string> GlobalImageIds;
   typedef std::map<std::string, cls::rbd::MirrorImageSiteStatus>
       GlobalImageStatus;
+  typedef std::set<std::string> GlobalGroupIds;
+  typedef std::map<std::string, cls::rbd::MirrorGroupSiteStatus>
+      GlobalGroupStatus;
 
   librados::IoCtx m_io_ctx;
   Threads<ImageCtxT>* m_threads;
@@ -76,7 +99,7 @@ private:
 
   Context* m_timer_task = nullptr;
 
-  ceph::mutex m_lock;
+  mutable ceph::mutex m_lock;
 
   bool m_initialized = false;
 
@@ -85,14 +108,21 @@ private:
   GlobalImageIds m_update_global_image_ids;
   GlobalImageStatus m_global_image_status;
 
+  GlobalGroupIds m_update_global_group_ids;
+  GlobalGroupStatus m_global_group_status;
+
   bool m_update_in_progress = false;
   bool m_update_in_flight = false;
   bool m_update_requested = false;
   Contexts m_update_on_finish_ctxs;
   GlobalImageIds m_updating_global_image_ids;
+  GlobalImageIds m_updating_global_group_ids;
 
   bool try_remove_mirror_image_status(const std::string& global_image_id,
                                       bool queue_update, bool immediate_update,
+                                      Context* on_finish);
+
+  bool try_remove_mirror_group_status(const std::string& global_image_id,
                                       Context* on_finish);
 
   void init_mirror_status_watcher(Context* on_finish);
