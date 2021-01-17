@@ -42,6 +42,7 @@ public:
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
       librados::IoCtx& remote_io_ctx,
+      GroupCtx *local_group_ctx,
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
@@ -53,15 +54,17 @@ public:
       bool* do_resync,
       Context* on_finish) {
     return new BootstrapRequest(
-      threads, local_io_ctx, remote_io_ctx, instance_watcher, global_image_id,
-      local_mirror_uuid, remote_pool_meta, cache_manager_handler,
-      pool_meta_cache, progress_ctx, state_builder, do_resync, on_finish);
+      threads, local_io_ctx, remote_io_ctx, local_group_ctx, instance_watcher,
+      global_image_id, local_mirror_uuid, remote_pool_meta,
+      cache_manager_handler, pool_meta_cache, progress_ctx, state_builder,
+      do_resync, on_finish);
   }
 
   BootstrapRequest(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
       librados::IoCtx& remote_io_ctx,
+      GroupCtx *local_group_ctx,
       InstanceWatcher<ImageCtxT>* instance_watcher,
       const std::string& global_image_id,
       const std::string& local_mirror_uuid,
@@ -124,6 +127,7 @@ private:
   Threads<ImageCtxT>* m_threads;
   librados::IoCtx &m_local_io_ctx;
   librados::IoCtx &m_remote_io_ctx;
+  GroupCtx *m_local_group_ctx;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;

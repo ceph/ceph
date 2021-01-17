@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -172,6 +173,27 @@ struct PeerSpec {
 };
 
 std::ostream& operator<<(std::ostream& os, const PeerSpec &peer);
+
+struct GroupCtx {
+  std::string name;
+  std::string group_id;
+  std::string global_group_id;
+  bool primary = false;
+  mutable librados::IoCtx io_ctx;
+
+  GroupCtx() {
+  }
+
+  GroupCtx(const std::string &name, const std::string &group_id,
+           const std::string &global_group_id, bool primary,
+           librados::IoCtx &io_ctx_)
+    : name(name), group_id(group_id), global_group_id(global_group_id),
+      primary(primary) {
+    io_ctx.dup(io_ctx_);
+  }
+};
+
+std::ostream& operator<<(std::ostream& lhs, const GroupCtx &group_ctx);
 
 } // namespace mirror
 } // namespace rbd
