@@ -47,6 +47,7 @@ BootstrapRequest<I>::BootstrapRequest(
     Threads<I>* threads,
     librados::IoCtx& local_io_ctx,
     librados::IoCtx& remote_io_ctx,
+    GroupCtx *local_group_ctx,
     InstanceWatcher<I>* instance_watcher,
     const std::string& global_image_id,
     const std::string& local_mirror_uuid,
@@ -63,6 +64,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_threads(threads),
     m_local_io_ctx(local_io_ctx),
     m_remote_io_ctx(remote_io_ctx),
+    m_local_group_ctx(local_group_ctx),
     m_instance_watcher(instance_watcher),
     m_global_image_id(global_image_id),
     m_local_mirror_uuid(local_mirror_uuid),
@@ -361,8 +363,8 @@ void BootstrapRequest<I>::create_local_image() {
     BootstrapRequest<I>,
     &BootstrapRequest<I>::handle_create_local_image>(this);
   auto request = (*m_state_builder)->create_local_image_request(
-    m_threads, m_local_io_ctx, m_global_image_id, m_pool_meta_cache,
-    m_progress_ctx, ctx);
+    m_threads, m_local_io_ctx, m_local_group_ctx, m_global_image_id,
+    m_pool_meta_cache, m_progress_ctx, ctx);
   request->send();
 }
 
@@ -405,9 +407,9 @@ void BootstrapRequest<I>::image_sync() {
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_image_sync>(this);
   m_image_sync = ImageSync<I>::create(
-    m_threads, state_builder->local_image_ctx, state_builder->remote_image_ctx,
-    m_local_mirror_uuid, sync_point_handler, m_instance_watcher,
-    m_progress_ctx, ctx);
+    m_threads, m_local_group_ctx, state_builder->local_image_ctx,
+    state_builder->remote_image_ctx, m_local_mirror_uuid, sync_point_handler,
+    m_instance_watcher, m_progress_ctx, ctx);
   m_image_sync->get();
   locker.unlock();
 
