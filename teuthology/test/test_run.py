@@ -110,10 +110,11 @@ class TestRun(object):
 
     @patch("teuthology.run.fetch_qa_suite")
     def test_fetch_tasks_if_needed(self, m_fetch_qa_suite):
-        config = {"suite_path": "/some/suite/path", "suite_branch": "feature_branch"}
+        config = {"suite_path": "/some/suite/path", "suite_branch": "feature_branch",
+                  "suite_sha1": "commit"}
         m_fetch_qa_suite.return_value = "/some/other/suite/path"
         result = run.fetch_tasks_if_needed(config)
-        m_fetch_qa_suite.assert_called_with("feature_branch")
+        m_fetch_qa_suite.assert_called_with("feature_branch", commit="commit")
         assert result == "/some/other/suite/path"
 
     @patch("teuthology.run.get_status")
