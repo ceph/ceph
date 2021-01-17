@@ -19,6 +19,7 @@ namespace rbd {
 namespace mirror {
 
 class PoolMetaCache;
+struct GroupCtx;
 template <typename> struct Threads;
 
 namespace image_replayer {
@@ -29,6 +30,7 @@ public:
   static CreateImageRequest *create(
       Threads<ImageCtxT> *threads,
       librados::IoCtx &local_io_ctx,
+      GroupCtx *local_group_ctx,
       const std::string &global_image_id,
       const std::string &remote_mirror_uuid,
       const std::string &local_image_name,
@@ -37,15 +39,16 @@ public:
       PoolMetaCache* pool_meta_cache,
       cls::rbd::MirrorImageMode mirror_image_mode,
       Context *on_finish) {
-    return new CreateImageRequest(threads, local_io_ctx, global_image_id,
-                                  remote_mirror_uuid, local_image_name,
-                                  local_image_id, remote_image_ctx,
-                                  pool_meta_cache, mirror_image_mode,
-                                  on_finish);
+    return new CreateImageRequest(threads, local_io_ctx, local_group_ctx,
+                                  global_image_id, remote_mirror_uuid,
+                                  local_image_name, local_image_id,
+                                  remote_image_ctx, pool_meta_cache,
+                                  mirror_image_mode, on_finish);
   }
 
   CreateImageRequest(
       Threads<ImageCtxT> *threads, librados::IoCtx &local_io_ctx,
+      GroupCtx *local_group_ctx,
       const std::string &global_image_id,
       const std::string &remote_mirror_uuid,
       const std::string &local_image_name,
@@ -87,6 +90,7 @@ private:
 
   Threads<ImageCtxT> *m_threads;
   librados::IoCtx &m_local_io_ctx;
+  GroupCtx *m_local_group_ctx;
   std::string m_global_image_id;
   std::string m_remote_mirror_uuid;
   std::string m_local_image_name;
