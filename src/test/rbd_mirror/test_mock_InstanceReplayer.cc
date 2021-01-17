@@ -114,7 +114,9 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   std::string global_image_id;
 
   static ImageReplayer *create(
-      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      librados::IoCtx &local_io_ctx,
+      GroupCtx *local_group_ctx,
+      const std::string &local_mirror_uuid,
       const std::string &global_image_id,
       Threads<librbd::MockTestImageCtx> *threads,
       InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,

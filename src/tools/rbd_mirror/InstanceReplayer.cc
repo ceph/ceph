@@ -167,7 +167,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
-        m_local_io_ctx, m_local_mirror_uuid, global_image_id,
+        m_local_io_ctx, nullptr, m_local_mirror_uuid, global_image_id,
         m_threads, instance_watcher, m_local_status_updater,
         m_cache_manager_handler, m_pool_meta_cache);
 

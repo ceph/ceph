@@ -208,10 +208,11 @@ public:
   }
 
   void create_replayer() {
-    m_replayer = new ImageReplayer<>(m_local_ioctx, m_local_mirror_uuid,
-                                     m_global_image_id, m_threads.get(),
-                                     m_instance_watcher, m_local_status_updater,
-                                     nullptr, &m_pool_meta_cache);
+    m_replayer = new ImageReplayer<>(m_local_ioctx, nullptr,
+                                     m_local_mirror_uuid, m_global_image_id,
+                                     m_threads.get(), m_instance_watcher,
+                                     m_local_status_updater, nullptr,
+                                     &m_pool_meta_cache);
     m_replayer->add_peer({"peer uuid", m_remote_ioctx,
                          {m_remote_mirror_uuid, "remote mirror peer uuid"},
                          nullptr});
