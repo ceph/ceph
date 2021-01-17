@@ -2537,6 +2537,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_backfills", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum number of concurrent local and remote backfills or recoveries per OSD ")
     .set_long_description("There can be osd_max_backfills local reservations AND the same remote reservations per OSD. So a value of 1 lets this OSD participate as 1 PG primary in recovery and 1 shard of another recovering PG."),
 
@@ -3124,19 +3125,23 @@ std::vector<Option> get_global_options() {
 
     Option("osd_recovery_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next recovery or backfill op"),
 
     Option("osd_recovery_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.1)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next recovery or backfill op for HDDs"),
 
     Option("osd_recovery_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next recovery or backfill op for SSDs")
     .add_see_also("osd_recovery_sleep"),
 
     Option("osd_recovery_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.025)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Time in seconds to sleep before next recovery or backfill op when data is on HDD and journal is on SSD")
     .add_see_also("osd_recovery_sleep"),
 
@@ -3251,18 +3256,21 @@ std::vector<Option> get_global_options() {
 
     Option("osd_recovery_max_active", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Number of simultaneous active recovery operations per OSD (overrides _ssd and _hdd if non-zero)")
     .add_see_also("osd_recovery_max_active_hdd")
     .add_see_also("osd_recovery_max_active_ssd"),
 
     Option("osd_recovery_max_active_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Number of simultaneous active recovery operations per OSD (for rotational devices)")
     .add_see_also("osd_recovery_max_active")
     .add_see_also("osd_recovery_max_active_ssd"),
 
     Option("osd_recovery_max_active_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Number of simultaneous active recovery operations per OSD (for non-rotational solid state devices)")
     .add_see_also("osd_recovery_max_active")
     .add_see_also("osd_recovery_max_active_hdd"),
@@ -3522,6 +3530,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_async_recovery_min_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("A mixture measure of number of current log entries difference "
                      "and historical missing objects,  above which we switch to use "
                      "asynchronous recovery when appropriate"),
