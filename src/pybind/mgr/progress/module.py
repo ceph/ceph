@@ -801,10 +801,10 @@ class Module(MgrModule):
             self.log.warning("fail: ev {0} does not exist".format(ev_id))
 
     def on(self):
-        self.set_module_option('enabled', True)
+        self.set_module_option('enabled', "true")
 
     def off(self):
-        self.set_module_option('enabled', False)
+        self.set_module_option('enabled', "false")
 
     def _handle_ls(self):
         if len(self._events) or len(self._completed_events):
