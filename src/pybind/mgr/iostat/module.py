@@ -3,7 +3,7 @@ from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule
 
 class Module(MgrModule):
     def __init__(self, *args, **kwargs):
-        super(Module, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def self_test(self):
         r = self.get('io_rate')
@@ -31,7 +31,7 @@ class Module(MgrModule):
         r = self.get('io_rate')
 
         stamp_delta = int(float(r['pg_stats_delta']['stamp_delta']))
-        if (stamp_delta > 0):
+        if stamp_delta > 0:
             rd = r['pg_stats_delta']['stat_sum']['num_read_kb'] // stamp_delta
             wr = r['pg_stats_delta']['stat_sum']['num_write_kb'] // stamp_delta
             # The values are in kB, but to_pretty_iec() requires them to be in bytes
