@@ -4,12 +4,14 @@
 #ifndef CEPH_RBD_MIRROR_GROUP_REPLAYER_H
 #define CEPH_RBD_MIRROR_GROUP_REPLAYER_H
 
+#include "cls/rbd/cls_rbd_types.h"
 #include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
 #include <boost/optional.hpp>
 #include <string>
+#include <list>
 
 class AdminSocketHook;
 
@@ -19,10 +21,15 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+template <typename> class ImageReplayer;
 template <typename> struct InstanceWatcher;
 template <typename> struct MirrorStatusUpdater;
 struct PoolMetaCache;
 template <typename> struct Threads;
+
+namespace group_replayer {
+  template <typename> class BootstrapRequest;
+}
 
 /**
  * Replays changes from a remote cluster for a single group.
@@ -57,11 +64,23 @@ public:
   GroupReplayer(const GroupReplayer&) = delete;
   GroupReplayer& operator=(const GroupReplayer&) = delete;
 
-  bool is_stopped() { std::lock_guard l{m_lock}; return is_stopped_(); }
-  bool is_running() { std::lock_guard l{m_lock}; return is_running_(); }
-  bool is_replaying() { std::lock_guard l{m_lock}; return is_replaying_(); }
+  bool is_stopped() const {
+    std::lock_guard l{m_lock};
+    return is_stopped_();
+  }
+  bool is_running() const {
+    std::lock_guard l{m_lock};
+    return is_running_();
+  }
+  bool is_replaying() const {
+    std::lock_guard l{m_lock};
+    return is_replaying_();
+  }
 
-  std::string get_name() { std::lock_guard l{m_lock}; return m_group_spec; };
+  std::string get_name() const {
+    std::lock_guard l{m_lock};
+    return m_group_spec;
+  }
   void set_state_description(int r, const std::string &desc);
 
   // TODO temporary until policy handles release of group replayers
@@ -78,6 +97,8 @@ public:
     std::lock_guard locker{m_lock};
     return (m_last_r == -EBLOCKLISTED);
   }
+
+  bool needs_restart() const;
 
   image_replayer::HealthState get_health_state() const;
 
@@ -115,6 +136,18 @@ public:
    * <starting>                                             *
    *    |                                                   *
    *    v                                           (error) *
+   * BOOTSTRAP_GROUP  * * * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
+   * START_IMAGE_REPLAYERS  * * * * * * * * * * * * * * * * *
+   *    |
+   *    v
+   * REPLAYING
+   *    |
+   *    v
+   * STOP_IMAGE_REPLAYERS
+   *    |
+   *    v
    * <stopped>
    *
    * @endverbatim
@@ -136,13 +169,15 @@ private:
   std::string m_global_group_id;
   Threads<ImageCtxT> *m_threads;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
-  MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
+  MirrorStatusUpdater<ImageCtxT> *m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
   PoolMetaCache* m_pool_meta_cache;
 
   std::string m_local_group_name;
   std::string m_group_spec;
+  GroupCtx m_local_group_ctx;
   Peers m_peers;
+  Peer<ImageCtxT> m_remote_group_peer;
 
   mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
@@ -158,6 +193,24 @@ private:
 
   AdminSocketHook *m_asok_hook = nullptr;
 
+  group_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
+  std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> m_image_replayers;
+
+  static std::string state_to_string(const State &state) {
+    switch (state) {
+    case STATE_STARTING:
+      return "Starting";
+    case STATE_REPLAYING:
+      return "Replaying";
+    case STATE_STOPPING:
+      return "Stopping";
+    case STATE_STOPPED:
+      return "Stopped";
+    default:
+      return "Unknown (" + stringify(static_cast<uint32_t>(state)) + ")";
+    }
+  }
+
   bool is_stopped_() const {
     return m_state == STATE_STOPPED;
   }
@@ -168,9 +221,25 @@ private:
     return (m_state == STATE_REPLAYING);
   }
 
+  void bootstrap_group();
+  void handle_bootstrap_group(int r);
+
+  void start_image_replayers();
+  void handle_start_image_replayers(int r);
+
+  bool finish_start_if_interrupted();
+  bool finish_start_if_interrupted(ceph::mutex &lock);
+  void finish_start(int r, const std::string &desc);
+
+  void stop_image_replayers();
+  void handle_stop_image_replayers(int r);
+
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+
+  void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
+                                      const std::string &desc);
 };
 
 } // namespace mirror

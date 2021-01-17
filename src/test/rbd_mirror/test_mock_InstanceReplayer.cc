@@ -99,6 +99,7 @@ struct GroupReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(is_running, bool());
   MOCK_METHOD0(is_stopped, bool());
   MOCK_METHOD0(is_blocklisted, bool());
+  MOCK_METHOD0(needs_restart, bool());
 
   MOCK_CONST_METHOD0(is_finished, bool());
   MOCK_METHOD1(set_finished, void(bool));
@@ -114,7 +115,9 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   std::string global_image_id;
 
   static ImageReplayer *create(
-      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      librados::IoCtx &local_io_ctx,
+      GroupCtx *local_group_ctx,
+      const std::string &local_mirror_uuid,
       const std::string &global_image_id,
       Threads<librbd::MockTestImageCtx> *threads,
       InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,

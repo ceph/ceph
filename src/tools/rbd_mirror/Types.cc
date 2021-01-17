@@ -34,14 +34,20 @@ std::ostream& operator<<(std::ostream& os,
 
 std::ostream& operator<<(std::ostream& os,
                          const RemotePoolMeta& remote_pool_meta) {
-  return os << "mirror_uuid=" << remote_pool_meta.mirror_uuid << ", "
-                "mirror_peer_uuid=" << remote_pool_meta.mirror_peer_uuid;
+  return os << "mirror_uuid=" << remote_pool_meta.mirror_uuid
+            << ", mirror_peer_uuid=" << remote_pool_meta.mirror_peer_uuid;
 }
 
 std::ostream& operator<<(std::ostream& os, const PeerSpec &peer) {
   return os << "uuid: " << peer.uuid
-	     << " cluster: " << peer.cluster_name
-	     << " client: " << peer.client_name;
+            << " cluster: " << peer.cluster_name
+            << " client: " << peer.client_name;
+}
+
+std::ostream& operator<<(std::ostream& os, const GroupCtx &group_ctx) {
+  return os << "name: " << group_ctx.name
+            << ", group_id: " << group_ctx.group_id
+            << ", global_group_id: " << group_ctx.global_group_id;
 }
 
 } // namespace mirror
