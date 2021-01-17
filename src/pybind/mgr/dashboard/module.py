@@ -367,9 +367,9 @@ class Module(MgrModule, CherryPyConfig):
             return -errno.EINVAL, '',\
                 'Please specify the certificate file with "-i" option'
         if mgr_id is not None:
-            self.set_store('{}/crt'.format(mgr_id), inbuf)
+            self.set_store('{}/crt'.format(mgr_id), inbuf.decode())
         else:
-            self.set_store('crt', inbuf)
+            self.set_store('crt', inbuf.decode())
         return 0, 'SSL certificate updated', ''
 
     @CLIWriteCommand("dashboard set-ssl-certificate-key")
@@ -380,9 +380,9 @@ class Module(MgrModule, CherryPyConfig):
             return -errno.EINVAL, '',\
                 'Please specify the certificate key file with "-i" option'
         if mgr_id is not None:
-            self.set_store('{}/key'.format(mgr_id), inbuf)
+            self.set_store('{}/key'.format(mgr_id), inbuf.decode())
         else:
-            self.set_store('key', inbuf)
+            self.set_store('key', inbuf.decode())
         return 0, 'SSL certificate key updated', ''
 
     def handle_command(self, inbuf, cmd):
