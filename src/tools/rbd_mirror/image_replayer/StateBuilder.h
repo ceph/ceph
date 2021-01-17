@@ -15,6 +15,7 @@ namespace rbd {
 namespace mirror {
 
 struct BaseRequest;
+struct GroupCtx;
 template <typename> class InstanceWatcher;
 struct PoolMetaCache;
 struct ProgressContext;
@@ -59,6 +60,7 @@ public:
   virtual BaseRequest* create_local_image_request(
       Threads<ImageCtxT>* threads,
       librados::IoCtx& local_io_ctx,
+      GroupCtx *local_group_ctx,
       const std::string& global_image_id,
       PoolMetaCache* pool_meta_cache,
       ProgressContext* progress_ctx,

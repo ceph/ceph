@@ -44,5 +44,11 @@ std::ostream& operator<<(std::ostream& lhs, const PeerSpec &peer) {
 	     << " client: " << peer.client_name;
 }
 
+std::ostream& operator<<(std::ostream& lhs, const GroupCtx &group_ctx) {
+  return lhs << "name: " << group_ctx.name
+	     << ", group_id: " << group_ctx.group_id
+	     << ", global_group_id: " << group_ctx.global_group_id;
+}
+
 } // namespace mirror
 } // namespace rbd
