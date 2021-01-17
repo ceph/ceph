@@ -877,7 +877,6 @@ void NamespaceReplayer<I>::handle_remove_group(const std::string &mirror_uuid,
                                                const std::string &global_group_id,
                                                const std::string &instance_id,
                                                Context* on_finish) {
-  ceph_assert(!mirror_uuid.empty());
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "global_group_id=" << global_group_id << ", "
           << "instance_id=" << instance_id << dendl;
