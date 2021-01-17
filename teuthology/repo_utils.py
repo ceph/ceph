@@ -313,7 +313,7 @@ def validate_branch(branch):
         raise ValueError("Illegal branch name: '%s'" % branch)
 
 
-def fetch_repo(url, branch, bootstrap=None, lock=True):
+def fetch_repo(url, branch, commit=None, bootstrap=None, lock=True):
     """
     Make sure we have a given project's repo checked out and up-to-date with
     the current branch requested
@@ -328,8 +328,8 @@ def fetch_repo(url, branch, bootstrap=None, lock=True):
     src_base_path = config.src_base_path
     if not os.path.exists(src_base_path):
         os.mkdir(src_base_path)
-    branch_dir = ref_to_dirname(branch)
-    dirname = '%s_%s' % (url_to_dirname(url), branch_dir)
+    ref_dir = ref_to_dirname(commit or branch)
+    dirname = '%s_%s' % (url_to_dirname(url), ref_dir)
     dest_path = os.path.join(src_base_path, dirname)
     # only let one worker create/update the checkout at a time
     lock_path = dest_path.rstrip('/') + '.lock'
@@ -338,9 +338,17 @@ def fetch_repo(url, branch, bootstrap=None, lock=True):
             try:
                 while proceed():
                     try:
-                        enforce_repo_state(url, dest_path, branch)
+                        enforce_repo_state(url, dest_path, branch, commit)
                         if bootstrap:
+                            sentinel = os.path.join(dest_path, '.bootstrapped')
+                            if commit and os.path.exists(sentinel) or is_fresh(sentinel):
+                                log.info(
+                                    "Skipping bootstrap as it was already done in the last %ss",
+                                    FRESHNESS_INTERVAL,
+                                )
+                                break
                             bootstrap(dest_path)
+                            touch_file(sentinel)
                         break
                     except GitError:
                         log.exception("Git error encountered; retrying")
@@ -383,36 +391,31 @@ def url_to_dirname(url):
     return string
 
 
-def fetch_qa_suite(branch, lock=True):
+def fetch_qa_suite(branch, commit=None, lock=True):
     """
     Make sure ceph-qa-suite is checked out.
 
     :param branch: The branch to fetch
+    :param commit: The sha1 to checkout. Defaults to None, which uses HEAD of the branch.
     :returns:      The destination path
     """
     return fetch_repo(config.get_ceph_qa_suite_git_url(),
-                      branch, lock=lock)
+                      branch, commit, lock=lock)
 
 
-def fetch_teuthology(branch, lock=True):
+def fetch_teuthology(branch, commit=None, lock=True):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
 
     :param branch: The branch we want
+    :param commit: The sha1 to checkout. Defaults to None, which uses HEAD of the branch.
     :returns:      The destination path
     """
     url = config.ceph_git_base_url + 'teuthology.git'
-    return fetch_repo(url, branch, bootstrap_teuthology, lock)
+    return fetch_repo(url, branch, commit, bootstrap_teuthology, lock)
 
 
 def bootstrap_teuthology(dest_path):
-        sentinel = os.path.join(dest_path, '.bootstrapped')
-        if is_fresh(sentinel):
-            log.info(
-                "Skipping bootstrap as it was already done in the last %ss",
-                FRESHNESS_INTERVAL,
-            )
-            return
         log.info("Bootstrapping %s", dest_path)
         # This magic makes the bootstrap script not attempt to clobber an
         # existing virtualenv. But the branch's bootstrap needs to actually
@@ -433,4 +436,3 @@ def bootstrap_teuthology(dest_path):
             log.info("Removing %s", venv_path)
             shutil.rmtree(venv_path, ignore_errors=True)
             raise BootstrapError("Bootstrap failed!")
-        touch_file(sentinel)
