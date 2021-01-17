@@ -7,7 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { ToastrModule } from 'ngx-toastr';
-import { of as observableOf } from 'rxjs';
+import { of as observableOf, throwError } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -155,21 +155,19 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('username validation', () => {
-    beforeEach(() => {
-      spyOn(rgwUserService, 'enumerate').and.returnValue(observableOf(['abc', 'xyz']));
-    });
-
     it('should validate that username is required', () => {
       formHelper.expectErrorChange('uid', '', 'required', true);
     });
 
     it('should validate that username is valid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
       formHelper.setValue('uid', 'ab', true);
       tick(500);
       formHelper.expectValid('uid');
     }));
 
     it('should validate that username is invalid', fakeAsync(() => {
+      spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
       formHelper.setValue('uid', 'abc', true);
       tick(500);
       formHelper.expectError('uid', 'notUnique');
