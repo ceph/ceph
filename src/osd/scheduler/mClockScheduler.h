@@ -33,8 +33,12 @@
 
 namespace ceph::osd::scheduler {
 
+constexpr uint64_t default_min = 1;
+constexpr uint64_t default_max = 999999;
+
 using client_id_t = uint64_t;
 using profile_id_t = uint64_t;
+using op_type_t = OpSchedulerItem::OpQueueable::op_type_t;
 
 struct client_profile_id_t {
   client_id_t client_id;
@@ -60,6 +64,15 @@ WRITE_CMP_OPERATORS_2(scheduler_id_t, class_id, client_profile_id)
  */
 class mClockScheduler : public OpScheduler, md_config_obs_t {
 
+  CephContext *cct;
+  const uint32_t num_shards;
+  bool is_rotational;
+  double max_osd_capacity;
+  uint64_t osd_mclock_cost_per_io_msec;
+  std::string mclock_profile = "balanced";
+  std::map<op_scheduler_class, double> client_allocs;
+  std::map<op_type_t, int> client_cost_infos;
+  std::map<op_type_t, int> client_scaled_cost_infos;
   class ClientRegistry {
     std::array<
       crimson::dmclock::ClientInfo,
@@ -101,7 +114,43 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   }
 
 public:
-  mClockScheduler(CephContext *cct);
+  mClockScheduler(CephContext *cct, uint32_t num_shards, bool is_rotational);
+
+  // Set the max osd capacity in iops
+  void set_max_osd_capacity();
+
+  // Set the cost per io for the osd
+  void set_osd_mclock_cost_per_io();
+
+  // Set the mclock related config params based on the profile
+  void enable_mclock_profile();
+
+  // Get the active mclock profile
+  std::string get_mclock_profile();
+
+  // Set client capacity allocations based on profile
+  void set_client_allocations();
+
+  // Get client allocation
+  double get_client_allocation(op_type_t op_type);
+
+  // Set "balanced" profile parameters
+  void set_balanced_profile_config();
+
+  // Set "high_recovery_ops" profile parameters
+  void set_high_recovery_ops_profile_config();
+
+  // Set "high_client_ops" profile parameters
+  void set_high_client_ops_profile_config();
+
+  // Set recovery specific Ceph settings for profiles
+  void set_global_recovery_options();
+
+  // Calculate scale cost per item
+  int calc_scaled_cost(op_type_t op_type, int cost);
+
+  // Update mclock client cost info
+  bool maybe_update_client_cost_info(op_type_t op_type, int new_cost);
 
   // Enqueue op in the back of the regular queue
   void enqueue(OpSchedulerItem &&item) final;
