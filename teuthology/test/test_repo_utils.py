@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 
-from teuthology.exceptions import BranchNotFoundError
+from teuthology.exceptions import BranchNotFoundError, CommitNotFoundError
 from teuthology import repo_utils
 from teuthology import parallel
 repo_utils.log.setLevel(logging.WARNING)
@@ -23,8 +23,10 @@ class TestRepoUtils(object):
 
         if 'TEST_ONLINE' in os.environ:
             cls.repo_url = 'https://github.com/ceph/empty.git'
+            cls.commit = '71245d8e454a06a38a00bff09d8f19607c72e8bf'
         else:
             cls.repo_url = 'file://' + cls.src_path
+            cls.commit = None
 
     @classmethod
     def teardown_class(cls):
@@ -56,17 +58,25 @@ class TestRepoUtils(object):
             stdout=subprocess.PIPE,
         )
         assert proc.wait() == 0
+        if not self.commit:
+            result = subprocess.check_output(
+                'git rev-parse HEAD',
+                shell=True,
+                cwd=self.src_path,
+            ).split()
+            assert result
+            self.commit = result[0].decode()
 
     def teardown_method(self, method):
         shutil.rmtree(self.dest_path, ignore_errors=True)
 
     def test_clone_repo_existing_branch(self):
-        repo_utils.clone_repo(self.repo_url, self.dest_path, 'master')
+        repo_utils.clone_repo(self.repo_url, self.dest_path, 'master', self.commit)
         assert os.path.exists(self.dest_path)
 
     def test_clone_repo_non_existing_branch(self):
         with raises(BranchNotFoundError):
-            repo_utils.clone_repo(self.repo_url, self.dest_path, 'nobranch')
+            repo_utils.clone_repo(self.repo_url, self.dest_path, 'nobranch', self.commit)
         assert not os.path.exists(self.dest_path)
 
     def test_fetch_no_repo(self):
@@ -77,7 +87,7 @@ class TestRepoUtils(object):
         assert not os.path.exists(fake_dest_path)
 
     def test_fetch_noop(self):
-        repo_utils.clone_repo(self.repo_url, self.dest_path, 'master')
+        repo_utils.clone_repo(self.repo_url, self.dest_path, 'master', self.commit)
         repo_utils.fetch(self.dest_path)
         assert os.path.exists(self.dest_path)
 
@@ -89,7 +99,7 @@ class TestRepoUtils(object):
         assert not os.path.exists(fake_dest_path)
 
     def test_fetch_branch_fake_branch(self):
-        repo_utils.clone_repo(self.repo_url, self.dest_path, 'master')
+        repo_utils.clone_repo(self.repo_url, self.dest_path, 'master', self.commit)
         with raises(BranchNotFoundError):
             repo_utils.fetch_branch(self.dest_path, 'nobranch')
 
@@ -118,21 +128,32 @@ class TestRepoUtils(object):
                                       'master')
         assert os.path.exists(self.dest_path)
 
+    def test_enforce_existing_commit(self):
+        repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
+                                      'master', self.commit)
+        assert os.path.exists(self.dest_path)
+
     def test_enforce_non_existing_branch(self):
         with raises(BranchNotFoundError):
             repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
-                                          'blah')
+                                          'blah', self.commit)
+        assert not os.path.exists(self.dest_path)
+
+    def test_enforce_non_existing_commit(self):
+        with raises(CommitNotFoundError):
+            repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
+                                          'master', 'c69e90807d222c1719c45c8c758bf6fac3d985f1')
         assert not os.path.exists(self.dest_path)
 
     def test_enforce_multiple_calls_same_branch(self):
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
-                                      'master')
+                                      'master', self.commit)
         assert os.path.exists(self.dest_path)
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
-                                      'master')
+                                      'master', self.commit)
         assert os.path.exists(self.dest_path)
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
-                                      'master')
+                                      'master', self.commit)
         assert os.path.exists(self.dest_path)
 
     def test_enforce_multiple_calls_different_branches(self):
@@ -141,48 +162,48 @@ class TestRepoUtils(object):
                                           'blah1')
         assert not os.path.exists(self.dest_path)
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
-                                      'master')
+                                      'master', self.commit)
         assert os.path.exists(self.dest_path)
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
-                                      'master')
+                                      'master', self.commit)
         assert os.path.exists(self.dest_path)
         with raises(BranchNotFoundError):
             repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
                                           'blah2')
         assert not os.path.exists(self.dest_path)
         repo_utils.enforce_repo_state(self.repo_url, self.dest_path,
-                                      'master')
+                                      'master', self.commit)
         assert os.path.exists(self.dest_path)
 
     def test_enforce_invalid_branch(self):
         with raises(ValueError):
-            repo_utils.enforce_repo_state(self.repo_url, self.dest_path, 'a b')
+            repo_utils.enforce_repo_state(self.repo_url, self.dest_path, 'a b', self.commit)
 
     def test_simultaneous_access(self):
         count = 5
         with parallel.parallel() as p:
             for i in range(count):
                 p.spawn(repo_utils.enforce_repo_state, self.repo_url,
-                        self.dest_path, 'master')
+                        self.dest_path, 'master', self.commit)
             for result in p:
                 assert result is None
 
     def test_simultaneous_access_different_branches(self):
-        branches = ['master', 'master', 'nobranch',
-                    'nobranch', 'master', 'nobranch']
+        branches = [('master', self.commit),  ('master', self.commit), ('nobranch', 'nocommit'),
+                    ('nobranch', 'nocommit'), ('master', self.commit), ('nobranch', 'nocommit')]
 
         with parallel.parallel() as p:
-            for branch in branches:
+            for branch, commit in branches:
                 if branch == 'master':
                     p.spawn(repo_utils.enforce_repo_state, self.repo_url,
-                            self.dest_path, branch)
+                            self.dest_path, branch, commit)
                 else:
                     dest_path = self.dest_path + '_' + branch
 
                     def func():
                         repo_utils.enforce_repo_state(
                             self.repo_url, dest_path,
-                            branch)
+                            branch, commit)
                     p.spawn(
                         raises,
                         BranchNotFoundError,

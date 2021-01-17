@@ -9,7 +9,7 @@ from teuthology import misc
 from teuthology.util.flock import FileLock
 from teuthology.config import config
 from teuthology.contextutil import MaxWhileTries, safe_while
-from teuthology.exceptions import BootstrapError, BranchNotFoundError, GitError
+from teuthology.exceptions import BootstrapError, BranchNotFoundError, CommitNotFoundError, GitError
 
 log = logging.getLogger(__name__)
 
@@ -70,33 +70,42 @@ def ls_remote(url, ref):
     return sha1
 
 
-def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
+def enforce_repo_state(repo_url, dest_path, branch, commit=None, remove_on_error=True):
     """
     Use git to either clone or update a given repo, forcing it to switch to the
     specified branch.
 
-    :param repo_url:  The full URL to the repo (not including the branch)
-    :param dest_path: The full path to the destination directory
-    :param branch:    The branch.
-    :param remove:    Whether or not to remove dest_dir when an error occurs
-    :raises:          BranchNotFoundError if the branch is not found;
-                      GitError for other errors
+    :param repo_url:        The full URL to the repo (not including the branch)
+    :param dest_path:       The full path to the destination directory
+    :param branch:          The branch.
+    :param commit:          The sha1 to checkout. Defaults to None, which uses HEAD of the branch.
+    :param remove_on_error: Whether or not to remove dest_dir when an error occurs
+    :raises:                BranchNotFoundError if the branch is not found;
+                            CommitNotFoundError if the commit is not found;
+                            GitError for other errors
     """
     validate_branch(branch)
     sentinel = os.path.join(dest_path, '.fetched')
+    # sentinel to track whether the repo has checked out the intended
+    # version, in addition to being cloned
+    repo_reset = os.path.join(dest_path, '.fetched_and_reset')
     try:
         if not os.path.isdir(dest_path):
             clone_repo(repo_url, dest_path, branch)
-        elif not is_fresh(sentinel):
+        elif not commit and not is_fresh(sentinel):
             set_remote(dest_path, repo_url)
             fetch_branch(dest_path, branch)
             touch_file(sentinel)
         else:
-            log.info("%s was just updated; assuming it is current", dest_path)
+            log.info("%s was just updated or references a specific commit; assuming it is current", dest_path)
 
-        reset_repo(repo_url, dest_path, branch)
+        if commit and os.path.exists(repo_reset):
+            return
+
+        reset_repo(repo_url, dest_path, branch, commit)
+        touch_file(repo_reset)
         # remove_pyc_files(dest_path)
-    except BranchNotFoundError:
+    except (BranchNotFoundError, CommitNotFoundError):
         if remove_on_error:
             shutil.rmtree(dest_path, ignore_errors=True)
         raise
@@ -262,13 +271,15 @@ def fetch_branch(repo_path, branch, shallow=True):
             raise GitError("git fetch failed!")
 
 
-def reset_repo(repo_url, dest_path, branch):
+def reset_repo(repo_url, dest_path, branch, commit=None):
     """
 
     :param repo_url:  The full URL to the repo (not including the branch)
     :param dest_path: The full path to the destination directory
     :param branch:    The branch.
+    :param commit:    The sha1 to checkout. Defaults to None, which uses HEAD of the branch.
     :raises:          BranchNotFoundError if the branch is not found;
+                      CommitNotFoundError if the commit is not found;
                       GitError for other errors
     """
     validate_branch(branch)
@@ -276,15 +287,18 @@ def reset_repo(repo_url, dest_path, branch):
         reset_branch = lsstrip(remote_ref_from_ref(branch), 'refs/remotes/')
     else:
         reset_branch = 'origin/%s' % branch
-    log.info('Resetting repo at %s to branch %s', dest_path, reset_branch)
+    reset_ref = commit or reset_branch
+    log.info('Resetting repo at %s to %s', dest_path, reset_ref)
     # This try/except block will notice if the requested branch doesn't
     # exist, whether it was cloned or fetched.
     try:
         subprocess.check_output(
-            ('git', 'reset', '--hard', reset_branch),
+            ('git', 'reset', '--hard', reset_ref),
             cwd=dest_path,
         )
     except subprocess.CalledProcessError:
+        if commit:
+            raise CommitNotFoundError(commit, repo_url)
         raise BranchNotFoundError(branch, repo_url)
 
 
@@ -308,6 +322,7 @@ def fetch_repo(url, branch, bootstrap=None, lock=True):
     :param bootstrap:  An optional callback function to execute. Gets passed a
                        dest_dir argument: the path to the repo on-disk.
     :param branch:     The branch we want
+    :param commit:     The sha1 to checkout. Defaults to None, which uses HEAD of the branch.
     :returns:          The destination path
     """
     src_base_path = config.src_base_path
