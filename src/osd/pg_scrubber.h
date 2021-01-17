@@ -321,10 +321,14 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
     return false;
   };
 
+  int asok_debug(std::string_view cmd,
+		 std::string param,
+		 Formatter* f,
+		 stringstream& ss) override;
+  int m_debug_blockrange{0};
+
   // -------------------------------------------------------------------------------------------
   // the I/F used by the state-machine (i.e. the implementation of ScrubMachineListener)
-
-
 
   bool select_range() final;
 

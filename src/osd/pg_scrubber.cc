@@ -572,6 +572,12 @@ bool PgScrubber::select_range()
 
   dout(15) << __func__ << " range selected: " << m_start << " //// " << m_end << " //// "
 	   << m_max_end << dendl;
+
+  // debug: be 'blocked' if told so by the 'pg scrub_debug block' asok command
+  if (m_debug_blockrange > 0) {
+    m_debug_blockrange--;
+    return false;
+  }
   return true;
 }
 
@@ -1870,6 +1876,23 @@ ostream& PgScrubber::show(ostream& out) const
   return out << " [ " << m_pg_id << ": " << m_flags << " ] ";
 }
 
+int PgScrubber::asok_debug(std::string_view cmd,
+			   std::string param,
+			   Formatter* f,
+			   stringstream& ss)
+{
+  dout(10) << __func__ << " cmd: " << cmd << " param: " << param << dendl;
+
+  if (cmd == "block") {
+    // set a flag that will cause the next 'select_range' to report a blocked object
+    m_debug_blockrange = 1;
+  } else if (cmd == "unblock") {
+    // send an 'unblock' event, as if a blocked range was freed
+    m_debug_blockrange = 0;
+    m_fsm->process_event(Unblocked{});
+  }
+  return 0;
+}
 // ///////////////////// preemption_data_t //////////////////////////////////
 
 PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}

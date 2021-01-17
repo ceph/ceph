@@ -84,8 +84,6 @@ struct ScrubMachineListener {
 
   virtual void replica_handling_done() = 0;
 
-  // no virtual void discard_reservation_by_primary() = 0;
-
   /// the version of 'scrub_clear_state()' that does not try to invoke FSM services
   /// (thus can be called from FSM reactions)
   virtual void clear_pgscrub_state() = 0;
