@@ -8,7 +8,7 @@ class Module(MgrModule):
             "cmd": "iostat",
             "desc": "Get IO rates",
             "perm": "r",
-            "poll": "true"
+            "poll": True
         },
     ]
 
