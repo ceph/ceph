@@ -110,6 +110,7 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
 
   Context *ctx = new LambdaContext(
     [this] (int r) {
+      cancel_group_state_check_task();
       cancel_image_state_check_task();
       wait_for_ops();
     });
@@ -133,6 +134,7 @@ void InstanceReplayer<I>::release_all(Context *on_finish) {
   std::lock_guard locker{m_lock};
 
   C_Gather *gather_ctx = new C_Gather(g_ceph_context, on_finish);
+  dout(10) << "group_replayers: { " << m_group_replayers << " }" << dendl;
   for (auto it = m_group_replayers.begin(); it != m_group_replayers.end();
        it = m_group_replayers.erase(it)) {
     auto group_replayer = it->second;
@@ -171,7 +173,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
-        m_local_io_ctx, m_local_mirror_uuid, global_image_id,
+        m_local_io_ctx, nullptr, m_local_mirror_uuid, global_image_id,
         m_threads, instance_watcher, m_local_status_updater,
         m_cache_manager_handler, m_pool_meta_cache);
 
@@ -294,6 +296,7 @@ void InstanceReplayer<I>::release_group(const std::string &global_group_id,
   std::lock_guard locker{m_lock};
   ceph_assert(m_on_shut_down == nullptr);
 
+  dout(10) << "group_replayers: { " << m_group_replayers << " }" << dendl;
   auto it = m_group_replayers.find(global_group_id);
   if (it == m_group_replayers.end()) {
     dout(5) << global_group_id << ": not found" << dendl;
@@ -596,10 +599,11 @@ void InstanceReplayer<I>::handle_stop_image_replayers(int r) {
     }
     m_image_replayers.clear();
 
-    ceph_assert(m_on_shut_down != nullptr);
     std::swap(on_finish, m_on_shut_down);
   }
-  on_finish->complete(r);
+  if (on_finish) {
+    on_finish->complete(r);
+  }
 }
 
 template <typename I>
@@ -641,10 +645,15 @@ void InstanceReplayer<I>::schedule_image_state_check_task() {
 template <typename I>
 void InstanceReplayer<I>::start_group_replayer(
     GroupReplayer<I> *group_replayer) {
+  dout(10) << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   std::string global_group_id = group_replayer->get_global_group_id();
   if (!group_replayer->is_stopped()) {
+    if (group_replayer->needs_restart()) {
+      stop_group_replayer(group_replayer, new C_TrackedOp(m_async_op_tracker,
+                                                          nullptr));
+    }
     return;
   } else if (group_replayer->is_blocklisted()) {
     derr << "global_group_id=" << global_group_id << ": blocklisted detected "
@@ -682,6 +691,7 @@ void InstanceReplayer<I>::start_group_replayers(int r) {
 
   std::lock_guard locker{m_lock};
   if (m_on_shut_down != nullptr) {
+    m_async_op_tracker.finish_op();
     return;
   }
 
@@ -785,10 +795,11 @@ void InstanceReplayer<I>::handle_stop_group_replayers(int r) {
     }
     m_group_replayers.clear();
 
-    ceph_assert(m_on_shut_down != nullptr);
     std::swap(on_finish, m_on_shut_down);
   }
-  on_finish->complete(r);
+  if (on_finish) {
+    on_finish->complete(r);
+  }
 }
 
 template <typename I>
@@ -844,6 +855,7 @@ void InstanceReplayer<I>::handle_wait_for_ops(int r) {
   ceph_assert(r == 0);
 
   std::lock_guard locker{m_lock};
+  stop_group_replayers();
   stop_image_replayers();
 }
 
