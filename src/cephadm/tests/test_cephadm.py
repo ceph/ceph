@@ -654,11 +654,23 @@ iMN28C2bKGao5UHvdER1rGy7
 
     def test_ipv4_subnet(self):
         rc, v, msg = cd.check_subnet('192.168.1.0/24')
-        assert rc == 0 and v == 4
+        assert rc == 0 and v[0] == 4
     
+    def test_ipv4_subnet_list(self):
+        rc, v, msg = cd.check_subnet('192.168.1.0/24,10.90.90.0/24')
+        assert rc == 0 and not msg
+    
+    def test_ipv4_subnet_badlist(self):
+        rc, v, msg = cd.check_subnet('192.168.1.0/24,192.168.1.1')
+        assert rc == 1 and msg
+
+    def test_ipv4_subnet_mixed(self):
+        rc, v, msg = cd.check_subnet('192.168.100.0/24,fe80::/64')
+        assert rc == 0 and v == [4,6]
+
     def test_ipv6_subnet(self):
         rc, v, msg = cd.check_subnet('fe80::/64')
-        assert rc == 0 and v == 6
+        assert rc == 0 and v[0] == 6
     
     def test_subnet_mask_missing(self):
         rc, v, msg = cd.check_subnet('192.168.1.58')
