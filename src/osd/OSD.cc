@@ -9910,6 +9910,14 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_map_cache_size",
     "osd_pg_epoch_max_lag_factor",
     "osd_pg_epoch_persisted_max_stale",
+    "osd_recovery_sleep",
+    "osd_recovery_sleep_hdd",
+    "osd_recovery_sleep_ssd",
+    "osd_recovery_sleep_hybrid",
+    "osd_recovery_max_active",
+    "osd_recovery_max_active_hdd",
+    "osd_recovery_max_active_ssd",
+    "osd_async_recovery_min_cost",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -9938,9 +9946,46 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
   std::lock_guard l{osd_lock};
-  if (changed.count("osd_max_backfills")) {
-    service.local_reserver.set_max(cct->_conf->osd_max_backfills);
-    service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
+
+  if (changed.count("osd_max_backfills") ||
+      changed.count("osd_recovery_sleep") ||
+      changed.count("osd_recovery_sleep_hdd") ||
+      changed.count("osd_recovery_sleep_ssd") ||
+      changed.count("osd_recovery_sleep_hybrid") ||
+      changed.count("osd_recovery_max_active") ||
+      changed.count("osd_recovery_max_active_hdd") ||
+      changed.count("osd_recovery_max_active_ssd") ||
+      changed.count("osd_async_recovery_min_cost")) {
+    if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
+        cct->_conf.get_val<std::string>("osd_mclock_profile") != "custom") {
+      // Set ceph config option to meet QoS goals
+      // Set async_recovery_min_cost
+      cct->_conf.set_val("osd_async_recovery_min_cost", std::to_string(100));
+      // Set high value for recovery max active
+      uint32_t recovery_max_active = 1000;
+      if (cct->_conf->osd_recovery_max_active) {
+        cct->_conf.set_val(
+            "osd_recovery_max_active", std::to_string(recovery_max_active));
+      }
+      if (store_is_rotational) {
+        cct->_conf.set_val(
+            "osd_recovery_max_active_hdd", std::to_string(recovery_max_active));
+      } else {
+        cct->_conf.set_val(
+            "osd_recovery_max_active_ssd", std::to_string(recovery_max_active));
+      }
+      // Set high value for osd_max_backfill
+      cct->_conf.set_val("osd_max_backfills", std::to_string(1000));
+
+      // Disable recovery sleep
+      cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
+      cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
+      cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
+      cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
+    } else {
+      service.local_reserver.set_max(cct->_conf->osd_max_backfills);
+      service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
+    }
   }
   if (changed.count("osd_min_recovery_priority")) {
     service.local_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
