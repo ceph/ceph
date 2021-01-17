@@ -39,6 +39,7 @@ template <typename I>
 CreateImageRequest<I>::CreateImageRequest(
     Threads<I>* threads,
     librados::IoCtx &local_io_ctx,
+    GroupCtx *local_group_ctx,
     const std::string &global_image_id,
     const std::string &remote_mirror_uuid,
     const std::string &local_image_name,
@@ -48,7 +49,7 @@ CreateImageRequest<I>::CreateImageRequest(
     cls::rbd::MirrorImageMode mirror_image_mode,
     Context *on_finish)
   : m_threads(threads), m_local_io_ctx(local_io_ctx),
-    m_global_image_id(global_image_id),
+    m_local_group_ctx(local_group_ctx), m_global_image_id(global_image_id),
     m_remote_mirror_uuid(remote_mirror_uuid),
     m_local_image_name(local_image_name), m_local_image_id(local_image_id),
     m_remote_image_ctx(remote_image_ctx),
@@ -441,6 +442,12 @@ void CreateImageRequest<I>::populate_image_options(
       clone_format = 2;
     }
     image_options->set(RBD_IMAGE_OPTION_CLONE_FORMAT, clone_format);
+  }
+
+  if (m_local_group_ctx != nullptr) {
+    image_options->set(RBD_IMAGE_OPTION_GROUP_NAME, m_local_group_ctx->name);
+    image_options->set(RBD_IMAGE_OPTION_GROUP_POOL,
+                       m_local_group_ctx->io_ctx.get_pool_name());
   }
 }
 
