@@ -158,20 +158,20 @@ class Module(MgrModule):
             "major": m.group("major"),
             "minor": m.group("minor")
         }
-        return { k:int(v) for k,v in ver.items() }
+        return {k: int(v) for k, v in ver.items()}
 
     def _crash_history(self, hours):
         """
         Load crash history for the past N hours from the crash module.
         """
         params = dict(
-            prefix = "crash json_report",
-            hours = hours
+            prefix="crash json_report",
+            hours=hours
         )
 
         result = dict(
-            summary = {},
-            hours = params["hours"],
+            summary={},
+            hours=params["hours"],
         )
 
         health_check_details = []
@@ -299,9 +299,6 @@ class Module(MgrModule):
         the selftest module to manage testing scenarios related to tracking
         health history.
         """
-        try:
-            hours = long(hours)
-        except NameError:
-            hours = int(hours)
-        health_util.NOW_OFFSET = datetime.timedelta(hours = hours)
+        hours = int(hours)
+        health_util.NOW_OFFSET = datetime.timedelta(hours=hours)
         self.log.warning("Setting now time offset {}".format(health_util.NOW_OFFSET))
