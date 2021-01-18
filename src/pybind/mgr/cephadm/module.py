@@ -532,9 +532,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def is_paused(self) -> bool:
         return self.paused
 
-    def worker_pool_size(self) -> int:
-        return self._worker_pool._processes  # type: ignore
-
     def pause(self) -> None:
         if not self.paused:
             self.log.info('Paused')
@@ -690,7 +687,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return ok, err
         if not self.ssh_key or not self.ssh_pub:
             return False, 'SSH keys not set. Use `ceph cephadm set-priv-key` and `ceph cephadm set-pub-key` or `ceph cephadm generate-key`'
-        return True, ''
+
+        return True, str(self._worker_pool._processes)  # type: ignore
 
     def process(self, completions: List[CephadmCompletion]) -> None:  # type: ignore
         """
