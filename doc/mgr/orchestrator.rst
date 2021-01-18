@@ -53,7 +53,7 @@ Status
 
 ::
 
-    ceph orch status
+    ceph orch status [--detail]
 
 Show current orchestrator mode and high-level status (whether the orchestrator
 plugin is available and operational)
