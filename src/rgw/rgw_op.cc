@@ -224,7 +224,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
     if (ret < 0)
       return ret;
   } else {
-    ldout(cct, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(bucket_info.owner);
     /* object exists, but policy is broken */
     int r = user->load_by_id(dpp, y);
@@ -259,7 +259,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
       return ret;
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
-    ldout(cct, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
     std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(bucket_info.owner);
     ret = user->load_by_id(dpp, y);
     if (ret < 0)
