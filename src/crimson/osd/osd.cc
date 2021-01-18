@@ -444,7 +444,10 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SeastarMetricsHook>()),
       // PG commands
       asok->register_command(make_asok_hook<pg::QueryCommand>(*this)),
-      asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)));
+      asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)),
+      // ops commands
+      asok->register_command(make_asok_hook<DumpInFlightOpsHook>(
+        std::as_const(get_shard_services().registry))));
   }).then_unpack([] {
     return seastar::now();
   });

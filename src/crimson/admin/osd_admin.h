@@ -14,6 +14,7 @@ class OsdStatusHook;
 class SendBeaconHook;
 class DumpPGStateHistory;
 class SeastarMetricsHook;
+class DumpInFlightOpsHook;
 
 
 template<class Hook, class... Args>
