@@ -1345,7 +1345,9 @@ Usage:
         return HandleCommandResult()
 
     @_cli_read_command('orch status')
-    def _status(self, format: Format = Format.plain) -> HandleCommandResult:
+    def _status(self,
+                detail: bool = False,
+                format: Format = Format.plain) -> HandleCommandResult:
         """Report configured backend and its status"""
         o = self._select_orchestrator()
         if o is None:
@@ -1357,24 +1359,20 @@ Usage:
             "paused": self.is_paused(),
         }
 
-        try:
-            num_workers = self.worker_pool_size()
-        except NotImplementedError:
-            pass
-        else:
-            result['workers'] = num_workers
-
         if avail is not None:
             result['available'] = avail
-            if not avail:
-                result['reason'] = why
+            if avail:
+                if o == "cephadm" and detail:
+                    result['workers'] = msg
+            else:
+                result['reason'] = msg
 
         if format != Format.plain:
             output = to_format(result, format, many=False, cls=None)
         else:
             output = "Backend: {0}".format(result['backend'])
             if 'available' in result:
-                output += "\nAvailable: {0}".format(result['available'])
+                output += f"\nAvailable: {'Yes' if result['available'] else 'No'}"
                 if 'reason' in result:
                     output += ' ({0})'.format(result['reason'])
             output += f"\nPaused: {'Yes' if result['paused'] else 'No'}"
