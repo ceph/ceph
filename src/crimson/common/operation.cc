@@ -62,29 +62,7 @@ void AggregateBlocker::dump_detail(ceph::Formatter *f) const
   f->close_section();
 }
 
-void OrderedPipelinePhase::Handle::exit()
-{
-  if (phase) {
-    phase->mutex.unlock();
-    phase = nullptr;
-  }
-}
-
-blocking_future<> OrderedPipelinePhase::Handle::enter(
-  OrderedPipelinePhase &new_phase)
-{
-  auto fut = new_phase.mutex.lock();
-  exit();
-  phase = &new_phase;
-  return new_phase.make_blocking_future(std::move(fut));
-}
-
-OrderedPipelinePhase::Handle::~Handle()
-{
-  exit();
-}
-
-void OrderedPipelinePhase::dump_detail(ceph::Formatter* f) const
+void OrderedExclusivePhase::dump_detail(ceph::Formatter* f) const
 {
 }
 
