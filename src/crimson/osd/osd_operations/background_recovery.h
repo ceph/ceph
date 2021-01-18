@@ -86,7 +86,7 @@ private:
 class BackfillRecovery final : public BackgroundRecovery {
 public:
   class BackfillRecoveryPipeline {
-    OrderedPipelinePhase process = {
+    OrderedExclusivePhase process = {
       "BackfillRecovery::PGPipeline::process"
     };
     friend class BackfillRecovery;
@@ -104,7 +104,7 @@ public:
 
 private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
-  OrderedPipelinePhase::Handle handle;
+  PipelineHandle handle;
   seastar::future<bool> do_recovery() override;
 };
 
