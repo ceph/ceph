@@ -32,7 +32,7 @@ namespace migration {
 #define dout_prefix *_dout << "librbd::migration::QCOWFormat: " \
                            << __func__ << ": "
 
-namespace {
+namespace qcow_format {
 
 struct ClusterExtent {
   uint64_t cluster_offset;
@@ -86,7 +86,9 @@ void populate_cluster_extents(CephContext* cct, uint64_t cluster_size,
   }
 }
 
-} // anonymous namespace
+} // namespace qcow_format
+
+using namespace qcow_format;
 
 template <typename I>
 struct QCOWFormat<I>::Cluster {
@@ -411,7 +413,7 @@ private:
       }
 
       if (l2_cache.count <= min_count) {
-        if (min_timestamp.is_zero() || l2_cache.timestamp < min_timestamp) {
+        if (min_idx == -1 || l2_cache.timestamp < min_timestamp) {
           min_timestamp = l2_cache.timestamp;
           min_count = l2_cache.count;
           min_idx = idx;
@@ -619,11 +621,11 @@ private:
 template <typename I>
 class QCOWFormat<I>::ListSnapsRequest {
 public:
-  ListSnapsRequest(QCOWFormat* qcow_format, uint32_t l1_size,
+  ListSnapsRequest(QCOWFormat* qcow_format, uint64_t snap_id, uint32_t l1_size,
                    const uint64_t* l1_table, io::Extents&& image_extents,
                    bool require_copied_bit, io::SparseExtents* sparse_extents,
                    Context* on_finish)
-    : qcow_format(qcow_format), l1_size(l1_size),
+    : qcow_format(qcow_format), snap_id(snap_id), l1_size(l1_size),
       l1_table(l1_table), image_extents(std::move(image_extents)),
       require_copied_bit(require_copied_bit), sparse_extents(sparse_extents),
       on_finish(on_finish) {
@@ -635,6 +637,7 @@ public:
 
 private:
   QCOWFormat* qcow_format;
+  uint64_t snap_id;
   uint32_t l1_size;
   const uint64_t* l1_table;
   io::Extents image_extents;
@@ -646,7 +649,7 @@ private:
 
   void list_snaps() {
     auto cct = qcow_format->m_image_ctx->cct;
-    ldout(cct, 20) << dendl;
+    ldout(cct, 20) << "snap_id=" << snap_id << dendl;
 
     populate_cluster_extents(cct, qcow_format->m_cluster_size, image_extents,
                              &cluster_extents);
@@ -674,7 +677,7 @@ private:
   void handle_get_cluster_offset(
       int r, const ClusterExtent& cluster_extent, Context* on_finish) {
     auto cct = qcow_format->m_image_ctx->cct;
-    ldout(cct, 20) << "r=" << r << ", "
+    ldout(cct, 20) << "snap_id=" << snap_id << ", r=" << r << ", "
                    << "image_offset=" << cluster_extent.image_offset << ", "
                    << "image_length=" << cluster_extent.cluster_length << ", "
                    << "cluster_offset=" << cluster_extent.cluster_offset
@@ -709,7 +712,8 @@ private:
 
   void handle_list_snaps(int r) {
     auto cct = qcow_format->m_image_ctx->cct;
-    ldout(cct, 20) << "r=" << r << dendl;
+    ldout(cct, 20) << "snap_id=" << snap_id << ", r=" << r << ", "
+                   << "sparse_extents=" << *sparse_extents << dendl;
 
     on_finish->complete(r);
     delete this;
@@ -1045,7 +1049,9 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
 
   ldout(cct, 15) << "size=" << m_size << ", "
                  << "cluster_bits=" << m_cluster_bits << ", "
-                 << "snapshot_count=" << m_snapshot_count << dendl;
+                 << "l1_table_offset=" << m_l1_table_offset << ", "
+                 << "snapshot_count=" << m_snapshot_count << ", "
+                 << "snapshot_offset=" << m_snapshots_offset << dendl;
 
   // allocate memory for L1 table and L2 + cluster caches
   m_l2_table_cache = std::make_unique<L2TableCache>(this, l2_bits);
@@ -1099,6 +1105,13 @@ void QCOWFormat<I>::handle_read_snapshot(int r, Context* on_finish) {
   snapshot.timestamp.sec_ref() = be32toh(header.date_sec);
   snapshot.timestamp.nsec_ref() = be32toh(header.date_nsec);
   snapshot.extra_data_size = be32toh(header.extra_data_size);
+
+  ldout(cct, 10) << "snap_id=" << m_snapshots.size() << ", "
+                 << "id_str_len=" << snapshot.id.size() << ", "
+                 << "name_str_len=" << snapshot.name.size() << ", "
+                 << "l1_table_offset=" << snapshot.l1_table_offset << ", "
+                 << "l1_size=" << snapshot.l1_size << ", "
+                 << "extra_data_size=" << snapshot.extra_data_size << dendl;
 
   read_snapshot_extra(on_finish);
 }
@@ -1287,9 +1300,21 @@ template <typename I>
 void QCOWFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
                                   Context* on_finish) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+  ldout(cct, 10) << "snap_id=" << snap_id << dendl;
 
-  *size = m_size;
+  if (snap_id == CEPH_NOSNAP) {
+    *size = m_size;
+  } else {
+    auto snapshot_it = m_snapshots.find(snap_id);
+    if (snapshot_it == m_snapshots.end()) {
+      on_finish->complete(-ENOENT);
+      return;
+    }
+
+    auto& snapshot = snapshot_it->second;
+    *size = snapshot.size;
+  }
+
   on_finish->complete(0);
 }
 
@@ -1353,8 +1378,9 @@ void QCOWFormat<I>::list_snaps(io::Extents&& image_extents,
                                &previous_size, sparse_extents);
 
     auto list_snaps_request = new ListSnapsRequest(
-      this, snapshot.l1_size, snapshot.l1_table, io::Extents{image_extents},
-      require_copied_bit, sparse_extents, gather_ctx->new_sub());
+      this, snap_id, snapshot.l1_size, snapshot.l1_table,
+      io::Extents{image_extents}, require_copied_bit, sparse_extents,
+      gather_ctx->new_sub());
     list_snaps_request->send();
 
     require_copied_bit = false;
@@ -1366,8 +1392,8 @@ void QCOWFormat<I>::list_snaps(io::Extents&& image_extents,
                              &previous_size, sparse_extents);
 
   auto list_snaps_request = new ListSnapsRequest(
-    this, m_l1_size, m_l1_table, io::Extents{image_extents}, require_copied_bit,
-    sparse_extents, gather_ctx->new_sub());
+    this, CEPH_NOSNAP, m_l1_size, m_l1_table, io::Extents{image_extents},
+    require_copied_bit, sparse_extents, gather_ctx->new_sub());
   list_snaps_request->send();
 
   gather_ctx->activate();
@@ -1379,7 +1405,7 @@ void QCOWFormat<I>::handle_list_snaps(int r, io::SnapIds&& snap_ids,
                                       Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "r=" << r << ", "
-                 << "snapshot_delta=" << snapshot_delta << dendl;
+                 << "snapshot_delta=" << *snapshot_delta << dendl;
 
   util::merge_snapshot_delta(snap_ids, snapshot_delta);
   on_finish->complete(r);
