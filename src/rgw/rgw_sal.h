@@ -257,7 +257,6 @@ class RGWUser {
     virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params = {}) = 0;
 
     /* dang temporary; will be removed when User is complete */
-    rgw_user& get_user() { return info.user_id; }
     RGWUserInfo& get_info() { return info; }
 
     friend inline ostream& operator<<(ostream& out, const RGWUser& u) {
