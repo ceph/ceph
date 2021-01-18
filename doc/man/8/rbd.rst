@@ -704,9 +704,13 @@ Per client instance `rbd device map` options:
 
 * noshare - Disable sharing of client instances with other mappings.
 
-* crc - Enable CRC32C checksumming for data writes (default).
+* crc - Enable CRC32C checksumming for msgr1 on-the-wire protocol (default).
+  For msgr2.1 protocol this option is ignored: full checksumming is always on
+  in 'crc' mode and always off in 'secure' mode.
 
-* nocrc - Disable CRC32C checksumming for data writes.
+* nocrc - Disable CRC32C checksumming for msgr1 on-the-wire protocol.  Note
+  that only payload checksumming is disabled, header checksumming is always on.
+  For msgr2.1 protocol this option is ignored.
 
 * cephx_require_signatures - Require cephx message signing (since 3.19,
   default).
@@ -719,9 +723,12 @@ Per client instance `rbd device map` options:
 
 * notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
 
-* cephx_sign_messages - Enable message signing (since 4.4, default).
+* cephx_sign_messages - Enable message signing for msgr1 on-the-wire protocol
+  (since 4.4, default).  For msgr2.1 protocol this option is ignored: message
+  signing is built into 'secure' mode and not offered in 'crc' mode.
 
-* nocephx_sign_messages - Disable message signing (since 4.4).
+* nocephx_sign_messages - Disable message signing for msgr1 on-the-wire protocol
+  (since 4.4).  For msgr2.1 protocol this option is ignored.
 
 * mount_timeout=x - A timeout on various steps in `rbd device map` and
   `rbd device unmap` sequences (default is 60 seconds).  In particular,
@@ -764,6 +771,25 @@ Per mapping (block device) `rbd device map` options:
   bluestore_min_alloc_size (typically 64K for hard disk drives and 16K for
   solid-state drives).  For filestore with filestore_punch_hole = false, the
   recommended setting is image object size (typically 4M).
+
+* ms_mode=legacy - Use msgr1 on-the-wire protocol (since 5.11, default).
+
+* ms_mode=crc - Use msgr2.1 on-the-wire protocol, select 'crc' mode, also
+  referred to as plain mode (since 5.11).  If the daemon denies 'crc' mode,
+  fail the connection.
+
+* ms_mode=secure - Use msgr2.1 on-the-wire protocol, select 'secure' mode
+  (since 5.11).  'secure' mode provides full in-transit encryption ensuring
+  both confidentiality and authenticity.  If the daemon denies 'secure' mode,
+  fail the connection.
+
+* ms_mode=prefer-crc - Use msgr2.1 on-the-wire protocol, select 'crc'
+  mode (since 5.11).  If the daemon denies 'crc' mode in favor of 'secure'
+  mode, agree to 'secure' mode.
+
+* ms_mode=prefer-secure - Use msgr2.1 on-the-wire protocol, select 'secure'
+  mode (since 5.11).  If the daemon denies 'secure' mode in favor of 'crc'
+  mode, agree to 'crc' mode.
 
 * udev - Wait for udev device manager to finish executing all matching
   "add" rules and release the device before exiting (default).  This option

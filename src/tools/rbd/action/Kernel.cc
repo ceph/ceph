@@ -64,6 +64,16 @@ static std::string map_option_int_cb(const char *value_char)
   return stringify(d);
 }
 
+static std::string map_option_ms_mode_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "legacy") || !strcmp(value_char, "crc") ||
+      !strcmp(value_char, "secure") || !strcmp(value_char, "prefer-crc") ||
+      !strcmp(value_char, "prefer-secure")) {
+    return value_char;
+  }
+  return "";
+}
+
 static void put_map_option(const std::string &key, const std::string &val)
 {
   map_options[key] = val;
@@ -152,6 +162,9 @@ static int parse_map_options(const std::string &options_string)
       put_map_option("abort_on_full", this_char);
     } else if (!strcmp(this_char, "alloc_size")) {
       if (put_map_option_value("alloc_size", value_char, map_option_int_cb))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "ms_mode")) {
+      if (put_map_option_value("ms_mode", value_char, map_option_ms_mode_cb))
         return -EINVAL;
     } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
       put_map_option("udev", this_char);
