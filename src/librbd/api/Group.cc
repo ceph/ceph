@@ -639,9 +639,6 @@ int Group<I>::list(IoCtx& io_ctx, vector<string> *names)
     map<string, string> groups;
     r = cls_client::group_dir_list(&io_ctx, RBD_GROUP_DIRECTORY, last_read,
                                    max_read, &groups);
-    if (r == -ENOENT) {
-      return 0; // Ignore missing rbd group directory. It means we don't have any groups yet.
-    }
     if (r < 0) {
       if (r != -ENOENT) {
         lderr(cct) << "error listing group in directory: "
