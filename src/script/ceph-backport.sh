@@ -1083,7 +1083,7 @@ function try_known_milestones {
         mimic) mn="11" ;;
         nautilus) mn="12" ;;
         octopus) mn="13" ;;
-        pacific) mn="TBD" ;;
+        pacific) mn="14" ;;
     esac
     echo "$mn"
 }
