@@ -276,9 +276,6 @@ void mClockScheduler::set_high_client_ops_profile_config()
 
 void mClockScheduler::set_global_recovery_options()
 {
-  // Set low recovery min cost
-  cct->_conf.set_val("osd_async_recovery_min_cost", stringify(100));
-
   // Set high value for recovery max active and max backfill
   int rec_max_active = 1000;
   int max_backfills = 1000;
