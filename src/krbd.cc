@@ -44,6 +44,7 @@
 
 #include <blkid/blkid.h>
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/tokenizer.hpp>
 #include <libudev.h>
 
 static const int UDEV_BUF_SIZE = 1 << 20;  /* doubled to 2M (SO_RCVBUFFORCE) */
@@ -184,24 +185,39 @@ static int have_minor_attr(void)
 }
 
 static int build_map_buf(CephContext *cct, const krbd_spec& spec,
-                         const char *options, string *pbuf)
+                         const string& options, string *pbuf)
 {
+  bool msgr2 = false;
   ostringstream oss;
   int r;
+
+  boost::char_separator<char> sep(",");
+  boost::tokenizer<boost::char_separator<char>> tok(options, sep);
+  for (const auto& t : tok) {
+    if (boost::starts_with(t, "ms_mode=")) {
+      /* msgr2 unless ms_mode=legacy */
+      msgr2 = t.compare(8, t.npos, "legacy");
+    }
+  }
 
   MonMap monmap;
   r = monmap.build_initial(cct, false, cerr);
   if (r < 0)
     return r;
 
-  list<entity_addr_t> mon_addr;
-  monmap.list_addrs(mon_addr);
-
-  for (const auto &p : mon_addr) {
-    if (oss.tellp() > 0) {
-      oss << ",";
+  /*
+   * If msgr2, filter TYPE_MSGR2 addresses.  Otherwise, filter
+   * TYPE_LEGACY addresses.
+   */
+  for (const auto& p : monmap.mon_info) {
+    for (const auto& a : p.second.public_addrs.v) {
+      if ((msgr2 && a.is_msgr2()) || (!msgr2 && a.is_legacy())) {
+        if (oss.tellp() > 0) {
+          oss << ",";
+        }
+        oss << a.get_sockaddr();
+      }
     }
-    oss << p.get_sockaddr();
   }
 
   oss << " name=" << cct->_conf->name.get_id();
@@ -244,7 +260,7 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
     oss << ",key=" << key_name;
   }
 
-  if (strcmp(options, "") != 0)
+  if (!options.empty())
     oss << "," << options;
   if (!spec.nspace_name.empty())
     oss << ",_pool_ns=" << spec.nspace_name;
