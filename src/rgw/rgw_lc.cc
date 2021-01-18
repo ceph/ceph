@@ -303,11 +303,11 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, c
   utime_t base_time;
   if (cct->_conf->rgw_lc_debug_interval <= 0) {
     /* Normal case, run properly */
-    cmp = days*24*60*60;
+    cmp = double(days)*24*60*60;
     base_time = ceph_clock_now().round_to_day();
   } else {
     /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
-    cmp = days*cct->_conf->rgw_lc_debug_interval;
+    cmp = double(days)*cct->_conf->rgw_lc_debug_interval;
     base_time = ceph_clock_now();
   }
   timediff = base_time - ceph::real_clock::to_time_t(mtime);
@@ -1640,7 +1640,7 @@ std::string s3_expiration_header(
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
 	  boost::optional<ceph::real_time>(
-	    mtime + make_timespan(rule_expiration.get_days()*24*60*60));
+	    mtime + make_timespan(double(rule_expiration.get_days())*24*60*60));
 	rule_id = id;
       }
     }
