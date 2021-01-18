@@ -9917,7 +9917,6 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_recovery_max_active",
     "osd_recovery_max_active_hdd",
     "osd_recovery_max_active_ssd",
-    "osd_async_recovery_min_cost",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -9954,13 +9953,10 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_sleep_hybrid") ||
       changed.count("osd_recovery_max_active") ||
       changed.count("osd_recovery_max_active_hdd") ||
-      changed.count("osd_recovery_max_active_ssd") ||
-      changed.count("osd_async_recovery_min_cost")) {
+      changed.count("osd_recovery_max_active_ssd")) {
     if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
         cct->_conf.get_val<std::string>("osd_mclock_profile") != "custom") {
       // Set ceph config option to meet QoS goals
-      // Set async_recovery_min_cost
-      cct->_conf.set_val("osd_async_recovery_min_cost", std::to_string(100));
       // Set high value for recovery max active
       uint32_t recovery_max_active = 1000;
       if (cct->_conf->osd_recovery_max_active) {
