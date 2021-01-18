@@ -128,7 +128,7 @@ void RGWRealmReloader::reload()
 				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
 				   cct->_conf->rgw_cache_enabled);
 
-    ldout(cct, 1) << "Creating new store" << dendl;
+    ldpp_dout(this, 1) << "Creating new store" << dendl;
 
     rgw::sal::RGWRadosStore* store_cleanup = nullptr;
     {
@@ -144,7 +144,7 @@ void RGWRealmReloader::reload()
 
         // sleep until another event is scheduled
 	cond.wait(lock, [this] { return reload_scheduled; });
-        ldout(cct, 1) << "Woke up with a new configuration, retrying "
+        ldpp_dout(this, 1) << "Woke up with a new configuration, retrying "
             "RGWRados initialization." << dendl;
       }
 
@@ -160,7 +160,7 @@ void RGWRealmReloader::reload()
     }
 
     if (store_cleanup) {
-      ldout(cct, 4) << "Got another notification, restarting RGWRados "
+      ldpp_dout(this, 4) << "Got another notification, restarting RGWRados "
           "initialization." << dendl;
 
       RGWStoreManager::close_storage(store_cleanup);
@@ -174,14 +174,14 @@ void RGWRealmReloader::reload()
     /* ignore error */
   }
 
-  ldout(cct, 1) << "Finishing initialization of new store" << dendl;
+  ldpp_dout(this, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
-  ldout(cct, 1) << " - REST subsystem init" << dendl;
+  ldpp_dout(this, 1) << " - REST subsystem init" << dendl;
   rgw_rest_init(cct, store->svc()->zone->get_zonegroup());
-  ldout(cct, 1) << " - usage subsystem init" << dendl;
+  ldpp_dout(this, 1) << " - usage subsystem init" << dendl;
   rgw_log_usage_init(cct, store->getRados());
 
-  ldout(cct, 1) << "Resuming frontends with new realm configuration." << dendl;
+  ldpp_dout(this, 1) << "Resuming frontends with new realm configuration." << dendl;
 
   frontends->resume(store);
 }
