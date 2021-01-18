@@ -5,6 +5,7 @@ import time
 import subprocess
 import json
 import boto3
+import botocore.exceptions
 
 """
 Rgw manual and dynamic resharding  testing against a running instance
@@ -45,15 +46,6 @@ def exec_cmd(cmd):
         log.error('command failed')
         log.error(e)
         return False
-
-
-def get_radosgw_port():
-    out = exec_cmd('sudo netstat -nltp | grep radosgw')
-    log.debug('output: %s' % out)
-    x = out.decode('utf8').split(" ")
-    port = [i for i in x if ':' in i][0].split(':')[1]
-    log.info('radosgw port: %s' % port)
-    return port
 
 
 class BucketStats:
@@ -118,14 +110,22 @@ def main():
                               verify=False,
                               config=None,
                               )
+        try:
+            list(conn.buckets.limit(1)) # just verify we can list buckets
+        except botocore.exceptions.ConnectionError as e:
+            print(e)
+            raise
+        print('connected to', endpoint)
         return conn
 
-    port = get_radosgw_port()
-
-    if port == '80':
-        connection = boto_connect(port, ssl=False, proto='http')
-    elif port == '443':
-        connection = boto_connect(port, ssl=True, proto='https')
+    try:
+        connection = boto_connect('80', False, 'http')
+    except botocore.exceptions.ConnectionError:
+        try: # retry on non-privileged http port
+            connection = boto_connect('8000', False, 'http')
+        except botocore.exceptions.ConnectionError:
+            # retry with ssl
+            connection = boto_connect('443', True, 'https')
 
     # create a bucket
     bucket1 = connection.create_bucket(Bucket=BUCKET_NAME1)
