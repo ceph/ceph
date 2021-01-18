@@ -90,6 +90,7 @@ class IscsiService(CephService):
                     'value': "true"
                 })
             for dd in daemon_descrs:
+                assert dd.hostname is not None
                 spec = cast(IscsiServiceSpec,
                             self.mgr.spec_store.specs.get(dd.service_name(), None))
                 if not spec:

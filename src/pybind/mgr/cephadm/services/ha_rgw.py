@@ -78,6 +78,7 @@ class HA_RGWService(CephService):
         rgw_daemons = self.mgr.cache.get_daemons_by_type('rgw')
         rgw_servers = []
         for daemon in rgw_daemons:
+            assert daemon.hostname is not None
             rgw_servers.append(self.rgw_server(
                 daemon.name(), resolve_ip(daemon.hostname)))
 

@@ -172,6 +172,8 @@ class CephadmUpgrade:
 
     def _wait_for_ok_to_stop(self, s: DaemonDescription) -> bool:
         # only wait a little bit; the service might go away for something
+        assert s.daemon_type is not None
+        assert s.daemon_id is not None
         tries = 4
         while tries > 0:
             if not self.upgrade_state or self.upgrade_state.paused:
@@ -286,6 +288,10 @@ class CephadmUpgrade:
                 logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
                     daemon_type, d.daemon_id,
                     d.container_image_name, d.container_image_id, d.version))
+
+                assert d.daemon_type is not None
+                assert d.daemon_id is not None
+                assert d.hostname is not None
 
                 if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
                     logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
