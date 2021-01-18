@@ -592,7 +592,8 @@ class CephadmServe:
         # remove any?
         def _ok_to_stop(remove_daemon_hosts: Set[orchestrator.DaemonDescription]) -> bool:
             daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
-            r = self.mgr.cephadm_services[service_type].ok_to_stop(daemon_ids)
+            assert None not in daemon_ids
+            r = self.mgr.cephadm_services[service_type].ok_to_stop(cast(List[str], daemon_ids))
             return not r.retval
 
         while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
@@ -602,6 +603,7 @@ class CephadmServe:
             r = True
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
+            assert d.hostname is not None
             self._remove_daemon(d.name(), d.hostname)
 
         if r is None:
@@ -615,6 +617,9 @@ class CephadmServe:
         for dd in daemons:
             # orphan?
             spec = self.mgr.spec_store.specs.get(dd.service_name(), None)
+            assert dd.hostname is not None
+            assert dd.daemon_type is not None
+            assert dd.daemon_id is not None
             if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
@@ -720,6 +725,7 @@ class CephadmServe:
             ha_rgw_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
             for daemon in ha_rgw_daemons:
                 if daemon.hostname in [h.hostname for h in hosts] and daemon.hostname not in add_hosts:
+                    assert daemon.hostname is not None
                     self.mgr.cache.schedule_daemon_action(
                         daemon.hostname, daemon.name(), 'reconfig')
         return spec
