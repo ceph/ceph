@@ -567,6 +567,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
   }
 
   // the new entry (from the logs) has a version that is higher than
@@ -881,6 +882,7 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
@@ -895,6 +897,7 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
@@ -907,6 +910,7 @@ TEST_F(PGLogTest, merge_log) {
   // copied from oinfo.stats but info.stats.reported_* is guaranteed to
   // never be replaced by a lower version
   {
+    //case: 1
     clear();
 
     pg_log_t olog;
@@ -930,6 +934,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
     EXPECT_EQ(eversion_t(), info.stats.version);
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(1ull, info.stats.reported_seq);
     EXPECT_EQ(10u, info.stats.reported_epoch);
     EXPECT_TRUE(remove_snap.empty());
@@ -945,6 +950,7 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_EQ(1ull, info.stats.reported_seq);
     EXPECT_EQ(10u, info.stats.reported_epoch);
@@ -992,6 +998,7 @@ TEST_F(PGLogTest, merge_log) {
             +--------+-------+
   */
   {
+    //case: 2
     clear();
 
     pg_log_t olog;
@@ -1036,6 +1043,7 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(2U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
@@ -1050,6 +1058,7 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
@@ -1085,6 +1094,7 @@ TEST_F(PGLogTest, merge_log) {
 
   */
   {
+    //case: 3
     clear();
 
     pg_log_t olog;
@@ -1175,6 +1185,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
+    EXPECT_EQ(log.get_can_rollback_to(), log.head);
   }
 
   /*        +--------------------------+
@@ -1204,6 +1215,7 @@ TEST_F(PGLogTest, merge_log) {
 
   */
   {
+    //case: 4
     clear();
 
     pg_log_t olog;
@@ -1264,6 +1276,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(3U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_TRUE(info.purged_snaps.empty());
@@ -1284,6 +1297,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(4U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), olog.head);
     /* DELETE entries from olog that are appended to the hed of the
        log, and the divergent version of the object is removed (added
        to remove_snap). When peering handles deletes, it is the earlier
@@ -1319,6 +1333,7 @@ TEST_F(PGLogTest, merge_log) {
 
   */
   {
+    //case: 5
     clear();
 
     pg_log_t olog;
@@ -1365,6 +1380,7 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
@@ -1380,6 +1396,7 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(2U, log.log.size());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_EQ(0x9U, remove_snap.front().get_hash());
     EXPECT_TRUE(info.purged_snaps.empty());
@@ -1487,6 +1504,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     proc_replica_log(oinfo, olog, omissing, from);
 
     EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(log.get_can_rollback_to(), eversion_t(0,0));
   }
 
  {
