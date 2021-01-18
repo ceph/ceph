@@ -315,7 +315,7 @@ public:
   ~RGWHandler_SWIFT_Auth() override {}
   RGWOp *op_get() override;
 
-  int init(rgw::sal::RGWRadosStore *store, struct req_state *state, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::RGWStore *store, struct req_state *state, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
   int postauth_init(optional_yield) override { return 0; }
   int read_permissions(RGWOp *op, optional_yield) override { return 0; }
@@ -335,7 +335,7 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
 			       struct req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override {

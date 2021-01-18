@@ -83,7 +83,7 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(rgw::sal::RGWRadosStore* store,
+  virtual void unpause_with_new_config(rgw::sal::RGWStore* store,
                                        rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
@@ -146,7 +146,7 @@ public:
     env.mutex.get_write();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
+  void unpause_with_new_config(rgw::sal::RGWStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = std::move(auth_registry);
@@ -189,7 +189,7 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
+  void unpause_with_new_config(rgw::sal::RGWStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = auth_registry;
@@ -245,17 +245,17 @@ public:
     }
 
     rgw_user uid(uid_str);
+    std::unique_ptr<rgw::sal::RGWUser> user = env.store->get_user(uid);
 
-    RGWUserInfo user_info;
-    int ret = env.store->ctl()->user->get_info_by_uid(this, uid, &user_info, null_yield);
+    int ret = user->load_by_id(this, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
       return ret;
     }
 
-    map<string, RGWAccessKey>::iterator aiter = user_info.access_keys.begin();
-    if (aiter == user_info.access_keys.end()) {
+    map<string, RGWAccessKey>::iterator aiter = user->get_info().access_keys.begin();
+    if (aiter == user->get_info().access_keys.end()) {
       derr << "ERROR: user has no S3 access keys set" << dendl;
       return -EINVAL;
     }
@@ -287,11 +287,11 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(rgw::sal::RGWRadosStore *store) override {
+  void resume(rgw::sal::RGWStore *store) override {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->getRados()->pctl);
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->get_ctl());
 
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store, auth_registry);

@@ -7,7 +7,7 @@
 
 class RGWRESTMgr_PubSub : public RGWRESTMgr {
 public:
-  virtual RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
+  virtual RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
 			       struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;

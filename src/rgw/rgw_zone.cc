@@ -1372,13 +1372,13 @@ static int read_sync_status(rgw::sal::RGWRadosStore *store, rgw_meta_sync_status
   return r;
 }
 
-int RGWPeriod::update_sync_status(rgw::sal::RGWRadosStore *store, /* for now */
+int RGWPeriod::update_sync_status(rgw::sal::RGWStore *store, /* for now */
 				  const RGWPeriod &current_period,
                                   std::ostream& error_stream,
                                   bool force_if_stale)
 {
   rgw_meta_sync_status status;
-  int r = read_sync_status(store, &status);
+  int r = read_sync_status(static_cast<rgw::sal::RGWRadosStore*>(store), &status);
   if (r < 0) {
     ldout(cct, 0) << "period failed to read sync status: "
         << cpp_strerror(-r) << dendl;
@@ -1422,8 +1422,8 @@ int RGWPeriod::update_sync_status(rgw::sal::RGWRadosStore *store, /* for now */
   return 0;
 }
 
-int RGWPeriod::commit(const DoutPrefixProvider *dpp, 
-                      rgw::sal::RGWRadosStore *store,
+int RGWPeriod::commit(const DoutPrefixProvider *dpp,
+		      rgw::sal::RGWStore *store,
 		      RGWRealm& realm, const RGWPeriod& current_period,
                       std::ostream& error_stream, optional_yield y,
 		      bool force_if_stale)

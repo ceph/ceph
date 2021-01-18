@@ -657,7 +657,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
   ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
 
   // forward bucket tags requests to meta master zone
-  if (!store->svc()->zone->is_meta_master()) {
+  if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
     in_data = std::move(data);
   }
@@ -923,13 +923,13 @@ struct ReplicationConfiguration {
       }
     };
 
-    set<rgw_zone_id> get_zone_ids_from_names(rgw::sal::RGWRadosStore *store,
+    set<rgw_zone_id> get_zone_ids_from_names(rgw::sal::RGWStore *store,
                                              const vector<string>& zone_names) const {
       set<rgw_zone_id> ids;
 
       for (auto& name : zone_names) {
         rgw_zone_id id;
-        if (store->svc()->zone->find_zone_id_by_name(name, &id)) {
+        if (static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->find_zone_id_by_name(name, &id)) {
           ids.insert(std::move(id));
         }
       }
@@ -937,13 +937,13 @@ struct ReplicationConfiguration {
       return ids;
     }
 
-    vector<string> get_zone_names_from_ids(rgw::sal::RGWRadosStore *store,
+    vector<string> get_zone_names_from_ids(rgw::sal::RGWStore *store,
                                            const set<rgw_zone_id>& zone_ids) const {
       vector<string> names;
 
       for (auto& id : zone_ids) {
         RGWZone *zone;
-        if (store->svc()->zone->find_zone(id, &zone)) {
+        if (static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->find_zone(id, &zone)) {
           names.emplace_back(zone->name);
         }
       }
@@ -1007,7 +1007,7 @@ struct ReplicationConfiguration {
       return true;
     }
 
-    int to_sync_policy_pipe(req_state *s, rgw::sal::RGWRadosStore *store,
+    int to_sync_policy_pipe(req_state *s, rgw::sal::RGWStore *store,
                             rgw_sync_bucket_pipes *pipe,
                             bool *enabled) const {
       if (!is_valid(s->cct)) {
@@ -1058,7 +1058,7 @@ struct ReplicationConfiguration {
       return 0;
     }
 
-    void from_sync_policy_pipe(rgw::sal::RGWRadosStore *store,
+    void from_sync_policy_pipe(rgw::sal::RGWStore *store,
                               const rgw_sync_bucket_pipes& pipe,
                               bool enabled) {
       id = pipe.id;
@@ -1111,7 +1111,7 @@ struct ReplicationConfiguration {
     encode_xml("Rule", rules, f);
   }
 
-  int to_sync_policy_groups(req_state *s, rgw::sal::RGWRadosStore *store,
+  int to_sync_policy_groups(req_state *s, rgw::sal::RGWStore *store,
                             vector<rgw_sync_policy_group> *result) const {
     result->resize(2);
 
@@ -1141,7 +1141,7 @@ struct ReplicationConfiguration {
     return 0;
   }
 
-  void from_sync_policy_group(rgw::sal::RGWRadosStore *store,
+  void from_sync_policy_group(rgw::sal::RGWStore *store,
                               const rgw_sync_policy_group& group) {
 
     bool enabled = (group.status == rgw_sync_policy_group::Status::ENABLED);
@@ -1222,7 +1222,7 @@ int RGWPutBucketReplication_ObjStore_S3::get_params(optional_yield y)
   }
 
   // forward requests to meta master zone
-  if (!store->svc()->zone->is_meta_master()) {
+  if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
     in_data = std::move(data);
   }
@@ -1895,7 +1895,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   RGWZoneGroup zonegroup;
   string api_name;
 
-  int ret = store->svc()->zone->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
+  int ret = store->get_zonegroup(s->bucket->get_info().zonegroup, zonegroup);
   if (ret >= 0) {
     api_name = zonegroup.api_name;
   } else  {
@@ -1996,7 +1996,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
+  if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
     in_data.append(data);
   }
@@ -2173,7 +2173,7 @@ void RGWStatBucket_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-static int create_s3_policy(struct req_state *s, rgw::sal::RGWRadosStore *store,
+static int create_s3_policy(struct req_state *s, rgw::sal::RGWStore *store,
 			    RGWAccessControlPolicy_S3& s3policy,
 			    ACLOwner& owner)
 {
@@ -2181,7 +2181,7 @@ static int create_s3_policy(struct req_state *s, rgw::sal::RGWRadosStore *store,
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return s3policy.create_from_headers(s, store->ctl()->user, s->info.env, owner);
+    return s3policy.create_from_headers(s, store, s->info.env, owner);
   }
 
   return s3policy.create_canned(owner, s->bucket_owner, s->canned_acl);
@@ -2538,16 +2538,6 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
-static inline int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
-{
-  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  read_op.params.attrs = &attrs;
-
-  return read_op.prepare(s->yield, s);
-}
-
 static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
 {
   bufferlist bl;
@@ -2597,16 +2587,17 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   int res = 0;
   if (!multipart_upload_id.empty()) {
     RGWMPObj mp(s->object->get_name(), multipart_upload_id);
-    rgw_obj obj;
-    obj.init_ns(s->bucket->get_key(), mp.get_meta(), RGW_OBJ_NS_MULTIPART);
-    obj.set_in_extra_data(true);
-    map<string, bufferlist> xattrs;
-    res = get_obj_attrs(store, s, obj, xattrs);
+    std::unique_ptr<rgw::sal::RGWObject> obj = s->bucket->get_object(
+						rgw_obj_key(mp.get_meta(),
+							    std::string(),
+							    RGW_OBJ_NS_MULTIPART));
+    obj->set_in_extra_data(true);
+    res = obj->get_obj_attrs(s->obj_ctx, s->yield, this);
     if (res == 0) {
       std::unique_ptr<BlockCrypt> block_crypt;
       /* We are adding to existing object.
        * We use crypto mode that configured as if we were decrypting. */
-      res = rgw_s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
+      res = rgw_s3_prepare_decrypt(s, obj->get_attrs(), &block_crypt, crypt_http_responses);
       if (res == 0 && block_crypt != nullptr)
         filter->reset(new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
     }
@@ -2740,7 +2731,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
 
   if (! storage_class.empty()) {
     s->dest_placement.storage_class = storage_class;
-    if (!store->svc()->zone->get_zone_params().valid_placement(s->dest_placement)) {
+    if (!store->get_zone_params().valid_placement(s->dest_placement)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
       err_msg = "The storage class you specified is not valid";
       return -EINVAL;
@@ -3347,7 +3338,7 @@ int RGWPutACLs_ObjStore_S3::get_params(optional_yield y)
   return ret;
 }
 
-int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWRadosStore *store,
+int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::RGWStore *store,
 						  struct req_state *s,
 						  stringstream& ss)
 {
@@ -3513,7 +3504,7 @@ int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
   }
 
   // forward bucket cors requests to meta master zone
-  if (!store->svc()->zone->is_meta_master()) {
+  if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
     in_data.append(data);
   }
@@ -4412,7 +4403,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
   } else if (is_notification_op()) {
     return RGWHandler_REST_PSNotifs_S3::create_put_op();
   } else if (is_replication_op()) {
-    auto sync_policy_handler = store->svc()->zone->get_sync_policy_handler(nullopt);
+    auto sync_policy_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_sync_policy_handler(nullopt);
     if (!sync_policy_handler ||
         sync_policy_handler->is_legacy_config()) {
       return nullptr;
@@ -4564,7 +4555,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
-int RGWHandler_REST_S3::init_from_header(rgw::sal::RGWRadosStore *store,
+int RGWHandler_REST_S3::init_from_header(rgw::sal::RGWStore *store,
 					 struct req_state* s,
 					 int default_formatter,
 					 bool configurable_format)
@@ -4640,7 +4631,7 @@ int RGWHandler_REST_S3::init_from_header(rgw::sal::RGWRadosStore *store,
   return 0;
 }
 
-static int verify_mfa(rgw::sal::RGWRadosStore *store, RGWUserInfo *user,
+static int verify_mfa(rgw::sal::RGWStore *store, RGWUserInfo *user,
 		      const string& mfa_str, bool *verified, const DoutPrefixProvider *dpp, optional_yield y)
 {
   vector<string> params;
@@ -4660,7 +4651,7 @@ static int verify_mfa(rgw::sal::RGWRadosStore *store, RGWUserInfo *user,
     return -EACCES;
   }
 
-  int ret = store->svc()->cls->mfa.check_mfa(user->user_id, serial, pin, y);
+  int ret = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->cls->mfa.check_mfa(user->user_id, serial, pin, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
     return -EACCES;
@@ -4711,7 +4702,7 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
   return 0;
 }
 
-int RGWHandler_REST_S3::init(rgw::sal::RGWRadosStore *store, struct req_state *s,
+int RGWHandler_REST_S3::init(rgw::sal::RGWStore *store, struct req_state *s,
                              rgw::io::BasicClient *cio)
 {
   int ret;
@@ -4821,7 +4812,7 @@ discover_aws_flavour(const req_info& info)
  * it tries AWS v4 before AWS v2
  */
 int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
-                           rgw::sal::RGWRadosStore* const store,
+                           rgw::sal::RGWStore* const store,
                            const rgw::auth::StrategyRegistry& auth_registry,
                            struct req_state* const s, optional_yield y)
 {
@@ -4843,7 +4834,7 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-int RGWHandler_Auth_S3::init(rgw::sal::RGWRadosStore *store, struct req_state *state,
+int RGWHandler_Auth_S3::init(rgw::sal::RGWStore *store, struct req_state *state,
                              rgw::io::BasicClient *cio)
 {
   int ret = RGWHandler_REST_S3::init_from_header(store, state, RGW_FORMAT_JSON, true);
@@ -4853,7 +4844,7 @@ int RGWHandler_Auth_S3::init(rgw::sal::RGWRadosStore *store, struct req_state *s
   return RGWHandler_REST::init(store, state, cio);
 }
 
-RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::RGWRadosStore *store,
+RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::RGWStore *store,
 					    struct req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
@@ -4903,14 +4894,14 @@ bool RGWHandler_REST_S3Website::web_dir() const {
     subdir_name.pop_back();
   }
 
-  rgw_obj obj(s->bucket->get_key(), subdir_name);
+  std::unique_ptr<rgw::sal::RGWObject> obj = s->bucket->get_object(rgw_obj_key(subdir_name));
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
-  obj_ctx.set_prefetch_data(obj);
+  obj->set_atomic(&obj_ctx);
+  obj->set_prefetch_data(&obj_ctx);
 
   RGWObjState* state = nullptr;
-  if (store->getRados()->get_obj_state(s, &obj_ctx, s->bucket->get_info(), obj, &state, false, s->yield) < 0) {
+  if (obj->get_obj_state(s, &obj_ctx, &state, s->yield) < 0) {
     return false;
   }
   if (! state->exists) {
@@ -4919,7 +4910,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
   return state->exists;
 }
 
-int RGWHandler_REST_S3Website::init(rgw::sal::RGWRadosStore *store, req_state *s,
+int RGWHandler_REST_S3Website::init(rgw::sal::RGWStore *store, req_state *s,
                                     rgw::io::BasicClient* cio)
 {
   // save the original object name before retarget() replaces it with the

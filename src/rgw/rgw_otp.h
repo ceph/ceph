@@ -5,7 +5,7 @@
 #define CEPH_RGW_OTP_H
 
 namespace rgw { namespace sal {
-class RGWRadosStore;
+class RGWStore;
 } }
 
 #include "cls/otp/cls_otp_types.h"

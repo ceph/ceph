@@ -82,7 +82,7 @@ RGWOp *RGWHandler_REST_IAM::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_IAM::init(rgw::sal::RGWRadosStore *store,
+int RGWHandler_REST_IAM::init(rgw::sal::RGWStore *store,
                               struct req_state *s,
                               rgw::io::BasicClient *cio)
 {
@@ -144,7 +144,7 @@ int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_IAM::get_handler(rgw::sal::RGWRadosStore *store,
+RGWRESTMgr_IAM::get_handler(rgw::sal::RGWStore *store,
 			    struct req_state* const s,
 			    const rgw::auth::StrategyRegistry& auth_registry,
 			    const std::string& frontend_prefix)

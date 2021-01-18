@@ -856,7 +856,7 @@ namespace rgw {
     
     std::string uid; // should match user.user_id, iiuc
 
-    RGWUserInfo user;
+    std::unique_ptr<rgw::sal::RGWUser> user;
     RGWAccessKey key; // XXXX acc_key
 
     static std::atomic<uint32_t> fs_inst_counter;
@@ -984,13 +984,13 @@ namespace rgw {
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
 
-    int authorize(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store) {
-      int ret = store->ctl()->user->get_info_by_access_key(dpp, key.id, &user, null_yield);
+    int authorize(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store) {
+      int ret = store->get_user(dpp, key, null_yield, &user);
       if (ret == 0) {
-	RGWAccessKey* k = user.get_key(key.id);
+	RGWAccessKey* k = user->get_info().get_key(key.id);
 	if (!k || (k->key != key.key))
 	  return -EINVAL;
-	if (user.suspended)
+	if (user->get_info().suspended)
 	  return -ERR_USER_SUSPENDED;
       } else {
 	/* try external authenticators (ldap for now) */
@@ -1004,9 +1004,8 @@ namespace rgw {
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
-	  if (store->ctl()->user->get_info_by_uid(dpp, rgw_user(token.id), &user, null_yield) < 0) {
-	    int ret = store->ctl()->user->store_info(dpp, user, null_yield,
-                                                  RGWUserCtl::PutParams()
+	  if (user->load_by_id(dpp, null_yield) < 0) {
+	    int ret = user->store_info(dpp, null_yield, RGWUserCtl::PutParams()
                                                   .set_exclusive(true));
 	    if (ret < 0) {
 	      lsubdout(get_context(), rgw, 10)
@@ -1295,14 +1294,10 @@ namespace rgw {
 
     uint64_t get_fsid() { return root_fh.state.dev; }
 
-    RGWUserInfo* get_user() { return &user; }
+    RGWUserInfo* get_user() { return &user->get_info(); }
 
     void update_user(const DoutPrefixProvider *dpp) {
-      RGWUserInfo _user = user;
-      auto user_ctl = rgwlib.get_store()->ctl()->user;
-      int ret = user_ctl->get_info_by_access_key(dpp, key.id, &user, null_yield);
-      if (ret != 0)
-        user = _user;
+      (void) rgwlib.get_store()->get_user(dpp, key, null_yield, &user);
     }
 
     void close();
@@ -2506,7 +2501,7 @@ public:
   size_t bytes_written;
   bool eio;
 
-  RGWWriteRequest(rgw::sal::RGWRadosStore* store,
+  RGWWriteRequest(rgw::sal::RGWStore* store,
 		  std::unique_ptr<rgw::sal::RGWUser> _user,
 		  RGWFileHandle* _fh, const std::string& _bname,
 		  const std::string& _oname)

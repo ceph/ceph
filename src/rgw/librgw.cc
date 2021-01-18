@@ -236,7 +236,7 @@ namespace rgw {
 
     RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
 
-    auto sysobj_ctx = store->svc()->sysobj->init_obj_ctx();
+    auto sysobj_ctx = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj->init_obj_ctx();
     s->sysobj_ctx = &sysobj_ctx;
 
     /* XXX and -then- stash req_state pointers everywhere they are needed */
@@ -336,7 +336,7 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(store->getRados(), nullptr /* !rest */, s,
+      rgw_log_op(store, nullptr /* !rest */, s,
 		 (op ? op->name() : "unknown"), olog);
     }
 
@@ -540,6 +540,7 @@ namespace rgw {
 
     const DoutPrefix dp(cct.get(), dout_subsys, "librgw: ");
     store = RGWStoreManager::get_storage(&dp, g_ceph_context,
+					 "rados",
 					 run_gc,
 					 run_lc,
 					 run_quota,
@@ -558,7 +559,7 @@ namespace rgw {
 
     r = rgw_perf_start(g_ceph_context);
 
-    rgw_rest_init(g_ceph_context, store->svc()->zone->get_zonegroup());
+    rgw_rest_init(g_ceph_context, store->get_zonegroup());
 
     mutex.lock();
     init_timer.cancel_all_events();
@@ -581,7 +582,7 @@ namespace rgw {
     ldh->init();
     ldh->bind();
 
-    rgw_log_usage_init(g_ceph_context, store->getRados());
+    rgw_log_usage_init(g_ceph_context, store);
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
@@ -613,7 +614,7 @@ namespace rgw {
 
     fe->run();
 
-    r = store->getRados()->register_to_service_map("rgw-nfs", service_map_meta);
+    r = store->register_to_service_map("rgw-nfs", service_map_meta);
     if (r < 0) {
       derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
       /* ignore error */
@@ -656,14 +657,17 @@ namespace rgw {
     return 0;
   } /* RGWLib::stop() */
 
-  int RGWLibIO::set_uid(rgw::sal::RGWRadosStore *store, const rgw_user& uid)
+  int RGWLibIO::set_uid(rgw::sal::RGWStore *store, const rgw_user& uid)
   {
     const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
-    int ret = store->ctl()->user->get_info_by_uid(&dp, uid, &user_info, null_yield);
+    std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(uid);
+    /* object exists, but policy is broken */
+    int ret = user->load_by_id(&dp, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
     }
+    user_info = user->get_info();
     return ret;
   }
 

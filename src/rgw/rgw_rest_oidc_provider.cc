@@ -16,7 +16,7 @@
 #include "rgw_role.h"
 #include "rgw_rest_oidc_provider.h"
 #include "rgw_oidc_provider.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -121,7 +121,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
     return;
   }
 
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_url,
+  RGWOIDCProvider provider(s->cct, store->get_ctl(), provider_url,
                             s->user->get_tenant(), client_ids, thumbprints);
   op_ret = provider.create(s, true, y);
 
@@ -140,7 +140,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
+  RGWOIDCProvider provider(s->cct, store->get_ctl(), provider_arn, s->user->get_tenant());
   op_ret = provider.delete_obj(y);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -158,7 +158,7 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
 
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->getRados()->pctl, provider_arn, s->user->get_tenant());
+  RGWOIDCProvider provider(s->cct, store->get_ctl(), provider_arn, s->user->get_tenant());
   op_ret = provider.get(s);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -200,7 +200,7 @@ int RGWListOIDCProviders::verify_permission(optional_yield y)
 void RGWListOIDCProviders::execute(optional_yield y)
 {
   vector<RGWOIDCProvider> result;
-  op_ret = RGWOIDCProvider::get_providers(s, store->getRados(), s->user->get_tenant(), result);
+  op_ret = RGWOIDCProvider::get_providers(s, store, s->user->get_tenant(), result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListOpenIDConnectProvidersResponse");

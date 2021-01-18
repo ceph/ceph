@@ -171,7 +171,7 @@ public:
 class RGW_Auth_STS {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       rgw::sal::RGWRadosStore *store,
+                       rgw::sal::RGWStore *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s, optional_yield y);
 };
@@ -191,7 +191,7 @@ public:
       post_body(post_body) {}
   ~RGWHandler_REST_STS() override = default;
 
-  int init(rgw::sal::RGWRadosStore *store,
+  int init(rgw::sal::RGWStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -209,7 +209,7 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
+  RGWHandler_REST* get_handler(rgw::sal::RGWStore *store,
 			       struct req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;

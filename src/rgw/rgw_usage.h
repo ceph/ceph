@@ -11,20 +11,23 @@
 #include "rgw_formats.h"
 #include "rgw_user.h"
 
-class RGWRados;
+namespace rgw { namespace sal { class RGWStore; } }
 
 
 class RGWUsage
 {
 public:
-  static int show(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
-	          uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
+  static int show(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
+		  rgw::sal::RGWUser* user , rgw::sal::RGWBucket* bucket,
+		  uint64_t start_epoch, uint64_t end_epoch, bool show_log_entries,
+		  bool show_log_sum,
 		  std::map<std::string, bool> *categories, RGWFormatterFlusher& flusher);
 
-  static int trim(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
-	          uint64_t end_epoch);
+  static int trim(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *store,
+		  rgw::sal::RGWUser* user , rgw::sal::RGWBucket* bucket,
+		  uint64_t start_epoch, uint64_t end_epoch);
 
-  static int clear(RGWRados *store);
+  static int clear(rgw::sal::RGWStore *store);
 };
 
 

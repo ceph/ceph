@@ -442,15 +442,15 @@ void RGWRole::update_trust_policy(string& trust_policy)
   this->trust_policy = trust_policy;
 }
 
-int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp, 
-                                      RGWRados *store,
+int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
+				      rgw::sal::RGWStore *store,
                                       CephContext *cct,
                                       const string& path_prefix,
                                       const string& tenant,
                                       vector<RGWRole>& roles,
 				      optional_yield y)
 {
-  auto pool = store->svc.zone->get_zone_params().roles_pool;
+  auto pool = store->get_zone_params().roles_pool;
   string prefix;
 
   // List all roles if path prefix is empty
@@ -492,7 +492,7 @@ int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
       //Get id from info oid prefix + id
       string id = it.substr(pos + role_oid_prefix.length());
 
-      RGWRole role(cct, store->pctl);
+      RGWRole role(cct, store->get_ctl());
       role.set_id(id);
       int ret = role.read_info(dpp, y);
       if (ret < 0) {

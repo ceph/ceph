@@ -8,7 +8,9 @@
 #include "rgw_common.h"
 #include "common/OutputDataSocket.h"
 
-class RGWRados;
+namespace rgw { namespace sal {
+  class RGWStore;
+} }
 
 struct rgw_log_entry {
 
@@ -143,9 +145,9 @@ public:
 
 class RGWREST;
 
-int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
-	       const string& op_name, OpsLogSocket *olog);
-void rgw_log_usage_init(CephContext *cct, RGWRados *store);
+int rgw_log_op(rgw::sal::RGWStore* store, RGWREST* const rest, struct req_state* s,
+	       const string& op_name, OpsLogSocket* olog);
+void rgw_log_usage_init(CephContext* cct, rgw::sal::RGWStore* store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
 			      ceph::Formatter *formatter);

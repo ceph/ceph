@@ -112,7 +112,7 @@ class AssumedRoleUser {
   string assumeRoleId;
 public:
   int generateAssumedRoleUser( CephContext* cct,
-                                rgw::sal::RGWRadosStore *store,
+                                rgw::sal::RGWStore *store,
                                 const string& roleId,
                                 const rgw::ARN& roleArn,
                                 const string& roleSessionName);
@@ -225,14 +225,14 @@ using AssumeRoleWithWebIdentityResponse = struct AssumeRoleWithWebIdentityRespon
 
 class STSService {
   CephContext* cct;
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   rgw_user user_id;
   RGWRole role;
   rgw::auth::Identity* identity;
   int storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y);
 public:
   STSService() = default;
-  STSService(CephContext* cct, rgw::sal::RGWRadosStore *store, rgw_user user_id,
+  STSService(CephContext* cct, rgw::sal::RGWStore *store, rgw_user user_id,
 	     rgw::auth::Identity* identity)
     : cct(cct), store(store), user_id(user_id), identity(identity) {}
   std::tuple<int, RGWRole> getRoleInfo(const DoutPrefixProvider *dpp, const string& arn, optional_yield y);

@@ -7,14 +7,14 @@ class req_state;
 class RGWREST;
 class OpsLogSocket;
 namespace rgw::sal {
-  class RGWRadosStore;
+  class RGWStore;
 }
 
 namespace rgw::lua::request {
 
 // execute a lua script in the Request context
 int execute(
-    rgw::sal::RGWRadosStore* store,
+    rgw::sal::RGWStore* store,
     RGWREST* rest,
     OpsLogSocket* olog,
     req_state *s, 
