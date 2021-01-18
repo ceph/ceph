@@ -235,6 +235,7 @@ class CephadmService(metaclass=ABCMeta):
         """
         Called before the daemon is removed.
         """
+        assert daemon.daemon_type is not None
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Pre remove daemon {self.TYPE}.{daemon.daemon_id}')
 
@@ -242,6 +243,7 @@ class CephadmService(metaclass=ABCMeta):
         """
         Called after the daemon is removed.
         """
+        assert daemon.daemon_type is not None
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
