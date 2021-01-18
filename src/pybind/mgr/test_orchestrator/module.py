@@ -208,7 +208,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 daemon_size = len(list(daemons))
                 services.append(orchestrator.ServiceDescription(
                     spec=ServiceSpec(
-                        service_type=daemon_type,
+                        service_type=daemon_type,  # type: ignore
                     ),
                     size=daemon_size, running=daemon_size))
         
