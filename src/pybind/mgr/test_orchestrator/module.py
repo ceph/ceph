@@ -67,8 +67,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     The implementation is similar to the Rook orchestrator, but simpler.
     """
 
-    def process(self, completions):
-        # type: (List[TestCompletion]) -> None
+    def process(self, completions: List[TestCompletion]) -> None:  # type: ignore
         if completions:
             self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 

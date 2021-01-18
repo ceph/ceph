@@ -685,7 +685,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return False, 'SSH keys not set. Use `ceph cephadm set-priv-key` and `ceph cephadm set-pub-key` or `ceph cephadm generate-key`'
         return True, ''
 
-    def process(self, completions: List[CephadmCompletion]) -> None:
+    def process(self, completions: List[CephadmCompletion]) -> None:  # type: ignore
         """
         Does nothing, as completions are processed in another thread.
         """
