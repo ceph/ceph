@@ -3,9 +3,9 @@
 * New bluestore_rocksdb_options_annex config parameter. Complements
   bluestore_rocksdb_options and allows setting rocksdb options without repeating
   the existing defaults.
-* The cephfs addes two new CDentry tags, 'I' --> 'i' and 'L' --> 'l', and
-  on-RADOS metadata is no longer backwards compatible after upgraded to Pacific
-  or a later release.
+* The MDS in Pacific makes backwards-incompatible changes to the ON-RADOS
+  metadata structures, which prevent a downgrade to older releases
+  (to Octopus and older).
 
 * $pid expansion in config paths like `admin_socket` will now properly expand
   to the daemon pid for commands like `ceph-mds` or `ceph-osd`. Previously only
@@ -13,46 +13,49 @@
 
 * The allowable options for some "radosgw-admin" commands have been changed.
 
-  * "mdlog-list", "datalog-list", "sync-error-list" no longer accepts
-    start and end dates, but does accept a single optional start marker.
+  * "mdlog-list", "datalog-list", "sync-error-list" no longer accept
+    start and end dates, but do accept a single optional start marker.
   * "mdlog-trim", "datalog-trim", "sync-error-trim" only accept a
     single marker giving the end of the trimmed range.
   * Similarly the date ranges and marker ranges have been removed on
     the RESTful DATALog and MDLog list and trim operations.
 
-* ceph-volume: The ``lvm batch` subcommand received a major rewrite. This closed
-  a number of bugs and improves usability in terms of size specification and
-  calculation, as well as idempotency behaviour and disk replacement process.
-  Please refer to https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for
-  more detailed information.
+* ceph-volume: The ``lvm batch`` subcommand received a major rewrite. This 
+  closed a number of bugs and improves usability in terms of size specification
+  and calculation, as well as idempotency behaviour and disk replacement 
+  process. Please refer to 
+  https://docs.ceph.com/en/latest/ceph-volume/lvm/batch/ for more detailed 
+  information.
 
 * Configuration variables for permitted scrub times have changed.  The legal
-  values for ``osd_scrub_begin_hour`` and ``osd_scrub_end_hour`` are 0 - 23.
-  The use of 24 is now illegal.  Specifying ``0`` for both values causes every
-  hour to be allowed.  The legal vaues for ``osd_scrub_begin_week_day`` and
-  ``osd_scrub_end_week_day`` are 0 - 6.  The use of 7 is now illegal.
-  Specifying ``0`` for both values causes every day of the week to be allowed.
+  values for ``osd_scrub_begin_hour`` and ``osd_scrub_end_hour`` are ``0`` -
+  ``23``. The use of 24 is now illegal. Specifying ``0`` for both values 
+  causes every hour to be allowed.  The legal vaues for 
+  ``osd_scrub_begin_week_day`` and ``osd_scrub_end_week_day`` are ``0`` - 
+  ``6``. The use of ``7`` is now illegal. Specifying ``0`` for both values 
+  causes every day of the week to be allowed.
 
-* Multiple file systems in a single Ceph cluster is now stable. New Ceph clusters
-  enable support for multiple file systems by default. Existing clusters
-  must still set the "enable_multiple" flag on the fs. Please see the CephFS
-  documentation for more information.
+* Support for multiple file systems in a single Ceph cluster is now stable. 
+  New Ceph clusters enable support for multiple file systems by default.
+  Existing clusters must still set the "enable_multiple" flag on the fs. 
+  See the CephFS documentation for more information.
 
-* volume/nfs: Recently "ganesha-" prefix from cluster id and nfs-ganesha common
-  config object was removed, to ensure consistent namespace across different
-  orchestrator backends. Please delete any existing nfs-ganesha clusters prior
+* volume/nfs: The "ganesha-" prefix from cluster id and nfs-ganesha common
+  config object was removed to ensure a consistent namespace across different
+  orchestrator backends. Delete any existing nfs-ganesha clusters prior
   to upgrading and redeploy new clusters after upgrading to Pacific.
 
-* A new health check, DAEMON_OLD_VERSION, will warn if different versions of Ceph are running
-  on daemons. It will generate a health error if multiple versions are detected.
-  This condition must exist for over mon_warn_older_version_delay (set to 1 week by default) in order for the
-  health condition to be triggered.  This allows most upgrades to proceed
-  without falsely seeing the warning.  If upgrade is paused for an extended
-  time period, health mute can be used like this
-  "ceph health mute DAEMON_OLD_VERSION --sticky".  In this case after
-  upgrade has finished use "ceph health unmute DAEMON_OLD_VERSION".
+* A new health check, DAEMON_OLD_VERSION, warns if different versions of
+  Ceph are running on daemons. It generates a health error if multiple
+  versions are detected.  This condition must exist for over 
+  ``mon_warn_older_version_delay`` (set to 1 week by default) in order for the 
+  health condition to be triggered. This allows most upgrades to proceed 
+  without falsely seeing the warning.  If upgrade is paused for an extended 
+  time period, health mute can be used like this "ceph health mute 
+  DAEMON_OLD_VERSION --sticky". In this case after upgrade has finished use 
+  "ceph health unmute DAEMON_OLD_VERSION".
 
-* MGR: progress module can now be turned on/off, using the commands:
+* MGR: progress module can now be turned on/off, using these commands:
   ``ceph progress on`` and ``ceph progress off``.
 
 * The ceph_volume_client.py library used for manipulating legacy "volumes" in
@@ -60,12 +63,15 @@
   exposed by the ceph-mgr:
   https://docs.ceph.com/en/latest/cephfs/fs-volumes/
 
-* An AWS-compliant API: "GetTopicAttributes" was added to replace the existing "GetTopic" API. The new API
-  should be used to fetch information about topics used for bucket notifications.
+* An AWS-compliant API: "GetTopicAttributes" was added to replace the existing 
+  "GetTopic" API. The new API should be used to fetch information about topics 
+  used for bucket notifications.
 
-* librbd: The shared, read-only parent cache's config option ``immutable_object_cache_watermark`` now has been updated
-  to property reflect the upper cache utilization before space is reclaimed. The default ``immutable_object_cache_watermark``
-  now is ``0.9``. If the capacity reaches 90% the daemon will delete cold cache.
+* librbd: The shared, read-only parent cache's config option 
+  ``immutable_object_cache_watermark`` has now been updated to properly reflect 
+  the upper cache utilization before space is reclaimed. The default 
+  ``immutable_object_cache_watermark`` is now ``0.9``. If the capacity reaches 
+  90% the daemon will delete cold cache.
 
 >=15.0.0
 --------
