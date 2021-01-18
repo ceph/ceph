@@ -740,11 +740,12 @@ Per client instance `rbd device map` options:
   that only payload checksumming is disabled, header checksumming is always on.
   For msgr2.1 protocol this option is ignored.
 
-* cephx_require_signatures - Require cephx message signing (since 3.19,
-  default).
+* cephx_require_signatures - Require msgr1 message signing feature (since 3.19,
+  default).  This option is deprecated and will be removed in the future as the
+  feature has been supported since the Bobtail release.
 
-* nocephx_require_signatures - Don't require cephx message signing (since
-  3.19).
+* nocephx_require_signatures - Don't require msgr1 message signing feature
+  (since 3.19).  This option is deprecated and will be removed in the future.
 
 * tcp_nodelay - Disable Nagle's algorithm on client sockets (since 4.0,
   default).
