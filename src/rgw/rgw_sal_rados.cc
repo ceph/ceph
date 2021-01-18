@@ -85,7 +85,7 @@ static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
     if (r < 0)
       return r;
 
-    policy->create_default(user.get_user(), user.get_display_name());
+    policy->create_default(user.get_id(), user.get_display_name());
   }
   return 0;
 }
@@ -386,13 +386,13 @@ int RGWRadosBucket::link(const DoutPrefixProvider *dpp, RGWUser* new_user, optio
 {
   RGWBucketEntryPoint ep;
   ep.bucket = info.bucket;
-  ep.owner = new_user->get_user();
+  ep.owner = new_user->get_id();
   ep.creation_time = get_creation_time();
   ep.linked = true;
   RGWAttrs ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
-  int r = store->ctl()->bucket->link_bucket(new_user->get_user(), info.bucket,
+  int r = store->ctl()->bucket->link_bucket(new_user->get_id(), info.bucket,
 					    get_creation_time(), y, dpp, update_entrypoint,
 					    &ep_data);
   if (r < 0)
@@ -416,7 +416,7 @@ int RGWRadosBucket::chown(const DoutPrefixProvider *dpp, RGWUser* new_user, RGWU
   if (marker == nullptr)
     marker = &obj_marker;
 
-  return store->ctl()->bucket->chown(store, this, new_user->get_user(),
+  return store->ctl()->bucket->chown(store, this, new_user->get_id(),
 			   old_user->get_display_name(), *marker, y, dpp);
 }
 
@@ -443,7 +443,7 @@ int RGWRadosBucket::remove_instance_info(const DoutPrefixProvider *dpp, RGWObjVe
 /* Make sure to call get_bucket_info() if you need it first */
 bool RGWRadosBucket::is_owner(RGWUser* user)
 {
-  return (info.owner.compare(user->get_user()) == 0);
+  return (info.owner.compare(user->get_id()) == 0);
 }
 
 int RGWRadosBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
@@ -454,7 +454,7 @@ int RGWRadosBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
 int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
 {
-    return store->getRados()->check_quota(owner->get_user(), get_key(),
+    return store->getRados()->check_quota(owner->get_id(), get_key(),
 					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 

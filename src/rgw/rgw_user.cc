@@ -1653,7 +1653,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   // create a stub user and write only the uid index and buckets object
   RGWUserInfo stub_user_info;
-  stub_user_info.user_id = new_user->get_user();
+  stub_user_info.user_id = new_user->get_id();
 
   RGWObjVersionTracker objv;
   const bool exclusive = !op_state.get_overwrite_new_user(); // overwrite if requested
@@ -1672,7 +1672,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   }
 
   RGWAccessControlPolicy policy_instance;
-  policy_instance.create_default(new_user->get_user(), old_user->get_display_name());
+  policy_instance.create_default(new_user->get_id(), old_user->get_display_name());
 
   //unlink and link buckets to new user
   string marker;
@@ -1723,10 +1723,10 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   // update the 'stub user' with all of the other fields and rewrite all of the
   // associated index objects
   RGWUserInfo& user_info = op_state.get_user_info();
-  user_info.user_id = new_user->get_user();
+  user_info.user_id = new_user->get_id();
   op_state.objv = objv;
 
-  rename_swift_keys(new_user->get_user(), user_info.swift_keys);
+  rename_swift_keys(new_user->get_id(), user_info.swift_keys);
 
   return update(dpp, op_state, err_msg, y);
 }
