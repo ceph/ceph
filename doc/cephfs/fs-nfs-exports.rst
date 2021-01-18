@@ -102,6 +102,37 @@ Set Customized NFS Ganesha Configuration
 With this the nfs cluster will use the specified config and it will have
 precedence over default config blocks.
 
+Example use cases
+
+1) Changing log level
+
+  It can be done by adding LOG block in the following way::
+
+   LOG {
+    COMPONENTS {
+        ALL = FULL_DEBUG;
+    }
+   }
+
+2) Adding custom export block
+
+  The following sample block creates a single export. This export will not be
+  managed by `ceph nfs export` interface::
+
+   EXPORT {
+     Export_Id = 100;
+     Transports = TCP;
+     Path = /;
+     Pseudo = /ceph/;
+     Protocols = 4;
+     Access_Type = RW;
+     Attr_Expiration_Time = 0;
+     Squash = None;
+     FSAL {
+       Name = CEPH;
+     }
+   }
+
 Reset NFS Ganesha Configuration
 ===============================
 
@@ -110,6 +141,9 @@ Reset NFS Ganesha Configuration
     $ ceph nfs cluster config reset <clusterid>
 
 This removes the user defined configuration.
+
+.. note:: With a rook deployment, ganesha pods must be explicitly restarted
+   for the new config blocks to be effective.
 
 Create CephFS Export
 ====================
