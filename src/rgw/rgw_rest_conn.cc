@@ -24,6 +24,20 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
   }
 }
 
+RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::RGWStore* store,
+                         const string& _remote_id,
+                         const list<string>& remote_endpoints,
+                         HostStyle _host_style)
+  : cct(_cct),
+    endpoints(remote_endpoints.begin(), remote_endpoints.end()),
+    remote_id(_remote_id), host_style(_host_style)
+{
+  if (store) {
+    key = store->get_zone_params().system_key;
+    self_zone_group = store->get_zonegroup().get_id();
+  }
+}
+
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
@@ -36,6 +50,21 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
 {
   if (zone_svc) {
     self_zone_group = zone_svc->get_zonegroup().get_id();
+  }
+}
+
+RGWRESTConn::RGWRESTConn(CephContext *_cct, rgw::sal::RGWStore* store,
+                         const string& _remote_id,
+                         const list<string>& remote_endpoints,
+                         RGWAccessKey _cred,
+                         HostStyle _host_style)
+  : cct(_cct),
+    endpoints(remote_endpoints.begin(), remote_endpoints.end()),
+    key(std::move(_cred)),
+    remote_id(_remote_id), host_style(_host_style)
+{
+  if (store) {
+    self_zone_group = store->get_zonegroup().get_id();
   }
 }
 

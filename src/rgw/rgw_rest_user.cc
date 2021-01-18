@@ -6,7 +6,7 @@
 #include "rgw_op.h"
 #include "rgw_user.h"
 #include "rgw_rest_user.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
 
 #include "include/str_list.h"
 #include "include/ceph_assert.h"
@@ -210,7 +210,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->svc()->zone->get_zone_params().valid_placement(target_rule)) {
+    if (!store->get_zone_params().valid_placement(target_rule)) {
       ldout(s->cct, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
@@ -352,7 +352,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
-    if (!store->svc()->zone->get_zone_params().valid_placement(target_rule)) {
+    if (!store->get_zone_params().valid_placement(target_rule)) {
       ldout(s->cct, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;

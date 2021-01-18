@@ -4,12 +4,13 @@
 #ifndef CEPH_RGW_PUBSUB_H
 #define CEPH_RGW_PUBSUB_H
 
-#include "rgw_sal.h"
 #include "services/svc_sys_obj.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_notify_event_type.h"
 #include <boost/container/flat_map.hpp>
+
+namespace rgw::sal { class RGWRadosStore; }
 
 class XMLObj;
 

@@ -54,7 +54,7 @@ void RGWOp_Metadata_Get::execute(optional_yield y) {
 
   frame_metadata_key(s, metadata_key);
 
-  auto meta_mgr = store->ctl()->meta.mgr;
+  auto meta_mgr = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr;
 
   /* Get keys */
   op_ret = meta_mgr->get(metadata_key, s->formatter, s->yield, s);
@@ -123,7 +123,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
      marker = "3:bf885d8f:root::sorry_janefonda_665:head";
   */
 
-  op_ret = store->ctl()->meta.mgr->list_keys_init(metadata_key, marker, &handle);
+  op_ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init(metadata_key, marker, &handle);
   if (op_ret < 0) {
     dout(5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;
@@ -138,7 +138,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
 
   s->formatter->open_array_section("keys");
 
-  auto meta_mgr = store->ctl()->meta.mgr;
+  auto meta_mgr = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr;
 
   uint64_t left;
   do {
@@ -263,7 +263,7 @@ void RGWOp_Metadata_Put::execute(optional_yield y) {
     }
   }
 
-  op_ret = store->ctl()->meta.mgr->put(metadata_key, bl, s->yield, s, sync_type,
+  op_ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->put(metadata_key, bl, s->yield, s, sync_type,
 				       false, &ondisk_version);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: can't put key: " << cpp_strerror(op_ret) << dendl;
@@ -294,7 +294,7 @@ void RGWOp_Metadata_Delete::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
-  op_ret = store->ctl()->meta.mgr->remove(metadata_key, s->yield, s);
+  op_ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->remove(metadata_key, s->yield, s);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: can't remove key: " << cpp_strerror(op_ret) << dendl;
     return;

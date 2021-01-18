@@ -231,7 +231,7 @@ void handle_connection(boost::asio::io_context& context,
       }
 
       // process the request
-      RGWRequest req{env.store->getRados()->get_new_req_id()};
+      RGWRequest req{env.store->get_new_req_id()};
 
       auto& socket = get_lowest_layer(stream).socket();
       const auto& remote_endpoint = socket.remote_endpoint(ec);
@@ -415,7 +415,7 @@ class AsioFrontend {
   void stop();
   void join();
   void pause();
-  void unpause(rgw::sal::RGWRadosStore* store, rgw_auth_registry_ptr_t);
+  void unpause(rgw::sal::RGWStore* store, rgw_auth_registry_ptr_t);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -709,8 +709,7 @@ int AsioFrontend::get_config_key_val(string name,
     return -EINVAL;
   }
 
-  auto svc = env.store->svc()->config_key;
-  int r = svc->get(name, true, pbl);
+  int r = env.store->get_config_key_val(name, pbl);
   if (r < 0) {
     lderr(ctx()) << type << " was not found: " << name << dendl;
     return r;
@@ -816,7 +815,7 @@ int AsioFrontend::init_ssl()
       key_is_cert = true;
     }
 
-    ExpandMetaVar emv(env.store->svc()->zone);
+    ExpandMetaVar emv(static_cast<rgw::sal::RGWRadosStore*>(env.store)->svc()->zone);
 
     cert = emv.process_str(*cert);
     key = emv.process_str(*key);
@@ -1014,7 +1013,7 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause(rgw::sal::RGWRadosStore* const store,
+void AsioFrontend::unpause(rgw::sal::RGWStore* const store,
                            rgw_auth_registry_ptr_t auth_registry)
 {
   env.store = store;
@@ -1078,7 +1077,7 @@ void RGWAsioFrontend::pause_for_new_config()
 }
 
 void RGWAsioFrontend::unpause_with_new_config(
-  rgw::sal::RGWRadosStore* const store,
+  rgw::sal::RGWStore* const store,
   rgw_auth_registry_ptr_t auth_registry
 ) {
   impl->unpause(store, std::move(auth_registry));

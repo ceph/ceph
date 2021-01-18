@@ -49,6 +49,7 @@
 #include "rgw_perf_counters.h"
 #include "rgw_notify.h"
 #include "rgw_notify_event_type.h"
+#include "rgw_sal.h"
 #include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
@@ -185,7 +186,6 @@ static int decode_policy(CephContext *cct,
 
 
 static int get_user_policy_from_attr(CephContext * const cct,
-				     rgw::sal::RGWRadosStore * const store,
 				     map<string, bufferlist>& attrs,
 				     RGWAccessControlPolicy& policy    /* out */)
 {
@@ -311,7 +311,6 @@ get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 }
 
 vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        rgw::sal::RGWRadosStore* store,
                         map<string, bufferlist>& attrs,
                         const string& tenant) {
   vector<Policy> policies;
@@ -514,10 +513,9 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
  * only_bucket: If true, reads the user and bucket ACLs rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y)
+int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, struct req_state* s, optional_yield y)
 {
   int ret = 0;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
 
   string bi = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
   if (!bi.empty()) {
@@ -545,11 +543,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
   /* check if copy source is within the current domain */
   if (!s->src_bucket_name.empty()) {
     std::unique_ptr<rgw::sal::RGWBucket> src_bucket;
-    ret = store->get_bucket(dpp, nullptr, s->src_tenant_name, s->src_bucket_name, &src_bucket, y);
-    if (ret == 0) {
-      ret = src_bucket->load_by_name(dpp, s->src_tenant_name, s->src_bucket_name,
-				     s->bucket_instance_id, &obj_ctx, s->yield);
-    }
+    ret = store->get_bucket(dpp, nullptr,
+			    rgw_bucket(s->src_tenant_name,
+				       s->src_bucket_name,
+				       s->bucket_instance_id),
+			    &src_bucket, y);
     if (ret == 0) {
       string& zonegroup = src_bucket->get_info().zonegroup;
       s->local_source = store->get_zonegroup().equals(zonegroup);
@@ -632,7 +630,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
     s->dest_placement.storage_class = s->info.storage_class;
     s->dest_placement.inherit_from(s->bucket->get_placement_rule());
 
-    if (!store->svc()->zone->get_zone_params().valid_placement(s->dest_placement)) {
+    if (!store->get_zone_params().valid_placement(s->dest_placement)) {
       ldpp_dout(dpp, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
       return -EINVAL;
     }
@@ -642,10 +640,12 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
 
   /* handle user ACL only for those APIs which support it */
   if (s->user_acl) {
-    map<string, bufferlist> uattrs;
-    ret = store->ctl()->user->get_attrs_by_uid(dpp, acct_acl_user.uid, &uattrs, s->yield);
+    rgw::sal::RGWAttrs uattrs;
+    std::unique_ptr<rgw::sal::RGWUser> acl_user = store->get_user(acct_acl_user.uid);
+
+    ret = acl_user->read_attrs(dpp, y, &uattrs);
     if (!ret) {
-      ret = get_user_policy_from_attr(s->cct, store, uattrs, *s->user_acl);
+      ret = get_user_policy_from_attr(s->cct, uattrs, *s->user_acl);
     }
     if (-ENOENT == ret) {
       /* In already existing clusters users won't have ACL. In such case
@@ -668,9 +668,10 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
   // hence the check for user type
   if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
     try {
-      map<string, bufferlist> uattrs;
-      if (ret = store->ctl()->user->get_attrs_by_uid(dpp, s->user->get_id(), &uattrs, s->yield); ! ret) {
-          auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());
+      rgw::sal::RGWAttrs uattrs;
+      ret = s->user->read_attrs(dpp, y, &uattrs);
+      if (ret == 0) {
+          auto user_policies = get_iam_user_policy_from_attr(s->cct, uattrs, s->user->get_tenant());
           s->iam_user_policies.insert(s->iam_user_policies.end(),
                                       std::make_move_iterator(user_policies.begin()),
                                       std::make_move_iterator(user_policies.end()));
@@ -695,7 +696,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
     ret = -EACCES;
   }
 
-  bool success = store->svc()->zone->get_redirect_zone_endpoint(&s->redirect_zone_endpoint);
+  bool success = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_redirect_zone_endpoint(&s->redirect_zone_endpoint);
   if (success) {
     ldpp_dout(dpp, 20) << "redirect_zone_endpoint=" << s->redirect_zone_endpoint << dendl;
   }
@@ -709,8 +710,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosS
  * only_bucket: If true, reads the bucket ACL rather than the object ACL.
  * Returns: 0 on success, -ERR# otherwise.
  */
-int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, struct req_state *s,
-			      bool prefetch_data, optional_yield y)
+int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *store,
+			      struct req_state *s, bool prefetch_data, optional_yield y)
 {
   int ret = 0;
 
@@ -757,7 +758,7 @@ static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
   return 0;
 }
 
-static int rgw_iam_add_existing_objtags(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store, struct req_state* s, std::uint64_t action) {
+static int rgw_iam_add_existing_objtags(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, struct req_state* s, std::uint64_t action) {
   s->object->set_atomic(s->obj_ctx);
   int op_ret = s->object->get_obj_attrs(s->obj_ctx, s->yield, dpp);
   if (op_ret < 0)
@@ -791,7 +792,7 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
   }
 }
 
-void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
+void rgw_build_iam_environment(rgw::sal::RGWStore* store,
 	                              struct req_state* s)
 {
   const auto& m = s->info.env->get_map();
@@ -942,7 +943,7 @@ int RGWOp::verify_op_mask()
     return -EPERM;
   }
 
-  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && !store->svc()->zone->zone_is_writeable()) {
+  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && !static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->zone_is_writeable()) {
     ldpp_dout(this, 5) << "NOTICE: modify request to a read-only zone by a "
         "non-system user, permission denied"  << dendl;
     return -EPERM;
@@ -1290,30 +1291,29 @@ int RGWOp::init_quota()
     return 0;
   }
 
-  rgw::sal::RGWRadosUser owner_user(store, s->bucket->get_info().owner);
+  std::unique_ptr<rgw::sal::RGWUser> owner_user =
+			store->get_user(s->bucket->get_info().owner);
   rgw::sal::RGWUser* user;
 
   if (s->user->get_id() == s->bucket_owner.get_id()) {
     user = s->user.get();
   } else {
-    int r = owner_user.load_by_id(this, s->yield);
+    int r = owner_user->load_by_id(this, s->yield);
     if (r < 0)
       return r;
-    user = &owner_user;
+    user = owner_user.get();
   }
+
+  store->get_quota(bucket_quota, user_quota);
 
   if (s->bucket->get_info().quota.enabled) {
     bucket_quota = s->bucket->get_info().quota;
   } else if (user->get_info().bucket_quota.enabled) {
     bucket_quota = user->get_info().bucket_quota;
-  } else {
-    bucket_quota = store->svc()->quota->get_bucket_quota();
   }
 
   if (user->get_info().user_quota.enabled) {
     user_quota = user->get_info().user_quota;
-  } else {
-    user_quota = store->svc()->quota->get_user_quota();
   }
 
   return 0;
@@ -1924,7 +1924,6 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
 
 	std::unique_ptr<rgw::sal::RGWBucket> tmp_bucket;
-        auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
 	int r = store->get_bucket(this, s->user.get(), s->user->get_tenant(), bucket_name, &tmp_bucket, y);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
@@ -2289,7 +2288,7 @@ void RGWListBuckets::execute(optional_yield y)
   }
 
   if (supports_account_metadata()) {
-    op_ret = store->ctl()->user->get_attrs_by_uid(this, s->user->get_id(), &attrs, s->yield);
+    op_ret = s->user->read_attrs(this, s->yield, &attrs);
     if (op_ret < 0) {
       goto send_end;
     }
@@ -2408,19 +2407,19 @@ void RGWGetUsage::execute(optional_yield y)
     }    
   }
 
-  op_ret = rgw_user_sync_all_stats(this, store, s->user->get_id(), y);
+  op_ret = rgw_user_sync_all_stats(this, store, s->user.get(), y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to sync user stats" << dendl;
     return;
   }
 
-  op_ret = rgw_user_get_all_buckets_stats(this, store, s->user->get_id(), buckets_usage, y);
+  op_ret = rgw_user_get_all_buckets_stats(this, store, s->user.get(), buckets_usage, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to get user's buckets stats" << dendl;
     return;
   }
 
-  op_ret = store->ctl()->user->read_stats(s->user->get_id(), &stats, y);
+  op_ret = s->user->read_stats(y, &stats);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: can't read user header"  << dendl;
     return;
@@ -2448,12 +2447,11 @@ void RGWStatAccount::execute(optional_yield y)
   do {
 
     lastmarker = nullptr;
-    op_ret = rgw_read_user_buckets(this, store, s->user->get_id(), buckets, marker,
-				   string(), max_buckets, true, y);
+    op_ret = s->user->list_buckets(this, marker, string(), max_buckets, true, buckets, y);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
-      ldpp_dout(this, 10) << "WARNING: failed on rgw_read_user_buckets uid="
+      ldpp_dout(this, 10) << "WARNING: failed on list_buckets uid="
 			<< s->user->get_id() << " ret=" << op_ret << dendl;
       break;
     } else {
@@ -2848,9 +2846,8 @@ int RGWCreateBucket::verify_permission(optional_yield y)
   if (s->user->get_max_buckets()) {
     rgw::sal::RGWBucketList buckets;
     string marker;
-    op_ret = rgw_read_user_buckets(this, store, s->user->get_id(), buckets,
-				   marker, string(), s->user->get_max_buckets(),
-				   false, y);
+    op_ret = s->user->list_buckets(this, marker, string(), s->user->get_max_buckets(),
+				   false, buckets, y);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -3039,7 +3036,7 @@ void RGWCreateBucket::execute(optional_yield y)
   buffer::list aclbl;
   buffer::list corsbl;
   string bucket_name = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
-  rgw_raw_obj obj(store->svc()->zone->get_zone_params().domain_root, bucket_name);
+  rgw_raw_obj obj(store->get_zone_params().domain_root, bucket_name);
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -3047,7 +3044,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
   if (!relaxed_region_enforcement &&
       !location_constraint.empty() &&
-      !store->svc()->zone->has_zonegroup_api(location_constraint)) {
+      !static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->has_zonegroup_api(location_constraint)) {
       ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
                        << " can't be found." << dendl;
       op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
@@ -3085,7 +3082,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
   if (s->bucket_exists) {
     if (!s->system_request &&
-        store->svc()->zone->get_zonegroup().get_id() != s->bucket->get_info().zonegroup) {
+        store->get_zonegroup().get_id() != s->bucket->get_info().zonegroup) {
       op_ret = -EEXIST;
       return;
     }
@@ -3182,11 +3179,10 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), s->bucket->get_key(),
-                                          s->bucket->get_creation_time(), y, s, false);
+  op_ret = s->bucket->link(this, s->user.get(), y, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), s->bucket->get_key(), y, this);
+    op_ret = s->bucket->unlink(this, s->user.get(), y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -3239,9 +3235,7 @@ void RGWCreateBucket::execute(optional_yield y)
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
       /* This will also set the quota on the bucket. */
-      op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							    &s->bucket->get_info().objv_tracker,
-							    y, this);
+      op_ret = s->bucket->set_instance_attrs(this, attrs, y);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
     /* Restore the proper return code. */
@@ -3775,9 +3769,9 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
-  const auto event_type = rgw::notify::ObjectCreatedPut;
-  op_ret = rgw::notify::publish_reserve(event_type, res, obj_tags.get());
+  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
+						s, rgw::notify::ObjectCreatedPut);
+  op_ret = res->publish_reserve(obj_tags.get());
   if (op_ret < 0) {
     return;
   }
@@ -3847,11 +3841,17 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   if ((! copy_source.empty()) && !copy_source_range) {
-    rgw::sal::RGWRadosObject obj(store, rgw_obj_key(copy_source_object_name, copy_source_version_id));
-    rgw::sal::RGWRadosBucket bucket(store, copy_source_bucket_info);
+    std::unique_ptr<rgw::sal::RGWBucket> bucket;
+    op_ret = store->get_bucket(nullptr, copy_source_bucket_info, &bucket);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "ERROR: failed to get bucket with error" << op_ret << dendl;
+      return;
+    }
+    std::unique_ptr<rgw::sal::RGWObject> obj =
+      bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
 
     RGWObjState *astate;
-    op_ret = obj.get_obj_state(this, &obj_ctx, bucket, &astate, s->yield);
+    op_ret = obj->get_obj_state(this, &obj_ctx, &astate, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
@@ -3870,7 +3870,7 @@ void RGWPutObj::execute(optional_yield y)
   // no filters by default
   DataProcessor *filter = processor.get();
 
-  const auto& compression_type = store->svc()->zone->get_zone_params().get_compression_type(*pdest_placement);
+  const auto& compression_type = store->get_zone_params().get_compression_type(*pdest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -4061,7 +4061,7 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // send request to notification manager
-  const auto ret = rgw::notify::publish_commit(s->object.get(), s->obj_size, mtime, etag, event_type, res, this);
+  int ret = res->publish_commit(this, s->obj_size, mtime, etag);
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -4124,9 +4124,8 @@ void RGWPostObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
-  const auto event_type = rgw::notify::ObjectCreatedPost;
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(), s, rgw::notify::ObjectCreatedPost);
+  op_ret = res->publish_reserve();
   if (op_ret < 0) {
     return;
   }
@@ -4191,7 +4190,7 @@ void RGWPostObj::execute(optional_yield y)
     if (encrypt != nullptr) {
       filter = encrypt.get();
     } else {
-      const auto& compression_type = store->svc()->zone->get_zone_params().get_compression_type(
+      const auto& compression_type = store->get_zone_params().get_compression_type(
           s->dest_placement);
       if (compression_type != "none") {
         plugin = Compressor::create(s->cct, compression_type);
@@ -4294,7 +4293,7 @@ void RGWPostObj::execute(optional_yield y)
   } while (is_next_file_to_upload());
 
   // send request to notification manager
-  const auto ret = rgw::notify::publish_commit(s->object.get(), ofs, ceph::real_clock::now(), etag, event_type, res, this);
+  int ret = res->publish_commit(this, ofs, ceph::real_clock::now(), etag);
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -4346,9 +4345,7 @@ int RGWPutMetadataAccount::init_processing(optional_yield y)
     return op_ret;
   }
 
-  op_ret = store->ctl()->user->get_attrs_by_uid(this, s->user->get_id(), &orig_attrs,
-					     s->yield,
-                                             &acct_op_tracker);
+  op_ret = s->user->read_attrs(this, y, &orig_attrs, &acct_op_tracker);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -4408,10 +4405,7 @@ int RGWPutMetadataAccount::verify_permission(optional_yield y)
 void RGWPutMetadataAccount::execute(optional_yield y)
 {
   /* Params have been extracted earlier. See init_processing(). */
-  RGWUserInfo new_uinfo;
-  op_ret = store->ctl()->user->get_info_by_uid(this, s->user->get_id(), &new_uinfo, s->yield,
-                                            RGWUserCtl::GetParams()
-                                            .set_objv_tracker(&acct_op_tracker));
+  op_ret = s->user->load_by_id(this, y, RGWUserCtl::GetParams().set_objv_tracker(&acct_op_tracker));
   if (op_ret < 0) {
     return;
   }
@@ -4419,22 +4413,21 @@ void RGWPutMetadataAccount::execute(optional_yield y)
   /* Handle the TempURL-related stuff. */
   if (!temp_url_keys.empty()) {
     for (auto& pair : temp_url_keys) {
-      new_uinfo.temp_url_keys[pair.first] = std::move(pair.second);
+      s->user->get_info().temp_url_keys[pair.first] = std::move(pair.second);
     }
   }
 
   /* Handle the quota extracted at the verify_permission step. */
   if (new_quota_extracted) {
-    new_uinfo.user_quota = std::move(new_quota);
+    s->user->get_info().user_quota = std::move(new_quota);
   }
 
   /* We are passing here the current (old) user info to allow the function
    * optimize-out some operations. */
-  op_ret = store->ctl()->user->store_info(this, new_uinfo, s->yield,
-                                       RGWUserCtl::PutParams()
-                                       .set_old_info(&s->user->get_info())
-                                       .set_objv_tracker(&acct_op_tracker)
-                                       .set_attrs(&attrs));
+  op_ret = s->user->store_info(this, y, RGWUserCtl::PutParams()
+			     .set_old_info(&s->user->get_info())
+			     .set_objv_tracker(&acct_op_tracker)
+			     .set_attrs(&attrs));
 }
 
 int RGWPutMetadataBucket::verify_permission(optional_yield y)
@@ -4760,11 +4753,12 @@ void RGWDeleteObj::execute(optional_yield y)
     }
 
     // make reservation for notification if needed
-    rgw::notify::reservation_t res(store, s, s->object.get());
     const auto versioned_object = s->bucket->versioning_enabled();
     const auto event_type = versioned_object && s->object->get_instance().empty() ? 
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+    std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
+									s, event_type);
+    op_ret = res->publish_reserve();
     if (op_ret < 0) {
       return;
     }
@@ -4789,10 +4783,19 @@ void RGWDeleteObj::execute(optional_yield y)
 	return;
       }
 
-      op_ret = s->object->delete_object(this, obj_ctx, s->owner, s->bucket_owner, unmod_since,
-					s->system_request, epoch, version_id, s->yield);
+      std::unique_ptr<rgw::sal::RGWObject::DeleteOp> del_op = s->object->get_delete_op(obj_ctx);
+      del_op->params.obj_owner = s->owner;
+      del_op->params.bucket_owner = s->bucket_owner;
+      del_op->params.versioning_status = s->bucket->get_info().versioning_status();
+      del_op->params.unmod_since = unmod_since;
+      del_op->params.high_precision_time = s->system_request;
+      del_op->params.olh_epoch = epoch;
+      del_op->params.marker_version_id = version_id;
+
+      op_ret = del_op->delete_obj(this, y);
       if (op_ret >= 0) {
-	delete_marker = s->object->get_delete_marker();
+	delete_marker = del_op->result.delete_marker;
+	version_id = del_op->result.version_id;
       }
 
       /* Check whether the object has expired. Swift API documentation
@@ -4813,7 +4816,7 @@ void RGWDeleteObj::execute(optional_yield y)
     const auto obj_state = obj_ctx->get_state(s->object->get_obj());
 
     // send request to notification manager
-    const auto ret = rgw::notify::publish_commit(s->object.get(), obj_state->size, obj_state->mtime, attrs[RGW_ATTR_ETAG].to_str(), event_type, res, this);
+    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, attrs[RGW_ATTR_ETAG].to_str());
     if (ret < 0) {
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
@@ -4879,17 +4882,11 @@ int RGWCopyObj::verify_permission(optional_yield y)
     return op_ret;
   }
 
-  /* This is a bit of a hack; create an empty bucket, then load it below. */
-  op_ret = store->get_bucket(s->user.get(), RGWBucketInfo(), &src_bucket);
-  if (op_ret < 0) {
-    if (op_ret == -ENOENT) {
-      op_ret = -ERR_NO_SUCH_BUCKET;
-    }
-    return op_ret;
-  }
-
-  op_ret = src_bucket->load_by_name(this, src_tenant_name, src_bucket_name, s->bucket_instance_id,
-				    s->sysobj_ctx, s->yield);
+  op_ret = store->get_bucket(this, s->user.get(),
+			     rgw_bucket(src_tenant_name,
+					src_bucket_name,
+					s->bucket_instance_id),
+			     &src_bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_BUCKET;
@@ -4951,18 +4948,10 @@ int RGWCopyObj::verify_permission(optional_yield y)
                                                            or intra region sync */
     dest_bucket = src_bucket->clone();
   } else {
-    op_ret = store->get_bucket(s->user.get(), RGWBucketInfo(), &dest_bucket);
+    op_ret = store->get_bucket(this, s->user.get(), dest_tenant_name, dest_bucket_name, &dest_bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
 	op_ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return op_ret;
-    }
-    op_ret = dest_bucket->load_by_name(this, dest_tenant_name, dest_bucket_name, std::string(),
-				      s->sysobj_ctx, s->yield);
-    if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        op_ret = -ERR_NO_SUCH_BUCKET;
       }
       return op_ret;
     }
@@ -5082,9 +5071,9 @@ void RGWCopyObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
-  const auto event_type = rgw::notify::ObjectCreatedCopy; 
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
+						s, rgw::notify::ObjectCreatedPost);
+  op_ret = res->publish_reserve();
   if (op_ret < 0) {
     return;
   }
@@ -5103,8 +5092,7 @@ void RGWCopyObj::execute(optional_yield y)
   if (!s->system_request) { // no quota enforcement for system requests
     // get src object size (cached in obj_ctx from verify_permission())
     RGWObjState* astate = nullptr;
-    op_ret = src_object->get_obj_state(this, s->obj_ctx, *src_bucket, &astate,
-				       s->yield, true);
+    op_ret = src_object->get_obj_state(this, s->obj_ctx, &astate, s->yield, true);
     if (op_ret < 0) {
       return;
     }
@@ -5155,7 +5143,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   s->yield);
 
   // send request to notification manager
-  const auto ret = rgw::notify::publish_commit(s->object.get(), s->obj_size, mtime, etag, event_type, res, this);
+  int ret = res->publish_commit(this, s->obj_size, mtime, etag);
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -5382,7 +5370,7 @@ void RGWPutACLs::execute(optional_yield y)
     *_dout << dendl;
   }
 
-  op_ret = policy->rebuild(this, store->ctl()->user, &owner, new_policy, s->err.message);
+  op_ret = policy->rebuild(this, store, &owner, new_policy, s->err.message);
   if (op_ret < 0)
     return;
 
@@ -5408,9 +5396,7 @@ void RGWPutACLs::execute(optional_yield y)
   } else {
     map<string,bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
-    op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket->get_info(), attrs,
-							  &s->bucket->get_info().objv_tracker,
-							  s->yield, this);
+    op_ret = s->bucket->set_instance_attrs(this, attrs, y);
   }
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */
@@ -5502,7 +5488,7 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->get_rgwlc()->set_bucket_config(s->bucket->get_info(), s->bucket_attrs, &new_config);
+  op_ret = store->get_rgwlc()->set_bucket_config(s->bucket.get(), s->bucket_attrs, &new_config);
   if (op_ret < 0) {
     return;
   }
@@ -5518,7 +5504,7 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->get_rgwlc()->remove_bucket_config(s->bucket->get_info(), s->bucket_attrs);
+  op_ret = store->get_rgwlc()->remove_bucket_config(s->bucket.get(), s->bucket_attrs);
   if (op_ret < 0) {
     return;
   }
@@ -5774,9 +5760,9 @@ void RGWInitMultipart::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
-  const auto event_type = rgw::notify::ObjectCreatedPost;
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
+				s, rgw::notify::ObjectCreatedCompleteMultipartUpload);
+  op_ret = res->publish_reserve();
   if (op_ret < 0) {
     return;
   }
@@ -5819,7 +5805,7 @@ void RGWInitMultipart::execute(optional_yield y)
   } while (op_ret == -EEXIST);
   
   // send request to notification manager
-  const auto ret = rgw::notify::publish_commit(s->object.get(), s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), event_type, res, this);
+  int ret = res->publish_commit(this, s->obj_size, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -5922,9 +5908,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
   mp.init(s->object->get_name(), upload_id);
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
-  const auto event_type = rgw::notify::ObjectCreatedCompleteMultipartUpload;
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  std::unique_ptr<rgw::sal::Notification> res = store->get_notification(s->object.get(),
+				s, rgw::notify::ObjectCreatedCompleteMultipartUpload);
+  op_ret = res->publish_reserve();
   if (op_ret < 0) {
     return;
   }
@@ -5976,7 +5962,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   attrs = meta_obj->get_attrs();
 
   do {
-    op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
+    op_ret = list_multipart_parts(s, upload_id, meta_oid, max_parts,
 				  marker, obj_parts, &marker, &truncated);
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_UPLOAD;
@@ -6033,7 +6019,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
         op_ret = -ERR_INVALID_PART;
         return;
       } else {
-        manifest.append(obj_part.manifest, store->svc()->zone);
+        manifest.append(obj_part.manifest, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone);
       }
 
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
@@ -6129,8 +6115,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
 
   // remove the upload obj
-  string version_id;
-  int r = meta_obj->delete_object(this, s->obj_ctx, ACLOwner(), ACLOwner(), ceph::real_time(), false, 0, version_id, null_yield);
+  int r = meta_obj->delete_object(this, s->obj_ctx, y);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer->clear_locked();
@@ -6139,7 +6124,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   // send request to notification manager
-  const auto ret = rgw::notify::publish_commit(s->object.get(), ofs, ceph::real_clock::now(), final_etag_str, event_type, res, this);
+  int ret = res->publish_commit(this, ofs, ceph::real_clock::now(), final_etag_str);
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6215,7 +6200,7 @@ void RGWAbortMultipart::execute(optional_yield y)
     return;
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-  op_ret = abort_multipart_upload(this, store, s->cct, obj_ctx, s->bucket->get_info(), mp);
+  op_ret = abort_multipart_upload(this, store, s->cct, obj_ctx, s->bucket.get(), mp);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
@@ -6247,7 +6232,7 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
+  op_ret = list_multipart_parts(s, upload_id, meta_oid, max_parts,
 				marker, parts, NULL, &truncated);
 }
 
@@ -6289,7 +6274,7 @@ void RGWListBucketMultiparts::execute(optional_yield y)
   }
   marker_meta = marker.get_meta();
 
-  op_ret = list_bucket_multiparts(this, store, s->bucket->get_info(), prefix, marker_meta, delimiter,
+  op_ret = list_bucket_multiparts(this, s->bucket.get(), prefix, marker_meta, delimiter,
                                   max_uploads, &objs, &common_prefixes, &is_truncated);
   if (op_ret < 0) {
     return;
@@ -6504,10 +6489,11 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     }
     // make reservation for notification if needed
     const auto versioned_object = s->bucket->versioning_enabled();
-    rgw::notify::reservation_t res(store, s, obj.get());
     const auto event_type = versioned_object && obj->get_instance().empty() ? 
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+    std::unique_ptr<rgw::sal::Notification> res = store->get_notification(obj.get(),
+									s, event_type);
+    op_ret = res->publish_reserve();
     if (op_ret < 0) {
       send_partial_response(*iter, false, "", op_ret);
       continue;
@@ -6515,20 +6501,25 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
     obj->set_atomic(obj_ctx);
 
-    op_ret = obj->delete_object(this, obj_ctx, s->owner, s->bucket_owner, ceph::real_time(),
-				false, 0, version_id, s->yield);
+    std::unique_ptr<rgw::sal::RGWObject::DeleteOp> del_op = obj->get_delete_op(obj_ctx);
+    del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
+    del_op->params.obj_owner = s->owner;
+    del_op->params.bucket_owner = s->bucket_owner;
+    del_op->params.marker_version_id = version_id;
+
+    op_ret = del_op->delete_obj(this, y);
     if (op_ret == -ENOENT) {
       op_ret = 0;
     }
 
-    send_partial_response(*iter, obj->get_delete_marker(), version_id, op_ret);
+    send_partial_response(*iter, obj->get_delete_marker(), del_op->result.version_id, op_ret);
 
     const auto obj_state = obj_ctx->get_state(obj->get_obj());
     bufferlist etag_bl;
     const auto etag = obj_state->get_attr(RGW_ATTR_ETAG, etag_bl) ? etag_bl.to_str() : "";
 
     // send request to notification manager
-    const auto ret = rgw::notify::publish_commit(obj.get(), obj_state->size, obj_state->mtime, etag, event_type, res, this);
+    int ret = res->publish_commit(this, obj_state->size, obj_state->mtime, etag);
     if (ret < 0) {
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
@@ -6594,13 +6585,17 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
 
   if (!path.obj_key.empty()) {
     ACLOwner bucket_owner;
-    std::string version_id;
 
     bucket_owner.set_id(bucket->get_info().owner);
     std::unique_ptr<rgw::sal::RGWObject> obj = bucket->get_object(path.obj_key);
     obj->set_atomic(s->obj_ctx);
 
-    ret = obj->delete_object(dpp, s->obj_ctx, bowner, bucket_owner, ceph::real_time(), false, 0, version_id, s->yield);
+    std::unique_ptr<rgw::sal::RGWObject::DeleteOp> del_op = obj->get_delete_op(s->obj_ctx);
+    del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
+    del_op->params.obj_owner = bowner;
+    del_op->params.bucket_owner = bucket_owner;
+
+    ret = del_op->delete_obj(dpp, y);
     if (ret < 0) {
       goto delop_fail;
     }
@@ -6781,9 +6776,8 @@ int RGWBulkUploadOp::handle_dir_verify_permission(optional_yield y)
   if (s->user->get_max_buckets() > 0) {
     rgw::sal::RGWBucketList buckets;
     std::string marker;
-    op_ret = rgw_read_user_buckets(this, store, s->user->get_user(), buckets,
-                                   marker, std::string(), s->user->get_max_buckets(),
-                                   false, y);
+    op_ret = s->user->list_buckets(this, marker, std::string(), s->user->get_max_buckets(),
+                                   false, buckets, y);
     if (op_ret < 0) {
       return op_ret;
     }
@@ -6810,12 +6804,11 @@ static void forward_req_info(CephContext *cct, req_info& info, const std::string
   info.effective_uri = "/" + bucket_name;
 }
 
-void RGWBulkUploadOp::init(rgw::sal::RGWRadosStore* const store,
+void RGWBulkUploadOp::init(rgw::sal::RGWStore* const store,
                            struct req_state* const s,
                            RGWHandler* const h)
 {
   RGWOp::init(store, s, h);
-  dir_ctx.emplace(store->svc()->sysobj->init_obj_ctx());
 }
 
 int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
@@ -6831,7 +6824,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
   rgw_obj_key object_junk;
   std::tie(bucket_name, object_junk) =  *parse_path(path);
 
-  rgw_raw_obj obj(store->svc()->zone->get_zone_params().domain_root,
+  rgw_raw_obj obj(store->get_zone_params().domain_root,
                   rgw_make_bucket_entry_name(s->bucket_tenant, bucket_name));
 
   /* we need to make sure we read bucket info, it's not read before for this
@@ -6889,15 +6882,12 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
       ldpp_dout(this, 20) << "conflicting bucket name" << dendl;
       return op_ret;
     }
-    new_bucket = out_info.bucket;
   }
 
-  op_ret = store->ctl()->bucket->link_bucket(s->user->get_id(), new_bucket,
-                                          out_info.creation_time,
-					  s->yield, s, false);
+  op_ret = bucket->link(this, s->user.get(), y, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl()->bucket->unlink_bucket(s->user->get_id(), new_bucket, s->yield, this);
+    op_ret = bucket->unlink(this, s->user.get(), y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret << dendl;
     }
@@ -7013,7 +7003,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   /* No filters by default. */
   DataProcessor *filter = &processor;
 
-  const auto& compression_type = store->svc()->zone->get_zone_params().get_compression_type(
+  const auto& compression_type = store->get_zone_params().get_compression_type(
       dest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
@@ -7364,9 +7354,7 @@ void RGWSetAttrs::execute(optional_yield y)
     for (auto& iter : attrs) {
       s->bucket_attrs[iter.first] = std::move(iter.second);
     }
-    op_ret = store->ctl()->bucket->set_bucket_instance_attrs(
-      s->bucket->get_info(), attrs, &s->bucket->get_info().objv_tracker,
-      s->yield, this);
+    op_ret = s->bucket->set_instance_attrs(this, attrs, y);
   }
 
 } /* RGWSetAttrs::execute() */
@@ -7474,7 +7462,7 @@ RGWHandler::~RGWHandler()
 {
 }
 
-int RGWHandler::init(rgw::sal::RGWRadosStore *_store,
+int RGWHandler::init(rgw::sal::RGWStore *_store,
                      struct req_state *_s,
                      rgw::io::BasicClient *cio)
 {

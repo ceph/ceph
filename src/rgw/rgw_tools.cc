@@ -407,9 +407,9 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
   }
 }
 
-RGWDataAccess::RGWDataAccess(rgw::sal::RGWRadosStore *_store) : store(_store)
+RGWDataAccess::RGWDataAccess(rgw::sal::RGWStore *_store) : store(_store)
 {
-  sysobj_ctx = std::make_unique<RGWSysObjectCtx>(store->svc()->sysobj->init_obj_ctx());
+  sysobj_ctx = std::make_unique<RGWSysObjectCtx>(static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj->init_obj_ctx());
 }
 
 
@@ -432,16 +432,15 @@ int RGWDataAccess::Bucket::finish_init()
 
 int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  int ret = sd->store->getRados()->get_bucket_info(sd->store->svc(),
-				       tenant, name,
-				       bucket_info,
-				       &mtime,
-                                       y,
-                                       dpp,
-				       &attrs);
+  std::unique_ptr<rgw::sal::RGWBucket> bucket;
+  int ret = sd->store->get_bucket(dpp, nullptr, tenant, name, &bucket, y);
   if (ret < 0) {
     return ret;
   }
+
+  bucket_info = bucket->get_info();
+  mtime = bucket->get_modification_time();
+  attrs = bucket->get_attrs();
 
   return finish_init();
 }
@@ -466,7 +465,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
                                const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
-  rgw::sal::RGWRadosStore *store = sd->store;
+  rgw::sal::RGWStore *store = sd->store;
   CephContext *cct = store->ctx();
 
   string tag;
@@ -483,7 +482,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   auto& owner = bucket->policy.get_owner();
 
-  string req_id = store->svc()->zone_utils->unique_id(store->getRados()->get_new_req_id());
+  string req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_new_req_id());
 
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, store, b.get(), nullptr,
@@ -499,7 +498,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  const auto& compression_type = store->svc()->zone->get_zone_params().get_compression_type(bucket_info.placement_rule);
+  const auto& compression_type = store->get_zone_params().get_compression_type(bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(store->ctx(), compression_type);
     if (!plugin) {

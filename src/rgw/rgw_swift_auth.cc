@@ -625,12 +625,12 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
   int ret = -EPERM;
 
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
-  const char *user = s->info.env->get("HTTP_X_AUTH_USER");
+  const char *user_name = s->info.env->get("HTTP_X_AUTH_USER");
 
   s->prot_flags |= RGW_REST_SWIFT;
 
   string user_str;
-  RGWUserInfo info;
+  std::unique_ptr<rgw::sal::RGWUser> user;
   bufferlist bl;
   RGWAccessKey *swift_key;
   map<string, RGWAccessKey>::iterator siter;
@@ -682,19 +682,19 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
     }
   }
 
-  if (!key || !user)
+  if (!key || !user_name)
     goto done;
 
-  user_str = user;
+  user_str = user_name;
 
-  if ((ret = store->ctl()->user->get_info_by_swift(s, user_str, &info, s->yield)) < 0)
-  {
+  ret = store->get_user_by_swift(s, user_str, s->yield, &user);
+  if (ret < 0) {
     ret = -EACCES;
     goto done;
   }
 
-  siter = info.swift_keys.find(user_str);
-  if (siter == info.swift_keys.end()) {
+  siter = user->get_info().swift_keys.find(user_str);
+  if (siter == user->get_info().swift_keys.end()) {
     ret = -EPERM;
     goto done;
   }
@@ -711,7 +711,7 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
     tenant_path.append(g_conf()->rgw_swift_tenant_name);
   } else if (g_conf()->rgw_swift_account_in_url) {
     tenant_path = "/AUTH_";
-    tenant_path.append(info.user_id.to_str());
+    tenant_path.append(user->get_id().to_str());
   }
 
   dump_header(s, "X-Storage-Url", swift_url + swift_prefix + "/v1" +
@@ -741,7 +741,7 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(rgw::sal::RGWRadosStore *store, struct req_state *state,
+int RGWHandler_SWIFT_Auth::init(rgw::sal::RGWStore *store, struct req_state *state,
 				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";

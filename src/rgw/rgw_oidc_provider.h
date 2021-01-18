@@ -9,7 +9,7 @@
 #include "common/ceph_context.h"
 #include "common/ceph_json.h"
 
-#include "rgw/rgw_rados.h"
+#include "rgw/rgw_sal.h"
 
 class RGWCtl;
 
@@ -118,9 +118,10 @@ public:
   void decode_json(JSONObj *obj);
 
   static const string& get_url_oid_prefix();
-  static int get_providers(const DoutPrefixProvider *dpp, RGWRados *store,
-                            const string& tenant,
-                            vector<RGWOIDCProvider>& providers);
+  static int get_providers(const DoutPrefixProvider *dpp,
+			   rgw::sal::RGWStore* store,
+			   const string& tenant,
+			   vector<RGWOIDCProvider>& providers);
 };
 WRITE_CLASS_ENCODER(RGWOIDCProvider)
 #endif /* CEPH_RGW_OIDC_PROVIDER_H */

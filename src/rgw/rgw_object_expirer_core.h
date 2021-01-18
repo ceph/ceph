@@ -70,13 +70,8 @@ public:
 
 class RGWObjectExpirer {
 protected:
-  rgw::sal::RGWRadosStore *store;
+  rgw::sal::RGWStore *store;
   RGWObjExpStore exp_store;
-
-  int init_bucket_info(const std::string& tenant_name,
-                       const std::string& bucket_name,
-                       const std::string& bucket_id,
-                       RGWBucketInfo& bucket_info);
 
   class OEWorker : public Thread, public DoutPrefixProvider {
     CephContext *cct;
@@ -103,9 +98,9 @@ protected:
   std::atomic<bool> down_flag = { false };
 
 public:
-  explicit RGWObjectExpirer(rgw::sal::RGWRadosStore *_store)
+  explicit RGWObjectExpirer(rgw::sal::RGWStore *_store)
     : store(_store),
-      exp_store(_store->getRados()->ctx(), _store->svc()->rados, _store->svc()->zone),
+      exp_store(_store->ctx(), static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->rados, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {

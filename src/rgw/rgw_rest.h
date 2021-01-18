@@ -162,7 +162,7 @@ protected:
 public:
   RGWGetObj_ObjStore() : sent_header(false) {}
 
-  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWStore *store, struct req_state *s, RGWHandler *h) override {
     RGWGetObj::init(store, s, h);
     sent_header = false;
   }
@@ -544,7 +544,7 @@ class RGWRESTOp : public RGWOp {
 protected:
   RGWRESTFlusher flusher;
 public:
-  void init(rgw::sal::RGWRadosStore *store, struct req_state *s,
+  void init(rgw::sal::RGWStore *store, struct req_state *s,
             RGWHandler *dialect_handler) override {
     RGWOp::init(store, s, dialect_handler);
     flusher.init(s, this);
@@ -637,7 +637,7 @@ public:
   }
 
   virtual RGWHandler_REST* get_handler(
-    rgw::sal::RGWRadosStore *store,
+    rgw::sal::RGWStore *store,
     struct req_state* const s,
     const rgw::auth::StrategyRegistry& auth_registry,
     const std::string& frontend_prefix
@@ -669,7 +669,7 @@ class RGWREST {
   static int preprocess(struct req_state *s, rgw::io::BasicClient* rio);
 public:
   RGWREST() {}
-  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
+  RGWHandler_REST *get_handler(rgw::sal::RGWStore *store,
                                struct req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix,

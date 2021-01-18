@@ -243,13 +243,14 @@ bool RGWOIDCProvider::validate_input()
   return true;
 }
 
-int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *store,
-                                    const string& tenant,
-                                    vector<RGWOIDCProvider>& providers)
+int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp,
+				   rgw::sal::RGWStore* store,
+				   const string& tenant,
+				   vector<RGWOIDCProvider>& providers)
 {
-  auto ctl = store->pctl;
+  auto ctl = store->get_ctl();
   auto svc = ctl->svc;
-  auto pool = store->svc.zone->get_zone_params().oidc_pool;
+  auto pool = store->get_zone_params().oidc_pool;
   string prefix = tenant + oidc_url_oid_prefix;
 
   //Get the filtered objects
@@ -265,7 +266,7 @@ int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *stor
       return r;
     }
     for (const auto& iter : oids) {
-      RGWOIDCProvider provider(ctl->cct, store->pctl);
+      RGWOIDCProvider provider(ctl->cct, store->get_ctl());
       bufferlist bl;
       auto obj_ctx = svc->sysobj->init_obj_ctx();
 
