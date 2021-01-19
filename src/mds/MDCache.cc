@@ -3873,9 +3873,9 @@ void MDCache::recalc_auth_bits(bool replay)
 	CDentry *dn = p.second;
 	CDentry::linkage_t *dnl = dn->get_linkage();
 	if (auth) {
-	  dn->state_set(CDentry::STATE_AUTH);
+	  dn->mark_auth();
 	} else {
-	  dn->state_clear(CDentry::STATE_AUTH);
+	  dn->clear_auth();
 	  if (!replay) {
 	    dn->state_set(CDentry::STATE_REJOINING);
 	    if (dn->is_dirty())
@@ -7260,7 +7260,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
         dir->remove_dentry(dn);
       } else {
         dout(20) << "trim_non_auth_subtree(" << dir << ") keeping inode " << in << " with dentry " << dn <<dendl;
-	dn->state_clear(CDentry::STATE_AUTH);
+	dn->clear_auth();
 	in->state_clear(CInode::STATE_AUTH);
       }
     } else if (keep_dir && dnl->is_null()) { // keep null dentry for peer rollback
