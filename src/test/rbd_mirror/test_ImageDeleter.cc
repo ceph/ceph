@@ -79,7 +79,7 @@ public:
                                 m_remote_mirror_uuid, true));
 
     cls::rbd::MirrorImage mirror_image(
-      MirrorImageMode::MIRROR_IMAGE_MODE_JOURNAL, GLOBAL_IMAGE_ID,
+      MirrorImageMode::MIRROR_IMAGE_MODE_JOURNAL, GLOBAL_IMAGE_ID, {},
       MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
     EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
                                               mirror_image));
@@ -207,7 +207,7 @@ public:
                                GLOBAL_CLONE_IMAGE_ID, m_remote_mirror_uuid));
 
     cls::rbd::MirrorImage mirror_image(
-      MirrorImageMode::MIRROR_IMAGE_MODE_JOURNAL, GLOBAL_CLONE_IMAGE_ID,
+      MirrorImageMode::MIRROR_IMAGE_MODE_JOURNAL, GLOBAL_CLONE_IMAGE_ID, {},
       MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
     EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, clone_id,
                                               mirror_image));
