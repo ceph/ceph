@@ -318,11 +318,10 @@ class RemoveUtil(object):
             'format': 'json'
         })
         try:
-            ret = json.loads(out)
+            return json.loads(out)
         except ValueError:
             logger.exception(f'Cannot decode JSON: \'{out}\'')
             return {}
-        return ret
 
     def get_pg_count(self, osd_id: int, osd_df: Optional[dict] = None) -> int:
         if not osd_df:
