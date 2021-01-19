@@ -286,7 +286,7 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
     RGWRole role(cct, store->getRados()->pctl, roleName, r_arn->account);
     if (int ret = role.get(dpp, y); ret < 0) {
       if (ret == -ENOENT) {
-        ldout(cct, 0) << "Role doesn't exist: " << roleName << dendl;
+        ldpp_dout(dpp, 0) << "Role doesn't exist: " << roleName << dendl;
         ret = -ERR_NO_ROLE_FOUND;
       }
       return make_tuple(ret, this->role);
@@ -300,14 +300,14 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
       }
       string r_path = role.get_path();
       if (path != r_path) {
-        ldout(cct, 0) << "Invalid Role ARN: Path in ARN does not match with the role path: " << path << " " << r_path << dendl;
+        ldpp_dout(dpp, 0) << "Invalid Role ARN: Path in ARN does not match with the role path: " << path << " " << r_path << dendl;
         return make_tuple(-EACCES, this->role);
       }
       this->role = std::move(role);
       return make_tuple(0, this->role);
     }
   } else {
-    ldout(cct, 0) << "Invalid role arn: " << arn << dendl;
+    ldpp_dout(dpp, 0) << "Invalid role arn: " << arn << dendl;
     return make_tuple(-EINVAL, this->role);
   }
 }
@@ -403,7 +403,7 @@ AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp,
   //Get the role info which is being assumed
   boost::optional<rgw::ARN> r_arn = rgw::ARN::parse(req.getRoleARN());
   if (r_arn == boost::none) {
-    ldout(cct, 0) << "Error in parsing role arn: " << req.getRoleARN() << dendl;
+    ldpp_dout(dpp, 0) << "Error in parsing role arn: " << req.getRoleARN() << dendl;
     response.retCode = -EINVAL;
     return response;
   }
