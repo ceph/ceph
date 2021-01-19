@@ -126,7 +126,7 @@ void print_deprecated_warning(po::option_description option, std::string descrip
   auto pos = description.find_first_of(":");
   if (pos != std::string::npos) {
   std::string param = description.substr(pos + 1, description.size() - pos - 2);
-  std::cout << "rbd: " << option.format_name() << " is deprecated, use --"
+  std::cerr << "rbd: " << option.format_name() << " is deprecated, use --"
             << param << std::endl;
   }
 }
