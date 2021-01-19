@@ -15,7 +15,7 @@ namespace rgw::auth::sts {
 
 class WebTokenEngine : public rgw::auth::Engine {
   CephContext* const cct;
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
 
   using result_t = rgw::auth::Engine::result_t;
   using token_t = rgw::web_idp::WebTokenClaims;
@@ -44,11 +44,11 @@ class WebTokenEngine : public rgw::auth::Engine {
 
 public:
   WebTokenEngine(CephContext* const cct,
-                    RGWCtl* const ctl,
+                    rgw::sal::RGWStore* store,
                     const rgw::auth::TokenExtractor* const extractor,
                     const rgw::auth::WebIdentityApplier::Factory* const apl_factory)
     : cct(cct),
-      ctl(ctl),
+      store(store),
       extractor(extractor),
       apl_factory(apl_factory) {
   }
@@ -65,7 +65,7 @@ public:
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::WebIdentityApplier::Factory {
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   ImplicitTenants& implicit_tenant_context;
 
   /* The engine. */
@@ -83,18 +83,18 @@ class DefaultStrategy : public rgw::auth::Strategy,
                                     const string& role_session,
                                     const string& role_tenant,
                                     const rgw::web_idp::WebTokenClaims& token) const override {
-    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::WebIdentityApplier(cct, ctl, role_session, role_tenant, token));
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::WebIdentityApplier(cct, store, role_session, role_tenant, token));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
   DefaultStrategy(CephContext* const cct,
                   ImplicitTenants& implicit_tenant_context,
-                  RGWCtl* const ctl)
-    : ctl(ctl),
+                  rgw::sal::RGWStore* store)
+    : store(store),
       implicit_tenant_context(implicit_tenant_context),
-      web_token_engine(cct, ctl,
+      web_token_engine(cct, store,
                         static_cast<rgw::auth::TokenExtractor*>(this),
                         static_cast<rgw::auth::WebIdentityApplier::Factory*>(this)) {
     /* When the constructor's body is being executed, all member engines

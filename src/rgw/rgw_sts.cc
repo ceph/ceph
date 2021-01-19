@@ -283,7 +283,7 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
   if (auto r_arn = rgw::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
-    RGWRole role(cct, store->get_ctl(), roleName, r_arn->account);
+    RGWRole role(cct, store, roleName, r_arn->account);
     if (int ret = role.get(dpp, y); ret < 0) {
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 0) << "Role doesn't exist: " << roleName << dendl;

@@ -291,7 +291,7 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->get_ctl());
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store);
 
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store, auth_registry);

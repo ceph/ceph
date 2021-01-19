@@ -202,6 +202,19 @@ class RGWStore {
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_all_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual int get_config_key_val(string name, bufferlist *bl) = 0;
+    virtual int put_system_obj(const rgw_pool& pool, const string& oid,
+			       bufferlist& data, bool exclusive,
+			       RGWObjVersionTracker *objv_tracker, real_time set_mtime,
+			       optional_yield y, map<string, bufferlist> *pattrs = nullptr) = 0;
+    virtual int get_system_obj(const DoutPrefixProvider *dpp,
+			       const rgw_pool& pool, const string& key,
+			       bufferlist& bl,
+			       RGWObjVersionTracker *objv_tracker, real_time *pmtime,
+			       optional_yield y, map<string, bufferlist> *pattrs = nullptr,
+			       rgw_cache_entry_info *cache_info = nullptr,
+			       boost::optional<obj_version> refresh_version = boost::none) = 0;
+    virtual int delete_system_obj(const rgw_pool& pool, const string& oid,
+				  RGWObjVersionTracker *objv_tracker, optional_yield y) = 0;
     virtual void finalize(void) = 0;
 
     virtual CephContext *ctx(void) = 0;
@@ -236,6 +249,7 @@ class RGWUser {
     void set_tenant(std::string& _t) { info.user_id.tenant = _t; }
     const std::string& get_ns() { return info.user_id.ns; }
     void set_ns(std::string& _ns) { info.user_id.ns = _ns; }
+    void clear_ns() { info.user_id.ns.clear(); }
     const rgw_user& get_id() const { return info.user_id; }
     uint32_t get_type() const { return info.type; }
     int32_t get_max_buckets() const { return info.max_buckets; }

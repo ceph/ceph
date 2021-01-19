@@ -5720,11 +5720,12 @@ rgw::auth::s3::LocalEngine::authenticate(
   optional_yield y) const
 {
   /* get the user info */
-  RGWUserInfo user_info;
+  std::unique_ptr<rgw::sal::RGWUser> user;
   /* TODO(rzarzynski): we need to have string-view taking variant. */
-  const std::string access_key_id(_access_key_id);
-  if (rgw_get_user_info_by_access_key(dpp, ctl->user, access_key_id, user_info, y) < 0) {
-      ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
+  RGWAccessKey access_key;
+  access_key.id = _access_key_id;
+  if (store->get_user(dpp, access_key, y, &user) < 0) {
+      ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key.id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
@@ -5737,8 +5738,8 @@ rgw::auth::s3::LocalEngine::authenticate(
     }
   }*/
 
-  const auto iter = user_info.access_keys.find(access_key_id);
-  if (iter == std::end(user_info.access_keys)) {
+  const auto iter = user->get_info().access_keys.find(access_key.id);
+  if (iter == std::end(user->get_info().access_keys)) {
     ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
     return result_t::deny(-EPERM);
   }
@@ -5759,7 +5760,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser, boost::none);
+  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(), k.subuser, boost::none);
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
 
@@ -5891,12 +5892,12 @@ rgw::auth::s3::STSEngine::authenticate(
   }
 
   // Get all the authorization info
-  RGWUserInfo user_info;
+  std::unique_ptr<rgw::sal::RGWUser> user;
   rgw_user user_id;
   string role_id;
   rgw::auth::RoleApplier::Role r;
   if (! token.roleId.empty()) {
-    RGWRole role(s->cct, ctl, token.roleId);
+    RGWRole role(s->cct, store, token.roleId);
     if (role.get_by_id(dpp, y) < 0) {
       return result_t::deny(-EPERM);
     }
@@ -5915,9 +5916,10 @@ rgw::auth::s3::STSEngine::authenticate(
     user_id = token.user;
   }
 
+  user = store->get_user(token.user);
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
-    int ret = rgw_get_user_info_by_uid(dpp, ctl->user, token.user, user_info, y, NULL);
+    int ret = user->load_by_id(dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
@@ -5933,7 +5935,7 @@ rgw::auth::s3::STSEngine::authenticate(
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, token.perm_mask);
+    auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(), subuser, token.perm_mask);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }

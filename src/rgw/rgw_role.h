@@ -13,7 +13,7 @@
 
 #include "rgw/rgw_rados.h"
 
-struct RGWCtl;
+namespace rgw { namespace sal { class RGWStore; } }
 
 class RGWRole
 {
@@ -28,7 +28,7 @@ class RGWRole
   static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 
   CephContext *cct;
-  RGWCtl *ctl;
+  rgw::sal::RGWStore* store;
   string id;
   string name;
   string path;
@@ -50,14 +50,14 @@ class RGWRole
 
 public:
   RGWRole(CephContext *cct,
-          RGWCtl *ctl,
+          rgw::sal::RGWStore* store,
           string name,
           string path,
           string trust_policy,
           string tenant,
           string max_session_duration_str="")
   : cct(cct),
-    ctl(ctl),
+    store(store),
     name(std::move(name)),
     path(std::move(path)),
     trust_policy(std::move(trust_policy)),
@@ -73,27 +73,27 @@ public:
   }
 
   RGWRole(CephContext *cct,
-          RGWCtl *ctl,
+          rgw::sal::RGWStore* store,
           string name,
           string tenant)
   : cct(cct),
-    ctl(ctl),
+    store(store),
     name(std::move(name)),
     tenant(std::move(tenant)) {
     extract_name_tenant(this->name);
   }
 
   RGWRole(CephContext *cct,
-          RGWCtl *ctl,
+          rgw::sal::RGWStore* store,
           string id)
   : cct(cct),
-    ctl(ctl),
+    store(store),
     id(std::move(id)) {}
 
   RGWRole(CephContext *cct,
-          RGWCtl *ctl)
+          rgw::sal::RGWStore* store)
   : cct(cct),
-    ctl(ctl) {}
+    store(store) {}
 
   RGWRole() {}
 

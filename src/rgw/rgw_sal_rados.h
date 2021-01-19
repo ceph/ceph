@@ -418,6 +418,20 @@ class RGWRadosStore : public RGWStore {
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual int trim_all_usage(uint64_t start_epoch, uint64_t end_epoch) override;
     virtual int get_config_key_val(string name, bufferlist *bl) override;
+    virtual int put_system_obj(const rgw_pool& pool, const string& oid,
+			       bufferlist& data, bool exclusive,
+			       RGWObjVersionTracker *objv_tracker, real_time set_mtime,
+			       optional_yield y, map<string, bufferlist> *pattrs = nullptr)
+      override;
+    virtual int get_system_obj(const DoutPrefixProvider *dpp,
+			       const rgw_pool& pool, const string& key,
+			       bufferlist& bl,
+			       RGWObjVersionTracker *objv_tracker, real_time *pmtime,
+			       optional_yield y, map<string, bufferlist> *pattrs = nullptr,
+			       rgw_cache_entry_info *cache_info = nullptr,
+			       boost::optional<obj_version> refresh_version = boost::none) override;
+    virtual int delete_system_obj(const rgw_pool& pool, const string& oid,
+				  RGWObjVersionTracker *objv_tracker, optional_yield y) override;
     virtual void finalize(void) override;
 
     virtual CephContext *ctx(void) override { return rados->ctx(); }

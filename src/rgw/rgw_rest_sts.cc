@@ -82,7 +82,7 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   }
   auto provider_arn = rgw::ARN(idp_url, "oidc-provider", tenant);
   string p_arn = provider_arn.to_string();
-  RGWOIDCProvider provider(cct, ctl, p_arn, tenant);
+  RGWOIDCProvider provider(cct, store, p_arn, tenant);
   auto ret = provider.get(dpp);
   if (ret < 0) {
     return boost::none;
