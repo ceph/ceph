@@ -228,7 +228,7 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   try {
     decode(*entry_point, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
   return 0;
@@ -579,7 +579,7 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
 
   int r = svc.bucket_sync->handle_bi_removal(info, y);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
     /* returning success as index is just keeping hints, so will keep extra hints,
      * but bucket removal succeeded
      */
