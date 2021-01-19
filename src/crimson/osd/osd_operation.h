@@ -308,6 +308,8 @@ public:
     shutdown_timer.arm_periodic(std::chrono::milliseconds(100/*TODO: use option instead*/));
     return shutdown.get_future();
   }
+
+  void dump_client_requests(ceph::Formatter* f) const;
 };
 
 /**

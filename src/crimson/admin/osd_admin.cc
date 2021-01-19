@@ -205,6 +205,7 @@ public:
   {
     unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
     f->open_object_section("ops_in_flight");
+    op_registry.dump_client_requests(f.get());
     f->close_section();
     f->dump_int("num_ops", 0);
     return seastar::make_ready_future<tell_result_t>(std::move(f));

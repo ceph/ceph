@@ -6,6 +6,15 @@
 
 namespace crimson::osd {
 
+void OperationRegistry::dump_client_requests(ceph::Formatter* f) const
+{
+  const auto& client_registry =
+    registries[static_cast<int>(OperationTypeCode::client_request)];
+  for (const auto& op : client_registry) {
+    op.dump(f);
+  }
+}
+
 void Operation::dump(ceph::Formatter* f) const
 {
   f->open_object_section("operation");
