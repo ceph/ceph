@@ -3330,3 +3330,22 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
 
   return r;
 }
+
+bool RocksDBStore::get_sharding(std::string& sharding) {
+  rocksdb::Status status;
+  std::string stored_sharding_text;
+  bool result = false;
+  sharding.clear();
+
+  status = env->FileExists(sharding_def_file);
+  if (status.ok()) {
+    status = rocksdb::ReadFileToString(env,
+				       sharding_def_file,
+				       &stored_sharding_text);
+    if(status.ok()) {
+      result = true;
+      sharding = stored_sharding_text;
+    }
+  }
+  return result;
+}
