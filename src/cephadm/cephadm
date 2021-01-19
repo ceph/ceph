@@ -2,7 +2,7 @@
 
 DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-master-devel'
 DEFAULT_IMAGE_IS_MASTER = True
-LATEST_STABLE_RELEASE = 'octopus'
+LATEST_STABLE_RELEASE = 'pacific'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
