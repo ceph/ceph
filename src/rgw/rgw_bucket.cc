@@ -275,7 +275,7 @@ void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_use
   do {
     int ret = user.list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "failed to read user buckets: "
+      ldpp_dout(dpp, 0) << "failed to read user buckets: "
 			     << cpp_strerror(-ret) << dendl;
       return;
     }
@@ -292,7 +292,7 @@ void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_use
       real_time mtime;
       int r = store->getRados()->get_bucket_info(store->svc(), user_id.tenant, bucket->get_name(), bucket_info, &mtime, null_yield, dpp);
       if (r < 0) {
-        ldpp_dout(this, 0) << "could not get bucket info for bucket=" << bucket << dendl;
+        ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
       }
 
@@ -635,7 +635,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y, const Dou
   map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter == attrs.end()) {
 	// should never happen; only pre-argonaut buckets lacked this.
-    ldpp_dout(this, 0) << "WARNING: can't bucket link because no acl on bucket=" << old_bucket.name << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: can't bucket link because no acl on bucket=" << old_bucket.name << dendl;
     set_err_msg(err_msg,
 	"While crossing the Anavros you have displeased the goddess Hera."
 	"  You must sacrifice your ancient bucket " + bucket.bucket_id);
@@ -662,7 +662,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y, const Dou
 
   // now update the user for the bucket...
   if (display_name.empty()) {
-    ldpp_dout(this, 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
   }
 
   RGWAccessControlPolicy policy_instance;
@@ -845,7 +845,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr, null_yield, dpp);
   if (r < 0) {
-    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): get_bucket_instance_info(bucket=" << bucket << ") returned r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): get_bucket_instance_info(bucket=" << bucket << ") returned r=" << r << dendl;
     return r;
   }
 
@@ -3183,7 +3183,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
     objs.clear();
     int ret = list_op.list_objects(dpp, max_entries, &objs, &common_prefixes, &is_truncated, y);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
 
@@ -3200,12 +3200,12 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
       read_op.params.attrs = &attrs;
       ret = read_op.prepare(y, dpp);
       if (ret < 0){
-        ldpp_dout(this, 0) << "ERROR: failed to read object " << obj.key.name << cpp_strerror(-ret) << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to read object " << obj.key.name << cpp_strerror(-ret) << dendl;
         continue;
       }
       const auto& aiter = attrs.find(RGW_ATTR_ACL);
       if (aiter == attrs.end()) {
-        ldpp_dout(this, 0) << "ERROR: no acls found for object " << obj.key.name << " .Continuing with next object." << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: no acls found for object " << obj.key.name << " .Continuing with next object." << dendl;
         continue;
       } else {
         bufferlist& bl = aiter->second;
@@ -3215,7 +3215,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
           decode(policy, bl);
           owner = policy.get_owner();
         } catch (buffer::error& err) {
-          ldpp_dout(this, 0) << "ERROR: decode policy failed" << err.what()
+          ldpp_dout(dpp, 0) << "ERROR: decode policy failed" << err.what()
 				 << dendl;
           return -EIO;
         }
@@ -3242,7 +3242,7 @@ int RGWBucketCtl::chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_in
         obj_ctx.set_atomic(r_obj);
         ret = store->getRados()->set_attr(dpp, &obj_ctx, bucket_info, r_obj, RGW_ATTR_ACL, bl);
         if (ret < 0) {
-          ldpp_dout(this, 0) << "ERROR: modify attr failed " << cpp_strerror(-ret) << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-ret) << dendl;
           return ret;
         }
       }

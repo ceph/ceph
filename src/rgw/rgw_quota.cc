@@ -203,7 +203,7 @@ int RGWQuotaCache<T>::get_stats(const rgw_user& user, const rgw_bucket& bucket, 
     if (qs.async_refresh_time.sec() > 0 && now >= qs.async_refresh_time) {
       int r = async_refresh(user, bucket, qs, dpp);
       if (r < 0) {
-        ldpp_dout(this, 0) << "ERROR: quota async refresh returned ret=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: quota async refresh returned ret=" << r << dendl;
 
         /* continue processing, might be a transient error, async refresh is just optimization */
       }
@@ -300,15 +300,15 @@ int BucketAsyncRefreshHandler::init_fetch()
 
   int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield, dpp);
   if (r < 0) {
-    ldpp_dout(this, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
   }
 
-  ldpp_dout(this, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
+  ldpp_dout(dpp, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
   r = store->getRados()->get_bucket_stats_async(bucket_info, RGW_NO_SHARD, this);
   if (r < 0) {
-    ldpp_dout(this, 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
+    ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
     /* get_bucket_stats_async() dropped our reference already */
     return r;
@@ -371,7 +371,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
 
   int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, y, dpp);
   if (r < 0) {
-    ldpp_dout(this, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
   }
 
@@ -382,7 +382,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
   r = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver,
                                   &master_ver, bucket_stats, nullptr);
   if (r < 0) {
-    ldpp_dout(this, 0) << "could not get bucket stats for bucket="
+    ldpp_dout(dpp, 0) << "could not get bucket stats for bucket="
                            << bucket.name << dendl;
     return r;
   }
@@ -626,7 +626,7 @@ int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& user,
 {
   int r = store->ctl()->user->read_stats(user, &stats, y);
   if (r < 0) {
-    ldpp_dout(this, 0) << "could not get user stats for user=" << user << dendl;
+    ldpp_dout(dpp, 0) << "could not get user stats for user=" << user << dendl;
     return r;
   }
 
@@ -639,14 +639,14 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket, opt
 
   int r = store->ctl()->bucket->read_bucket_instance_info(bucket, &bucket_info, y, dpp);
   if (r < 0) {
-    ldpp_dout(this, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
   }
 
   RGWBucketEnt ent;
   r = store->ctl()->bucket->sync_user_stats(user, bucket_info, y, &ent);
   if (r < 0) {
-    ldpp_dout(this, 0) << "ERROR: sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
   }
 
@@ -662,13 +662,13 @@ int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& 
 
   int ret = store->ctl()->user->read_stats(rgw_user(user_str), &stats, y, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
-    ldpp_dout(this, 5) << "ERROR: can't read user header: ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
   }
 
   if (!store->ctx()->_conf->rgw_user_quota_sync_idle_users &&
       last_stats_update < last_stats_sync) {
-    ldpp_dout(this, 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
+    ldpp_dout(dpp, 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
     return 0;
   }
 
@@ -680,7 +680,7 @@ int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& 
 
   ret = rgw_user_sync_all_stats(dpp, store, user, y);
   if (ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
     return ret;
   }
 
@@ -694,7 +694,7 @@ int RGWUserStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yi
 
   int ret = store->ctl()->meta.mgr->list_keys_init(key, &handle);
   if (ret < 0) {
-    ldpp_dout(this, 10) << "ERROR: can't get key: ret=" << ret << dendl;
+    ldpp_dout(dpp, 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
   }
 
@@ -705,17 +705,17 @@ int RGWUserStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yi
     list<string> keys;
     ret = store->ctl()->meta.mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       goto done;
     }
     for (list<string>::iterator iter = keys.begin();
          iter != keys.end() && !going_down(); 
          ++iter) {
       rgw_user user(*iter);
-      ldpp_dout(this, 20) << "RGWUserStatsCache: sync user=" << user << dendl;
+      ldpp_dout(dpp, 20) << "RGWUserStatsCache: sync user=" << user << dendl;
       int ret = sync_user(dpp, user, y);
       if (ret < 0) {
-        ldpp_dout(this, 5) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
+        ldpp_dout(dpp, 5) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
 
         /* continuing to next user */
         continue;
@@ -908,7 +908,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
 
     const auto& quota_applier = RGWQuotaInfoApplier::get_instance(quota);
 
-    ldpp_dout(this, 20) << entity
+    ldpp_dout(dpp, 20) << entity
                             << " quota: max_objects=" << quota.max_objects
                             << " max_size=" << quota.max_size << dendl;
 
@@ -921,7 +921,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
       return -ERR_QUOTA_EXCEEDED;
     }
 
-    ldpp_dout(this, 20) << entity << " quota OK:"
+    ldpp_dout(dpp, 20) << entity << " quota OK:"
                             << " stats.num_objects=" << stats.num_objects
                             << " stats.size=" << stats.size << dendl;
     return 0;

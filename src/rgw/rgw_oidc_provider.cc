@@ -215,11 +215,11 @@ int RGWOIDCProvider::read_url(const DoutPrefixProvider *dpp, const string& url, 
 bool RGWOIDCProvider::validate_input()
 {
   if (provider_url.length() > MAX_OIDC_URL_LEN) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid length of url " << dendl;
+    ldout(cct, 0) << "ERROR: Invalid length of url " << dendl;
     return false;
   }
   if (client_ids.size() > MAX_OIDC_NUM_CLIENT_IDS) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid number of client ids " << dendl;
+    ldout(cct, 0) << "ERROR: Invalid number of client ids " << dendl;
     return false;
   }
 
@@ -230,7 +230,7 @@ bool RGWOIDCProvider::validate_input()
   }
 
   if (thumbprints.size() > MAX_OIDC_NUM_THUMBPRINTS) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid number of thumbprints " << thumbprints.size() << dendl;
+    ldout(cct, 0) << "ERROR: Invalid number of thumbprints " << thumbprints.size() << dendl;
     return false;
   }
 
@@ -260,7 +260,7 @@ int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *stor
     list<string> oids;
     int r = store->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
     if (r < 0) {
-      ldpp_dout(this, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
+      ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
                   << prefix << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
@@ -279,7 +279,7 @@ int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *stor
         auto iter = bl.cbegin();
         decode(provider, iter);
       } catch (buffer::error& err) {
-        ldpp_dout(this, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
+        ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
                     ": " << iter << dendl;
         return -EIO;
       }

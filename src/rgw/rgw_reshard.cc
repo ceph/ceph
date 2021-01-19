@@ -209,7 +209,7 @@ public:
     for (auto& shard : target_shards) {
       int ret = shard->wait_all_aio();
       if (ret < 0) {
-        ldpp_dout(this, 20) << __func__ <<
+        ldpp_dout(dpp, 20) << __func__ <<
 	  ": shard->wait_all_aio() returned ret=" << ret << dendl;
       }
     }
@@ -394,7 +394,7 @@ class BucketInfoReshardUpdate
     bucket_info.reshard_status = s;
     int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs, dpp);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: failed to write bucket info, ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to write bucket info, ret=" << ret << dendl;
       return ret;
     }
     return 0;
@@ -550,7 +550,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   list<rgw_cls_bi_entry> entries;
 
   if (max_entries < 0) {
-    ldpp_dout(this, 0) << __func__ <<
+    ldpp_dout(dpp, 0) << __func__ <<
       ": can't reshard, negative max_entries" << dendl;
     return -EINVAL;
   }
@@ -561,7 +561,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   int ret = bucket_info_updater.start();
   if (ret < 0) {
-    ldpp_dout(this, 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
     return ret;
   }
 
@@ -681,7 +681,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   ret = bucket_info_updater.complete();
   if (ret < 0) {
-    ldpp_dout(this, 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
     /* don't error out, reshard process succeeded */
   }
 
@@ -760,7 +760,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
       "\"created after successful resharding with error " << ret << dendl;
   }
 
-  ldpp_dout(this, 1) << __func__ <<
+  ldpp_dout(dpp, 1) << __func__ <<
     " INFO: reshard of bucket \"" << bucket_info.bucket.name << "\" from \"" <<
     bucket_info.bucket.get_key() << "\" to \"" <<
     new_bucket_info.bucket.get_key() << "\" completed successfully" << dendl;
@@ -1001,7 +1001,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
   int ret = logshard_lock.lock();
   if (ret < 0) { 
-    ldpp_dout(this, 5) << __func__ << "(): failed to acquire lock on " <<
+    ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " <<
       logshard_oid << ", ret = " << ret <<dendl;
     return ret;
   }
@@ -1018,7 +1018,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
     for(auto& entry: entries) { // logshard entries
       if(entry.new_instance_id.empty()) {
 
-	ldpp_dout(this, 20) << __func__ << " resharding " <<
+	ldpp_dout(dpp, 20) << __func__ << " resharding " <<
 	  entry.bucket_name  << dendl;
 
 	rgw_bucket bucket;
@@ -1067,13 +1067,13 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 	ret = br.execute(entry.new_num_shards, max_entries, dpp, false, nullptr,
 			 nullptr, this);
 	if (ret < 0) {
-	  ldpp_dout(this, 0) <<  __func__ <<
+	  ldpp_dout(dpp, 0) <<  __func__ <<
 	    ": Error during resharding bucket " << entry.bucket_name << ":" <<
 	    cpp_strerror(-ret)<< dendl;
 	  return ret;
 	}
 
-	ldpp_dout(this, 20) << __func__ <<
+	ldpp_dout(dpp, 20) << __func__ <<
 	  " removing reshard queue entry for bucket " << entry.bucket_name <<
 	  dendl;
 
@@ -1117,7 +1117,7 @@ void  RGWReshard::get_logshard_oid(int shard_num, string *logshard)
 int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp)
 {
   if (!store->svc()->zone->can_reshard()) {
-    ldpp_dout(this, 20) << __func__ << " Resharding is disabled"  << dendl;
+    ldpp_dout(dpp, 20) << __func__ << " Resharding is disabled"  << dendl;
     return 0;
   }
   int ret = 0;
@@ -1126,11 +1126,11 @@ int RGWReshard::process_all_logshards(const DoutPrefixProvider *dpp)
     string logshard;
     get_logshard_oid(i, &logshard);
 
-    ldpp_dout(this, 20) << "processing logshard = " << logshard << dendl;
+    ldpp_dout(dpp, 20) << "processing logshard = " << logshard << dendl;
 
     ret = process_single_logshard(i, dpp);
 
-    ldpp_dout(this, 20) << "finish processing logshard = " << logshard << " , ret = " << ret << dendl;
+    ldpp_dout(dpp, 20) << "finish processing logshard = " << logshard << " , ret = " << ret << dendl;
   }
 
   return 0;

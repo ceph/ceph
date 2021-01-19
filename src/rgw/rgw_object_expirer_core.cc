@@ -217,11 +217,11 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
   int ret = init_bucket_info(hint.tenant, hint.bucket_name,
           hint.bucket_id, bucket_info);
   if (-ENOENT == ret) {
-    ldpp_dout(this, 15) << "NOTICE: cannot find bucket = " \
+    ldpp_dout(dpp, 15) << "NOTICE: cannot find bucket = " \
         << hint.bucket_name << ". The object must be already removed" << dendl;
     return -ERR_PRECONDITION_FAILED;
   } else if (ret < 0) {
-    ldpp_dout(this, 1) << "ERROR: could not init bucket = " \
+    ldpp_dout(dpp, 1) << "ERROR: could not init bucket = " \
         << hint.bucket_name << "due to ret = " << ret << dendl;
     return ret;
   }
@@ -252,12 +252,12 @@ void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp,
        ++iter)
   {
     objexp_hint_entry hint;
-    ldpp_dout(this, 15) << "got removal hint for: " << iter->key_ts.sec() \
+    ldpp_dout(dpp, 15) << "got removal hint for: " << iter->key_ts.sec() \
         << " - " << iter->key_ext << dendl;
 
     int ret = objexp_hint_parse(store->getRados()->ctx(), *iter, &hint);
     if (ret < 0) {
-      ldpp_dout(this, 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
+      ldpp_dout(dpp, 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
     }
 
@@ -265,9 +265,9 @@ void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp,
      * We can silently ignore that and move forward. */
     ret = garbage_single_object(dpp, hint);
     if (ret == -ERR_PRECONDITION_FAILED) {
-      ldpp_dout(this, 15) << "not actual hint for object: " << hint.obj_key << dendl;
+      ldpp_dout(dpp, 15) << "not actual hint for object: " << hint.obj_key << dendl;
     } else if (ret < 0) {
-      ldpp_dout(this, 1) << "cannot remove expired object: " << hint.obj_key << dendl;
+      ldpp_dout(dpp, 1) << "cannot remove expired object: " << hint.obj_key << dendl;
     }
 
     need_trim = true;
@@ -372,7 +372,7 @@ bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp,
     string shard;
     objexp_get_shard(i, &shard);
 
-    ldpp_dout(this, 20) << "processing shard = " << shard << dendl;
+    ldpp_dout(dpp, 20) << "processing shard = " << shard << dendl;
 
     if (! process_single_shard(dpp, shard, last_run, round_start)) {
       all_done = false;

@@ -3232,7 +3232,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
 done_cancel:
   int ret = index_op->cancel(dpp);
   if (ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: index_op.cancel()() returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: index_op.cancel()() returned ret=" << ret << dendl;
   }
 
   meta.canceled = true;
@@ -5060,7 +5060,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     BucketShard *bs;
     int r = target->get_bucket_shard(&bs, dpp);
     if (r < 0) {
-      ldpp_dout(this, 5) << "failed to get BucketShard object: r=" << r << dendl;
+      ldpp_dout(dpp, 5) << "failed to get BucketShard object: r=" << r << dendl;
       return r;
     }
 
@@ -5169,13 +5169,13 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     
     int ret = target->complete_atomic_modification();
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: complete_atomic_modification returned ret=" << ret << dendl;
     }
     /* other than that, no need to propagate error */
   } else {
     int ret = index_op.cancel(dpp);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
     }
   }
 
@@ -6043,11 +6043,11 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
     if (r < 0) {
       return r;
     }
-    ldpp_dout(this, 20) << "reshard completion identified, new_bucket_id=" << new_bucket_id << dendl;
+    ldpp_dout(dpp, 20) << "reshard completion identified, new_bucket_id=" << new_bucket_id << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
     r = target->update_bucket_id(new_bucket_id, dpp);
     if (r < 0) {
-      ldpp_dout(this, 0) << "ERROR: update_bucket_id() new_bucket_id=" << new_bucket_id << " returned r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: update_bucket_id() new_bucket_id=" << new_bucket_id << " returned r=" << r << dendl;
       return r;
     }
     invalidate_bs();
@@ -6108,7 +6108,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 
   int ret = get_bucket_shard(&bs, dpp);
   if (ret < 0) {
-    ldpp_dout(this, 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
 
@@ -6157,7 +6157,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
 
   int ret = get_bucket_shard(&bs, dpp);
   if (ret < 0) {
-    ldpp_dout(this, 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
 
