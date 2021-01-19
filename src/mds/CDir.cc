@@ -932,10 +932,8 @@ void CDir::prepare_old_fragment(map<string_snap_t, MDSContext::vec >& dentry_wai
 
   if (!waiting_on_dentry.empty()) {
     for (const auto &p : waiting_on_dentry) {
-      auto &e = dentry_waiters[p.first];
-      for (const auto &waiter : p.second) {
-        e.push_back(waiter);
-      }
+      std::copy(p.second.begin(), p.second.end(),
+		std::back_inserter(dentry_waiters[p.first]));
     }
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
@@ -1075,10 +1073,8 @@ void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, b
 
     if (f->waiting_on_dentry.empty())
       f->get(PIN_DNWAITER);
-    auto &e = f->waiting_on_dentry[p.first];
-    for (const auto &waiter : p.second) {
-      e.push_back(waiter);
-    }
+    std::copy(p.second.begin(), p.second.end(),
+	      std::back_inserter(f->waiting_on_dentry[p.first]));
   }
 
   // FIXME: handle dirty old rstat
@@ -1170,10 +1166,8 @@ void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool 
   if (!dentry_waiters.empty()) {
     get(PIN_DNWAITER);
     for (const auto &p : dentry_waiters) {
-      auto &e = waiting_on_dentry[p.first];
-      for (const auto &waiter : p.second) {
-        e.push_back(waiter);
-      }
+      std::copy(p.second.begin(), p.second.end(),
+		std::back_inserter(waiting_on_dentry[p.first]));
     }
   }
 
@@ -1300,31 +1294,13 @@ void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t 
 	     << " [" << first << "," << last << "] found waiter on snap "
 	     << it->first.snapid
 	     << " on " << *this << dendl;
-    for (const auto &waiter : it->second) {
-      ls.push_back(waiter);
-    }
+    std::copy(it->second.begin(), it->second.end(), std::back_inserter(ls));
     waiting_on_dentry.erase(it++);
   }
 
   if (waiting_on_dentry.empty())
     put(PIN_DNWAITER);
 }
-
-void CDir::take_sub_waiting(MDSContext::vec& ls)
-{
-  dout(10) << __func__ << dendl;
-  if (!waiting_on_dentry.empty()) {
-    for (const auto &p : waiting_on_dentry) {
-      for (const auto &waiter : p.second) {
-        ls.push_back(waiter);
-      }
-    }
-    waiting_on_dentry.clear();
-    put(PIN_DNWAITER);
-  }
-}
-
-
 
 void CDir::add_waiter(uint64_t tag, MDSContext *c) 
 {
@@ -1355,9 +1331,7 @@ void CDir::take_waiting(uint64_t mask, MDSContext::vec& ls)
     for (const auto &p : waiting_on_dentry) {
       dout(10) << "take_waiting dentry " << p.first.name
 	       << " snap " << p.first.snapid << " on " << *this << dendl;
-      for (const auto &waiter : p.second) {
-        ls.push_back(waiter);
-      }
+      std::copy(p.second.begin(), p.second.end(), std::back_inserter(ls));
     }
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);

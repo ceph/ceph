@@ -10094,11 +10094,6 @@ void MDCache::discover_path(CDir *base,
       onfinish = new C_MDC_RetryDiscoverPath2(this, base, snap, want_path);
     base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
     return;
-  } else if (from == mds->get_nodeid()) {
-    MDSContext::vec finished;
-    base->take_sub_waiting(finished);
-    mds->queue_waiters(finished);
-    return;
   }
 
   if ((path_locked && want_path.depth() == 1) ||
@@ -10563,13 +10558,9 @@ void MDCache::handle_discover_reply(const cref_t<MDiscoverReply> &m)
   } else if (m->is_flag_error_dn()) {
     frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
     CDir *dir = cur->get_dirfrag(fg);
-    if (dir) {
-      if (dir->is_auth()) {
-	dir->take_sub_waiting(finished);
-      } else {
-	dir->take_dentry_waiting(m->get_error_dentry(), m->get_wanted_snapid(),
-				 m->get_wanted_snapid(), error);
-      }
+    if (dir && !dir->is_auth()) {
+      dir->take_dentry_waiting(m->get_error_dentry(), m->get_wanted_snapid(),
+			       m->get_wanted_snapid(), error);
     }
   }
 
