@@ -39,7 +39,7 @@
 #include "cls_fifo_legacy.h"
 
 namespace rgw::cls::fifo {
-static constexpr auto dout_subsys = ceph_subsys_rgw;
+static constexpr auto dout_subsys = ceph_subsys_objclass;
 namespace cb = ceph::buffer;
 namespace fifo = rados::cls::fifo;
 
