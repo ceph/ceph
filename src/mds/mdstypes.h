@@ -1431,6 +1431,15 @@ struct string_snap_t {
   string_snap_t() {}
   string_snap_t(std::string_view n, snapid_t s) : name(n), snapid(s) {}
 
+  int compare(const string_snap_t& r) const {
+    int ret = name.compare(r.name);
+    if (ret)
+      return ret;
+    if (snapid == r.snapid)
+      return 0;
+    return snapid > r.snapid ? 1 : -1;
+  }
+
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
@@ -1440,6 +1449,10 @@ struct string_snap_t {
   snapid_t snapid;
 };
 WRITE_CLASS_ENCODER(string_snap_t)
+
+inline bool operator==(const string_snap_t& l, const string_snap_t& r) {
+  return l.name == r.name && l.snapid == r.snapid;
+}
 
 inline bool operator<(const string_snap_t& l, const string_snap_t& r) {
   int c = l.name.compare(r.name);

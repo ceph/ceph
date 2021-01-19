@@ -318,7 +318,7 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
       dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
     } else if (dir->get_version() == 0) {
       dout(20) << __func__ << " barebones " << *dir  << dendl;
-      dir->fetch(gather.new_sub());
+      dir->fetch_keys({}, gather.new_sub());
     } else {
       _enqueue(dir, header, true);
       queued.insert_raw(dir->get_frag());
