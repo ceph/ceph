@@ -3,11 +3,13 @@
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"
 #include "mon/OSDMonitor.h"
+#include "mon/PGMap.h"
 
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/common_init.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_json.h"
 
 #include <iostream>
 
@@ -1495,3 +1497,79 @@ TEST(PGTempMap, basic)
   ASSERT_EQ(998u, m.size());
 }
 
+TEST_F(OSDMapTest, BUG_48884)
+{
+
+  set_up_map(12);
+
+  unsigned int host_index = 1;
+  for (unsigned int x=0; x < get_num_osds();) {
+    // Create three hosts with four osds each
+    for (unsigned int y=0; y < 4; y++) {
+      stringstream osd_name;
+      stringstream host_name;
+      vector<string> move_to;
+      osd_name << "osd." << x;
+      host_name << "host-" << host_index;
+      move_to.push_back("root=default");
+      move_to.push_back("rack=localrack");
+      string host_loc = "host=" + host_name.str();
+      move_to.push_back(host_loc);
+      int r = crush_move(osdmap, osd_name.str(), move_to);
+      ASSERT_EQ(0, r);
+      x++;
+    }
+    host_index++;
+  }
+
+  CrushWrapper crush;
+  get_crush(osdmap, crush);
+  auto host_id = crush.get_item_id("localhost");
+  crush.remove_item(g_ceph_context, host_id, false);
+  OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+  pending_inc.crush.clear();
+  crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  osdmap.apply_incremental(pending_inc);
+
+  PGMap pgmap;
+  osd_stat_t stats, stats_null;
+  stats.statfs.total = 500000;
+  stats.statfs.available = 50000;
+  stats.statfs.omap_allocated = 50000;
+  stats.statfs.internal_metadata = 50000;
+  stats_null.statfs.total = 0;
+  stats_null.statfs.available = 0;
+  stats_null.statfs.omap_allocated = 0;
+  stats_null.statfs.internal_metadata = 0;
+  for (unsigned int x=0; x < get_num_osds(); x++) {
+    if (x > 3 && x < 8) {
+      pgmap.osd_stat.insert({x,stats_null});
+    } else {
+      pgmap.osd_stat.insert({x,stats});
+    }
+  }
+
+  stringstream ss;
+  boost::scoped_ptr<Formatter> f(Formatter::create("json-pretty"));
+  print_osd_utilization(osdmap, pgmap, ss, f.get(), true, "", "root");
+  JSONParser parser;
+  parser.parse(ss.str().c_str(), static_cast<int>(ss.str().size()));
+  auto iter = parser.find_first();
+  for (const auto bucket : (*iter)->get_array_elements()) {
+    JSONParser parser2;
+    parser2.parse(bucket.c_str(), static_cast<int>(bucket.size()));
+    auto* obj = parser2.find_obj("name");
+    if (obj->get_data_val().str.compare("localrack") == 0) {
+      obj = parser2.find_obj("kb");
+      ASSERT_EQ(obj->get_data_val().str, "3904");
+      obj = parser2.find_obj("kb_used");
+      ASSERT_EQ(obj->get_data_val().str, "3512");
+      obj = parser2.find_obj("kb_used_omap");
+      ASSERT_EQ(obj->get_data_val().str, "384");
+      obj = parser2.find_obj("kb_used_meta");
+      ASSERT_EQ(obj->get_data_val().str, "384");
+      obj = parser2.find_obj("kb_avail");
+      ASSERT_EQ(obj->get_data_val().str, "384");
+    }
+  }
+}
