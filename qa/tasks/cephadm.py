@@ -402,8 +402,9 @@ def ceph_bootstrap(ctx, config, registry):
             'sudo chmod 0600 /root/.ssh/authorized_keys')
 
         # set options
-        _shell(ctx, cluster_name, bootstrap_remote,
-               ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
+        if config.get('allow_ptrace', True):
+            _shell(ctx, cluster_name, bootstrap_remote,
+                   ['ceph', 'config', 'set', 'mgr', 'mgr/cephadm/allow_ptrace', 'true'])
 
         # add other hosts
         for remote in ctx.cluster.remotes.keys():
