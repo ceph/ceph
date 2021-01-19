@@ -1126,6 +1126,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
+        image: Optional[str] = None
         if daemon_type in CEPH_TYPES or \
                 daemon_type == 'nfs' or \
                 daemon_type == 'iscsi':
@@ -1135,7 +1136,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'who': utils.name_to_config_section(daemon_name),
                 'key': 'container_image',
             })
-            image = image.strip()  # type: ignore
+            image = image.strip()
         elif daemon_type == 'prometheus':
             image = self.container_image_prometheus
         elif daemon_type == 'grafana':
