@@ -10,6 +10,7 @@
 #include <functional>
 
 #include <boost/intrusive_ptr.hpp>
+#include <boost/iterator/counting_iterator.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include <seastar/core/future.hh>
@@ -176,6 +177,12 @@ public:
     Transaction &t,
     laddr_t offset);
 
+  /// remove refcount for list of offset
+  using refs_ret = ref_ertr::future<std::vector<unsigned>>;
+  refs_ret dec_ref(
+    Transaction &t,
+    std::vector<laddr_t> offsets);
+
   /**
    * alloc_extent
    *
@@ -203,6 +210,35 @@ public:
       return alloc_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
+  }
+
+  /* alloc_extents
+   *
+   * allocates more than one new blocks of type T.
+   */
+   using alloc_extents_ertr = alloc_extent_ertr;
+   template<class T>
+   alloc_extents_ertr::future<std::vector<TCachedExtentRef<T>>>
+   alloc_extents(
+     Transaction &t,
+     laddr_t hint,
+     extent_len_t len,
+     int num) {
+     return seastar::do_with(std::vector<TCachedExtentRef<T>>(),
+       [this, &t, hint, len, num] (auto &extents) {
+       return crimson::do_for_each(
+                       boost::make_counting_iterator(0),
+                       boost::make_counting_iterator(num),
+         [this, &t, len, hint, &extents] (auto i) {
+         return alloc_extent<T>(t, hint, len).safe_then(
+           [&extents](auto &&node) {
+           extents.push_back(node);
+         });
+       }).safe_then([&extents] {
+         return alloc_extents_ertr::make_ready_future
+                <std::vector<TCachedExtentRef<T>>>(std::move(extents));
+       });
+     });
   }
 
   /**
