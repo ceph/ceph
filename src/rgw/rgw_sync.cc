@@ -1089,7 +1089,7 @@ protected:
   int _send_request() override {
     int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, dpp, RGWMDLogSyncType::APPLY_ALWAYS, true);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
     }
     return 0;
@@ -1143,7 +1143,7 @@ protected:
   int _send_request() override {
     int ret = store->ctl()->meta.mgr->remove(raw_key, null_yield, dpp);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;
     }
     return 0;
