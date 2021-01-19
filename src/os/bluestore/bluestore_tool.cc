@@ -428,6 +428,8 @@ int main(int argc, char **argv)
     args.push_back(ll);
     args.push_back("--debug-bluefs");
     args.push_back(ll);
+    args.push_back("--debug-rocksdb");
+    args.push_back(ll);
   }
   args.push_back("--no-log-to-stderr");
   args.push_back("--err-to-stderr");
@@ -935,7 +937,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr, false);
+    int r = bluestore.open_db_environment(&db_ptr, true);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
