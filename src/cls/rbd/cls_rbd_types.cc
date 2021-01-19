@@ -128,16 +128,17 @@ std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer) {
 }
 
 void MirrorImage::encode(bufferlist &bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(global_image_id, bl);
   encode(static_cast<uint8_t>(state), bl);
   encode(static_cast<uint8_t>(mode), bl);
+  encode(group_spec, bl);
   ENCODE_FINISH(bl);
 }
 
 void MirrorImage::decode(bufferlist::const_iterator &it) {
   uint8_t int_state;
-  DECODE_START(2, it);
+  DECODE_START(3, it);
   decode(global_image_id, it);
   decode(int_state, it);
   state = static_cast<MirrorImageState>(int_state);
@@ -146,26 +147,34 @@ void MirrorImage::decode(bufferlist::const_iterator &it) {
     decode(int_mode, it);
     mode = static_cast<MirrorImageMode>(int_mode);
   }
+  if (struct_v >= 3) {
+    decode(group_spec, it);
+  }
   DECODE_FINISH(it);
 }
 
 void MirrorImage::dump(Formatter *f) const {
   f->dump_stream("mode") << mode;
   f->dump_string("global_image_id", global_image_id);
+  if (group_spec.is_valid()) {
+    f->open_object_section("group");
+    group_spec.dump(f);
+    f->close_section();
+  }
   f->dump_stream("state") << state;
 }
 
 void MirrorImage::generate_test_instances(std::list<MirrorImage*> &o) {
   o.push_back(new MirrorImage());
-  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_JOURNAL, "uuid-123",
+  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_JOURNAL, "uuid-123", {},
                               MIRROR_IMAGE_STATE_ENABLED));
-  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_SNAPSHOT, "uuid-abc",
+  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_SNAPSHOT, "uuid-abc", {"g1", 1},
                               MIRROR_IMAGE_STATE_DISABLING));
 }
 
 bool MirrorImage::operator==(const MirrorImage &rhs) const {
   return mode == rhs.mode && global_image_id == rhs.global_image_id &&
-         state == rhs.state;
+         group_spec == rhs.group_spec && state == rhs.state;
 }
 
 bool MirrorImage::operator<(const MirrorImage &rhs) const {
@@ -174,6 +183,9 @@ bool MirrorImage::operator<(const MirrorImage &rhs) const {
   }
   if (global_image_id != rhs.global_image_id) {
     return global_image_id < rhs.global_image_id;
+  }
+  if (group_spec != rhs.group_spec) {
+    return group_spec < rhs.group_spec;
   }
   return state < rhs.state;
 }
@@ -218,6 +230,7 @@ std::ostream& operator<<(std::ostream& os, const MirrorImage& mirror_image) {
   os << "["
      << "mode=" << mirror_image.mode << ", "
      << "global_image_id=" << mirror_image.global_image_id << ", "
+     << "group_spec=" << mirror_image.group_spec << ", "
      << "state=" << mirror_image.state << "]";
   return os;
 }

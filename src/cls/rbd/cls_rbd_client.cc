@@ -2060,11 +2060,13 @@ int mirror_peer_set_direction(
 }
 
 void mirror_image_list_start(librados::ObjectReadOperation *op,
-                             const std::string &start, uint64_t max_return)
+                             const std::string &start, uint64_t max_return,
+                             bool all)
 {
   bufferlist in_bl;
   encode(start, in_bl);
   encode(max_return, in_bl);
+  encode(all, in_bl);
   op->exec("rbd", "mirror_image_list", in_bl);
 }
 
@@ -2080,10 +2082,10 @@ int mirror_image_list_finish(bufferlist::const_iterator *it,
 }
 
 int mirror_image_list(librados::IoCtx *ioctx,
-                      const std::string &start, uint64_t max_return,
+                      const std::string &start, uint64_t max_return, bool all,
                       std::map<std::string, std::string> *mirror_image_ids) {
   librados::ObjectReadOperation op;
-  mirror_image_list_start(&op, start, max_return);
+  mirror_image_list_start(&op, start, max_return, all);
 
   bufferlist out_bl;
   int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);

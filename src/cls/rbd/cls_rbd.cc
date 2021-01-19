@@ -6953,19 +6953,24 @@ int mirror_peer_set_direction(cls_method_context_t hctx, bufferlist *in,
  * @param start_after which name to begin listing after
  *        (use the empty string to start at the beginning)
  * @param max_return the maximum number of names to list
+ * @param all true if listing should include group images
  *
  * Output:
  * @param std::map<std::string, std::string>: local id to global id map
  * @returns 0 on success, negative error code on failure
  */
 int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
-		     bufferlist *out) {
+                      bufferlist *out) {
   std::string start_after;
   uint64_t max_return;
+  bool all = false;
   try {
     auto iter = in->cbegin();
     decode(start_after, iter);
     decode(max_return, iter);
+    if (!iter.end()) {
+      decode(all, iter);
+    }
   } catch (const ceph::buffer::error &err) {
     return -EINVAL;
   }
@@ -7001,13 +7006,16 @@ int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
 	return -EIO;
       }
 
+      if (mirror_image.group_spec.is_valid() && !all) {
+        continue;
+      }
       mirror_images[image_id] = mirror_image.global_image_id;
       if (mirror_images.size() >= max_return) {
 	break;
       }
     }
     if (!vals.empty()) {
-      last_read = mirror::image_key(mirror_images.rbegin()->first);
+      last_read = vals.rbegin()->first;
     }
   }
 

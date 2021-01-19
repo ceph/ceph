@@ -1750,13 +1750,14 @@ TEST_F(TestClsRbd, mirror_image) {
   ioctx.remove(RBD_MIRRORING);
 
   std::map<std::string, std::string> mirror_image_ids;
-  ASSERT_EQ(-ENOENT, mirror_image_list(&ioctx, "", 0, &mirror_image_ids));
+  ASSERT_EQ(-ENOENT, mirror_image_list(&ioctx, "", 0, false,
+                                       &mirror_image_ids));
 
-  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1",
+  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1", {},
                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2",
+  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2", {},
                                cls::rbd::MIRROR_IMAGE_STATE_DISABLING);
-  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3",
+  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3", {},
                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
@@ -1781,12 +1782,13 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(0, mirror_image_get(&ioctx, "image_id3", &read_image));
   ASSERT_EQ(read_image, image3);
 
-  ASSERT_EQ(0, mirror_image_list(&ioctx, "", 1, &mirror_image_ids));
+  ASSERT_EQ(0, mirror_image_list(&ioctx, "", 1, false, &mirror_image_ids));
   std::map<std::string, std::string> expected_mirror_image_ids = {
     {"image_id1", "uuid1"}};
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 
-  ASSERT_EQ(0, mirror_image_list(&ioctx, "image_id1", 2, &mirror_image_ids));
+  ASSERT_EQ(0, mirror_image_list(&ioctx, "image_id1", 2, false,
+                                 &mirror_image_ids));
   expected_mirror_image_ids = {{"image_id2", "uuid2"}, {"image_id3", "uuid3"}};
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 
@@ -1794,7 +1796,7 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(-ENOENT, mirror_image_get_image_id(&ioctx, "uuid2", &image_id));
   ASSERT_EQ(-EBUSY, mirror_image_remove(&ioctx, "image_id1"));
 
-  ASSERT_EQ(0, mirror_image_list(&ioctx, "", 3, &mirror_image_ids));
+  ASSERT_EQ(0, mirror_image_list(&ioctx, "", 3, false, &mirror_image_ids));
   expected_mirror_image_ids = {{"image_id1", "uuid1"}, {"image_id3", "uuid3"}};
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 
@@ -1807,7 +1809,7 @@ TEST_F(TestClsRbd, mirror_image) {
   ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id1"));
   ASSERT_EQ(0, mirror_image_remove(&ioctx, "image_id3"));
 
-  ASSERT_EQ(0, mirror_image_list(&ioctx, "", 3, &mirror_image_ids));
+  ASSERT_EQ(0, mirror_image_list(&ioctx, "", 3, false, &mirror_image_ids));
   expected_mirror_image_ids = {};
   ASSERT_EQ(expected_mirror_image_ids, mirror_image_ids);
 }
@@ -1846,11 +1848,11 @@ TEST_F(TestClsRbd, mirror_image_status) {
 
   // Test status set
 
-  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1",
+  cls::rbd::MirrorImage image1(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid1", {},
                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2",
+  cls::rbd::MirrorImage image2(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid2", {},
                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
-  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3",
+  cls::rbd::MirrorImage image3(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, "uuid3", {},
                                cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
 
   ASSERT_EQ(0, mirror_image_set(&ioctx, "image_id1", image1));
@@ -2120,7 +2122,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
   for (size_t i = 0; i < N; i++) {
     std::string id = "id" + stringify(i);
     std::string uuid = "uuid" + stringify(i);
-    cls::rbd::MirrorImage image(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, uuid,
+    cls::rbd::MirrorImage image(cls::rbd::MIRROR_IMAGE_MODE_JOURNAL, uuid, {},
                                 cls::rbd::MIRROR_IMAGE_STATE_ENABLED);
     cls::rbd::MirrorImageSiteStatus status(
       "", cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN, "");
