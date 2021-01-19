@@ -235,7 +235,7 @@ struct Option {
   int pre_validate(std::string *new_value, std::string *err) const;
 
   // Validate properly typed value against bounds
-  int validate(const Option::value_t &new_value, std::string *err) const;
+  int validate(Option::value_t &new_value, std::string *err) const;
 
   // const char * must be explicit to avoid it being treated as an int
   Option& set_value(value_t& v, const char *new_value) {

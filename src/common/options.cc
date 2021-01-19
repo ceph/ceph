@@ -94,7 +94,7 @@ int Option::pre_validate(std::string *new_value, std::string *err) const
   }
 }
 
-int Option::validate(const Option::value_t &new_value, std::string *err) const
+int Option::validate(Option::value_t &new_value, std::string *err) const
 {
   // Generic validation: min
   if (!boost::get<boost::blank>(&(min))) {
@@ -118,19 +118,21 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
 
   // Generic validation: enum
   if (!enum_allowed.empty() && type == Option::TYPE_STR) {
-    auto found = std::find(enum_allowed.begin(), enum_allowed.end(),
-                           boost::get<std::string>(new_value));
-    if (found == enum_allowed.end()) {
-      std::ostringstream oss;
-      oss << "'" << new_value << "' is not one of the permitted "
-                 "values: " << joinify(enum_allowed.begin(),
-                                       enum_allowed.end(),
-                                       std::string(", "));
-      *err = oss.str();
-      return -EINVAL;
+    auto& v = boost::get<std::string>(new_value);
+    for (const auto& e : enum_allowed) {
+      if (strcasecmp(e, v.c_str()) == 0) {
+	new_value = std::string(e);
+	return 0;
+      }
     }
+    std::ostringstream oss;
+    oss << "'" << new_value << "' is not one of the permitted "
+      "values: " << joinify(enum_allowed.begin(),
+			    enum_allowed.end(),
+			    std::string(", "));
+    *err = oss.str();
+    return -EINVAL;
   }
-
   return 0;
 }
 
