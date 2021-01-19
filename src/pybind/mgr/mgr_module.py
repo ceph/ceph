@@ -531,13 +531,13 @@ class ClusterLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         levelmap = {
-            'DEBUG': MgrModule.ClusterLogPrio.DEBUG,
-            'INFO': MgrModule.ClusterLogPrio.INFO,
-            'WARNING': MgrModule.ClusterLogPrio.WARN,
-            'ERROR': MgrModule.ClusterLogPrio.ERROR,
-            'CRITICAL': MgrModule.ClusterLogPrio.ERROR,
+            logging.DEBUG: MgrModule.ClusterLogPrio.DEBUG,
+            logging.INFO: MgrModule.ClusterLogPrio.INFO,
+            logging.WARNING: MgrModule.ClusterLogPrio.WARN,
+            logging.ERROR: MgrModule.ClusterLogPrio.ERROR,
+            logging.CRITICAL: MgrModule.ClusterLogPrio.ERROR,
         }
-        level = levelmap[record.levelname]
+        level = levelmap[record.levelno]
         if record.levelno >= self.level:
             self._module.cluster_log(self._module.module_name,
                                      level,
