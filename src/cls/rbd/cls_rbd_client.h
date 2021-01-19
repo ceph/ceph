@@ -422,11 +422,12 @@ int mirror_peer_set_direction(
     cls::rbd::MirrorPeerDirection mirror_peer_direction);
 
 void mirror_image_list_start(librados::ObjectReadOperation *op,
-                             const std::string &start, uint64_t max_return);
+                             const std::string &start, uint64_t max_return,
+                             bool all);
 int mirror_image_list_finish(ceph::buffer::list::const_iterator *it,
                              std::map<std::string, std::string> *mirror_image_ids);
 int mirror_image_list(librados::IoCtx *ioctx,
-                      const std::string &start, uint64_t max_return,
+                      const std::string &start, uint64_t max_return, bool all,
                       std::map<std::string, std::string> *mirror_image_ids);
 void mirror_image_get_image_id_start(librados::ObjectReadOperation *op,
                                      const std::string &global_image_id);

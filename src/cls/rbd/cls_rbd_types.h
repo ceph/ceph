@@ -43,6 +43,41 @@ inline void decode(DirectoryState &state, ceph::buffer::list::const_iterator& it
   state = static_cast<DirectoryState>(int_state);
 }
 
+struct GroupSpec {
+  GroupSpec() {}
+  GroupSpec(const std::string &group_id, int64_t pool_id)
+    : group_id(group_id), pool_id(pool_id) {}
+
+  std::string group_id;
+  int64_t pool_id = -1;
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &it);
+  void dump(ceph::Formatter *f) const;
+  bool is_valid() const;
+
+  static void generate_test_instances(std::list<GroupSpec *> &o);
+
+  inline bool operator==(const GroupSpec& rhs) const {
+    return pool_id == rhs.pool_id && group_id == rhs.group_id;
+  }
+
+  inline bool operator!=(const GroupSpec& rhs) const {
+    return !(*this == rhs);
+  }
+
+  inline bool operator<(const GroupSpec& rhs) const {
+    if (pool_id != rhs.pool_id) {
+      return pool_id < rhs.pool_id;
+    }
+    return group_id < rhs.group_id;
+  }
+};
+
+WRITE_CLASS_ENCODER(GroupSpec);
+
+std::ostream& operator<<(std::ostream& os, const GroupSpec& group_spec);
+
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
   MIRROR_MODE_IMAGE    = 1,
@@ -148,12 +183,14 @@ struct MirrorImage {
   MirrorImage() {
   }
   MirrorImage(MirrorImageMode mode, const std::string &global_image_id,
-              MirrorImageState state)
-    : mode(mode), global_image_id(global_image_id), state(state) {
+              const GroupSpec &group_spec, MirrorImageState state)
+    : mode(mode), global_image_id(global_image_id), group_spec(group_spec),
+      state(state) {
   }
 
   MirrorImageMode mode = MIRROR_IMAGE_MODE_JOURNAL;
   std::string global_image_id;
+  GroupSpec group_spec;
   MirrorImageState state = MIRROR_IMAGE_STATE_DISABLING;
 
   void encode(ceph::buffer::list &bl) const;
@@ -572,41 +609,6 @@ struct GroupImageStatus {
 };
 
 WRITE_CLASS_ENCODER(GroupImageStatus);
-
-struct GroupSpec {
-  GroupSpec() {}
-  GroupSpec(const std::string &group_id, int64_t pool_id)
-    : group_id(group_id), pool_id(pool_id) {}
-
-  std::string group_id;
-  int64_t pool_id = -1;
-
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator &it);
-  void dump(ceph::Formatter *f) const;
-  bool is_valid() const;
-
-  static void generate_test_instances(std::list<GroupSpec *> &o);
-
-  inline bool operator==(const GroupSpec& rhs) const {
-    return pool_id == rhs.pool_id && group_id == rhs.group_id;
-  }
-
-  inline bool operator!=(const GroupSpec& rhs) const {
-    return !(*this == rhs);
-  }
-
-  inline bool operator<(const GroupSpec& rhs) const {
-    if (pool_id != rhs.pool_id) {
-      return pool_id < rhs.pool_id;
-    }
-    return group_id < rhs.group_id;
-  }
-};
-
-WRITE_CLASS_ENCODER(GroupSpec);
-
-std::ostream& operator<<(std::ostream& os, const GroupSpec& group_spec);
 
 enum SnapshotNamespaceType {
   SNAPSHOT_NAMESPACE_TYPE_USER   = 0,
