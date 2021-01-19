@@ -202,14 +202,14 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                                                      &cache_info);
   if (r < 0) {
     if (r != -ENOENT) {
-      ldout(cct, 0) << "ERROR: svc.bucket->read_bucket_instance_info(key=" << bucket_key << ") returned r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: svc.bucket->read_bucket_instance_info(key=" << bucket_key << ") returned r=" << r << dendl;
     }
     return r;
   }
 
   auto zone_policy_handler = svc.zone->get_sync_policy_handler(zone);
   if (!zone_policy_handler) {
-    ldout(cct, 20) << "ERROR: could not find policy handler for zone=" << zone << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: could not find policy handler for zone=" << zone << dendl;
     return -ENOENT;
   }
 
@@ -217,7 +217,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
 
   r = e.handler->init(y);
   if (r < 0) {
-    ldout(cct, 20) << "ERROR: failed to init bucket sync policy handler: r=" << r << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: failed to init bucket sync policy handler: r=" << r << dendl;
     return r;
   }
 
@@ -230,12 +230,12 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
                            zone_policy_handler,
                            temp_map, y, dpp);
   if (r < 0) {
-    ldout(cct, 20) << "ERROR: failed to resolve policy hints: bucket_key=" << bucket_key << ", r=" << r << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: failed to resolve policy hints: bucket_key=" << bucket_key << ", r=" << r << dendl;
     return r;
   }
 
   if (!sync_policy_cache->put(svc.cache, cache_key, &e, {&cache_info})) {
-    ldout(cct, 20) << "couldn't put bucket_sync_policy cache entry, might have raced with data changes" << dendl;
+    ldpp_dout(dpp, 20) << "couldn't put bucket_sync_policy cache entry, might have raced with data changes" << dendl;
   }
 
   *handler = e.handler;
