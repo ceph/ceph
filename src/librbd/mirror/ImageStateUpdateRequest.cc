@@ -83,6 +83,10 @@ void ImageStateUpdateRequest<I>::set_mirror_image() {
   if (m_mirror_image.state == m_mirror_image_state) {
     finish(0);
     return;
+  } else if (m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED ||
+             m_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLING) {
+    ceph_assert(m_group_spec.is_valid());
+    m_mirror_image.group_spec = m_group_spec;
   }
 
   ldout(m_cct, 10) << dendl;
