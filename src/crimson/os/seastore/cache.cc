@@ -7,6 +7,7 @@
 // included for get_extent_by_type
 #include "crimson/os/seastore/extentmap_manager/btree/extentmap_btree_node_impl.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node_impl.h"
+#include "crimson/os/seastore/omap_manager/btree/omap_btree_node_impl.h"
 #include "crimson/os/seastore/onode_manager/simple-fltree/onode_block.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "test/crimson/seastore/test_block.h"
@@ -136,6 +137,10 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
     return alloc_new_extent<extentmap_manager::ExtMapInnerNode>(t, length);
   case extent_types_t::EXTMAP_LEAF:
     return alloc_new_extent<extentmap_manager::ExtMapLeafNode>(t, length);
+  case extent_types_t::OMAP_INNER:
+    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length);
+  case extent_types_t::OMAP_LEAF:
+    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length);
   case extent_types_t::TEST_BLOCK:
     return alloc_new_extent<TestBlock>(t, length);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
@@ -498,6 +503,16 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::get_extent_by_type(
       });
     case extent_types_t::EXTMAP_LEAF:
       return get_extent<extentmap_manager::ExtMapLeafNode>(offset, length
+      ).safe_then([](auto extent) {
+        return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::OMAP_INNER:
+      return get_extent<omap_manager::OMapInnerNode>(offset, length
+      ).safe_then([](auto extent) {
+        return CachedExtentRef(extent.detach(), false /* add_ref */);
+      });
+    case extent_types_t::OMAP_LEAF:
+      return get_extent<omap_manager::OMapLeafNode>(offset, length
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
