@@ -1020,7 +1020,7 @@ def deep_merge(a, b):
     return b
 
 
-def get_valgrind_args(testdir, name, preamble, v):
+def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True):
     """
     Build a command line for running valgrind.
 
@@ -1051,9 +1051,6 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
             '--vgdb=yes',
-            # at least Valgrind 3.14 is required
-            '--exit-on-first-error=yes',
-            '--error-exitcode=42',
         ]
     else:
         extra_args = [
@@ -1064,9 +1061,13 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
             '--vgdb=yes',
+        ]
+    if exit_on_first_error:
+        extra_args.extend([
+            # at least Valgrind 3.14 is required
             '--exit-on-first-error=yes',
             '--error-exitcode=42',
-        ]
+        ])
     args = [
         'cd', testdir,
         run.Raw('&&'),
