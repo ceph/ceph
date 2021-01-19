@@ -185,7 +185,7 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, Success) {
 
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid", {},
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
   MockUtils mock_utils;
   expect_can_create_non_primary_snapshot(mock_utils, true);
@@ -214,7 +214,7 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, SuccessDemoted) {
   expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid", {},
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
   MockUtils mock_utils;
   expect_can_create_non_primary_snapshot(mock_utils, true);
@@ -265,7 +265,7 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, GetMirrorImageError) {
 
   expect_refresh_image(mock_image_ctx, false, 0);
   expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid", {},
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, -EINVAL);
 
   C_SaferCond ctx;
@@ -288,7 +288,7 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, CanNotError) {
 
   expect_refresh_image(mock_image_ctx, false, 0);
   expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid", {},
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
   MockUtils mock_utils;
   expect_can_create_non_primary_snapshot(mock_utils, false);
@@ -314,7 +314,7 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, GetMirrorPeersError) {
   expect_clone_md_ctx(mock_image_ctx);
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid", {},
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
   MockUtils mock_utils;
   expect_can_create_non_primary_snapshot(mock_utils, true);
@@ -340,7 +340,7 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, CreateSnapshotError) {
 
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid", {},
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
   MockUtils mock_utils;
   expect_can_create_non_primary_snapshot(mock_utils, true);
@@ -366,7 +366,7 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, WriteImageStateError) {
 
   expect_refresh_image(mock_image_ctx, true, 0);
   expect_get_mirror_image(
-    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid",
+    mock_image_ctx, {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT, "gid", {},
                      cls::rbd::MIRROR_IMAGE_STATE_ENABLED}, 0);
   MockUtils mock_utils;
   expect_can_create_non_primary_snapshot(mock_utils, true);
