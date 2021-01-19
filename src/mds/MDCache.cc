@@ -799,7 +799,7 @@ void MDCache::populate_mydir()
       ceph_assert(!dir->state_test(CDir::STATE_BADFRAG));
 
       if (dir->get_version() == 0) {
-        dir->fetch(new C_MDS_RetryOpenRoot(this));
+        dir->fetch_keys({}, new C_MDS_RetryOpenRoot(this));
         return;
       }
 
@@ -5966,15 +5966,23 @@ bool MDCache::open_undef_inodes_dirfrags()
 	   << rejoin_undef_inodes.size() << " inodes "
 	   << rejoin_undef_dirfrags.size() << " dirfrags" << dendl;
 
-  set<CDir*> fetch_queue = rejoin_undef_dirfrags;
+  // dirfrag -> (fetch_complete, keys_to_fetch)
+  map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
+  for (auto& dir : rejoin_undef_dirfrags) {
+    ceph_assert(dir->get_version() == 0);
+    (void)fetch_queue[dir];
+  }
 
-  for (set<CInode*>::iterator p = rejoin_undef_inodes.begin();
-       p != rejoin_undef_inodes.end();
-       ++p) {
-    CInode *in = *p;
-    ceph_assert(!in->is_base());
-    ceph_assert(in->get_parent_dir());
-    fetch_queue.insert(in->get_parent_dir());
+  for (auto& in : rejoin_undef_inodes) {
+    assert(!in->is_base());
+    CDentry *dn = in->get_parent_dn();
+    auto& p = fetch_queue[dn->get_dir()];
+    if (dn->last != CEPH_NOSNAP) {
+      p.first = true;
+      p.second.clear();
+    } else if (!p.first) {
+      p.second.push_back(dn->key());
+    }
   }
 
   if (fetch_queue.empty())
@@ -5989,16 +5997,17 @@ bool MDCache::open_undef_inodes_dirfrags()
 	)
       );
 
-  for (set<CDir*>::iterator p = fetch_queue.begin();
-       p != fetch_queue.end();
-       ++p) {
-    CDir *dir = *p;
+  for (auto& p : fetch_queue) {
+    CDir *dir = p.first;
     CInode *diri = dir->get_inode();
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       ceph_assert(diri->dirfragtree.is_leaf(dir->get_frag()));
-    dir->fetch(gather.new_sub());
+    if (p.second.first)
+      dir->fetch(gather.new_sub());
+    else
+      dir->fetch_keys(p.second.second, gather.new_sub());
   }
   ceph_assert(gather.has_subs());
   gather.activate();
@@ -8478,7 +8487,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
-        curdir->fetch(cf.build(), path[depth]);
+        curdir->fetch(path[depth], snapid, cf.build());
 	if (mds->logger) mds->logger->inc(l_mds_traverse_dir_fetch);
         return 1;
       }
@@ -8890,11 +8899,12 @@ void MDCache::_open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int r
   do_open_ino(ino, info, ret);
 }
 
-void MDCache::_open_ino_fetch_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m, CDir *dir, bool parent)
+void MDCache::_open_ino_fetch_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m, bool parent,
+				  CDir *dir, std::string_view dname)
 {
   if (dir->state_test(CDir::STATE_REJOINUNDEF))
     ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
-  dir->fetch(new C_MDC_OpenInoTraverseDir(this, ino, m, parent));
+  dir->fetch(dname, CEPH_NOSNAP, new C_MDC_OpenInoTraverseDir(this, ino, m, parent));
   if (mds->logger)
     mds->logger->inc(l_mds_openino_dir_fetch);
 }
@@ -8918,11 +8928,14 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
     }
 
     if (diri->state_test(CInode::STATE_REJOINUNDEF)) {
-      CDir *dir = diri->get_parent_dir();
+      CDentry *dn = diri->get_parent_dn();
+      CDir *dir = dn->get_dir();
       while (dir->state_test(CDir::STATE_REJOINUNDEF) &&
-	     dir->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
-	dir = dir->get_inode()->get_parent_dir();
-      _open_ino_fetch_dir(ino, m, dir, i == 0);
+	     dir->get_inode()->state_test(CInode::STATE_REJOINUNDEF)) {
+	dn = dir->get_inode()->get_parent_dn();
+	dir = dn->get_dir();
+      }
+      _open_ino_fetch_dir(ino, m, i == 0, dir, dn->name);
       return 1;
     }
 
@@ -8957,14 +8970,14 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 	if (dnl && dnl->is_primary() &&
 	    dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF)) {
 	  dout(10) << " fetching undef " << *dnl->get_inode() << dendl;
-	  _open_ino_fetch_dir(ino, m, dir, i == 0);
+	  _open_ino_fetch_dir(ino, m, i == 0, dir, name);
 	  return 1;
 	}
 
 	if (!dnl && !dir->is_complete() &&
 	    (!dir->has_bloom() || dir->is_in_bloom(name))) {
 	  dout(10) << " fetching incomplete " << *dir << dendl;
-	  _open_ino_fetch_dir(ino, m, dir, i == 0);
+	  _open_ino_fetch_dir(ino, m, i == 0, dir, name);
 	  return 1;
 	}
 
@@ -10310,31 +10323,35 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
 
     // lookup
     CDentry *dn = 0;
+    std::string_view dname;
+    if (dis->get_want().depth() > 0)
+      dname = dis->get_dentry(i);
     if (curdir->get_version() == 0) {
       // fetch newly opened dir
       ceph_assert(!curdir->has_bloom());
-    } else if (dis->get_want().depth() > 0) {
+    } else if (dname.size() > 0) {
       // lookup dentry
-      dn = curdir->lookup(dis->get_dentry(i), snapid);
+      dn = curdir->lookup(dname, snapid);
     } else 
       break; // done!
           
     // incomplete dir?
     if (!dn) {
       if (!curdir->is_complete() &&
-	  !(snapid == CEPH_NOSNAP &&
+	  !(dname.size() > 0 &&
+	    snapid == CEPH_NOSNAP &&
 	    curdir->has_bloom() &&
-	    !curdir->is_in_bloom(dis->get_dentry(i)))) {
+	    !curdir->is_in_bloom(dname))) {
 	// readdir
 	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << dendl;
 	if (reply->is_empty()) {
 	  // fetch and wait
-	  curdir->fetch(new C_MDS_RetryMessage(mds, dis),
+	  curdir->fetch(dname, snapid, new C_MDS_RetryMessage(mds, dis),
 			dis->wants_base_dir() && curdir->get_version() == 0);
 	  return;
 	} else {
 	  // initiate fetch, but send what we have so far
-	  curdir->fetch(0);
+	  curdir->fetch(dname, snapid, nullptr);
 	  break;
 	}
       }
@@ -12966,7 +12983,7 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
       }
       if (dir->get_version() == 0) {
         ceph_assert(dir->is_auth());
-        dir->fetch(new C_MDS_RetryRequest(this, mdr));
+        dir->fetch_keys({}, new C_MDS_RetryRequest(this, mdr));
         return;
       }
     }
