@@ -503,6 +503,12 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	} else {
 	  if (mdr->locking && lock != mdr->locking)
 	    cancel_locking(mdr.get(), &issue_set);
+	  if (it != mdr->locks.end() && it->is_wrlock()) {
+	    bool ni = false;
+	    wrlock_finish(it, mdr.get(), &ni);
+	    if (ni)
+	      issue_set.insert(static_cast<CInode*>(lock->get_parent()));
+	  }
 	  marker.message = "waiting for remote wrlocks";
 	  remote_wrlock_start(lock, p.wrlock_target, mdr);
 	  goto out;
