@@ -191,6 +191,9 @@ Journal::write_record_ret Journal::write_record(
     rsize.mdlength,
     rsize.dlength,
     target);
+
+  auto segment_id = current_journal_segment->get_segment_id();
+
   // Start write under the current exclusive stage, but wait for it
   // in the device_submission concurrent stage to permit multiple
   // overlapping writes.
@@ -203,16 +206,22 @@ Journal::write_record_ret Journal::write_record(
       crimson::ct_error::assert_all{
 	"Invalid error in Journal::write_record"
       }
-    ).safe_then([this, &handle] {
-      return handle.enter(write_pipeline->finalize);
-    }).safe_then([this, target] {
+    );
+  }).safe_then([this, &handle] {
+    return handle.enter(write_pipeline->finalize);
+  }).safe_then([this, target, segment_id] {
+    logger().debug(
+      "write_record: commit target {}",
+      target);
+    if (segment_id == current_journal_segment->get_segment_id()) {
+      assert(committed_to < target);
       committed_to = target;
-      return write_record_ret(
-	write_record_ertr::ready_future_marker{},
-	paddr_t{
-	  current_journal_segment->get_segment_id(),
-	  target});
-    });
+    }
+    return write_record_ret(
+      write_record_ertr::ready_future_marker{},
+      paddr_t{
+	segment_id,
+	target});
   });
 }
 
