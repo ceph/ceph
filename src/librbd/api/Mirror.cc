@@ -280,7 +280,7 @@ int list_mirror_images(librados::IoCtx& io_ctx,
   int r;
   do {
     std::map<std::string, std::string> mirror_images;
-    r =  cls_client::mirror_image_list(&io_ctx, last_read, max_read,
+    r =  cls_client::mirror_image_list(&io_ctx, last_read, max_read, true /* XXXMG */,
                                        &mirror_images);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error listing mirrored image directory: "
