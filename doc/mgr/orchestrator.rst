@@ -355,6 +355,7 @@ that is compatible to ``ceph orch apply -i``::
 
     ceph orch ls --export
 
+For examples about retrieving specs of single services see :ref:`orchestrator-cli-service-spec-retrieve`.
 
 Daemon Status
 =============
@@ -742,6 +743,8 @@ Many service specifications can be applied at once using
     data_devices:
       all: true
     EOF
+
+.. _orchestrator-cli-service-spec-retrieve:
 
 Retrieving the running Service Specification
 --------------------------------------------
