@@ -217,7 +217,7 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, Success) {
   librbd::util::s_image_id = "local image id";
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_CREATING}, 0);
 
   MockCreateImageRequest mock_create_image_request;
@@ -240,7 +240,7 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, AddMirrorImageError
   librbd::util::s_image_id = "local image id";
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_CREATING}, -EINVAL);
 
   C_SaferCond ctx;
@@ -258,7 +258,7 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, CreateImageError) {
   librbd::util::s_image_id = "local image id";
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_CREATING}, 0);
 
   MockCreateImageRequest mock_create_image_request;
@@ -279,7 +279,7 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, CreateImageDuplicat
   librbd::util::s_image_id = "local image id";
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_CREATING}, 0);
 
   MockCreateImageRequest mock_create_image_request;
@@ -287,14 +287,14 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, CreateImageDuplicat
 
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_mirror_image_remove("local image id", 0);
 
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_CREATING}, 0);
 
   expect_create_image(mock_create_image_request, "local image id", 0);
@@ -316,7 +316,7 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, DisableMirrorImageE
   librbd::util::s_image_id = "local image id";
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, -EINVAL);
 
   C_SaferCond ctx;
@@ -335,7 +335,7 @@ TEST_F(TestMockImageReplayerSnapshotCreateLocalImageRequest, RemoveMirrorImageEr
   librbd::util::s_image_id = "local image id";
   expect_mirror_image_set("local image id",
                           {cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
-                           "global image id",
+                           "global image id", {},
                            cls::rbd::MIRROR_IMAGE_STATE_DISABLING}, 0);
 
   expect_mirror_image_remove("local image id", -EINVAL);
