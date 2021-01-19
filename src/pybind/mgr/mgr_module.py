@@ -1,7 +1,7 @@
 import ceph_module  # noqa
 
 from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
-    Sequence, Union, TYPE_CHECKING
+    NamedTuple, Sequence, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -15,7 +15,7 @@ import errno
 import functools
 import json
 import threading
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from enum import IntEnum
 import rados
 import re
@@ -104,26 +104,20 @@ class CommandResult(object):
         return self.r, self.outb, self.outs
 
 
-class HandleCommandResult(namedtuple('HandleCommandResult', ['retval', 'stdout', 'stderr'])):
-    def __new__(cls, retval=0, stdout="", stderr=""):
-        """
-        Tuple containing the result of `handle_command()`
+class HandleCommandResult(NamedTuple):
+    """
+    Tuple containing the result of `handle_command()`
 
-        Only write to stderr if there is an error, or in extraordinary circumstances
+    Only write to stderr if there is an error, or in extraordinary circumstances
 
-        Avoid having `ceph foo bar` commands say "did foo bar" on success unless there
-        is critical information to include there.
+    Avoid having `ceph foo bar` commands say "did foo bar" on success unless there
+    is critical information to include there.
 
-        Everything programmatically consumable should be put on stdout
-
-        :param retval: return code. E.g. 0 or -errno.EINVAL
-        :type retval: int
-        :param stdout: data of this result.
-        :type stdout: str
-        :param stderr: Typically used for error messages.
-        :type stderr: str
-        """
-        return super(HandleCommandResult, cls).__new__(cls, retval, stdout, stderr)
+    Everything programmatically consumable should be put on stdout
+    """
+    retval: int = 0             # return code. E.g. 0 or -errno.EINVAL
+    stdout: str = ""            # data of this result.
+    stderr: str = ""            # Typically used for error messages.
 
 
 class MonCommandFailed(RuntimeError): pass
