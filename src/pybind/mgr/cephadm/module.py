@@ -1092,6 +1092,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 return conn, r
             else:
                 self._reset_con(host)
+        assert self.ssh_user
         n = self.ssh_user + '@' + host
         self.log.debug("Opening connection to {} with ssh options '{}'".format(
             n, self._ssh_options))
