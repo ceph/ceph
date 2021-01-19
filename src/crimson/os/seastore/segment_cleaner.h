@@ -395,10 +395,6 @@ public:
     if (!init_scan && !init_complete)
       return;
 
-    if (!init_scan) {
-      assert(segments[addr.segment].state == Segment::segment_state_t::OPEN);
-    }
-
     used_bytes += len;
     [[maybe_unused]] auto ret = space_tracker->allocate(
       addr.segment,
