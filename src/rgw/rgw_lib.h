@@ -131,7 +131,6 @@ namespace rgw {
     std::unique_ptr<rgw::sal::RGWUser> tuser; // Don't use this.  It's empty except during init.
   public:
     CephContext* cct;
-    boost::optional<RGWSysObjectCtx> sysobj_ctx;
 
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
@@ -161,10 +160,7 @@ namespace rgw {
       RGWRequest::init_state(_s);
       RGWHandler::init(rados_ctx->get_store(), _s, io);
 
-      sysobj_ctx.emplace(static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj);
-
       get_state()->obj_ctx = rados_ctx;
-      get_state()->sysobj_ctx = &(sysobj_ctx.get());
       get_state()->req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(id);
       get_state()->trans_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_trans_id(id);
       get_state()->bucket_tenant = tuser->get_tenant();
@@ -203,11 +199,7 @@ namespace rgw {
 	RGWRequest::init_state(&rstate);
 	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
-	sysobj_ctx.emplace(static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj);
-
-	get_state()->cio = &io_ctx;
 	get_state()->obj_ctx = &rados_ctx;
-	get_state()->sysobj_ctx = &(sysobj_ctx.get());
 	get_state()->req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(id);
 	get_state()->trans_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_trans_id(id);
 

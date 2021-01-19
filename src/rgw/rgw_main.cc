@@ -483,7 +483,7 @@ int radosgw_Main(int argc, const char **argv)
   rgw::auth::ImplicitTenants implicit_tenant_context{g_conf()};
   g_conf().add_observer(&implicit_tenant_context);
   auto auth_registry = \
-    rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenant_context, store->get_ctl());
+    rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenant_context, store);
 
   /* Header custom behavior */
   rest.register_x_headers(g_conf()->rgw_log_http_headers);

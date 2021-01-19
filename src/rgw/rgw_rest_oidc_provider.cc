@@ -121,7 +121,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
     return;
   }
 
-  RGWOIDCProvider provider(s->cct, store->get_ctl(), provider_url,
+  RGWOIDCProvider provider(s->cct, store, provider_url,
                             s->user->get_tenant(), client_ids, thumbprints);
   op_ret = provider.create(s, true, y);
 
@@ -140,7 +140,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->get_ctl(), provider_arn, s->user->get_tenant());
+  RGWOIDCProvider provider(s->cct, store, provider_arn, s->user->get_tenant());
   op_ret = provider.delete_obj(y);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -158,7 +158,7 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
 
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
-  RGWOIDCProvider provider(s->cct, store->get_ctl(), provider_arn, s->user->get_tenant());
+  RGWOIDCProvider provider(s->cct, store, provider_arn, s->user->get_tenant());
   op_ret = provider.get(s);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {

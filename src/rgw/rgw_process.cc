@@ -201,9 +201,6 @@ int process_request(rgw::sal::RGWStore* const store,
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
 
-  auto sysobj_ctx = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj->init_obj_ctx();
-  s->sysobj_ctx = &sysobj_ctx;
-
   if (ret < 0) {
     s->cio = client_io;
     abort_early(s, nullptr, ret, nullptr, yield);

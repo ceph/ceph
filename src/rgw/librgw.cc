@@ -236,9 +236,6 @@ namespace rgw {
 
     RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
 
-    auto sysobj_ctx = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj->init_obj_ctx();
-    s->sysobj_ctx = &sysobj_ctx;
-
     /* XXX and -then- stash req_state pointers everywhere they are needed */
     ret = req->init(rgw_env, &rados_ctx, io, s);
     if (ret < 0) {

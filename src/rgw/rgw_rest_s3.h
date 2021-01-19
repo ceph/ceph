@@ -1091,7 +1091,7 @@ class LDAPEngine : public AWSEngine {
   using result_t = rgw::auth::Engine::result_t;
 
 protected:
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const rgw::auth::RemoteApplier::Factory* const apl_factory;
 
   acl_strategy_t get_acl_strategy() const;
@@ -1108,11 +1108,11 @@ protected:
 			optional_yield y) const override;
 public:
   LDAPEngine(CephContext* const cct,
-             RGWCtl* const ctl,
+             rgw::sal::RGWStore* store,
              const VersionAbstractor& ver_abstractor,
              const rgw::auth::RemoteApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      ctl(ctl),
+      store(store),
       apl_factory(apl_factory) {
     init(cct);
   }
@@ -1128,7 +1128,7 @@ public:
 };
 
 class LocalEngine : public AWSEngine {
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
@@ -1142,11 +1142,11 @@ class LocalEngine : public AWSEngine {
 			optional_yield y) const override;
 public:
   LocalEngine(CephContext* const cct,
-              RGWCtl* const ctl,
+              rgw::sal::RGWStore* store,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      ctl(ctl),
+      store(store),
       apl_factory(apl_factory) {
   }
 
@@ -1158,7 +1158,7 @@ public:
 };
 
 class STSEngine : public AWSEngine {
-  RGWCtl* const ctl;
+  rgw::sal::RGWStore* store;
   const rgw::auth::LocalApplier::Factory* const local_apl_factory;
   const rgw::auth::RemoteApplier::Factory* const remote_apl_factory;
   const rgw::auth::RoleApplier::Factory* const role_apl_factory;
@@ -1183,13 +1183,13 @@ class STSEngine : public AWSEngine {
 			optional_yield y) const override;
 public:
   STSEngine(CephContext* const cct,
-              RGWCtl* const ctl,
+              rgw::sal::RGWStore* store,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const local_apl_factory,
               const rgw::auth::RemoteApplier::Factory* const remote_apl_factory,
               const rgw::auth::RoleApplier::Factory* const role_apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      ctl(ctl),
+      store(store),
       local_apl_factory(local_apl_factory),
       remote_apl_factory(remote_apl_factory),
       role_apl_factory(role_apl_factory) {

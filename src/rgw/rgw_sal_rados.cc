@@ -1003,6 +1003,32 @@ int RGWRadosStore::get_config_key_val(string name, bufferlist *bl)
   return svc()->config_key->get(name, true, bl);
 }
 
+int RGWRadosStore::put_system_obj(const rgw_pool& pool, const string& oid,
+				  bufferlist& data, bool exclusive,
+				  RGWObjVersionTracker *objv_tracker, real_time set_mtime,
+				  optional_yield y, map<string, bufferlist> *pattrs)
+{
+  auto obj_ctx = svc()->sysobj->init_obj_ctx();
+  return rgw_put_system_obj(obj_ctx, pool, oid, data, exclusive, objv_tracker, set_mtime, y, pattrs);
+}
+
+int RGWRadosStore::get_system_obj(const DoutPrefixProvider *dpp,
+				  const rgw_pool& pool, const string& key,
+				  bufferlist& bl,
+				  RGWObjVersionTracker *objv_tracker, real_time *pmtime,
+				  optional_yield y, map<string, bufferlist> *pattrs,
+				  rgw_cache_entry_info *cache_info,
+				  boost::optional<obj_version> refresh_version)
+{
+  auto obj_ctx = svc()->sysobj->init_obj_ctx();
+  return rgw_get_system_obj(obj_ctx, pool, key, bl, objv_tracker, pmtime, y, dpp, pattrs, cache_info, refresh_version);
+}
+
+int RGWRadosStore::delete_system_obj(const rgw_pool& pool, const string& oid,
+				     RGWObjVersionTracker *objv_tracker, optional_yield y)
+{
+    return rgw_delete_system_obj(svc()->sysobj, pool, oid, objv_tracker, y);
+}
 void RGWRadosStore::finalize(void)
 {
   if (rados)
