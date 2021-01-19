@@ -947,6 +947,7 @@ class Module(MgrModule):
             self.rbd_stats['query_id'] = query_id
 
         res = self.get_osd_perf_counters(self.rbd_stats['query_id'])
+        assert res
         for c in res['counters']:
             # if the pool id is not found in the object name use id of the
             # pool where the object is located
