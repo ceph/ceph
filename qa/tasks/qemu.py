@@ -29,6 +29,7 @@ def normalize_disks(config):
         clone = client_config.get('clone', False)
         image_url = client_config.get('image_url', DEFAULT_IMAGE_URL)
         device_type = client_config.get('type', 'filesystem')
+        encryption_format = client_config.get('encryption_format', 'none')
 
         disks = client_config.get('disks', DEFAULT_NUM_DISKS)
         if not isinstance(disks, list):
@@ -55,6 +56,10 @@ def normalize_disks(config):
 
             disk['device_letter'] = chr(ord('a') + i)
 
+            if 'encryption_format' not in disk:
+                disk['encryption_format'] = encryption_format
+            assert disk['encryption_format'] in ['none', 'luks1', 'luks2'], 'invalid encryption format'
+
         assert disks, 'at least one rbd device must be used'
 
         if clone:
@@ -72,13 +77,16 @@ def create_images(ctx, config, managers):
     for client, client_config in config.items():
         disks = client_config['disks']
         for disk in disks:
-            if disk.get('action') != 'create' or 'image_url' in disk:
+            if disk.get('action') != 'create' or (
+                    'image_url' in disk and
+                    disk['encryption_format'] == 'none'):
                 continue
             create_config = {
                 client: {
                     'image_name': disk['image_name'],
                     'image_format': 2,
                     'image_size': disk['image_size'],
+                    'encryption_format': disk['encryption_format'],
                     }
                 }
             managers.append(
@@ -102,6 +110,20 @@ def create_clones(ctx, config, managers):
             managers.append(
                 lambda create_config=create_config:
                 rbd.clone_image(ctx=ctx, config=create_config)
+                )
+
+def create_encrypted_devices(ctx, config, managers):
+    for client, client_config in config.items():
+        disks = client_config['disks']
+        for disk in disks:
+            if disk['encryption_format'] == 'none' or \
+                    'device_letter' not in disk:
+                continue
+
+            dev_config = {client: disk}
+            managers.append(
+                lambda dev_config=dev_config:
+                rbd.dev_create(ctx=ctx, config=dev_config)
                 )
 
 @contextlib.contextmanager
@@ -279,15 +301,38 @@ def download_image(ctx, config):
                     'wget', '-nv', '-O', base_file, disk['image_url'],
                     ]
                 )
-            remote.run(
-                args=[
-                    'qemu-img', 'convert', '-f', 'qcow2', '-O', 'raw',
-                    base_file, 'rbd:rbd/{image_name}'.format(image_name=disk['image_name'])
-                    ]
-                )
+
+            if disk['encryption_format'] == 'none':
+                remote.run(
+                    args=[
+                        'qemu-img', 'convert', '-f', 'qcow2', '-O', 'raw',
+                        base_file, 'rbd:rbd/{image_name}'.format(image_name=disk['image_name'])
+                        ]
+                    )
+            else:
+                dev_config = {client: {'image_name': disk['image_name'],
+                                       'encryption_format': disk['encryption_format']}}
+                raw_file = '{tdir}/qemu/base.{name}.raw'.format(
+                    tdir=testdir, name=disk['image_name'])
+                client_base_files[client].append(raw_file)
+                remote.run(
+                    args=[
+                        'qemu-img', 'convert', '-f', 'qcow2', '-O', 'raw',
+                        base_file, raw_file
+                        ]
+                    )
+                with rbd.dev_create(ctx, dev_config):
+                    remote.run(
+                        args=[
+                            'dd', 'if={name}'.format(name=raw_file),
+                            'of={name}'.format(name=dev_config[client]['device_path']),
+                            'bs=4M', 'conv=fdatasync'
+                            ]
+                        )
 
         for disk in disks:
             if disk['action'] == 'clone' or \
+                    disk['encryption_format'] != 'none' or \
                     (disk['action'] == 'create' and 'image_url' not in disk):
                 continue
 
@@ -446,11 +491,18 @@ def run_qemu(ctx, config):
             if 'device_letter' not in disk:
                 continue
 
+            if disk['encryption_format'] == 'none':
+                disk_spec = 'rbd:rbd/{img}:id={id}'.format(
+                    img=disk['image_name'],
+                    id=client[len('client.'):]
+                    )
+            else:
+                disk_spec = disk['device_path']
+
             args.extend([
                 '-drive',
-                'file=rbd:rbd/{img}:id={id},format=raw,if=virtio,cache={cachemode}'.format(
-                    img=disk['image_name'],
-                    id=client[len('client.'):],
+                'file={disk_spec},format=raw,if=virtio,cache={cachemode}'.format(
+                    disk_spec=disk_spec,
                     cachemode=cachemode,
                     ),
                 ])
@@ -552,6 +604,7 @@ def task(ctx, config):
                         type: filesystem / block (optional, defaults to fileystem)
                         image_url: <URL> (optional),
                         image_size: <MiB> (optional)
+                        encryption_format: luks1 / luks2 / none (optional, defaults to none)
                     }, ...
                 ]
 
@@ -597,6 +650,7 @@ def task(ctx, config):
         lambda: download_image(ctx=ctx, config=config),
         ])
     create_clones(ctx=ctx, config=config, managers=managers)
+    create_encrypted_devices(ctx=ctx, config=config, managers=managers)
     managers.append(
         lambda: run_qemu(ctx=ctx, config=config),
         )
