@@ -967,7 +967,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
     use_http_params = false;
   } else {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
-    use_http_params = (!encoding || strcmp(encoding, "chunked") != 0);
+    use_http_params1 = (!encoding || strcmp(encoding, "chunked") != 0);
   }
 
   if (use_http_params && set_all) {
@@ -981,7 +981,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   RGWUser user;
   op_ret = user.init(s, store, op_state, y);
   if (op_ret < 0) {
-    ldout(store->ctx(), 20) << "failed initializing user info: " << op_ret << dendl;
+    ldpp_dout(s, 20) << "failed initializing user info: " << op_ret << dendl;
     return;
   }
 
@@ -995,7 +995,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
     UserQuotas quotas;
 
     if ((op_ret = rgw_rest_get_json_input(store->ctx(), s, quotas, QUOTA_INPUT_MAX_LEN, NULL)) < 0) {
-      ldout(store->ctx(), 20) << "failed to retrieve input" << dendl;
+      ldpp_dout(s, 20) << "failed to retrieve input" << dendl;
       return;
     }
 
@@ -1008,7 +1008,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
       bool empty;
       op_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
       if (op_ret < 0) {
-        ldout(store->ctx(), 20) << "failed to retrieve input" << dendl;
+        ldpp_dout(s, 20) << "failed to retrieve input" << dendl;
         if (!empty)
           return;
 
@@ -1022,7 +1022,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
       string err_msg;
       op_ret = user.info(info, &err_msg);
       if (op_ret < 0) {
-        ldout(store->ctx(), 20) << "failed to get user info: " << op_ret << dendl;
+        ldpp_dout(s, 20) << "failed to get user info: " << op_ret << dendl;
         return;
       }
       RGWQuotaInfo *old_quota;
@@ -1053,7 +1053,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
   string err;
   op_ret = user.modify(s, op_state, y, &err);
   if (op_ret < 0) {
-    ldout(store->ctx(), 20) << "failed updating user info: " << op_ret << ": " << err << dendl;
+    ldpp_dout(s, 20) << "failed updating user info: " << op_ret << ": " << err << dendl;
     return;
   }
 }
