@@ -225,6 +225,22 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
+void CDentry::mark_auth()
+{
+  if (!is_auth()) {
+    state_set(STATE_AUTH);
+    dir->adjust_dentry_lru(this);
+  }
+}
+
+void CDentry::clear_auth()
+{
+  if (is_auth()) {
+    state_clear(STATE_AUTH);
+    dir->adjust_dentry_lru(this);
+  }
+}
+
 void CDentry::make_path_string(string& s, bool projected) const
 {
   if (dir) {
