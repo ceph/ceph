@@ -63,17 +63,16 @@ std::string script_oid(context ctx, const std::string& tenant) {
 }
 
 
-int read_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, std::string& script)
+int read_script(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, std::string& script)
 {
-  RGWSysObjectCtx obj_ctx(static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj->init_obj_ctx());
   RGWObjVersionTracker objv_tracker;
 
   rgw_raw_obj obj(store->get_zone_params().log_pool, script_oid(ctx, tenant));
 
   bufferlist bl;
   
-  const auto rc = rgw_get_system_obj(
-      obj_ctx,
+  const auto rc = store->get_system_obj(
+      dpp,
       obj.pool, 
       obj.oid,
       bl,
@@ -99,7 +98,6 @@ int read_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_y
 
 int write_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
 {
-  RGWSysObjectCtx obj_ctx(static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj->init_obj_ctx());
   RGWObjVersionTracker objv_tracker;
 
   rgw_raw_obj obj(store->get_zone_params().log_pool, script_oid(ctx, tenant));
@@ -107,8 +105,7 @@ int write_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_
   bufferlist bl;
   ceph::encode(script, bl);
 
-  const auto rc = rgw_put_system_obj(
-      obj_ctx,
+  const auto rc = store->put_system_obj(
       obj.pool,
       obj.oid,
       bl,
@@ -130,8 +127,7 @@ int delete_script(rgw::sal::RGWStore* store, const std::string& tenant, optional
 
   rgw_raw_obj obj(store->get_zone_params().log_pool, script_oid(ctx, tenant));
 
-  const auto rc = rgw_delete_system_obj(
-      static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj,
+  const auto rc = store->delete_system_obj(
       obj.pool,
       obj.oid,
       &objv_tracker,

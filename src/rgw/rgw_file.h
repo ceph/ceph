@@ -985,7 +985,7 @@ namespace rgw {
     }
 
     int authorize(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store) {
-      int ret = store->get_user(dpp, key, null_yield, &user);
+      int ret = store->get_user_by_access_key(dpp, key.id, null_yield, &user);
       if (ret == 0) {
 	RGWAccessKey* k = user->get_info().get_key(key.id);
 	if (!k || (k->key != key.key))
@@ -1297,7 +1297,7 @@ namespace rgw {
     RGWUserInfo* get_user() { return &user->get_info(); }
 
     void update_user(const DoutPrefixProvider *dpp) {
-      (void) rgwlib.get_store()->get_user(dpp, key, null_yield, &user);
+      (void) rgwlib.get_store()->get_user_by_access_key(dpp, key.id, null_yield, &user);
     }
 
     void close();

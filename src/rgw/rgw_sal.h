@@ -126,8 +126,10 @@ class RGWStore {
     RGWStore() {}
     virtual ~RGWStore() = default;
 
+    /* This one does not query the cluster for info */
     virtual std::unique_ptr<RGWUser> get_user(const rgw_user& u) = 0;
-    virtual int get_user(const DoutPrefixProvider *dpp, const RGWAccessKey& key, optional_yield y, std::unique_ptr<RGWUser>* user) = 0;
+    /* These three do query the cluster for info */
+    virtual int get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<RGWUser>* user) = 0;
     virtual int get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<RGWUser>* user) = 0;
     virtual int get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<RGWUser>* user) = 0;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) = 0;
@@ -228,6 +230,7 @@ class RGWStore {
 class RGWUser {
   protected:
     RGWUserInfo info;
+    RGWObjVersionTracker objv_tracker;
 
   public:
     RGWUser() : info() {}
@@ -265,9 +268,10 @@ class RGWUser {
 			   bool *is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
+    virtual RGWObjVersionTracker& get_version_tracker() { return objv_tracker; }
 
     /* Placeholders */
-    virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::GetParams& params = {}) = 0;
+    virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params = {}) = 0;
 
     /* dang temporary; will be removed when User is complete */
