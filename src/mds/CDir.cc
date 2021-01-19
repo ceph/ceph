@@ -334,6 +334,31 @@ CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
   return p->second;
 }
 
+void CDir::adjust_dentry_lru(CDentry *dn)
+{
+  bool bottom_lru;
+  if (dn->get_linkage()->is_primary()) {
+    bottom_lru = !is_auth() && inode->is_stray();
+  } else if (dn->get_linkage()->is_remote()) {
+    bottom_lru = false;
+  } else {
+    bottom_lru = !is_auth();
+  }
+  if (bottom_lru) {
+    if (!dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+      mdcache->lru.lru_remove(dn);
+      mdcache->bottom_lru.lru_insert_mid(dn);
+      dn->state_set(CDentry::STATE_BOTTOMLRU);
+    }
+  } else {
+    if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+      mdcache->bottom_lru.lru_remove(dn);
+      mdcache->lru.lru_insert_mid(dn);
+      dn->state_clear(CDentry::STATE_BOTTOMLRU);
+    }
+  }
+}
+
 /***
  * linking fun
  */
@@ -346,11 +371,13 @@ CDentry* CDir::add_null_dentry(std::string_view dname,
    
   // create dentry
   CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), "", first, last);
-  if (is_auth()) 
+  if (is_auth()) {
     dn->state_set(CDentry::STATE_AUTH);
-
-  mdcache->bottom_lru.lru_insert_mid(dn);
-  dn->state_set(CDentry::STATE_BOTTOMLRU);
+    mdcache->lru.lru_insert_mid(dn);
+  } else {
+    mdcache->bottom_lru.lru_insert_mid(dn);
+    dn->state_set(CDentry::STATE_BOTTOMLRU);
+  }
 
   dn->dir = this;
   dn->version = get_projected_version();
@@ -620,7 +647,8 @@ void CDir::unlink_inode(CDentry *dn, bool adjust_lru)
 
   unlink_inode_work(dn);
 
-  if (adjust_lru && !dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+  if (adjust_lru && !is_auth() &&
+      !dn->state_test(CDentry::STATE_BOTTOMLRU)) {
     mdcache->lru.lru_remove(dn);
     mdcache->bottom_lru.lru_insert_mid(dn);
     dn->state_set(CDentry::STATE_BOTTOMLRU);
@@ -635,7 +663,6 @@ void CDir::unlink_inode(CDentry *dn, bool adjust_lru)
   }
   ceph_assert(get_num_any() == items.size());
 }
-
 
 void CDir::try_remove_unlinked_dn(CDentry *dn)
 {
@@ -1630,7 +1657,7 @@ public:
   void finish(int r) {
     if (omap_version < dir->get_committed_version()) {
       omap.clear();
-      dir->_omap_fetch(fin, {});
+      dir->_omap_fetch({}, fin);
       return;
     }
 
@@ -1679,7 +1706,7 @@ public:
     if (more) {
       if (omap_version < dir->get_committed_version()) {
         omap.clear();
-        dir->_omap_fetch(fin, {});
+        dir->_omap_fetch({}, fin);
       } else {
         dir->_omap_fetch_more(omap_version, hdrbl, omap, fin);
       }
