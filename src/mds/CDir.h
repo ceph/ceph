@@ -498,7 +498,6 @@ public:
   }
   void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSContext *c);
   void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, MDSContext::vec& ls);
-  void take_sub_waiting(MDSContext::vec& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, MDSContext *c) override;
   void take_waiting(uint64_t mask, MDSContext::vec& ls) override;  // may include dentry waiters
