@@ -66,4 +66,8 @@ void OrderedExclusivePhase::dump_detail(ceph::Formatter* f) const
 {
 }
 
+void OrderedConcurrentPhase::dump_detail(ceph::Formatter* f) const
+{
+}
+
 }
