@@ -62,7 +62,7 @@ class RGWRadosUser : public RGWUser {
     virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) override;
 
     /* Placeholders */
-    virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::GetParams& params = {}) override;
+    virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params = {}) override;
 
     friend class RGWRadosBucket;
@@ -343,7 +343,7 @@ class RGWRadosStore : public RGWStore {
     }
 
     virtual std::unique_ptr<RGWUser> get_user(const rgw_user& u) override;
-    virtual int get_user(const DoutPrefixProvider *dpp, const RGWAccessKey& key, optional_yield y, std::unique_ptr<RGWUser>* user) override;
+    virtual int get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<RGWUser>* user) override;
     virtual int get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<RGWUser>* user) override;
     virtual int get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<RGWUser>* user) override;
     virtual std::unique_ptr<RGWObject> get_object(const rgw_obj_key& k) override;

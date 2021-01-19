@@ -187,9 +187,9 @@ int RGWRadosUser::trim_usage(uint64_t start_epoch, uint64_t end_epoch)
   return store->getRados()->trim_usage(get_id(), bucket_name, start_epoch, end_epoch);
 }
 
-int RGWRadosUser::load_by_id(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::GetParams& params)
+int RGWRadosUser::load_by_id(const DoutPrefixProvider *dpp, optional_yield y)
 {
-    return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, params);
+    return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
 }
 
 int RGWRadosUser::store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params)
@@ -573,18 +573,21 @@ std::unique_ptr<RGWUser> RGWRadosStore::get_user(const rgw_user &u)
   return std::unique_ptr<RGWUser>(new RGWRadosUser(this, u));
 }
 
-int RGWRadosStore::get_user(const DoutPrefixProvider *dpp, const RGWAccessKey& key, optional_yield y, std::unique_ptr<RGWUser>* user)
+int RGWRadosStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<RGWUser>* user)
 {
   RGWUserInfo uinfo;
   RGWUser *u;
+  RGWObjVersionTracker objv_tracker;
 
-  int r = ctl()->user->get_info_by_access_key(dpp, key.id, &uinfo, y);
+  int r = ctl()->user->get_info_by_access_key(dpp, key, &uinfo, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
   if (r < 0)
     return r;
 
   u = new RGWRadosUser(this, uinfo);
   if (!u)
     return -ENOMEM;
+
+  u->get_version_tracker() = objv_tracker;
 
   user->reset(u);
   return 0;
@@ -594,14 +597,17 @@ int RGWRadosStore::get_user_by_email(const DoutPrefixProvider *dpp, const std::s
 {
   RGWUserInfo uinfo;
   RGWUser *u;
+  RGWObjVersionTracker objv_tracker;
 
-  int r = ctl()->user->get_info_by_email(dpp, email, &uinfo, y);
+  int r = ctl()->user->get_info_by_email(dpp, email, &uinfo, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
   if (r < 0)
     return r;
 
   u = new RGWRadosUser(this, uinfo);
   if (!u)
     return -ENOMEM;
+
+  u->get_version_tracker() = objv_tracker;
 
   user->reset(u);
   return 0;
@@ -611,14 +617,17 @@ int RGWRadosStore::get_user_by_swift(const DoutPrefixProvider *dpp, const std::s
 {
   RGWUserInfo uinfo;
   RGWUser *u;
+  RGWObjVersionTracker objv_tracker;
 
-  int r = ctl()->user->get_info_by_swift(dpp, user_str, &uinfo, y);
+  int r = ctl()->user->get_info_by_swift(dpp, user_str, &uinfo, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
   if (r < 0)
     return r;
 
   u = new RGWRadosUser(this, uinfo);
   if (!u)
     return -ENOMEM;
+
+  u->get_version_tracker() = objv_tracker;
 
   user->reset(u);
   return 0;

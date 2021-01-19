@@ -4405,10 +4405,11 @@ int RGWPutMetadataAccount::verify_permission(optional_yield y)
 void RGWPutMetadataAccount::execute(optional_yield y)
 {
   /* Params have been extracted earlier. See init_processing(). */
-  op_ret = s->user->load_by_id(this, y, RGWUserCtl::GetParams().set_objv_tracker(&acct_op_tracker));
+  op_ret = s->user->load_by_id(this, y);
   if (op_ret < 0) {
     return;
   }
+  acct_op_tracker = s->user->get_version_tracker();
 
   /* Handle the TempURL-related stuff. */
   if (!temp_url_keys.empty()) {

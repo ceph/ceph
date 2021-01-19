@@ -29,7 +29,7 @@ bool verify(const std::string& script, std::string& err_msg);
 int write_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, const std::string& script);
 
 // read the stored lua script from a context
-int read_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, std::string& script);
+int read_script(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx, std::string& script);
 
 // delete the stored lua script from a context
 int delete_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_yield y, context ctx);

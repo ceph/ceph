@@ -5721,11 +5721,10 @@ rgw::auth::s3::LocalEngine::authenticate(
 {
   /* get the user info */
   std::unique_ptr<rgw::sal::RGWUser> user;
+  const std::string access_key_id(_access_key_id);
   /* TODO(rzarzynski): we need to have string-view taking variant. */
-  RGWAccessKey access_key;
-  access_key.id = _access_key_id;
-  if (store->get_user(dpp, access_key, y, &user) < 0) {
-      ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key.id
+  if (store->get_user_by_access_key(dpp, access_key_id, y, &user) < 0) {
+      ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
   }
@@ -5738,7 +5737,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     }
   }*/
 
-  const auto iter = user->get_info().access_keys.find(access_key.id);
+  const auto iter = user->get_info().access_keys.find(access_key_id);
   if (iter == std::end(user->get_info().access_keys)) {
     ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
     return result_t::deny(-EPERM);

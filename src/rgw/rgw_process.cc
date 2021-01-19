@@ -240,7 +240,7 @@ int process_request(rgw::sal::RGWStore* const store,
   }
   {
     std::string script;
-    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
@@ -308,7 +308,7 @@ int process_request(rgw::sal::RGWStore* const store,
 done:
   if (op) {
     std::string script;
-    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    auto rc = rgw::lua::read_script(s, store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {

@@ -9255,7 +9255,7 @@ next:
       return EINVAL;
     }
     std::string script;
-    const auto rc = rgw::lua::read_script(store, tenant, null_yield, script_ctx, script);
+    const auto rc = rgw::lua::read_script(dpp(), store, tenant, null_yield, script_ctx, script);
     if (rc == -ENOENT) {
       std::cout << "no script exists for context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;

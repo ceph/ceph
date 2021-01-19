@@ -1472,7 +1472,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     access_key.clear();
   }
 
-  RGWUserInfo user_info;
+  std::unique_ptr<rgw::sal::RGWUser> user;
 
   clear_populated();
 
@@ -1485,35 +1485,37 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   }
 
   if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
-    found = (rgw_get_user_info_by_uid(dpp, user_ctl, user_id, user_info, y, &op_state.objv) >= 0);
+    user = store->get_user(user_id);
+    found = (user->load_by_id(dpp, y) >= 0);
     op_state.found_by_uid = found;
   }
   if (store->ctx()->_conf.get_val<bool>("rgw_user_unique_email")) {
     if (!user_email.empty() && !found) {
-      found = (rgw_get_user_info_by_email(dpp, user_ctl, user_email, user_info, y, &op_state.objv) >= 0);
+      found = (store->get_user_by_email(dpp, user_email, y, &user) >= 0);
       op_state.found_by_email = found;
     }
   }
   if (!swift_user.empty() && !found) {
-    found = (rgw_get_user_info_by_swift(dpp, user_ctl, swift_user, user_info, y, &op_state.objv) >= 0);
+    found = (store->get_user_by_swift(dpp, swift_user, y, &user) >= 0);
     op_state.found_by_key = found;
   }
   if (!access_key.empty() && !found) {
-    found = (rgw_get_user_info_by_access_key(dpp, user_ctl, access_key, user_info, y, &op_state.objv) >= 0);
+    found = (store->get_user_by_access_key(dpp, access_key, y, &user) >= 0);
     op_state.found_by_key = found;
   }
   
   op_state.set_existing_user(found);
   if (found) {
-    op_state.set_user_info(user_info);
+    op_state.set_user_info(user->get_info());
     op_state.set_populated();
+    op_state.objv = user->get_version_tracker();
 
-    old_info = user_info;
+    old_info = user->get_info();
     set_populated();
   }
 
   if (user_id.empty()) {
-    user_id = user_info.user_id;
+    user_id = user->get_id();
   }
   op_state.set_initialized();
 
