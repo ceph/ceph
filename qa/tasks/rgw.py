@@ -157,7 +157,9 @@ def start_rgw(ctx, config, clients):
                 testdir,
                 client_with_cluster,
                 cmd_prefix,
-                client_config.get('valgrind')
+                client_config.get('valgrind'),
+                # see https://github.com/ceph/teuthology/pull/1600
+                exit_on_first_error=False
                 )
 
         run_cmd = list(cmd_prefix)
