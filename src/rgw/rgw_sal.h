@@ -273,6 +273,7 @@ class RGWUser {
     /* Placeholders */
     virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params = {}) = 0;
+    virtual int remove_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::RemoveParams& params = {}) = 0;
 
     /* dang temporary; will be removed when User is complete */
     RGWUserInfo& get_info() { return info; }

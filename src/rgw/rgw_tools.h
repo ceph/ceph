@@ -143,7 +143,6 @@ using RGWMD5Etag = RGWEtag<MD5, CEPH_CRYPTO_MD5_DIGESTSIZE>;
 class RGWDataAccess
 {
   rgw::sal::RGWStore *store;
-  std::unique_ptr<RGWSysObjectCtx> sysobj_ctx;
 
 public:
   RGWDataAccess(rgw::sal::RGWStore *_store);

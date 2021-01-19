@@ -64,6 +64,7 @@ class RGWRadosUser : public RGWUser {
     /* Placeholders */
     virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int store_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::PutParams& params = {}) override;
+    virtual int remove_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::RemoveParams& params = {}) override;
 
     friend class RGWRadosBucket;
 };
