@@ -472,7 +472,7 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
     return -EINVAL;
   }
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     keys_allowed = false;
     return -EACCES;
@@ -484,6 +484,112 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   keys_allowed = true;
 
   return 0;
+}
+
+RGWUserAdminOpState::RGWUserAdminOpState(rgw::sal::RGWStore* store)
+{
+  user = store->get_user(rgw_user(RGW_USER_ANON_ID));
+}
+
+void RGWUserAdminOpState::set_user_id(const rgw_user& id)
+{
+  if (id.empty())
+    return;
+
+  user->get_info().user_id = id;
+}
+
+void RGWUserAdminOpState::set_subuser(std::string& _subuser)
+{
+  if (_subuser.empty())
+    return;
+
+  size_t pos = _subuser.find(":");
+  if (pos != string::npos) {
+    rgw_user tmp_id;
+    tmp_id.from_str(_subuser.substr(0, pos));
+    if (tmp_id.tenant.empty()) {
+      user->get_info().user_id.id = tmp_id.id;
+    } else {
+      user->get_info().user_id = tmp_id;
+    }
+    subuser = _subuser.substr(pos+1);
+  } else {
+    subuser = _subuser;
+  }
+
+  subuser_specified = true;
+}
+
+void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
+{
+  user->get_info() = user_info;
+}
+
+const rgw_user& RGWUserAdminOpState::get_user_id()
+{
+  return user->get_id();
+}
+
+RGWUserInfo& RGWUserAdminOpState::get_user_info()
+{
+  return user->get_info();
+}
+
+map<std::string, RGWAccessKey>* RGWUserAdminOpState::get_swift_keys()
+{
+  return &user->get_info().swift_keys;
+}
+
+map<std::string, RGWAccessKey>* RGWUserAdminOpState::get_access_keys()
+{
+  return &user->get_info().access_keys;
+}
+
+map<std::string, RGWSubUser>* RGWUserAdminOpState::get_subusers()
+{
+  return &user->get_info().subusers;
+}
+
+RGWUserCaps *RGWUserAdminOpState::get_caps_obj()
+{
+  return &user->get_info().caps;
+}
+
+std::string RGWUserAdminOpState::build_default_swift_kid()
+{
+  if (user->get_id().empty() || subuser.empty())
+    return "";
+
+  std::string kid;
+  user->get_id().to_str(kid);
+  kid.append(":");
+  kid.append(subuser);
+
+  return kid;
+}
+
+std::string RGWUserAdminOpState::generate_subuser() {
+  if (user->get_id().empty())
+    return "";
+
+  std::string generated_subuser;
+  user->get_id().to_str(generated_subuser);
+  std::string rand_suffix;
+
+  int sub_buf_size = RAND_SUBUSER_LEN + 1;
+  char sub_buf[RAND_SUBUSER_LEN + 1];
+
+  gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size);
+
+  rand_suffix = sub_buf;
+  if (rand_suffix.empty())
+    return "";
+
+  generated_subuser.append(rand_suffix);
+  subuser = generated_subuser;
+
+  return generated_subuser;
 }
 
 /*
@@ -1004,7 +1110,7 @@ int RGWSubUserPool::init(RGWUserAdminOpState& op_state)
     return -EINVAL;
   }
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     subusers_allowed = false;
     return -EACCES;
@@ -1307,7 +1413,7 @@ int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
     return -EINVAL;
   }
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   if (uid.compare(RGW_USER_ANON_ID) == 0) {
     caps_allowed = false;
     return -EACCES;
@@ -1577,7 +1683,7 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
   bool same_id;
   bool populated;
-  rgw_user& op_id = op_state.get_user_id();
+  const rgw_user& op_id = op_state.get_user_id();
 
   RGWUserInfo user_info;
 
@@ -1742,7 +1848,7 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
 
   RGWUserInfo user_info;
 
-  rgw_user& uid = op_state.get_user_id();
+  const rgw_user& uid = op_state.get_user_id();
   std::string user_email = op_state.get_user_email();
   std::string display_name = op_state.get_display_name();
 
@@ -1756,7 +1862,7 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
       set_err_msg(err_msg, "duplicate key provided");
       ret = -ERR_KEY_EXIST;
     } else {
-      set_err_msg(err_msg, "user: " + op_state.user_id.to_str() + " exists");
+      set_err_msg(err_msg, "user: " + uid.to_str() + " exists");
       ret = -EEXIST;
     }
     return ret;

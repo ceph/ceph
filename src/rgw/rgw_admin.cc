@@ -3004,6 +3004,7 @@ int main(int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
+  rgw_user user_id_arg;
   std::unique_ptr<rgw::sal::RGWUser> user;
   string tenant;
   string user_ns;
@@ -3068,7 +3069,6 @@ int main(int argc, const char **argv)
   map<string, bool> categories;
   string caps;
   int check_objects = false;
-  RGWUserAdminOpState user_op;
   RGWBucketAdminOpState bucket_op;
   string infile;
   string metadata_key;
@@ -3210,13 +3210,11 @@ int main(int argc, const char **argv)
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
-      rgw_user user_id;
-      user_id.from_str(val);
-      if (!user) {
+      user_id_arg.from_str(val);
+      if (user_id_arg.empty()) {
         cerr << "no value for uid" << std::endl;
         exit(1);
       }
-      user = store->get_user(user_id);
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--new-uid", (char*)NULL)) {
       new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -3232,7 +3230,6 @@ int main(int argc, const char **argv)
       secret_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
-      user_op.user_email_specified=true;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
       display_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
@@ -3868,6 +3865,15 @@ int main(int argc, const char **argv)
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
+  }
+
+  /* Needs to be after the store is initialized */
+  if (!user_id_arg.empty()) {
+    user = store->get_user(user_id_arg);
+  }
+  RGWUserAdminOpState user_op(store);
+  if (!user_email.empty()) {
+    user_op.user_email_specified=true;
   }
 
   if (!source_zone_name.empty()) {

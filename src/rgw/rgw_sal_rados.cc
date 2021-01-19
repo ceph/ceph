@@ -197,6 +197,11 @@ int RGWRadosUser::store_info(const DoutPrefixProvider *dpp, optional_yield y, co
     return store->ctl()->user->store_info(dpp, info, y, params);
 }
 
+int RGWRadosUser::remove_info(const DoutPrefixProvider *dpp, optional_yield y, const RGWUserCtl::RemoveParams& params)
+{
+    return store->ctl()->user->remove_info(dpp, info, y, params);
+}
+
 /* Placeholder */
 RGWObject *RGWRadosBucket::create_object(const rgw_obj_key &key)
 {

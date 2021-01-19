@@ -409,7 +409,6 @@ void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const strin
 
 RGWDataAccess::RGWDataAccess(rgw::sal::RGWStore *_store) : store(_store)
 {
-  sysobj_ctx = std::make_unique<RGWSysObjectCtx>(static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sysobj->init_obj_ctx());
 }
 
 

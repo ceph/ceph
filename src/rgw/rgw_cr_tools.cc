@@ -23,7 +23,7 @@ int RGWUserCreateCR::Request::_send_request()
   const int32_t default_max_buckets =
     cct->_conf.get_val<int64_t>("rgw_user_max_buckets");
 
-  RGWUserAdminOpState op_state;
+  RGWUserAdminOpState op_state(store);
 
   auto& user = params.user;
 
