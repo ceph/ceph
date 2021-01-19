@@ -186,13 +186,14 @@ public:
       : roll_journal_segment_ertr::now();
     return roll.safe_then(
       [this, rsize, record=std::move(record), &handle]() mutable {
+	auto seq = next_journal_segment_seq - 1;
 	return write_record(
 	  rsize, std::move(record),
 	  handle
-	).safe_then([this, rsize](auto addr) {
+	).safe_then([this, rsize, seq](auto addr) {
 	  return std::make_pair(
 	    addr.add_offset(rsize.mdlength),
-	    get_journal_seq(addr));
+	    journal_seq_t{seq, addr});
 	});
       });
   }
@@ -249,10 +250,6 @@ private:
   segment_off_t committed_to = 0;
 
   WritePipeline *write_pipeline = nullptr;
-
-  journal_seq_t get_journal_seq(paddr_t addr) {
-    return journal_seq_t{next_journal_segment_seq-1, addr};
-  }
 
   /// prepare segment for writes, writes out segment header
   using initialize_segment_ertr = crimson::errorator<
