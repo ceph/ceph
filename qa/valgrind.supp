@@ -16,6 +16,7 @@
    apparent TLS leak in eglibc
    Memcheck:Leak
    fun:calloc
+   ...
    fun:_dl_allocate_tls
    fun:pthread_create*
    ...
