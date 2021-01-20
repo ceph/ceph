@@ -1,0 +1,8 @@
+meta:
+- desc: use notcmalloc version for valgrind
+
+overrides:
+  install:
+    ceph:
+      flavor: notcmalloc
+      debuginfo: true

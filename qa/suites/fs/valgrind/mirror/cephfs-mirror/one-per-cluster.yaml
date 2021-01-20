@@ -1,0 +1,7 @@
+meta:
+- desc: run one cephfs-mirror daemon on primary cluster
+
+tasks:
+- cephfs-mirror:
+    client: client.mirror
+    valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
