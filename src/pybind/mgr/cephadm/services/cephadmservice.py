@@ -235,6 +235,7 @@ class CephadmService(metaclass=ABCMeta):
         """
         Called before the daemon is removed.
         """
+        assert daemon.daemon_type is not None
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Pre remove daemon {self.TYPE}.{daemon.daemon_id}')
 
@@ -242,6 +243,7 @@ class CephadmService(metaclass=ABCMeta):
         """
         Called after the daemon is removed.
         """
+        assert daemon.daemon_type is not None
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
@@ -314,6 +316,8 @@ class CephService(CephadmService):
         }
 
     def remove_keyring(self, daemon: DaemonDescription) -> None:
+        assert daemon.daemon_id is not None
+        assert daemon.hostname is not None
         daemon_id: str = daemon.daemon_id
         host: str = daemon.hostname
 
@@ -407,6 +411,7 @@ class MonService(CephService):
     def pre_remove(self, daemon: DaemonDescription) -> None:
         super().pre_remove(daemon)
 
+        assert daemon.daemon_id is not None
         daemon_id: str = daemon.daemon_id
         self._check_safe_to_destroy(daemon_id)
 
@@ -464,6 +469,8 @@ class MgrService(CephService):
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
         for daemon in daemon_descrs:
+            assert daemon.daemon_type is not None
+            assert daemon.daemon_id is not None
             if self.mgr.daemon_is_self(daemon.daemon_type, daemon.daemon_id):
                 return daemon
         # if no active mgr found, return empty Daemon Desc
