@@ -1,0 +1,7 @@
+
+# teuthology hosts used as downburst vps targets
+192.168.123.100 target-00 target-00.local
+192.168.123.101 target-01 target-01.local
+192.168.123.102 target-02 target-02.local
+192.168.123.103 target-03 target-03.local
+

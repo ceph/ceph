@@ -26,6 +26,11 @@ def setup_stage_cdn(ctx, config):
         raise ConfigError("suite_path missing")
     teuthconfig.suite_path = suite_path
 
+    rhbuild = ctx.config.get('redhat').get('rhbuild')
+    if not rhbuild:
+        raise ConfigError('Provide rhbuild attribute')
+    teuthconfig.rhbuild = str(rhbuild)
+
     with parallel() as p:
         for remote in ctx.cluster.remotes.keys():
             if remote.os.name == 'rhel':
@@ -105,11 +110,10 @@ def setup_additional_repo(ctx, config):
 
 def _enable_rhel_repos(remote):
 
-    # Look for rh specific repos in <suite_path>/rh/downstream.yaml
+    # Look for rh specific repos
     ds_yaml = os.path.join(
-        teuthconfig.suite_path,
-        'rh',
-        'downstream.yaml',
+        teuthconfig.get('ds_yaml_dir'),
+        teuthconfig.rhbuild + ".yaml"
     )
 
     rhel_repos = yaml.safe_load(open(ds_yaml))
@@ -118,9 +122,6 @@ def _enable_rhel_repos(remote):
     for repo in repos_to_subscribe:
         remote.run(args=['sudo', 'subscription-manager',
                          'repos', '--enable={r}'.format(r=repo)])
-
-    if remote.os.version.startswith('8'):
-        workaround(remote)
 
 
 @contextlib.contextmanager
@@ -234,12 +235,3 @@ def _create_temp_repo_file(repos, repo_file):
         repo_file.write(gpgcheck)
         repo_file.write(enabled)
     repo_file.close()
-
-
-def workaround(remote):
-    log.info('temporary workaround')
-    remote.run(args=['sudo',
-                     'yum',
-                     'install', '-y',
-                     'http://download-ib01.fedoraproject.org/pub/epel/7/x86_64/Packages/d/dbench-4.0-10.el7.x86_64.rpm'])
-

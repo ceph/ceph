@@ -4,18 +4,23 @@ Note that there is no corresponding task defined for this module.  All of
 the calls are made from other modules, most notably teuthology/run.py
 """
 import contextlib
+import functools
+import gzip
 import logging
 import os
+import shutil
 import time
 import yaml
 import subprocess
+
+import humanfriendly
 
 import teuthology.lock.ops
 from teuthology import misc
 from teuthology.packaging import get_builder_project
 from teuthology import report
 from teuthology.config import config as teuth_config
-from teuthology.exceptions import VersionNotFoundError
+from teuthology.exceptions import ConfigError, VersionNotFoundError
 from teuthology.job_status import get_status, set_status
 from teuthology.orchestra import cluster, remote, run
 # the below import with noqa is to workaround run.py which does not support multilevel submodule import
@@ -334,6 +339,14 @@ def fetch_binaries_for_coredumps(path, remote):
             remote.get_file(debug_path, coredump_path)
 
 
+def gzip_if_too_large(compress_min_size, src, tarinfo, local_path):
+    if tarinfo.size >= compress_min_size:
+        with gzip.open(local_path + '.gz', 'wb') as dest:
+            shutil.copyfileobj(src, dest)
+    else:
+        misc.copy_fileobj(src, tarinfo, local_path)
+
+
 @contextlib.contextmanager
 def archive(ctx, config):
     """
@@ -367,7 +380,18 @@ def archive(ctx, config):
                 os.mkdir(logdir)
             for rem in ctx.cluster.remotes.keys():
                 path = os.path.join(logdir, rem.shortname)
-                misc.pull_directory(rem, archive_dir, path)
+                min_size_option = ctx.config.get('log-compress-min-size',
+                                                 '128MB')
+                try:
+                    compress_min_size_bytes = \
+                        humanfriendly.parse_size(min_size_option)
+                except humanfriendly.InvalidSize:
+                    msg = 'invalid "log-compress-min-size": {}'.format(min_size_option)
+                    log.error(msg)
+                    raise ConfigError(msg)
+                maybe_compress = functools.partial(gzip_if_too_large,
+                                                   compress_min_size_bytes)
+                misc.pull_directory(rem, archive_dir, path, maybe_compress)
                 # Check for coredumps and pull binaries
                 fetch_binaries_for_coredumps(path, rem)
 

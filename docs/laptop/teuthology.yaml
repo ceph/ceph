@@ -1,0 +1,30 @@
+# replace $HOME with whatever appropriate to your needs
+# teuthology-lock
+lab_domain: local
+lock_server: http://localhost:80
+default_machine_type: vps
+# teuthology-run
+results_server: http://localhost:80
+# we do not need reserve_machines on localhost
+reserve_machines: 0
+# point to your teuthology
+teuthology_path: $HOME/teuthology
+# beanstalkd
+queue_host: localhost
+queue_port: 11300
+# if you want make and test patches to ceph-cm-ansible
+# ceph_cm_ansible_git_url: $HOME/ceph-cm-ansible
+# customize kvm guests parameter
+downburst:
+  path: $HOME/downburst/virtualenv/bin/downburst
+  discover_url: http://localhost:8181/images/ibs/
+  machine:
+    cpus: 2
+    disk: 12G
+    ram: 2G
+    volumes:
+      size: 8G
+      count: 4
+check_package_signatures: false
+suite_verify_ceph_hash: false
+

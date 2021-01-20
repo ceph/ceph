@@ -307,6 +307,7 @@ class Ansible(Task):
                         self.failure_log.name, e
                     )
                 )
+                fail_log.seek(0)
                 failures = fail_log.read().replace('\n', '')
 
         if failures:

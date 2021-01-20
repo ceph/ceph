@@ -853,6 +853,9 @@ class ShamanProject(GitbuilderProject):
         super(ShamanProject, self).__init__(project, job_config, ctx, remote)
         self.query_url = 'https://%s/api/' % config.shaman_host
 
+        # Force to use the "noarch" instead to build the uri.
+        self.force_noarch = self.job_config.get("shaman", {}).get("force_noarch", False)
+
     def _get_base_url(self):
         self.assert_result()
         return self._result.json()[0]['url']
@@ -882,7 +885,8 @@ class ShamanProject(GitbuilderProject):
         req_obj['status'] = 'ready'
         req_obj['project'] = self.project
         req_obj['flavor'] = flavor
-        req_obj['distros'] = '%s/%s' % (self.distro, self.arch)
+        arch = "noarch" if self.force_noarch else self.arch
+        req_obj['distros'] = '%s/%s' % (self.distro, arch)
         ref_name, ref_val = list(self._choose_reference().items())[0]
         if ref_name == 'tag':
             req_obj['sha1'] = self._sha1 = self._tag_to_sha1()
@@ -969,6 +973,38 @@ class ShamanProject(GitbuilderProject):
             self._result.json()[0]['chacra_url'],
             'repo',
         )
+
+    @property
+    def build_complete(self):
+        # use the repo search results to get a ref and a sha1; the
+        # input to teuthology-suite doesn't contain both
+        try:
+            self.assert_result()
+        except VersionNotFoundError:
+            return False
+
+        search_result = self._result.json()[0]
+
+        # now look for the build complete status
+        path = '/'.join(
+            ('builds/ceph', search_result['ref'], search_result['sha1'])
+        )
+        build_url = urljoin(self.query_url, path)
+
+        try:
+            resp = requests.get(build_url)
+            resp.raise_for_status()
+        except requests.HttpError:
+            return False
+        for build in resp.json():
+            if (
+                build['distro'] == search_result['distro'] and
+                build['distro_version'] == search_result['distro_version'] and
+                build['flavor'] == search_result['flavor'] and
+                build['distro_arch'] in search_result['archs']
+               ):
+                return build['status'] == 'completed'
+        return False
 
     def _get_repo(self):
         resp = requests.get(self.repo_url)

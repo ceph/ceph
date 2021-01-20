@@ -4,15 +4,16 @@ import os
 import sys
 import time
 import types
+import yaml
 
 from copy import deepcopy
 from humanfriendly import format_timespan
+import sentry_sdk
 
 from teuthology.config import config as teuth_config
 from teuthology.exceptions import ConnectionLostError
 from teuthology.job_status import set_status, get_status
 from teuthology.misc import get_http_log_path, get_results_url
-from teuthology.sentry import get_client as get_sentry_client
 from teuthology.timer import Timer
 
 log = logging.getLogger(__name__)
@@ -103,18 +104,19 @@ def run_tasks(tasks, ctx):
             ctx.summary['failure_reason'] = str(e)
         log.exception('Saw exception from tasks.')
 
-        sentry = get_sentry_client()
-        if sentry:
+        if teuth_config.sentry_dsn:
+            sentry_sdk.init(teuth_config.sentry_dsn)
             config = deepcopy(ctx.config)
 
             tags = {
                 'task': taskname,
                 'owner': ctx.owner,
             }
-            if 'teuthology_branch' in config:
-                tags['teuthology_branch'] = config['teuthology_branch']
-            if 'branch' in config:
-                tags['branch'] = config['branch']
+            optional_tags = ('teuthology_branch', 'branch', 'suite',
+                             'machine_type', 'os_type', 'os_version')
+            for tag in optional_tags:
+                if tag in config:
+                    tags[tag] = config[tag]
 
             # Remove ssh keys from reported config
             if 'targets' in config:
@@ -124,16 +126,19 @@ def run_tasks(tasks, ctx):
 
             job_id = ctx.config.get('job_id')
             archive_path = ctx.config.get('archive_path')
-            extra = dict(config=config,
+            extras = dict(config=config,
                          )
             if job_id:
-                extra['logs'] = get_http_log_path(archive_path, job_id)
+                extras['logs'] = get_http_log_path(archive_path, job_id)
 
-            exc_id = sentry.get_ident(sentry.captureException(
+            fingerprint = e.fingerprint() if hasattr(e, 'fingerprint') else None
+            exc_id = sentry_sdk.capture_exception(
+                error=e,
                 tags=tags,
-                extra=extra,
-            ))
-            event_url = "{server}/?q={id}".format(
+                extras=extras,
+                fingerprint=fingerprint,
+            )
+            event_url = "{server}/?query={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
             ctx.summary['sentry_event'] = event_url
@@ -185,7 +190,7 @@ def run_tasks(tasks, ctx):
                         exc_info = sys.exc_info()
 
                     if ctx.config.get('interactive-on-error'):
-                        from tuethology.task import interactive
+                        from teuthology.task import interactive
                         log.warning(
                             'Saw failure during task cleanup, going into interactive mode...')
                         interactive.task(ctx=ctx, config=None)
@@ -201,6 +206,41 @@ def run_tasks(tasks, ctx):
             # be careful about cyclic references
             del exc_info
         timer.mark("tasks complete")
+
+
+def build_rocketchat_message(ctx, stack, sleep_time_sec, template_path=None):
+    message_template_path = template_path or os.path.dirname(__file__) + \
+            '/templates/rocketchat-sleep-before-teardown.jinja2'
+
+    with open(message_template_path) as f:
+        template_text = f.read()
+
+    template = jinja2.Template(template_text)
+    archive_path = ctx.config.get('archive_path')
+    job_id = ctx.config.get('job_id')
+    status = get_status(ctx.summary)
+    stack_path = ' -> '.join(task for task, _ in stack)
+    suite_name=ctx.config.get('suite')
+    sleep_date=time.time()
+    sleep_date_str=time.strftime('%Y-%m-%d %H:%M:%S',
+                                 time.gmtime(sleep_date))
+
+    message = template.render(
+        sleep_time=format_timespan(sleep_time_sec),
+        sleep_time_sec=sleep_time_sec,
+        sleep_date=sleep_date_str,
+        owner=ctx.owner,
+        run_name=ctx.name,
+        job_id=ctx.config.get('job_id'),
+        job_desc=ctx.config.get('description'),
+        job_info=get_results_url(ctx.name, job_id),
+        job_logs=get_http_log_path(archive_path, job_id),
+        suite_name=suite_name,
+        status=status,
+        task_stack=stack_path,
+    )
+    return message
+
 
 def build_email_body(ctx, stack, sleep_time_sec):
     email_template_path = os.path.dirname(__file__) + \
@@ -238,7 +278,57 @@ def build_email_body(ctx, stack, sleep_time_sec):
     )
     return (subject.strip(), body.strip())
 
+
+def rocketchat_send_message(ctx, message, channels):
+    """
+    Send the message to the given RocketChat channels
+
+    Before sending the message we read the config file
+    from `~/.config/rocketchat.api/settings.yaml` which
+    must include next records:
+
+        username: 'userloginname'
+        password: 'userbigsecret'
+        domain: 'https://chat.suse.de'
+
+    :param message:     plain text message content in the Rocket.Chat
+                        messaging format
+    :param channels:    a list of channels where to send the message,
+                        the user private channel should be prefixed
+                        with '@' symbol
+    """
+    try:
+        from rocketchat.api import RocketChatAPI
+    except Exception as e:
+        log.warning(f'rocketchat: Failed to import rocketchat.api: {e}')
+        return
+
+    settings_path = \
+        os.environ.get('HOME') + '/.config/rocketchat.api/settings.yaml'
+
+    try:
+        with open(settings_path) as f:
+            settings = yaml.safe_load(f)
+    except Exception as e:
+        log.warning(f'rocketchat: Failed to load settings from {settings_path}: {e}')
+
+    r = RocketChatAPI(settings=settings)
+    for channel in channels:
+        try:
+            r.send_message(message, channel)
+        except Exception as e:
+            log.warning(f'rocketchat: Failed to send message to "{channel}" channel: {e}')
+
+
 def notify_sleep_before_teardown(ctx, stack, sleep_time):
+    rocketchat = ctx.config.get('rocketchat', None)
+
+    if rocketchat:
+        channels = [_ for _ in [_.strip() for _ in rocketchat.split(',')] if _]
+        log.info("Sending a message to Rocket.Chat channels: %s", channels)
+        message = build_rocketchat_message(ctx, stack, sleep_time)
+        rocketchat_send_message(ctx, message, channels)
+
     email = ctx.config.get('email', None)
     if not email:
         # we have no email configured, return silently

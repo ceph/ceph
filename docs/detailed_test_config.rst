@@ -12,10 +12,6 @@ An integration test run takes three items of configuration:
 - ``targets``: what hosts to run on; this is a dictionary mapping
   hosts to ssh host keys, like:
   "username@hostname.example.com: ssh-rsa long_hostkey_here"
-  It is possible to configure your installation so that if the targets line
-  and host keys are omitted and teuthology is run with the --lock option,
-  then teuthology will grab machines from a pool of available
-  test machines.
 - ``roles``: how to use the hosts; this is a list of lists, where each
   entry lists all the roles to be run on a single host. For example, a
   single entry might say ``[mon.1, osd.1]``.
@@ -65,6 +61,14 @@ teuthology on it like this::
 
     ./virtualenv/bin/teuthology example.yaml
 
+It is possible to configure installation so that specifying targets and host
+keys can be omitted. Teuthology is run with the ``--lock`` option which locks
+the targets based on ``roles`` in YAML. Teuthology grabs machines from a pool of
+available test machines; but since most times machines are busy, you might have
+to wait until they are free or else command fails due to lack of available
+machines. To avoid this you can specify ``--block`` with ``--lock`` which will
+make teuthology retry until it finds and locks required machines.
+
 You could also pass the ``-v`` option for more verbose execution. See
 ``teuthology --help`` for more options.
 
@@ -97,7 +101,7 @@ lock command was run.
 You can override this with the ``--owner`` option when running
 teuthology or teuthology-lock.
 
-With teuthology-lock you can also add a description, so you can
+With ``teuthology-lock`` you can also add a description, so you can
 remember which tests you were running. This can be done when
 locking or unlocking machines, or as a separate action with the
 ``--update`` option. To lock 3 machines and set a description, run::
@@ -227,17 +231,44 @@ global option can be set to true to make the unlocking happen unconditionally.
 Troubleshooting
 ===============
 
+Postmortem Debugging
+--------------------
+
+After completion of a test, the ``archive`` subdirectory is archived under
+the corresponding ``remote`` subdirectory. We can disable this behavior
+using the top-level configuration, like::
+
+  archive-on-error: true
+
+If ``archive-on-error`` is ``true``, the ``archive`` subdirectory is
+archived only for failed tests.
+
+If the size of the archived file exceeds 128MB, the file will be compressed
+using GZip. This threshold can be configured using the top-level option
+named ``log-compress-min-size``, like::
+
+  log-compress-min-size: 256GB
+
+Other size unit postfixes are also supported,
+see `humanfriendly document <https://pypi.org/project/humanfriendly/#a-note-about-size-units>`__
+for more details.
+
+Situ Debugging
+--------------
 Sometimes when a bug triggers, instead of automatic cleanup, you want
 to explore the system as is. Adding a top-level::
 
     interactive-on-error: true
 
 as a config file for teuthology will make that possible. With that
-option, any *task* that fails, will have the ``interactive`` task
+option, any *task* that fails will have the ``interactive`` task
 called after it. This means that before any cleanup happens, you get a
 chance to inspect the system -- both through Teuthology and via extra
-SSH connections -- and the cleanup completes only when you choose so.
+SSH connections -- and the cleanup completes only when you choose.
 Just exit the interactive Python session to continue the cleanup.
+
+You can enable interactive-on-error with the ``teuthology`` command option
+``--interactive-on-error``
 
 Interactive task facilities
 ===========================
@@ -270,3 +301,15 @@ the location of the sandbox directory, the following option can be
 specified in ``$HOME/.teuthology.yaml``::
 
     test_path: <directory>
+
+Shaman options
+==============
+
+Shaman is a helper class which could be used to build the uri for specified
+packages based the 'shaman_host': 'shaman.ceph.com'.
+
+Options::
+
+    use_shaman: True # Enable to use Shaman, False as default
+    shaman:
+      force_noarch: True # Force to use "noarch" to build the uri

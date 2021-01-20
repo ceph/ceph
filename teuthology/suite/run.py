@@ -323,6 +323,8 @@ class Run(object):
             job_config.owner = self.args.owner
         if self.args.sleep_before_teardown:
             job_config.sleep_before_teardown = int(self.args.sleep_before_teardown)
+        if self.args.rocketchat:
+            job_config.rocketchat = self.args.rocketchat
         return job_config
 
     def build_base_args(self):
@@ -501,6 +503,22 @@ class Run(object):
                 log.info("pause between jobs : --throttle " + str(throttle))
                 time.sleep(int(throttle))
 
+    def check_priority(self, jobs_to_schedule):
+        priority = self.args.priority
+        msg='''Use the following testing priority
+10 to 49: Tests which are urgent and blocking other important development.
+50 to 74: Testing a particular feature/fix with less than 25 jobs and can also be used for urgent release testing.
+75 to 99: Tech Leads usually schedule integration tests with this priority to verify pull requests against master.
+100 to 149: QE validation of point releases.
+150 to 199: Testing a particular feature/fix with less than 100 jobs and results will be available in a day or so.
+200 to 1000: Large test runs that can be done over the course of a week.
+Note: To force run, use --force-priority'''
+        if priority < 50:
+            util.schedule_fail(msg)
+        elif priority < 75 and jobs_to_schedule > 25:
+            util.schedule_fail(msg)
+        elif priority < 150 and jobs_to_schedule > 100:
+            util.schedule_fail(msg)
 
     def schedule_suite(self):
         """
@@ -613,6 +631,10 @@ class Run(object):
 
         if jobs_to_schedule:
             self.write_rerun_memo()
+
+        # Before scheduling jobs, check the priority
+        if self.args.priority and jobs_to_schedule and not self.args.force_priority:
+            self.check_priority(len(jobs_to_schedule))
 
         self.schedule_jobs(jobs_missing_packages, jobs_to_schedule, name)
 

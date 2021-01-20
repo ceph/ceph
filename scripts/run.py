@@ -23,6 +23,10 @@ optional arguments:
   --name NAME                    name for this teuthology run
   --suite-path SUITE_PATH        Location of ceph-qa-suite on disk. If not specified,
                                  it will be fetched
+  --interactive-on-error         drop to a python shell on failure, which will
+                                 halt the job; developer can then ssh to targets
+                                 and examine cluster state.
+
 """
 import docopt
 

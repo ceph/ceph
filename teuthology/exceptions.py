@@ -68,6 +68,17 @@ class CommandFailedError(Exception):
             prefix=prefix,
             )
 
+    def fingerprint(self):
+        """
+        Returns a list of strings to group failures with.
+        Used by sentry instead of grouping by backtrace.
+        """
+        return [
+            self.label or self.command,
+            'exit status {}'.format(self.exitstatus),
+            '{{ type }}',
+        ]
+
 
 class AnsibleFailedError(Exception):
 

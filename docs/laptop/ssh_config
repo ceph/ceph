@@ -1,0 +1,6 @@
+Host target-*
+    User ubuntu
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+

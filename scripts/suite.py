@@ -109,6 +109,9 @@ Scheduler arguments:
                               When tests finish or time out, send an email
                               here. May also be specified in ~/.teuthology.yaml
                               as 'results_email'
+  --rocketchat <rocketchat>   Comma separated list of Rocket.Chat channels where
+                              to send a message when tests finished or time out.
+                              To be used with --sleep-before-teardown option.
   -N <num>, --num <num>       Number of times to run/queue the job
                               [default: 1]
   -l <jobs>, --limit <jobs>   Queue at most this many jobs
@@ -168,6 +171,7 @@ Scheduler arguments:
                               with --rerun argument. This number can be found
                               in the output of teuthology-suite command. -1
                               for a random seed [default: -1].
+ --force-priority             Skip the priority check.
 
 """.format(
     default_machine_type=config.default_machine_type,

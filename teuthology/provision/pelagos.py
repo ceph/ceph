@@ -49,8 +49,8 @@ def get_types():
     return [_ for _ in types if _]
 
 def park_node(name):
-        p = Pelagos(name, "maintenance_image")
-        p.create()
+    p = Pelagos(name, "maintenance_image")
+    p.create(wait=False)
 
 
 class Pelagos(object):
@@ -71,18 +71,26 @@ class Pelagos(object):
             self.os_name = os_type
         self.log = log.getChild(self.name)
 
-    def create(self):
+    def create(self, wait=True):
         """
         Initiate deployment via REST requests and wait until completion
+         :param wait: optional, by default is True, if set to False, function
+                      doesn't wait for the end of node provisioning
+         :returns: http response code if operation is successful
+         :raises: :class:`Exception`: if node provision failure reported by
+                             Pelagos or if timeout is reached
+         :raises: :class:`RuntimeError`: if pelagos is not configured
 
         """
         if not enabled():
             raise RuntimeError("Pelagos is not configured!")
         location = None
         try:
-            params=dict(os=self.os_name, node=self.name)
+            params = dict(os=self.os_name, node=self.name)
             response = self.do_request('node/provision',
                                 data=params, method='POST')
+            if not wait:
+                return response
             location = response.headers.get('Location')
             self.log.debug("provision task: '%s'", location)
             # gracefully wait till provision task gets created on pelagos

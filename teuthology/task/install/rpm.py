@@ -1,9 +1,11 @@
 import logging
 import os.path
+from io import StringIO
 
 from distutils.version import LooseVersion
 
 from teuthology.config import config as teuth_config
+from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
 from teuthology import packaging
 
@@ -143,6 +145,18 @@ def _downgrade_packages(ctx, remote, pkgs, pkg_version, config):
     remote.run(args='sudo yum -y downgrade {}'.format(' '.join(pkgs_opt)))
     return [pkg for pkg in pkgs if pkg not in downgrade_pkgs]
 
+def _retry_if_503_in_output(remote, args):
+    # wait at most 5 minutes
+    with safe_while(sleep=10, tries=30) as proceed:
+        while proceed():
+            stdout = StringIO()
+            try:
+                return remote.run(args=args, stdout=stdout)
+            except run.CommandFailedError:
+                if "status code: 503" in stdout.getvalue().lower():
+                    continue
+                else:
+                    raise
 
 def _update_package_list_and_install(ctx, remote, rpm, config):
     """
@@ -236,26 +250,27 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
         rpm = _downgrade_packages(ctx, remote, rpm, pkg_version, config)
 
     if system_pkglist:
-        remote.run(
+        _retry_if_503_in_output(remote,
             args='{install_cmd} {rpms}'
                  .format(install_cmd=install_cmd, rpms=' '.join(rpm))
             )
     else:
         for cpack in rpm:
             if ldir:
-                remote.run(args='''
+                _retry_if_503_in_output(remote,
+                  args='''
                   if test -e {pkg} ; then
                     {remove_cmd} {pkg} ;
                     {install_cmd} {pkg} ;
                   else
                     {install_cmd} {cpack} ;
                   fi
-                '''.format(remove_cmd=remove_cmd,
-                           install_cmd=install_cmd,
-                           pkg=os.path.join(ldir, cpack),
-                           cpack=cpack))
+                  '''.format(remove_cmd=remove_cmd,
+                             install_cmd=install_cmd,
+                             pkg=os.path.join(ldir, cpack),
+                             cpack=cpack))
             else:
-                remote.run(
+                _retry_if_503_in_output(remote,
                     args='{install_cmd} {cpack}'
                          .format(install_cmd=install_cmd, cpack=cpack)
                     )
@@ -401,14 +416,14 @@ def _upgrade_packages(ctx, config, remote, pkgs):
     # Actually upgrade the project packages
     if builder.dist_release in ['opensuse', 'sle']:
         pkg_mng_opts = '-n'
-        pkg_mng_subcommand_opts = '--capability'
-        pkg_mng_install_opts = '--no-recommends'
+        pkg_mng_subcommand = 'install'
+        pkg_mng_subcommand_opts = ['--capability', '--no-recommends']
     else:
         pkg_mng_opts = '-y'
-        pkg_mng_subcommand_opts = ''
-        pkg_mng_install_opts = ''
-    args = ['sudo', pkg_mng_cmd, pkg_mng_opts,
-            'install', pkg_mng_subcommand_opts,
-            pkg_mng_install_opts]
+        pkg_mng_subcommand = 'upgrade'
+        pkg_mng_subcommand_opts = []
+    args = ['sudo', pkg_mng_cmd, pkg_mng_opts, pkg_mng_subcommand]
+    if pkg_mng_subcommand_opts:
+        args += pkg_mng_subcommand_opts
     args += pkgs
     remote.run(args=args)

@@ -1,0 +1,15 @@
+<network>
+  <name>front</name>
+  <forward mode='nat'/>
+  <bridge name='virbr1' stp='on' delay='0'/>
+  <domain name='local' />
+  <ip address='192.168.123.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.123.2' end='192.168.123.99'/>
+      <host mac="52:54:00:00:00:00" ip="192.168.123.100"/>
+      <host mac="52:54:00:00:00:01" ip="192.168.123.101"/>
+      <host mac="52:54:00:00:00:02" ip="192.168.123.102"/>
+      <host mac="52:54:00:00:00:03" ip="192.168.123.103"/>
+    </dhcp>
+  </ip>
+</network>

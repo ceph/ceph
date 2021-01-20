@@ -28,6 +28,7 @@ from teuthology.packaging import (
     get_koji_task_result,
     get_builder_project,
 )
+from teuthology.task.install.deb import install_dep_packages
 
 log = logging.getLogger(__name__)
 
@@ -1078,8 +1079,8 @@ def get_latest_image_version_deb(remote, ostype):
     # Note that a dependency list may have multiple comma-separated entries,
     # but also each entry may be an alternative (pkg1 | pkg2)
     if 'debian' in ostype:
-        remote.run(args=['sudo', 'apt-get', '-y', 'install',
-                         'linux-image-amd64'], stdout=output)
+        args=['sudo', 'apt-get', '-y', 'install', 'linux-image-amd64']
+        install_dep_packages(remote, args)
         remote.run(args=['dpkg', '-s', 'linux-image-amd64'], stdout=output)
         for line in output.getvalue().split('\n'):
             if 'Depends:' in line:
@@ -1089,23 +1090,23 @@ def get_latest_image_version_deb(remote, ostype):
     # Ubuntu is a depend in a depend.
     if 'ubuntu' in ostype:
         try:
-            remote.run(args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
-                             'apt-get', '-y', 'install',
-                             'linux-image-current-generic'])
+            args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
+                  'apt-get', '-y', 'install', 'linux-image-current-generic']
+            install_dep_packages(remote, args)
             remote.run(args=['dpkg', '-s', 'linux-image-current-generic'],
                        stdout=output)
             for line in output.getvalue().split('\n'):
                 if 'Depends:' in line:
                     depends = line.split('Depends: ')[1]
-                    remote.run(args=['sudo', 'apt-get', '-y', 'install',
-                                     depends])
+                    install_dep_packages(remote, args=['sudo', 'apt-get', '-y',
+                                                       'install', depends])
             remote.run(args=['dpkg', '-s', depends], stdout=output)
         except run.CommandFailedError:
             # Non precise ubuntu machines (like trusty) don't have
             # linux-image-current-generic so use linux-image-generic instead.
-            remote.run(args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
-                             'apt-get', '-y', 'install',
-                             'linux-image-generic'], stdout=output)
+            args=['sudo', 'DEBIAN_FRONTEND=noninteractive',
+                  'apt-get', '-y', 'install', 'linux-image-generic']
+            install_dep_packages(remote, args)
             remote.run(args=['dpkg', '-s', 'linux-image-generic'],
                        stdout=output)
         for line in output.getvalue().split('\n'):

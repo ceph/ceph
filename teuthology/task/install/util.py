@@ -51,18 +51,14 @@ def get_flavor(config):
                 flavor = 'gcov'
     return flavor
 
-
-@contextlib.contextmanager
-def ship_utilities(ctx, config):
+def _ship_utilities(ctx):
     """
     Write a copy of valgrind.supp to each of the remote sites.  Set executables
     used by Ceph in /usr/local/bin.  When finished (upon exit of the teuthology
     run), remove these files.
 
     :param ctx: Context
-    :param config: Configuration
     """
-    assert config is None
     testdir = teuthology.get_testdir(ctx)
     filenames = []
 
@@ -109,19 +105,49 @@ def ship_utilities(ctx, config):
                         dst,
                     ],
                 )
+    return filenames
 
-    try:
+def _remove_utilities(ctx, filenames):
+    """
+    Remove the shipped utilities.
+
+    :param ctx: Context
+    :param filenames: The utilities install paths
+    """
+    log.info('Removing shipped files: %s...', ' '.join(filenames))
+    if filenames == []:
+        return
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                'rm',
+                '-f',
+                '--',
+            ] + list(filenames),
+            wait=False,
+        ),
+    )
+
+@contextlib.contextmanager
+def ship_utilities(ctx, config):
+    """
+    Ship utilities during the first call, and skip it in the following ones.
+    See also `_ship_utilities`.
+
+    :param ctx: Context
+    :param config: Configuration
+    """
+    assert config is None
+
+    do_ship_utilities = ctx.get('do_ship_utilities', True)
+    if do_ship_utilities:
+        ctx['do_ship_utilities'] = False
+        filenames = _ship_utilities(ctx)
+        try:
+            yield
+        finally:
+            _remove_utilities(ctx, filenames)
+    else:
+        log.info('Utilities already shipped, skip it...')
         yield
-    finally:
-        log.info('Removing shipped files: %s...', ' '.join(filenames))
-        run.wait(
-            ctx.cluster.run(
-                args=[
-                    'sudo',
-                    'rm',
-                    '-f',
-                    '--',
-                ] + list(filenames),
-                wait=False,
-            ),
-        )

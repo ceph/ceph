@@ -7,6 +7,7 @@ import os
 import logging
 import configobj
 import getpass
+import shutil
 import socket
 import subprocess
 import tarfile
@@ -39,7 +40,7 @@ stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
 is_arm = lambda x: x.startswith('tala') or x.startswith(
     'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
 
-hostname_expr_templ = '(?P<user>.*@)?(?P<shortname>.*)\.{lab_domain}'
+hostname_expr_templ = '(?P<user>.*@)?(?P<shortname>.*){lab_domain}'
 
 def host_shortname(hostname):
     if _is_ipv4(hostname) or _is_ipv6(hostname):
@@ -65,18 +66,22 @@ def canonicalize_hostname(hostname, user='ubuntu'):
         user_ = user
 
     user_at = user_.strip('@') + '@' if user_ else ''
-
-    ret = '{user_at}{short}.{lab_domain}'.format(
+    domain = config.lab_domain
+    if domain and not shortname.endswith('.'):
+        domain = '.' + domain
+    ret = '{user_at}{short}{domain}'.format(
         user_at=user_at,
         short=shortname,
-        lab_domain=config.lab_domain,
+        domain=domain,
     )
     return ret
 
 
 def decanonicalize_hostname(hostname):
-    hostname_expr = hostname_expr_templ.format(
-        lab_domain=config.lab_domain.replace('.', '\.'))
+    lab_domain = ''
+    if config.lab_domain:
+        lab_domain='\.' + config.lab_domain.replace('.', '\.')
+    hostname_expr = hostname_expr_templ.format(lab_domain=lab_domain)
     match = re.match(hostname_expr, hostname)
     if match:
         hostname = match.groupdict()['shortname']
@@ -523,14 +528,7 @@ def write_file(remote, path, data):
     :param path: Path on the remote being written to.
     :param data: Data to be written.
     """
-    remote.run(
-        args=[
-            'cat',
-            run.Raw('>'),
-            path,
-        ],
-        stdin=data,
-    )
+    remote.write_file(path, data)
 
 
 def sudo_write_file(remote, path, data, perms=None, owner=None):
@@ -545,21 +543,7 @@ def sudo_write_file(remote, path, data, perms=None, owner=None):
 
     Both perms and owner are passed directly to chmod.
     """
-    permargs = []
-    if perms:
-        permargs = [run.Raw('&&'), 'sudo', 'chmod', perms, path]
-    owner_args = []
-    if owner:
-        owner_args = [run.Raw('&&'), 'sudo', 'chown', owner, path]
-    remote.run(
-        args=[
-            'sudo',
-            'sh',
-            '-c',
-            'cat > ' + path,
-        ] + owner_args + permargs,
-        stdin=data,
-    )
+    remote.sudo_write_file(path, data, mode=perms, owner=owner)
 
 
 def copy_file(from_remote, from_path, to_remote, to_path=None):
@@ -647,7 +631,7 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
     on when the main site goes up and down.
     """
     # read in the specified file
-    in_data = get_file(remote, path, False).decode()
+    in_data = remote.read_file(path, False).decode()
     out_data = ""
 
     first_line = True
@@ -679,22 +663,8 @@ def remove_lines_from_file(remote, path, line_is_valid_test,
 def append_lines_to_file(remote, path, lines, sudo=False):
     """
     Append lines to a file.
-    An intermediate file is used in the same manner as in
-    Remove_lines_from_list.
     """
-
-    temp_file_path = remote.mktemp()
-
-    data = get_file(remote, path, sudo).decode()
-
-    # add the additional data and write it back out, using a temp file
-    # in case of connectivity of loss, and then mv it to the
-    # actual desired location
-    data += lines
-    write_file(remote, temp_file_path, data)
-
-    # then do a 'mv' to the actual file location
-    move_file(remote, temp_file_path, path, sudo)
+    remote.write_file(path, lines, append=True, sudo=sudo)
 
 def prepend_lines_to_file(remote, path, lines, sudo=False):
     """
@@ -704,17 +674,9 @@ def prepend_lines_to_file(remote, path, lines, sudo=False):
     """
 
     temp_file_path = remote.mktemp()
-
-    data = get_file(remote, path, sudo).decode()
-
-    # add the additional data and write it back out, using a temp file
-    # in case of connectivity of loss, and then mv it to the
-    # actual desired location
-    data = lines + data
-    write_file(remote, temp_file_path, data)
-
-    # then do a 'mv' to the actual file location
-    move_file(remote, temp_file_path, path, sudo)
+    remote.write_file(temp_file_path, lines)
+    remote.copy_file(path, temp_file_path, append=True, sudo=sudo)
+    remote.move_file(temp_file_path, path, sudo=sudo)
 
 
 def create_file(remote, path, data="", permissions=str(644), sudo=False):
@@ -755,9 +717,24 @@ def get_file(remote, path, sudo=False, dest_dir='/tmp'):
     return file_data
 
 
-def pull_directory(remote, remotedir, localdir):
+def copy_fileobj(src, tarinfo, local_path):
+    with open(local_path, 'wb') as dest:
+        shutil.copyfileobj(src, dest)
+
+
+def pull_directory(remote, remotedir, localdir, write_to=copy_fileobj):
     """
     Copy a remote directory to a local directory.
+
+    :param remote: the remote object representing the remote host from where
+                   the specified directory is pulled
+    :param remotedir: the source directory on remote host
+    :param localdir: the destination directory on localhost
+    :param write_to: optional function to write the file to localdir.
+                     its signature should be:
+                     func(src: fileobj,
+                          tarinfo: tarfile.TarInfo,
+                          local_path: str)
     """
     log.debug('Transferring archived files from %s:%s to %s',
               remote.shortname, remotedir, localdir)
@@ -777,7 +754,8 @@ def pull_directory(remote, remotedir, localdir):
         elif ti.isfile():
             sub = safepath.munge(ti.name)
             safepath.makedirs(root=localdir, path=os.path.dirname(sub))
-            tar.makefile(ti, targetpath=os.path.join(localdir, sub))
+            with tar.extractfile(ti) as src:
+                write_to(src, ti, os.path.join(localdir, sub))
         else:
             if ti.isdev():
                 type_ = 'device'
@@ -810,7 +788,7 @@ def get_scratch_devices(remote):
     """
     devs = []
     try:
-        file_data = get_file(remote, "/scratch_devs").decode()
+        file_data = remote.read_file("/scratch_devs").decode()
         devs = file_data.split()
     except Exception:
         devs = remote.sh('ls /dev/[sv]d?').strip().split('\n')
@@ -1044,7 +1022,7 @@ def deep_merge(a, b):
     return b
 
 
-def get_valgrind_args(testdir, name, preamble, v):
+def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True):
     """
     Build a command line for running valgrind.
 
@@ -1075,9 +1053,6 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
             '--vgdb=yes',
-            # at least Valgrind 3.14 is required
-            '--exit-on-first-error=yes',
-            '--error-exitcode=42',
         ]
     else:
         extra_args = [
@@ -1088,9 +1063,13 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
             '--vgdb=yes',
+        ]
+    if exit_on_first_error:
+        extra_args.extend([
+            # at least Valgrind 3.14 is required
             '--exit-on-first-error=yes',
             '--error-exitcode=42',
-        ]
+        ])
     args = [
         'cd', testdir,
         run.Raw('&&'),
@@ -1215,6 +1194,7 @@ def get_system_type(remote, distro=False, version=False):
         return "deb"
     if system_value in ['CentOS', 'Fedora', 'RedHatEnterpriseServer',
                         'RedHatEnterprise',
+                        'CentOSStream',
                         'openSUSE', 'openSUSE project', 'SUSE', 'SUSE LINUX']:
         return "rpm"
     return system_value

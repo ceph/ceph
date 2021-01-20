@@ -8,13 +8,16 @@ from teuthology.orchestra import run
 from teuthology.orchestra import connection
 from teuthology.orchestra import console
 from teuthology.orchestra.opsys import OS
+import teuthology.provision
 from teuthology import misc
 from teuthology.exceptions import CommandFailedError
 from teuthology.misc import host_shortname
+import errno
 import time
 import re
 import logging
 from io import BytesIO
+from io import StringIO
 import os
 import pwd
 import tempfile
@@ -33,6 +36,7 @@ class Remote(object):
 
     # for unit tests to hook into
     _runner = staticmethod(run.run)
+    _reimage_types = None
 
     def __init__(self, name, ssh=None, shortname=None, console=None,
                  host_key=None, keep_alive=True):
@@ -52,6 +56,9 @@ class Remote(object):
         self.keep_alive = keep_alive
         self._console = console
         self.ssh = ssh
+
+        if self._reimage_types is None:
+            Remote._reimage_types = teuthology.provision.get_reimage_types()
 
     def connect(self, timeout=None, create_key=None, context='connect'):
         args = dict(user_at_host=self.name, host_key=self._host_key,
@@ -149,6 +156,10 @@ class Remote(object):
                 return None
             self._machine_type = remote_info.get("machine_type", None)
         return self._machine_type
+
+    @property
+    def is_reimageable(self):
+        return self.machine_type in self._reimage_types
 
     @property
     def shortname(self):
@@ -448,6 +459,145 @@ class Remote(object):
             '.',
             ])
         return self.run(args=args, wait=False, stdout=run.PIPE)
+
+    def copy_file(self, src, dst, sudo=False, mode=None, owner=None,
+                                              mkdir=False, append=False):
+        """
+        Copy data to remote file
+
+        :param src:     source file path on remote host
+        :param dst:     destination file path on remote host
+        :param sudo:    use sudo to write file, defaults False
+        :param mode:    set file mode bits if provided
+        :param owner:   set file owner if provided
+        :param mkdir:   ensure the destination directory exists, defaults False
+        :param append:  append data to the file, defaults False
+        """
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' if=' + src + ' of=' + dst
+        if append:
+            args += ' conv=notrunc oflag=append'
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(dst)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += '\n' + chmod + ' ' + mode + ' ' + dst
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += '\n' + chown + ' ' + owner + ' ' + dst
+        args = 'set -ex' + '\n' + args
+        self.run(args=args)
+
+    def move_file(self, src, dst, sudo=False, mode=None, owner=None,
+                                              mkdir=False):
+        """
+        Move data to remote file
+
+        :param src:     source file path on remote host
+        :param dst:     destination file path on remote host
+        :param sudo:    use sudo to write file, defaults False
+        :param mode:    set file mode bits if provided
+        :param owner:   set file owner if provided
+        :param mkdir:   ensure the destination directory exists, defaults False
+        """
+        mv = 'sudo mv' if sudo else 'mv'
+        args = mv + ' ' + src + ' ' + dst
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(dst)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += ' && ' + chmod + ' ' + mode + ' ' + dst
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += ' && ' + chown + ' ' + owner + ' ' + dst
+        self.run(args=args)
+
+    def read_file(self, path, sudo=False, stdout=None,
+                              offset=0, length=0):
+        """
+        Read data from remote file
+
+        :param path:    file path on remote host
+        :param sudo:    use sudo to read the file, defaults False
+        :param stdout:  output object, defaults to io.BytesIO()
+        :param offset:  number of bytes to skip from the file
+        :param length:  number of bytes to read from the file
+
+        :raises: :class:`FileNotFoundError`: there is no such file by the path
+        :raises: :class:`RuntimeError`:      unexpected error occurred
+
+        :returns: the file contents in bytes, if stdout is `io.BytesIO`, by default
+        :returns: the file contents in str, if stdout is `io.StringIO`
+        """
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' if=' + path + ' of=/dev/stdout'
+        iflags=[]
+        # we have to set defaults here instead of the method's signature,
+        # because python is reusing the object from call to call
+        stdout = stdout or BytesIO()
+        if offset:
+            args += ' skip=' + str(offset)
+            iflags += 'skip_bytes'
+        if length:
+            args += ' count=' + str(length)
+            iflags += 'count_bytes'
+        if iflags:
+            args += ' iflag=' + ','.join(iflags)
+        args = 'set -ex' + '\n' + args
+        proc = self.run(args=args, stdout=stdout, stderr=StringIO(), check_status=False, quiet=True)
+        if proc.returncode:
+            if 'No such file or directory' in proc.stderr.getvalue():
+                raise FileNotFoundError(errno.ENOENT,
+                        f"Cannot find file on the remote '{self.name}'", path)
+            else:
+                raise RuntimeError("Unexpected error occurred while trying to "
+                        f"read '{path}' file on the remote '{self.name}'")
+
+        return proc.stdout.getvalue()
+
+
+    def write_file(self, path, data, sudo=False, mode=None, owner=None,
+                                     mkdir=False, append=False):
+        """
+        Write data to remote file
+
+        :param path:    file path on remote host
+        :param data:    str, binary or fileobj to be written
+        :param sudo:    use sudo to write file, defaults False
+        :param mode:    set file mode bits if provided
+        :param owner:   set file owner if provided
+        :param mkdir:   preliminary create the file directory, defaults False
+        :param append:  append data to the file, defaults False
+        """
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' of=' + path
+        if append:
+            args += ' conv=notrunc oflag=append'
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(path)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += '\n' + chmod + ' ' + mode + ' ' + path
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += '\n' + chown + ' ' + owner + ' ' + path
+        args = 'set -ex' + '\n' + args
+        self.run(args=args, stdin=data, quiet=True)
+
+    def sudo_write_file(self, path, data, **kwargs):
+        """
+        Write data to remote file with sudo, for more info see `write_file()`.
+        """
+        self.write_file(path, data, sudo=True, **kwargs)
 
     @property
     def os(self):
