@@ -374,7 +374,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
   void *handle;
   int max = 1000;
   string section = "bucket.instance";
-  int ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init(section, &handle);
+  int ret = store->meta_list_keys_init(section, string(), &handle);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -391,7 +391,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
 
   do {
     list<string> keys;
-    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, max, keys, &truncated);
+    ret = store->meta_list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
       return ret;
@@ -416,12 +416,13 @@ int RGWOrphanSearch::build_buckets_instance_index()
 
   } while (truncated);
 
+  store->meta_list_keys_complete(handle);
+
   ret = log_oids(buckets_instance_index, instances);
   if (ret < 0) {
     lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
     return ret;
   }
-  static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_complete(handle);
 
   return 0;
 }
@@ -1308,7 +1309,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
   int ret;
   void* handle = nullptr;
 
-  ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init("bucket", &handle);
+  ret = store->meta_list_keys_init("bucket", string(), &handle);
   if (ret < 0) {
     lderr(store->ctx()) << "RGWRadosList::" << __func__ <<
       " ERROR: list_keys_init returned " <<
@@ -1321,8 +1322,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp)
 
   do {
     std::list<std::string> buckets;
-    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, max_keys,
-						 buckets, &truncated);
+    ret = store->meta_list_keys_next(handle, max_keys, buckets, &truncated);
 
     for (std::string& bucket_id : buckets) {
       ret = run(dpp, bucket_id);

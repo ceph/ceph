@@ -67,66 +67,6 @@ extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
  */
 extern void rgw_get_anon_user(RGWUserInfo& info);
 
-/**
- * Save the given user information to storage.
- * Returns: 0 on success, -ERR# on failure.
- */
-extern int rgw_store_user_info(const DoutPrefixProvider *dpp, 
-                               RGWUserCtl *user_ctl,
-                               RGWUserInfo& info,
-                               RGWUserInfo *old_info,
-                               RGWObjVersionTracker *objv_tracker,
-                               real_time mtime,
-                               bool exclusive,
-			       optional_yield y,
-                               map<string, bufferlist> *pattrs = nullptr);
-
-/**
- * Given an user_id, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-extern int rgw_get_user_info_by_uid(const DoutPrefixProvider *dpp, 
-                                    RGWUserCtl *user_ctl,
-                                    const rgw_user& user_id,
-                                    RGWUserInfo& info,
-				    optional_yield y,
-                                    RGWObjVersionTracker *objv_tracker = nullptr,
-                                    real_time *pmtime                  = nullptr,
-                                    rgw_cache_entry_info *cache_info   = nullptr,
-                                    map<string, bufferlist> *pattrs    = nullptr);
-/**
- * Given an email, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-extern int rgw_get_user_info_by_email(const DoutPrefixProvider *dpp, 
-                                      RGWUserCtl *user_ctl,
-                                      string& email, RGWUserInfo& info,
-				      optional_yield y,
-                                      RGWObjVersionTracker *objv_tracker = NULL,
-                                      real_time *pmtime = nullptr);
-/**
- * Given an swift username, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-extern int rgw_get_user_info_by_swift(const DoutPrefixProvider *dpp, 
-                                      RGWUserCtl *user_ctl,
-                                      const string& swift_name,
-                                      RGWUserInfo& info,        /* out */
-				      optional_yield y,
-                                      RGWObjVersionTracker *objv_tracker = nullptr,
-                                      real_time *pmtime = nullptr);
-/**
- * Given an access key, finds the user info associated with it.
- * returns: 0 on success, -ERR# on failure (including nonexistence)
- */
-extern int rgw_get_user_info_by_access_key(const DoutPrefixProvider *dpp, 
-                                           RGWUserCtl *user_ctl,
-                                           const std::string& access_key,
-                                           RGWUserInfo& info,
-					   optional_yield y,
-					   RGWObjVersionTracker* objv_tracker = nullptr,
-                                           real_time* pmtime = nullptr);
-
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
 
@@ -439,6 +379,7 @@ struct RGWUserAdminOpState {
   RGWQuotaInfo& get_user_quota() { return user_quota; }
   set<string>& get_mfa_ids() { return mfa_ids; }
 
+  rgw::sal::RGWUser* get_user() { return user.get(); }
   const rgw_user& get_user_id();
   std::string get_subuser() { return subuser; }
   std::string get_access_key() { return id; }
@@ -474,7 +415,6 @@ class RGWAccessKeyPool
   std::map<std::string, int, ltstr_nocase> key_type_map;
   rgw_user user_id;
   rgw::sal::RGWStore *store{nullptr};
-  RGWUserCtl *user_ctl{nullptr};
 
   map<std::string, RGWAccessKey> *swift_keys{nullptr};
   map<std::string, RGWAccessKey> *access_keys{nullptr};
@@ -528,7 +468,6 @@ class RGWSubUserPool
 
   rgw_user user_id;
   rgw::sal::RGWStore *store{nullptr};
-  RGWUserCtl *user_ctl{nullptr};
   bool subusers_allowed{false};
 
   map<string, RGWSubUser> *subuser_map{nullptr};
@@ -591,7 +530,6 @@ class RGWUser
 private:
   RGWUserInfo old_info;
   rgw::sal::RGWStore *store{nullptr};
-  RGWUserCtl *user_ctl{nullptr};
 
   rgw_user user_id;
   bool info_stored{false};
@@ -625,7 +563,6 @@ public:
   int init_members(RGWUserAdminOpState& op_state);
 
   rgw::sal::RGWStore *get_store() { return store; }
-  RGWUserCtl *get_user_ctl() { return user_ctl; }
 
   /* API Contracted Members */
   RGWUserCapPool caps;

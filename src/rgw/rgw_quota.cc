@@ -691,7 +691,7 @@ int RGWUserStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yi
   string key = "user";
   void *handle;
 
-  int ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init(key, &handle);
+  int ret = store->meta_list_keys_init(key, string(), &handle);
   if (ret < 0) {
     ldout(store->ctx(), 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
@@ -702,7 +702,7 @@ int RGWUserStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yi
 
   do {
     list<string> keys;
-    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, max, keys, &truncated);
+    ret = store->meta_list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       goto done;
@@ -724,7 +724,7 @@ int RGWUserStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yi
 
   ret = 0;
 done:
-  static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_complete(handle);
+  store->meta_list_keys_complete(handle);
   return ret;
 }
 

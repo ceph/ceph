@@ -217,6 +217,12 @@ class RGWStore {
 			       boost::optional<obj_version> refresh_version = boost::none) = 0;
     virtual int delete_system_obj(const rgw_pool& pool, const string& oid,
 				  RGWObjVersionTracker *objv_tracker, optional_yield y) = 0;
+    virtual int meta_list_keys_init(const string& section, const string& marker, void** phandle) = 0;
+    virtual int meta_list_keys_next(void* handle, int max, list<string>& keys, bool* truncated) = 0;
+    virtual void meta_list_keys_complete(void* handle) = 0;
+    virtual std::string meta_get_marker(void *handle) = 0;
+    virtual int meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y) = 0;
+
     virtual void finalize(void) = 0;
 
     virtual CephContext *ctx(void) = 0;
