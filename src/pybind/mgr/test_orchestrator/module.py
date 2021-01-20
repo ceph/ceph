@@ -67,8 +67,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     The implementation is similar to the Rook orchestrator, but simpler.
     """
 
-    def process(self, completions):
-        # type: (List[TestCompletion]) -> None
+    def process(self, completions: List[TestCompletion]) -> None:  # type: ignore
         if completions:
             self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 
@@ -208,7 +207,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 daemon_size = len(list(daemons))
                 services.append(orchestrator.ServiceDescription(
                     spec=ServiceSpec(
-                        service_type=daemon_type,
+                        service_type=daemon_type,  # type: ignore
                     ),
                     size=daemon_size, running=daemon_size))
         
