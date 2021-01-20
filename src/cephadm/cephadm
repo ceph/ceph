@@ -5120,21 +5120,21 @@ def command_check_host(ctx: CephadmContext) -> None:
             find_program(command)
             logger.info('%s is present' % command)
         except ValueError:
-            errors.append('ERROR: %s binary does not appear to be installed' % command)
+            errors.append('%s binary does not appear to be installed' % command)
 
     # check for configured+running chronyd or ntp
     if not check_time_sync(ctx):
-        errors.append('ERROR: No time synchronization is active')
+        errors.append('No time synchronization is active')
 
     if "expect_hostname" in ctx and ctx.expect_hostname:
         if get_hostname().lower() != ctx.expect_hostname.lower():
-            errors.append('ERROR: hostname "%s" does not match expected hostname "%s"' % (
+            errors.append('hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), ctx.expect_hostname))
         logger.info('Hostname "%s" matches what is expected.',
                     ctx.expect_hostname)
 
     if errors:
-        raise Error('\n'.join(errors))
+        raise Error('\nERROR: '.join(errors))
 
     logger.info('Host looks OK')
 
