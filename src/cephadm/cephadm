@@ -1947,6 +1947,7 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
 
         # Set up directories specific to the monitoring component
         config_dir = ''
+        data_dir_root = ''
         if daemon_type == 'prometheus':
             data_dir_root = get_data_dir(fsid, daemon_type, daemon_id)
             config_dir = 'etc/prometheus'
@@ -1965,8 +1966,6 @@ def create_daemon_dirs(fsid, daemon_type, daemon_id, uid, gid,
             config_dir = 'etc/alertmanager'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
-        else:
-            assert False
 
         # populate the config directory for the component from the config-json
         for fname in required_files:
