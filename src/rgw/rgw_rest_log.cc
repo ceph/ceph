@@ -369,8 +369,6 @@ void RGWOp_BILog_List::execute(optional_yield y) {
          format_version_str = s->info.args.get("format-ver");
   RGWBucketInfo bucket_info;
   unsigned max_entries;
-  uint64_t gen;
-  int format_version;
 
   if (bucket_name.empty() && bucket_instance.empty()) {
     dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
@@ -379,7 +377,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   }
 
   string err;
-  gen = (unsigned)strict_strtol(gen_str.c_str(), 10, &err);
+  const uint64_t gen = strict_strtoll(gen_str.c_str(), 10, &err);
   if (!err.empty()) {
     ldpp_dout(s, 5) << "Error parsing generation param " << gen_str << dendl;
     op_ret = -EINVAL;
@@ -389,7 +387,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
   if (!format_version_str.empty()) {
     format_ver = strict_strtoll(format_version_str.c_str(), 10, &err);
     if (!err.empty()) {
-      ldpp_dout(s, 5) << "Failed to parse format-ver param: " << format_version << dendl;
+      ldpp_dout(s, 5) << "Failed to parse format-ver param: " << format_ver << dendl;
       op_ret = -EINVAL;
       return;
     }
@@ -417,25 +415,27 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     }
   }
 
-  // get next generation and num_shards
-  auto latest_gen = bucket_info.layout.logs.back().gen;
-  auto num_shards = bucket_info.layout.logs.back().layout.in_index.layout.num_shards;
+  const auto& logs = bucket_info.layout.logs;
+  auto log = std::prev(logs.end());
+  if (gen) {
+    log = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
+    if (log == logs.end()) {
+      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
+      op_ret = -ENOENT;
+      return;
+    }
+  }
+  if (auto next = std::next(log); next != logs.end()) {
+    next_log_layout = *next;   // get the next log after the current latest
+  }
+  auto& log_layout = *log; // current log layout for log listing
+
   unsigned count = 0;
+
 
   max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
     max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
-
-  const auto& logs = bucket_info.layout.logs;
-  auto log_layout = std::reference_wrapper{logs.back()};
-  if (gen) {
-    auto i = std::find_if(logs.begin(), logs.end(), rgw::matches_gen(gen));
-    if (i == logs.end()) {
-      ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
-      op_ret = -ENOENT;
-    }
-    log_layout = *i;
-  }
 
   send_response();
   do {
@@ -494,8 +494,8 @@ void RGWOp_BILog_List::send_response_end() {
     encode_json("truncated", truncated, s->formatter);
 
     s->formatter->open_object_section("next_log");
-    encode_json("generation", latest_gen, s->formatter);
-    encode_json("num_shards", num_shards, s->formatter);
+    encode_json("generation", next_log_layout->gen, s->formatter);
+    encode_json("num_shards", next_log_layout->layout.in_index.layout.num_shards, s->formatter);
     s->formatter->close_section(); // next_log
 
     s->formatter->close_section(); // result
@@ -620,6 +620,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     if (i == logs.end()) {
       ldpp_dout(s, 5) << "ERROR: no log layout with gen=" << gen << dendl;
       op_ret = -ENOENT;
+      return;
     }
     log_layout = *i;
   }

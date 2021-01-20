@@ -23,11 +23,10 @@
 
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;
-  uint32_t format_ver;
+  uint32_t format_ver{0};
   bool truncated;
   uint64_t gen; // next generation number output from log list
-  uint64_t latest_gen; // part of response
-  uint32_t num_shards; // num shards corresponding to next generation number
+  std::optional<rgw::bucket_log_layout_generation> next_log_layout;
 
 public:
   RGWOp_BILog_List() : sent_header(false) {}
