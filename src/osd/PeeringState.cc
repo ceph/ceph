@@ -4114,6 +4114,7 @@ void PeeringState::merge_new_log_entries(
       NULL,
       pmissing,
       NULL,
+      nullptr,
       dpp);
     pinfo.last_update = info.last_update;
     pinfo.stats.stats_invalid = pinfo.stats.stats_invalid || invalidate_stats;

@@ -377,6 +377,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
   }
 
   bool changed = false;
+  bool should_rollforward = false;
 
   // extend on tail?
   //  this is just filling in history.  it does not affect our
@@ -453,7 +454,6 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
     for (auto &&oe: divergent) {
       dout(10) << "merge_log divergent " << oe << dendl;
     }
-    log.roll_forward_to(log.head, rollbacker);
 
     mempool::osd_pglog::list<pg_log_entry_t> new_entries;
     new_entries.splice(new_entries.end(), olog.log, from, to);
@@ -463,6 +463,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       false,
       &log,
       missing,
+      &should_rollforward,
       rollbacker,
       this);
 
@@ -476,6 +477,10 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t&& olog, pg_shard_t fromosd,
       this);
 
     info.last_update = log.head = olog.head;
+    if (should_rollforward) {
+      log.roll_forward_to(log.head, rollbacker);
+      dout(10) << "crt updated after new entries merged to " << log.head << dendl;
+    }
 
     // We cannot rollback into the new log entries
     log.skip_can_rollback_to_to_head();

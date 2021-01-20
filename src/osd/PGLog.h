@@ -1257,6 +1257,7 @@ public:
     bool maintain_rollback,
     IndexedLog *log,
     missing_type &missing,
+    bool *should_rollforward,
     LogEntryHandler *rollbacker,
     const DoutPrefixProvider *dpp) {
     bool invalidate_stats = false;
@@ -1266,8 +1267,11 @@ public:
     for (auto p = entries.begin(); p != entries.end(); ++p) {
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
-	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-	log->add(*p);
+       log->add(*p);
+       ldpp_dout(dpp, 20) << "update missing, appended " << *p << dendl;
+       if (should_rollforward) {
+          *should_rollforward = true;
+       }
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
@@ -1302,6 +1306,7 @@ public:
       true,
       &log,
       missing,
+      nullptr,
       rollbacker,
       this);
     if (!entries.empty()) {
