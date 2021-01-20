@@ -1127,6 +1127,8 @@ void OSDMonitor::on_shutdown()
   list<MonOpRequestRef> ls;
   take_all_failures(ls);
   ls.clear();
+
+  cct->_conf.remove_observer(this);
 }
 
 void OSDMonitor::update_logger()
