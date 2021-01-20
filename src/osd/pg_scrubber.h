@@ -525,7 +525,7 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
   OSDService* const m_osds;
   const pg_shard_t m_pg_whoami;	 ///< a local copy of m_pg->pg_whoami;
 
-  epoch_t m_interval_start;  ///< interval's 'from' of when scrubbing was first scheduled
+  epoch_t m_interval_start{0};  ///< interval's 'from' of when scrubbing was first scheduled
   /*
    * the exact epoch when the scrubbing actually started (started here - cleared checks
    *  for no-scrub conf). Incoming events are verified against this, with stale events
