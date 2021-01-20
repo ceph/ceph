@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug client: 10
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_mirroring
