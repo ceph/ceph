@@ -5989,7 +5989,7 @@ int main(int argc, const char **argv)
     } else {
       /* list users in groups of max-keys, then perform user-bucket
        * limit-check on each group */
-     ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init(metadata_key, &handle);
+     ret = store->meta_list_keys_init(metadata_key, string(), &handle);
       if (ret < 0) {
 	cerr << "ERROR: buckets limit check can't get user metadata_key: "
 	     << cpp_strerror(-ret) << std::endl;
@@ -5997,7 +5997,7 @@ int main(int argc, const char **argv)
       }
 
       do {
-	ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, max, user_ids,
+	ret = store->meta_list_keys_next(handle, max, user_ids,
 					      &truncated);
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "ERROR: buckets limit check lists_keys_next(): "
@@ -6013,7 +6013,7 @@ int main(int argc, const char **argv)
 	}
 	user_ids.clear();
       } while (truncated);
-      static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_complete(handle);
+      store->meta_list_keys_complete(handle);
     }
     return -ret;
   } /* OPT::BUCKET_LIMIT_CHECK */
@@ -6112,7 +6112,7 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT::BUCKET_STATS) {
     if (bucket_name.empty() && !bucket_id.empty()) {
       rgw_bucket bucket;
-      if (!rgw_find_bucket_by_id(store->ctx(), static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr, marker, bucket_id, &bucket)) {
+      if (!rgw_find_bucket_by_id(store->ctx(), store, marker, bucket_id, &bucket)) {
         cerr << "failure: no such bucket id" << std::endl;
         return -ENOENT;
       }
@@ -7496,7 +7496,7 @@ next:
     }
     void *handle;
     int max = 1000;
-    int ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init(metadata_key, marker, &handle);
+    int ret = store->meta_list_keys_init(metadata_key, marker, &handle);
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7514,7 +7514,7 @@ next:
     do {
       list<string> keys;
       left = (max_entries_specified ? max_entries - count : max);
-      ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, left, keys, &truncated);
+      ret = store->meta_list_keys_next(handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -7533,13 +7533,13 @@ next:
       encode_json("truncated", truncated, formatter.get());
       encode_json("count", count, formatter.get());
       if (truncated) {
-        encode_json("marker", static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->get_marker(handle), formatter.get());
+        encode_json("marker", store->meta_get_marker(handle), formatter.get());
       }
       formatter->close_section();
     }
     formatter->flush(cout);
 
-    static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_complete(handle);
+    store->meta_list_keys_complete(handle);
   }
 
   if (opt_cmd == OPT::MDLOG_LIST) {

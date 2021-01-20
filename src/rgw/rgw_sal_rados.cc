@@ -1043,6 +1043,32 @@ int RGWRadosStore::delete_system_obj(const rgw_pool& pool, const string& oid,
 {
     return rgw_delete_system_obj(svc()->sysobj, pool, oid, objv_tracker, y);
 }
+
+int RGWRadosStore::meta_list_keys_init(const string& section, const string& marker, void** phandle)
+{
+  return ctl()->meta.mgr->list_keys_init(section, marker, phandle);
+}
+
+int RGWRadosStore::meta_list_keys_next(void* handle, int max, list<string>& keys, bool* truncated)
+{
+  return ctl()->meta.mgr->list_keys_next(handle, max, keys, truncated);
+}
+
+void RGWRadosStore::meta_list_keys_complete(void* handle)
+{
+  ctl()->meta.mgr->list_keys_complete(handle);
+}
+
+std::string RGWRadosStore::meta_get_marker(void* handle)
+{
+  return ctl()->meta.mgr->get_marker(handle);
+}
+
+int RGWRadosStore::meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y)
+{
+  return ctl()->meta.mgr->remove(metadata_key, y, dpp);
+}
+
 void RGWRadosStore::finalize(void)
 {
   if (rados)

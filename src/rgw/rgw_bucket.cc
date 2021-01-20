@@ -500,25 +500,25 @@ int RGWBucket::init(rgw::sal::RGWStore *_store, RGWBucketAdminOpState& op_state,
   return 0;
 }
 
-bool rgw_find_bucket_by_id(CephContext *cct, RGWMetadataManager *mgr,
+bool rgw_find_bucket_by_id(CephContext *cct, rgw::sal::RGWStore* store,
                            const string& marker, const string& bucket_id, rgw_bucket* bucket_out)
 {
   void *handle = NULL;
   bool truncated = false;
   string s;
 
-  int ret = mgr->list_keys_init("bucket.instance", marker, &handle);
+  int ret = store->meta_list_keys_init("bucket.instance", marker, &handle);
   if (ret < 0) {
     cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
-    mgr->list_keys_complete(handle);
+    store->meta_list_keys_complete(handle);
     return -ret;
   }
   do {
       list<string> keys;
-      ret = mgr->list_keys_next(handle, 1000, keys, &truncated);
+      ret = store->meta_list_keys_next(handle, 1000, keys, &truncated);
       if (ret < 0) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
-        mgr->list_keys_complete(handle);
+        store->meta_list_keys_complete(handle);
         return -ret;
       }
       for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
@@ -528,12 +528,12 @@ bool rgw_find_bucket_by_id(CephContext *cct, RGWMetadataManager *mgr,
           continue;
         }
         if (bucket_id == bucket_out->bucket_id) {
-          mgr->list_keys_complete(handle);
+          store->meta_list_keys_complete(handle);
           return true;
         }
       }
   } while (truncated);
-  mgr->list_keys_complete(handle);
+  store->meta_list_keys_complete(handle);
   return false;
 }
 
@@ -1457,11 +1457,11 @@ int RGWBucketAdminOp::info(rgw::sal::RGWStore *store,
     bool truncated = true;
 
     formatter->open_array_section("buckets");
-    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init("bucket", &handle);
+    ret = store->meta_list_keys_init("bucket", string(), &handle);
     while (ret == 0 && truncated) {
       std::list<std::string> buckets;
       constexpr int max_keys = 1000;
-      ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, max_keys, buckets,
+      ret = store->meta_list_keys_next(handle, max_keys, buckets,
 						   &truncated);
       for (auto& bucket_name : buckets) {
         if (show_stats) {
@@ -1471,7 +1471,7 @@ int RGWBucketAdminOp::info(rgw::sal::RGWStore *store,
 	}
       }
     }
-    static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_complete(handle);
+    store->meta_list_keys_complete(handle);
 
     formatter->close_section();
   }
@@ -1612,7 +1612,7 @@ static int process_stale_instances(rgw::sal::RGWStore *store, RGWBucketAdminOpSt
   Formatter *formatter = flusher.get_formatter();
   static constexpr auto default_max_keys = 1000;
 
-  int ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init("bucket.instance", marker, &handle);
+  int ret = store->meta_list_keys_init("bucket.instance", marker, &handle);
   if (ret < 0) {
     cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -1622,7 +1622,7 @@ static int process_stale_instances(rgw::sal::RGWStore *store, RGWBucketAdminOpSt
 
   formatter->open_array_section("keys");
   auto g = make_scope_guard([&store, &handle, &formatter]() {
-                              static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_complete(handle);
+                              store->meta_list_keys_complete(handle);
                               formatter->close_section(); // keys
                               formatter->flush(cout);
                             });
@@ -1630,7 +1630,7 @@ static int process_stale_instances(rgw::sal::RGWStore *store, RGWBucketAdminOpSt
   do {
     list<std::string> keys;
 
-    ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
+    ret = store->meta_list_keys_next(handle, default_max_keys, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -1681,7 +1681,7 @@ int RGWBucketAdminOp::clear_stale_instances(rgw::sal::RGWStore *store,
                        int ret = purge_bucket_instance(store, binfo, dpp);
                        if (ret == 0){
                          auto md_key = "bucket.instance:" + binfo.bucket.get_key();
-                         ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->remove(md_key, null_yield, dpp);
+                         ret = store->meta_remove(dpp, md_key, null_yield);
                        }
                        formatter->open_object_section("delete_status");
                        formatter->dump_string("bucket_instance", binfo.bucket.get_key());
@@ -1748,7 +1748,7 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::RGWStore *store,
     process_single_lc_entry(store, formatter, user_id.tenant, bucket_name, dpp);
     formatter->flush(cout);
   } else {
-    int ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init("bucket", marker, &handle);
+    int ret = store->meta_list_keys_init("bucket", marker, &handle);
     if (ret < 0) {
       std::cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -1757,13 +1757,13 @@ int RGWBucketAdminOp::fix_lc_shards(rgw::sal::RGWStore *store,
     {
       formatter->open_array_section("lc_fix_status");
       auto sg = make_scope_guard([&store, &handle, &formatter](){
-                                   static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_complete(handle);
+                                   store->meta_list_keys_complete(handle);
                                    formatter->close_section(); // lc_fix_status
                                    formatter->flush(cout);
                                  });
       do {
         list<std::string> keys;
-        ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
+        ret = store->meta_list_keys_next(handle, default_max_keys, keys, &truncated);
         if (ret < 0 && ret != -ENOENT) {
           std::cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
           return ret;

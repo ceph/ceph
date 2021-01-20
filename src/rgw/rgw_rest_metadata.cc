@@ -123,7 +123,7 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
      marker = "3:bf885d8f:root::sorry_janefonda_665:head";
   */
 
-  op_ret = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr->list_keys_init(metadata_key, marker, &handle);
+  op_ret = store->meta_list_keys_init(metadata_key, marker, &handle);
   if (op_ret < 0) {
     dout(5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;
@@ -138,13 +138,11 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
 
   s->formatter->open_array_section("keys");
 
-  auto meta_mgr = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->meta.mgr;
-
   uint64_t left;
   do {
     list<string> keys;
     left = (max_entries_specified ? max_entries - count : max);
-    op_ret = meta_mgr->list_keys_next(handle, left, keys, &truncated);
+    op_ret = store->meta_list_keys_next(handle, left, keys, &truncated);
     if (op_ret < 0) {
       dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(op_ret)
 	      << dendl;
@@ -166,12 +164,12 @@ void RGWOp_Metadata_List::execute(optional_yield y) {
     encode_json("count", count, s->formatter);
     if (truncated) {
       string esc_marker =
-	rgw::to_base64(meta_mgr->get_marker(handle));
+	rgw::to_base64(store->meta_get_marker(handle));
       encode_json("marker", esc_marker, s->formatter);
     }
     s->formatter->close_section();
   }
-  meta_mgr->list_keys_complete(handle);
+  store->meta_list_keys_complete(handle);
 
   op_ret = 0;
 }
