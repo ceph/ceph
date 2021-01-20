@@ -44,6 +44,7 @@ import ipaddress
 import json
 import logging
 from logging.config import dictConfig
+from operator import truediv
 import os
 import platform
 import pwd
@@ -142,6 +143,10 @@ class CephadmContext:
 
     def has_function(self) -> bool:
         return "func" in self._args
+
+
+    def has(self, name: str) -> bool:
+        return hasattr(self, name)
 
 
     def __getattr__(self, name: str) -> Any:
@@ -1564,7 +1569,7 @@ def infer_fsid(func):
             if not is_fsid(daemon['fsid']):
                 # 'unknown' fsid
                 continue
-            elif 'name' not in ctx.args or not ctx.name:
+            elif ctx.has("name") or not ctx.name:
                 # ctx.name not specified
                 fsids_set.add(daemon['fsid'])
             elif daemon['name'] == ctx.name:
@@ -1649,7 +1654,7 @@ def default_image(func):
     @wraps(func)
     def _default_image(ctx: CephadmContext):
         if not ctx.image:
-            if 'name' in ctx.args and ctx.name:
+            if ctx.has("name") and ctx.name:
                 type_ = ctx.name.split('.', 1)[0]
                 if type_ in Monitoring.components:
                     ctx.image = Monitoring.components[type_]['image']
@@ -2135,18 +2140,18 @@ def get_config_and_keyring(ctx):
     config = None
     keyring = None
 
-    if 'config_json' in ctx.args and ctx.config_json:
+    if ctx.has("config_json") and ctx.config_json:
         d = get_parm(ctx.config_json)
         config = d.get('config')
         keyring = d.get('keyring')
 
-    if 'config' in ctx.args and ctx.config:
+    if ctx.has("config") and ctx.config:
         with open(ctx.config, 'r') as f:
             config = f.read()
 
-    if 'key' in ctx.args and ctx.key:
+    if ctx.has("key") and ctx.key:
         keyring = '[%s]\n\tkey = %s\n' % (ctx.name, ctx.key)
-    elif 'keyring' in ctx.args and ctx.keyring:
+    elif ctx.has("keyring") and ctx.keyring:
         with open(ctx.keyring, 'r') as f:
             keyring = f.read()
 
@@ -5005,7 +5010,6 @@ def check_time_sync(ctx, enabler=None):
 
 def command_check_host(ctx: CephadmContext) -> None:
     container_path = ctx.container_path
-    args = ctx.args
 
     errors = []
     commands = ['systemctl', 'lvcreate']
@@ -5035,7 +5039,7 @@ def command_check_host(ctx: CephadmContext) -> None:
     if not check_time_sync(ctx):
         errors.append('ERROR: No time synchronization is active')
 
-    if 'expect_hostname' in args and ctx.expect_hostname:
+    if ctx.has("expect_hostname") and ctx.expect_hostname:
         if get_hostname().lower() != ctx.expect_hostname.lower():
             errors.append('ERROR: hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), ctx.expect_hostname))
@@ -5051,7 +5055,6 @@ def command_check_host(ctx: CephadmContext) -> None:
 
 
 def command_prepare_host(ctx: CephadmContext) -> None:
-    args = ctx.args
     container_path = ctx.container_path
 
     logger.info('Verifying podman|docker is present...')
@@ -5076,7 +5079,7 @@ def command_prepare_host(ctx: CephadmContext) -> None:
         # the service
         check_time_sync(ctx, enabler=pkg)
 
-    if 'expect_hostname' in args and ctx.expect_hostname and ctx.expect_hostname != get_hostname():
+    if ctx.has("expect_hostname") and ctx.expect_hostname and ctx.expect_hostname != get_hostname():
         logger.warning('Adjusting hostname from %s -> %s...' % (get_hostname(), ctx.expect_hostname))
         call_throws(ctx, ['hostname', ctx.expect_hostname])
         with open('/etc/hostname', 'w') as f:
@@ -6161,7 +6164,6 @@ def command_gather_facts(ctx: CephadmContext):
 ##################################
 
 def command_verify_prereqs(ctx: CephadmContext):
-    args = ctx.args
     if ctx.service_type == 'haproxy' or ctx.service_type == 'keepalived':
         out, err, code = call(
             ctx, ['sysctl', '-n', 'net.ipv4.ip_nonlocal_bind']
@@ -6790,7 +6792,6 @@ WantedBy=ceph-{fsid}.target
 
     @classmethod
     def uninstall(cls, ctx: CephadmContext, fsid, daemon_type, daemon_id):
-        args = ctx.args
         unit_name = CephadmDaemon._unit_name(fsid, daemon_id)
         unit_path = os.path.join(ctx.unit_dir, unit_name)
         unit_run = os.path.join(ctx.data_dir, fsid, f"{daemon_type}.{daemon_id}", "unit.run")
