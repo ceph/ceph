@@ -37,6 +37,7 @@ class IscsiService(CephService):
             'caps': ['mon', 'profile rbd, '
                             'allow command "osd blocklist", '
                             'allow command "config-key get" with "key" prefix "iscsi/"',
+                     'mgr', 'allow command "service status"',
                      'osd', 'allow rwx'],
         })
 

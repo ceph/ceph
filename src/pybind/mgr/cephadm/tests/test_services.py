@@ -1,6 +1,6 @@
 import pytest
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
     RbdMirrorService, CrashService, CephadmService, AuthEntity, CephadmExporter
@@ -9,6 +9,7 @@ from cephadm.services.nfs import NFSService
 from cephadm.services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
+from ceph.deployment.service_spec import IscsiServiceSpec
 
 from orchestrator import OrchestratorError
 
@@ -17,6 +18,7 @@ class FakeMgr:
     def __init__(self):
         self.config = ''
         self.check_mon_command = MagicMock(side_effect=self._check_mon_command)
+        self.template = MagicMock()
 
     def _check_mon_command(self, cmd_dict, inbuf=None):
         prefix = cmd_dict.get('prefix')
@@ -75,6 +77,30 @@ class TestCephadmService:
             'cephadm-exporter': cephadm_exporter_service,
         }
         return cephadm_services
+
+    def test_iscsi_client_caps(self):
+        mgr = FakeMgr()
+        iscsi_service = self._get_services(mgr)['iscsi']
+
+        iscsi_spec = IscsiServiceSpec(service_type='iscsi', service_id="a")
+        iscsi_spec.daemon_type = "iscsi"
+        iscsi_spec.daemon_id = "a"
+        iscsi_spec.spec = MagicMock()
+        iscsi_spec.spec.daemon_type = "iscsi"
+        iscsi_spec.spec.ssl_cert = ''
+
+        iscsi_service.prepare_create(iscsi_spec)
+
+        expected_caps = ['mon',
+                         'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"',
+                         'mgr', 'allow command "service status"',
+                         'osd', 'allow rwx']
+
+        expected_call = call({'prefix': 'auth get-or-create',
+                              'entity': 'client.iscsi.a',
+                              'caps': expected_caps})
+
+        assert expected_call in mgr.check_mon_command.mock_calls
 
     def test_get_auth_entity(self):
         mgr = FakeMgr()
