@@ -7670,6 +7670,10 @@ void RGWDefaultResponseOp::send_response() {
 
 void RGWPutBucketPolicy::send_response()
 {
+  if (!op_ret) {
+    /* A successful Put Bucket Policy should return a 204 on success */
+    op_ret = STATUS_NO_CONTENT;
+  }
   if (op_ret) {
     set_req_state_err(s, op_ret);
   }
