@@ -54,7 +54,7 @@ class SocketMessenger final : public Messenger {
   SocketMessenger(const entity_name_t& myname,
                   const std::string& logic_name,
                   uint32_t nonce);
-  ~SocketMessenger() override { ceph_assert(!listener); }
+  ~SocketMessenger() override;
 
   seastar::future<> set_myaddrs(const entity_addrvec_t& addr) override;
 
