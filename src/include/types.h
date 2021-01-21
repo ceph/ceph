@@ -478,7 +478,7 @@ inline std::ostream& operator<<(std::ostream& out, const byte_u_t& b)
 
 inline std::ostream& operator<<(std::ostream& out, const ceph_mon_subscribe_item& i)
 {
-  return out << i.start
+  return out << (long)i.start
 	     << ((i.flags & CEPH_SUBSCRIBE_ONETIME) ? "" : "+");
 }
 
