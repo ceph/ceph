@@ -163,7 +163,7 @@ static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
   return mgr;
 }
 
-static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
+static RGWRESTMgr *rest_filter(rgw::sal::RGWStore* store, int dialect, RGWRESTMgr *orig)
 {
   RGWSyncModuleInstanceRef sync_module = store->get_sync_module();
   if (sync_module) {
@@ -387,7 +387,7 @@ int radosgw_Main(int argc, const char **argv)
   const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
-      rest.register_default_mgr(set_logging(rest_filter(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados(), RGW_REST_S3,
+      rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
                                                         new RGWRESTMgr_S3(s3website_enabled, sts_enabled, iam_enabled, pubsub_enabled))));
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
@@ -446,7 +446,7 @@ int radosgw_Main(int argc, const char **argv)
 
     if (! swift_at_root) {
       rest.register_resource(g_conf()->rgw_swift_url_prefix,
-                          set_logging(rest_filter(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados(), RGW_REST_SWIFT,
+                          set_logging(rest_filter(store, RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
       if (store->get_zonegroup().zones.size() > 1) {
@@ -472,6 +472,7 @@ int radosgw_Main(int argc, const char **argv)
   
     /*Registering resource for /admin/metadata */
     admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
+    /* XXX dang ifdef these RADOS ? */
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);

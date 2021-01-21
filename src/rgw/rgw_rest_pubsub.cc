@@ -498,8 +498,8 @@ void RGWPSCreateNotif_ObjStore_S3::execute(optional_yield y) {
   std::string data_bucket_prefix = "";
   std::string data_oid_prefix = "";
   bool push_only = true;
-  if (static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_sync_module()) {
-    const auto psmodule = dynamic_cast<RGWPSSyncModuleInstance*>(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_sync_module().get());
+  if (store->get_sync_module()) {
+    const auto psmodule = dynamic_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
     if (psmodule) {
       const auto& conf = psmodule->get_effective_conf();
       data_bucket_prefix = conf["data_bucket_prefix"];

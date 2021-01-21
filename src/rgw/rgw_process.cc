@@ -209,7 +209,7 @@ int process_request(rgw::sal::RGWStore* const store,
 
   s->req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(req->id);
   s->trans_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_trans_id(req->id);
-  s->host_id = static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->host_id;
+  s->host_id = store->get_host_id();
   s->yield = yield;
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;

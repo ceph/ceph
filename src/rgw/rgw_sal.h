@@ -35,6 +35,8 @@ class RGWListRawObjsCtx;
 class RGWBucketSyncPolicyHandler;
 using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler>;
 class RGWDataSyncStatusManager;
+class RGWSyncModuleInstance;
+typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
 namespace rgw {
   class Aio;
   namespace IAM { struct Policy; }
@@ -222,6 +224,8 @@ class RGWStore {
     virtual void meta_list_keys_complete(void* handle) = 0;
     virtual std::string meta_get_marker(void *handle) = 0;
     virtual int meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y) = 0;
+    virtual const RGWSyncModuleInstanceRef& get_sync_module() = 0;
+    virtual std::string get_host_id() = 0;
 
     virtual void finalize(void) = 0;
 
