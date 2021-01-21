@@ -35,7 +35,7 @@ int RGWOIDCProvider::store_url(const string& url, bool exclusive,
 
   bufferlist bl;
   encode(*this, bl);
-  return store->put_system_obj(store->get_zone_params().oidc_pool, oid,
+  return store->put_system_obj(store->get_zone()->get_params().oidc_pool, oid,
 			       bl, exclusive, NULL, real_time(), y);
 }
 
@@ -92,7 +92,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
-  auto& pool = store->get_zone_params().oidc_pool;
+  auto& pool = store->get_zone()->get_params().oidc_pool;
   ret = store_url(idp_url, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
@@ -105,7 +105,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
 
 int RGWOIDCProvider::delete_obj(optional_yield y)
 {
-  auto& pool = store->get_zone_params().oidc_pool;
+  auto& pool = store->get_zone()->get_params().oidc_pool;
 
   string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
@@ -182,7 +182,7 @@ void RGWOIDCProvider::decode_json(JSONObj *obj)
 
 int RGWOIDCProvider::read_url(const DoutPrefixProvider *dpp, const string& url, const string& tenant)
 {
-  auto& pool = store->get_zone_params().oidc_pool;
+  auto& pool = store->get_zone()->get_params().oidc_pool;
   string oid = tenant + get_url_oid_prefix() + url;
   bufferlist bl;
 
@@ -240,7 +240,7 @@ int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp,
 				   const string& tenant,
 				   vector<RGWOIDCProvider>& providers)
 {
-  auto pool = store->get_zone_params().oidc_pool;
+  auto pool = store->get_zone()->get_params().oidc_pool;
   string prefix = tenant + oidc_url_oid_prefix;
 
   //Get the filtered objects

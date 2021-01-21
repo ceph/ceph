@@ -840,31 +840,6 @@ int RGWRadosStore::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, R
   return rados->defer_gc(dpp, rctx, bucket->get_info(), obj->get_obj(), y);
 }
 
-const RGWZoneGroup& RGWRadosStore::get_zonegroup()
-{
-  return svc()->zone->get_zonegroup();
-}
-
-int RGWRadosStore::get_zonegroup(const string& id, RGWZoneGroup& zonegroup)
-{
-  return svc()->zone->get_zonegroup(id, zonegroup);
-}
-
-const RGWZoneParams& RGWRadosStore::get_zone_params()
-{
-  return svc()->zone->get_zone_params();
-}
-
-const rgw_zone_id& RGWRadosStore::get_zone_id()
-{
-  return svc()->zone->zone_id();
-}
-
-const RGWRealm& RGWRadosStore::get_realm()
-{
-  return svc()->zone->get_realm();
-}
-
 int RGWRadosStore::cluster_stat(RGWClusterStat& stats)
 {
   rados_cluster_stat_t rados_stats;
@@ -1890,6 +1865,56 @@ RadosWriter::~RadosWriter()
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
   }
+}
+
+const RGWZoneGroup& RadosZone::get_zonegroup()
+{
+  return store->svc()->zone->get_zonegroup();
+}
+
+int RadosZone::get_zonegroup(const string& id, RGWZoneGroup& zonegroup)
+{
+  return store->svc()->zone->get_zonegroup(id, zonegroup);
+}
+
+const RGWZoneParams& RadosZone::get_params()
+{
+  return store->svc()->zone->get_zone_params();
+}
+
+const rgw_zone_id& RadosZone::get_id()
+{
+  return store->svc()->zone->zone_id();
+}
+
+const RGWRealm& RadosZone::get_realm()
+{
+  return store->svc()->zone->get_realm();
+}
+
+const std::string& RadosZone::get_name() const
+{
+  return store->svc()->zone->zone_name();
+}
+
+bool RadosZone::is_writeable()
+{
+  return store->svc()->zone->zone_is_writeable();
+}
+
+bool RadosZone::get_redirect_endpoint(std::string *endpoint)
+{
+  return store->svc()->zone->get_redirect_zone_endpoint(endpoint);
+}
+
+bool RadosZone::has_zonegroup_api(const std::string& api) const
+{
+  return store->svc()->zone->has_zonegroup_api(api);
+}
+
+const string& RadosZone::get_current_period_id()
+{
+  return store->svc()->zone->get_current_period_id();
 }
 
 } // namespace rgw::sal

@@ -1632,7 +1632,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     return -EINVAL;
   }
   // are we the period's master zone?
-  if (store->get_zone_id() == master_zone) {
+  if (store->get_zone()->get_id() == master_zone) {
     // read the current period
     RGWPeriod current_period;
     int ret = current_period.init(g_ceph_context,
@@ -2178,8 +2178,8 @@ static void tab_dump(const string& header, int width, const list<string>& entrie
 
 static void sync_status(Formatter *formatter)
 {
-  const RGWRealm& realm = store->get_realm();
-  const RGWZoneGroup& zonegroup = store->get_zonegroup();
+  const RGWRealm& realm = store->get_zone()->get_realm();
+  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
   const RGWZone& zone = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_zone();
 
   int width = 15;
@@ -2374,7 +2374,7 @@ rgw_zone_id validate_zone_id(const rgw_zone_id& zone_id)
 
 static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<rgw_bucket> opt_bucket, Formatter *formatter)
 {
-  rgw_zone_id zone_id = opt_target_zone.value_or(store->get_zone_id());
+  rgw_zone_id zone_id = opt_target_zone.value_or(store->get_zone()->get_id());
 
   auto zone_policy_handler = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_sync_policy_handler(zone_id);
 
@@ -2488,8 +2488,8 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
 static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& info,
                               std::ostream& out)
 {
-  const RGWRealm& realm = store->get_realm();
-  const RGWZoneGroup& zonegroup = store->get_zonegroup();
+  const RGWRealm& realm = store->get_zone()->get_realm();
+  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
   const RGWZone& zone = store->svc()->zone->get_zone();
   constexpr int width = 15;
 
@@ -2529,8 +2529,8 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
 			      std::optional<rgw_bucket>& opt_source_bucket,
                               std::ostream& out)
 {
-  const RGWRealm& realm = store->get_realm();
-  const RGWZoneGroup& zonegroup = store->get_zonegroup();
+  const RGWRealm& realm = store->get_zone()->get_realm();
+  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
   const RGWZone& zone = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_zone();
   constexpr int width = 15;
 
@@ -5516,7 +5516,7 @@ int main(int argc, const char **argv)
     rgw_placement_rule target_rule;
     target_rule.name = placement_id;
     target_rule.storage_class = *opt_storage_class;
-    if (!store->get_zone_params().valid_placement(target_rule)) {
+    if (!store->get_zone()->get_params().valid_placement(target_rule)) {
       cerr << "NOTICE: invalid dest placement: " << target_rule.to_str() << std::endl;
       return EINVAL;
     }
@@ -7874,7 +7874,7 @@ next:
 
     RGWSyncModuleInstanceRef sync_module;
     int ret = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sync_modules->get_manager()->create_instance(g_ceph_context, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_zone().tier_type,
-        store->get_zone_params().tier_config, &sync_module);
+        store->get_zone()->get_params().tier_config, &sync_module);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
       return ret;

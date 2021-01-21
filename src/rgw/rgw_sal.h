@@ -104,6 +104,7 @@ class Lifecycle;
 class Notification;
 class GCChain;
 class Writer;
+class Zone;
 
 enum AttrsMod {
   ATTRSMOD_NONE    = 0,
@@ -160,11 +161,7 @@ class RGWStore {
 					  optional_yield y) = 0;
     virtual int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) = 0;
-    virtual const RGWZoneGroup& get_zonegroup() = 0;
-    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) = 0;
-    virtual const RGWZoneParams& get_zone_params() = 0;
-    virtual const rgw_zone_id& get_zone_id() = 0;
-    virtual const RGWRealm& get_realm() = 0;
+    virtual Zone* get_zone() = 0;
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
     virtual std::unique_ptr<Completions> get_completions(void) = 0;
@@ -884,6 +881,22 @@ protected:
   // so they aren't deleted on destruction
   virtual void clear_written() { written.clear(); }
 
+};
+
+class Zone {
+  public:
+    virtual ~Zone() = default;
+
+    virtual const RGWZoneGroup& get_zonegroup() = 0;
+    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) = 0;
+    virtual const RGWZoneParams& get_params() = 0;
+    virtual const rgw_zone_id& get_id() = 0;
+    virtual const RGWRealm& get_realm() = 0;
+    virtual const std::string& get_name() const = 0;
+    virtual bool is_writeable() = 0;
+    virtual bool get_redirect_endpoint(string *endpoint) = 0;
+    virtual bool has_zonegroup_api(const std::string& api) const = 0;
+    virtual const string& get_current_period_id() = 0;
 };
 
 } } // namespace rgw::sal

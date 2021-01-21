@@ -504,7 +504,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   //For Append obj, disable versioning
   obj_op->params.versioning_disabled = true;
   if (cur_manifest) {
-    cur_manifest->append(manifest, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone);
+    cur_manifest->append(manifest, store->get_zone());
     obj_op->params.manifest = cur_manifest;
   } else {
     obj_op->params.manifest = &manifest;

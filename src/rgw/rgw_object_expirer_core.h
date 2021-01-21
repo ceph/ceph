@@ -40,9 +40,9 @@ class cls_timeindex_entry;
 class RGWObjExpStore {
   CephContext *cct;
   RGWSI_RADOS *rados_svc;
-  RGWSI_Zone *zone_svc;
+  rgw::sal::Zone* zone_svc;
 public:
-  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc) : cct(_cct),
+  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::Zone* _zone_svc) : cct(_cct),
                                                                                       rados_svc(_rados_svc),
                                                                                       zone_svc(_zone_svc) {}
 
@@ -100,7 +100,7 @@ protected:
 public:
   explicit RGWObjectExpirer(rgw::sal::RGWStore *_store)
     : store(_store),
-      exp_store(_store->ctx(), static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->rados, static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone),
+      exp_store(_store->ctx(), static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->rados, store->get_zone()),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {

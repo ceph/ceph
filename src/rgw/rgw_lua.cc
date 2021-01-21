@@ -67,7 +67,7 @@ int read_script(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, const 
 {
   RGWObjVersionTracker objv_tracker;
 
-  rgw_raw_obj obj(store->get_zone_params().log_pool, script_oid(ctx, tenant));
+  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
 
   bufferlist bl;
   
@@ -100,7 +100,7 @@ int write_script(rgw::sal::RGWStore* store, const std::string& tenant, optional_
 {
   RGWObjVersionTracker objv_tracker;
 
-  rgw_raw_obj obj(store->get_zone_params().log_pool, script_oid(ctx, tenant));
+  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
 
   bufferlist bl;
   ceph::encode(script, bl);
@@ -125,7 +125,7 @@ int delete_script(rgw::sal::RGWStore* store, const std::string& tenant, optional
 {
   RGWObjVersionTracker objv_tracker;
 
-  rgw_raw_obj obj(store->get_zone_params().log_pool, script_oid(ctx, tenant));
+  rgw_raw_obj obj(store->get_zone()->get_params().log_pool, script_oid(ctx, tenant));
 
   const auto rc = store->delete_system_obj(
       obj.pool,

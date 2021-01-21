@@ -329,15 +329,35 @@ class RGWRadosBucket : public RGWBucket {
     friend class RGWRadosStore;
 };
 
+class RadosZone : public Zone {
+  protected:
+    RGWRadosStore* store;
+  public:
+    RadosZone(RGWRadosStore* _store) : store(_store) {}
+    ~RadosZone() = default;
+
+    virtual const RGWZoneGroup& get_zonegroup() override;
+    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) override;
+    virtual const RGWZoneParams& get_params() override;
+    virtual const rgw_zone_id& get_id() override;
+    virtual const RGWRealm& get_realm() override;
+    virtual const std::string& get_name() const override;
+    virtual bool is_writeable() override;
+    virtual bool get_redirect_endpoint(string *endpoint) override;
+    virtual bool has_zonegroup_api(const std::string& api) const override;
+    virtual const string& get_current_period_id() override;
+};
+
 class RGWRadosStore : public RGWStore {
   private:
     RGWRados *rados;
     RGWUserCtl *user_ctl;
     std::string luarocks_path;
+    RadosZone zone;
 
   public:
     RGWRadosStore()
-      : rados(nullptr) {
+      : rados(nullptr), zone(this) {
       }
     ~RGWRadosStore() {
       delete rados;
@@ -373,11 +393,7 @@ class RGWRadosStore : public RGWStore {
 					  optional_yield y) override;
     virtual int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) override;
-    virtual const RGWZoneGroup& get_zonegroup() override;
-    virtual int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) override;
-    virtual const RGWZoneParams& get_zone_params() override;
-    virtual const rgw_zone_id& get_zone_id() override;
-    virtual const RGWRealm& get_realm() override;
+    virtual Zone* get_zone() { return &zone; }
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Completions> get_completions(void) override;
