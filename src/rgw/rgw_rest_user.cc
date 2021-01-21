@@ -967,7 +967,7 @@ void RGWOp_Quota_Set::execute(optional_yield y)
     use_http_params = false;
   } else {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
-    use_http_params1 = (!encoding || strcmp(encoding, "chunked") != 0);
+    use_http_params = (!encoding || strcmp(encoding, "chunked") != 0);
   }
 
   if (use_http_params && set_all) {

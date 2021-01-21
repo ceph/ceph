@@ -154,7 +154,7 @@ namespace rgw {
     int ret = process_request(req, &io_ctx);
     if (ret < 0) {
       /* we don't really care about return code */
-      ldpp_dout(dpp, 20) << "process_request() returned " << ret << dendl;
+      dout(20) << "process_request() returned " << ret << dendl;
 
     }
     delete req;
@@ -173,7 +173,7 @@ namespace rgw {
     int ret = process_request(req, &io_ctx);
     if (ret < 0) {
       /* we don't really care about return code */
-      ldpp_dout(dpp, 20) << "process_request() returned " << ret << dendl;
+      dout(20) << "process_request() returned " << ret << dendl;
     }
     return ret;
   } /* process_request */
@@ -195,7 +195,7 @@ namespace rgw {
     int ret = 0;
     bool should_log = true; // XXX
 
-    ldpp_dout(dpp, 1) << "====== " << __func__
+    dout(1) << "====== " << __func__
 	    << " starting new request req=" << hex << req << dec
 	    << " ======" << dendl;
 
@@ -243,7 +243,7 @@ namespace rgw {
     /* XXX and -then- stash req_state pointers everywhere they are needed */
     ret = req->init(rgw_env, &rados_ctx, io, s);
     if (ret < 0) {
-      ldpp_dout(dpp, 10) << "failed to initialize request" << dendl;
+      ldpp_dout(s, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
       goto done;
     }
@@ -251,7 +251,7 @@ namespace rgw {
     /* req is-a RGWOp, currently initialized separately */
     ret = req->op_init();
     if (ret < 0) {
-      ldpp_dout(dpp, 10) << "failed to initialize RGWOp" << dendl;
+      dout(10) << "failed to initialize RGWOp" << dendl;
       abort_req(s, op, ret);
       goto done;
     }
@@ -267,7 +267,7 @@ namespace rgw {
       ldpp_dout(s, 2) << "authorizing" << dendl;
       ret = req->authorize(op, null_yield);
       if (ret < 0) {
-	ldpp_dout(dpp, 10) << "failed to authorize request" << dendl;
+	dout(10) << "failed to authorize request" << dendl;
 	abort_req(s, op, ret);
 	goto done;
       }
@@ -345,7 +345,7 @@ namespace rgw {
 
     ldpp_dout(s, 2) << "http status=" << http_ret << dendl;
 
-    ldpp_dout(dpp, 1) << "====== " << __func__
+    ldpp_dout(s, 1) << "====== " << __func__
 	    << " req done req=" << hex << req << dec << " http_status="
 	    << http_ret
 	    << " ======" << dendl;
@@ -356,7 +356,7 @@ namespace rgw {
   int RGWLibProcess::start_request(RGWLibContinuedReq* req)
   {
 
-    ldpp_dout(dpp, 1) << "====== " << __func__
+    dout(1) << "====== " << __func__
 	    << " starting new continued request req=" << hex << req << dec
 	    << " ======" << dendl;
 
@@ -381,7 +381,7 @@ namespace rgw {
 
     int ret = req->init(rgw_env, &rados_ctx, &io_ctx, s);
     if (ret < 0) {
-      ldpp_dout(dpp, 10) << "failed to initialize request" << dendl;
+      ldpp_dout(s, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
       goto done;
     }
@@ -389,7 +389,7 @@ namespace rgw {
     /* req is-a RGWOp, currently initialized separately */
     ret = req->op_init();
     if (ret < 0) {
-      ldpp_dout(dpp, 10) << "failed to initialize RGWOp" << dendl;
+      dout(10) << "failed to initialize RGWOp" << dendl;
       abort_req(s, op, ret);
       goto done;
     }
@@ -399,7 +399,7 @@ namespace rgw {
     ldpp_dout(s, 2) << "authorizing" << dendl;
     ret = req->authorize(op, null_yield);
     if (ret < 0) {
-      ldpp_dout(dpp, 10) << "failed to authorize request" << dendl;
+      dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
       goto done;
     }
