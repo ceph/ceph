@@ -865,7 +865,7 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
   return p_cursor;
 }
 
-void LeafNode::validate_cursor(tree_cursor_t& cursor) const
+void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
 {
 #ifndef NDEBUG
   assert(this == cursor.get_leaf_node().get());
