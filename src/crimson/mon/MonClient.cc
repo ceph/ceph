@@ -957,7 +957,13 @@ seastar::future<> Client::reopen_session(int rank)
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
     // TODO: connect to multiple addrs
-    auto peer = monmap.get_addrs(rank).pick_addr(msgr.get_myaddr().get_type());
+    // connect to v2 addresses if we have not bound to any address, otherwise
+    // use the advertised msgr protocol
+    uint32_t type = msgr.get_myaddr().get_type();
+    if (type == entity_addr_t::TYPE_NONE) {
+      type = entity_addr_t::TYPE_MSGR2;
+    }
+    auto peer = monmap.get_addrs(rank).pick_addr(type);
     if (peer == entity_addr_t{}) {
       // crimson msgr only uses the first bound addr
       logger().warn("mon.{} does not have an addr compatible with my type: {}",
