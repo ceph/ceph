@@ -438,6 +438,8 @@ class RGWRadosStore : public RGWStore {
     virtual void meta_list_keys_complete(void* handle) override;
     virtual std::string meta_get_marker(void *handle) override;
     virtual int meta_remove(const DoutPrefixProvider *dpp, string& metadata_key, optional_yield y) override;
+    virtual const RGWSyncModuleInstanceRef& get_sync_module() { return rados->get_sync_module(); }
+    virtual std::string get_host_id() { return rados->host_id; }
 
     virtual void finalize(void) override;
 

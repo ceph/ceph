@@ -108,9 +108,9 @@ void RGWOp_Period_Post::execute(optional_yield y)
   }
 
   // require period.realm_id to match our realm
-  if (period.get_realm() != static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_realm().get_id()) {
+  if (period.get_realm() != store->get_realm().get_id()) {
     error_stream << "period with realm id " << period.get_realm()
-        << " doesn't match current realm " << static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_realm().get_id() << std::endl;
+        << " doesn't match current realm " << store->get_realm().get_id() << std::endl;
     op_ret = -EINVAL;
     return;
   }

@@ -847,7 +847,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
     }
   }
 
-  const auto& local_zone_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->zone_id();
+  const auto& local_zone_id = store->get_zone_id();
 
   if (!merge) {
     rgw_sync_bucket_pipe pipe;

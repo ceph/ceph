@@ -171,7 +171,7 @@ public:
       return -EINVAL;
     }
 
-    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_sync_module().get());
+    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
     const auto& conf = psmodule->get_effective_conf();
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
