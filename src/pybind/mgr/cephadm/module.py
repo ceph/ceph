@@ -819,7 +819,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         Show user for SSHing to cluster hosts
         """
-        return 0, self.ssh_user, ''
+        if self.ssh_user is None:
+            return -errno.ENOENT, '', 'No cluster SSH user configured'
+        else:
+            return 0, self.ssh_user, ''
 
     @orchestrator._cli_read_command(
         'cephadm set-user')
