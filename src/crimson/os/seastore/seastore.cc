@@ -11,14 +11,11 @@
 #include "os/Transaction.h"
 
 #include "crimson/common/buffer_io.h"
-#include "crimson/common/config_proxy.h"
 
 #include "crimson/os/futurized_collection.h"
 
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
-#include "crimson/os/seastore/transaction_manager.h"
 #include "crimson/os/seastore/onode_manager.h"
-#include "crimson/os/seastore/cache.h"
 
 namespace {
   seastar::logger& logger() {
@@ -30,36 +27,13 @@ using crimson::common::local_conf;
 
 namespace crimson::os::seastore {
 
+SeaStore::~SeaStore() {}
+
 struct SeastoreCollection final : public FuturizedCollection {
   template <typename... T>
   SeastoreCollection(T&&... args) :
     FuturizedCollection(std::forward<T>(args)...) {}
 };
-
-SeaStore::SeaStore(const std::string& path)
-  : segment_manager(segment_manager::create_test_ephemeral() /* TODO */),
-    segment_cleaner(
-      std::make_unique<SegmentCleaner>(
-	SegmentCleaner::config_t::default_from_segment_manager(
-	  *segment_manager))),
-    cache(std::make_unique<Cache>(*segment_manager)),
-    journal(new Journal(*segment_manager)),
-    lba_manager(
-      lba_manager::create_lba_manager(*segment_manager, *cache)),
-    transaction_manager(
-      new TransactionManager(
-	*segment_manager,
-	*segment_cleaner,
-	*journal,
-	*cache,
-	*lba_manager)),
-    onode_manager(onode_manager::create_ephemeral())
-{
-  journal->set_segment_provider(&*segment_cleaner);
-  segment_cleaner->set_extent_callback(&*transaction_manager);
-}
-
-SeaStore::~SeaStore() = default;
 
 seastar::future<> SeaStore::stop()
 {
@@ -229,7 +203,7 @@ seastar::future<> SeaStore::do_transaction(
 {
   return seastar::do_with(
     _t.begin(),
-    transaction_manager->create_transaction(),
+    transaction_manager.create_transaction(),
     std::vector<OnodeRef>(),
     std::move(_t),
     std::move(_ch),
@@ -243,7 +217,7 @@ seastar::future<> SeaStore::do_transaction(
 	      [this, &iter, &trans, &onodes, &t, &ch]() {
 		return _do_transaction_step(trans, ch, onodes, iter).safe_then(
 		  [this, &trans] {
-		    return transaction_manager->submit_transaction(std::move(trans));
+		    return transaction_manager.submit_transaction(std::move(trans));
 		  }).handle_error(
 		    // TODO: add errorator::do_until
 		    crimson::ct_error::eagain::handle([]() {
