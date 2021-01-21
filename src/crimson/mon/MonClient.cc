@@ -960,7 +960,8 @@ seastar::future<> Client::reopen_session(int rank)
     auto peer = monmap.get_addrs(rank).pick_addr(msgr.get_myaddr().get_type());
     if (peer == entity_addr_t{}) {
       // crimson msgr only uses the first bound addr
-      logger().warn("mon.{} does not have an addr compatible with me", rank);
+      logger().warn("mon.{} does not have an addr compatible with my type: {}",
+		    rank, msgr.get_myaddr().get_type());
       return seastar::now();
     }
     logger().info("connecting to mon.{}", rank);
