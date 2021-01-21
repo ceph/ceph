@@ -145,6 +145,11 @@ LogClientTemp::~LogClientTemp()
     parent.do_log(type, ss);
 }
 
+void LogChannel::set_log_to_monitors(bool v)
+{
+  log_to_monitors = v;
+}
+
 void LogChannel::update_config(map<string,string> &log_to_monitors,
 			       map<string,string> &log_to_syslog,
 			       map<string,string> &log_channels,
