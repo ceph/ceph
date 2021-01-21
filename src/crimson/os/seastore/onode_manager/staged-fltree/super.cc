@@ -6,7 +6,8 @@
 
 namespace crimson::os::seastore::onode {
 
-Ref<Node> RootNodeTrackerIsolated::get_root(Transaction& t) const {
+Ref<Node> RootNodeTrackerIsolated::get_root(Transaction& t) const
+{
   auto iter = tracked_supers.find(&t);
   if (iter == tracked_supers.end()) {
     return nullptr;
@@ -15,7 +16,8 @@ Ref<Node> RootNodeTrackerIsolated::get_root(Transaction& t) const {
   }
 }
 
-Ref<Node> RootNodeTrackerShared::get_root(Transaction&) const {
+Ref<Node> RootNodeTrackerShared::get_root(Transaction&) const
+{
   if (is_clean()) {
     return nullptr;
   } else {

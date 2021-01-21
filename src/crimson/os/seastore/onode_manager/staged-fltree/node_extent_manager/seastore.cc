@@ -8,7 +8,8 @@
 
 namespace {
 
-seastar::logger& logger() {
+seastar::logger& logger()
+{
   return crimson::get_logger(ceph_subsys_filestore);
 }
 
@@ -17,7 +18,8 @@ seastar::logger& logger() {
 namespace crimson::os::seastore::onode {
 
 static DeltaRecorderURef create_replay_recorder(
-    node_type_t node_type, field_type_t field_type) {
+    node_type_t node_type, field_type_t field_type)
+{
   if (node_type == node_type_t::LEAF) {
     if (field_type == field_type_t::N0) {
       return DeltaRecorderT<node_fields_0_t, node_type_t::LEAF>::create_for_replay();
@@ -47,7 +49,8 @@ static DeltaRecorderURef create_replay_recorder(
   }
 }
 
-void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr) {
+void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr)
+{
   logger().info("OTree::Seastore: update root {:#x} ...", addr);
   root_addr = addr;
   auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
@@ -55,7 +58,8 @@ void SeastoreSuper::write_root_laddr(context_t c, laddr_t addr) {
 }
 
 NodeExtentRef SeastoreNodeExtent::mutate(
-    context_t c, DeltaRecorderURef&& _recorder) {
+    context_t c, DeltaRecorderURef&& _recorder)
+{
   logger().debug("OTree::Seastore: mutate {:#x} ...", get_laddr());
   auto nm = static_cast<SeastoreNodeExtentManager*>(&c.nm);
   auto extent = nm->get_tm().get_mutable_extent(c.t, this);
@@ -67,7 +71,8 @@ NodeExtentRef SeastoreNodeExtent::mutate(
   return ret;
 }
 
-void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl) {
+void SeastoreNodeExtent::apply_delta(const ceph::bufferlist& bl)
+{
   logger().debug("OTree::Seastore: replay {:#x} ...", get_laddr());
   if (!recorder) {
     auto [node_type, field_type] = get_types();

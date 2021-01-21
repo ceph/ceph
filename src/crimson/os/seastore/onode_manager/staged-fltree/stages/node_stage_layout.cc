@@ -10,7 +10,8 @@ namespace crimson::os::seastore::onode {
 void node_header_t::bootstrap_extent(
     NodeExtentMutable& mut,
     field_type_t field_type, node_type_t node_type,
-    bool is_level_tail, level_t level) {
+    bool is_level_tail, level_t level)
+{
   node_header_t header;
   header.set_field_type(field_type);
   header.set_node_type(node_type);
@@ -20,7 +21,8 @@ void node_header_t::bootstrap_extent(
 }
 
 void node_header_t::update_is_level_tail(
-    NodeExtentMutable& mut, const node_header_t& header, bool value) {
+    NodeExtentMutable& mut, const node_header_t& header, bool value)
+{
   auto& _header = const_cast<node_header_t&>(header);
   _header.set_is_level_tail(value);
   mut.validate_inplace_update(_header);
@@ -31,7 +33,8 @@ void node_header_t::update_is_level_tail(
 
 template <typename SlotType>
 void F013_T::update_size_at(
-    NodeExtentMutable& mut, const me_t& node, index_t index, int change) {
+    NodeExtentMutable& mut, const me_t& node, index_t index, int change)
+{
   assert(index <= node.num_keys);
   for (const auto* p_slot = &node.slots[index];
        p_slot < &node.slots[node.num_keys];
@@ -45,14 +48,16 @@ void F013_T::update_size_at(
 
 template <typename SlotType>
 void F013_T::append_key(
-    NodeExtentMutable& mut, const key_t& key, char*& p_append) {
+    NodeExtentMutable& mut, const key_t& key, char*& p_append)
+{
   mut.copy_in_absolute(p_append, key);
   p_append += sizeof(key_t);
 }
 
 template <typename SlotType>
 void F013_T::append_offset(
-    NodeExtentMutable& mut, node_offset_t offset_to_right, char*& p_append) {
+    NodeExtentMutable& mut, node_offset_t offset_to_right, char*& p_append)
+{
   mut.copy_in_absolute(p_append, offset_to_right);
   p_append += sizeof(node_offset_t);
 }
@@ -61,7 +66,8 @@ template <typename SlotType>
 template <KeyT KT>
 void F013_T::insert_at(
     NodeExtentMutable& mut, const full_key_t<KT>& key,
-    const me_t& node, index_t index, node_offset_t size_right) {
+    const me_t& node, index_t index, node_offset_t size_right)
+{
   assert(index <= node.num_keys);
   update_size_at(mut, node, index, size_right);
   auto p_insert = const_cast<char*>(fields_start(node)) +
@@ -88,7 +94,8 @@ F013_TEMPLATE(slot_1_t);
 F013_TEMPLATE(slot_3_t);
 
 void node_fields_2_t::append_offset(
-    NodeExtentMutable& mut, node_offset_t offset_to_right, char*& p_append) {
+    NodeExtentMutable& mut, node_offset_t offset_to_right, char*& p_append)
+{
   mut.copy_in_absolute(p_append, offset_to_right);
   p_append += sizeof(node_offset_t);
 }
