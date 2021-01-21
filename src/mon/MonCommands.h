@@ -1235,6 +1235,9 @@ COMMAND("config-key dump "
 /*
  * mon/MgrMonitor.cc
  */
+COMMAND("mgr stat",
+	"dump basic info about the mgr cluster state",
+	"mgr", "r")
 COMMAND("mgr dump "
 	"name=epoch,type=CephInt,range=0,req=false",
 	"dump the latest MgrMap",

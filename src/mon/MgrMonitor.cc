@@ -953,7 +953,15 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(cmdmap, "prefix", prefix);
   int r = 0;
 
-  if (prefix == "mgr dump") {
+  if (prefix == "mgr stat") {
+    f->open_object_section("stat");
+    f->dump_unsigned("epoch", map.get_epoch());
+    f->dump_bool("available", map.get_available());
+    f->dump_string("active_name", map.get_active_name());
+    f->dump_unsigned("num_standby", map.get_num_standby());
+    f->close_section();
+    f->flush(rdata);
+  } else if (prefix == "mgr dump") {
     int64_t epoch = 0;
     cmd_getval(cmdmap, "epoch", epoch, (int64_t)map.get_epoch());
     if (epoch == (int64_t)map.get_epoch()) {
