@@ -12,34 +12,30 @@
 #include <optional>
 #include <seastar/core/future.hh>
 
-#include "osd/osd_types.h"
 #include "include/uuid.h"
 
 #include "os/Transaction.h"
-#include "crimson/os/seastore/segment_cleaner.h"
 #include "crimson/os/futurized_store.h"
-#include "transaction.h"
+#include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/onode_manager.h"
 
 namespace crimson::os::seastore {
 
 class SeastoreCollection;
-class SegmentManager;
-class OnodeManager;
 class Onode;
 using OnodeRef = boost::intrusive_ptr<Onode>;
-class Journal;
-class LBAManager;
 class TransactionManager;
-class Cache;
 
 class SeaStore final : public FuturizedStore {
   uuid_d osd_fsid;
 
 public:
 
-  SeaStore(const std::string& path);
-  ~SeaStore() final;
+  SeaStore(TransactionManager &tm) :
+    transaction_manager(tm) {}
 
+  ~SeaStore();
+    
   seastar::future<> stop() final;
   seastar::future<> mount() final;
   seastar::future<> umount() final;
@@ -119,14 +115,8 @@ public:
   }
 
 private:
-  std::unique_ptr<SegmentManager> segment_manager;
-  std::unique_ptr<SegmentCleaner> segment_cleaner;
-  std::unique_ptr<Cache> cache;
-  std::unique_ptr<Journal> journal;
-  std::unique_ptr<LBAManager> lba_manager;
-  std::unique_ptr<TransactionManager> transaction_manager;
+  TransactionManager &transaction_manager;
   std::unique_ptr<OnodeManager> onode_manager;
-
 
   using write_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;

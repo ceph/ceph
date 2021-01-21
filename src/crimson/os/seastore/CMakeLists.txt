@@ -37,6 +37,7 @@ add_library(crimson-seastore STATIC
   collection_manager/collection_flat_node.cc
   seastore.cc
   ../../../test/crimson/seastore/test_block.cc
+  ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
 	)
 target_link_libraries(crimson-seastore
   crimson)
