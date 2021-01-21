@@ -133,6 +133,10 @@ LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 {
 }
 
+void LogChannel::set_log_to_monitors(bool v) {
+  log_to_monitors = v;
+}
+
 void LogChannel::update_config(map<string,string> &log_to_monitors,
 			       map<string,string> &log_to_syslog,
 			       map<string,string> &log_channels,
