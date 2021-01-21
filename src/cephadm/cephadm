@@ -2192,10 +2192,10 @@ def _write_container_cmd_to_bash(file_obj, container, comment=None, background=F
         # unit file, makes it easier to read and grok.
         file_obj.write('# ' + comment + '\n')
     # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
-    file_obj.write('! '+ ' '.join(container.rm_cmd()) + '2> /dev/null\n')
+    file_obj.write('! '+ ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
     # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
     if 'podman' in container_path:
-        file_obj.write('! '+ ' '.join(container.rm_cmd(storage=True)) + '2> /dev/null\n')
+        file_obj.write('! '+ ' '.join(container.rm_cmd(storage=True)) + ' 2> /dev/null\n')
 
     # container run command
     file_obj.write(' '.join(container.run_cmd()) + (' &' if background else '') + '\n')
