@@ -122,7 +122,7 @@ class tree_cursor_t final
   tree_cursor_t(Ref<LeafNode>);
 
   const search_position_t& get_position() const { return position; }
-  Ref<LeafNode> get_leaf_node() { return ref_leaf_node; }
+  Ref<LeafNode> get_leaf_node() const { return ref_leaf_node; }
   template <bool VALIDATE>
   void update_track(Ref<LeafNode>, const search_position_t&);
   void update_cache(LeafNode&, const key_view_t&, const value_header_t*) const;
@@ -466,10 +466,10 @@ class LeafNode final : public Node {
       validate_cursor(cursor);
     }
     auto& cursor_pos = cursor.get_position();
-    assert(tracked_cursors.find(cursor_pos) == tracked_cursors.end());
-    tracked_cursors[cursor_pos] = &cursor;
+    assert(tracked_cursors.count(cursor_pos) == 0);
+    tracked_cursors.emplace(cursor_pos, &cursor);
   }
-  void do_untrack_cursor(tree_cursor_t& cursor) {
+  void do_untrack_cursor(const tree_cursor_t& cursor) {
     validate_cursor(cursor);
     auto& cursor_pos = cursor.get_position();
     assert(tracked_cursors.find(cursor_pos)->second == &cursor);
@@ -517,7 +517,7 @@ class LeafNode final : public Node {
     }
 #endif
   }
-  void validate_cursor(tree_cursor_t& cursor) const;
+  void validate_cursor(const tree_cursor_t& cursor) const;
   // invalidate p_value pointers in tree_cursor_t
   void on_layout_change() { ++layout_version; }
 
