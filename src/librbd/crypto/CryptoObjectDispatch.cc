@@ -201,6 +201,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
     int* object_dispatch_flags;
     uint64_t* journal_tid;
     Context* on_finish;
+    bool may_copyup;
     ceph::bufferlist aligned_data;
     io::ReadExtents extents;
     uint64_t version;
@@ -214,14 +215,15 @@ struct C_UnalignedObjectWriteRequest : public Context {
             IOContext io_context, int op_flags, int write_flags,
             std::optional<uint64_t> assert_version,
             const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
-            uint64_t* journal_tid,Context* on_dispatched
+            uint64_t* journal_tid, Context* on_dispatched, bool may_copyup
             ) : image_ctx(image_ctx), crypto(crypto), object_no(object_no),
                 object_off(object_off), data(data), cmp_data(cmp_data),
                 mismatch_offset(mismatch_offset), io_context(io_context),
                 op_flags(op_flags), write_flags(write_flags),
                 assert_version(assert_version), parent_trace(parent_trace),
                 object_dispatch_flags(object_dispatch_flags),
-                journal_tid(journal_tid), on_finish(on_dispatched) {
+                journal_tid(journal_tid), on_finish(on_dispatched),
+                may_copyup(may_copyup) {
       // build read extents
       auto [pre_align, post_align] = crypto->get_pre_and_post_align(
               object_off, data.length());
@@ -337,7 +339,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
       if (r < 0) {
         complete(r);
       } else {
-        restart_request();
+        restart_request(false);
       }
     }
 
@@ -345,13 +347,16 @@ struct C_UnalignedObjectWriteRequest : public Context {
       ldout(image_ctx->cct, 20) << "unaligned write r=" << r << dendl;
 
       if (r == -ENOENT) {
-        auto ctx = create_context_callback<
-                C_UnalignedObjectWriteRequest<I>,
-                &C_UnalignedObjectWriteRequest<I>::handle_copyup>(this);
-        if (io::util::trigger_copyup(image_ctx, object_no, io_context, ctx)) {
-          return;
+        if (may_copyup) {
+          auto ctx = create_context_callback<
+                  C_UnalignedObjectWriteRequest<I>,
+                  &C_UnalignedObjectWriteRequest<I>::handle_copyup>(this);
+          if (io::util::trigger_copyup(
+                  image_ctx, object_no, io_context, ctx)) {
+            return;
+          }
+          delete ctx;
         }
-        delete ctx;
         object_exists = false;
       } else if (r < 0) {
         complete(r);
@@ -388,13 +393,13 @@ struct C_UnalignedObjectWriteRequest : public Context {
       write_req->send();
     }
 
-    void restart_request() {
+    void restart_request(bool may_copyup) {
       auto req = new C_UnalignedObjectWriteRequest<I>(
               image_ctx, crypto, object_no, object_off,
               std::move(data), std::move(cmp_data),
               mismatch_offset, io_context, op_flags, write_flags,
               assert_version, parent_trace,
-              object_dispatch_flags, journal_tid, this);
+              object_dispatch_flags, journal_tid, this, may_copyup);
       req->send();
     }
 
@@ -409,7 +414,7 @@ struct C_UnalignedObjectWriteRequest : public Context {
       }
 
       if (restart) {
-        restart_request();
+        restart_request(may_copyup);
       } else {
         complete(r);
       }
@@ -491,7 +496,8 @@ bool CryptoObjectDispatch<I>::write(
     auto req = new C_UnalignedObjectWriteRequest<I>(
             m_image_ctx, m_crypto, object_no, object_off, std::move(data), {},
             nullptr, io_context, op_flags, write_flags, assert_version,
-            parent_trace, object_dispatch_flags, journal_tid, on_dispatched);
+            parent_trace, object_dispatch_flags, journal_tid, on_dispatched,
+            true);
     req->send();
   }
 
@@ -552,7 +558,7 @@ bool CryptoObjectDispatch<I>::compare_and_write(
           m_image_ctx, m_crypto, object_no, object_off, std::move(write_data),
           std::move(cmp_data), mismatch_offset, io_context, op_flags, 0,
           std::nullopt, parent_trace, object_dispatch_flags, journal_tid,
-          on_dispatched);
+          on_dispatched, true);
   req->send();
 
   return true;
