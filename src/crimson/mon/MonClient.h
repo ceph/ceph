@@ -90,6 +90,7 @@ public:
   void sub_unwant(const std::string& what);
   bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
   seastar::future<> renew_subs();
+  seastar::future<> wait_for_config();
 
   void print(std::ostream&) const;
 private:
@@ -173,6 +174,7 @@ private:
     seastar::promise<> pr;
   };
   std::deque<pending_msg_t> pending_messages;
+  std::optional<seastar::promise<>> config_updated;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Client& client) {

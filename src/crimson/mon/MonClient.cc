@@ -894,7 +894,11 @@ seastar::future<> Client::handle_log_ack(Ref<MLogAck> m)
 
 seastar::future<> Client::handle_config(Ref<MConfig> m)
 {
-  return crimson::common::local_conf().set_mon_vals(m->config);
+  return crimson::common::local_conf().set_mon_vals(m->config).then([this] {
+    if (config_updated) {
+      config_updated->set_value();
+    }
+  });
 }
 
 std::vector<unsigned> Client::get_random_mons(unsigned n) const
@@ -1108,6 +1112,13 @@ seastar::future<> Client::renew_subs()
   return send_message(m).then([this] {
     sub.renewed();
   });
+}
+
+seastar::future<> Client::wait_for_config()
+{
+  assert(!config_updated);
+  config_updated = seastar::promise<>();
+  return config_updated->get_future();
 }
 
 void Client::print(std::ostream& out) const
