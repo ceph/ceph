@@ -1256,7 +1256,7 @@ public:
     target_placement.inherit_from(oc.bucket->get_placement_rule());
     target_placement.storage_class = transition.storage_class;
 
-    if (!oc.store->get_zone_params().
+    if (!oc.store->get_zone()->get_params().
 	valid_placement(target_placement)) {
       ldpp_dout(oc.dpp, 0) << "ERROR: non existent dest placement: "
 			   << target_placement

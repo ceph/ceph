@@ -352,7 +352,7 @@ int radosgw_Main(int argc, const char **argv)
     return -r;
   }
 
-  rgw_rest_init(g_ceph_context, store->get_zonegroup());
+  rgw_rest_init(g_ceph_context, store->get_zone()->get_zonegroup());
 
   mutex.lock();
   init_timer.cancel_all_events();
@@ -449,7 +449,7 @@ int radosgw_Main(int argc, const char **argv)
                           set_logging(rest_filter(store, RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
-      if (store->get_zonegroup().zones.size() > 1) {
+      if (store->get_zone()->get_zonegroup().zones.size() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
              << " multi-site configuration requires another instance of RadosGW"
              << " with S3 API enabled!" << dendl;
@@ -632,7 +632,7 @@ int radosgw_Main(int argc, const char **argv)
   auto reloader = std::make_unique<RGWRealmReloader>(store,
 						     service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->get_realm());
+  RGWRealmWatcher realm_watcher(g_ceph_context, store->get_zone()->get_realm());
   realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 

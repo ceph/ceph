@@ -74,7 +74,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_current_period_id();
+    period = store->get_zone()->get_current_period_id();
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
       op_ret = -EINVAL;
@@ -152,7 +152,7 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_current_period_id();
+    period = store->get_zone()->get_current_period_id();
 
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
@@ -218,7 +218,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_current_period_id();
+    period = store->get_zone()->get_current_period_id();
 
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
@@ -245,7 +245,7 @@ void RGWOp_MDLog_Lock::execute(optional_yield y) {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_current_period_id();
+    period = store->get_zone()->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -293,7 +293,7 @@ void RGWOp_MDLog_Unlock::execute(optional_yield y) {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone->get_current_period_id();
+    period = store->get_zone()->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -847,7 +847,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
     }
   }
 
-  const auto& local_zone_id = store->get_zone_id();
+  const auto& local_zone_id = store->get_zone()->get_id();
 
   if (!merge) {
     rgw_sync_bucket_pipe pipe;

@@ -629,13 +629,13 @@ class ExpandMetaVar {
   map<string, string> meta_map;
 
 public:
-  ExpandMetaVar(RGWSI_Zone *zone_svc) {
+  ExpandMetaVar(rgw::sal::Zone *zone_svc) {
     meta_map["realm"] = zone_svc->get_realm().get_name();
     meta_map["realm_id"] = zone_svc->get_realm().get_id();
     meta_map["zonegroup"] = zone_svc->get_zonegroup().get_name();
     meta_map["zonegroup_id"] = zone_svc->get_zonegroup().get_id();
-    meta_map["zone"] = zone_svc->zone_name();
-    meta_map["zone_id"] = zone_svc->zone_id().id;
+    meta_map["zone"] = zone_svc->get_name();
+    meta_map["zone_id"] = zone_svc->get_id().id;
   }
 
   string process_str(const string& in);
@@ -815,7 +815,7 @@ int AsioFrontend::init_ssl()
       key_is_cert = true;
     }
 
-    ExpandMetaVar emv(static_cast<rgw::sal::RGWRadosStore*>(env.store)->svc()->zone);
+    ExpandMetaVar emv(env.store->get_zone());
 
     cert = emv.process_str(*cert);
     key = emv.process_str(*key);

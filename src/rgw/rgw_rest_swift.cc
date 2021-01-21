@@ -711,7 +711,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
     policy.create_default(s->user->get_id(), s->user->get_display_name());
   }
 
-  location_constraint = store->get_zonegroup().api_name;
+  location_constraint = store->get_zone()->get_zonegroup().api_name;
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
   placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""), s->info.storage_class);
@@ -1896,7 +1896,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   }
 
   formatter.open_array_section("policies");
-  const RGWZoneGroup& zonegroup = store->get_zonegroup();
+  const RGWZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
 
   for (const auto& placement_targets : zonegroup.placement_targets) {
     formatter.open_object_section("policy");

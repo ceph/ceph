@@ -148,7 +148,7 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
 
 int RGWOrphanStore::init()
 {
-  const rgw_pool& log_pool = store->get_zone_params().log_pool;
+  const rgw_pool& log_pool = store->get_zone()->get_params().log_pool;
   int r = rgw_init_ioctx(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_rados_handle(), log_pool, ioctx);
   if (r < 0) {
     cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
