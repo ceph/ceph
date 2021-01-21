@@ -205,14 +205,13 @@ def uninstall_pkgs(ctx, remote, downstream_config):
     :param remote: the teuthology.orchestra.remote.Remote object
     :param downstream_config the dict object that has downstream pkg info
     """
-    rh_rpm_pkgs = downstream_config.get('pkgs').get('rpm')
-    rpm_pkgs = str.join(' ', rh_rpm_pkgs)
-
-    rh_deb_pkgs = downstream_config.get('pkgs').get('deb')
-    deb_pkgs = str.join(' ', rh_deb_pkgs)
 
     if remote.os.name == 'rhel':
-        remote.run(args=['sudo', 'yum', 'remove', run.Raw(rpm_pkgs), '-y'])
+        pkgs = downstream_config.get('pkgs').get('rpm')
+        if pkgs:
+            remote.sh(['sudo', 'yum', 'remove'] + pkgs + ['-y'])
     else:
-        remote.run(args=['sudo', 'apt-get', 'remove', run.Raw(deb_pkgs), '-y'])
+        pkgs = downstream_config.get('pkgs').get('deb') 
+        if pkgs:
+            remote.sh(['sudo', 'apt-get', 'remove'] + pkgs + ['-y'])
     remote.run(args=['sudo', 'rm', '-rf', '/var/lib/ceph'])
