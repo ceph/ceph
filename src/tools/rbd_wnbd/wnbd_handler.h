@@ -128,8 +128,8 @@ private:
     WnbdRequestType req_type = WnbdReqTypeUnknown;
     uint64_t req_handle = 0;
     uint32_t err_code = 0;
-    uint32_t req_size;
-    uint32_t req_from;
+    size_t req_size;
+    uint64_t req_from;
     bufferlist data;
 
     IOContext()
