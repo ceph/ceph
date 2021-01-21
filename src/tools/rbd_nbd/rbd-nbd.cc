@@ -1009,7 +1009,8 @@ static int parse_nbd_index(const std::string& devpath)
   return index;
 }
 
-static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
+static int try_ioctl_setup(Config *cfg, int fd, uint64_t size,
+                           uint64_t blksize, uint64_t flags)
 {
   int index = 0, r;
 
@@ -1072,7 +1073,7 @@ static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
     }
   }
 
-  r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
+  r = ioctl(nbd, NBD_SET_BLKSIZE, blksize);
   if (r < 0) {
     r = -errno;
     cerr << "rbd-nbd: NBD_SET_BLKSIZE failed" << std::endl;
@@ -1560,6 +1561,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   int read_only = 0;
   unsigned long flags;
   unsigned long size;
+  unsigned long blksize = RBD_NBD_BLKSIZE;
   bool use_netlink;
 
   int fd[2];
@@ -1677,6 +1679,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
         opts.passphrase = passphrase;
         r = image.encryption_load(
                 RBD_ENCRYPTION_FORMAT_LUKS2, &opts, sizeof(opts));
+        blksize = 4096;
         break;
       }
       default:
@@ -1728,7 +1731,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   }
 
   if (!use_netlink) {
-    r = try_ioctl_setup(cfg, fd[0], size, flags);
+    r = try_ioctl_setup(cfg, fd[0], size, blksize, flags);
     if (r < 0)
       goto free_server;
   }
