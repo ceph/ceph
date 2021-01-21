@@ -117,9 +117,7 @@ public:
     do_log(CLOG_SEC, s);
   }
 
-  void set_log_to_monitors(bool v) {
-    log_to_monitors = v;
-  }
+  void set_log_to_monitors(bool v);
   void set_log_to_syslog(bool v) {
     log_to_syslog = v;
   }
