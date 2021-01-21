@@ -37,10 +37,6 @@ describe('OSDs page', () => {
         osds.getExpandCollapseElement().click();
       });
 
-      it('should verify that selected footer increases', () => {
-        osds.getTableSelectedCount().should('equal', 1);
-      });
-
       it('should show the correct text for the tab labels', () => {
         cy.get('#tabset-osd-details > div > tab').then(($tabs) => {
           const tabHeadings = $tabs.map((_i, e) => e.getAttribute('heading')).get();
