@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
-from teuthology.exceptions import ConfigError
+from teuthology.exceptions import ConfigError, CommandFailedError
 
 
 log = logging.getLogger(__name__)
@@ -65,8 +65,20 @@ def download(ctx, config):
         log.info('Extracting vault...')
         ctx.cluster.only(client).run(args=['mkdir', '-p', install_dir])
         # Using python in case unzip is not installed on hosts
-        ctx.cluster.only(client).run(
-            args=['python', '-m', 'zipfile', '-e', install_zip, install_dir])
+        # Using python3 in case python is not installed on hosts
+        failed=True
+        for f in [
+                lambda z,d: ['unzip', z, '-d', d],
+                lambda z,d: ['python3', '-m', 'zipfile', '-e', z, d],
+                lambda z,d: ['python', '-m', 'zipfile', '-e', z, d]]:
+            try:
+                ctx.cluster.only(client).run(args=f(install_zip, install_dir))
+                failed = False
+                break
+            except CommandFailedError as e:
+                failed = e
+        if failed:
+            raise failed
 
     try:
         yield
