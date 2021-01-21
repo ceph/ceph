@@ -235,18 +235,9 @@ class CephadmServe:
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self._run_cephadm(
-                host, 'mon', 'ls', [], no_fsid=True)
-            if code:
-                return 'host %s cephadm ls returned %d: %s' % (
-                    host, code, err)
-            ls = json.loads(''.join(out))
-        except ValueError:
-            msg = 'host %s scrape failed: Cannot decode JSON' % host
-            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
-            return msg
-        except Exception as e:
-            return 'host %s scrape failed: %s' % (host, e)
+            ls = self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True)
+        except OrchestratorError as e:
+            return str(e)
         dm = {}
         for d in ls:
             if not d['style'].startswith('cephadm'):
@@ -292,51 +283,22 @@ class CephadmServe:
 
     def _refresh_facts(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self._run_cephadm(
-                host, cephadmNoImage, 'gather-facts', [],
-                error_ok=True, no_fsid=True)
+            val = self._run_cephadm_json(host, cephadmNoImage, 'gather-facts', [], no_fsid=True)
+        except OrchestratorError as e:
+            return str(e)
 
-            if code:
-                return 'host %s gather-facts returned %d: %s' % (
-                    host, code, err)
-        except Exception as e:
-            return 'host %s gather facts failed: %s' % (host, e)
-        self.log.debug('Refreshed host %s facts' % (host))
-        self.mgr.cache.update_host_facts(host, json.loads(''.join(out)))
+        self.mgr.cache.update_host_facts(host, val)
+
         return None
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self._run_cephadm(
-                host, 'osd',
-                'ceph-volume',
-                ['--', 'inventory', '--format=json', '--filter-for-batch'])
-            if code:
-                return 'host %s ceph-volume inventory returned %d: %s' % (
-                    host, code, err)
-            devices = json.loads(''.join(out))
-        except ValueError:
-            msg = 'host %s scrape failed: Cannot decode JSON' % host
-            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
-            return msg
-        except Exception as e:
-            return 'host %s ceph-volume inventory failed: %s' % (host, e)
-        try:
-            out, err, code = self._run_cephadm(
-                host, 'mon',
-                'list-networks',
-                [],
-                no_fsid=True)
-            if code:
-                return 'host %s list-networks returned %d: %s' % (
-                    host, code, err)
-            networks = json.loads(''.join(out))
-        except ValueError:
-            msg = 'host %s scrape failed: Cannot decode JSON' % host
-            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
-            return msg
-        except Exception as e:
-            return 'host %s list-networks failed: %s' % (host, e)
+            devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                                             ['--', 'inventory', '--format=json', '--filter-for-batch'])
+            networks = self._run_cephadm_json(host, 'mon', 'list-networks', [], no_fsid=True)
+        except OrchestratorError as e:
+            return str(e)
+
         self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
             host, len(devices), len(networks)))
         devices = inventory.Devices.from_json(devices)
@@ -894,6 +856,28 @@ class CephadmServe:
 
             return "Removed {} from host '{}'".format(name, host)
 
+    def _run_cephadm_json(self,
+                          host: str,
+                          entity: Union[CephadmNoImage, str],
+                          command: str,
+                          args: List[str],
+                          no_fsid: Optional[bool] = False,
+                          image: Optional[str] = "",
+                          ) -> Any:
+        try:
+            out, err, code = self._run_cephadm(
+                host, entity, command, args, no_fsid=no_fsid, image=image)
+            if code:
+                raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
+        except Exception as e:
+            raise OrchestratorError(f'host {host} `cephadm {command}` failed: {e}')
+        try:
+            return json.loads(''.join(out))
+        except (ValueError, KeyError):
+            msg = f'host {host} `cephadm {command}` failed: Cannot decode JSON'
+            self.log.exception(f'{msg}: {"".join(out)}')
+            raise OrchestratorError(msg)
+
     def _run_cephadm(self,
                      host: str,
                      entity: Union[CephadmNoImage, str],
@@ -1003,27 +987,16 @@ class CephadmServe:
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
             self._registry_login(host, self.mgr.registry_url,
                                  self.mgr.registry_username, self.mgr.registry_password)
-        out, err, code = self._run_cephadm(
-            host, '', 'pull', [],
-            image=image_name,
-            no_fsid=True,
-            error_ok=True)
-        if code:
-            raise OrchestratorError('Failed to pull %s on %s: %s' % (
-                image_name, host, '\n'.join(out)))
-        try:
-            j = json.loads('\n'.join(out))
-            r = ContainerInspectInfo(
-                j['image_id'],
-                j.get('ceph_version'),
-                j.get('repo_digest')
-            )
-            self.log.debug(f'image {image_name} -> {r}')
-            return r
-        except (ValueError, KeyError) as _:
-            msg = 'Failed to pull %s on %s: Cannot decode JSON' % (image_name, host)
-            self.log.exception('%s: \'%s\'' % (msg, '\n'.join(out)))
-            raise OrchestratorError(msg)
+
+        j = self._run_cephadm_json(host, '', 'pull', [], image=image_name, no_fsid=True)
+
+        r = ContainerInspectInfo(
+            j['image_id'],
+            j.get('ceph_version'),
+            j.get('repo_digest')
+        )
+        self.log.debug(f'image {image_name} -> {r}')
+        return r
 
     # function responsible for logging single host into custom registry
     def _registry_login(self, host: str, url: Optional[str], username: Optional[str], password: Optional[str]) -> Optional[str]:
