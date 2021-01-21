@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 DEFAULT_NUM_DISKS = 2
 DEFAULT_IMAGE_URL = 'http://download.ceph.com/qa/ubuntu-12.04.qcow2'
 DEFAULT_IMAGE_SIZE = 10240 # in megabytes
+ENCRYPTION_HEADER_SIZE = 16 # in megabytes
 DEFAULT_CPUS = 1
 DEFAULT_MEM = 4096 # in megabytes
 
@@ -81,11 +82,14 @@ def create_images(ctx, config, managers):
                     'image_url' in disk and
                     disk['encryption_format'] == 'none'):
                 continue
+            image_size = disk['image_size']
+            if disk['encryption_format'] != 'none':
+                image_size += ENCRYPTION_HEADER_SIZE
             create_config = {
                 client: {
                     'image_name': disk['image_name'],
                     'image_format': 2,
-                    'image_size': disk['image_size'],
+                    'image_size': image_size,
                     'encryption_format': disk['encryption_format'],
                     }
                 }
