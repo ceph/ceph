@@ -14,7 +14,8 @@ template <node_type_t NODE_TYPE>
 template <KeyT KT>
 memory_range_t ITER_T::insert_prefix(
     NodeExtentMutable& mut, const ITER_T& iter, const full_key_t<KT>& key,
-    bool is_end, node_offset_t size, const char* p_left_bound) {
+    bool is_end, node_offset_t size, const char* p_left_bound)
+{
   // 1. insert range
   char* p_insert;
   if (is_end) {
@@ -51,7 +52,8 @@ IP_TEMPLATE(node_type_t::INTERNAL, KeyT::HOBJ);
 
 template <node_type_t NODE_TYPE>
 void ITER_T::update_size(
-    NodeExtentMutable& mut, const ITER_T& iter, int change) {
+    NodeExtentMutable& mut, const ITER_T& iter, int change)
+{
   node_offset_t offset = iter.get_back_offset();
   int new_size = change + offset;
   assert(new_size > 0 && new_size < NODE_BLOCK_SIZE);
@@ -60,7 +62,8 @@ void ITER_T::update_size(
 }
 
 template <node_type_t NODE_TYPE>
-node_offset_t ITER_T::trim_until(NodeExtentMutable&, const ITER_T& iter) {
+node_offset_t ITER_T::trim_until(NodeExtentMutable&, const ITER_T& iter)
+{
   assert(iter.index() != 0);
   size_t ret = iter.p_end() - iter.p_items_start;
   assert(ret < NODE_BLOCK_SIZE);
@@ -69,7 +72,8 @@ node_offset_t ITER_T::trim_until(NodeExtentMutable&, const ITER_T& iter) {
 
 template <node_type_t NODE_TYPE>
 node_offset_t ITER_T::trim_at(
-    NodeExtentMutable& mut, const ITER_T& iter, node_offset_t trimmed) {
+    NodeExtentMutable& mut, const ITER_T& iter, node_offset_t trimmed)
+{
   size_t trim_size = iter.p_start() - iter.p_items_start + trimmed;
   assert(trim_size < NODE_BLOCK_SIZE);
   assert(iter.get_back_offset() > trimmed);
@@ -86,7 +90,8 @@ ITER_TEMPLATE(node_type_t::INTERNAL);
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
-bool APPEND_T::append(const ITER_T& src, index_t& items) {
+bool APPEND_T::append(const ITER_T& src, index_t& items)
+{
   auto p_end = src.p_end();
   bool append_till_end = false;
   if (is_valid_index(items)) {
@@ -130,7 +135,8 @@ bool APPEND_T::append(const ITER_T& src, index_t& items) {
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
 std::tuple<NodeExtentMutable*, char*>
-APPEND_T::open_nxt(const key_get_type& partial_key) {
+APPEND_T::open_nxt(const key_get_type& partial_key)
+{
   p_append -= sizeof(node_offset_t);
   p_offset_while_open = p_append;
   ns_oid_view_t::append(*p_mut, partial_key, p_append);
@@ -140,7 +146,8 @@ APPEND_T::open_nxt(const key_get_type& partial_key) {
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
 std::tuple<NodeExtentMutable*, char*>
-APPEND_T::open_nxt(const full_key_t<KT>& key) {
+APPEND_T::open_nxt(const full_key_t<KT>& key)
+{
   p_append -= sizeof(node_offset_t);
   p_offset_while_open = p_append;
   ns_oid_view_t::append<KT>(*p_mut, key, p_append);
@@ -149,7 +156,8 @@ APPEND_T::open_nxt(const full_key_t<KT>& key) {
 
 template <node_type_t NODE_TYPE>
 template <KeyT KT>
-void APPEND_T::wrap_nxt(char* _p_append) {
+void APPEND_T::wrap_nxt(char* _p_append)
+{
   assert(_p_append < p_append);
   p_mut->copy_in_absolute(
       p_offset_while_open, node_offset_t(p_offset_while_open - _p_append));

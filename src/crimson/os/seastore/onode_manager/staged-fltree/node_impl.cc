@@ -13,7 +13,8 @@ last_split_info_t last_split = {};
 // XXX: branchless allocation
 InternalNodeImpl::alloc_ertr::future<InternalNodeImpl::fresh_impl_t>
 InternalNodeImpl::allocate(
-    context_t c, field_type_t type, bool is_level_tail, level_t level) {
+    context_t c, field_type_t type, bool is_level_tail, level_t level)
+{
   if (type == field_type_t::N0) {
     return InternalNode0::allocate(c, is_level_tail, level);
   } else if (type == field_type_t::N1) {
@@ -29,7 +30,8 @@ InternalNodeImpl::allocate(
 
 LeafNodeImpl::alloc_ertr::future<LeafNodeImpl::fresh_impl_t>
 LeafNodeImpl::allocate(
-    context_t c, field_type_t type, bool is_level_tail) {
+    context_t c, field_type_t type, bool is_level_tail)
+{
   if (type == field_type_t::N0) {
     return LeafNode0::allocate(c, is_level_tail, 0);
   } else if (type == field_type_t::N1) {
@@ -44,7 +46,8 @@ LeafNodeImpl::allocate(
 }
 
 InternalNodeImplURef InternalNodeImpl::load(
-    NodeExtentRef extent, field_type_t type, bool expect_is_level_tail) {
+    NodeExtentRef extent, field_type_t type, bool expect_is_level_tail)
+{
   if (type == field_type_t::N0) {
     return InternalNode0::load(extent, expect_is_level_tail);
   } else if (type == field_type_t::N1) {
@@ -59,7 +62,8 @@ InternalNodeImplURef InternalNodeImpl::load(
 }
 
 LeafNodeImplURef LeafNodeImpl::load(
-    NodeExtentRef extent, field_type_t type, bool expect_is_level_tail) {
+    NodeExtentRef extent, field_type_t type, bool expect_is_level_tail)
+{
   if (type == field_type_t::N0) {
     return LeafNode0::load(extent, expect_is_level_tail);
   } else if (type == field_type_t::N1) {

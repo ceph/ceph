@@ -16,7 +16,8 @@ template <class ValueT=void>
 using future = Value::future<ValueT>;
 
 ceph::bufferlist&
-ValueDeltaRecorder::get_encoded(NodeExtentMutable& payload_mut) {
+ValueDeltaRecorder::get_encoded(NodeExtentMutable& payload_mut)
+{
   ceph::encode(node_delta_op_t::SUBOP_UPDATE_VALUE, encoded);
   node_offset_t offset = payload_mut.get_node_offset();
   assert(offset > sizeof(value_header_t));
@@ -32,7 +33,8 @@ Value::Value(NodeExtentManager& nm,
 
 Value::~Value() {}
 
-future<> Value::extend(Transaction& t, value_size_t extend_size) {
+future<> Value::extend(Transaction& t, value_size_t extend_size)
+{
   auto target_size = get_payload_size() + extend_size;
   return p_cursor->extend_value(get_context(t), extend_size
   ).safe_then([this, target_size] {
@@ -40,7 +42,8 @@ future<> Value::extend(Transaction& t, value_size_t extend_size) {
   });
 }
 
-future<> Value::trim(Transaction& t, value_size_t trim_size) {
+future<> Value::trim(Transaction& t, value_size_t trim_size)
+{
   assert(get_payload_size() > trim_size);
   auto target_size = get_payload_size() - trim_size;
   return p_cursor->trim_value(get_context(t), trim_size
@@ -49,18 +52,21 @@ future<> Value::trim(Transaction& t, value_size_t trim_size) {
   });
 }
 
-const value_header_t* Value::read_value_header() const {
+const value_header_t* Value::read_value_header() const
+{
   return p_cursor->read_value_header(vb.get_header_magic());
 }
 
 std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
-Value::do_prepare_mutate_payload(Transaction& t) {
+Value::do_prepare_mutate_payload(Transaction& t)
+{
    return p_cursor->prepare_mutate_value_payload(get_context(t));
 }
 
 std::unique_ptr<ValueDeltaRecorder>
 build_value_recorder_by_type(ceph::bufferlist& encoded,
-                             const value_magic_t& magic) {
+                             const value_magic_t& magic)
+{
   std::unique_ptr<ValueDeltaRecorder> ret;
   switch (magic) {
   case value_magic_t::TEST:

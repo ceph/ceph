@@ -11,7 +11,8 @@ template <KeyT KT>
 const laddr_packed_t* internal_sub_items_t::insert_at(
     NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
     const full_key_t<KT>& key, const laddr_t& value,
-    index_t index, node_offset_t size, const char* p_left_bound) {
+    index_t index, node_offset_t size, const char* p_left_bound)
+{
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
   const char* p_shift_start = p_left_bound;
@@ -33,7 +34,8 @@ IA_TEMPLATE(KeyT::VIEW);
 IA_TEMPLATE(KeyT::HOBJ);
 
 node_offset_t internal_sub_items_t::trim_until(
-    NodeExtentMutable&, internal_sub_items_t& items, index_t index) {
+    NodeExtentMutable&, internal_sub_items_t& items, index_t index)
+{
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
@@ -44,7 +46,8 @@ node_offset_t internal_sub_items_t::trim_until(
 
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
-    const internal_sub_items_t& src, index_t from, index_t items) {
+    const internal_sub_items_t& src, index_t from, index_t items)
+{
   assert(from <= src.keys());
   if (items == 0) {
     return;
@@ -59,7 +62,8 @@ void internal_sub_items_t::Appender<KT>::append(
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
     const full_key_t<KT>& key, const laddr_t& value,
-    const laddr_packed_t*& p_value) {
+    const laddr_packed_t*& p_value)
+{
   p_append -= sizeof(internal_sub_item_t);
   auto item = internal_sub_item_t{
     snap_gen_t::from_key<KT>(key), laddr_packed_t{value}};
@@ -71,7 +75,8 @@ template <KeyT KT>
 const value_header_t* leaf_sub_items_t::insert_at(
     NodeExtentMutable& mut, const leaf_sub_items_t& sub_items,
     const full_key_t<KT>& key, const value_config_t& value,
-    index_t index, node_offset_t size, const char* p_left_bound) {
+    index_t index, node_offset_t size, const char* p_left_bound)
+{
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
   // a. [... item(index)] << size
@@ -117,7 +122,8 @@ template const value_header_t* leaf_sub_items_t::insert_at<KeyT::HOBJ>(
     const value_config_t&, index_t, node_offset_t, const char*);
 
 node_offset_t leaf_sub_items_t::trim_until(
-    NodeExtentMutable& mut, leaf_sub_items_t& items, index_t index) {
+    NodeExtentMutable& mut, leaf_sub_items_t& items, index_t index)
+{
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
@@ -146,7 +152,8 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 template <KeyT KT>
-char* leaf_sub_items_t::Appender<KT>::wrap() {
+char* leaf_sub_items_t::Appender<KT>::wrap()
+{
   auto p_cur = p_append;
   num_keys_t num_keys = 0;
   for (auto i = 0u; i < cnt; ++i) {

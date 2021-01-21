@@ -14,9 +14,12 @@
 #include "stages/node_stage_layout.h"
 
 namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_filestore);
-  }
+
+seastar::logger& logger()
+{
+  return crimson::get_logger(ceph_subsys_filestore);
+}
+
 }
 
 namespace crimson::os::seastore::onode {
@@ -30,7 +33,8 @@ using node_future = Node::node_future<ValueT>;
  */
 
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
-      : ref_leaf_node{node}, position{pos} {
+      : ref_leaf_node{node}, position{pos}
+{
   assert(!is_end());
   ref_leaf_node->do_track_cursor<true>(*this);
 }
@@ -38,35 +42,41 @@ tree_cursor_t::tree_cursor_t(Ref<LeafNode> node, const search_position_t& pos)
 tree_cursor_t::tree_cursor_t(
     Ref<LeafNode> node, const search_position_t& pos,
     const key_view_t& key_view, const value_header_t* p_value_header)
-      : ref_leaf_node{node}, position{pos} {
+      : ref_leaf_node{node}, position{pos}
+{
   assert(!is_end());
   update_cache(*node, key_view, p_value_header);
   ref_leaf_node->do_track_cursor<true>(*this);
 }
 
 tree_cursor_t::tree_cursor_t(Ref<LeafNode> node)
-      : ref_leaf_node{node}, position{search_position_t::end()} {
+      : ref_leaf_node{node}, position{search_position_t::end()}
+{
   assert(is_end());
   assert(ref_leaf_node->is_level_tail());
 }
 
-tree_cursor_t::~tree_cursor_t() {
+tree_cursor_t::~tree_cursor_t()
+{
   if (!is_end()) {
     ref_leaf_node->do_untrack_cursor(*this);
   }
 }
 
-node_future<> tree_cursor_t::extend_value(context_t c, value_size_t extend_size) {
+node_future<> tree_cursor_t::extend_value(context_t c, value_size_t extend_size)
+{
   return ref_leaf_node->extend_value(c, position, extend_size);
 }
 
-node_future<> tree_cursor_t::trim_value(context_t c, value_size_t trim_size) {
+node_future<> tree_cursor_t::trim_value(context_t c, value_size_t trim_size)
+{
   return ref_leaf_node->trim_value(c, position, trim_size);
 }
 
 template <bool VALIDATE>
 void tree_cursor_t::update_track(
-    Ref<LeafNode> node, const search_position_t& pos) {
+    Ref<LeafNode> node, const search_position_t& pos)
+{
   // the cursor must be already untracked
   // track the new node and new pos
   assert(!pos.is_end());
@@ -81,14 +91,16 @@ template void tree_cursor_t::update_track<false>(Ref<LeafNode>, const search_pos
 
 void tree_cursor_t::update_cache(LeafNode& node,
                                  const key_view_t& key_view,
-                                 const value_header_t* p_value_header) const {
+                                 const value_header_t* p_value_header) const
+{
   assert(!is_end());
   assert(ref_leaf_node.get() == &node);
   cache.update(node, key_view, p_value_header);
   cache.validate_is_latest(node, position);
 }
 
-void tree_cursor_t::maybe_update_cache(value_magic_t magic) const {
+void tree_cursor_t::maybe_update_cache(value_magic_t magic) const
+{
   assert(!is_end());
   if (!cache.is_latest()) {
     auto [key_view, p_value_header] = ref_leaf_node->get_kv(position);
@@ -104,13 +116,15 @@ void tree_cursor_t::maybe_update_cache(value_magic_t magic) const {
 
 tree_cursor_t::Cache::Cache() = default;
 
-bool tree_cursor_t::Cache::is_latest() const {
+bool tree_cursor_t::Cache::is_latest() const
+{
   return (valid && (version == p_leaf_node->get_layout_version()));
 }
 
 void tree_cursor_t::Cache::update(LeafNode& node,
                                   const key_view_t& _key_view,
-                                  const value_header_t* _p_value_header) {
+                                  const value_header_t* _p_value_header)
+{
   assert(_p_value_header);
   p_leaf_node = &node;
   version = node.get_layout_version();
@@ -123,7 +137,8 @@ void tree_cursor_t::Cache::update(LeafNode& node,
 }
 
 void tree_cursor_t::Cache::validate_is_latest(const LeafNode& node,
-                                              const search_position_t& pos) const {
+                                              const search_position_t& pos) const
+{
   assert(p_leaf_node == &node);
   assert(is_latest());
 #ifndef NDEBUG
@@ -134,7 +149,8 @@ void tree_cursor_t::Cache::validate_is_latest(const LeafNode& node,
 }
 
 std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
-tree_cursor_t::Cache::prepare_mutate_value_payload(context_t c) {
+tree_cursor_t::Cache::prepare_mutate_value_payload(context_t c)
+{
   assert(is_latest());
   assert(p_leaf_node && p_value_header);
   assert(p_value_header->magic == c.vb.get_header_magic());
@@ -152,7 +168,8 @@ tree_cursor_t::Cache::prepare_mutate_value_payload(context_t c) {
 
 Node::Node(NodeImplURef&& impl) : impl{std::move(impl)} {}
 
-Node::~Node() {
+Node::~Node()
+{
   // XXX: tolerate failure between allocate() and as_child()
   if (is_root()) {
     super->do_untrack_root(*this);
@@ -161,12 +178,14 @@ Node::~Node() {
   }
 }
 
-level_t Node::level() const {
+level_t Node::level() const
+{
   return impl->level();
 }
 
 node_future<Node::search_result_t> Node::lower_bound(
-    context_t c, const key_hobj_t& key) {
+    context_t c, const key_hobj_t& key)
+{
   return seastar::do_with(
     MatchHistory(), [this, c, &key](auto& history) {
       return lower_bound_tracked(c, key, history);
@@ -175,7 +194,8 @@ node_future<Node::search_result_t> Node::lower_bound(
 }
 
 node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
-    context_t c, const key_hobj_t& key, value_config_t vconf) {
+    context_t c, const key_hobj_t& key, value_config_t vconf)
+{
   return seastar::do_with(
     MatchHistory(), [this, c, &key, vconf](auto& history) {
       return lower_bound_tracked(c, key, history
@@ -197,7 +217,8 @@ node_future<std::pair<Ref<tree_cursor_t>, bool>> Node::insert(
   );
 }
 
-node_future<tree_stats_t> Node::get_tree_stats(context_t c) {
+node_future<tree_stats_t> Node::get_tree_stats(context_t c)
+{
   return seastar::do_with(
     tree_stats_t(), [this, c](auto& stats) {
       return do_get_tree_stats(c, stats).safe_then([&stats] {
@@ -207,26 +228,31 @@ node_future<tree_stats_t> Node::get_tree_stats(context_t c) {
   );
 }
 
-std::ostream& Node::dump(std::ostream& os) const {
+std::ostream& Node::dump(std::ostream& os) const
+{
   return impl->dump(os);
 }
 
-std::ostream& Node::dump_brief(std::ostream& os) const {
+std::ostream& Node::dump_brief(std::ostream& os) const
+{
   return impl->dump_brief(os);
 }
 
 void Node::test_make_destructable(
-    context_t c, NodeExtentMutable& mut, Super::URef&& _super) {
+    context_t c, NodeExtentMutable& mut, Super::URef&& _super)
+{
   impl->test_set_tail(mut);
   make_root(c, std::move(_super));
 }
 
-node_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker) {
+node_future<> Node::mkfs(context_t c, RootNodeTracker& root_tracker)
+{
   return LeafNode::allocate_root(c, root_tracker
   ).safe_then([](auto ret) { /* FIXME: discard_result(); */ });
 }
 
-node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracker) {
+node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracker)
+{
   return c.nm.get_super(c.t, root_tracker
   ).safe_then([c, &root_tracker](auto&& _super) {
     auto root_addr = _super->get_root_laddr();
@@ -244,12 +270,14 @@ node_future<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tracke
   });
 }
 
-void Node::make_root(context_t c, Super::URef&& _super) {
+void Node::make_root(context_t c, Super::URef&& _super)
+{
   _super->write_root_laddr(c, impl->laddr());
   as_root(std::move(_super));
 }
 
-void Node::as_root(Super::URef&& _super) {
+void Node::as_root(Super::URef&& _super)
+{
   assert(!super && !_parent_info);
   assert(_super->get_root_laddr() == impl->laddr());
   assert(impl->is_level_tail());
@@ -257,7 +285,8 @@ void Node::as_root(Super::URef&& _super) {
   super->do_track_root(*this);
 }
 
-node_future<> Node::upgrade_root(context_t c) {
+node_future<> Node::upgrade_root(context_t c)
+{
   assert(is_root());
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
@@ -269,7 +298,8 @@ node_future<> Node::upgrade_root(context_t c) {
 }
 
 template <bool VALIDATE>
-void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node) {
+void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
+{
   assert(!super);
   _parent_info = parent_info_t{pos, parent_node};
   parent_info().ptr->do_track_child<VALIDATE>(*this);
@@ -277,7 +307,8 @@ void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
 template void Node::as_child<true>(const search_position_t&, Ref<InternalNode>);
 template void Node::as_child<false>(const search_position_t&, Ref<InternalNode>);
 
-node_future<> Node::insert_parent(context_t c, Ref<Node> right_node) {
+node_future<> Node::insert_parent(context_t c, Ref<Node> right_node)
+{
   assert(!is_root());
   // TODO(cross-node string dedup)
   return parent_info().ptr->apply_child_split(
@@ -285,7 +316,8 @@ node_future<> Node::insert_parent(context_t c, Ref<Node> right_node) {
 }
 
 node_future<Ref<Node>> Node::load(
-    context_t c, laddr_t addr, bool expect_is_level_tail) {
+    context_t c, laddr_t addr, bool expect_is_level_tail)
+{
   // NOTE:
   // *option1: all types of node have the same length;
   // option2: length is defined by node/field types;
@@ -314,7 +346,8 @@ InternalNode::InternalNode(InternalNodeImpl* impl, NodeImplURef&& impl_ref)
 
 node_future<> InternalNode::apply_child_split(
     context_t c, const search_position_t& pos,
-    Ref<Node> left_child, Ref<Node> right_child) {
+    Ref<Node> left_child, Ref<Node> right_child)
+{
 #ifndef NDEBUG
   if (pos.is_end()) {
     assert(impl->is_level_tail());
@@ -380,7 +413,8 @@ node_future<> InternalNode::apply_child_split(
 
 node_future<Ref<InternalNode>> InternalNode::allocate_root(
     context_t c, level_t old_root_level,
-    laddr_t old_root_addr, Super::URef&& super) {
+    laddr_t old_root_addr, Super::URef&& super)
+{
   return InternalNode::allocate(c, field_type_t::N0, true, old_root_level + 1
   ).safe_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
@@ -394,7 +428,8 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
 }
 
 node_future<Ref<tree_cursor_t>>
-InternalNode::lookup_smallest(context_t c) {
+InternalNode::lookup_smallest(context_t c)
+{
   auto position = search_position_t::begin();
   laddr_t child_addr = impl->get_p_value(position)->value;
   return get_or_track_child(c, position, child_addr
@@ -404,7 +439,8 @@ InternalNode::lookup_smallest(context_t c) {
 }
 
 node_future<Ref<tree_cursor_t>>
-InternalNode::lookup_largest(context_t c) {
+InternalNode::lookup_largest(context_t c)
+{
   // NOTE: unlike LeafNode::lookup_largest(), this only works for the tail
   // internal node to return the tail child address.
   auto position = search_position_t::end();
@@ -416,7 +452,8 @@ InternalNode::lookup_largest(context_t c) {
 
 node_future<Node::search_result_t>
 InternalNode::lower_bound_tracked(
-    context_t c, const key_hobj_t& key, MatchHistory& history) {
+    context_t c, const key_hobj_t& key, MatchHistory& history)
+{
   auto result = impl->lower_bound(key, history);
   return get_or_track_child(c, result.position, result.p_value->value
   ).safe_then([c, &key, &history](auto child) {
@@ -426,7 +463,8 @@ InternalNode::lower_bound_tracked(
 }
 
 node_future<> InternalNode::do_get_tree_stats(
-    context_t c, tree_stats_t& stats) {
+    context_t c, tree_stats_t& stats)
+{
   auto nstats = impl->get_stats();
   stats.size_persistent_internal += nstats.size_persistent;
   stats.size_filled_internal += nstats.size_filled;
@@ -468,7 +506,8 @@ node_future<> InternalNode::do_get_tree_stats(
 }
 
 node_future<> InternalNode::test_clone_root(
-    context_t c_other, RootNodeTracker& tracker_other) const {
+    context_t c_other, RootNodeTracker& tracker_other) const
+{
   assert(is_root());
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
@@ -498,7 +537,8 @@ node_future<> InternalNode::test_clone_root(
 }
 
 node_future<Ref<Node>> InternalNode::get_or_track_child(
-    context_t c, const search_position_t& position, laddr_t child_addr) {
+    context_t c, const search_position_t& position, laddr_t child_addr)
+{
   bool level_tail = position.is_end();
   Ref<Node> child;
   auto found = tracked_child_nodes.find(position);
@@ -526,7 +566,8 @@ node_future<Ref<Node>> InternalNode::get_or_track_child(
 
 void InternalNode::track_insert(
       const search_position_t& insert_pos, match_stage_t insert_stage,
-      Ref<Node> insert_child, Ref<Node> nxt_child) {
+      Ref<Node> insert_child, Ref<Node> nxt_child)
+{
   // update tracks
   auto pos_upper_bound = insert_pos;
   pos_upper_bound.index_by_stage(insert_stage) = INDEX_UPPER_BOUND;
@@ -557,7 +598,8 @@ void InternalNode::track_insert(
 }
 
 void InternalNode::replace_track(
-    const search_position_t& position, Ref<Node> new_child, Ref<Node> old_child) {
+    const search_position_t& position, Ref<Node> new_child, Ref<Node> old_child)
+{
   assert(tracked_child_nodes[position] == old_child);
   tracked_child_nodes.erase(position);
   new_child->as_child(position, this);
@@ -565,7 +607,8 @@ void InternalNode::replace_track(
 }
 
 void InternalNode::track_split(
-    const search_position_t& split_pos, Ref<InternalNode> right_node) {
+    const search_position_t& split_pos, Ref<InternalNode> right_node)
+{
   auto first = tracked_child_nodes.lower_bound(split_pos);
   auto iter = first;
   while (iter != tracked_child_nodes.end()) {
@@ -577,7 +620,8 @@ void InternalNode::track_split(
   tracked_child_nodes.erase(first, tracked_child_nodes.end());
 }
 
-void InternalNode::validate_child(const Node& child) const {
+void InternalNode::validate_child(const Node& child) const
+{
 #ifndef NDEBUG
   assert(impl->level() - 1 == child.impl->level());
   assert(this == child.parent_info().ptr);
@@ -596,7 +640,8 @@ void InternalNode::validate_child(const Node& child) const {
 }
 
 node_future<InternalNode::fresh_node_t> InternalNode::allocate(
-    context_t c, field_type_t field_type, bool is_level_tail, level_t level) {
+    context_t c, field_type_t field_type, bool is_level_tail, level_t level)
+{
   return InternalNodeImpl::allocate(c, field_type, is_level_tail, level
   ).safe_then([](auto&& fresh_impl) {
     auto node = Ref<InternalNode>(new InternalNode(
@@ -612,36 +657,42 @@ node_future<InternalNode::fresh_node_t> InternalNode::allocate(
 LeafNode::LeafNode(LeafNodeImpl* impl, NodeImplURef&& impl_ref)
   : Node(std::move(impl_ref)), impl{impl} {}
 
-bool LeafNode::is_level_tail() const {
+bool LeafNode::is_level_tail() const
+{
   return impl->is_level_tail();
 }
 
 std::tuple<key_view_t, const value_header_t*>
-LeafNode::get_kv(const search_position_t& pos) const {
+LeafNode::get_kv(const search_position_t& pos) const
+{
   key_view_t key_view;
   auto p_value_header = impl->get_p_value(pos, &key_view);
   return {key_view, p_value_header};
 }
 
 node_future<> LeafNode::extend_value(
-    context_t c, const search_position_t& pos, value_size_t extend_size) {
+    context_t c, const search_position_t& pos, value_size_t extend_size)
+{
   ceph_abort("not implemented");
   return node_ertr::now();
 }
 
 node_future<> LeafNode::trim_value(
-    context_t c, const search_position_t& pos, value_size_t trim_size) {
+    context_t c, const search_position_t& pos, value_size_t trim_size)
+{
   ceph_abort("not implemented");
   return node_ertr::now();
 }
 
 std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
-LeafNode::prepare_mutate_value_payload(context_t c) {
+LeafNode::prepare_mutate_value_payload(context_t c)
+{
   return impl->prepare_mutate_value_payload(c);
 }
 
 node_future<Ref<tree_cursor_t>>
-LeafNode::lookup_smallest(context_t) {
+LeafNode::lookup_smallest(context_t)
+{
   if (unlikely(impl->is_empty())) {
     assert(is_root());
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
@@ -655,7 +706,8 @@ LeafNode::lookup_smallest(context_t) {
 }
 
 node_future<Ref<tree_cursor_t>>
-LeafNode::lookup_largest(context_t) {
+LeafNode::lookup_largest(context_t)
+{
   if (unlikely(impl->is_empty())) {
     assert(is_root());
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
@@ -671,7 +723,8 @@ LeafNode::lookup_largest(context_t) {
 
 node_future<Node::search_result_t>
 LeafNode::lower_bound_tracked(
-    context_t c, const key_hobj_t& key, MatchHistory& history) {
+    context_t c, const key_hobj_t& key, MatchHistory& history)
+{
   key_view_t index_key;
   auto result = impl->lower_bound(key, history, &index_key);
   Ref<tree_cursor_t> cursor;
@@ -685,7 +738,8 @@ LeafNode::lower_bound_tracked(
       search_result_t{cursor, result.mstat});
 }
 
-node_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats) {
+node_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats)
+{
   auto nstats = impl->get_stats();
   stats.size_persistent_leaf += nstats.size_persistent;
   stats.size_filled_leaf += nstats.size_filled;
@@ -698,7 +752,8 @@ node_future<> LeafNode::do_get_tree_stats(context_t, tree_stats_t& stats) {
 }
 
 node_future<> LeafNode::test_clone_root(
-    context_t c_other, RootNodeTracker& tracker_other) const {
+    context_t c_other, RootNodeTracker& tracker_other) const
+{
   assert(is_root());
   assert(impl->is_level_tail());
   assert(impl->field_type() == field_type_t::N0);
@@ -717,7 +772,8 @@ node_future<> LeafNode::test_clone_root(
 node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     context_t c, const key_hobj_t& key, value_config_t vconf,
     const search_position_t& pos, const MatchHistory& history,
-    match_stat_t mstat) {
+    match_stat_t mstat)
+{
 #ifndef NDEBUG
   if (pos.is_end()) {
     assert(impl->is_level_tail());
@@ -777,7 +833,8 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
 }
 
 node_future<Ref<LeafNode>> LeafNode::allocate_root(
-    context_t c, RootNodeTracker& root_tracker) {
+    context_t c, RootNodeTracker& root_tracker)
+{
   return LeafNode::allocate(c, field_type_t::N0, true
   ).safe_then([c, &root_tracker](auto fresh_node) {
     auto root = fresh_node.node;
@@ -791,7 +848,8 @@ node_future<Ref<LeafNode>> LeafNode::allocate_root(
 
 Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
     const search_position_t& position,
-    const key_view_t& key, const value_header_t* p_value_header) {
+    const key_view_t& key, const value_header_t* p_value_header)
+{
   assert(!position.is_end());
   assert(p_value_header);
   Ref<tree_cursor_t> p_cursor;
@@ -807,7 +865,8 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
   return p_cursor;
 }
 
-void LeafNode::validate_cursor(tree_cursor_t& cursor) const {
+void LeafNode::validate_cursor(tree_cursor_t& cursor) const
+{
 #ifndef NDEBUG
   assert(this == cursor.get_leaf_node().get());
   assert(!cursor.is_end());
@@ -820,7 +879,8 @@ void LeafNode::validate_cursor(tree_cursor_t& cursor) const {
 
 Ref<tree_cursor_t> LeafNode::track_insert(
     const search_position_t& insert_pos, match_stage_t insert_stage,
-    const value_header_t* p_value_header) {
+    const value_header_t* p_value_header)
+{
   // update cursor position
   auto pos_upper_bound = insert_pos;
   pos_upper_bound.index_by_stage(insert_stage) = INDEX_UPPER_BOUND;
@@ -844,7 +904,8 @@ Ref<tree_cursor_t> LeafNode::track_insert(
 }
 
 void LeafNode::track_split(
-    const search_position_t& split_pos, Ref<LeafNode> right_node) {
+    const search_position_t& split_pos, Ref<LeafNode> right_node)
+{
   // update cursor ownership and position
   auto first = tracked_cursors.lower_bound(split_pos);
   auto iter = first;
@@ -858,7 +919,8 @@ void LeafNode::track_split(
 }
 
 node_future<LeafNode::fresh_node_t> LeafNode::allocate(
-    context_t c, field_type_t field_type, bool is_level_tail) {
+    context_t c, field_type_t field_type, bool is_level_tail)
+{
   return LeafNodeImpl::allocate(c, field_type, is_level_tail
   ).safe_then([](auto&& fresh_impl) {
     auto node = Ref<LeafNode>(new LeafNode(
