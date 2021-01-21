@@ -207,14 +207,14 @@ SeaStore::omap_get_values(
     std::make_tuple(false, omap_values_t()));
 }
 
-seastar::future<FuturizedStore::OmapIteratorRef> get_omap_iterator(
+seastar::future<FuturizedStore::OmapIteratorRef> SeaStore::get_omap_iterator(
   CollectionRef ch,
   const ghobject_t& oid)
 {
   return seastar::make_ready_future<FuturizedStore::OmapIteratorRef>();
 }
 
-seastar::future<std::map<uint64_t, uint64_t>> fiemap(
+seastar::future<std::map<uint64_t, uint64_t>> SeaStore::fiemap(
   CollectionRef ch,
   const ghobject_t& oid,
   uint64_t off,
