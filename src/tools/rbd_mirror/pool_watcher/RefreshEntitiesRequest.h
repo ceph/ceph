@@ -6,6 +6,7 @@
 
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "tools/rbd_mirror/Types.h"
 #include <string>
 
@@ -48,6 +49,16 @@ private:
    *    v   v             | (more images)
    * MIRROR_IMAGE_LIST ---/
    *    |
+   *    |   /-------------\
+   *    |   |             |
+   *    v   v             | (more groups)
+   * MIRROR_GROUP_LIST ---/
+   *    |
+   *    |   /-------------\
+   *    |   |             |
+   *    v   v             | (for every group)
+   * GROUP_IMAGE_LIST ----/
+   *    |
    *    v
    * <finish>
    *
@@ -61,8 +72,18 @@ private:
   bufferlist m_out_bl;
   std::string m_start_after;
 
+  std::map<std::string, cls::rbd::MirrorGroup> m_groups;
+  cls::rbd::GroupImageSpec m_start_group_image_list_after;
+  size_t m_group_size = 0;
+
   void mirror_image_list();
   void handle_mirror_image_list(int r);
+
+  void mirror_group_list();
+  void handle_mirror_group_list(int r);
+
+  void group_image_list();
+  void handle_group_image_list(int r);
 
   void finish(int r);
 
