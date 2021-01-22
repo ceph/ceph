@@ -124,7 +124,8 @@ uploaded to http://teuthology-logs.public.ceph.com.
 Run a standalone test
 ---------------------
 
-The standalone test can be run with the following command
+The standalone test explained in :ref:`reading a standalone test<reading-standalone-test>` can be run
+with the following command
 
 .. prompt:: bash $
 

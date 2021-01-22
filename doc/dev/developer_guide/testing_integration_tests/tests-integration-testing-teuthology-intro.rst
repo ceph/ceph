@@ -201,6 +201,9 @@ are defined in a single yaml file, while other tests are defined by a
 directory tree containing yaml files that are combined, at runtime, into a
 larger yaml file.
 
+
+.. _reading-standalone-test:
+
 Reading a standalone test
 -------------------------
 
