@@ -247,7 +247,7 @@ int RGWObjectSimplePutCR::Request::_send_request()
 
   ret = obj->put(params.data, params.attrs, dpp, null_yield);
   if (ret < 0) {
-    lderr(cct) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
   }
 
   return 0;
@@ -286,7 +286,7 @@ int RGWBucketGetSyncPolicyHandlerCR::Request::_send_request()
                                                         null_yield,
                                                         dpp);
   if (r < 0) {
-    lderr(cct) << "ERROR: " << __func__ << "(): get_sync_policy_handler() returned " << r << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: " << __func__ << "(): get_sync_policy_handler() returned " << r << dendl;
     return  r;
   }
 

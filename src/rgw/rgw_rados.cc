@@ -858,7 +858,7 @@ int RGWIndexCompletionThread::process()
     }
     r = store->svc.datalog_rados->add_entry(dpp, bucket_info, bs.shard_id);
     if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
     }
   }
 
@@ -5066,7 +5066,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
 
     r = store->svc.datalog_rados->add_entry(dpp, target->bucket_info, bs->shard_id);
     if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
       return r;
     }
 
@@ -6138,7 +6138,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 
   int r = store->svc.datalog_rados->add_entry(dpp, target->bucket_info, bs->shard_id);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
   }
 
   return ret;
@@ -6165,7 +6165,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
 
   int r = store->svc.datalog_rados->add_entry(dpp, target->bucket_info, bs->shard_id);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
   }
 
   return ret;
@@ -6191,7 +6191,7 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp)
    */
   int r = store->svc.datalog_rados->add_entry(dpp, target->bucket_info, bs->shard_id);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
   }
 
   return ret;
@@ -9182,7 +9182,7 @@ int RGWRados::delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj,
 
     ret = index_op.prepare(dpp, CLS_RGW_OP_DEL, &astate->write_tag, y);
     if (ret < 0) {
-      lderr(cct) << "ERROR: failed to prepare index op with ret=" << ret << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: failed to prepare index op with ret=" << ret << dendl;
       return ret;
     }
   }
@@ -9204,7 +9204,7 @@ int RGWRados::delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj,
   if (keep_index_consistent) {
     ret = delete_obj_index(obj, astate->mtime, dpp);
     if (ret < 0) {
-      lderr(cct) << "ERROR: failed to delete obj index with ret=" << ret << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: failed to delete obj index with ret=" << ret << dendl;
       return ret;
     }
   }

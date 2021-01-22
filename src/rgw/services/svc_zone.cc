@@ -95,13 +95,13 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   ret = replace_region_with_zonegroup(dpp, y);
   if (ret < 0) {
-    lderr(cct) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   ret = convert_regionmap(dpp, y);
   if (ret < 0) {
-    lderr(cct) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, -1) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
