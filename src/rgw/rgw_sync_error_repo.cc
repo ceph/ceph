@@ -18,7 +18,73 @@
 #include "services/svc_rados.h"
 #include "cls/cmpomap/client.h"
 
-ceph::real_time rgw_error_repo_decode_value(const bufferlist& bl)
+namespace rgw::error_repo {
+
+// prefix for the binary encoding of keys. this particular value is not
+// valid as the first byte of a utf8 code point, so we use this to
+// differentiate the binary encoding from existing string keys for
+// backward-compatibility
+constexpr uint8_t binary_key_prefix = 0x80;
+
+struct key_type {
+  rgw_bucket_shard bs;
+  std::optional<uint64_t> gen;
+};
+
+void encode(const key_type& k, bufferlist& bl, uint64_t f=0)
+{
+  ENCODE_START(1, 1, bl);
+  encode(k.bs, bl);
+  encode(k.gen, bl);
+  ENCODE_FINISH(bl);
+}
+
+void decode(key_type& k, bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(k.bs, bl);
+  decode(k.gen, bl);
+  DECODE_FINISH(bl);
+}
+
+std::string encode_key(const rgw_bucket_shard& bs,
+                       std::optional<uint64_t> gen)
+{
+  using ceph::encode;
+  const auto key = key_type{bs, gen};
+  bufferlist bl;
+  encode(binary_key_prefix, bl);
+  encode(key, bl);
+  return bl.to_str();
+}
+
+int decode_key(std::string encoded,
+               rgw_bucket_shard& bs,
+               std::optional<uint64_t>& gen)
+{
+  using ceph::decode;
+  key_type key;
+  const auto bl = bufferlist::static_from_string(encoded);
+  auto p = bl.cbegin();
+  try {
+    uint8_t prefix;
+    decode(prefix, p);
+    if (prefix != binary_key_prefix) {
+      return -EINVAL;
+    }
+    decode(key, p);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+  if (!p.end()) {
+    return -EIO; // buffer contained unexpected bytes
+  }
+  bs = std::move(key.bs);
+  gen = key.gen;
+  return 0;
+}
+
+ceph::real_time decode_value(const bufferlist& bl)
 {
   uint64_t value;
   try {
@@ -30,9 +96,9 @@ ceph::real_time rgw_error_repo_decode_value(const bufferlist& bl)
   return ceph::real_clock::zero() + ceph::timespan(value);
 }
 
-int rgw_error_repo_write(librados::ObjectWriteOperation& op,
-                         const std::string& key,
-                         ceph::real_time timestamp)
+int write(librados::ObjectWriteOperation& op,
+          const std::string& key,
+          ceph::real_time timestamp)
 {
   // overwrite the existing timestamp if value is greater
   const uint64_t value = timestamp.time_since_epoch().count();
@@ -41,9 +107,9 @@ int rgw_error_repo_write(librados::ObjectWriteOperation& op,
   return cmp_set_vals(op, Mode::U64, Op::GT, {{key, u64_buffer(value)}}, zero);
 }
 
-int rgw_error_repo_remove(librados::ObjectWriteOperation& op,
-                          const std::string& key,
-                          ceph::real_time timestamp)
+int remove(librados::ObjectWriteOperation& op,
+           const std::string& key,
+           ceph::real_time timestamp)
 {
   // remove the omap key if value >= existing
   const uint64_t value = timestamp.time_since_epoch().count();
@@ -67,7 +133,7 @@ class RGWErrorRepoWriteCR : public RGWSimpleCoroutine {
 
   int send_request(const DoutPrefixProvider *dpp) override {
     librados::ObjectWriteOperation op;
-    int r = rgw_error_repo_write(op, key, timestamp);
+    int r = write(op, key, timestamp);
     if (r < 0) {
       return r;
     }
@@ -85,10 +151,10 @@ class RGWErrorRepoWriteCR : public RGWSimpleCoroutine {
   }
 };
 
-RGWCoroutine* rgw_error_repo_write_cr(RGWSI_RADOS* rados,
-                                      const rgw_raw_obj& obj,
-                                      const std::string& key,
-                                      ceph::real_time timestamp)
+RGWCoroutine* write_cr(RGWSI_RADOS* rados,
+                       const rgw_raw_obj& obj,
+                       const std::string& key,
+                       ceph::real_time timestamp)
 {
   return new RGWErrorRepoWriteCR(rados, obj, key, timestamp);
 }
@@ -110,7 +176,7 @@ class RGWErrorRepoRemoveCR : public RGWSimpleCoroutine {
 
   int send_request(const DoutPrefixProvider *dpp) override {
     librados::ObjectWriteOperation op;
-    int r = rgw_error_repo_remove(op, key, timestamp);
+    int r = remove(op, key, timestamp);
     if (r < 0) {
       return r;
     }
@@ -128,10 +194,12 @@ class RGWErrorRepoRemoveCR : public RGWSimpleCoroutine {
   }
 };
 
-RGWCoroutine* rgw_error_repo_remove_cr(RGWSI_RADOS* rados,
-                                       const rgw_raw_obj& obj,
-                                       const std::string& key,
-                                       ceph::real_time timestamp)
+RGWCoroutine* remove_cr(RGWSI_RADOS* rados,
+                        const rgw_raw_obj& obj,
+                        const std::string& key,
+                        ceph::real_time timestamp)
 {
   return new RGWErrorRepoRemoveCR(rados, obj, key, timestamp);
 }
+
+} // namespace rgw::error_repo
