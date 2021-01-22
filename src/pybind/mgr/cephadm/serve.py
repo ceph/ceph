@@ -197,7 +197,7 @@ class CephadmServe:
             health_changed = True
         failed_daemons = []
         for dd in self.mgr.cache.get_daemons():
-            if dd.status < 0:
+            if dd.status is not None and dd.status < 0:
                 failed_daemons.append('daemon %s on %s is in %s state' % (
                     dd.name(), dd.hostname, dd.status_desc
                 ))
