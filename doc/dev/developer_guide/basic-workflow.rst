@@ -281,17 +281,19 @@ sub-directory`_ and are run via the `teuthology framework`_.
 .. _`teuthology repository`: https://github.com/ceph/teuthology
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 
-The Ceph community has access to the `Sepia lab`_ where `Integration Testing`_
-can be run on physical hardware. Other developers may add tags like "needs-qa"
-to your
-PR. This allows PRs that need testing to be merged into a single branch and
-tested all at the same time. Since teuthology suites can take hours (even
-days in some cases) to run, this can save a lot of time.
+The Ceph community has access to the `Sepia lab
+<https://wiki.sepia.ceph.com/doku.php>`_ where :ref:`integration
+tests<testing-integration-tests>` can be run on physical hardware. Other
+developers may add tags like "needs-qa" to your PR. This allows PRs that need
+testing to be merged into a single branch and tested all at the same time.
+Since teuthology suites can take hours (even days in some cases) to run, this
+can save a lot of time.
 
-To request access to the Sepia lab, start `here <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
+To request access to the Sepia lab, start `here
+<https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
 
-Integration testing is discussed in more detail in the `Integration Testing`_
-chapter.
+Integration testing is discussed in more detail in the :ref:`integration
+tests<testing-integration-tests>` chapter.
 
 Code review
 -----------
