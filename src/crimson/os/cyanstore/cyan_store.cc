@@ -95,7 +95,7 @@ seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
     } else if (r < 0) {
       throw std::runtime_error("read_meta");
     } else {
-      logger().info("{} already has fsid {}", __func__, fsid_str);
+      logger().info("mkfs already has fsid {}", fsid_str);
       if (!osd_fsid.parse(fsid_str.c_str())) {
         throw std::runtime_error("failed to parse fsid");
       } else if (osd_fsid != new_osd_fsid) {
