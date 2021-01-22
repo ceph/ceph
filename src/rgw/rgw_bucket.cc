@@ -421,7 +421,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
         continue;
       }
       if (ret < 0) {
-        lderr(store->ctx()) << "ERROR: get obj state returned with error " << ret << dendl;
+        ldpp_dout(dpp, -1) << "ERROR: get obj state returned with error " << ret << dendl;
         return ret;
       }
 
@@ -458,7 +458,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
 
         ret = store->getRados()->delete_obj_aio(dpp, head_obj, info, astate, handles, keep_index_consistent, null_yield);
         if (ret < 0) {
-          lderr(store->ctx()) << "ERROR: delete obj aio failed with " << ret << dendl;
+          ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
           return ret;
         }
       }
@@ -493,13 +493,13 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
   // remain are detritus from a prior bug
   ret = store->getRados()->delete_bucket(info, objv_tracker, y, dpp, false);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: could not remove bucket " << bucket.name << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << bucket.name << dendl;
     return ret;
   }
 
   ret = store->ctl()->bucket->unlink_bucket(info.owner, bucket, null_yield, dpp, false);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: unable to remove user bucket information" << dendl;
   }
 
   return ret;
@@ -1657,7 +1657,7 @@ void get_stale_instances(rgw::sal::RGWRadosStore *store, const std::string& buck
                                             binfo, nullptr,nullptr, null_yield, dpp);
     if (r < 0){
       // this can only happen if someone deletes us right when we're processing
-      lderr(store->ctx()) << "Bucket instance is invalid: " << bucket_instance
+      ldpp_dout(dpp, -1) << "Bucket instance is invalid: " << bucket_instance
                           << cpp_strerror(-r) << dendl;
       continue;
     }
@@ -1681,7 +1681,7 @@ void get_stale_instances(rgw::sal::RGWRadosStore *store, const std::string& buck
                              std::make_move_iterator(other_instances.end()));
     } else {
       // all bets are off if we can't read the bucket, just return the sureshot stale instances
-      lderr(store->ctx()) << "error: reading bucket info for bucket: "
+      ldpp_dout(dpp, -1) << "error: reading bucket info for bucket: "
                           << bucket << cpp_strerror(-r) << dendl;
     }
     return;
@@ -1943,7 +1943,7 @@ static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
 				 RGWFormatterFlusher& flusher, bool dry_run)
 {
   if (bucket_info.bucket.bucket_id == bucket_info.bucket.marker) {
-    lderr(store->ctx()) << "Not a resharded bucket skipping" << dendl;
+    ldpp_dout(dpp, -1) << "Not a resharded bucket skipping" << dendl;
     return 0;  // not a resharded bucket, move along
   }
 
@@ -1967,7 +1967,7 @@ static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
     int ret = list_op.list_objects(dpp, listing_max_entries, &objs, nullptr,
 				   &is_truncated, null_yield);
     if (ret < 0) {
-      lderr(store->ctx()) << "ERROR failed to list objects in the bucket" << dendl;
+      ldpp_dout(dpp, -1) << "ERROR failed to list objects in the bucket" << dendl;
       return ret;
     }
     for (const auto& obj : objs) {
@@ -2000,7 +2000,7 @@ int RGWBucketAdminOp::fix_obj_expiry(rgw::sal::RGWRadosStore *store,
   RGWBucket admin_bucket;
   int ret = admin_bucket.init(store, op_state, null_yield, dpp);
   if (ret < 0) {
-    lderr(store->ctx()) << "failed to initialize bucket" << dendl;
+    ldpp_dout(dpp, -1) << "failed to initialize bucket" << dendl;
     return ret;
   }
 
@@ -2097,12 +2097,12 @@ public:
      */
     ret = ctl.bucket->unlink_bucket(be.owner, be.bucket, y, dpp, false);
     if (ret < 0) {
-      lderr(svc.bucket->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+      ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
     ret = svc.bucket->remove_bucket_entrypoint_info(ctx, entry, &objv_tracker, y, dpp);
     if (ret < 0) {
-      lderr(svc.bucket->ctx()) << "could not delete bucket=" << entry << dendl;
+      ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
     }
     /* idempotent */
     return 0;
@@ -2363,7 +2363,7 @@ public:
 
     ret = ctl.bucket->unlink_bucket(be.owner, entry_bucket, y, dpp, false);
     if (ret < 0) {
-        lderr(cct) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+        ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
     // if (ret == -ECANCELED) it means that there was a race here, and someone
@@ -2383,7 +2383,7 @@ public:
 
     ret = ctl.bucket->remove_bucket_instance_info(be.bucket, old_bi, y, dpp);
     if (ret < 0) {
-        lderr(cct) << "could not delete bucket=" << entry << dendl;
+        ldpp_dout(dpp, -1) << "could not delete bucket=" << entry << dendl;
     }
 
 

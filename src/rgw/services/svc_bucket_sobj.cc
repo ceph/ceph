@@ -282,7 +282,7 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   if (auto e = binfo_cache->find(cache_key)) {
     if (refresh_version &&
         e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
-      lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
+      ldpp_dout(dpp, -1) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
       binfo_cache->invalidate(key);
@@ -306,7 +306,7 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
 
   if (ret < 0) {
     if (ret != -ENOENT) {
-      lderr(cct) << "ERROR: do_read_bucket_instance_info failed: " << ret << dendl;
+      ldpp_dout(dpp, -1) << "ERROR: do_read_bucket_instance_info failed: " << ret << dendl;
     } else {
       ldpp_dout(dpp, 20) << "do_read_bucket_instance_info, bucket instance not found (key=" << key << ")" << dendl;
     }
@@ -330,7 +330,7 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
 
   if (refresh_version &&
       refresh_version->compare(&info->objv_tracker.read_version)) {
-    lderr(cct) << "WARNING: The OSD has the same version I have. Something may "
+    ldpp_dout(dpp, -1) << "WARNING: The OSD has the same version I have. Something may "
                << "have gone squirrelly. An administrator may have forced a "
                << "change; otherwise there is a problem somewhere." << dendl;
   }
@@ -457,7 +457,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                   &cache_info, refresh_version);
   *info = e.info;
   if (ret < 0) {
-    lderr(cct) << "ERROR: read_bucket_instance_from_oid failed: " << ret << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: read_bucket_instance_from_oid failed: " << ret << dendl;
     info->bucket = bucket;
     // XXX and why return anything in case of an error anyway?
     return ret;
@@ -475,7 +475,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 
   if (refresh_version &&
       refresh_version->compare(&info->objv_tracker.read_version)) {
-    lderr(cct) << "WARNING: The OSD has the same version I have. Something may "
+    ldpp_dout(dpp, -1) << "WARNING: The OSD has the same version I have. Something may "
                << "have gone squirrelly. An administrator may have forced a "
                << "change; otherwise there is a problem somewhere." << dendl;
   }

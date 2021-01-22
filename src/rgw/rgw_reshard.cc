@@ -674,7 +674,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
   ret = store->ctl()->bucket->link_bucket(new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time, null_yield, dpp);
   if (ret < 0) {
-    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << cpp_strerror(-ret) << ")" << dendl;
+    ldpp_dout(dpp, -1) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
 
@@ -753,7 +753,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   ret = store->ctl()->bucket->remove_bucket_instance_info(bucket_info.bucket,
                                                        bucket_info, null_yield, dpp);
   if (ret < 0) {
-    lderr(store->ctx()) << "Error: " << __func__ <<
+    ldpp_dout(dpp, -1) << "Error: " << __func__ <<
       " failed to clean old bucket info object \"" <<
       bucket_info.bucket.get_key() <<
       "\"created after successful resharding with error " << ret << dendl;
@@ -784,7 +784,7 @@ error_out:
                                                         new_bucket_info,
 							null_yield, dpp);
   if (ret2 < 0) {
-    lderr(store->ctx()) << "Error: " << __func__ <<
+    ldpp_dout(dpp, -1) << "Error: " << __func__ <<
       " failed to clean bucket info object \"" <<
       new_bucket_info.bucket.get_key() <<
       "\"created during incomplete resharding with error " << ret2 << dendl;
