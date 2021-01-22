@@ -3731,8 +3731,13 @@ def command_bootstrap(ctx):
 
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart():
-        # first get latest mgrmap epoch from the mon
-        out = cli(['mgr', 'dump'])
+        # first get latest mgrmap epoch from the mon.  try newer 'mgr
+        # stat' command first, then fall back to 'mgr dump' if
+        # necessary
+        try:
+            out = cli(['mgr', 'stat'])
+        except Exception as e:
+            out = cli(['mgr', 'dump'])
         j = json.loads(out)
         epoch = j['epoch']
         # wait for mgr to have it
