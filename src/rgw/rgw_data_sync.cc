@@ -70,6 +70,17 @@ void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
+// print a bucket shard with [gen]
+std::string to_string(const rgw_bucket_shard& bs, std::optional<uint64_t> gen)
+{
+  constexpr auto digits10 = std::numeric_limits<uint64_t>::digits10;
+  constexpr auto reserve = 2 + digits10; // [value]
+  auto str = bs.get_key('/', ':', ':', reserve);
+  str.append(1, '[');
+  str.append(std::to_string(gen.value_or(0)));
+  str.append(1, ']');
+  return str;
+}
 
 class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
   static constexpr int MAX_CONCURRENT_SHARDS = 16;
@@ -1279,7 +1290,7 @@ public:
       marker_tracker(_marker_tracker), error_repo(error_repo),
       lease_cr(std::move(lease_cr)) {
     set_description() << "data sync single entry (source_zone=" << sc->source_zone << ") " << obligation;
-    tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", obligation.key);
+    tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", to_string(obligation.bs, obligation.gen));
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -1334,14 +1345,15 @@ public:
         // this was added when 'tenant/' was added to datalog entries, because
         // preexisting tenant buckets could never sync and would stay in the
         // error_repo forever
-        tn->log(0, SSTR("WARNING: skipping data log entry for missing bucket " << complete->key));
+        tn->log(0, SSTR("WARNING: skipping data log entry for missing bucket " << complete->bs));
         sync_status = 0;
       }
 
       if (sync_status < 0) {
         // write actual sync failures for 'radosgw-admin sync error list'
         if (sync_status != -EBUSY && sync_status != -EAGAIN) {
-          yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data", complete->key,
+          yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data",
+                                                          to_string(complete->bs, complete->gen),
                                                           -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
           if (retcode < 0) {
             tn->log(0, SSTR("ERROR: failed to log sync failure: retcode=" << retcode));
@@ -1349,15 +1361,17 @@ public:
         }
         if (complete->timestamp != ceph::real_time{}) {
           tn->log(10, SSTR("writing " << *complete << " to error repo for retry"));
-          yield call(rgw_error_repo_write_cr(sync_env->store->svc()->rados, error_repo,
-                                            complete->key, complete->timestamp));
+          yield call(rgw::error_repo::write_cr(sync_env->store->svc()->rados, error_repo,
+                                               rgw::error_repo::encode_key(complete->bs, complete->gen),
+                                               complete->timestamp));
           if (retcode < 0) {
             tn->log(0, SSTR("ERROR: failed to log sync failure in error repo: retcode=" << retcode));
           }
         }
       } else if (complete->retry) {
-        yield call(rgw_error_repo_remove_cr(sync_env->store->svc()->rados, error_repo,
-                                            complete->key, complete->timestamp));
+        yield call(rgw::error_repo::remove_cr(sync_env->store->svc()->rados, error_repo,
+                                              rgw::error_repo::encode_key(complete->bs, complete->gen),
+                                              complete->timestamp));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to remove omap key from error repo ("
              << error_repo << " retcode=" << retcode));
@@ -1445,11 +1459,11 @@ class RGWDataSyncShardCR : public RGWCoroutine {
                                        &bs.bucket, &bs.shard_id);
   }
   RGWCoroutine* sync_single_entry(const rgw_bucket_shard& src,
-                                  const std::string& key,
+                                  std::optional<uint64_t> gen,
                                   const std::string& marker,
                                   ceph::real_time timestamp, bool retry) {
     auto state = bucket_shard_cache->get(src);
-    auto obligation = rgw_data_sync_obligation{key, marker, timestamp, retry};
+    auto obligation = rgw_data_sync_obligation{src, gen, marker, timestamp, retry};
     return new RGWDataSyncSingleEntryCR(sc, std::move(state), std::move(obligation),
                                         &*marker_tracker, error_repo,
                                         lease_cr.get(), tn);
@@ -1575,11 +1589,11 @@ public:
             tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
-            yield_spawn_window(sync_single_entry(source_bs, iter->first, iter->first,
-                                                 entry_timestamp, false),
-                               cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
-          }
-          sync_marker.marker = iter->first;
+	      yield_spawn_window(sync_single_entry(source_bs, std::nullopt, iter->first,
+						   entry_timestamp, false),
+				 cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
+	  }
+	  sync_marker.marker = iter->first;
         }
       } while (omapvals->more);
       omapvals.reset();
@@ -1657,7 +1671,7 @@ public:
             continue;
           }
           tn->log(20, SSTR("received async update notification: " << *modified_iter));
-          spawn(sync_single_entry(source_bs, *modified_iter, string(),
+          spawn(sync_single_entry(source_bs, std::nullopt, string(),
                                   ceph::real_time{}, false), false);
         }
 
@@ -1671,17 +1685,21 @@ public:
           iter = error_entries.begin();
           for (; iter != error_entries.end(); ++iter) {
             error_marker = iter->first;
-            entry_timestamp = rgw_error_repo_decode_value(iter->second);
-            retcode = parse_bucket_key(error_marker, source_bs);
+            entry_timestamp = rgw::error_repo::decode_value(iter->second);
+            std::optional<uint64_t> gen;
+            retcode = rgw::error_repo::decode_key(iter->first, source_bs, gen);
+            if (retcode == -EINVAL) {
+              // backward compatibility for string keys that don't encode a gen
+              retcode = parse_bucket_key(error_marker, source_bs);
+            }
             if (retcode < 0) {
               tn->log(1, SSTR("failed to parse bucket shard: " << error_marker));
-              spawn(rgw_error_repo_remove_cr(sync_env->store->svc()->rados, error_repo,
-                                             error_marker, entry_timestamp), false);
+              spawn(rgw::error_repo::remove_cr(sync_env->store->svc()->rados, error_repo,
+                                               error_marker, entry_timestamp), false);
               continue;
             }
-            tn->log(20, SSTR("handle error entry key=" << error_marker << " timestamp=" << entry_timestamp));
-            spawn(sync_single_entry(source_bs, error_marker, "",
-                                    entry_timestamp, true), false);
+            tn->log(20, SSTR("handle error entry key=" << to_string(source_bs, gen) << " timestamp=" << entry_timestamp));
+            spawn(sync_single_entry(source_bs, gen, "", entry_timestamp, true), false);
           }
           if (!omapvals->more) {
             error_retry_time = ceph::coarse_real_clock::now() + make_timespan(retry_backoff_secs);
@@ -1715,7 +1733,7 @@ public:
           if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
           } else {
-            yield_spawn_window(sync_single_entry(source_bs, log_iter->entry.key, log_iter->log_id,
+            yield_spawn_window(sync_single_entry(source_bs, std::nullopt, log_iter->log_id,
                                                  log_iter->log_timestamp, false),
                                cct->_conf->rgw_data_sync_spawn_window, std::nullopt);
           }
