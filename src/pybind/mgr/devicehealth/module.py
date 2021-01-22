@@ -168,6 +168,7 @@ class Module(MgrModule):
         '''
         self.set_module_option('enable_monitoring', True)
         self.event.set()
+        return 0, '', ''
 
     @CLICommand('device monitoring off',
                 perm='rw')
@@ -177,6 +178,7 @@ class Module(MgrModule):
         '''
         self.set_module_option('enable_monitoring', False)
         self.set_health_checks({})  # avoid stuck health alerts
+        return 0, '', ''
 
     @CLICommand('device predict-life-expectancy',
                 perm='r')
