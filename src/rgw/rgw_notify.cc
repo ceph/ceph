@@ -6,6 +6,7 @@
 #include "cls/lock/cls_lock_client.h"
 #include <memory>
 #include <boost/algorithm/hex.hpp>
+#include <boost/context/protected_fixedsize_stack.hpp>
 #include <spawn/spawn.hpp>
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -45,6 +46,11 @@ struct event_entry_t {
 WRITE_CLASS_ENCODER(event_entry_t)
 
 using queues_t = std::set<std::string>;
+
+// use mmap/mprotect to allocate 128k coroutine stacks
+auto make_stack_allocator() {
+  return boost::context::protected_fixedsize_stack{128*1024};
+}
 
 class Manager : public DoutPrefixProvider {
   const size_t max_queue_size;
@@ -231,7 +237,7 @@ class Manager : public DoutPrefixProvider {
     // start a the cleanup coroutine for the queue
     spawn::spawn(io_context, [this, queue_name](spawn::yield_context yield) {
             cleanup_queue(queue_name, yield);
-            });
+            }, make_stack_allocator());
     
     while (true) {
       // if queue was empty the last time, sleep for idle timeout
@@ -318,7 +324,7 @@ class Manager : public DoutPrefixProvider {
               ldpp_dout(this, 20) << "INFO: processing of entry: " << 
                 entry.marker << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name << " failed" << dendl;
             } 
-        });
+        }, make_stack_allocator());
         ++entry_idx;
       }
 
@@ -437,7 +443,8 @@ class Manager : public DoutPrefixProvider {
             std::lock_guard lock_guard(queue_gc_lock);
             queue_gc.push_back(queue_name);
             ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " marked for removal" << dendl;
-          });
+            ldout(cct, 10) << "INFO: queue: " << queue_name << " marked for removal" << dendl;
+          }, make_stack_allocator());
         } else {
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " ownership (lock) renewed" << dendl;
         }
@@ -482,7 +489,7 @@ public:
     {
       spawn::spawn(io_context, [this](spawn::yield_context yield) {
             process_queues(yield);
-          });
+          }, make_stack_allocator());
 
       // start the worker threads to do the actual queue processing
       const std::string WORKER_THREAD_NAME = "notif-worker";
