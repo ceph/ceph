@@ -15,8 +15,7 @@ internally so that writes that get flushed back to the cluster are always
 crash consistent. Even if the client cache is lost entirely, the disk image is
 still consistent but the data will appear to be stale.
 
-Currently this cache uses PMEM devices as cache devices, and later SSDs will
-be supported.
+This cache can be used with PMEM or SSD as a cache device.
 
 Usage
 =====
@@ -45,18 +44,22 @@ Enable Persistent Write-back Cache
 To enable the persistent write-back cache, the following Ceph settings
 need to be enabled.::
 
-        rbd rwl enabled = true
+        rbd persistent cache mode = {cache-mode}
         rbd plugins = pwl_cache
+
+Value of {cache-mode} can be ``rwl`` or ``ssd``. By default it is
+``disabled``
 
 Here are some cache configuration settings:
 
-- ``rbd_rwl_path`` A file folder to cache data. This folder must have DAX enabled
-  (see `DAX`_) to avoid performance degradation.
+- ``rbd_persistent_cache_path`` A file folder to cache data. This folder must
+  have DAX enabled (see `DAX`_) when using ``rwl`` mode to avoid performance
+  degradation.
 
-- ``rbd_rwl_size`` The cache size per image.
+- ``rbd_persistent_cache_size`` The cache size per image.
 
-- ``rbd_rwl_log_periodic_stats`` This is a debug option. It is used to emit
-  periodic perf stats to the debug log.
+- ``rbd_persistent_cache_log_periodic_stats`` This is a debug option. It is
+  used to emit periodic perf stats to the debug log.
 
 The above configurations can be set per-host, per-pool, per-image etc. Eg, to
 set per-host, add the overrides to the appropriate `section`_ in the host's
