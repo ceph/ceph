@@ -254,8 +254,7 @@ Connection::do_auth_single(Connection::request_t what)
     if (!m) {
       ceph_assert(closed);
       logger().info("do_auth: connection closed");
-      return seastar::make_ready_future<std::optional<Connection::auth_result_t>>(
-	std::make_optional(auth_result_t::canceled));
+      return std::make_optional(auth_result_t::canceled);
     }
     logger().info(
       "do_auth: mon {} => {} returns {}: {}",
@@ -264,19 +263,22 @@ Connection::do_auth_single(Connection::request_t what)
     auto p = m->result_bl.cbegin();
     auto ret = auth->handle_response(m->result, p,
 				     nullptr, nullptr);
-    if (ret != 0 && ret != -EAGAIN) {
+    std::optional<Connection::auth_result_t> auth_result;
+    switch (ret) {
+    case -EAGAIN:
+      auth_result = std::nullopt;
+      break;
+    case 0:
+      auth_result = auth_result_t::success;
+      break;
+    default:
+      auth_result = auth_result_t::failure;
       logger().error(
-	"do_auth: got error {} on mon {}",
-	ret,
-	conn->get_peer_addr());
+        "do_auth: got error {} on mon {}",
+        ret, conn->get_peer_addr());
+      break;
     }
-    return seastar::make_ready_future<std::optional<Connection::auth_result_t>>(
-      ret == -EAGAIN
-      ? std::nullopt
-      : std::make_optional(ret == 0
-	 ? auth_result_t::success
-	 : auth_result_t::failure
-      ));
+    return auth_result;
   });
 }
 
