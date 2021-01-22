@@ -1232,37 +1232,33 @@ def call(ctx: CephadmContext,
     end_time = None
     if timeout:
         end_time = start_time + timeout
-    while not stop:
-        if end_time and (time.time() >= end_time):
-            stop = True
-            if process.poll() is None:
+    stopped = False
+    read_some = False
+    while not stopped or read_some:
+        if not stopped:
+            if process.poll() is not None:
+                stopped = True
+            elif end_time and (time.time() >= end_time):
                 logger.info(desc + 'timeout after %s seconds' % timeout)
                 process.kill()
-        if reads and process.poll() is not None:
-            # we want to stop, but first read off anything remaining
-            # on stdout/stderr
-            stop = True
-        else:
-            reads, _, _ = select.select(
-                [process.stdout.fileno(), process.stderr.fileno()],
-                [], [], timeout
-            )
+        reads, _, _ = select.select(
+            [process.stdout.fileno(), process.stderr.fileno()],
+            [], [], timeout
+        )
+        read_some = False
         for fd in reads:
             try:
                 message = str()
                 message_b = os.read(fd, 1024)
+                if not message_b:
+                    continue
                 if isinstance(message_b, bytes):
                     message = message_b.decode('utf-8')
                 elif isinstance(message_b, str):
                     message = message_b
                 else:
                     assert False
-                if stop and message:
-                    # process has terminated, but have more to read still, so not stopping yet
-                    # (os.read returns '' when it encounters EOF)
-                    stop = False
-                if not message:
-                    continue
+                read_some = True
                 if fd == process.stdout.fileno():
                     out += message
                     message = out_buffer + message
