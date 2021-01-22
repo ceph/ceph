@@ -430,7 +430,8 @@ struct rgw_bucket_shard {
   rgw_bucket_shard(const rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
 
   std::string get_key(char tenant_delim = '/', char id_delim = ':',
-                      char shard_delim = ':') const;
+                      char shard_delim = ':',
+                      size_t reserve = 0) const;
 
   bool operator<(const rgw_bucket_shard& b) const {
     if (bucket < b.bucket) {
@@ -447,6 +448,9 @@ struct rgw_bucket_shard {
             shard_id == b.shard_id);
   }
 };
+
+void encode(const rgw_bucket_shard& b, bufferlist& bl, uint64_t f=0);
+void decode(rgw_bucket_shard& b, bufferlist::const_iterator& bl);
 
 inline std::ostream& operator<<(std::ostream& out, const rgw_bucket_shard& bs) {
   if (bs.shard_id <= 0) {
