@@ -475,7 +475,11 @@ Provides:	ceph-test:/usr/bin/ceph-monstore-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	nvme-cli
+%if 0%{?suse_version}
+Requires:       smartmontools
+%else
 Recommends:	smartmontools
+%endif
 %endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
@@ -755,7 +759,11 @@ Requires:	libstoragemgmt
 Requires:	python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	nvme-cli
+%if 0%{?suse_version}
+Requires:       smartmontools
+%else
 Recommends:	smartmontools
+%endif
 %endif
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
