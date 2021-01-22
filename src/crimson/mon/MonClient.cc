@@ -254,8 +254,7 @@ Connection::do_auth_single(Connection::request_t what)
     if (!m) {
       ceph_assert(closed);
       logger().info("do_auth: connection closed");
-      return seastar::make_ready_future<std::optional<Connection::auth_result_t>>(
-	std::make_optional(auth_result_t::canceled));
+      return std::make_optional(auth_result_t::canceled);
     }
     logger().info(
       "do_auth: mon {} => {} returns {}: {}",
@@ -264,19 +263,22 @@ Connection::do_auth_single(Connection::request_t what)
     auto p = m->result_bl.cbegin();
     auto ret = auth->handle_response(m->result, p,
 				     nullptr, nullptr);
-    if (ret != 0 && ret != -EAGAIN) {
+    std::optional<Connection::auth_result_t> auth_result;
+    switch (ret) {
+    case -EAGAIN:
+      auth_result = std::nullopt;
+      break;
+    case 0:
+      auth_result = auth_result_t::success;
+      break;
+    default:
+      auth_result = auth_result_t::failure;
       logger().error(
-	"do_auth: got error {} on mon {}",
-	ret,
-	conn->get_peer_addr());
+        "do_auth: got error {} on mon {}",
+        ret, conn->get_peer_addr());
+      break;
     }
-    return seastar::make_ready_future<std::optional<Connection::auth_result_t>>(
-      ret == -EAGAIN
-      ? std::nullopt
-      : std::make_optional(ret == 0
-	 ? auth_result_t::success
-	 : auth_result_t::failure
-      ));
+    return auth_result;
   });
 }
 
@@ -894,7 +896,11 @@ seastar::future<> Client::handle_log_ack(Ref<MLogAck> m)
 
 seastar::future<> Client::handle_config(Ref<MConfig> m)
 {
-  return crimson::common::local_conf().set_mon_vals(m->config);
+  return crimson::common::local_conf().set_mon_vals(m->config).then([this] {
+    if (config_updated) {
+      config_updated->set_value();
+    }
+  });
 }
 
 std::vector<unsigned> Client::get_random_mons(unsigned n) const
@@ -957,10 +963,17 @@ seastar::future<> Client::reopen_session(int rank)
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
     // TODO: connect to multiple addrs
-    auto peer = monmap.get_addrs(rank).pick_addr(msgr.get_myaddr().get_type());
+    // connect to v2 addresses if we have not bound to any address, otherwise
+    // use the advertised msgr protocol
+    uint32_t type = msgr.get_myaddr().get_type();
+    if (type == entity_addr_t::TYPE_NONE) {
+      type = entity_addr_t::TYPE_MSGR2;
+    }
+    auto peer = monmap.get_addrs(rank).pick_addr(type);
     if (peer == entity_addr_t{}) {
       // crimson msgr only uses the first bound addr
-      logger().warn("mon.{} does not have an addr compatible with me", rank);
+      logger().warn("mon.{} does not have an addr compatible with my type: {}",
+		    rank, msgr.get_myaddr().get_type());
       return seastar::now();
     }
     logger().info("connecting to mon.{}", rank);
@@ -1101,6 +1114,13 @@ seastar::future<> Client::renew_subs()
   return send_message(m).then([this] {
     sub.renewed();
   });
+}
+
+seastar::future<> Client::wait_for_config()
+{
+  assert(!config_updated);
+  config_updated = seastar::promise<>();
+  return config_updated->get_future();
 }
 
 void Client::print(std::ostream& out) const

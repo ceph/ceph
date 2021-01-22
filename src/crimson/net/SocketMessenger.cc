@@ -38,6 +38,11 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
     nonce{nonce}
 {}
 
+SocketMessenger::~SocketMessenger()
+{
+  ceph_assert(!listener);
+}
+
 seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
   assert(seastar::this_shard_id() == master_sid);

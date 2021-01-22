@@ -31,7 +31,6 @@
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
 #include "messages/MConfig.h"
-#include "messages/MGetConfig.h"
 #include "messages/MAuth.h"
 #include "messages/MLogAck.h"
 #include "messages/MAuthReply.h"
