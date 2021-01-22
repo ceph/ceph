@@ -3081,7 +3081,7 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_RUNTIME),
 
     Option("osd_mclock_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("balanced")
+    .set_default("high_client_ops")
     .set_enum_allowed( { "balanced", "high_recovery_ops", "high_client_ops", "custom" } )
     .set_description("Which mclock profile to use")
     .set_long_description("This option specifies the mclock profile to enable - one among the set of built-in profiles or a custom profile. Only considered for osd_op_queue = mclock_scheduler")
