@@ -18,6 +18,7 @@ import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { MonitoringListComponent } from './ceph/cluster/prometheus/monitoring-list/monitoring-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
+import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
@@ -102,8 +103,15 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        component: ServicesComponent,
-        data: { breadcrumbs: 'Cluster/Services' }
+        data: { breadcrumbs: 'Cluster/Services' },
+        children: [
+          { path: '', component: ServicesComponent },
+          {
+            path: URLVerbs.CREATE,
+            component: ServiceFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          }
+        ]
       },
       {
         path: 'inventory',
