@@ -14,7 +14,7 @@ CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 MIN_PODMAN_VERSION = (2, 0, 2)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
-DEFAULT_RETRY = 10
+DEFAULT_RETRY = 15
 SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
 SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
 
@@ -1375,7 +1375,7 @@ def is_available(ctx, what, func):
                 % (what, num, retry))
 
         num += 1
-        time.sleep(1)
+        time.sleep(2)
 
 
 def read_config(fn):
