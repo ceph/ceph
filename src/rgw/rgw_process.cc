@@ -207,8 +207,8 @@ int process_request(rgw::sal::RGWStore* const store,
     return ret;
   }
 
-  s->req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(req->id);
-  s->trans_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_trans_id(req->id);
+  s->req_id = store->zone_unique_id(req->id);
+  s->trans_id = store->zone_unique_trans_id(req->id);
   s->host_id = store->get_host_id();
   s->yield = yield;
 

@@ -36,7 +36,8 @@
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_quota.h"
-#include "rgw/services/svc_config_key.h"
+#include "services/svc_config_key.h"
+#include "services/svc_zone_utils.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
@@ -838,6 +839,16 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
 int RGWRadosStore::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj, optional_yield y)
 {
   return rados->defer_gc(dpp, rctx, bucket->get_info(), obj->get_obj(), y);
+}
+
+std::string RGWRadosStore::zone_unique_id(uint64_t unique_num)
+{
+  return svc()->zone_utils->unique_id(unique_num);
+}
+
+std::string RGWRadosStore::zone_unique_trans_id(const uint64_t unique_num)
+{
+  return svc()->zone_utils->unique_trans_id(unique_num);
 }
 
 int RGWRadosStore::cluster_stat(RGWClusterStat& stats)

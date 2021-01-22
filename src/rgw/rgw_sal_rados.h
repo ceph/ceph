@@ -394,6 +394,8 @@ class RGWRadosStore : public RGWStore {
     virtual int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) override;
     virtual Zone* get_zone() { return &zone; }
+    virtual std::string zone_unique_id(uint64_t unique_num) override;
+    virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Completions> get_completions(void) override;

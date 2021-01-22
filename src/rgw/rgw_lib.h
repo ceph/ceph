@@ -161,8 +161,8 @@ namespace rgw {
       RGWHandler::init(rados_ctx->get_store(), _s, io);
 
       get_state()->obj_ctx = rados_ctx;
-      get_state()->req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(id);
-      get_state()->trans_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_trans_id(id);
+      get_state()->req_id = store->zone_unique_id(id);
+      get_state()->trans_id = store->zone_unique_trans_id(id);
       get_state()->bucket_tenant = tuser->get_tenant();
       get_state()->set_user(tuser);
 
@@ -200,8 +200,8 @@ namespace rgw {
 	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
 	get_state()->obj_ctx = &rados_ctx;
-	get_state()->req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(id);
-	get_state()->trans_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_trans_id(id);
+	get_state()->req_id = store->zone_unique_id(id);
+	get_state()->trans_id = store->zone_unique_trans_id(id);
 
 	ldpp_dout(get_state(), 2) << "initializing for trans_id = "
 	    << get_state()->trans_id.c_str() << dendl;

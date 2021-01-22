@@ -468,6 +468,7 @@ int radosgw_Main(int argc, const char **argv)
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
+    /* XXX dang part of this is RADOS specific */
     admin_resource->register_resource("bucket", new RGWRESTMgr_Bucket);
   
     /*Registering resource for /admin/metadata */
