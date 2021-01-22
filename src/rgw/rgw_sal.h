@@ -162,6 +162,8 @@ class RGWStore {
     virtual int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,
 			 optional_yield y) = 0;
     virtual Zone* get_zone() = 0;
+    virtual std::string zone_unique_id(uint64_t unique_num) = 0;
+    virtual std::string zone_unique_trans_id(const uint64_t unique_num) = 0;
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
     virtual std::unique_ptr<Completions> get_completions(void) = 0;

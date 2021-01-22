@@ -481,7 +481,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   auto& owner = bucket->policy.get_owner();
 
-  string req_id = static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->zone_utils->unique_id(static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_new_req_id());
+  string req_id = store->zone_unique_id(store->get_new_req_id());
 
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, store, b.get(), nullptr,
