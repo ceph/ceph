@@ -1286,18 +1286,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         in_maintenance = self.inventory.get_host_with_state("maintenance")
         if not in_maintenance:
-            self.set_health_checks({
-                "HOST_IN_MAINTENANCE": {}
-            })
+            del self.health_checks["HOST_IN_MAINTENANCE"]
         else:
             s = "host is" if len(in_maintenance) == 1 else "hosts are"
-            self.set_health_checks({
-                "HOST_IN_MAINTENANCE": {
-                    "severity": "warning",
-                    "summary": f"{len(in_maintenance)} {s} in maintenance mode",
-                    "detail": [f"{h} is in maintenance" for h in in_maintenance],
-                }
-            })
+            self.health_checks["HOST_IN_MAINTENANCE"] = {
+                "severity": "warning",
+                "summary": f"{len(in_maintenance)} {s} in maintenance mode",
+                "detail": [f"{h} is in maintenance" for h in in_maintenance],
+            }
+        self.set_health_checks(self.health_checks)
 
     @trivial_completion
     @host_exists()
