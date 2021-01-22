@@ -300,6 +300,8 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     blk
     ceph-common
     cls_rbd_client
+    libneorados
+    librados
     StdFilesystem::filesystem)
 
   if(WITH_RBD_RWL)
