@@ -1913,7 +1913,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->dump_string("pool", cfg.poolname);
       f->dump_string("namespace", cfg.nsname);
       f->dump_string("image", cfg.imgname);
-      f->dump_string("snap", cfg.snapname);
+      f->dump_string("snapshot", cfg.snapname);
       f->dump_string("device", cfg.devpath);
       f->close_section();
     } else {

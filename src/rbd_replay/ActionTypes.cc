@@ -225,8 +225,8 @@ void OpenImageAction::decode(__u8 version, bufferlist::const_iterator &it) {
 
 void OpenImageAction::dump(Formatter *f) const {
   ImageActionBase::dump(f);
-  f->dump_string("name", name);
-  f->dump_string("snap_name", snap_name);
+  f->dump_string("image", name);
+  f->dump_string("snapshot", snap_name);
   f->dump_bool("read_only", read_only);
 }
 
@@ -253,8 +253,8 @@ void AioOpenImageAction::decode(__u8 version, bufferlist::const_iterator &it) {
 
 void AioOpenImageAction::dump(Formatter *f) const {
   ImageActionBase::dump(f);
-  f->dump_string("name", name);
-  f->dump_string("snap_name", snap_name);
+  f->dump_string("image", name);
+  f->dump_string("snapshot", snap_name);
   f->dump_bool("read_only", read_only);
 }
 

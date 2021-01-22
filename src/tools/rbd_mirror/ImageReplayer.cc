@@ -662,7 +662,7 @@ void ImageReplayer<I>::print_status(Formatter *f)
   std::lock_guard l{m_lock};
 
   f->open_object_section("image_replayer");
-  f->dump_string("name", m_image_spec);
+  f->dump_string("image", m_image_spec);
   f->dump_string("state", to_string(m_state));
   f->close_section();
 }

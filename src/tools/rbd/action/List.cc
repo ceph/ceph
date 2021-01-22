@@ -88,12 +88,12 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
   if (f) {
     f->open_object_section("image");
     f->dump_string("image", w->name);
-    f->dump_string("id", w->id);
+    f->dump_string("image_id", w->id);
     f->dump_unsigned("size", info.size);
     if (has_parent) {
       f->open_object_section("parent");
       f->dump_string("pool", parent_image_spec.pool_name);
-      f->dump_string("pool_namespace", parent_image_spec.pool_namespace);
+      f->dump_string("namespace", parent_image_spec.pool_namespace);
       f->dump_string("image", parent_image_spec.image_name);
       f->dump_string("snapshot", parent_snap_spec.name);
       f->close_section();
@@ -137,7 +137,7 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
       }
       if (f) {
         f->open_object_section("snapshot");
-        f->dump_string("image", w->name);
+        f->dump_string("name", w->name);
         f->dump_string("id", w->id);
         f->dump_string("snapshot", s->name);
         f->dump_unsigned("snapshot_id", s->id);
@@ -145,7 +145,7 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
         if (has_parent) {
           f->open_object_section("parent");
           f->dump_string("pool", parent_image_spec.pool_name);
-          f->dump_string("pool_namespace", parent_image_spec.pool_namespace);
+          f->dump_string("namespace", parent_image_spec.pool_namespace);
           f->dump_string("image", parent_image_spec.image_name);
           f->dump_string("snapshot", parent_snap_spec.name);
           f->close_section();
@@ -200,7 +200,7 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
       f->open_array_section("images");
     for (auto& image : images) {
        if (f)
-	 f->dump_string("name", image.name);
+	 f->dump_string("image", image.name);
        else
 	 std::cout << image.name << std::endl;
     }

@@ -224,8 +224,8 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
 
   if (f) {
     f->open_object_section("image");
-    f->dump_string("name", imgname);
-    f->dump_string("id", imgid);
+    f->dump_string("image", imgname);
+    f->dump_string("image_id", imgid);
     f->dump_unsigned("size", info.size);
     f->dump_unsigned("objects", info.num_objs);
     f->dump_int("order", info.order);
@@ -326,9 +326,9 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     if (f) {
       f->open_object_section("parent");
       f->dump_string("pool", parent_image_spec.pool_name);
-      f->dump_string("pool_namespace", parent_image_spec.pool_namespace);
+      f->dump_string("namespace", parent_image_spec.pool_namespace);
       f->dump_string("image", parent_image_spec.image_name);
-      f->dump_string("id", parent_image_spec.image_id);
+      f->dump_string("image_id", parent_image_spec.image_id);
       f->dump_string("snapshot", parent_snap_spec.name);
       f->dump_bool("trash", parent_image_spec.trash);
       f->dump_unsigned("overlap", overlap);

@@ -42,7 +42,7 @@ void SnapState::dump(Formatter *f) const {
   f->open_object_section("namespace");
   snap_namespace.dump(f);
   f->close_section();
-  f->dump_string("name", name);
+  f->dump_string("snapshot", name);
   f->dump_unsigned("protection_status", protection_status);
 }
 
@@ -76,7 +76,7 @@ void ImageState::decode(bufferlist::const_iterator& bl) {
 }
 
 void ImageState::dump(Formatter *f) const {
-  f->dump_string("name", name);
+  f->dump_string("snapshot", name);
   f->dump_unsigned("features", features);
   f->dump_unsigned("snap_limit", snap_limit);
   f->open_array_section("snapshots");

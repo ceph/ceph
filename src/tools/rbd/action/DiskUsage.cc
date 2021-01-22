@@ -78,8 +78,8 @@ void format_image_disk_usage(const std::string& name,
                               TextTable& tbl, Formatter *f) {
   if (f) {
     f->open_object_section("image");
-    f->dump_string("name", name);
-    f->dump_string("id", id);
+    f->dump_string("image", name);
+    f->dump_string("image_id", id);
     if (!snap_name.empty()) {
       f->dump_string("snapshot", snap_name);
       f->dump_unsigned("snapshot_id", snap_id);

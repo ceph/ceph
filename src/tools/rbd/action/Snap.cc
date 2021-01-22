@@ -145,8 +145,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
     if (f) {
       protected_str = snap_protected ? "true" : "false";
       f->open_object_section("snapshot");
-      f->dump_unsigned("id", s->id);
-      f->dump_string("name", s->name);
+      f->dump_unsigned("snapshot_id", s->id);
+      f->dump_string("snapshot", s->name);
       f->dump_unsigned("size", s->size);
       f->dump_string("protected", protected_str);
       f->dump_string("timestamp", tt_str);

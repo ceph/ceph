@@ -194,8 +194,8 @@ struct cls_rbd_snap {
   }
 
   void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("id", id);
-    f->dump_string("name", name);
+    f->dump_unsigned("image_id", id);
+    f->dump_string("image", name);
     f->dump_unsigned("image_size", image_size);
     if (parent.exists()) {
       f->open_object_section("parent");

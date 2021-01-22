@@ -39,15 +39,15 @@ int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
       if (all_flag) {
         f->open_object_section("child");
         f->dump_string("pool", child.pool_name);
-        f->dump_string("pool_namespace", child.pool_namespace);
+        f->dump_string("namespace", child.pool_namespace);
         f->dump_string("image", child.image_name);
-        f->dump_string("id", child.image_id);
+        f->dump_string("image_id", child.image_id);
         f->dump_bool("trash", child.trash);
         f->close_section();
       } else if (!trash) {
         f->open_object_section("child");
         f->dump_string("pool", child.pool_name);
-        f->dump_string("pool_namespace", child.pool_namespace);
+        f->dump_string("namespace", child.pool_namespace);
         f->dump_string("image", child.image_name);
         f->close_section();
       }

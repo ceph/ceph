@@ -301,7 +301,7 @@ void format(const ImageStats& image_stats, Formatter* f, bool global_search) {
     if (f)  {
       f->open_object_section("image");
       f->dump_string("pool", image_stat.pool_name);
-      f->dump_string("pool_namespace", image_stat.pool_namespace);
+      f->dump_string("namespace", image_stat.pool_namespace);
       f->dump_string("image", image_stat.image_name);
       for (auto& pair : STAT_DESCRIPTORS.left) {
         f->dump_float(pair.second.c_str(),
