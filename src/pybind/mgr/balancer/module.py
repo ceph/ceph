@@ -1006,10 +1006,8 @@ class Module(MgrModule):
         random.shuffle(adjusted_pools)
         pool_dump = osdmap_dump.get('pools', [])
         for pool in adjusted_pools:
-            num_pg = 0
             for p in pool_dump:
                 if p['pool_name'] == pool:
-                    num_pg = p['pg_num']
                     pool_id = p['pool']
                     break
 
@@ -1024,7 +1022,7 @@ class Module(MgrModule):
                     if s['state_name'] == 'active+clean':
                         num_pg_active_clean += s['count']
                         break
-            available = left - (num_pg - num_pg_active_clean)
+            available = min(left, num_pg_active_clean)
             did = plan.osdmap.calc_pg_upmaps(inc, max_deviation, available, [pool])
             total_did += did
             left -= did
