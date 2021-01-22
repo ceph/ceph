@@ -24,7 +24,8 @@ from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Cal
 try:
     from typing import Protocol  # Protocol was added in Python 3.8
 except ImportError:
-    class Protocol: pass  # type: ignore
+    class Protocol:  # type: ignore
+        pass
 
 
 import yaml
@@ -115,6 +116,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
 
 class InnerCliCommandCallable(Protocol):
     def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]: ...
+
 
 def _cli_command(perm: str) -> InnerCliCommandCallable:
     def inner_cli_command(prefix: str) -> Callable[[FuncT], FuncT]:
@@ -665,6 +667,7 @@ class TrivialReadCompletion(Completion[T]):
 def _hide_in_features(f: FuncT) -> FuncT:
     f._hide_in_features = True  # type: ignore
     return f
+
 
 class Orchestrator(object):
     """
