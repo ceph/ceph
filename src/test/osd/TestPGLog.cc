@@ -1165,11 +1165,10 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(4U, log.log.size());
-    /* DELETE entries from olog that are appended to the hed of the
-       log, and the divergent version of the object is removed (added
-       to remove_snap)
+    /* DELETE entries from olog that are appended to the head of the log,
+       and the divergent version of the object is not removed (Case 2).
      */
-    EXPECT_EQ(0x9U, remove_snap.front().get_hash());
+    EXPECT_TRUE(remove_snap.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_TRUE(info.purged_snaps.contains(purged_snap));
     EXPECT_TRUE(is_dirty());
@@ -1284,7 +1283,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(4U, log.log.size());
-    /* DELETE entries from olog that are appended to the hed of the
+    /* DELETE entries from olog that are appended to the head of the
        log, and the divergent version of the object is removed (added
        to remove_snap). When peering handles deletes, it is the earlier
        version that is in the removed list.
@@ -1388,6 +1387,116 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(dirty_big_info);
   }
 
+  /*        +--------------------------+
+            |  log              olog   |
+            +--------+-------+---------+
+            |        |object |         |
+            |version | hash  | version |
+            |        |       |         |
+       tail > (1,1)  |  x5   |  (1,1)  < tail
+            |        |       |         |
+            |        |       |         |
+            | (1,4)  |  x7   |  (1,4)  |
+            |        |       |         |
+            |        |       |         |
+       head > (1,5)  |  x9   |         |
+            | MODIFY |       |         |
+            |        |       |         |
+            |        |  x9   |  (2,5)  < head
+            |        |       |  MODIFY |
+            +--------+-------+---------+
+
+      The log entry (1,5) modifies the object x9 but the olog entry (2,5) modifies
+      it and is authoritative : the log entry (1,5) is divergent.
+      This will enter Case 4.
+
+  */
+  {
+    clear();
+
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_shard_t fromosd;
+    pg_info_t info;
+    list<hobject_t> remove_snap;
+    bool dirty_info = false;
+    bool dirty_big_info = false;
+
+    hobject_t divergent_object;
+    missing.may_include_deletes = false;
+
+    {
+      pg_log_entry_t e;
+
+      e.version = eversion_t(1, 1);
+      e.soid.set_hash(0x5);
+      log.tail = e.version;
+      log.log.push_back(e);
+      e.version = eversion_t(1, 4);
+      e.soid.set_hash(0x7);
+      log.log.push_back(e);
+      e.prior_version = eversion_t(1, 3);
+      e.version = eversion_t(1, 5);
+      e.soid.set_hash(0x9);
+      divergent_object = e.soid;
+      e.op = pg_log_entry_t::MODIFY;
+      log.log.push_back(e);
+      log.head = e.version;
+      log.index();
+
+      info.last_update = log.head;
+
+      e.version = eversion_t(1, 1);
+      e.soid.set_hash(0x5);
+      olog.tail = e.version;
+      olog.log.push_back(e);
+      e.version = eversion_t(1, 4);
+      e.soid.set_hash(0x7);
+      olog.log.push_back(e);
+      e.version = eversion_t(2, 5);
+      e.soid.set_hash(0x9);
+      e.op = pg_log_entry_t::MODIFY;
+      olog.log.push_back(e);
+      olog.head = e.version;
+    }
+
+    snapid_t purged_snap(1);
+    {
+      oinfo.last_update = olog.head;
+      oinfo.purged_snaps.insert(purged_snap);
+    }
+
+    EXPECT_FALSE(missing.have_missing());
+    EXPECT_EQ(1U, log.objects.count(divergent_object));
+    EXPECT_EQ(3U, log.log.size());
+    EXPECT_TRUE(remove_snap.empty());
+    EXPECT_EQ(log.head, info.last_update);
+    EXPECT_TRUE(info.purged_snaps.empty());
+    EXPECT_FALSE(is_dirty());
+    EXPECT_FALSE(dirty_info);
+    EXPECT_FALSE(dirty_big_info);
+
+    TestHandler h(remove_snap);
+    merge_log(oinfo, std::move(olog), fromosd, info, &h,
+              dirty_info, dirty_big_info);
+
+    /* When the divergent entry is a MODIFY and the authoritative
+       entry is a MODIFY of the same object, we can rollback all of
+       the divergent entries, then object will be added to missing.
+    */
+    EXPECT_TRUE(missing.is_missing(divergent_object));
+    EXPECT_EQ(1U, log.objects.count(divergent_object));
+    EXPECT_EQ(3U, log.log.size());
+    /* MODIFY entries from olog that are appended to the head of the log,
+       and the divergent version of the object is not removed.
+     */
+    EXPECT_TRUE(remove_snap.empty());
+    EXPECT_EQ(log.head, info.last_update);
+    EXPECT_TRUE(info.purged_snaps.contains(purged_snap));
+    EXPECT_TRUE(is_dirty());
+    EXPECT_TRUE(dirty_info);
+    EXPECT_TRUE(dirty_big_info);
+  }
 }
 
 TEST_F(PGLogTest, proc_replica_log) {
