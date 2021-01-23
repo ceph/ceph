@@ -2238,19 +2238,12 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     info.placement_rule = selected_placement_rule;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
-    init_default_bucket_layout(cct, info, svc.zone->get_zone());
-    if (pmaster_num_shards) {
-      // TODO: remove this once sync doesn't require the same shard count
-      info.layout.current_index.layout.normal.num_shards = *pmaster_num_shards;
-    }
-    info.layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
-    info.layout.current_index.layout.type = rule_info.index_type;
-    if (info.layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-      // use the same index layout for the bilog
-      const auto gen = info.layout.current_index.gen;
-      const auto& index = info.layout.current_index.layout.normal;
-      info.layout.logs.push_back(rgw::log_layout_from_index(gen, index));
-    }
+
+    init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
+			       pmaster_num_shards ?
+			       std::optional{*pmaster_num_shards} :
+			       std::nullopt,
+			       rule_info.index_type);
 
     info.requester_pays = false;
     if (real_clock::is_zero(creation_time)) {

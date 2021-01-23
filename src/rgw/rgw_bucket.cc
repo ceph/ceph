@@ -43,6 +43,7 @@
 #include "rgw_common.h"
 #include "rgw_reshard.h"
 #include "rgw_lc.h"
+#include "rgw_bucket_layout.h"
 
 // stolen from src/cls/version/cls_version.cc
 #define VERSION_ATTR "ceph.objclass.version"
@@ -2530,14 +2531,31 @@ int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
   return do_put_operate(&put_op);
 }
 
-void init_default_bucket_layout(CephContext *cct, RGWBucketInfo& info, const RGWZone& zone) {
-  info.layout.current_index.gen = 0;
-  info.layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
-  info.layout.current_index.layout.type = rgw::BucketIndexType::Normal;
+void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
+				const RGWZone& zone,
+				std::optional<uint32_t> shards,
+				std::optional<rgw::BucketIndexType> type) {
+  layout.current_index.gen = 0;
+  layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
 
-  info.layout.current_index.layout.normal.num_shards = (
-      cct->_conf->rgw_override_bucket_index_max_shards > 0 ?
-      cct->_conf->rgw_override_bucket_index_max_shards : zone.bucket_index_max_shards);
+  layout.current_index.layout.type =
+    type.value_or(rgw::BucketIndexType::Normal);
+
+  if (shards) {
+    layout.current_index.layout.normal.num_shards = *shards;
+  } else if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
+    layout.current_index.layout.normal.num_shards =
+      cct->_conf->rgw_override_bucket_index_max_shards;
+  } else {
+    layout.current_index.layout.normal.num_shards =
+      zone.bucket_index_max_shards;
+  }
+
+  if (layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
+    layout.logs.push_back(log_layout_from_index(
+			    layout.current_index.gen,
+			    layout.current_index.layout.normal));
+  }
 }
 
 int RGWMetadataHandlerPut_BucketInstance::put_check()
@@ -2550,12 +2568,17 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
 
   RGWBucketCompleteInfo *old_bci = (orig_obj ? &orig_obj->get_bci() : nullptr);
 
-  bool exists = (!!orig_obj);
+  const bool exists = (!!orig_obj);
 
   if (from_remote_zone) {
     // don't sync bucket layout changes
     if (!exists) {
-      init_default_bucket_layout(cct, bci.info, bihandler->svc.zone->get_zone());
+      auto& bci_index = bci.info.layout.current_index.layout;
+      auto index_type = bci_index.type;
+      auto num_shards = bci_index.normal.num_shards;
+      init_default_bucket_layout(cct, bci.info.layout,
+				 bihandler->svc.zone->get_zone(),
+				 num_shards, index_type);
     } else {
       bci.info.layout = old_bci->info.layout;
     }
