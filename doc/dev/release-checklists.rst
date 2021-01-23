@@ -64,7 +64,7 @@ Mon
 ---
 
 - [ ] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
-- [ ] mon/MgrMonitor.cc adjust `always_on_modules`
+- [x] mon/MgrMonitor.cc adjust `always_on_modules`
 - [ ] common/options.cc define `mon_debug_no_require_X`
 - [ ] common/options.cc remove `mon_debug_no_require_X-2`
 - [ ] mon/OSDMonitor.cc `create_initial`: adjust new `require_osd_release`, and add associated `mon_debug_no_require_X`
