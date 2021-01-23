@@ -202,6 +202,29 @@ public:
   std::string_view max_marker() const override {
     return "99999999"sv;
   }
+  int is_empty() override {
+    for (auto shard = 0u; shard < oids.size(); ++shard) {
+      std::list<cls_log_entry> log_entries;
+      lr::ObjectReadOperation op;
+      std::string out_marker;
+      bool truncated;
+      cls_log_list(op, {}, {}, {}, 1, log_entries, &out_marker, &truncated);
+      auto r = rgw_rados_operate(ioctx, oids[shard], &op, nullptr, null_yield);
+      if (r == -ENOENT) {
+	continue;
+      }
+      if (r < 0) {
+	lderr(cct) << __PRETTY_FUNCTION__
+		   << ": failed to list " << oids[shard]
+		   << cpp_strerror(-r) << dendl;
+	return r;
+      }
+      if (!log_entries.empty()) {
+	return 0;
+      }
+    }
+    return 1;
+  }
 };
 
 class RGWDataChangesFIFO final : public RGWDataChangesBE {
@@ -343,6 +366,24 @@ public:
     static const std::string mm =
       rgw::cls::fifo::marker::max().to_string();
     return std::string_view(mm);
+  }
+  int is_empty() override {
+    std::vector<rgw::cls::fifo::list_entry> log_entries;
+    bool more = false;
+    for (auto shard = 0u; shard < fifos.size(); ++shard) {
+      auto r = fifos[shard]->list(1, {}, &log_entries, &more,
+				  null_yield);
+      if (r < 0) {
+	lderr(cct) << __PRETTY_FUNCTION__
+		   << ": unable to list FIFO: " << get_oid(shard)
+		   << ": " << cpp_strerror(-r) << dendl;
+	return r;
+      }
+      if (!log_entries.empty()) {
+	return 0;
+      }
+    }
+    return 1;
   }
 };
 
@@ -782,7 +823,7 @@ public:
 
   GenTrim(DataLogBackends* bes, int shard_id, uint64_t target_gen, std::string cursor,
 	  uint64_t head_gen, uint64_t tail_gen,
-	  boost::intrusive_ptr<RGWDataChangesBE>&& be,
+	  boost::intrusive_ptr<RGWDataChangesBE> be,
 	  lr::AioCompletion* super)
     : Completion(super), bes(bes), shard_id(shard_id), target_gen(target_gen),
       cursor(std::move(cursor)), head_gen(head_gen), tail_gen(tail_gen),
@@ -793,6 +834,7 @@ public:
     be.reset();
     if (r == -ENOENT) r = -ENODATA;
     if (r == -ENODATA && gen_id < target_gen) r = 0;
+      r = 0;
     if (r < 0) {
       complete(std::move(p), r);
       return;
@@ -809,7 +851,7 @@ public:
       be = i->second;
     }
     auto c = be->gen_id == target_gen ? cursor : be->max_marker();
-    r = be->trim(shard_id, c, call(std::move(p)));
+    be->trim(shard_id, c, call(std::move(p)));
   }
 };
 
@@ -822,18 +864,57 @@ void DataLogBackends::trim_entries(int shard_id, std::string_view marker,
   const auto tail_gen = begin()->first;
   if (target_gen < tail_gen) {
     l.unlock();
-    rgw_complete_aio_completion(c, 0);
+    rgw_complete_aio_completion(c, -ENODATA);
     return;
   }
-  auto be = lower_bound(0)->second;
+  auto be = begin()->second;
   l.unlock();
-  auto p = be.get();
   auto gt = std::make_unique<GenTrim>(this, shard_id, target_gen,
 				      std::string(cursor), head_gen, tail_gen,
-				      std::move(be), c);
+				      be, c);
 
-  p->trim(shard_id, cursor,  GenTrim::call(std::move(gt)));
+  auto cc = be->gen_id == target_gen ? cursor : be->max_marker();
+  be->trim(shard_id, cc,  GenTrim::call(std::move(gt)));
 }
+
+int DataLogBackends::trim_generations(std::optional<uint64_t>& through) {
+  if (size() == 1) {
+    return 0;
+  }
+
+  std::vector<mapped_type> candidates;
+  {
+    std::scoped_lock l(m);
+    auto e = cend() - 1;
+    for (auto i = cbegin(); i < e; ++i) {
+      candidates.push_back(i->second);
+    }
+  }
+
+  std::optional<uint64_t> highest;
+  for (auto& be : candidates) {
+    auto r = be->is_empty();
+    if (r < 0) {
+      return r;
+    } else if (r == 1) {
+      highest = be->gen_id;
+    } else {
+      break;
+    }
+  }
+
+  through = highest;
+  if (!highest) {
+    return 0;
+  }
+  auto ec = empty_to(*highest, null_yield);
+  if (ec) {
+    return ceph::from_error_code(ec);
+  }
+
+  return ceph::from_error_code(remove_empty(null_yield));
+}
+
 
 int RGWDataChangesLog::trim_entries(int shard_id, std::string_view marker,
 				    librados::AioCompletion* c)
@@ -897,4 +978,12 @@ void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
 std::string RGWDataChangesLog::max_marker() const {
   return gencursor(std::numeric_limits<uint64_t>::max(),
 		   "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+}
+
+int RGWDataChangesLog::change_format(log_type type, optional_yield y) {
+  return ceph::from_error_code(bes->new_backing(type, y));
+}
+
+int RGWDataChangesLog::trim_generations(std::optional<uint64_t>& through) {
+  return bes->trim_generations(through);
 }
