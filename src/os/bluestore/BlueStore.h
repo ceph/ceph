@@ -1071,7 +1071,7 @@ public:
     bool cached;              ///< Onode is logically in the cache
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
-    bool pinned;              ///< Onode is pinned
+    std::atomic_bool pinned;  ///< Onode is pinned
                               /// (or should be pinned when cached)
     ExtentMap extent_map;
 

@@ -3554,7 +3554,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 // decremented. And another 'putting' thread on the instance will release it.
 //
 void BlueStore::Onode::get() {
-  if (++nref == 2) {
+  if (++nref >= 2 && !pinned) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     std::lock_guard l(ocs->lock);
     bool was_pinned = pinned;
@@ -3574,15 +3574,11 @@ void BlueStore::Onode::put() {
   if (n == 2) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     std::lock_guard l(ocs->lock);
-    bool was_pinned = pinned;
+    bool need_unpin = pinned;
     pinned = pinned && nref > 2; // intentionally use > not >= as we have
-    // +1 due to pinned state
-    bool r = was_pinned && !pinned;
-    // additional decrement for newly unpinned instance
-    if (r) {
-      n = --nref;
-    }
-    if (cached && r) {
+                                 // +1 due to pinned state
+    need_unpin = need_unpin && !pinned;
+    if (cached && need_unpin) {
       if (exists) {
         ocs->_unpin(this);
       } else {
@@ -3590,6 +3586,12 @@ void BlueStore::Onode::put() {
         // remove will also decrement nref and delete Onode
         c->onode_map._remove(oid);
       }
+    }
+    // additional decrement for newly unpinned instance
+    // should be the last action since Onode can be released
+    // at any point after this decrement
+    if (need_unpin) {
+      n = --nref;
     }
   }
   if (n == 0) {
@@ -4041,7 +4043,7 @@ void BlueStore::Collection::split_cache(
 
       p = onode_map.onode_map.erase(p);
       dest->onode_map.onode_map[o->oid] = o;
-      if (get_onode_cache() != dest->get_onode_cache()) {
+      if (o->cached) {
         get_onode_cache()->move_pinned(dest->get_onode_cache(), o.get());
       }
       o->c = dest;
