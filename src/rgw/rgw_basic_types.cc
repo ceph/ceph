@@ -69,11 +69,15 @@ std::string rgw_bucket::get_key(char tenant_delim, char id_delim, size_t reserve
   return key;
 }
 
-std::string rgw_bucket_shard::get_key(char tenant_delim, char id_delim,
+std::string rgw_bucket_shard::get_key(char tenant_delim, char id_delim, char gen_delim,
                                       char shard_delim) const
 {
-  static constexpr size_t shard_len{12}; // ":4294967295\0"
-  auto key = bucket.get_key(tenant_delim, id_delim, shard_len);
+  static constexpr size_t gen_shard_len{12}; // ":4294967295\0"
+  auto key = bucket.get_key(tenant_delim, id_delim, gen_shard_len);
+  if (gen_id > 0 && gen_delim) {
+    key.append(1, gen_delim);
+    key.append(std::to_string(gen_id));
+  }
   if (shard_id >= 0 && shard_delim) {
     key.append(1, shard_delim);
     key.append(std::to_string(shard_id));

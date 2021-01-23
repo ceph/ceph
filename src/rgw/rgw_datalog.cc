@@ -672,8 +672,8 @@ void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
   status->cur_expiration = expiration;
 }
 
-int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
-  rgw_bucket_shard bs(bucket, shard_id);
+int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id, uint64_t gen_id) {
+  rgw_bucket_shard bs(bucket, shard_id, gen_id);
   return choose_oid(bs);
 }
 
@@ -691,7 +691,7 @@ std::string RGWDataChangesLog::get_oid(int i) const {
   return be->get_oid(i);
 }
 
-int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
+int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id, uint64_t gen_id) {
   auto& bucket = bucket_info.bucket;
 
   if (!filter_bucket(bucket, null_yield)) {
@@ -702,7 +702,7 @@ int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id)
     observer->on_bucket_changed(bucket.get_key());
   }
 
-  rgw_bucket_shard bs(bucket, shard_id);
+  rgw_bucket_shard bs(bucket, shard_id, gen_id);
 
   int index = choose_oid(bs);
   mark_modified(index, bs);

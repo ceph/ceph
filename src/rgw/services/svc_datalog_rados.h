@@ -53,12 +53,12 @@ public:
 
   void set_observer(rgw::BucketChangeObserver *observer);
 
-  int get_log_shard_id(rgw_bucket& bucket, int shard_id);
+  int get_log_shard_id(rgw_bucket& bucket, int shard_id, uint64_t gen_id);
   std::string get_oid(int shard_id) const;
 
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
 
-  int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
+  int add_entry(const RGWBucketInfo& bucket_info, int shard_id, uint64_t gen_id);
   int list_entries(int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::optional<std::string_view> marker,

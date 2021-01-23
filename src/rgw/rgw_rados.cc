@@ -855,7 +855,8 @@ int RGWIndexCompletionThread::process()
       /* ignoring error, can't do anything about it */
       continue;
     }
-    r = store->svc.datalog_rados->add_entry(bucket_info, bs.shard_id);
+    uint64_t gen_id = bucket_info.layout.current_index.gen? bucket_info.layout.current_index.gen : 0;
+    r = store->svc.datalog_rados->add_entry(bucket_info, bs.shard_id, gen_id);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
     }
@@ -5049,7 +5050,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
       return r;
     }
 
-    r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+    uint64_t gen_id = target->bucket_info.layout.current_index.gen? target->bucket_info.layout.current_index.gen : 0;
+    r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id, gen_id);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
       return r;
@@ -6119,7 +6121,8 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
 
   ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
 
-  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+  uint64_t gen_id = target->bucket_info.layout.current_index.gen? target->bucket_info.layout.current_index.gen : 0;
+  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id, gen_id);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
@@ -6145,7 +6148,8 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
 
   ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace);
 
-  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+  uint64_t gen_id = target->bucket_info.layout.current_index.gen? target->bucket_info.layout.current_index.gen : 0;
+  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id, gen_id);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
@@ -6171,7 +6175,8 @@ int RGWRados::Bucket::UpdateIndex::cancel()
    * for following the specific bucket shard log. Otherwise they end up staying behind, and users
    * have no way to tell that they're all caught up
    */
-  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id);
+  uint64_t gen_id = target->bucket_info.layout.current_index.gen? target->bucket_info.layout.current_index.gen : 0;
+  int r = store->svc.datalog_rados->add_entry(target->bucket_info, bs->shard_id, gen_id);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
   }
@@ -6813,7 +6818,8 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
     return r;
   }
 
-  r = svc.datalog_rados->add_entry(bucket_info, bs.shard_id);
+  uint64_t gen_id = bucket_info.layout.current_index.gen ? bucket_info.layout.current_index.gen : 0;
+  r = svc.datalog_rados->add_entry(bucket_info, bs.shard_id, gen_id);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed writing data log" << dendl;
   }
