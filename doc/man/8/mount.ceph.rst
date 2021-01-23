@@ -143,9 +143,6 @@ Advanced
 :command:`osdkeepalive`
     int, Default: 5
 
-:command:`osdtimeout`
-    int (seconds), Default: 60
-
 :command:`osd_idle_ttl`
     int (seconds), Default: 60
 
