@@ -1353,7 +1353,7 @@ Usage:
         if o is None:
             raise NoOrchestrator()
 
-        avail, why = self.available()
+        avail, msg = self.available()
         result: Dict[str, Any] = {
             "backend": o,
             "paused": self.is_paused(),
