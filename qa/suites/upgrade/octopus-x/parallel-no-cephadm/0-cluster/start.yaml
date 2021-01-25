@@ -7,7 +7,7 @@ meta:
 roles:
 - - mon.a
   - mgr.x
-  - mds.a
+  #- mds.a ref: https://tracker.ceph.com/issues/48994
   - osd.0
   - osd.1
   - osd.2
