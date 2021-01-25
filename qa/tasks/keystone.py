@@ -92,6 +92,22 @@ def download(ctx, config):
                 args=[ 'rm', '-rf', keystonedir ],
             )
 
+patch_bindep_template = """\
+import fileinput
+import sys
+import os
+fixed=False
+os.chdir("{keystone_dir}")
+for line in fileinput.input("bindep.txt", inplace=True):
+ if line == "python34-devel [platform:centos]\\n":
+  line="python34-devel [platform:centos-7]\\npython36-devel [platform:centos-8]\\n" 
+  fixed=True
+ print(line,end="")
+
+print("Fixed line" if fixed else "No fix necessary", file=sys.stderr)
+exit(0)
+"""
+
 @contextlib.contextmanager
 def install_packages(ctx, config):
     """
@@ -104,9 +120,12 @@ def install_packages(ctx, config):
     assert isinstance(config, dict)
     log.info('Installing packages for Keystone...')
 
+    patch_bindep = patch_bindep_template \
+        .replace("{keystone_dir}", get_keystone_dir(ctx))
     packages = {}
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
+        toxvenv_sh(ctx, remote, ['python'], stdin=patch_bindep)
         # use bindep to read which dependencies we need from keystone/bindep.txt
         toxvenv_sh(ctx, remote, ['pip', 'install', 'bindep'])
         packages[client] = toxvenv_sh(ctx, remote,
