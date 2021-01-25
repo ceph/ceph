@@ -628,7 +628,7 @@ private:
   // (3) manages deleted connections
   // (4) TODO reconnect on connection errors
   // (5) TODO cleanup timedout callbacks
-  void run() {
+  void run() noexcept {
     amqp_frame_t frame;
     while (!stopped) {
 
