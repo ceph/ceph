@@ -516,7 +516,7 @@ public:
     bool   unittest_fail_after_successful_processing = false;
   };
   int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
-
+  bool get_sharding(std::string& sharding);
 
 };
 
