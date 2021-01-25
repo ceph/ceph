@@ -259,7 +259,7 @@ public:
     // Dirt cheap, see:
     //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
     size_t me = (size_t)pthread_self();
-    size_t i = (me >> 3) & ((1 << num_shard_bits) - 1);
+    size_t i = (me >> 12) & ((1 << num_shard_bits) - 1);
     return i;
   }
 
