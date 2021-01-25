@@ -98,7 +98,7 @@ class DeviceSelection(object):
             ret['vendor'] = self.vendor
         if self.size:
             ret['size'] = self.size
-        if self.rotational:
+        if self.rotational is not None:
             ret['rotational'] = self.rotational
         if self.limit:
             ret['limit'] = self.limit
