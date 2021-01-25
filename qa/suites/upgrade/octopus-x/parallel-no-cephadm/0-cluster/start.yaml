@@ -1,0 +1,46 @@
+meta:
+- desc: |
+   Run ceph on two nodes,
+   with a separate client 0,1,2 third node.
+   Use xfs beneath the osds.
+   CephFS tests running on client 2,3
+roles:
+- - mon.a
+  - mgr.x
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+- - mon.b
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+- - mon.c
+  - osd.8
+  - osd.9
+  - osd.10
+  - osd.11
+- - client.0
+  - client.1
+  - client.2
+  - client.3
+overrides:
+  ceph:
+    log-whitelist:
+    - scrub mismatch
+    - ScrubResult
+    - wrongly marked
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(SLOW_OPS\)
+    - overall HEALTH_
+    - slow request
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
+      mon:
+        mon warn on osd down out interval zero: false
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
