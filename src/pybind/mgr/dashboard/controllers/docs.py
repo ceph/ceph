@@ -337,15 +337,24 @@ class Docs(BaseController):
         if all_endpoints:
             base_url = ""
 
-        host = cherrypy.request.base.split('://', 1)[1] if not offline else 'example.com'
+        forwarded_header = cherrypy.request.headers.get('Forwarded')
+        if forwarded_header:
+            host = forwarded_header.split(';', 1)[0].split('=', 1)[1].replace('"', '')
+            scheme = forwarded_header.split(';', 1)[1].split('=', 1)[1]
+            client_port = cherrypy.request.headers.get('X-Forwarded-Port')
+            spec_server_url = "{}://{}:{}".format(scheme, host, client_port)
+        else:
+            host = cherrypy.request.base.split('://', 1)[1] if not offline else 'example.com'
+            scheme = 'https' if offline or mgr.get_localized_module_option('ssl') else 'http'
+            spec_server_url = "{}{}".format(
+                cherrypy.request.base if not offline else '',
+                base_url)
         logger.debug("Host: %s", host)
 
         paths = cls._gen_paths(all_endpoints)
 
         if not base_url:
             base_url = "/"
-
-        scheme = 'https' if offline or mgr.get_localized_module_option('ssl') else 'http'
 
         spec = {
             'openapi': "3.0.0",
@@ -356,9 +365,7 @@ class Docs(BaseController):
             },
             'host': host,
             'basePath': base_url,
-            'servers': [{'url': "{}{}".format(
-                cherrypy.request.base if not offline else '',
-                base_url)}],
+            'servers': [{'url': spec_server_url}],
             'tags': cls._gen_tags(all_endpoints),
             'schemes': [scheme],
             'paths': paths,
