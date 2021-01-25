@@ -11,6 +11,7 @@ UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
+MIN_PODMAN_VERSION = (2, 0, 2)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 10
@@ -1874,6 +1875,9 @@ def check_container_engine(ctx):
     engine = os.path.basename(ctx.container_path) if ctx.container_path else None
     if engine not in CONTAINER_PREFERENCE:
         raise Error('Unable to locate any of %s' % CONTAINER_PREFERENCE)
+    elif engine == 'podman':
+        if get_podman_version(ctx, ctx.container_path) < MIN_PODMAN_VERSION:
+            raise Error('podman version %d.%d.%d or later is required' % MIN_PODMAN_VERSION)
 
 
 def get_unit_name(fsid, daemon_type, daemon_id=None):
