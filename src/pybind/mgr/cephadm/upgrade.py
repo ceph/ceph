@@ -58,6 +58,7 @@ class CephadmUpgrade:
         'UPGRADE_NO_STANDBY_MGR',
         'UPGRADE_FAILED_PULL',
         'UPGRADE_REDEPLOY_DAEMON',
+        'UPGRADE_BAD_TARGET_VERSION',
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -94,7 +95,7 @@ class CephadmUpgrade:
         try:
             (major, minor, patch) = version.split('.')
             assert int(minor) >= 0
-            assert int(patch) >= 0
+            # patch might be a number or {number}-g{sha1}
         except:
             return 'version must be in the form X.Y.Z (e.g., 15.2.3)'
         if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
@@ -304,6 +305,16 @@ class CephadmUpgrade:
         target_major, target_minor, target_patch = target_version.split('.')
         logger.info('Upgrade: Target is version %s, container %s with id %s' % (
             target_version, target_image, target_id))
+
+        version_error = self._check_target_version(target_version)
+        if version_error:
+            self._fail_upgrade('UPGRADE_BAD_TARGET_VERSION', {
+                'severity': 'error',
+                'summary': f'Upgrade: cannot upgrade/downgrade to {target_version}',
+                'count': 1,
+                'detail': [version_error],
+            })
+            return
 
         image_settings = self.get_distinct_container_image_settings()
 
