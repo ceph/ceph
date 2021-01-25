@@ -483,7 +483,7 @@ public:
       // start the worker threads to do the actual queue processing
       const std::string WORKER_THREAD_NAME = "notif-worker";
       for (auto worker_id = 0U; worker_id < worker_count; ++worker_id) {
-        workers.emplace_back([this]() { io_context.run(); });
+        workers.emplace_back([this]() noexcept { io_context.run(); });
         const auto rc = ceph_pthread_setname(workers.back().native_handle(), 
             (WORKER_THREAD_NAME+std::to_string(worker_id)).c_str());
         ceph_assert(rc == 0);

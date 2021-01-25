@@ -953,11 +953,12 @@ int AsioFrontend::run()
   work.emplace(boost::asio::make_work_guard(context));
 
   for (int i = 0; i < thread_count; i++) {
-    threads.emplace_back([=] {
+    threads.emplace_back([=]() noexcept {
       // request warnings on synchronous librados calls in this thread
       is_asio_thread = true;
-      boost::system::error_code ec;
-      context.run(ec);
+      // Have uncaught exceptions kill the process and give a
+      // stacktrace, not be swallowed.
+      context.run();
     });
   }
   return 0;

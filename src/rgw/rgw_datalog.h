@@ -201,7 +201,7 @@ class RGWDataChangesLog {
 
   ceph::mutex renew_lock = ceph::make_mutex("ChangesRenewThread::lock");
   ceph::condition_variable renew_cond;
-  void renew_run();
+  void renew_run() noexcept;
   void renew_stop();
   std::thread renew_thread;
 
