@@ -596,6 +596,16 @@ ceph_get_release_name(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject *
+ceph_lookup_release_name(BaseMgrModule *self, PyObject *args)
+{
+  int major = 0;
+  if (!PyArg_ParseTuple(args, "i:ceph_lookup_release_name", &major)) {
+    return nullptr;
+  }
+  return PyUnicode_FromString(ceph_release_name(major));
+}
+
+static PyObject *
 ceph_get_context(BaseMgrModule *self)
 {
   return self->py_modules->get_context();
@@ -1414,6 +1424,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_release_name", (PyCFunction)ceph_get_release_name, METH_NOARGS,
    "Get the ceph release name of this process"},
+
+  {"_ceph_lookup_release_name", (PyCFunction)ceph_lookup_release_name, METH_VARARGS,
+   "Get the ceph release name for a given major number"},
 
   {"_ceph_get_context", (PyCFunction)ceph_get_context, METH_NOARGS,
     "Get a CephContext* in a python capsule"},
