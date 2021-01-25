@@ -20,6 +20,9 @@
 #include "os/bluestore/BlueStore.h"
 #include "common/admin_socket.h"
 #include "kv/RocksDBStore.h"
+#include "common/url_escape.h"
+
+#include "bluestore_dump.h"
 
 namespace po = boost::program_options;
 
@@ -236,6 +239,9 @@ int main(int argc, char **argv)
   string empty_sharding(1, '\0');
   string new_sharding = empty_sharding;
   string resharding_ctrl;
+  string format = "xml-pretty";
+  string select;
+  string trim;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -254,6 +260,9 @@ int main(int argc, char **argv)
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'/'bluefs-slow'")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
+    ("format", po::value<string>(&format), "chooses output format for 'list-objects'. default 'xml-pretty'")
+    ("select", po::value<string>(&select), "selection condition for objects produced by 'list-objects'")
+    ("trim", po::value<string>(&trim), "trimming tree of output produced by 'list-objects'")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -275,7 +284,8 @@ int main(int argc, char **argv)
         "free-dump, "
         "free-score, "
         "bluefs-stats, "
-        "reshard")
+        "reshard, "
+        "list-objects")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -954,6 +964,16 @@ int main(int argc, char **argv)
       cout << "reshard success" << std::endl;
     }
     bluestore.close_db_environment();
+  } else if (action == "list-objects") {
+    BlueStore bluestore(g_ceph_context, path);
+    KeyValueDB *db_ptr;
+    int r = bluestore.open_db_environment(&db_ptr, false);
+    if (r < 0) {
+     return -EINVAL;
+    }
+    Dump dump(db_ptr);
+    dump.list_objects(format, select, trim);
+    bluestore.umount();
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;

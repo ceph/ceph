@@ -2705,6 +2705,9 @@ public:
 
   int dump_bluefs_sizes(ostream& out);
 
+  static int objkey_to_oid(const std::string& key, ghobject_t *oid);
+  static int extentkey_to_oid(const std::string& key, ghobject_t *oid, uint32_t *offset);
+
 public:
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
