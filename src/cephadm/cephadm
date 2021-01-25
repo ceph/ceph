@@ -4386,16 +4386,10 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         version = None
                         start_stamp = None
 
-                        if 'podman' in container_path and \
-                            get_podman_version(ctx, container_path) < (1, 6, 2):
-                            image_field = '.ImageID'
-                        else:
-                            image_field = '.Image'
-
                         out, err, code = call(ctx,
                             [
                                 container_path, 'inspect',
-                                '--format', '{{.Id}},{{.Config.Image}},{{%s}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}' % image_field,
+                                '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
                                 'ceph-%s-%s' % (fsid, j)
                             ],
                             verbosity=CallVerbosity.DEBUG)
