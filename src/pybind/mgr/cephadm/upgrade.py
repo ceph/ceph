@@ -303,8 +303,9 @@ class CephadmUpgrade:
             target_image = self.target_image
         target_version = self.upgrade_state.target_version
         target_major, target_minor, target_patch = target_version.split('.')
-        logger.info('Upgrade: Target is version %s, container %s with id %s' % (
-            target_version, target_image, target_id))
+        target_major_name = self.mgr.lookup_release_name(int(target_major))
+        logger.info('Upgrade: Target is version %s (%s), container %s id %s' % (
+            target_version, target_major_name, target_image, target_id))
 
         version_error = self._check_target_version(target_version)
         if version_error:
@@ -457,6 +458,18 @@ class CephadmUpgrade:
 
             logger.info('Upgrade: All %s daemons are up to date.' %
                         daemon_type)
+
+            # complete osd upgrade?
+            if daemon_type == 'osd':
+                osdmap = self.mgr.get("osd_map")
+                osd_min_name = osdmap.get("require_osd_release", "argonaut")
+                osd_min = ord(osd_min_name[0]) - ord('a') + 1
+                if osd_min < int(target_major):
+                    logger.info(f'Upgrade: Setting require_osd_release to {target_major} {target_major_name}')
+                    ret, _, err = self.mgr.check_mon_command({
+                        'prefix': 'osd require-osd-release',
+                        'release': target_major_name,
+                    })
 
         # clean up
         logger.info('Upgrade: Finalizing container_image settings')
