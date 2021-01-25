@@ -192,6 +192,10 @@ public:
 			      max_entries, log_entries,
 			      std::string(marker.value_or("")),
 			      out_marker, truncated, null_yield);
+    if (r == -ENOENT) {
+      *truncated = false;
+      return 0;
+    }
     if (r < 0) {
       lderr(cct) << __PRETTY_FUNCTION__
 		 << ": failed to list " << oids[index]
