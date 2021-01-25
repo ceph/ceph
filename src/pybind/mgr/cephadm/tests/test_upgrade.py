@@ -57,7 +57,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
             def _versions_mock(cmd):
                 return json.dumps({
                     'mgr': {
-                        'myversion': 1
+                        'ceph version 1.2.3 (asdf) blah': 1
                     }
                 })
 
