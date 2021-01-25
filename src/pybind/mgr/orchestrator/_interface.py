@@ -25,6 +25,7 @@ from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     ServiceSpecValidationError, IscsiServiceSpec
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
+from ceph.utils import datetime_to_str, str_to_datetime
 
 from mgr_module import MgrModule, CLICommand, HandleCommandResult
 
@@ -35,8 +36,6 @@ except ImportError:
     pass
 
 logger = logging.getLogger(__name__)
-
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 
 T = TypeVar('T')
 
@@ -1330,7 +1329,7 @@ class DaemonDescription(object):
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
             if getattr(self, k):
-                out[k] = getattr(self, k).strftime(DATEFMT)
+                out[k] = datetime_to_str(getattr(self, k))
 
         if self.events:
             out['events'] = [e.to_json() for e in self.events]
@@ -1348,7 +1347,7 @@ class DaemonDescription(object):
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
                   'last_configured']:
             if k in c:
-                c[k] = datetime.datetime.strptime(c[k], DATEFMT)
+                c[k] = str_to_datetime(c[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
         return cls(events=events, **c)
 
@@ -1436,7 +1435,7 @@ class ServiceDescription(object):
         }
         for k in ['last_refresh', 'created']:
             if getattr(self, k):
-                status[k] = getattr(self, k).strftime(DATEFMT)
+                status[k] = datetime_to_str(getattr(self, k))
         status = {k: v for (k, v) in status.items() if v is not None}
         out['status'] = status
         if self.events:
@@ -1454,7 +1453,7 @@ class ServiceDescription(object):
         c_status = status.copy()
         for k in ['last_refresh', 'created']:
             if k in c_status:
-                c_status[k] = datetime.datetime.strptime(c_status[k], DATEFMT)
+                c_status[k] = str_to_datetime(c_status[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
         return cls(spec=spec, events=events, **c_status)
 
@@ -1574,7 +1573,7 @@ class OrchestratorEvent:
 
     def __init__(self, created: Union[str, datetime.datetime], kind, subject, level, message):
         if isinstance(created, str):
-            created = datetime.datetime.strptime(created, DATEFMT)
+            created = str_to_datetime(created)
         self.created: datetime.datetime = created
 
         assert kind in "service daemon".split()
@@ -1596,7 +1595,7 @@ class OrchestratorEvent:
 
     def to_json(self) -> str:
         # Make a long list of events readable.
-        created = self.created.strftime(DATEFMT)
+        created = datetime_to_str(self.created)
         return f'{created} {self.kind_subject()} [{self.level}] "{self.message}"'
 
     @classmethod
@@ -1604,7 +1603,7 @@ class OrchestratorEvent:
     def from_json(cls, data) -> "OrchestratorEvent":
         """
         >>> OrchestratorEvent.from_json('''2020-06-10T10:20:25.691255 daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on host 'ubuntu'"''').to_json()
-        '2020-06-10T10:20:25.691255 daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on host \\'ubuntu\\'"'
+        '2020-06-10T10:20:25.691255Z daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on host \\'ubuntu\\'"'
 
         :param data:
         :return:

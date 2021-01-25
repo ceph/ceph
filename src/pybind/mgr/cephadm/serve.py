@@ -12,11 +12,12 @@ except ImportError:
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, RGWSpec
+from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
 from cephadm.schedule import HostAssignment
 from cephadm.upgrade import CEPH_UPGRADE_ORDER
-from cephadm.utils import forall_hosts, cephadmNoImage, str_to_datetime, is_repo_digest
+from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -224,7 +225,7 @@ class CephadmServe:
             if '.' not in d['name']:
                 continue
             sd = orchestrator.DaemonDescription()
-            sd.last_refresh = datetime.datetime.utcnow()
+            sd.last_refresh = datetime_now()
             for k in ['created', 'started', 'last_configured', 'last_deployed']:
                 v = d.get(k, None)
                 if v:

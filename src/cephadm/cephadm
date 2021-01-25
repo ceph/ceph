@@ -48,7 +48,6 @@ import os
 import platform
 import pwd
 import random
-import re
 import select
 import shutil
 import socket
@@ -94,7 +93,7 @@ if sys.version_info > (3, 0):
 container_path = ''
 cached_stdin = None
 
-DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
+DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 # Log and console output config
 logging_config = {
@@ -1178,7 +1177,7 @@ def get_file_timestamp(fn):
         return datetime.datetime.fromtimestamp(
             mt, tz=datetime.timezone.utc
         ).strftime(DATEFMT)
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -1200,11 +1199,11 @@ def try_convert_datetime(s):
     p = re.compile(r'(\.[\d]{6})[\d]*')
     s = p.sub(r'\1', s)
 
-    # replace trailling Z with -0000, since (on python 3.6.8) it won't parse
+    # replace trailing Z with -0000, since (on python 3.6.8) it won't parse
     if s and s[-1] == 'Z':
         s = s[:-1] + '-0000'
 
-    # cut off the redundnat 'CST' part that strptime can't parse, if
+    # cut off the redundant 'CST' part that strptime can't parse, if
     # present.
     v = s.split(' ')
     s = ' '.join(v[0:3])
