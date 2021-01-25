@@ -1856,6 +1856,26 @@ def find_program(filename):
     return name
 
 
+def find_container_engine(ctx):
+    # type: (CephadmContext) -> str
+    if ctx.docker:
+        return find_program('docker')
+    else:
+        for i in CONTAINER_PREFERENCE:
+            try:
+                return find_program(i)
+            except Exception as e:
+                logger.debug('Could not locate %s: %s' % (i, e))
+    return ''
+
+
+def check_container_engine(ctx):
+    # type: (CephadmContext) -> None
+    engine = os.path.basename(ctx.container_path) if ctx.container_path else None
+    if engine not in CONTAINER_PREFERENCE:
+        raise Error('Unable to locate any of %s' % CONTAINER_PREFERENCE)
+
+
 def get_unit_name(fsid, daemon_type, daemon_id=None):
     # type: (str, str, Optional[Union[int, str]]) -> str
     # accept either name or type + id
@@ -4995,19 +5015,11 @@ def command_check_host(ctx: CephadmContext) -> None:
     errors = []
     commands = ['systemctl', 'lvcreate']
 
-    if ctx.docker:
-        container_path = find_program('docker')
-    else:
-        for i in CONTAINER_PREFERENCE:
-            try:
-                container_path = find_program(i)
-                break
-            except Exception as e:
-                logger.debug('Could not locate %s: %s' % (i, e))
-        if not container_path:
-            errors.append('ERROR: Unable to locate a supported container engine ({})'.format(' or '.join(CONTAINER_PREFERENCE)))
-        else:
-            logger.info('podman|docker (%s) is present' % container_path)
+    try:
+        check_container_engine(ctx)
+        logger.info('podman|docker (%s) is present' % container_path)
+    except Error as e:
+        errors.append(str(e))
 
     for command in commands:
         try:
@@ -5040,7 +5052,10 @@ def command_prepare_host(ctx: CephadmContext) -> None:
 
     logger.info('Verifying podman|docker is present...')
     pkg = None
-    if not container_path:
+    try:
+        check_container_engine(ctx)
+    except Error as e:
+        logger.warning(str(e))
         if not pkg:
             pkg = create_packager(ctx)
         pkg.install_podman()
@@ -7509,23 +7524,6 @@ def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
         sys.stderr.write("No command specified; pass -h or --help for usage\n")
         return None
 
-    ctx.container_path = ""
-    if ctx.func != command_check_host:
-        if ctx.docker:
-            ctx.container_path = find_program("docker")
-        else:
-            for i in CONTAINER_PREFERENCE:
-                try:
-                    ctx.container_path = find_program(i)
-                    break
-                except Exception as e:
-                    logger.debug("Could not locate %s: %s" % (i, e))
-            if not ctx.container_path and ctx.func != command_prepare_host\
-                    and ctx.func != command_add_repo:
-                sys.stderr.write("Unable to locate any of %s\n" %
-                     CONTAINER_PREFERENCE)
-                return None
-
     return ctx
 
 
@@ -7547,6 +7545,12 @@ def main():
         sys.exit(1)
 
     try:
+        # podman or docker?
+        ctx.container_path = find_container_engine(ctx)
+        if ctx.func not in \
+                [command_check_host, command_prepare_host, command_add_repo]:
+            check_container_engine(ctx)
+        # command handler
         r = ctx.func(ctx)
     except Error as e:
         if ctx.verbose:
