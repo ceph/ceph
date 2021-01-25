@@ -347,7 +347,7 @@ recovery operations to ensure optimal performance during recovery.
 
 :Type: String
 :Valid Choices: prio, wpq
-:Default: ``prio``
+:Default: ``wpq``
 
 
 ``osd op queue cut off``
@@ -541,7 +541,7 @@ Ceph performs well as the OSD map grows larger.
 
 :Description: The number of OSD maps to keep cached.
 :Type: 32-bit Integer
-:Default: ``500``
+:Default: ``50``
 
 
 ``osd map cache bl size``
@@ -564,7 +564,7 @@ Ceph performs well as the OSD map grows larger.
 
 :Description: The maximum map entries allowed per MOSDMap message.
 :Type: 32-bit Integer
-:Default: ``100``
+:Default: ``40``
 
 
 
