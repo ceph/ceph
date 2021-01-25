@@ -530,42 +530,34 @@ public:
     logger().debug("Writing offset {}", offset);
     assert(offset % segment_manager->get_block_size() == 0);
     assert(ptr.length() == (size_t)segment_manager->get_block_size());
-    return crimson::do_until(
-      [this, offset, ptr=std::move(ptr)] {
-	return seastar::do_with(
-	  tm->create_transaction(),
-	  ptr,
-	  [this, offset](auto &t, auto &ptr) mutable {
-	    return tm->dec_ref(
+    return repeat_eagain([this, offset, ptr=std::move(ptr)] {
+      return seastar::do_with(
+	tm->create_transaction(),
+	ptr,
+	[this, offset](auto &t, auto &ptr) mutable {
+	  return tm->dec_ref(
+	    *t,
+	    offset
+	  ).safe_then([](auto){}).handle_error(
+	    crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
+	    crimson::ct_error::pass_further_all{}
+	  ).safe_then([=, &t, &ptr] {
+	    logger().debug("dec_ref complete");
+	    return tm->alloc_extent<TestBlock>(
 	      *t,
-	      offset
-	    ).safe_then([](auto){}).handle_error(
-	      crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
-	      crimson::ct_error::pass_further_all{}
-	    ).safe_then([=, &t, &ptr] {
-	      logger().debug("dec_ref complete");
-	      return tm->alloc_extent<TestBlock>(
-		*t,
-		offset,
-		ptr.length());
-	    }).safe_then([=, &t, &ptr](auto ext) mutable {
-	      assert(ext->get_laddr() == (size_t)offset);
-	      assert(ext->get_bptr().length() == ptr.length());
-	      ext->get_bptr().swap(ptr);
-	      logger().debug("submitting transaction");
-	      return tm->submit_transaction(std::move(t));
-	    }).safe_then([] {
-	      return true;
-	    }).handle_error(
-	      [](const crimson::ct_error::eagain &e) {
-		return seastar::make_ready_future<bool>(false);
-	      },
-	      crimson::ct_error::pass_further_all{}
-	    );
+	      offset,
+	      ptr.length());
+	  }).safe_then([=, &t, &ptr](auto ext) mutable {
+	    assert(ext->get_laddr() == (size_t)offset);
+	    assert(ext->get_bptr().length() == ptr.length());
+	    ext->get_bptr().swap(ptr);
+	    logger().debug("submitting transaction");
+	    return tm->submit_transaction(std::move(t));
 	  });
-      }).handle_error(
-	crimson::ct_error::assert_all{"store-nbd write"}
-      );
+	});
+    }).handle_error(
+      crimson::ct_error::assert_all{"store-nbd write"}
+    );
   }
 
   seastar::future<bufferlist> read(
@@ -576,41 +568,34 @@ public:
     assert(size % (size_t)segment_manager->get_block_size() == 0);
     auto blptrret = std::make_unique<bufferlist>();
     auto &blret = *blptrret;
-    return crimson::do_until(
-      [=, &blret] {
-	return seastar::do_with(
-	  tm->create_transaction(),
-	  [=, &blret](auto &t) {
-	    return tm->read_extents<TestBlock>(*t, offset, size
-	    ).safe_then([=, &blret](auto ext_list) mutable {
-	      size_t cur = offset;
-	      for (auto &i: ext_list) {
-		if (cur != i.first) {
-		  assert(cur < i.first);
-		  blret.append_zero(i.first - cur);
-		  cur = i.first;
-		}
-		blret.append(i.second->get_bptr());
-		cur += i.second->get_bptr().length();
+    return repeat_eagain([=, &blret] {
+      return seastar::do_with(
+	tm->create_transaction(),
+	[=, &blret](auto &t) {
+	  return tm->read_extents<TestBlock>(*t, offset, size
+	  ).safe_then([=, &blret](auto ext_list) mutable {
+	    size_t cur = offset;
+	    for (auto &i: ext_list) {
+	      if (cur != i.first) {
+		assert(cur < i.first);
+		blret.append_zero(i.first - cur);
+		cur = i.first;
 	      }
-	      if (blret.length() != size) {
-		assert(blret.length() < size);
-		blret.append_zero(size - blret.length());
-	      }
-	      return seastar::make_ready_future<bool>(true);
-	    }).handle_error(
-	      [](const crimson::ct_error::eagain &e) {
-		return seastar::make_ready_future<bool>(false);
-	      },
-	      crimson::ct_error::pass_further_all{}
-	    );
+	      blret.append(i.second->get_bptr());
+	      cur += i.second->get_bptr().length();
+	    }
+	    if (blret.length() != size) {
+	      assert(blret.length() < size);
+	      blret.append_zero(size - blret.length());
+	    }
 	  });
-      }).handle_error(
-	crimson::ct_error::assert_all{"store-nbd read"}
-      ).then([blptrret=std::move(blptrret)]() mutable {
-	logger().debug("read complete");
-	return std::move(*blptrret);
-      });
+	});
+    }).handle_error(
+      crimson::ct_error::assert_all{"store-nbd read"}
+    ).then([blptrret=std::move(blptrret)]() mutable {
+      logger().debug("read complete");
+      return std::move(*blptrret);
+    });
   }
 
   void init() {

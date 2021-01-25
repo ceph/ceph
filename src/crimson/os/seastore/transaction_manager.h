@@ -30,6 +30,26 @@
 namespace crimson::os::seastore {
 class Journal;
 
+template <typename F>
+auto repeat_eagain(F &&f) {
+  return seastar::do_with(
+    std::forward<F>(f),
+    [](auto &f) {
+      return crimson::do_until(
+	[&f] {
+	  return std::invoke(f
+	  ).safe_then([] {
+	    return true;
+	  }).handle_error(
+	    [](const crimson::ct_error::eagain &e) {
+	      return seastar::make_ready_future<bool>(false);
+	    },
+	    crimson::ct_error::pass_further_all{}
+	  );
+	});
+    });
+}
+
 /**
  * TransactionManager
  *
