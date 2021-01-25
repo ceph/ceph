@@ -180,8 +180,8 @@ class Alerts(MgrModule):
                     self._send_alert(new_status, diff)
                 last_status = new_status
 
-            self.log.debug('Sleeping for %d seconds', self.interval)
-            ret = self.event.wait(self.interval)
+            self.log.debug('Sleeping for %s seconds', self.interval)
+            ret = self.event.wait(self.interval or 60)
             self.event.clear()
 
     def shutdown(self):
