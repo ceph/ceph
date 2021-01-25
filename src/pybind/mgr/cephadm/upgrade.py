@@ -90,19 +90,50 @@ class CephadmUpgrade:
                 r.message = 'Upgrade paused'
         return r
 
+    def _check_target_version(self, version: str) -> Optional[str]:
+        try:
+            (major, minor, patch) = version.split('.')
+            assert int(minor) >= 0
+            assert int(patch) >= 0
+        except:
+            return 'version must be in the form X.Y.Z (e.g., 15.2.3)'
+        if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
+            return 'cephadm only supports octopus (15.2.0) or later'
+
+        # to far a jump?
+        current_version = self.mgr.version.split('ceph version ')[1]
+        current_major, current_minor, current_patch = current_version.split('-')[0].split('.')
+        if int(current_major) < int(major) - 2:
+            return f'ceph can only upgrade 1 or 2 major versions at a time; {current_version} -> {version} is too big a jump'
+        if int(current_major) > int(major):
+            return f'ceph cannot downgrade major versions (from {current_version} to {version})'
+        if int(current_major) == int(major):
+            if int(current_minor) > int(minor):
+                return f'ceph cannot downgrade to a {"rc" if minor == "1" else "dev"} release'
+
+        # check mon min
+        monmap = self.mgr.get("mon_map")
+        mon_min = monmap.get("min_mon_release", 0)
+        if mon_min < int(major) - 2:
+            return f'min_mon_release ({mon_min}) < target {major} - 2; first complete an upgrade to an earlier release'
+
+        # check osd min
+        osdmap = self.mgr.get("osd_map")
+        osd_min_name = osdmap.get("require_osd_release", "argonaut")
+        osd_min = ord(osd_min_name[0]) - ord('a') + 1
+        if osd_min < int(major) - 2:
+            return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
+
+        return None
+
     def upgrade_start(self, image: str, version: str) -> str:
         if self.mgr.mode != 'root':
             raise OrchestratorError('upgrade is not supported in %s mode' % (
                 self.mgr.mode))
         if version:
-            try:
-                (major, minor, patch) = version.split('.')
-                assert int(minor) >= 0
-                assert int(patch) >= 0
-            except:
-                raise OrchestratorError('version must be in the form X.Y.Z (e.g., 15.2.3)')
-            if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
-                raise OrchestratorError('cephadm only supports octopus (15.2.0) or later')
+            version_error = self._check_target_version(version)
+            if version_error:
+                raise OrchestratorError(version_error)
             target_name = self.mgr.container_image_base + ':v' + version
         elif image:
             target_name = image
@@ -269,8 +300,9 @@ class CephadmUpgrade:
             self._save_upgrade_state()
             target_image = self.target_image
         target_version = self.upgrade_state.target_version
-        logger.info('Upgrade: Target is %s with id %s' % (target_image,
-                                                          target_id))
+        target_major, target_minor, target_patch = target_version.split('.')
+        logger.info('Upgrade: Target is version %s, container %s with id %s' % (
+            target_version, target_image, target_id))
 
         image_settings = self.get_distinct_container_image_settings()
 
