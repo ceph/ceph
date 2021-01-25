@@ -1262,6 +1262,9 @@ def main():
         if outs:
             print(prefix + outs, file=sys.stderr)
 
+        if outbuf:
+            print(f"outbuf is {len(outbuf)} chars", file=sys.stderr)
+
         sys.stdout.flush()
 
         if parsed_args.output_file:
@@ -1301,6 +1304,8 @@ def main():
     if parsed_args.output_file and parsed_args.output_file != '-':
         outf.close()
 
+    time.sleep(1)
+        
     if final_ret:
         return final_ret
 
