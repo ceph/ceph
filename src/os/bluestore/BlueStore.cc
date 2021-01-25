@@ -12268,13 +12268,10 @@ void BlueStore::_deferred_queue(TransContext *txc)
   dout(20) << __func__ << " txc " << txc << " osr " << txc->osr << dendl;
 
   DeferredBatch *tmp;
-  bool need_lock_again = false;
   txc->osr->deferred_lock.lock();
   {
     if (!txc->osr->deferred_pending) {
       tmp = new DeferredBatch(cct, txc->osr.get());
-      txc->osr->deferred_lock.unlock();
-      need_lock_again = true;
     } else {
       tmp  = txc->osr->deferred_pending;
     }
@@ -12292,9 +12289,6 @@ void BlueStore::_deferred_queue(TransContext *txc)
   }
 
   {
-    if (need_lock_again) {
-      txc->osr->deferred_lock.lock();
-    }
     ++deferred_queue_size;
     txc->osr->deferred_pending = tmp;
     // condition "tmp->txcs.size() == 1" mean deferred_pending was originally empty.
