@@ -9279,14 +9279,13 @@ void Server::_commit_peer_rename(MDRequestRef& mdr, int r,
 {
   dout(10) << "_commit_peer_rename " << *mdr << " r=" << r << dendl;
 
-  CInode *in = destdn->get_linkage()->get_inode();
-
   inodeno_t migrated_stray;
-  if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray())
-    migrated_stray = in->ino();
-
   MDSContext::vec finished;
   if (r == 0) {
+    CInode *in = destdn->get_linkage()->get_inode();
+    if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray())
+      migrated_stray = in->ino();
+
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
     if (mdr->more()->is_inode_exporter) {
@@ -9354,6 +9353,7 @@ void Server::_commit_peer_rename(MDRequestRef& mdr, int r,
     //  rollback_bl may be empty if we froze the inode but had to provide an expanded
     // witness list from the leader, and they failed before we tried prep again.
     if (mdr->more()->rollback_bl.length()) {
+      CInode *in = destdn->get_linkage()->get_inode();
       if (mdr->more()->is_inode_exporter) {
 	dout(10) << " reversing inode export of " << *in << dendl;
 	in->abort_export();
