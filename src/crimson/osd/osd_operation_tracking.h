@@ -19,7 +19,7 @@ struct LttngBackend
     OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr::Backend,
     ClientRequest::ConnectionPipeline::GetPG::TimedPtr::Backend,
     OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker::TimedPtr::Backend,
-    OperationDone::Backend
+    ClientRequest::DoneEvent::Backend
 {
   void handle(EnqueuedEvent&, const Operation&) override {
     //tracepoint(...);
@@ -45,7 +45,7 @@ struct LttngBackend
               const Operation&) override {
   }
 
-  void handle(OperationDone&, const Operation&) override {
+  void handle(ClientRequest::DoneEvent&, const Operation&) override {
     //tracepoint(...);
   }
 };
@@ -57,7 +57,7 @@ struct HistoricBackend
     OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr::Backend,
     ClientRequest::ConnectionPipeline::GetPG::TimedPtr::Backend,
     OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker::TimedPtr::Backend,
-    OperationDone::Backend
+    ClientRequest::DoneEvent::Backend
 {
   void handle(EnqueuedEvent&, const Operation&) override {
     //tracepoint(...);
@@ -83,7 +83,7 @@ struct HistoricBackend
               const Operation&) override {
   }
 
-  void handle(OperationDone&, const Operation&) override {
+  void handle(ClientRequest::DoneEvent&, const Operation& op) override {
     //tracepoint(...);
   }
 };
