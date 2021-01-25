@@ -21,6 +21,8 @@ class ClientRequest final : public BlockingOperationT<ClientRequest> {
   OpInfo op_info;
   OrderedPipelinePhase::Handle handle;
 
+  friend class HistoricBackend;
+
 public:
   class ConnectionPipeline {
     struct AwaitMap : OrderedPipelinePhaseT<AwaitMap> {
@@ -57,13 +59,16 @@ public:
     friend class ClientRequest;
   };
 
+  struct DoneEvent : Event<DoneEvent> {
+  };
 
   std::tuple<
     EnqueuedEvent,
     ConnectionPipeline::AwaitMap::TimedPtr,
     OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker::TimedPtr,
     ConnectionPipeline::GetPG::TimedPtr,
-    OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker::TimedPtr
+    OSDMapGate<OSDMapGateType::PG>::OSDMapBlocker::TimedPtr,
+    DoneEvent
   > blockers;
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
@@ -88,6 +93,27 @@ private:
 
 private:
   bool is_misdirected(const PG& pg) const;
+};
+
+template <> constexpr auto EVENT_NAMES<ClientRequest::DoneEvent> =
+  "ClientRequest::DoneEvent";
+
+struct HistoricClientRequest : public OperationT<HistoricClientRequest> {
+  static constexpr OperationTypeCode type =
+    OperationTypeCode::historic_client_request;
+
+  HistoricClientRequest(ClientRequest::ICRef client_request)
+    : client_request(std::move(client_request)) {
+  }
+  ~HistoricClientRequest() = default;
+  seastar::future<> start() {
+    return seastar::now();
+  }
+  void print(std::ostream &) const final;
+  void dump_detail(Formatter *f) const final;
+
+private:
+  ClientRequest::ICRef client_request;
 };
 
 }

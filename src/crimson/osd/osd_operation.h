@@ -35,6 +35,7 @@ enum class OperationTypeCode {
   replicated_request,
   background_recovery,
   background_recovery_sub,
+  historic_client_request,
   last_op
 };
 
@@ -47,6 +48,7 @@ static constexpr const char* const OP_NAMES[] = {
   "replicated_request",
   "background_recovery",
   "background_recovery_sub",
+  "historic_client_request",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -240,11 +242,14 @@ using OperationRef = boost::intrusive_ptr<Operation>;
 
 std::ostream &operator<<(std::ostream &, const Operation &op);
 
+
+
 template <typename T>
 class OperationT : public Operation {
 public:
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
+  using ICRef = boost::intrusive_ptr<const T>;
 
   OperationTypeCode get_type() const final {
     return T::type;
@@ -265,6 +270,7 @@ private:
  */
 class OperationRegistry {
   friend class Operation;
+  friend class HistoricBackend;
   using op_list_member_option = boost::intrusive::member_hook<
     Operation,
     registry_hook_t,

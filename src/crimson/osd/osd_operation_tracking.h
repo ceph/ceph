@@ -83,8 +83,31 @@ struct HistoricBackend
               const Operation&) override {
   }
 
+  // TODO: make this a configuration parameter.
+  static const std::size_t historic_op_registry_max_size = 42;
+
   void handle(ClientRequest::DoneEvent&, const Operation& op) override {
-    //tracepoint(...);
+    // TODO: static_cast for production builds
+    const auto& client_request = dynamic_cast<const ClientRequest&>(op);
+    auto& main_registry = client_request.osd.get_shard_services().registry;
+    // create a historic op and release the smart pointer. It will be
+    // re-acquired (via the historic registry) when it's the purge time.
+    main_registry.create_operation<HistoricClientRequest>(
+      ClientRequest::ICRef(&client_request, /* add_ref= */true)
+    ).detach();
+
+    // check whether the history size limit is not exceeded; if so, then
+    // purge the oldest op.
+    // NOTE: Operation uses the auto-unlink feature of boost::intrusive.
+    constexpr auto historic_registry_index =
+      static_cast<int>(OperationTypeCode::historic_client_request);
+    const auto& historic_registry =
+      main_registry.registries[historic_registry_index];
+    if (historic_registry.size() > historic_op_registry_max_size) {
+      const auto& oldest_historic_op =
+        static_cast<const HistoricClientRequest&>(historic_registry.front());
+      HistoricClientRequest::ICRef(&oldest_historic_op, /* add_ref= */false);
+    }
   }
 };
 

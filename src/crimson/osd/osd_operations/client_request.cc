@@ -116,7 +116,14 @@ seastar::future<> ClientRequest::start()
 	  return seastar::stop_iteration::yes;
 	}
       });
-    });
+    }).then([this] {
+      // TODO: wrap with a dedicated, finishing stage
+      handle.exit();
+      handle2.exit();
+      // TODO: introduce `trigger_tracking_event<T>(...)` in `osd_
+      // operation_tracking.h`.
+      std::get<DoneEvent>(blockers).trigger(*this);
+    });;
   });
 }
 
@@ -209,6 +216,18 @@ bool ClientRequest::is_misdirected(const PG& pg) const
   }
   // neither balanced nor localize reads
   return true;
+}
+
+void HistoricClientRequest::print(std::ostream& os) const
+{
+  assert(client_request);
+  client_request->print(os);
+}
+
+void HistoricClientRequest::dump_detail(ceph::Formatter* f) const
+{
+  assert(client_request);
+  client_request->dump_detail(f);
 }
 
 }
