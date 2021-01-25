@@ -311,7 +311,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'use_repo_digest',
             type='bool',
-            default=False,
+            default=True,
             desc='Automatically convert image tags to image digest. Make sure all daemons use the same image',
         ),
     ]
@@ -357,7 +357,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.registry_url: Optional[str] = None
             self.registry_username: Optional[str] = None
             self.registry_password: Optional[str] = None
-            self.use_repo_digest = False
+            self.use_repo_digest = True
 
         self._cons: Dict[str, Tuple[remoto.backends.BaseConnection,
                                     remoto.backends.LegacyModuleExecute]] = {}
