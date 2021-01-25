@@ -36,8 +36,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'host1'):
         with with_host(cephadm_module, 'host2'):
             cephadm_module.set_container_image('global', 'from_image')
-            if use_repo_digest:
-                cephadm_module.use_repo_digest = True
+            cephadm_module.use_repo_digest = use_repo_digest
             with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)), CephadmOrchestrator.apply_mgr, ''),\
                 mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name",
                            return_value='foo'),\
