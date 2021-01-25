@@ -1237,6 +1237,7 @@ def call(ctx: CephadmContext,
     while not stopped or read_some:
         if not stopped:
             if process.poll() is not None:
+                logger.debug(f"stopped")
                 stopped = True
             elif end_time and (time.time() >= end_time):
                 logger.info(desc + 'timeout after %s seconds' % timeout)
@@ -1245,6 +1246,7 @@ def call(ctx: CephadmContext,
             [process.stdout.fileno(), process.stderr.fileno()],
             [], [], timeout
         )
+        logger.debug(f"reads {reads}")
         read_some = False
         for fd in reads:
             try:
@@ -1260,6 +1262,7 @@ def call(ctx: CephadmContext,
                     assert False
                 read_some = True
                 if fd == process.stdout.fileno():
+                    logger.debug(f"got {len(message)} for stdout")
                     out += message
                     message = out_buffer + message
                     lines = message.split('\n')
@@ -1270,6 +1273,7 @@ def call(ctx: CephadmContext,
                         elif verbosity != CallVerbosity.SILENT:
                             logger.debug(desc + 'stdout ' + line)
                 elif fd == process.stderr.fileno():
+                    logger.debug(f"got {len(message)} for stderr")
                     err += message
                     message = err_buffer + message
                     lines = message.split('\n')
