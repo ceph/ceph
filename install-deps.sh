@@ -205,6 +205,18 @@ function install_boost_on_ubuntu {
 	ceph-libboost-timer$ver-dev
 }
 
+function install_libzbd_on_ubuntu {
+    local project=libzbd
+    local sha1=44ffc287bf57e17afafec0af4d39b62d4f6c0dac
+    install_pkg_on_ubuntu \
+        $project \
+        $sha1 \
+        $codename \
+        check \
+        libzbd \
+        libzbd-dev
+}
+
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -291,6 +303,7 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
+                $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc
