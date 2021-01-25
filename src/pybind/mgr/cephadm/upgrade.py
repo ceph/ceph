@@ -295,7 +295,8 @@ class CephadmUpgrade:
                 })
                 return
             self.upgrade_state.target_id = target_id
-            self.upgrade_state.target_version = target_version
+            # extract the version portion of 'ceph version {version} ({sha1})'
+            self.upgrade_state.target_version = target_version.split(' ')[2]
             self.upgrade_state.repo_digest = repo_digest
             self._save_upgrade_state()
             target_image = self.target_image
@@ -418,10 +419,11 @@ class CephadmUpgrade:
             })
             j = json.loads(out_ver)
             for version, count in j.get(daemon_type, {}).items():
-                if version != target_version:
+                short_version = version.split(' ')[2]
+                if short_version != target_version:
                     logger.warning(
                         'Upgrade: %d %s daemon(s) are %s != target %s' %
-                        (count, daemon_type, version, target_version))
+                        (count, daemon_type, short_version, target_version))
 
             # push down configs
             if image_settings.get(daemon_type) != target_image:
