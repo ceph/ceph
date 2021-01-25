@@ -46,7 +46,10 @@ elif [ $2 = "nautilus" ] ; then
         teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/2999 -e $5 $7
 elif [ $2 = "octopus" ] ; then
         teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/9999 -e $5 $7
-        # run nautilus branch with /100000 jobs fir rados == ~ 300 job
+        # run octopus branch with /100000 jobs for rados == ~ 300 job
+elif [ $2 = "pacific" ] ; then
+        teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/99999 -e $5 $7
+        # run pacific branch with /99999 jobs for rados == ~ 367 job
 else
         # run NON master branches without --newest
         teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/999 -e $5 $7
