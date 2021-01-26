@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include "include/scope_guard.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
@@ -66,7 +67,7 @@ int execute(const po::variables_map &vm,
   std::string passphrase((std::istreambuf_iterator<char>(file)),
                          (std::istreambuf_iterator<char>()));
   auto sg = make_scope_guard([&] {
-      explicit_bzero(&passphrase[0], passphrase.size()); });
+      ceph_memzero_s(&passphrase[0], passphrase.size(), passphrase.size()); });
   file.close();
   if (!passphrase.empty() && passphrase[passphrase.length() - 1] == '\n') {
     passphrase.erase(passphrase.length() - 1);
