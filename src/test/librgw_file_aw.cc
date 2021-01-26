@@ -47,7 +47,7 @@ namespace {
   bool do_verify = false;
   bool do_hexdump = false;
 
-  string bucket_name = "sorry_dave";
+  string bucket_name = "sorrydave";
   string object_name = "jocaml";
 
   struct rgw_file_handle *bucket_fh = nullptr;
@@ -328,6 +328,14 @@ TEST(LibRGW, STAT_OBJECT) {
 TEST(LibRGW, DELETE_OBJECT) {
   if (do_delete) {
     int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
+			 RGW_UNLINK_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+  }
+}
+
+TEST(LibRGW, DELETE_BUCKET) {
+  if (do_delete) {
+    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
 			 RGW_UNLINK_FLAG_NONE);
     ASSERT_EQ(ret, 0);
   }
