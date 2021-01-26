@@ -232,7 +232,7 @@ seastar::future<> SeaStore::do_transaction(
       }).safe_then([this, &ctx] {
 	return onode_manager->write_dirty(*ctx.transaction, ctx.onodes);
       }).safe_then([this, &ctx] {
-	return transaction_manager.submit_transaction(std::move(ctx.transaction));
+	return transaction_manager->submit_transaction(std::move(ctx.transaction));
       }).safe_then([&ctx]() {
 	for (auto i : {
 	    ctx.ext_transaction.get_on_applied(),
