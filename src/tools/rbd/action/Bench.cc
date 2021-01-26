@@ -9,6 +9,8 @@
 #include "common/ceph_mutex.h"
 #include "include/types.h"
 #include "global/signal_handler.h"
+#include <atomic>
+#include <chrono>
 #include <iostream>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
