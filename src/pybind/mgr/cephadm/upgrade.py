@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Optional, Dict
 
 import orchestrator
 from cephadm.serve import CephadmServe
-from cephadm.utils import name_to_config_section, CEPH_UPGRADE_ORDER
+from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER
 from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service, service_to_daemon_types
 
 if TYPE_CHECKING:
@@ -121,7 +121,7 @@ class CephadmUpgrade:
         # check osd min
         osdmap = self.mgr.get("osd_map")
         osd_min_name = osdmap.get("require_osd_release", "argonaut")
-        osd_min = ord(osd_min_name[0]) - ord('a') + 1
+        osd_min = ceph_release_to_major(osd_min_name)
         if osd_min < int(major) - 2:
             return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
 
@@ -475,7 +475,7 @@ class CephadmUpgrade:
             if daemon_type == 'osd':
                 osdmap = self.mgr.get("osd_map")
                 osd_min_name = osdmap.get("require_osd_release", "argonaut")
-                osd_min = ord(osd_min_name[0]) - ord('a') + 1
+                osd_min = ceph_release_to_major(osd_min_name)
                 if osd_min < int(target_major):
                     logger.info(f'Upgrade: Setting require_osd_release to {target_major} {target_major_name}')
                     ret, _, err = self.mgr.check_mon_command({
