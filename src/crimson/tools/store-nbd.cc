@@ -510,10 +510,6 @@ seastar::future<> NBDHandler::run()
 class TMDriver final : public BlockDriver {
   const config_t config;
   std::unique_ptr<segment_manager::block::BlockSegmentManager> segment_manager;
-  std::unique_ptr<SegmentCleaner> segment_cleaner;
-  std::unique_ptr<Journal> journal;
-  std::unique_ptr<Cache> cache;
-  LBAManagerRef lba_manager;
   std::unique_ptr<TransactionManager> tm;
 
 public:
@@ -599,25 +595,26 @@ public:
   }
 
   void init() {
-    segment_cleaner = std::make_unique<SegmentCleaner>(
+    auto segment_cleaner = std::make_unique<SegmentCleaner>(
       SegmentCleaner::config_t::default_from_segment_manager(
 	*segment_manager),
       true);
-    journal = std::make_unique<Journal>(*segment_manager);
-    cache = std::make_unique<Cache>(*segment_manager);
-    lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
-    tm = std::make_unique<TransactionManager>(
-      *segment_manager, *segment_cleaner, *journal, *cache, *lba_manager);
+    auto journal = std::make_unique<Journal>(*segment_manager);
+    auto cache = std::make_unique<Cache>(*segment_manager);
+    auto lba_manager = lba_manager::create_lba_manager(*segment_manager, *cache);
+
     journal->set_segment_provider(&*segment_cleaner);
-    segment_cleaner->set_extent_callback(&*tm);
+
+    tm = std::make_unique<TransactionManager>(
+      *segment_manager,
+      std::move(segment_cleaner),
+      std::move(journal),
+      std::move(cache),
+      std::move(lba_manager));
   }
 
   void clear() {
     tm.reset();
-    lba_manager.reset();
-    cache.reset();
-    journal.reset();
-    segment_cleaner.reset();
   }
 
   size_t get_size() const final {

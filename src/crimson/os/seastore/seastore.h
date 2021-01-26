@@ -18,6 +18,7 @@
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
+#include "crimson/os/seastore/collection_manager.h"
 
 namespace crimson::os::seastore {
 
@@ -31,8 +32,13 @@ class SeaStore final : public FuturizedStore {
 
 public:
 
-  SeaStore(TransactionManager &tm) :
-    transaction_manager(tm) {}
+  SeaStore(
+    TransactionManagerRef tm,
+    CollectionManagerRef cm,
+    OnodeManagerRef om
+  ) : transaction_manager(std::move(tm)),
+      collection_manager(std::move(cm)),
+      onode_manager(std::move(om)) {}
 
   ~SeaStore();
     
@@ -160,8 +166,9 @@ private:
       });
   }
 
-  TransactionManager &transaction_manager;
-  std::unique_ptr<OnodeManager> onode_manager;
+  TransactionManagerRef transaction_manager;
+  CollectionManagerRef collection_manager;
+  OnodeManagerRef onode_manager;
 
   using tm_ertr = TransactionManager::base_ertr;
   using tm_ret = tm_ertr::future<>;
