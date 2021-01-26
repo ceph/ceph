@@ -323,7 +323,7 @@ public:
    *
    * Get onode-tree root logical address
    */
-  using read_onode_root_ertr = read_extent_ertr;
+  using read_onode_root_ertr = base_ertr;
   using read_onode_root_ret = read_onode_root_ertr::future<laddr_t>;
   read_onode_root_ret read_onode_root(Transaction &t) {
     return cache.get_root(t).safe_then([](auto croot) {
@@ -340,6 +340,30 @@ public:
     auto croot = cache.get_root_fast(t);
     croot = cache.duplicate_for_write(t, croot)->cast<RootBlock>();
     croot->get_root().onode_root = addr;
+  }
+
+  /**
+   * read_collection_root
+   *
+   * Get collection root addr
+   */
+  using read_collection_root_ertr = base_ertr;
+  using read_collection_root_ret = read_collection_root_ertr::future<laddr_t>;
+  read_collection_root_ret read_collection_root(Transaction &t) {
+    return cache.get_root(t).safe_then([](auto croot) {
+      return croot->get_root().collection_root;
+    });
+  }
+
+  /**
+   * write_collection_root
+   *
+   * Update collection root addr
+   */
+  void write_collection_root(Transaction &t, laddr_t addr) {
+    auto croot = cache.get_root_fast(t);
+    croot = cache.duplicate_for_write(t, croot)->cast<RootBlock>();
+    croot->get_root().collection_root = addr;
   }
 
   ~TransactionManager();
