@@ -190,13 +190,27 @@ private:
 public:
   static const char *get_state_name(int s) {
     switch (s) {
-    case STATE_PROBING: return "probing";
-    case STATE_SYNCHRONIZING: return "synchronizing";
-    case STATE_ELECTING: return "electing";
-    case STATE_LEADER: return "leader";
-    case STATE_PEON: return "peon";
-    case STATE_SHUTDOWN: return "shutdown";
-    default: return "???";
+    case STATE_PROBING:
+      return "probing";
+      break;
+    case STATE_SYNCHRONIZING:
+      return "synchronizing";
+      break;
+    case STATE_ELECTING:
+      return "electing";
+      break;
+    case STATE_LEADER:
+      return "leader";
+      break;
+    case STATE_PEON:
+      return "peon";
+      break;
+    case STATE_SHUTDOWN:
+      return "shutdown";
+      break;
+    default:
+      return "unknown";
+      break;
     }
   }
   const char *get_state_name() const {
