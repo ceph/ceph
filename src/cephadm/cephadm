@@ -13,7 +13,7 @@ DATA_DIR_MODE = 0o700
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
-DEFAULT_RETRY = 10
+DEFAULT_RETRY = 15
 SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
 SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
 
@@ -1374,7 +1374,7 @@ def is_available(ctx, what, func):
                 % (what, num, retry))
 
         num += 1
-        time.sleep(1)
+        time.sleep(2)
 
 
 def read_config(fn):
@@ -3707,8 +3707,13 @@ def command_bootstrap(ctx):
 
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart():
-        # first get latest mgrmap epoch from the mon
-        out = cli(['mgr', 'dump'])
+        # first get latest mgrmap epoch from the mon.  try newer 'mgr
+        # stat' command first, then fall back to 'mgr dump' if
+        # necessary
+        try:
+            out = cli(['mgr', 'stat'])
+        except Exception as e:
+            out = cli(['mgr', 'dump'])
         j = json.loads(out)
         epoch = j['epoch']
         # wait for mgr to have it

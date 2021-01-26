@@ -751,6 +751,7 @@ function test_mon_misc()
   ceph log last 100 | grep "$mymsg"
   ceph_watch_wait "$mymsg"
 
+  ceph mgr stat
   ceph mgr dump
   ceph mgr module ls
   ceph mgr module enable restful
