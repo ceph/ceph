@@ -8,43 +8,53 @@ namespace rgw::notify {
 
   std::string to_string(EventType t) {
     switch (t) {
-      case ObjectCreated:
-        return "s3:ObjectCreated:*";
-      case ObjectCreatedPut:
-        return "s3:ObjectCreated:Put";
-      case ObjectCreatedPost:
-        return "s3:ObjectCreated:Post";
-      case ObjectCreatedCopy:
-        return "s3:ObjectCreated:Copy";
-      case ObjectCreatedCompleteMultipartUpload:
-        return "s3:ObjectCreated:CompleteMultipartUpload";
-      case ObjectRemoved:
-        return "s3:ObjectRemoved:*";
-      case ObjectRemovedDelete:
-        return "s3:ObjectRemoved:Delete";
-      case ObjectRemovedDeleteMarkerCreated:
-        return "s3:ObjectRemoved:DeleteMarkerCreated";
-      case UnknownEvent:
-        return "s3:UnknownEvet";
+    case ObjectCreated:
+      return "s3:ObjectCreated:*";
+    case ObjectCreatedPut:
+      return "s3:ObjectCreated:Put";
+    case ObjectCreatedPost:
+      return "s3:ObjectCreated:Post";
+    case ObjectCreatedCopy:
+      return "s3:ObjectCreated:Copy";
+    case ObjectCreatedCompleteMultipartUpload:
+      return "s3:ObjectCreated:CompleteMultipartUpload";
+    case ObjectRemoved:
+      return "s3:ObjectRemoved:*";
+    case ObjectRemovedDelete:
+      return "s3:ObjectRemoved:Delete";
+    case ObjectRemovedDeleteMarkerCreated:
+      return "s3:ObjectRemoved:DeleteMarkerCreated";
+    case ObjectExpiration:
+      return "s3:ObjectLifecycle:Expiration";
+    case ObjectNoncurrentExpiration:
+      return "s3:ObjectLifecycle:NoncurrentExpiration";
+    case ObjectDeleteMarkerExpiration:
+      return "s3:ObjectLifecycle:DeleteMarkerExpiration";
+    case UnknownEvent:
+        return "s3:UnknownEvent";
     }
     return "s3:UnknownEvent";
   }
 
   std::string to_ceph_string(EventType t) {
     switch (t) {
-      case ObjectCreated:
-      case ObjectCreatedPut:
-      case ObjectCreatedPost:
-      case ObjectCreatedCopy:
-      case ObjectCreatedCompleteMultipartUpload:
-        return "OBJECT_CREATE";
-      case ObjectRemovedDelete:
-        return "OBJECT_DELETE";
-      case ObjectRemovedDeleteMarkerCreated:
-        return "DELETE_MARKER_CREATE";
-      case ObjectRemoved:
-      case UnknownEvent:
-        return "UNKNOWN_EVENT";
+    case ObjectCreated:
+    case ObjectCreatedPut:
+    case ObjectCreatedPost:
+    case ObjectCreatedCopy:
+    case ObjectCreatedCompleteMultipartUpload:
+      return "OBJECT_CREATE";
+    case ObjectRemovedDelete:
+      return "OBJECT_DELETE";
+    case ObjectRemovedDeleteMarkerCreated:
+      return "DELETE_MARKER_CREATE";
+    case ObjectExpiration:
+    case ObjectNoncurrentExpiration:
+    case ObjectDeleteMarkerExpiration:
+      return "OBJECT_EXPIRATION";
+    case ObjectRemoved:
+    case UnknownEvent:
+      return "UNKNOWN_EVENT";
     }
     return "UNKNOWN_EVENT";
   }

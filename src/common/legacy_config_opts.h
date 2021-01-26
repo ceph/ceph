@@ -1284,6 +1284,7 @@ OPTION(rgw_lc_max_worker, OPT_INT)// number of (parellized) LCWorker threads
 OPTION(rgw_lc_max_wp_worker, OPT_INT)// number of per-LCWorker pool threads
 OPTION(rgw_lc_max_objs, OPT_INT)
 OPTION(rgw_lc_max_rules, OPT_U32)  // Max rules set on one bucket
+OPTION(rgw_lc_notify, OPT_BOOL)  // Enable notifications for lifecycle deletes
 OPTION(rgw_lc_debug_interval, OPT_INT)  // Debug run interval, in seconds
 OPTION(rgw_script_uri, OPT_STR) // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR) // alternative value for REQUEST_URI if not set in request

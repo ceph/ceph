@@ -43,23 +43,67 @@ int remove_persistent_topic(const std::string& topic_name, optional_yield y);
 // then used to commit or abort the reservation
 struct reservation_t {
   struct topic_t {
-    topic_t(const std::string& _configurationId, const rgw_pubsub_topic& _cfg, cls_2pc_reservation::id_t _res_id) :
-        configurationId(_configurationId), cfg(_cfg), res_id(_res_id) {}
+    topic_t(std::string& _configurationId, rgw_pubsub_topic& _cfg,
+	    cls_2pc_reservation::id_t _res_id) :
+      configurationId(_configurationId), cfg(_cfg), res_id(_res_id) {}
 
-    const std::string configurationId;
-    const rgw_pubsub_topic cfg;
+    std::string configurationId;
+    rgw_pubsub_topic cfg;
     // res_id is reset after topic is committed/aborted
     cls_2pc_reservation::id_t res_id;
   };
-
+  
   std::vector<topic_t> topics;
-  rgw::sal::RGWRadosStore* const store;
-  const req_state* const s;
+  rgw::sal::RGWRadosStore* store;
   size_t size;
-  rgw::sal::RGWObject* const object;
 
-  reservation_t(rgw::sal::RGWRadosStore* _store, const req_state* _s, rgw::sal::RGWObject* _object) : 
-      store(_store), s(_s), object(_object) {}
+  const DoutPrefixProvider* dpp;
+  RGWObjectCtx* obj_ctx;
+  rgw::sal::RGWObject* object;
+  rgw::sal::RGWObject* /* const */ src_object; // may differ from object
+  rgw::sal::RGWBucket* /* const */ bucket;
+  boost::optional<RGWObjTags&> tagset;
+  boost::optional<meta_map_t&> x_meta_map;
+  std::string user_id;
+  std::string user_tenant;
+  std::string req_id;
+  optional_yield yield;
+
+  /* ctor for rgw_op callers */
+  reservation_t(rgw::sal::RGWRadosStore* _store,
+		req_state* _s,
+		const DoutPrefixProvider* _dpp,
+		rgw::sal::RGWObject* _object,
+		rgw::sal::RGWObject* _src_object) : 
+    store(_store), dpp(_s), obj_ctx(_s->obj_ctx),
+    object(_object), src_object(_src_object),
+    bucket(_s->bucket.get()),
+    tagset(_s->tagset),
+    x_meta_map(_s->info.x_meta_map),
+    user_id(_s->user->get_id().id),
+    user_tenant(_s->user->get_id().tenant),
+    req_id(_s->req_id),
+    yield(_s->yield)
+    {}
+
+  /* ctor for non-request caller (e.g., lifecycle) */
+  reservation_t(rgw::sal::RGWRadosStore* _store,
+		const DoutPrefixProvider* _dpp,
+		RGWObjectCtx* _obj_ctx,
+		rgw::sal::RGWObject* _object,
+		rgw::sal::RGWBucket* _bucket,
+		std::string& _user_id,
+		std::string& _user_tenant,
+		std::string& _req_id,
+		optional_yield y) :
+    store(_store), dpp(_dpp), obj_ctx(_obj_ctx),
+    object(_object), src_object(nullptr),
+    bucket(_bucket),
+    user_id(_user_id),
+    user_tenant(_user_tenant),
+    req_id(_req_id),
+    yield(y)
+    {}
 
   // dtor doing resource leak guarding
   // aborting the reservation if not already committed or aborted

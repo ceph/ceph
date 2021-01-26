@@ -608,22 +608,24 @@ int remove_persistent_topic(const std::string& topic_name, optional_yield y) {
   return s_manager->remove_persistent_topic(topic_name, y);
 }
 
-rgw::sal::RGWObject* get_object_with_atttributes(const req_state* s, rgw::sal::RGWObject* obj) {
+rgw::sal::RGWObject* get_object_with_atttributes(
+  const reservation_t& res, rgw::sal::RGWObject* obj) {
   // in case of copy obj, the tags and metadata are taken from source
-  const auto src_obj = s->src_object ? s->src_object.get() : obj;
+  const auto src_obj = res.src_object ? res.src_object : obj;
   if (src_obj->get_attrs().empty()) {
     if (!src_obj->get_bucket()) {
-      src_obj->set_bucket(s->bucket.get());
+      src_obj->set_bucket(res.bucket);
     }
-    if (src_obj->get_obj_attrs(s->obj_ctx, s->yield, s) < 0) {
+    if (src_obj->get_obj_attrs(res.obj_ctx, res.yield, res.dpp) < 0) {
       return nullptr;
     }
   }
   return src_obj;
 }
 
-void metadata_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& metadata) {
-  const auto src_obj = get_object_with_atttributes(s, obj);
+static inline void metadata_from_attributes(
+  const reservation_t& res, rgw::sal::RGWObject* obj, KeyValueMap& metadata) {
+  const auto src_obj = get_object_with_atttributes(res, obj);
   if (!src_obj) {
     return;
   }
@@ -638,8 +640,9 @@ void metadata_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyV
   }
 }
 
-void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& tags) {
-  const auto src_obj = get_object_with_atttributes(s, obj);
+static inline void tags_from_attributes(
+  const reservation_t& res, rgw::sal::RGWObject* obj, KeyValueMap& tags) {
+  const auto src_obj = get_object_with_atttributes(res, obj);
   if (!src_obj) {
     return;
   }
@@ -659,7 +662,7 @@ void tags_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValue
 }
 
 // populate event from request
-void populate_event_from_request(const req_state *s, 
+static inline void populate_event(const reservation_t& res,
         rgw::sal::RGWObject* obj,
         uint64_t size,
         const ceph::real_time& mtime, 
@@ -668,13 +671,13 @@ void populate_event_from_request(const req_state *s,
         rgw_pubsub_s3_event& event) { 
   event.eventTime = mtime;
   event.eventName = to_string(event_type);
-  event.userIdentity = s->user->get_id().id;    // user that triggered the change
-  event.x_amz_request_id = s->req_id;          // request ID of the original change
-  event.x_amz_id_2 = s->host_id;               // RGW on which the change was made
+  event.userIdentity = res.user_id;    // user that triggered the change
+  event.x_amz_request_id = res.req_id; // request ID of the original change
+  event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
-  event.bucket_name = s->bucket_name;
-  event.bucket_ownerIdentity = s->bucket_owner.get_id().id;
-  event.bucket_arn = to_string(rgw::ARN(s->bucket->get_key()));
+  event.bucket_name = res.bucket->get_name();
+  event.bucket_ownerIdentity = res.bucket->get_owner()->get_id().id;
+  event.bucket_arn = to_string(rgw::ARN(res.bucket->get_key()));
   event.object_key = obj->get_name();
   event.object_size = size;
   event.object_etag = etag;
@@ -684,26 +687,35 @@ void populate_event_from_request(const req_state *s,
   boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
           std::back_inserter(event.object_sequencer));
   set_event_id(event.id, etag, ts);
-  event.bucket_id = s->bucket->get_bucket_id();
+  event.bucket_id = res.bucket->get_bucket_id();
   // pass meta data
-  if (s->info.x_meta_map.empty()) {
+  if (!res.x_meta_map ||
+      (*res.x_meta_map).empty()) {
     // try to fetch the metadata from the attributes
-    metadata_from_attributes(s, obj, event.x_meta_map);
+    metadata_from_attributes(res, obj, event.x_meta_map);
   } else {
-    event.x_meta_map = s->info.x_meta_map;
+    if (res.x_meta_map) {
+      event.x_meta_map = *res.x_meta_map;
+    }
   }
   // pass tags
-  if (s->tagset.get_tags().empty()) {
+  if (!res.tagset ||
+      (*res.tagset).get_tags().empty()) {
     // try to fetch the tags from the attributes
-    tags_from_attributes(s, obj, event.tags);
+    tags_from_attributes(res, obj, event.tags);
   } else {
-    event.tags = s->tagset.get_tags();
+    if (res.tagset) {
+      event.tags = (*res.tagset).get_tags();
+    }
   }
   // opaque data will be filled from topic configuration
 }
 
-bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* s, rgw::sal::RGWObject* obj, 
-    EventType event, const RGWObjTags* req_tags) {
+static inline bool notification_match(const rgw_pubsub_topic_filter& filter,
+				      const reservation_t& res,
+				      rgw::sal::RGWObject* obj,
+				      EventType event,
+				      const RGWObjTags* req_tags) {
   if (!match(filter.events, event)) { 
     return false;
   }
@@ -713,17 +725,18 @@ bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* 
 
   if (!filter.s3_filter.metadata_filter.kv.empty()) {
     // metadata filter exists
-    if (!s->info.x_meta_map.empty()) {
-      // metadata was cached in req_state
-      if (!match(filter.s3_filter.metadata_filter, s->info.x_meta_map)) {
+    if (res.x_meta_map &&
+	!(*res.x_meta_map).empty()) {
+      // metadata was cached in res
+      if (!match(filter.s3_filter.metadata_filter, *res.x_meta_map)) {
         return false;
       }
     } else {
       // try to fetch the metadata from the attributes
       KeyValueMap metadata;
-      metadata_from_attributes(s, obj, metadata);
+      metadata_from_attributes(res, obj, metadata);
       if (!match(filter.s3_filter.metadata_filter, metadata)) {
-        return false;
+	return false;
       }
     }
   }
@@ -735,15 +748,15 @@ bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* 
       if (!match(filter.s3_filter.tag_filter, req_tags->get_tags())) {
         return false;
       }
-    } else if (!s->tagset.get_tags().empty()) { 
+    } else if (res.tagset && !(*res.tagset).get_tags().empty()) {
       // tags were cached in req_state
-      if (!match(filter.s3_filter.tag_filter, s->tagset.get_tags())) {
+      if (!match(filter.s3_filter.tag_filter, (*res.tagset).get_tags())) {
         return false;
       }
     } else {
       // try to fetch tags from the attributes
       KeyValueMap tags;
-      tags_from_attributes(s, obj, tags);
+      tags_from_attributes(res, obj, tags);
       if (!match(filter.s3_filter.tag_filter, tags)) {
         return false;
       }
@@ -753,28 +766,28 @@ bool notification_match(const rgw_pubsub_topic_filter& filter, const req_state* 
   return true;
 }
 
-int publish_reserve(EventType event_type,
-      reservation_t& res,
-      const RGWObjTags* req_tags)
+extern int publish_reserve(EventType event_type,
+			   reservation_t& res,
+			   const RGWObjTags* req_tags)
 {
-  RGWPubSub ps(res.store, res.s->user->get_id().tenant);
-  RGWPubSub::Bucket ps_bucket(&ps, res.s->bucket->get_key());
+  RGWPubSub ps(res.store, res.user_tenant);
+  RGWPubSub::Bucket ps_bucket(&ps, res.bucket->get_key());
   rgw_pubsub_bucket_topics bucket_topics;
   auto rc = ps_bucket.get_topics(&bucket_topics);
   if (rc < 0) {
     // failed to fetch bucket topics
     return rc;
   }
-  for (const auto& bucket_topic : bucket_topics.topics) {
-    const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
-    const rgw_pubsub_topic& topic_cfg = topic_filter.topic;
-    if (!notification_match(topic_filter, res.s, res.object, event_type, req_tags)) {
+  for (auto& bucket_topic : bucket_topics.topics) {
+    rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
+    rgw_pubsub_topic& topic_cfg = topic_filter.topic;
+    if (!notification_match(topic_filter, res, res.object, event_type, req_tags)) {
       // notification does not apply to req_state
       continue;
     }
-    ldout(res.s->cct, 20) << "INFO: notification: '" << topic_filter.s3_id << 
-        "' on topic: '" << topic_cfg.dest.arn_topic << 
-        "' and bucket: '" << res.s->bucket->get_name() << 
+    ldpp_dout(res.dpp, 20) << "INFO: notification: '" << topic_filter.s3_id <<
+        "' on topic: '" << topic_cfg.dest.arn_topic <<
+        "' and bucket: '" << res.bucket->get_name() <<
         "' (unique topic: '" << topic_cfg.name <<
         "') apply to event of type: '" << to_string(event_type) << "'" << dendl;
 
@@ -789,16 +802,17 @@ int publish_reserve(EventType event_type,
       const auto& queue_name = topic_cfg.dest.arn_topic;
       cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
       auto ret = rgw_rados_operate(res.store->getRados()->get_notif_pool_ctx(), 
-          queue_name, &op, res.s->yield, librados::OPERATION_RETURNVEC);
+          queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
       if (ret < 0) {
-        ldout(res.s->cct, 1) << "ERROR: failed to reserve notification on queue: " << queue_name 
-          << ". error: " << ret << dendl;
+        ldpp_dout(res.dpp, 1) <<
+	  "ERROR: failed to reserve notification on queue: "
+			      << queue_name << ". error: " << ret << dendl;
         // if no space is left in queue we ask client to slow down
         return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
       }
       ret = cls_2pc_queue_reserve_result(obl, res_id);
       if (ret < 0) {
-        ldout(res.s->cct, 1) << "ERROR: failed to parse reservation id. error: " << ret << dendl;
+        ldpp_dout(res.dpp, 1) << "ERROR: failed to parse reservation id. error: " << ret << dendl;
         return ret;
       }
     }
@@ -807,86 +821,101 @@ int publish_reserve(EventType event_type,
   return 0;
 }
 
-int publish_commit(rgw::sal::RGWObject* obj,
-        uint64_t size,
-        const ceph::real_time& mtime, 
-        const std::string& etag, 
-        EventType event_type,
-        reservation_t& res,
-        const DoutPrefixProvider *dpp) 
+extern int publish_commit(rgw::sal::RGWObject* obj,
+			  uint64_t size,
+			  const ceph::real_time& mtime,
+			  const std::string& etag,
+			  EventType event_type,
+			  reservation_t& res,
+			  const DoutPrefixProvider *dpp)
 {
   for (auto& topic : res.topics) {
-    if (topic.cfg.dest.persistent && topic.res_id == cls_2pc_reservation::NO_ID) {
+    if (topic.cfg.dest.persistent &&
+	topic.res_id == cls_2pc_reservation::NO_ID) {
       // nothing to commit or already committed/aborted
       continue;
     }
     event_entry_t event_entry;
-    populate_event_from_request(res.s, obj, size, mtime, etag, event_type, event_entry.event);
+    populate_event(res, obj, size, mtime, etag, event_type, event_entry.event);
     event_entry.event.configurationId = topic.configurationId;
     event_entry.event.opaque_data = topic.cfg.opaque_data;
     if (topic.cfg.dest.persistent) { 
       event_entry.push_endpoint = std::move(topic.cfg.dest.push_endpoint);
-      event_entry.push_endpoint_args = std::move(topic.cfg.dest.push_endpoint_args);
+      event_entry.push_endpoint_args =
+	std::move(topic.cfg.dest.push_endpoint_args);
       event_entry.arn_topic = std::move(topic.cfg.dest.arn_topic);
       bufferlist bl;
       encode(event_entry, bl);
       const auto& queue_name = topic.cfg.dest.arn_topic;
       if (bl.length() > res.size) {
         // try to make a larger reservation, fail only if this is not possible
-        ldpp_dout(dpp, 5) << "WARNING: committed size: " << bl.length() << " exceeded reserved size: " << res.size <<
-          " . trying to make a larger reservation on queue:" << queue_name << dendl;
+        ldpp_dout(dpp, 5) << "WARNING: committed size: " << bl.length()
+			  << " exceeded reserved size: " << res.size
+			  <<
+          " . trying to make a larger reservation on queue:" << queue_name
+			  << dendl;
         // first cancel the existing reservation
         librados::ObjectWriteOperation op;
         cls_2pc_queue_abort(op, topic.res_id);
-        auto ret = rgw_rados_operate(res.store->getRados()->get_notif_pool_ctx(),
-            topic.cfg.dest.arn_topic, &op,
-            res.s->yield);
+        auto ret =
+	  rgw_rados_operate(res.store->getRados()->get_notif_pool_ctx(),
+			    topic.cfg.dest.arn_topic, &op,
+			    res.yield);
         if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: " << topic.res_id << 
+          ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: "
+			    << topic.res_id << 
             " when trying to make a larger reservation on queue: " << queue_name
-            << ". error: " << ret << dendl;
+			    << ". error: " << ret << dendl;
           return ret;
         }
         // now try to make a bigger one
-        bufferlist obl;
+	buffer::list obl;
         int rval;
         cls_2pc_queue_reserve(op, bl.length(), 1, &obl, &rval);
         ret = rgw_rados_operate(res.store->getRados()->get_notif_pool_ctx(), 
-          queue_name, &op, res.s->yield, librados::OPERATION_RETURNVEC);
+          queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
         if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: " << queue_name
-            << ". error: " << ret << dendl;
+          ldpp_dout(dpp, 1) << "ERROR: failed to reserve extra space on queue: "
+			    << queue_name
+			    << ". error: " << ret << dendl;
           return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
         }
         ret = cls_2pc_queue_reserve_result(obl, topic.res_id);
         if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: failed to parse reservation id for extra space. error: " << ret << dendl;
+          ldpp_dout(dpp, 1) << "ERROR: failed to parse reservation id for "
+	    "extra space. error: " << ret << dendl;
           return ret;
         }
       }
-      std::vector<bufferlist> bl_data_vec{std::move(bl)};
+      std::vector<buffer::list> bl_data_vec{std::move(bl)};
       librados::ObjectWriteOperation op;
       cls_2pc_queue_commit(op, bl_data_vec, topic.res_id);
-      const auto ret = rgw_rados_operate(res.store->getRados()->get_notif_pool_ctx(),
-            queue_name, &op,
-            res.s->yield);
+      const auto ret = rgw_rados_operate(
+	res.store->getRados()->get_notif_pool_ctx(), queue_name, &op,
+	res.yield);
       topic.res_id = cls_2pc_reservation::NO_ID;
       if (ret < 0) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to commit reservation to queue: " << queue_name
-          << ". error: " << ret << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: failed to commit reservation to queue: "
+			  << queue_name << ". error: " << ret
+			  << dendl;
         return ret;
       }
     } else {
       try {
         // TODO add endpoint LRU cache
-        const auto push_endpoint = RGWPubSubEndpoint::create(topic.cfg.dest.push_endpoint, 
-                topic.cfg.dest.arn_topic,
-                RGWHTTPArgs(topic.cfg.dest.push_endpoint_args, dpp), 
-                res.s->cct);
-        ldpp_dout(dpp, 20) << "INFO: push endpoint created: " << topic.cfg.dest.push_endpoint << dendl;
-        const auto ret = push_endpoint->send_to_completion_async(res.s->cct, event_entry.event, res.s->yield);
+        const auto push_endpoint = RGWPubSubEndpoint::create(
+	  topic.cfg.dest.push_endpoint,
+	  topic.cfg.dest.arn_topic,
+	  RGWHTTPArgs(topic.cfg.dest.push_endpoint_args, dpp),
+	  dpp->get_cct());
+        ldpp_dout(res.dpp, 20) << "INFO: push endpoint created: "
+			       << topic.cfg.dest.push_endpoint << dendl;
+        const auto ret = push_endpoint->send_to_completion_async(
+	  dpp->get_cct(), event_entry.event, res.yield);
         if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint << " failed. error: " << ret << dendl;
+          ldpp_dout(dpp, 1) << "ERROR: push to endpoint "
+			    << topic.cfg.dest.push_endpoint
+			    << " failed. error: " << ret << dendl;
           if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
           return ret;
         }
@@ -902,7 +931,7 @@ int publish_commit(rgw::sal::RGWObject* obj,
   return 0;
 }
 
-int publish_abort(reservation_t& res) {
+extern int publish_abort(reservation_t& res) {
   for (auto& topic : res.topics) {
     if (!topic.cfg.dest.persistent || topic.res_id == cls_2pc_reservation::NO_ID) {
       // nothing to abort or already committed/aborted
@@ -911,11 +940,11 @@ int publish_abort(reservation_t& res) {
     const auto& queue_name = topic.cfg.dest.arn_topic;
     librados::ObjectWriteOperation op;
     cls_2pc_queue_abort(op, topic.res_id);
-    const auto ret = rgw_rados_operate(res.store->getRados()->get_notif_pool_ctx(),
-      queue_name, &op,
-      res.s->yield);
+    const auto ret = rgw_rados_operate(
+      res.store->getRados()->get_notif_pool_ctx(), queue_name, &op, res.yield);
     if (ret < 0) {
-      ldout(res.s->cct, 1) << "ERROR: failed to abort reservation: " << topic.res_id << 
+      ldpp_dout(res.dpp, 1) << "ERROR: failed to abort reservation: "
+			    << topic.res_id <<
         " from queue: " << queue_name << ". error: " << ret << dendl;
       return ret;
     }

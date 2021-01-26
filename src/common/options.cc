@@ -5829,6 +5829,14 @@ std::vector<Option> get_rgw_options() {
     .set_description("Max number of lifecycle rules set on one bucket")
     .set_long_description("Number of lifecycle rules set on one bucket should be limited."),
 
+    Option("rgw_lc_notify", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(
+      "Optional support for delete notifications in lifecycle processing")
+    .set_long_description(
+      "Optional support for S3 bucket notifications in lifecycle processing "
+      "(RGW extension)"),
+
     Option("rgw_lc_debug_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(-1)
     .set_description(""),
