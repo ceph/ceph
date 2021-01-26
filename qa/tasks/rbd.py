@@ -56,6 +56,7 @@ def create_image(ctx, config):
         images = [(role, None) for role in config]
 
     testdir = teuthology.get_testdir(ctx)
+    passphrase_file = '{tdir}/passphrase'.format(tdir=testdir)
     for role, properties in images:
         if properties is None:
             properties = {}
@@ -83,7 +84,6 @@ def create_image(ctx, config):
         remote.run(args=args)
 
         if encryption_format != 'none':
-            passphrase_file = '{tdir}/passphrase'.format(tdir=testdir)
             remote.run(
                 args=[
                     'echo',
@@ -111,6 +111,7 @@ def create_image(ctx, config):
         yield
     finally:
         log.info('Deleting rbd images...')
+        remote.run(args=['rm', '-f', passphrase_file])
         for role, properties in images:
             if properties is None:
                 properties = {}
@@ -327,6 +328,7 @@ def dev_create(ctx, config):
         yield
     finally:
         log.info('Unmapping rbd devices...')
+        remote.run(args=['rm', '-f', passphrase_file])
         for role, properties in role_images:
             if not device_path.get(role):
                 continue
