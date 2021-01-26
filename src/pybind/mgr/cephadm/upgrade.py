@@ -281,7 +281,8 @@ class CephadmUpgrade:
 
         target_image = self.target_image
         target_id = self.upgrade_state.target_id
-        if not target_id or (self.mgr.use_repo_digest and not self.upgrade_state.repo_digest):
+        target_version = self.upgrade_state.target_version
+        if not target_id or not target_version or (self.mgr.use_repo_digest and not self.upgrade_state.repo_digest):
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
             try:
@@ -295,13 +296,24 @@ class CephadmUpgrade:
                     'detail': [str(e)],
                 })
                 return
+            if not target_version:
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pull target image',
+                    'count': 1,
+                    'detail': ['unable to extract ceph version from container'],
+                })
+                return
             self.upgrade_state.target_id = target_id
             # extract the version portion of 'ceph version {version} ({sha1})'
             self.upgrade_state.target_version = target_version.split(' ')[2]
             self.upgrade_state.repo_digest = repo_digest
             self._save_upgrade_state()
             target_image = self.target_image
-        target_version = self.upgrade_state.target_version
+        if target_version.startswith('ceph version '):
+            # tolerate/fix upgrade state from older version
+            self.upgrade_state.target_version = target_version.split(' ')[2]
+            target_version = self.upgrade_state.target_version
         target_major, target_minor, target_patch = target_version.split('.')
         target_major_name = self.mgr.lookup_release_name(int(target_major))
         logger.info('Upgrade: Target is version %s (%s), container %s id %s' % (
