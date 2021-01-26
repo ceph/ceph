@@ -1701,6 +1701,7 @@ int FIFO::list(int max_entries,
 
 int FIFO::trim(std::string_view markstr, bool exclusive, optional_yield y)
 {
+  bool overshoot = false;
   auto marker = to_marker(markstr);
   if (!marker) {
     return -EINVAL;
@@ -1709,6 +1710,25 @@ int FIFO::trim(std::string_view markstr, bool exclusive, optional_yield y)
   auto ofs = marker->ofs;
   std::unique_lock l(m);
   auto tid = ++next_tid;
+  auto hn = info.head_part_num;
+  const auto max_part_size = info.params.max_part_size;
+  if (part_num > hn) {
+    l.unlock();
+    auto r = read_meta(tid, y);
+    if (r < 0) {
+      return r;
+    }
+    l.lock();
+    auto hn = info.head_part_num;
+    if (part_num > hn) {
+      overshoot = true;
+      part_num = hn;
+      ofs = max_part_size;
+    }
+  }
+  if (part_num < info.tail_part_num) {
+    return -ENODATA;
+  }
   auto pn = info.tail_part_num;
   l.unlock();
   ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
@@ -1719,7 +1739,6 @@ int FIFO::trim(std::string_view markstr, bool exclusive, optional_yield y)
     ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " pn=" << pn << " tid=" << tid << dendl;
     std::unique_lock l(m);
-    auto max_part_size = info.params.max_part_size;
     l.unlock();
     r = trim_part(pn, max_part_size, std::nullopt, false, tid, y);
     if (r < 0 && r == -ENOENT) {
@@ -1771,7 +1790,7 @@ int FIFO::trim(std::string_view markstr, bool exclusive, optional_yield y)
 	       << " canceled too many times, giving up: tid=" << tid << dendl;
     return -EIO;
   }
-  return 0;
+  return overshoot ? -ENODATA : 0;
 }
 
 struct Trimmer : public Completion<Trimmer> {
@@ -1782,7 +1801,9 @@ struct Trimmer : public Completion<Trimmer> {
   bool exclusive;
   std::uint64_t tid;
   bool update = false;
+  bool reread = false;
   bool canceled = false;
+  bool overshoot = false;
   int retries = 0;
 
   Trimmer(FIFO* fifo, std::int64_t part_num, std::uint64_t ofs, std::int64_t pn,
@@ -1794,6 +1815,45 @@ struct Trimmer : public Completion<Trimmer> {
     auto cct = fifo->cct;
     ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " entering: tid=" << tid << dendl;
+
+    if (reread) {
+      reread = false;
+      if (r < 0) {
+	lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		   << " read_meta failed: r="
+		   << r << " tid=" << tid << dendl;
+	complete(std::move(p), r);
+	return;
+      }
+      std::unique_lock l(fifo->m);
+      auto hn = fifo->info.head_part_num;
+      const auto max_part_size = fifo->info.params.max_part_size;
+      const auto tail_part_num = fifo->info.tail_part_num;
+      l.unlock();
+      if (part_num > hn) {
+	part_num = hn;
+	ofs = max_part_size;
+	overshoot = true;
+      }
+      if (part_num < tail_part_num) {
+	complete(std::move(p), -ENODATA);
+	return;
+      }
+      pn = tail_part_num;
+      if (pn < part_num) {
+	ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		       << " pn=" << pn << " tid=" << tid << dendl;
+	fifo->trim_part(pn++, max_part_size, std::nullopt,
+			false, tid, call(std::move(p)));
+      } else {
+	update = true;
+	canceled = tail_part_num < part_num;
+	fifo->trim_part(part_num, ofs, std::nullopt, exclusive, tid,
+			call(std::move(p)));
+      }
+      return;
+    }
+
     if (r == -ENOENT) {
       r = 0;
     }
@@ -1850,7 +1910,7 @@ struct Trimmer : public Completion<Trimmer> {
 			 .tail_part_num(part_num), objv, &canceled,
                          tid, call(std::move(p)));
     } else {
-      complete(std::move(p), 0);
+      complete(std::move(p), overshoot ? -ENODATA : 0);
     }
   }
 };
@@ -1860,6 +1920,7 @@ void FIFO::trim(std::string_view markstr, bool exclusive,
   auto marker = to_marker(markstr);
   auto realmark = marker.value_or(::rgw::cls::fifo::marker{});
   std::unique_lock l(m);
+  const auto hn = info.head_part_num;
   const auto max_part_size = info.params.max_part_size;
   const auto pn = info.tail_part_num;
   const auto part_oid = info.part_oid(pn);
@@ -1875,6 +1936,11 @@ void FIFO::trim(std::string_view markstr, bool exclusive,
   }
   ++trimmer->pn;
   auto ofs = marker->ofs;
+  if (marker->num > hn) {
+    trimmer->reread = true;
+    read_meta(tid, Trimmer::call(std::move(trimmer)));
+    return;
+  }
   if (pn < marker->num) {
     ldout(cct, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		   << " pn=" << pn << " tid=" << tid << dendl;
