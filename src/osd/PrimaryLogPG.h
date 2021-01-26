@@ -259,6 +259,7 @@ public:
   typedef std::shared_ptr<FlushOp> FlushOpRef;
 
   struct CLSGatherOp {
+    OpContext *ctx;
     ObjectContextRef obc;
     OpRequestRef op;
     std::vector<ceph_tid_t> objecter_tids;
