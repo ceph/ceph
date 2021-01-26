@@ -115,54 +115,99 @@ public:
   }
 
 private:
+  struct internal_context_t {
+    CollectionRef ch;
+    ceph::os::Transaction ext_transaction;
+
+    internal_context_t(
+      CollectionRef ch,
+      ceph::os::Transaction &&_ext_transaction)
+      : ch(ch), ext_transaction(std::move(_ext_transaction)),
+	iter(ext_transaction.begin()) {}
+
+    TransactionRef transaction;
+    std::vector<OnodeRef> onodes;
+
+    ceph::os::Transaction::iterator iter;
+
+    void reset(TransactionRef &&t) {
+      transaction = std::move(t);
+      onodes.clear();
+      iter = ext_transaction.begin();
+    }
+  };
+
+  static void on_error(ceph::os::Transaction &t);
+
+  template <typename F>
+  auto repeat_with_internal_context(
+    CollectionRef ch,
+    ceph::os::Transaction &&t,
+    F &&f) {
+    return seastar::do_with(
+      internal_context_t{ ch, std::move(t) },
+      std::forward<F>(f),
+      [](auto &ctx, auto &f) {
+	return repeat_eagain([&]() {
+	  ctx.reset(make_transaction());
+	  return std::invoke(f, ctx);
+	}).handle_error(
+	  crimson::ct_error::eagain::pass_further{},
+	  crimson::ct_error::all_same_way([&ctx](auto e) {
+	    on_error(ctx.ext_transaction);
+	  })
+	);
+      });
+  }
+
   TransactionManager &transaction_manager;
   std::unique_ptr<OnodeManager> onode_manager;
 
-  using write_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  write_ertr::future<> _do_transaction_step(
-    TransactionRef &trans,
+  using tm_ertr = TransactionManager::base_ertr;
+  using tm_ret = tm_ertr::future<>;
+  tm_ret _do_transaction_step(
+    internal_context_t &ctx,
     CollectionRef &col,
     std::vector<OnodeRef> &onodes,
     ceph::os::Transaction::iterator &i);
 
-  write_ertr::future<> _remove(
-    TransactionRef &trans,
+  tm_ret _remove(
+    internal_context_t &ctx,
     OnodeRef &onode);
-  write_ertr::future<> _touch(
-    TransactionRef &trans,
+  tm_ret _touch(
+    internal_context_t &ctx,
     OnodeRef &onode);
-  write_ertr::future<> _write(
-    TransactionRef &trans,
+  tm_ret _write(
+    internal_context_t &ctx,
     OnodeRef &onode,
     uint64_t offset, size_t len, const ceph::bufferlist& bl,
     uint32_t fadvise_flags);
-  write_ertr::future<> _omap_set_values(
-    TransactionRef &trans,
+  tm_ret _omap_set_values(
+    internal_context_t &ctx,
     OnodeRef &onode,
     std::map<std::string, ceph::bufferlist> &&aset);
-  write_ertr::future<> _omap_set_header(
-    TransactionRef &trans,
+  tm_ret _omap_set_header(
+    internal_context_t &ctx,
     OnodeRef &onode,
     const ceph::bufferlist &header);
-  write_ertr::future<> _omap_rmkeys(
-    TransactionRef &trans,
+  tm_ret _omap_rmkeys(
+    internal_context_t &ctx,
     OnodeRef &onode,
     const omap_keys_t& aset);
-  write_ertr::future<> _omap_rmkeyrange(
-    TransactionRef &trans,
+  tm_ret _omap_rmkeyrange(
+    internal_context_t &ctx,
     OnodeRef &onode,
     const std::string &first,
     const std::string &last);
-  write_ertr::future<> _truncate(
-    TransactionRef &trans,
+  tm_ret _truncate(
+    internal_context_t &ctx,
     OnodeRef &onode, uint64_t size);
-  write_ertr::future<> _setattrs(
-    TransactionRef &trans,
+  tm_ret _setattrs(
+    internal_context_t &ctx,
     OnodeRef &onode,
     std::map<std::string,bufferptr>& aset);
-  write_ertr::future<> _create_collection(
-    TransactionRef &trans,
+  tm_ret _create_collection(
+    internal_context_t &ctx,
     const coll_t& cid, int bits);
 
   boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
