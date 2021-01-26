@@ -5,17 +5,10 @@ Pipelines
 RADOS Protocol Requirements
 ===========================
 
-Requests
---------
+A Ready-to-Go Checklist
+-----------------------
 
-OSD serves different kinds of requests. Some of them are targeting the local state of the connected
-OSD instance. For instance, the ``ceph config get`` command is directed straight to the local config
-subsystem, and is fulfilled right away. But others inquiry or mutate the shared state of the cluster.
-Following are two categories of these requests:
-
-- I/O requests from clients.
-- PG peering requests from peer OSDs.
-
+In Ceph, librados I/O requests inquiry or mutate the shared state of the cluster.
 Because inherently a distributed storage system is distributed by its own nature, we can not assume
 that an OSD or the PGs hosted by it are always ready to serve a request targeting a shared state, not
 to mention the unpredictable hardware failures. But fortunately, even if an OSD is not able to serve
@@ -24,8 +17,11 @@ can answer this request. It's quite common in daily life:
 
   Great question, let me look into it and I will get back to you!
 
-Some questions involves multiple steps. To serve an I/O request from client, at
-least 7 stages are involved:
+To ensure that we don't get back with the wrong answer, we need to ready ourselves first. For
+instance, because the mapping of PG could change over time, we need to check if the PG is created
+or updated with the updated OSDMap. If the PG is not ready yet, we have to wait until it is. And
+also we need to recover the object accessed by the request if it is missing or corrupted. These
+preconditions and preparations are structured as multiple stages in Crimson:
 
 .. ditaa::
 
@@ -67,23 +63,32 @@ least 7 stages are involved:
              +----------------+
              |cGRE OSD stages |
              +----------------+
-             |cBLU PG stage   |
+             |cBLU PG stages  |
              +----------------+
 
-Two Requirements
-----------------
+Well, why not just going straight to the last stage? Because if we don't have an up-to-date osdmap
+for serving this request, we still need to wait it. And what if the PG holding the object is not
+created yet? We would have to wait until the OSD fully consumes the OSDMap instructing the OSD to
+create the PG. The same applies to other checks. If a precondition is satisfied, the request is
+moved to the next stage right away without the overhead of context switch, so the overhead of
+having intermediate stages is almost zero in the happy path.
 
-An OSD client talks with each connected OSD over stateful connection. The client is allowed to
-perform asynchronous I/O with OSD in the sense that it can send another request without waiting
-for the completion of the previous one. But the contract of the RADOS protocol requires writes
-(and write ordered reads) performed on a single object to be performed in the order in which
-they were originally submitted, and only once. This behavior is implemented by both the client
-side and server side of librados.
+A Sequential Model
+------------------
 
-So far, we have two restrictions:
+An OSD client talks with each connected OSD over a lossy connection which allows to drop messages,
+the objecter resends ops in that case after reconnecting independently of the messenger. While
+an OSD talks with its peers over a stateful connection which guarantees in-order message delivery
+unless marked down in the OSDMap. Both of them are allowed to perform asynchronous I/O with OSD
+in the sense that it can send another request without waiting for the completion of the previous
+one. But the contract of the RADOS protocol requires writes (and write ordered reads) to be
+performed on a single object to be performed in the order in which they were originally submitted,
+and only once. This behavior is implemented by both the client side and server side of librados.
 
-#. sequential stages of a given request
-#. ordered execution of multiple write requests on a single object
+In other words, we follow a simple sequential model. A Ceph cluster behaves just like a multi-core
+CPU which fetches, decodes and execute instructions from multiple programs in parallel. But from a
+single program's perspective, the processor behaves as if it only processed one instruction at a
+time. This model allows us to access the storage in a simpler way.
 
 It's like visiting a history museum with friends.
 
@@ -115,6 +120,22 @@ Apparently, the first solution is way simpler. It **satisfies** both of the requ
 downside is that a slow visitor could keep others out of the door for long time, and hence increases
 the overall waiting time. This could be worse if we have multiple visitors who keep the same visitor(s)
 waiting for different rooms.
+
+Following is a table explaining the mapping between this analogy and the actual OSD:
+
+================  ==========================
+handle a request  visiting a museum in group
+================  ==========================
+a PG              a museum
+a stage           an exhibition room
+the last stage    the room for reading/leaving messages
+a request         a group of visitors
+an op             a visitor
+receive an op     enter a museum
+an object         a notebook
+object id         color of its cover
+mutate an object  leave a message on notebook
+================  ==========================
 
 Crimson uses the first solution at the time of writing.
 
@@ -163,7 +184,7 @@ Crimson uses the first solution at the time of writing.
                                                                                        |cBLU| process |
                                                                                        +----+---------+
 
-In the diagram above, two requests from the same client are being served in parallel. They share the same
+In the diagram above, two requests from the same client are being served concurrently. They share the same
 pipeline. But before one transits to the next stage, it have to wait until the previous one leaves that stage.
 And please note, the last "process" stage is a per-PG stage. So only one request is allowed to stay in that
 stage at any give point of time.
@@ -246,7 +267,7 @@ processing requests. So, a PG is not able to handle multiple operations at a tim
   that we have a cluster backing tens of thousands of services. All of them are based on a certain
   container image. So, those RADOS objects containing the container image would be **very** popular. If
   a PG is able to serve multiple read requests concurently, these requests are likely to be replied sooner.
-  We will need to drain existing writers before start serving readers, and vice versa.
+  We will need to drain existing writers before serving readers, and vice versa.
 - for multiple read requests targeting different objects.
 
   If we thought that we'd actually get enough reads on the same pg in parallel to justify the complexity,
