@@ -17,6 +17,7 @@ BlockCrypto<T>::BlockCrypto(CephContext* cct, DataCryptor<T>* data_cryptor,
        m_data_offset(data_offset), m_iv_size(data_cryptor->get_iv_size()) {
   ceph_assert(isp2(block_size));
   ceph_assert((block_size % data_cryptor->get_block_size()) == 0);
+  ceph_assert((block_size % 512) == 0);
 }
 
 template <typename T>
@@ -53,7 +54,7 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
     lderr(m_cct) << "unable to get crypt context" << dendl;
     return -EIO;
   }
-  auto block_offset = image_offset / m_block_size;
+  auto sector_number = image_offset / 512;
   auto appender = data->get_contiguous_appender(src.length());
   unsigned char* out_buf_ptr = nullptr;
   uint32_t remaining_block_bytes = 0;
@@ -62,7 +63,7 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
     auto remaining_buf_bytes = buf->length();
     while (remaining_buf_bytes > 0) {
       if (remaining_block_bytes == 0) {
-        auto block_offset_le = init_le64(block_offset);
+        auto block_offset_le = init_le64(sector_number);
         memcpy(iv, &block_offset_le, sizeof(block_offset_le));
         auto r = m_data_cryptor->init_context(ctx, iv, m_iv_size);
         if (r != 0) {
@@ -73,7 +74,7 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
         out_buf_ptr = reinterpret_cast<unsigned char*>(
                 appender.get_pos_add(m_block_size));
         remaining_block_bytes = m_block_size;
-        ++block_offset;
+        sector_number += m_block_size / 512;
       }
 
       auto crypto_input_length = std::min(remaining_buf_bytes,
