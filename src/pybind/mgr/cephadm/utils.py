@@ -106,3 +106,7 @@ def resolve_ip(hostname: str) -> str:
         return socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]
     except socket.gaierror as e:
         raise OrchestratorError(f"Cannot resolve ip for host {hostname}: {e}")
+
+
+def ceph_release_to_major(release: str) -> int:
+    return ord(release[0]) - ord('a') + 1
