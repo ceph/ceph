@@ -23,6 +23,11 @@
 #include "wnbd_handler.h"
 
 #define SERVICE_REG_KEY "SYSTEM\\CurrentControlSet\\Services\\rbd-wnbd"
+#define SERVICE_PIPE_NAME "\\\\.\\pipe\\rbd-wnbd"
+#define SERVICE_PIPE_TIMEOUT_MS 5000
+#define SERVICE_PIPE_BUFFSZ 4096
+
+#define DEFAULT_MAP_TIMEOUT_MS 30000
 
 #define RBD_WNBD_BLKSIZE 512UL
 
@@ -82,6 +87,15 @@ enum Command {
   Service,
   Stats
 };
+
+typedef struct {
+  Command command;
+  BYTE arguments[1];
+} ServiceRequest;
+
+typedef struct {
+  int status;
+} ServiceReply;
 
 bool is_process_running(DWORD pid);
 
