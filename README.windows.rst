@@ -181,15 +181,20 @@ within ``ceph.conf`` for the time being.
 .. _windows_service:
 Windows service
 ===============
-In order to ensure that rbd-wnbd mappings survive host reboot, you'll have
-to configure it to run as a Windows service. Only one such service may run per
-host.
+On Windows, rbd-wnbd daemons are managed by a centralized service. This allows
+decoupling the daemons from the Windows session from which they originate. At
+the same time, the service is responsible of recreating persistent mappings,
+usually when the host boots.
 
-All mappings are currently persistent, being recreated when the service starts,
-unless explicitly unmapped. The service disconnects the mappings when being
-stopped. This also allows adjusting the Windows service start order so that rbd
-images can be mapped before starting services that may depend on it, such as
-VMMS.
+Note that only one such service may run per host.
+
+By default, all image mappings are persistent. Non-persistent mappings can be
+requested using the ``-onon-persistent`` ``rbd`` flag.
+
+Persistent mappings are recreated when the service starts, unless explicitly
+unmapped. The service disconnects the mappings when being stopped. This also
+allows adjusting the Windows service start order so that rbd images can be
+mapped before starting services that may depend on it, such as VMMS.
 
 In order to be able to reconnect the images, ``rbd-wnbd`` stores mapping
 information in the Windows registry at the following location:
@@ -322,7 +327,7 @@ initializes a partition.
 .. code:: PowerShell
 
     rbd create blank_image --size=1G
-    rbd device map blank_image
+    rbd device map blank_image -onon-persistent
 
     $mappingJson = rbd-wnbd show blank_image --format=json
     $mappingJson = $mappingJson | ConvertFrom-Json
