@@ -1125,3 +1125,54 @@ TEST_F(AioLegacyFIFO, TestPushBatch)
   auto& info = f->meta();
   ASSERT_EQ(info.head_part_num, 4);
 }
+
+TEST_F(LegacyFIFO, TrimAll)
+{
+  std::unique_ptr<RCf::FIFO> f;
+  auto r = RCf::FIFO::create(ioctx, fifo_id, &f, null_yield);
+  ASSERT_EQ(0, r);
+  static constexpr auto max_entries = 10u;
+  for (uint32_t i = 0; i < max_entries; ++i) {
+    cb::list bl;
+    encode(i, bl);
+    r = f->push(bl, null_yield);
+    ASSERT_EQ(0, r);
+  }
+
+  /* trim one entry */
+  r = f->trim(RCf::marker::max().to_string(), false, null_yield);
+  ASSERT_EQ(-ENODATA, r);
+
+  std::vector<RCf::list_entry> result;
+  bool more;
+  r = f->list(1, std::nullopt, &result, &more, null_yield);
+  ASSERT_EQ(0, r);
+  ASSERT_TRUE(result.empty());
+}
+
+TEST_F(LegacyFIFO, AioTrimAll)
+{
+  std::unique_ptr<RCf::FIFO> f;
+  auto r = RCf::FIFO::create(ioctx, fifo_id, &f, null_yield);
+  ASSERT_EQ(0, r);
+  static constexpr auto max_entries = 10u;
+  for (uint32_t i = 0; i < max_entries; ++i) {
+    cb::list bl;
+    encode(i, bl);
+    r = f->push(bl, null_yield);
+    ASSERT_EQ(0, r);
+  }
+
+  auto c = R::Rados::aio_create_completion();
+  f->trim(RCf::marker::max().to_string(), false, c);
+  c->wait_for_complete();
+  r = c->get_return_value();
+  c->release();
+  ASSERT_EQ(-ENODATA, r);
+
+  std::vector<RCf::list_entry> result;
+  bool more;
+  r = f->list(1, std::nullopt, &result, &more, null_yield);
+  ASSERT_EQ(0, r);
+  ASSERT_TRUE(result.empty());
+}
