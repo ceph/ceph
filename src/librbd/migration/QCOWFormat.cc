@@ -257,19 +257,58 @@ public:
       l2_cache_entries(QCOW_L2_CACHE_SIZE) {
   }
 
-  void get_cluster_offset(const LookupTable* l1_table,
-                          uint64_t image_offset, uint64_t* cluster_offset,
-                          Context* on_finish) {
+  void get_l2_table(const LookupTable* l1_table, uint64_t l2_table_offset,
+                    std::shared_ptr<const LookupTable>* l2_table,
+                    Context* on_finish) {
     auto cct = qcow_format->m_image_ctx->cct;
-    ldout(cct, 20) << "image_offset=" << image_offset << dendl;
+    ldout(cct, 20) << "l2_table_offset=" << l2_table_offset << dendl;
 
     // cache state machine runs in a single strand thread
-    Request request{l1_table, image_offset, cluster_offset, on_finish};
+    Request request{l1_table, l2_table_offset, l2_table, on_finish};
     boost::asio::dispatch(
       m_strand, [this, request=std::move(request)]() {
         requests.push_back(std::move(request));
       });
-    dispatch_get_cluster_offset();
+    dispatch_request();
+  }
+
+  void get_cluster_offset(const LookupTable* l1_table,
+                          uint64_t image_offset, uint64_t* cluster_offset,
+                          Context* on_finish) {
+    auto cct = qcow_format->m_image_ctx->cct;
+    uint32_t l1_table_index = image_offset >>
+                              (qcow_format->m_l2_bits + qcow_format->m_cluster_bits);
+    uint64_t l2_table_offset = l1_table->cluster_offsets[std::min<uint32_t>(
+                                 l1_table_index, l1_table->size - 1)] &
+                               qcow_format->m_cluster_mask;
+    uint32_t l2_table_index = (image_offset >> qcow_format->m_cluster_bits) &
+                              (qcow_format->m_l2_size - 1);
+    ldout(cct, 20) << "image_offset=" << image_offset << ", "
+                   << "l1_table_index=" << l1_table_index << ", "
+                   << "l2_table_offset=" << l2_table_offset << ", "
+                   << "l2_table_index=" << l2_table_index << dendl;
+
+    if (l1_table_index >= l1_table->size) {
+      lderr(cct) << "L1 index " << l1_table_index << " out-of-bounds" << dendl;
+      on_finish->complete(-ERANGE);
+      return;
+    } else if (l2_table_offset == 0) {
+      // L2 table has not been allocated for specified offset
+      ldout(cct, 20) << "image_offset=" << image_offset << ", "
+                     << "cluster_offset=DNE" << dendl;
+      *cluster_offset = 0;
+      on_finish->complete(-ENOENT);
+      return;
+    }
+
+    // cache state machine runs in a single strand thread
+    Request request{l1_table, l2_table_offset, l2_table_index, cluster_offset,
+                    on_finish};
+    boost::asio::dispatch(
+      m_strand, [this, request=std::move(request)]() {
+        requests.push_back(std::move(request));
+      });
+    dispatch_request();
   }
 
 private:
@@ -280,16 +319,31 @@ private:
   struct Request {
     const LookupTable* l1_table;
 
-    uint64_t image_offset;
-    uint64_t* cluster_offset;
+    uint64_t l2_table_offset;
+
+    // get_cluster_offset request
+    uint32_t l2_table_index;
+    uint64_t* cluster_offset = nullptr;
+
+    // get_l2_table request
+    std::shared_ptr<const LookupTable>* l2_table;
+
     Context* on_finish;
 
-    Request(const LookupTable* l1_table, uint64_t image_offset,
-            uint64_t* cluster_offset, Context* on_finish)
-      : l1_table(l1_table), image_offset(image_offset),
-        cluster_offset(cluster_offset), on_finish(on_finish) {
+    Request(const LookupTable* l1_table, uint64_t l2_table_offset,
+            uint32_t l2_table_index, uint64_t* cluster_offset,
+            Context* on_finish)
+      : l1_table(l1_table), l2_table_offset(l2_table_offset),
+        l2_table_index(l2_table_index), cluster_offset(cluster_offset),
+        on_finish(on_finish) {
+    }
+    Request(const LookupTable* l1_table, uint64_t l2_table_offset,
+            std::shared_ptr<const LookupTable>* l2_table, Context* on_finish)
+      : l1_table(l1_table), l2_table_offset(l2_table_offset),
+        l2_table(l2_table), on_finish(on_finish) {
     }
   };
+
   typedef std::deque<Request> Requests;
 
   struct L2Cache {
@@ -306,60 +360,52 @@ private:
 
   Requests requests;
 
-  void dispatch_get_cluster_offset() {
-    boost::asio::dispatch(m_strand, [this]() { execute_get_cluster_offset(); });
+  void dispatch_request() {
+    boost::asio::dispatch(m_strand, [this]() { execute_request(); });
   }
 
-  void execute_get_cluster_offset() {
+  void execute_request() {
     auto cct = qcow_format->m_image_ctx->cct;
     if (requests.empty()) {
       return;
     }
 
     auto request = requests.front();
-    auto l1_index = request.image_offset >>
-                    (qcow_format->m_l2_bits + qcow_format->m_cluster_bits);
-    auto l2_offset = request.l1_table->cluster_offsets[std::min<uint32_t>(
-                       l1_index, request.l1_table->size - 1)] &
-                     qcow_format->m_cluster_mask;
-    auto l2_index = (request.image_offset >> qcow_format->m_cluster_bits) &
-                    (qcow_format->m_l2_size - 1);
-    ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
-                   << "l1_index=" << l1_index << ", "
-                   << "l2_offset=" << l2_offset << ", "
-                   << "l2_index=" << l2_index << dendl;
+    ldout(cct, 20) << "l2_table_offset=" << request.l2_table_offset << dendl;
 
-    int r = 0;
-    if (l1_index >= request.l1_table->size) {
-      lderr(cct) << "L1 index " << l1_index << " out-of-bounds" << dendl;
-      r = -ERANGE;
-    } else if (l2_offset == 0) {
-      // L2 table has not been allocated for specified offset
-      ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
-                     << "cluster_offset=DNE" << dendl;
-      *request.cluster_offset = 0;
-      r = -ENOENT;
-    } else {
-      std::shared_ptr<const LookupTable> l2_table;
-      r = l2_table_lookup(l2_offset, &l2_table);
-      if (r < 0) {
-        lderr(cct) << "failed to load L2 table: l2_offset=" << l2_offset << ": "
-                   << cpp_strerror(r) << dendl;
-      } else if (l2_table == nullptr) {
-        // table not in cache -- will restart once its loaded
-        return;
-      } else {
-        *request.cluster_offset = be64toh(l2_table->cluster_offsets[l2_index]) &
-                                  qcow_format->m_cluster_mask;
-        if (*request.cluster_offset == QCOW_OFLAG_ZERO) {
-          ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
-                         << "cluster_offset=zeroed" << dendl;
-        } else {
-          ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
-                         << "cluster_offset=" << *request.cluster_offset
-                         << dendl;
-        }
+    std::shared_ptr<LookupTable> l2_table;
+    int r = l2_table_lookup(request.l2_table_offset, &l2_table);
+    if (r < 0) {
+      lderr(cct) << "failed to load L2 table: l2_table_offset="
+                 << request.l2_table_offset << ": "
+                 << cpp_strerror(r) << dendl;
+    } else if (l2_table == nullptr) {
+      // table not in cache -- will restart once its loaded
+      return;
+    } else if (request.cluster_offset != nullptr) {
+      auto cluster_offset = l2_table->cluster_offsets[request.l2_table_index];
+      if (!l2_table->decoded) {
+        // table hasn't been byte-swapped
+        cluster_offset = be64toh(cluster_offset);
       }
+
+      *request.cluster_offset = cluster_offset & qcow_format->m_cluster_mask;
+      if (*request.cluster_offset == QCOW_OFLAG_ZERO) {
+        ldout(cct, 20) << "l2_table_offset=" << request.l2_table_offset << ", "
+                       << "l2_table_index=" << request.l2_table_index << ", "
+                       << "cluster_offset=zeroed" << dendl;
+      } else {
+        ldout(cct, 20) << "l2_table_offset=" << request.l2_table_offset << ", "
+                       << "l2_table_index=" << request.l2_table_index << ", "
+                       << "cluster_offset=" << *request.cluster_offset
+                       << dendl;
+      }
+    } else if (request.l2_table != nullptr) {
+      // ensure it's in the correct byte-order
+      l2_table->decode();
+      *request.l2_table = l2_table;
+    } else {
+      ceph_assert(false);
     }
 
     // complete the L2 cache request
@@ -368,11 +414,11 @@ private:
     requests.pop_front();
 
     // process next request (if any)
-    dispatch_get_cluster_offset();
+    dispatch_request();
   }
 
   int l2_table_lookup(uint64_t l2_offset,
-                      std::shared_ptr<const LookupTable>* l2_table) {
+                      std::shared_ptr<LookupTable>* l2_table) {
     auto cct = qcow_format->m_image_ctx->cct;
 
     l2_table->reset();
@@ -474,11 +520,13 @@ private:
                  << cpp_strerror(r) << dendl;
       l2_cache.ret_val = r;
     } else {
+      // keep the L2 table in big-endian byte-order until the full table
+      // is requested
       l2_cache.l2_table->init();
     }
 
     // restart the state machine
-    dispatch_get_cluster_offset();
+    dispatch_request();
   }
 
 };
