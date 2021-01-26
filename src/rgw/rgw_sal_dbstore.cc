@@ -1716,11 +1716,21 @@ namespace rgw::sal {
     return new LCDBSerializer(store, oid, lock_name, cookie);
   }
 
-  std::unique_ptr<Notification> DBStore::get_notification(rgw::sal::Object* obj,
-      struct req_state* s,
-      rgw::notify::EventType event_type, const std::string* object_name)
+  std::unique_ptr<Notification> DBStore::get_notification(
+    rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
+    rgw::notify::EventType event_type, const std::string* object_name)
   {
-    return std::make_unique<DBNotification>(obj, event_type);
+    return std::make_unique<DBNotification>(obj, src_obj, event_type);
+  }
+
+  std::unique_ptr<Notification> DBStore::get_notification(
+    const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
+    rgw::sal::Object* src_obj, RGWObjectCtx* rctx,
+    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
+    std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
+    optional_yield y)
+  {
+    return std::make_unique<DBNotification>(obj, src_obj, event_type);
   }
 
   RGWLC* DBStore::get_rgwlc(void) {
