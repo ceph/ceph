@@ -109,7 +109,7 @@ class AdminSocketHook;
 class Monitor : public Dispatcher,
 		public AuthClient,
 		public AuthServer,
-                public md_config_obs_t {
+        public md_config_obs_t {
 public:
   int orig_argc = 0;
   const char **orig_argv = nullptr;

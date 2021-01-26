@@ -54,21 +54,29 @@ const char* ceph_error_category::message(int ev, char*,
     return "No error";
 
   switch (static_cast<errc>(ev)) {
-
   case errc::not_in_map:
     return "Map does not contain requested entry.";
+    break;
   case errc::does_not_exist:
     return "Item does not exist";
+    break;
   case errc::failure:
     return "An internal fault or inconsistency occurred";
+    break;
   case errc::exists:
     return "Already exists";
+    break;
   case errc::limit_exceeded:
     return "Attempt to use too much";
+    break;
   case errc::auth:
     return "Authentication error";
+    break;
   case errc::conflict:
     return "Conflict detected or precondition failed";
+    break;
+  default:
+    break;
   }
 
   return "Unknown error.";
@@ -83,30 +91,30 @@ bool ceph_error_category::equivalent(const boost::system::error_code& c,
   if (c.category() == system_category()) {
     if (c.value() == boost::system::errc::no_such_file_or_directory) {
       if (ev == static_cast<int>(errc::not_in_map) ||
-	  ev == static_cast<int>(errc::does_not_exist)) {
-	// Blargh. A bunch of stuff returns ENOENT now, so just to be safe.
-	return true;
+	    ev == static_cast<int>(errc::does_not_exist)) {
+	    // Blargh. A bunch of stuff returns ENOENT now, so just to be safe.
+	    return true;
       }
     }
     if (c.value() == boost::system::errc::io_error) {
       if (ev == static_cast<int>(errc::failure)) {
-	return true;
+        return true;
       }
     }
     if (c.value() == boost::system::errc::file_exists) {
       if (ev == static_cast<int>(errc::exists)) {
-	return true;
+        return true;
       }
     }
     if (c.value() == boost::system::errc::no_space_on_device ||
-	c.value() == boost::system::errc::invalid_argument) {
+	  c.value() == boost::system::errc::invalid_argument) {
       if (ev == static_cast<int>(errc::limit_exceeded)) {
-	return true;
+	    return true;
       }
     }
     if (c.value() == boost::system::errc::operation_not_permitted) {
       if (ev == static_cast<int>(ceph::errc::conflict)) {
-	return true;
+	    return true;
       }
     }
   }
