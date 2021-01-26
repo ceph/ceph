@@ -26,9 +26,10 @@
 #include "rgw_zone.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
-#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_rados.h"
 #include "rgw_lc_tier.h"
+#include "rgw_notify.h"
 
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
@@ -565,7 +566,13 @@ struct lc_op_ctx {
 
 }; /* lc_op_ctx */
 
-static int remove_expired_obj(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool remove_indeed)
+
+static std::string lc_id = "rgw lifecycle";
+static std::string lc_req_id = "0";
+
+static int remove_expired_obj(
+  const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool remove_indeed,
+  rgw::notify::EventType event_type)
 {
   auto& store = oc.store;
   auto& bucket_info = oc.bucket->get_info();
@@ -590,16 +597,48 @@ static int remove_expired_obj(const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool
   }
 
   obj = bucket->get_object(obj_key);
-  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op(&oc.rctx);
-
-  del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
+  std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
+    = obj->get_delete_op(&oc.rctx);
+  del_op->params.versioning_status
+    = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner.set_id(rgw_user {meta.owner});
   del_op->params.obj_owner.set_name(meta.owner_display_name);
   del_op->params.bucket_owner.set_id(bucket_info.owner);
   del_op->params.unmod_since = meta.mtime;
   del_op->params.marker_version_id = version_id;
 
-  return del_op->delete_obj(dpp, null_yield);
+  std::unique_ptr<rgw::sal::Notification> notify
+    = store->get_notification(dpp, obj.get(), nullptr, &oc.rctx, event_type,
+			      bucket.get(), lc_id,
+			      const_cast<std::string&>(oc.bucket->get_tenant()),
+			      lc_req_id, null_yield);
+
+  /* can eliminate cast when reservation is lifted into Notification */
+  auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
+
+  ret = rgw::notify::publish_reserve(dpp, event_type, notify_res, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1)
+      << "ERROR: notify reservation failed, deferring delete of object k="
+      << o.key
+      << dendl;
+    return ret;
+  }
+
+  ret =  del_op->delete_obj(dpp, null_yield);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) <<
+      "ERROR: publishing notification failed, with error: " << ret << dendl;
+  } else {
+      // send request to notification manager
+    (void) rgw::notify::publish_commit(
+      obj.get(), obj->get_obj_size(), ceph::real_clock::now(),
+      obj->get_attrs()[RGW_ATTR_ETAG].to_str(), version_id, event_type,
+      notify_res, dpp);
+  }
+
+  return ret;
+
 } /* remove_expired_obj */
 
 class LCOpAction {
@@ -1077,7 +1116,8 @@ public:
     auto& o = oc.o;
     int r;
     if (o.is_delete_marker()) {
-      r = remove_expired_obj(oc.dpp, oc, true);
+      r = remove_expired_obj(oc.dpp, oc, true,
+			     rgw::notify::ObjectDeleteMarkerExpiration);
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: current is-dm remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1090,7 +1130,8 @@ public:
 		       << " " << oc.wq->thr_name() << dendl;
     } else {
       /* ! o.is_delete_marker() */
-      r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned());
+      r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned(),
+			     rgw::notify::ObjectExpiration);
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1137,7 +1178,8 @@ public:
 
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
-    int r = remove_expired_obj(oc.dpp, oc, true);
+    int r = remove_expired_obj(oc.dpp, oc, true,
+			       rgw::notify::ObjectNoncurrentExpiration);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 		       << oc.bucket << ":" << o.key
@@ -1181,7 +1223,8 @@ public:
 
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
-    int r = remove_expired_obj(oc.dpp, oc, true);
+    int r = remove_expired_obj(oc.dpp, oc, true,
+			       rgw::notify::ObjectDeleteMarkerExpiration);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (delete marker expiration) "
 		       << oc.bucket << ":" << o.key
@@ -1279,11 +1322,11 @@ public:
     /* If bucket is versioned, create delete_marker for current version
      */
     if (oc.bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
-        ret = remove_expired_obj(oc.dpp, oc, false);
-        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << " versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+      ret = remove_expired_obj(oc.dpp, oc, false, rgw::notify::ObjectExpiration);
+      ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << " versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
     } else {
-        ret = remove_expired_obj(oc.dpp, oc, true);
-        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+      ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectExpiration);
+      ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
     }
     return ret;
   }

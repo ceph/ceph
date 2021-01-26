@@ -1141,12 +1141,15 @@ std::unique_ptr<Completions> RadosStore::get_completions(void)
   return std::make_unique<RadosCompletions>();
 }
 
-std::unique_ptr<Notification> RadosStore::get_notification(rgw::sal::Object* obj,
-							    struct req_state* s,
-							    rgw::notify::EventType event_type,
-                                                            const std::string* object_name)
+std::unique_ptr<Notification> RadosStore::get_notification(
+  rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s, rgw::notify::EventType event_type, const std::string* object_name)
 {
-  return std::make_unique<RadosNotification>(s, this, obj, s, event_type, object_name);
+  return std::make_unique<RadosNotification>(s, this, obj, src_obj, s, event_type, object_name);
+}
+
+std::unique_ptr<Notification> RadosStore::get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, RGWObjectCtx* rctx, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
+{
+  return std::make_unique<RadosNotification>(dpp, this, obj, src_obj, rctx, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
 }
 
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
