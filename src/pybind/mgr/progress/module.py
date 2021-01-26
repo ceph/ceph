@@ -28,13 +28,15 @@ class Event(object):
     and a list of "refs" that are (type, id) tuples describing which
     objects (osds, pools) this relates to.
     """
-
-    def __init__(self, message, refs, add_to_ceph_s, started_at=None):
-        # type: (str, List[str], bool, Optional[float]) -> None
+    def __init__(self, id: str,
+                 message: str,
+                 refs: List[str],
+                 add_to_ceph_s: bool,
+                 started_at: Optional[float] = None):
         self._message = message
         self._refs = refs
         self.started_at = started_at if started_at else time.time()
-        self.id = None  # type: Optional[str]
+        self.id = id
         self._add_to_ceph_s = add_to_ceph_s
 
     def _refresh(self):
@@ -134,6 +136,7 @@ class Event(object):
             return None
         return int(elapsed * (1 - progress) / progress)
 
+
 class GhostEvent(Event):
     """
     The ghost of a completed event: these are the fields that we persist
@@ -142,9 +145,8 @@ class GhostEvent(Event):
 
     def __init__(self, my_id, message, refs, add_to_ceph_s, started_at, finished_at=None,
                  failed=False, failure_message=None):
-        super().__init__(message, refs, add_to_ceph_s, started_at)
+        super().__init__(my_id, message, refs, add_to_ceph_s, started_at)
         self.finished_at = finished_at if finished_at else time.time()
-        self.id = my_id
 
         if failed:
             self._failed = True
@@ -185,10 +187,9 @@ class GlobalRecoveryEvent(Event):
 
     def __init__(self, message, refs, add_to_ceph_s, start_epoch, active_clean_num):
         # type: (str, List[Any], bool, int, int) -> None
-        super().__init__(message, refs, add_to_ceph_s)
+        super().__init__(str(uuid.uuid4()), message, refs, add_to_ceph_s)
         self._add_to_ceph_s = add_to_ceph_s
         self._progress = 0.0
-        self.id = str(uuid.uuid4()) # type: str
         self._start_epoch = start_epoch
         self._active_clean_num = active_clean_num
         self._refresh()
@@ -227,6 +228,7 @@ class GlobalRecoveryEvent(Event):
     def progress(self):
         return self._progress
 
+
 class RemoteEvent(Event):
     """
     An event that was published by another module: we know nothing about
@@ -236,8 +238,7 @@ class RemoteEvent(Event):
 
     def __init__(self, my_id, message, refs, add_to_ceph_s):
         # type: (str, str, List[str], bool) -> None
-        super().__init__(message, refs, add_to_ceph_s)
-        self.id = my_id
+        super().__init__(my_id, message, refs, add_to_ceph_s)
         self._progress = 0.0
         self._failed = False
         self._refresh()
@@ -280,22 +281,14 @@ class PgRecoveryEvent(Event):
 
     def __init__(self, message, refs, which_pgs, which_osds, start_epoch, add_to_ceph_s):
         # type: (str, List[Any], List[PgId], List[str], int, bool) -> None
-        super().__init__(message, refs, add_to_ceph_s)
-
+        super().__init__(str(uuid.uuid4()), message, refs, add_to_ceph_s)
         self._pgs = which_pgs
-
         self._which_osds = which_osds
-
         self._original_pg_count = len(self._pgs)
-
         self._original_bytes_recovered = None  # type: Optional[Dict[PgId, float]]
-
         self._progress = 0.0
-
         # self._start_epoch = _module.get_osdmap().get_epoch()
         self._start_epoch = start_epoch
-
-        self.id = str(uuid.uuid4())  # type: str
         self._refresh()
 
     @property
@@ -808,10 +801,10 @@ class Module(MgrModule):
             self.log.warning("fail: ev {0} does not exist".format(ev_id))
 
     def on(self):
-        self.set_module_option('enabled', True)
+        self.set_module_option('enabled', "true")
 
     def off(self):
-        self.set_module_option('enabled', False)
+        self.set_module_option('enabled', "false")
 
     def _handle_ls(self):
         if len(self._events) or len(self._completed_events):

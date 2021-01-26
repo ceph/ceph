@@ -78,7 +78,7 @@ class VolumeClient(CephfsClient["Module"]):
         log to cluster log with default log level as WARN.
         """
         if not lvl:
-            lvl = self.mgr.CLUSTER_LOG_PRIO_WARN
+            lvl = self.mgr.ClusterLogPrio.WARN
         self.mgr.cluster_log("cluster", lvl, msg)
 
     def volume_exception_to_retval(self, ve):

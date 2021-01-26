@@ -401,17 +401,20 @@ class CephadmServe:
             daemon_detail = []  # type: List[str]
             for item in ls:
                 host = item.get('hostname')
+                assert isinstance(host, str)
                 daemons = item.get('services')  # misnomer!
+                assert isinstance(daemons, list)
                 missing_names = []
                 for s in daemons:
-                    name = '%s.%s' % (s.get('type'), s.get('id'))
+                    daemon_id = s.get('id')
+                    assert daemon_id
+                    name = '%s.%s' % (s.get('type'), daemon_id)
                     if s.get('type') == 'rbd-mirror':
-                        defaults = defaultdict(lambda: None, {'id': None})
                         metadata = self.mgr.get_metadata(
-                            "rbd-mirror", s.get('id'), default=defaults)
-                        if metadata['id']:
+                            "rbd-mirror", daemon_id)
+                        try:
                             name = '%s.%s' % (s.get('type'), metadata['id'])
-                        else:
+                        except (KeyError, TypeError):
                             self.log.debug(
                                 "Failed to find daemon id for rbd-mirror service %s" % (s.get('id')))
 
