@@ -132,6 +132,7 @@ def start_rgw(ctx, config, clients):
             if not ctx.vault.root_token:
                 raise ConfigError('vault: no "root_token" specified')
             # create token on file
+            ctx.rgw.vault_role = vault_role
             ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
             log.info("Token file content")
             ctx.cluster.only(client).run(args=['cat', token_path])
