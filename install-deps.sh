@@ -206,14 +206,14 @@ function install_boost_on_ubuntu {
 }
 
 function install_libzbd_on_ubuntu {
+    local codename=$1
     local project=libzbd
-    local sha1=44ffc287bf57e17afafec0af4d39b62d4f6c0dac
+    local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
     install_pkg_on_ubuntu \
         $project \
         $sha1 \
         $codename \
         check \
-        libzbd \
         libzbd-dev
 }
 
