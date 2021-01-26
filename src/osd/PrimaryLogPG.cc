@@ -10109,6 +10109,7 @@ int PrimaryLogPG::cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> 
   C_GatherBuilder gather(cct);
 
   CLSGatherOpRef cgop(std::make_shared<CLSGatherOp>());
+  cgop->ctx = ctx;
   cgop->obc = obc;
   cgop->op = op;
   for (std::map<std::string, bufferlist*>::iterator it = src_objs->begin(); it != src_objs->end(); it++) {
@@ -10938,7 +10939,8 @@ void PrimaryLogPG::cancel_cls_gather(CLSGatherOpRef cgop, bool requeue,
     dout(0) << __func__ << " " << cgop->obc->obs.oi.soid << " tid " << *p << dendl;
   }
   cgop->objecter_tids.clear();
-  object_contexts.purge(cgop->obc->obs.oi.soid);
+  close_op_ctx(cgop->ctx);
+  cgop->ctx = NULL;
   if (requeue) {
     if (cgop->op)
       requeue_op(cgop->op);
