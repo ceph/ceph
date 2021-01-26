@@ -318,6 +318,7 @@ public:
   }
 
   void dump_client_requests(ceph::Formatter* f) const;
+  void dump_historic_client_requests(ceph::Formatter* f) const;
 };
 
 /**

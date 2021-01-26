@@ -22,6 +22,23 @@ void OperationRegistry::dump_client_requests(ceph::Formatter* f) const
   }
 }
 
+void OperationRegistry::dump_historic_client_requests(ceph::Formatter* f) const
+{
+  const auto& historic_client_registry =
+    registries[static_cast<int>(OperationTypeCode::historic_client_request)];
+  f->open_object_section("op_history");
+  f->dump_int("size", historic_client_registry.size());
+  // TODO: f->dump_int("duration", history_duration.load());
+  {
+    f->open_array_section("ops");
+    for (const auto& op : historic_client_registry) {
+      op.dump(f);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
 
 void dump_event_default(const char name[],
                         const utime_t& timestamp,

@@ -15,6 +15,7 @@ class SendBeaconHook;
 class DumpPGStateHistory;
 class SeastarMetricsHook;
 class DumpInFlightOpsHook;
+class DumpHistoricOpsHook;
 
 
 template<class Hook, class... Args>
