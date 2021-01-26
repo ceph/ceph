@@ -9,10 +9,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 FSID='00000000-0000-0000-0000-0000deadbeef'
 
 # images that are used
-IMAGE_MASTER=${IMAGE_MASTER:-'docker.io/ceph/daemon-base:latest-master-devel'}
-IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'docker.io/ceph/daemon-base:latest-octopus'}
-IMAGE_NAUTILUS=${IMAGE_NAUTILUS:-'docker.io/ceph/daemon-base:latest-nautilus'}
-IMAGE_MIMIC=${IMAGE_MIMIC:-'docker.io/ceph/daemon-base:latest-mimic'}
+IMAGE_MASTER=${IMAGE_MASTER:-'quay.ceph.io/ceph-ci/ceph:master'}
+IMAGE_PACIFIC=${IMAGE_PACIFIC:-'quay.ceph.io/ceph-ci/ceph:pacific'}
+IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -146,15 +145,12 @@ $SUDO $CEPHADM check-host
 $SUDO $CEPHADM gather-facts
 
 ## version + --image
+$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version
+$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version \
+    | grep 'ceph version 16'
 $SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
 $SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
     | grep 'ceph version 15'
-$SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version
-$SUDO CEPHADM_IMAGE=$IMAGE_NAUTILUS $CEPHADM_BIN version \
-    | grep 'ceph version 14'
-$SUDO $CEPHADM_BIN --image $IMAGE_MIMIC version
-$SUDO $CEPHADM_BIN --image $IMAGE_MIMIC version \
-    | grep 'ceph version 13'
 $SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
