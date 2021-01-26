@@ -19,6 +19,7 @@ struct __attribute__((aligned(8), packed)) root_t {
   paddr_t lba_root_addr;
   paddr_t segment_root;
   laddr_t onode_root = L_ADDR_NULL;
+  laddr_t collection_root = L_ADDR_NULL;
 
   void adjust_addrs_from_base(paddr_t base) {
     if (lba_root_addr.is_relative()) {
