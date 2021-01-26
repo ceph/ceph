@@ -52,13 +52,13 @@ function clean_up {
 
 if [[ $(uname) != "Linux" ]]; then
 	echo "LUKS encryption tests only supported on Linux"
-	exit 1
+	exit 0
 fi
 
 
 if [[ $(($(ceph-conf --name client.${CEPH_ID} rbd_default_features) & 64)) != 0 ]]; then
 	echo "LUKS encryption tests not supported alongside image journaling feature"
-	exit 1
+	exit 0
 fi
 
 clean_up
