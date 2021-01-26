@@ -31,9 +31,10 @@ upgrade-sequence:
        wait-for-healthy: true
    - sleep:
        duration: 60
-   - ceph.restart: [mds.a]
-   - sleep:
-       duration: 60
+   #this needs to be added when mds is enabled in riles
+   #- ceph.restart: [mds.a]
+   #- sleep:
+   #    duration: 60
    - sleep:
        duration: 60
    - ceph.restart:
@@ -51,3 +52,5 @@ upgrade-sequence:
        wait-for-healthy: true
    - sleep:
        duration: 60
+   - print: "**** done upgrade-mon-osd-mds.yaml"
+

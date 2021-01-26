@@ -1,6 +1,7 @@
 meta:
 - desc: |
    librbd python api tests
+#this test disable ref: https://tracker.ceph.com/issues/48759
 workload:
   full_sequential:
     - workunit:
