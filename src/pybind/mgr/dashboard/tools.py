@@ -66,7 +66,7 @@ class RequestLoggingTool(cherrypy.Tool):
                 for key in keys:
                     params[key] = '***'
                 msg = '{} params=\'{}\''.format(msg, json.dumps(params))
-            mgr.cluster_log('audit', mgr.CLUSTER_LOG_PRIO_INFO, msg)
+            mgr.cluster_log('audit', mgr.ClusterLogPrio.INFO, msg)
 
     def request_error(self):
         self._request_log(self.logger.error)

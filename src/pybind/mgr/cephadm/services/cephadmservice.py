@@ -215,7 +215,7 @@ class CephadmService(metaclass=ABCMeta):
 
         if self.TYPE not in ['mon', 'osd', 'mds']:
             logger.info(out)
-            return HandleCommandResult(0, out, None)
+            return HandleCommandResult(0, out)
 
         r = HandleCommandResult(*self.mgr.mon_command({
             'prefix': f'{self.TYPE} ok-to-stop',
