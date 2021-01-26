@@ -1268,7 +1268,7 @@ class RGWAWSCompleteMultipartCR : public RGWCoroutine {
     string etag;
 
     void decode_xml(XMLObj *obj) {
-      RGWXMLDecoder::decode_xml("Location", bucket, obj);
+      RGWXMLDecoder::decode_xml("Location", location, obj);
       RGWXMLDecoder::decode_xml("Bucket", bucket, obj);
       RGWXMLDecoder::decode_xml("Key", key, obj);
       RGWXMLDecoder::decode_xml("ETag", etag, obj);
