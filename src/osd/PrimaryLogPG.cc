@@ -10936,7 +10936,7 @@ void PrimaryLogPG::cancel_cls_gather(CLSGatherOpRef cgop, bool requeue,
 {
   for (std::vector<ceph_tid_t>::iterator p = cgop->objecter_tids.begin(); p != cgop->objecter_tids.end(); p++) {
     tids->push_back(*p);
-    dout(0) << __func__ << " " << cgop->obc->obs.oi.soid << " tid " << *p << dendl;
+    dout(10) << __func__ << " " << cgop->obc->obs.oi.soid << " tid " << *p << dendl;
   }
   cgop->objecter_tids.clear();
   close_op_ctx(cgop->ctx);
