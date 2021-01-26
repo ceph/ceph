@@ -27,6 +27,23 @@ namespace migration {
 template <typename> struct SourceSpecBuilder;
 struct StreamInterface;
 
+namespace qcow_format {
+
+struct LookupTable {
+  LookupTable() {}
+  LookupTable(uint32_t size) : size(size) {}
+
+  bufferlist bl;
+  uint64_t* cluster_offsets = nullptr;
+  uint32_t size = 0;
+  bool decoded = false;
+
+  void init();
+  void decode();
+};
+
+} // namespace qcow_format
+
 template <typename ImageCtxT>
 class QCOWFormat : public FormatInterface {
 public:
@@ -114,10 +131,8 @@ private:
     utime_t timestamp;
     uint64_t size = 0;
 
-    uint32_t l1_size = 0;
     uint64_t l1_table_offset = 0;
-    uint64_t* l1_table = nullptr;
-    bufferlist l1_table_bl;
+    qcow_format::LookupTable l1_table;
 
     uint32_t extra_data_size = 0;
   };
@@ -141,10 +156,11 @@ private:
   uint64_t m_cluster_offset_mask = 0;
   uint64_t m_cluster_mask = 0;
 
-  uint32_t m_l1_size = 0;
   uint64_t m_l1_table_offset = 0;
-  uint64_t* m_l1_table = nullptr;
-  bufferlist m_l1_table_bl;
+  qcow_format::LookupTable m_l1_table;
+
+  uint32_t m_l2_bits = 0;
+  uint32_t m_l2_size = 0;
 
   uint32_t m_snapshot_count = 0;
   uint64_t m_snapshots_offset = 0;

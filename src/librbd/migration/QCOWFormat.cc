@@ -52,13 +52,27 @@ struct ClusterExtent {
 
 typedef std::vector<ClusterExtent> ClusterExtents;
 
-void decode_l1_table(uint32_t l1_size, bufferlist& l1_table_bl,
-                     uint64_t** l1_table) {
-  // translate the L1 table (big-endian -> CPU endianess)
-  *l1_table = reinterpret_cast<uint64_t*>(l1_table_bl.c_str());
-  for (auto idx = 0UL; idx < l1_size; ++idx) {
-    (*l1_table)[idx] = be64toh((*l1_table)[idx]);
+void LookupTable::init() {
+  if (cluster_offsets == nullptr) {
+    cluster_offsets = reinterpret_cast<uint64_t*>(bl.c_str());
   }
+}
+
+void LookupTable::decode() {
+  init();
+
+  // L2 tables are selectively byte-swapped on demand if only requesting a
+  // single cluster offset
+  if (decoded) {
+    return;
+  }
+
+  // translate the lookup table (big-endian -> CPU endianess)
+  for (auto idx = 0UL; idx < size; ++idx) {
+    cluster_offsets[idx] = be64toh(cluster_offsets[idx]);
+  }
+
+  decoded = true;
 }
 
 void populate_cluster_extents(CephContext* cct, uint64_t cluster_size,
@@ -237,20 +251,20 @@ private:
 template <typename I>
 class QCOWFormat<I>::L2TableCache {
 public:
-  L2TableCache(QCOWFormat* qcow_format, uint32_t l2_bits)
-    : qcow_format(qcow_format), l2_bits(l2_bits), l2_size(1UL << l2_bits),
+  L2TableCache(QCOWFormat* qcow_format)
+    : qcow_format(qcow_format),
       m_strand(*qcow_format->m_image_ctx->asio_engine),
       l2_cache_entries(QCOW_L2_CACHE_SIZE) {
   }
 
-  void get_cluster_offset(uint32_t l1_size, const uint64_t* l1_table,
+  void get_cluster_offset(const LookupTable* l1_table,
                           uint64_t image_offset, uint64_t* cluster_offset,
                           Context* on_finish) {
     auto cct = qcow_format->m_image_ctx->cct;
     ldout(cct, 20) << "image_offset=" << image_offset << dendl;
 
     // cache state machine runs in a single strand thread
-    Request request{l1_size, l1_table, image_offset, cluster_offset, on_finish};
+    Request request{l1_table, image_offset, cluster_offset, on_finish};
     boost::asio::dispatch(
       m_strand, [this, request=std::move(request)]() {
         requests.push_back(std::move(request));
@@ -260,22 +274,19 @@ public:
 
 private:
   QCOWFormat* qcow_format;
-  uint32_t l2_bits;
-  uint32_t l2_size;
 
   boost::asio::io_context::strand m_strand;
 
   struct Request {
-    uint32_t l1_size;
-    const uint64_t* l1_table;
+    const LookupTable* l1_table;
 
     uint64_t image_offset;
     uint64_t* cluster_offset;
     Context* on_finish;
 
-    Request(uint32_t l1_size, const uint64_t* l1_table, uint64_t image_offset,
+    Request(const LookupTable* l1_table, uint64_t image_offset,
             uint64_t* cluster_offset, Context* on_finish)
-      : l1_size(l1_size), l1_table(l1_table), image_offset(image_offset),
+      : l1_table(l1_table), image_offset(image_offset),
         cluster_offset(cluster_offset), on_finish(on_finish) {
     }
   };
@@ -283,8 +294,7 @@ private:
 
   struct L2Cache {
     uint64_t l2_offset = 0;
-    uint64_t* l2_table = nullptr;
-    bufferlist l2_table_bl;
+    std::shared_ptr<LookupTable> l2_table;
 
     utime_t timestamp;
     uint32_t count = 0;
@@ -308,19 +318,19 @@ private:
 
     auto request = requests.front();
     auto l1_index = request.image_offset >>
-                    (l2_bits + qcow_format->m_cluster_bits);
-    auto l2_offset = request.l1_table[
-                       std::min<uint32_t>(l1_index, request.l1_size - 1)] &
+                    (qcow_format->m_l2_bits + qcow_format->m_cluster_bits);
+    auto l2_offset = request.l1_table->cluster_offsets[std::min<uint32_t>(
+                       l1_index, request.l1_table->size - 1)] &
                      qcow_format->m_cluster_mask;
     auto l2_index = (request.image_offset >> qcow_format->m_cluster_bits) &
-                    (l2_size - 1);
+                    (qcow_format->m_l2_size - 1);
     ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
                    << "l1_index=" << l1_index << ", "
                    << "l2_offset=" << l2_offset << ", "
                    << "l2_index=" << l2_index << dendl;
 
     int r = 0;
-    if (l1_index >= request.l1_size) {
+    if (l1_index >= request.l1_table->size) {
       lderr(cct) << "L1 index " << l1_index << " out-of-bounds" << dendl;
       r = -ERANGE;
     } else if (l2_offset == 0) {
@@ -330,7 +340,7 @@ private:
       *request.cluster_offset = 0;
       r = -ENOENT;
     } else {
-      const uint64_t* l2_table = nullptr;
+      std::shared_ptr<const LookupTable> l2_table;
       r = l2_table_lookup(l2_offset, &l2_table);
       if (r < 0) {
         lderr(cct) << "failed to load L2 table: l2_offset=" << l2_offset << ": "
@@ -339,7 +349,7 @@ private:
         // table not in cache -- will restart once its loaded
         return;
       } else {
-        *request.cluster_offset = be64toh(l2_table[l2_index]) &
+        *request.cluster_offset = be64toh(l2_table->cluster_offsets[l2_index]) &
                                   qcow_format->m_cluster_mask;
         if (*request.cluster_offset == QCOW_OFLAG_ZERO) {
           ldout(cct, 20) << "image_offset=" << request.image_offset << ", "
@@ -361,10 +371,11 @@ private:
     dispatch_get_cluster_offset();
   }
 
-  int l2_table_lookup(uint64_t l2_offset, const uint64_t** cluster_offset) {
+  int l2_table_lookup(uint64_t l2_offset,
+                      std::shared_ptr<const LookupTable>* l2_table) {
     auto cct = qcow_format->m_image_ctx->cct;
 
-    *cluster_offset = nullptr;
+    l2_table->reset();
 
     // find a match in the existing cache
     for (auto idx = 0U; idx < l2_cache_entries.size(); ++idx) {
@@ -393,7 +404,7 @@ private:
           }
         }
 
-        *cluster_offset = l2_cache.l2_table;
+        *l2_table = l2_cache.l2_table;
         return 0;
       }
     }
@@ -431,6 +442,7 @@ private:
     ldout(cct, 20) << "l2_offset=" << l2_offset << ", "
                    << "index=" << min_idx << " (loading)" << dendl;
     auto& l2_cache = l2_cache_entries[min_idx];
+    l2_cache.l2_table = std::make_shared<LookupTable>(qcow_format->m_l2_size);
     l2_cache.l2_offset = l2_offset;
     l2_cache.timestamp = ceph_clock_now();
     l2_cache.count = 1;
@@ -440,10 +452,9 @@ private:
     auto ctx = new LambdaContext([this, index=min_idx, l2_offset](int r) {
       boost::asio::post(m_strand, [this, index, l2_offset, r]() {
         handle_l2_table_lookup(r, index, l2_offset); }); });
-    l2_cache.l2_table_bl.clear();
     qcow_format->m_stream->read(
-      {{l2_offset, l2_size * sizeof(uint64_t)}}, &l2_cache.l2_table_bl, ctx);
-
+      {{l2_offset, qcow_format->m_l2_size * sizeof(uint64_t)}},
+      &l2_cache.l2_table->bl, ctx);
     return 0;
   }
 
@@ -463,8 +474,7 @@ private:
                  << cpp_strerror(r) << dendl;
       l2_cache.ret_val = r;
     } else {
-      l2_cache.l2_table = reinterpret_cast<uint64_t*>(
-        l2_cache.l2_table_bl.c_str());
+      l2_cache.l2_table->init();
     }
 
     // restart the state machine
@@ -481,10 +491,9 @@ template <typename I>
 class QCOWFormat<I>::ReadRequest {
 public:
   ReadRequest(QCOWFormat* qcow_format, io::AioCompletion* aio_comp,
-              uint32_t l1_size, const uint64_t* l1_table,
-              io::Extents&& image_extents)
-    : qcow_format(qcow_format), aio_comp(aio_comp), l1_size(l1_size),
-      l1_table(l1_table), image_extents(std::move(image_extents)) {
+              const LookupTable* l1_table, io::Extents&& image_extents)
+    : qcow_format(qcow_format), aio_comp(aio_comp), l1_table(l1_table),
+      image_extents(std::move(image_extents)) {
   }
 
   void send() {
@@ -495,8 +504,7 @@ private:
   QCOWFormat* qcow_format;
   io::AioCompletion* aio_comp;
 
-  uint32_t l1_size;
-  const uint64_t* l1_table;
+  const LookupTable* l1_table;
   io::Extents image_extents;
 
   size_t image_extents_idx = 0;
@@ -519,7 +527,7 @@ private:
         [this, &cluster_extent, on_finish=gather_ctx->new_sub()](int r) {
           handle_get_cluster_offset(r, cluster_extent, on_finish); });
       qcow_format->m_l2_table_cache->get_cluster_offset(
-        l1_size, l1_table, cluster_extent.image_offset,
+        l1_table, cluster_extent.image_offset,
         &cluster_extent.cluster_offset, sub_ctx);
     }
 
@@ -621,12 +629,12 @@ private:
 template <typename I>
 class QCOWFormat<I>::ListSnapsRequest {
 public:
-  ListSnapsRequest(QCOWFormat* qcow_format, uint64_t snap_id, uint32_t l1_size,
-                   const uint64_t* l1_table, io::Extents&& image_extents,
+  ListSnapsRequest(QCOWFormat* qcow_format, uint64_t snap_id,
+                   const LookupTable* l1_table, io::Extents&& image_extents,
                    bool require_copied_bit, io::SparseExtents* sparse_extents,
                    Context* on_finish)
-    : qcow_format(qcow_format), snap_id(snap_id), l1_size(l1_size),
-      l1_table(l1_table), image_extents(std::move(image_extents)),
+    : qcow_format(qcow_format), snap_id(snap_id), l1_table(l1_table),
+      image_extents(std::move(image_extents)),
       require_copied_bit(require_copied_bit), sparse_extents(sparse_extents),
       on_finish(on_finish) {
   }
@@ -638,8 +646,7 @@ public:
 private:
   QCOWFormat* qcow_format;
   uint64_t snap_id;
-  uint32_t l1_size;
-  const uint64_t* l1_table;
+  const LookupTable* l1_table;
   io::Extents image_extents;
   bool require_copied_bit;
   io::SparseExtents* sparse_extents;
@@ -667,8 +674,8 @@ private:
             });
         });
       qcow_format->m_l2_table_cache->get_cluster_offset(
-        l1_size, l1_table, cluster_extent.image_offset,
-        &cluster_extent.cluster_offset, ctx);
+        l1_table, cluster_extent.image_offset, &cluster_extent.cluster_offset,
+        ctx);
     }
 
     gather_ctx->activate();
@@ -890,12 +897,15 @@ void QCOWFormat<I>::handle_read_v1_header(int r, Context* on_finish) {
   m_cluster_offset_mask = (1ULL << (63 - header.cluster_bits)) - 1;
   m_cluster_mask = ~QCOW_OFLAG_COMPRESSED;
 
-  uint32_t l2_bits = header.l2_bits;
-  uint32_t shift = m_cluster_bits + l2_bits;
-  m_l1_size = (m_size + (1LL << shift) - 1) >> shift;
+  m_l2_bits = header.l2_bits;
+  m_l2_size = (1UL << m_l2_bits);
+
+  uint32_t shift = m_cluster_bits + m_l2_bits;
+  m_l1_table.size = (m_size + (1LL << shift) - 1) >> shift;
   m_l1_table_offset = header.l1_table_offset;
   if (m_size > (std::numeric_limits<uint64_t>::max() - (1ULL << shift)) ||
-      m_l1_size > (std::numeric_limits<int32_t>::max() / sizeof(uint64_t))) {
+      m_l1_table.size >
+        (std::numeric_limits<int32_t>::max() / sizeof(uint64_t))) {
     lderr(cct) << "image size too big: " << m_size << dendl;
     on_finish->complete(-EINVAL);
     return;
@@ -903,10 +913,10 @@ void QCOWFormat<I>::handle_read_v1_header(int r, Context* on_finish) {
 
   ldout(cct, 15) << "size=" << m_size << ", "
                  << "cluster_bits=" << m_cluster_bits << ", "
-                 << "l2_bits=" << l2_bits << dendl;
+                 << "l2_bits=" << m_l2_bits << dendl;
 
   // allocate memory for L1 table and L2 + cluster caches
-  m_l2_table_cache = std::make_unique<L2TableCache>(this, l2_bits);
+  m_l2_table_cache = std::make_unique<L2TableCache>(this);
   m_cluster_cache = std::make_unique<ClusterCache>(this);
 
   read_l1_table(on_finish);
@@ -1028,18 +1038,21 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
   m_cluster_mask = ~(QCOW_OFLAG_COMPRESSED | QCOW_OFLAG_COPIED);
 
   // L2 table is fixed a (1) cluster block to hold 8-byte (3 bit) offsets
-  uint32_t l2_bits = m_cluster_bits - 3;
-  uint32_t shift = m_cluster_bits + l2_bits;
-  m_l1_size = (m_size + (1LL << shift) - 1) >> shift;
+  m_l2_bits = m_cluster_bits - 3;
+  m_l2_size = (1UL << m_l2_bits);
+
+  uint32_t shift = m_cluster_bits + m_l2_bits;
+  m_l1_table.size = (m_size + (1LL << shift) - 1) >> shift;
   m_l1_table_offset = header.l1_table_offset;
   if (m_size > (std::numeric_limits<uint64_t>::max() - (1ULL << shift)) ||
-      m_l1_size > (std::numeric_limits<int32_t>::max() / sizeof(uint64_t))) {
+      m_l1_table.size >
+        (std::numeric_limits<int32_t>::max() / sizeof(uint64_t))) {
     lderr(cct) << "image size too big: " << m_size << dendl;
     on_finish->complete(-EINVAL);
     return;
-  } else if (m_l1_size > header.l1_size) {
+  } else if (m_l1_table.size > header.l1_size) {
     lderr(cct) << "invalid L1 table size in header (" << header.l1_size
-               << " < " << m_l1_size << ")" << dendl;
+               << " < " << m_l1_table.size << ")" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
@@ -1054,7 +1067,7 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
                  << "snapshot_offset=" << m_snapshots_offset << dendl;
 
   // allocate memory for L1 table and L2 + cluster caches
-  m_l2_table_cache = std::make_unique<L2TableCache>(this, l2_bits);
+  m_l2_table_cache = std::make_unique<L2TableCache>(this);
   m_cluster_cache = std::make_unique<ClusterCache>(this);
 
   read_snapshot(on_finish);
@@ -1101,7 +1114,7 @@ void QCOWFormat<I>::handle_read_snapshot(int r, Context* on_finish) {
   snapshot.id.resize(be16toh(header.id_str_size));
   snapshot.name.resize(be16toh(header.name_size));
   snapshot.l1_table_offset = be64toh(header.l1_table_offset);
-  snapshot.l1_size = be32toh(header.l1_size);
+  snapshot.l1_table.size = be32toh(header.l1_size);
   snapshot.timestamp.sec_ref() = be32toh(header.date_sec);
   snapshot.timestamp.nsec_ref() = be32toh(header.date_nsec);
   snapshot.extra_data_size = be32toh(header.extra_data_size);
@@ -1110,7 +1123,7 @@ void QCOWFormat<I>::handle_read_snapshot(int r, Context* on_finish) {
                  << "id_str_len=" << snapshot.id.size() << ", "
                  << "name_str_len=" << snapshot.name.size() << ", "
                  << "l1_table_offset=" << snapshot.l1_table_offset << ", "
-                 << "l1_size=" << snapshot.l1_size << ", "
+                 << "l1_size=" << snapshot.l1_table.size << ", "
                  << "extra_data_size=" << snapshot.extra_data_size << dendl;
 
   read_snapshot_extra(on_finish);
@@ -1207,8 +1220,8 @@ void QCOWFormat<I>::read_snapshot_l1_table(Context* on_finish) {
   auto ctx = new LambdaContext([this, on_finish](int r) {
     handle_read_snapshot_l1_table(r, on_finish); });
   m_stream->read({{snapshot.l1_table_offset,
-                    snapshot.l1_size * sizeof(uint64_t)}},
-                 &snapshot.l1_table_bl, ctx);
+                   snapshot.l1_table.size * sizeof(uint64_t)}},
+                 &snapshot.l1_table.bl, ctx);
 }
 
 template <typename I>
@@ -1227,8 +1240,7 @@ void QCOWFormat<I>::handle_read_snapshot_l1_table(int r, Context* on_finish) {
     return;
   }
 
-  decode_l1_table(snapshot.l1_size, snapshot.l1_table_bl,
-                  &snapshot.l1_table);
+  snapshot.l1_table.decode();
   read_snapshot(on_finish);
 }
 
@@ -1240,7 +1252,8 @@ void QCOWFormat<I>::read_l1_table(Context* on_finish) {
   auto ctx = new LambdaContext([this, on_finish](int r) {
     handle_read_l1_table(r, on_finish); });
   m_stream->read({{m_l1_table_offset,
-                   m_l1_size * sizeof(uint64_t)}}, &m_l1_table_bl, ctx);
+                   m_l1_table.size * sizeof(uint64_t)}},
+                 &m_l1_table.bl, ctx);
 }
 
 template <typename I>
@@ -1254,7 +1267,7 @@ void QCOWFormat<I>::handle_read_l1_table(int r, Context* on_finish) {
     return;
   }
 
-  decode_l1_table(m_l1_size, m_l1_table_bl, &m_l1_table);
+  m_l1_table.decode();
   read_backing_file(on_finish);
 }
 
@@ -1327,11 +1340,9 @@ bool QCOWFormat<I>::read(
   ldout(cct, 20) << "snap_id=" << snap_id << ", "
                  << "image_extents=" << image_extents << dendl;
 
-  uint32_t l1_size;
-  uint64_t* l1_table;
+  const LookupTable* l1_table = nullptr;
   if (snap_id == CEPH_NOSNAP) {
-    l1_size = m_l1_size;
-    l1_table = m_l1_table;
+    l1_table = &m_l1_table;
   } else {
     auto snapshot_it = m_snapshots.find(snap_id);
     if (snapshot_it == m_snapshots.end()) {
@@ -1340,14 +1351,13 @@ bool QCOWFormat<I>::read(
     }
 
     auto& snapshot = snapshot_it->second;
-    l1_size = snapshot.l1_size;
-    l1_table = snapshot.l1_table;
+    l1_table = &snapshot.l1_table;
   }
 
   aio_comp->read_result = std::move(read_result);
   aio_comp->read_result.set_image_extents(image_extents);
 
-  auto read_request = new ReadRequest(this, aio_comp, l1_size, l1_table,
+  auto read_request = new ReadRequest(this, aio_comp, l1_table,
                                       std::move(image_extents));
   read_request->send();
 
@@ -1378,9 +1388,8 @@ void QCOWFormat<I>::list_snaps(io::Extents&& image_extents,
                                &previous_size, sparse_extents);
 
     auto list_snaps_request = new ListSnapsRequest(
-      this, snap_id, snapshot.l1_size, snapshot.l1_table,
-      io::Extents{image_extents}, require_copied_bit, sparse_extents,
-      gather_ctx->new_sub());
+      this, snap_id, &snapshot.l1_table, io::Extents{image_extents},
+      require_copied_bit, sparse_extents, gather_ctx->new_sub());
     list_snaps_request->send();
 
     require_copied_bit = false;
@@ -1392,7 +1401,7 @@ void QCOWFormat<I>::list_snaps(io::Extents&& image_extents,
                              &previous_size, sparse_extents);
 
   auto list_snaps_request = new ListSnapsRequest(
-    this, CEPH_NOSNAP, m_l1_size, m_l1_table, io::Extents{image_extents},
+    this, CEPH_NOSNAP, &m_l1_table, io::Extents{image_extents},
     require_copied_bit, sparse_extents, gather_ctx->new_sub());
   list_snaps_request->send();
 
