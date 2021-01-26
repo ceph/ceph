@@ -270,7 +270,7 @@ void Elector::message_victory(const std::set<int>& quorum)
 		    metadata);
 }
 
-
+// receive propose
 void Elector::handle_propose(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_propose");
@@ -637,46 +637,46 @@ void Elector::dispatch(MonOpRequestRef op)
 	return;
       }
       if (peermap.epoch < mon->monmap->epoch) {
-	dout(0) << em->get_source_inst() << " has older monmap epoch " << peermap.epoch
+	    dout(0) << em->get_source_inst() << " has older monmap epoch " << peermap.epoch
 		<< " < my epoch " << mon->monmap->epoch 
 		<< dendl;
       }
 
       if (em->strategy != logic.strategy) {
-	dout(5) << __func__ << " somehow got an Election message with different strategy "
+	    dout(5) << __func__ << " somehow got an Election message with different strategy "
 		<< em->strategy << " from local " << logic.strategy
 		<< "; dropping for now to let race resolve" << dendl;
-	return;
+	    return;
       }
 
       if (em->scoring_bl.length()) {
-	assimilate_connection_reports(em->scoring_bl);
+	    assimilate_connection_reports(em->scoring_bl);
       }
 
       begin_peer_ping(mon->monmap->get_rank(em->get_source_addr()));
       switch (em->op) {
       case MMonElection::OP_PROPOSE:
-	handle_propose(op);
-	return;
+	    handle_propose(op);
+	    return;
       }
 
       if (em->epoch < get_epoch()) {
-	dout(5) << "old epoch, dropping" << dendl;
-	break;
+	    dout(5) << "old epoch, dropping" << dendl;
+	    break;
       }
 
       switch (em->op) {
       case MMonElection::OP_ACK:
-	handle_ack(op);
-	return;
+	    handle_ack(op);
+	    return;
       case MMonElection::OP_VICTORY:
-	handle_victory(op);
-	return;
+	    handle_victory(op);
+	    return;
       case MMonElection::OP_NAK:
-	handle_nak(op);
-	return;
+	    handle_nak(op);
+	    return;
       default:
-	ceph_abort();
+	    ceph_abort();
       }
     }
     break;

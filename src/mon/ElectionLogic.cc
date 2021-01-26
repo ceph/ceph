@@ -113,6 +113,7 @@ void ElectionLogic::connectivity_bump_epoch_in_election(epoch_t mepoch)
   }
 }
 
+//start election
 void ElectionLogic::start()
 {
   if (!participating) {
@@ -164,6 +165,7 @@ void ElectionLogic::defer(int who)
   elector->_defer_to(who);
 }
 
+// core code of pasox algorithm
 void ElectionLogic::end_election_period()
 {
   ldout(cct, 5) << "election period ended" << dendl;
@@ -181,7 +183,6 @@ void ElectionLogic::end_election_period()
       elector->reset_election();
   }
 }
-
 
 void ElectionLogic::declare_victory()
 {
@@ -239,6 +240,7 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch,
     break;
   default:
     ceph_assert(0 == "how did election strategy become an invalid value?");
+    break;
   }
 }
 
@@ -293,7 +295,7 @@ void ElectionLogic::propose_classic_handler(int from, epoch_t mepoch)
     } else {
       // wait, i should win!
       if (!electing_me) {
-	elector->trigger_new_election();
+	    elector->trigger_new_election();
       }
     }
   } else {
