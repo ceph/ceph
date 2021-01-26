@@ -97,7 +97,13 @@ public:
       throw crimson::common::system_shutdown_exception();
     }
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
-    return std::make_pair(op, op->start());
+    auto fut = op->start().then([op /* by copy */] {
+      // ensure the op's lifetime is appropriate. It is not enough to
+      // guarantee it's alive at the scheduling stages (i.e. `then()`
+      // calling) but also during the actual execution (i.e. when passed
+      // lambdas are actually run).
+    });
+    return std::make_pair(std::move(op), std::move(fut));
   }
 
   seastar::future<> stop() {
