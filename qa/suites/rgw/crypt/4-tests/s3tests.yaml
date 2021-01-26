@@ -8,6 +8,9 @@ tasks:
       vault_kv:
         key_path: my-key-1
         key_path2: my-key-2
-      vault_transit:
+      vault_old:
         key_path: my-key-1/1
         key_path2: my-key-2/1
+      vault_transit:
+        key_path: my-key-1
+        key_path2: my-key-2
