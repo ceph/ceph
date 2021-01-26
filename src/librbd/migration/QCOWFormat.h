@@ -156,6 +156,7 @@ private:
   uint64_t m_cluster_offset_mask = 0;
   uint64_t m_cluster_mask = 0;
 
+  uint32_t m_l1_shift = 0;
   uint64_t m_l1_table_offset = 0;
   qcow_format::LookupTable m_l1_table;
 
@@ -194,7 +195,8 @@ private:
 
   void read_backing_file(Context* on_finish);
 
-  void handle_list_snaps(int r, io::SnapIds&& snap_ids,
+  void handle_list_snaps(int r, io::Extents&& image_extents,
+                         io::SnapIds&& snap_ids,
                          io::SnapshotDelta* snapshot_delta, Context* on_finish);
 };
 
