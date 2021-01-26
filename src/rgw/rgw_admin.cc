@@ -3203,6 +3203,7 @@ int main(int argc, const char **argv)
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
+  bool raw_storage_op = false;
 
   std::optional<std::string> rgw_obj_fs; // radoslist field separator
 
@@ -3684,85 +3685,15 @@ int main(int argc, const char **argv)
       }
     }
 
-    init_optional_bucket(opt_bucket, opt_tenant,
-                         opt_bucket_name, opt_bucket_id);
-    init_optional_bucket(opt_source_bucket, opt_source_tenant,
-                         opt_source_bucket_name, opt_source_bucket_id);
-    init_optional_bucket(opt_dest_bucket, opt_dest_tenant,
-                         opt_dest_bucket_name, opt_dest_bucket_id);
+    // not a raw op if 'period update' needs to commit to master
+    bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
+    // not a raw op if 'period pull' needs to read zone/period configuration
+    bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
 
-    if (tenant.empty()) {
-      tenant = user->get_tenant();
-    } else {
-      if (!user && opt_cmd != OPT::ROLE_CREATE
-                          && opt_cmd != OPT::ROLE_DELETE
-                          && opt_cmd != OPT::ROLE_GET
-                          && opt_cmd != OPT::ROLE_MODIFY
-                          && opt_cmd != OPT::ROLE_LIST
-                          && opt_cmd != OPT::ROLE_POLICY_PUT
-                          && opt_cmd != OPT::ROLE_POLICY_LIST
-                          && opt_cmd != OPT::ROLE_POLICY_GET
-                          && opt_cmd != OPT::ROLE_POLICY_DELETE
-                          && opt_cmd != OPT::RESHARD_ADD
-                          && opt_cmd != OPT::RESHARD_CANCEL
-                          && opt_cmd != OPT::RESHARD_STATUS) {
-        cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
-        return EINVAL;
-      }
-      user->set_tenant(tenant);
-    }
-    if (user_ns.empty()) {
-      user_ns = user->get_id().ns;
-    } else {
-      user->set_ns(user_ns);
-    }
-
-    if (!new_user_id.empty() && !tenant.empty()) {
-      new_user_id.tenant = tenant;
-    }
-
-    /* check key parameter conflict */
-    if ((!access_key.empty()) && gen_access_key) {
-        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
-        return EINVAL;
-    }
-    if ((!secret_key.empty()) && gen_secret_key) {
-        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
-        return EINVAL;
-    }
-  }
-
-  // default to pretty json
-  if (format.empty()) {
-    format = "json";
-    pretty_format = true;
-  }
-
-  if (format ==  "xml")
-    formatter = make_unique<XMLFormatter>(pretty_format);
-  else if (format == "json")
-    formatter = make_unique<JSONFormatter>(pretty_format);
-  else {
-    cerr << "unrecognized format: " << format << std::endl;
-    exit(1);
-  }
-
-  zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(pretty_format);
-
-  realm_name = g_conf()->rgw_realm;
-  zone_name = g_conf()->rgw_zone;
-  zonegroup_name = g_conf()->rgw_zonegroup;
-
-  RGWStreamFlusher f(formatter.get(), cout);
-
-  // not a raw op if 'period update' needs to commit to master
-  bool raw_period_update = opt_cmd == OPT::PERIOD_UPDATE && !commit;
-  // not a raw op if 'period pull' needs to read zone/period configuration
-  bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
-
-  std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE, OPT::ZONEGROUP_DELETE,
+    std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE,
+			 OPT::ZONEGROUP_DELETE,
 			 OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
-                         OPT::ZONEGROUP_SET, OPT::ZONEGROUP_DEFAULT,
+			 OPT::ZONEGROUP_SET, OPT::ZONEGROUP_DEFAULT,
 			 OPT::ZONEGROUP_RENAME, OPT::ZONEGROUP_MODIFY,
 			 OPT::ZONEGROUP_REMOVE,
 			 OPT::ZONEGROUP_PLACEMENT_ADD, OPT::ZONEGROUP_PLACEMENT_RM,
@@ -3770,8 +3701,8 @@ int main(int argc, const char **argv)
 			 OPT::ZONEGROUP_PLACEMENT_GET,
 			 OPT::ZONEGROUP_PLACEMENT_DEFAULT,
 			 OPT::ZONE_CREATE, OPT::ZONE_DELETE,
-                         OPT::ZONE_GET, OPT::ZONE_SET, OPT::ZONE_RENAME,
-                         OPT::ZONE_LIST, OPT::ZONE_MODIFY, OPT::ZONE_DEFAULT,
+			 OPT::ZONE_GET, OPT::ZONE_SET, OPT::ZONE_RENAME,
+			 OPT::ZONE_LIST, OPT::ZONE_MODIFY, OPT::ZONE_DEFAULT,
 			 OPT::ZONE_PLACEMENT_ADD, OPT::ZONE_PLACEMENT_RM,
 			 OPT::ZONE_PLACEMENT_MODIFY, OPT::ZONE_PLACEMENT_LIST,
 			 OPT::ZONE_PLACEMENT_GET,
@@ -3786,7 +3717,7 @@ int main(int argc, const char **argv)
 			 OPT::REALM_RENAME, OPT::REALM_SET,
 			 OPT::REALM_DEFAULT, OPT::REALM_PULL};
 
-  std::set<OPT> readonly_ops_list = {
+    std::set<OPT> readonly_ops_list = {
                          OPT::USER_INFO,
 			 OPT::USER_STATS,
 			 OPT::BUCKETS_LIST,
@@ -3844,33 +3775,104 @@ int main(int argc, const char **argv)
 			 OPT::ROLE_POLICY_GET,
 			 OPT::RESHARD_LIST,
 			 OPT::RESHARD_STATUS,
-       OPT::PUBSUB_TOPICS_LIST,
-       OPT::PUBSUB_TOPIC_GET,
-       OPT::PUBSUB_SUB_GET,
-       OPT::PUBSUB_SUB_PULL,
-       OPT::SCRIPT_GET,
-  };
+			 OPT::PUBSUB_TOPICS_LIST,
+			 OPT::PUBSUB_TOPIC_GET,
+			 OPT::PUBSUB_SUB_GET,
+			 OPT::PUBSUB_SUB_PULL,
+			 OPT::SCRIPT_GET,
+    };
 
 
-  bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
-                         raw_period_update || raw_period_pull);
-  bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
+    raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
+			   raw_period_update || raw_period_pull);
+    bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
 
-  if (raw_storage_op) {
-    store = RGWStoreManager::get_raw_storage(dpp(), g_ceph_context, "rados");
-  } else {
-    store = RGWStoreManager::get_storage(dpp(), g_ceph_context, "rados", false, false, false, false, false,
-      need_cache && g_conf()->rgw_cache_enabled);
-  }
-  if (!store) {
-    cerr << "couldn't init storage provider" << std::endl;
-    return 5; //EIO
-  }
+    if (raw_storage_op) {
+      store = RGWStoreManager::get_raw_storage(dpp(), g_ceph_context, "rados");
+    } else {
+      store = RGWStoreManager::get_storage(dpp(), g_ceph_context, "rados", false, false, false,
+					   false, false,
+					   need_cache && g_conf()->rgw_cache_enabled);
+    }
+    if (!store) {
+      cerr << "couldn't init storage provider" << std::endl;
+      return 5; //EIO
+    }
 
-  /* Needs to be after the store is initialized */
-  if (!user_id_arg.empty()) {
+    /* Needs to be after the store is initialized.  Note, user could be empty here. */
     user = store->get_user(user_id_arg);
+
+    init_optional_bucket(opt_bucket, opt_tenant,
+                         opt_bucket_name, opt_bucket_id);
+    init_optional_bucket(opt_source_bucket, opt_source_tenant,
+                         opt_source_bucket_name, opt_source_bucket_id);
+    init_optional_bucket(opt_dest_bucket, opt_dest_tenant,
+                         opt_dest_bucket_name, opt_dest_bucket_id);
+
+    if (tenant.empty()) {
+      tenant = user->get_tenant();
+    } else {
+      if (rgw::sal::RGWUser::empty(user) && opt_cmd != OPT::ROLE_CREATE
+                          && opt_cmd != OPT::ROLE_DELETE
+                          && opt_cmd != OPT::ROLE_GET
+                          && opt_cmd != OPT::ROLE_MODIFY
+                          && opt_cmd != OPT::ROLE_LIST
+                          && opt_cmd != OPT::ROLE_POLICY_PUT
+                          && opt_cmd != OPT::ROLE_POLICY_LIST
+                          && opt_cmd != OPT::ROLE_POLICY_GET
+                          && opt_cmd != OPT::ROLE_POLICY_DELETE
+                          && opt_cmd != OPT::RESHARD_ADD
+                          && opt_cmd != OPT::RESHARD_CANCEL
+                          && opt_cmd != OPT::RESHARD_STATUS) {
+        cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
+        return EINVAL;
+      }
+      user->set_tenant(tenant);
+    }
+    if (user_ns.empty()) {
+      user_ns = user->get_id().ns;
+    } else {
+      user->set_ns(user_ns);
+    }
+
+    if (!new_user_id.empty() && !tenant.empty()) {
+      new_user_id.tenant = tenant;
+    }
+
+    /* check key parameter conflict */
+    if ((!access_key.empty()) && gen_access_key) {
+        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
+        return EINVAL;
+    }
+    if ((!secret_key.empty()) && gen_secret_key) {
+        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
+        return EINVAL;
+    }
   }
+
+  // default to pretty json
+  if (format.empty()) {
+    format = "json";
+    pretty_format = true;
+  }
+
+  if (format ==  "xml")
+    formatter = make_unique<XMLFormatter>(new XMLFormatter(pretty_format));
+  else if (format == "json")
+    formatter = make_unique<JSONFormatter>(new JSONFormatter(pretty_format));
+  else {
+    cerr << "unrecognized format: " << format << std::endl;
+    exit(1);
+  }
+
+  zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(pretty_format);
+
+  realm_name = g_conf()->rgw_realm;
+  zone_name = g_conf()->rgw_zone;
+  zonegroup_name = g_conf()->rgw_zonegroup;
+
+  RGWStreamFlusher f(formatter.get(), cout);
+
   RGWUserAdminOpState user_op(store);
   if (!user_email.empty()) {
     user_op.user_email_specified=true;
@@ -5434,7 +5436,7 @@ int main(int argc, const char **argv)
       return EINVAL;
   }
 
-  if (user) {
+  if (!rgw::sal::RGWUser::empty(user)) {
     user_op.set_user_id(user->get_id());
     bucket_op.set_user_id(user->get_id());
   }
@@ -5445,7 +5447,7 @@ int main(int argc, const char **argv)
   if (!user_email.empty())
     user_op.set_user_email(user_email);
 
-  if (!new_user_id.empty()) {
+  if (!rgw::sal::RGWUser::empty(user)) {
     user_op.set_new_user_id(new_user_id);
   }
 
@@ -5530,7 +5532,7 @@ int main(int argc, const char **argv)
   // RGWUser to use for user operations
   RGWUser ruser;
   int ret = 0;
-  if (!(!user && access_key.empty()) || !subuser.empty()) {
+  if (!(rgw::sal::RGWUser::empty(user) && access_key.empty()) || !subuser.empty()) {
     ret = ruser.init(dpp(), store, user_op, null_yield);
     if (ret < 0) {
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
@@ -5553,7 +5555,7 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT::USER_INFO:
-    if (!user && access_key.empty()) {
+    if (rgw::sal::RGWUser::empty(user) && access_key.empty()) {
       cerr << "ERROR: --uid or --access-key required" << std::endl;
       return EINVAL;
     }
@@ -5981,7 +5983,7 @@ int main(int argc, const char **argv)
 
     bool truncated;
 
-    if (user) {
+    if (!rgw::sal::RGWUser::empty(user)) {
       user_ids.push_back(user->get_id().id);
       ret =
 	RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, f,
@@ -6020,7 +6022,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT::BUCKETS_LIST) {
     if (bucket_name.empty()) {
-      if (user) {
+      if (!rgw::sal::RGWUser::empty(user)) {
         if (!user_op.has_existing_user()) {
           cerr << "ERROR: could not find user: " << user << std::endl;
           return -ENOENT;
@@ -6375,7 +6377,7 @@ next:
   }
 
   if (opt_cmd == OPT::USAGE_TRIM) {
-    if (!user && bucket_name.empty() &&
+    if (rgw::sal::RGWUser::empty(user) && bucket_name.empty() &&
 	start_date.empty() && end_date.empty() && !yes_i_really_mean_it) {
       cerr << "usage trim without user/date/bucket specified will remove *all* users data" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
@@ -7385,7 +7387,7 @@ next:
   }
 
   if (opt_cmd == OPT::USER_STATS) {
-    if (!user) {
+    if (rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: uid not specified" << std::endl;
       return EINVAL;
     }
@@ -8476,7 +8478,7 @@ next:
       }
     }
 
-    if (user) {
+    if (!rgw::sal::RGWUser::empty(user)) {
       pipe->params.user = user->get_id();
     } else if (pipe->params.user.empty()) {
       auto owner = sync_policy_ctx.get_owner();
@@ -8772,7 +8774,7 @@ next:
   bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
 
   if (quota_op) {
-    if (bucket_name.empty() && !user) {
+    if (bucket_name.empty() && rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: bucket name or uid is required for quota operation" << std::endl;
       return EINVAL;
     }
@@ -8784,7 +8786,7 @@ next:
       }
       set_bucket_quota(store, opt_cmd, tenant, bucket_name,
                        max_size, max_objects, have_max_size, have_max_objects);
-    } else if (user) {
+    } else if (!rgw::sal::RGWUser::empty(user)) {
       if (quota_scope == "bucket") {
         return set_user_bucket_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
       } else if (quota_scope == "user") {
@@ -8799,7 +8801,7 @@ next:
   if (opt_cmd == OPT::MFA_CREATE) {
     rados::cls::otp::otp_info_t config;
 
-    if (!user) {
+    if (rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -8864,7 +8866,7 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_REMOVE) {
-    if (!user) {
+    if (rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -8900,7 +8902,7 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_GET) {
-    if (!user) {
+    if (rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -8927,7 +8929,7 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_LIST) {
-    if (!user) {
+    if (rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -8945,7 +8947,7 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_CHECK) {
-    if (!user) {
+    if (rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }
@@ -8971,7 +8973,7 @@ next:
   }
 
  if (opt_cmd == OPT::MFA_RESYNC) {
-    if (!user) {
+    if (rgw::sal::RGWUser::empty(user)) {
       cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
       return EINVAL;
     }

@@ -267,6 +267,7 @@ class RGWUser {
     int32_t get_max_buckets() const { return info.max_buckets; }
     const RGWUserCaps& get_caps() const { return info.caps; }
     static bool empty(RGWUser* u) { return (!u || u->info.user_id.id.empty()); }
+    static bool empty(std::unique_ptr<RGWUser>& u) { return (!u || u->info.user_id.id.empty()); }
     virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y, RGWAttrs* uattrs, RGWObjVersionTracker* tracker = nullptr) = 0;
     virtual int read_stats(optional_yield y, RGWStorageStats* stats,
 			   ceph::real_time *last_stats_sync = nullptr,
