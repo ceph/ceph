@@ -243,6 +243,39 @@ bool WNBDDiskIterator::get(Config *cfg)
   return false;
 }
 
+int send_map_request(std::string command_line) {
+  BYTE request_buff[SERVICE_PIPE_BUFFSZ] = { 0 };
+  ServiceRequest* request = (ServiceRequest*) request_buff;
+  request->command = Connect;
+  command_line.copy(
+    (char*)request->arguments,
+    SERVICE_PIPE_BUFFSZ - FIELD_OFFSET(ServiceRequest, arguments));
+  ServiceReply reply = { 0 };
+
+  DWORD bytes_read = 0;
+  BOOL success = CallNamedPipe(
+    SERVICE_PIPE_NAME,
+    request_buff,
+    SERVICE_PIPE_BUFFSZ,
+    &reply,
+    sizeof(reply),
+    &bytes_read,
+    DEFAULT_MAP_TIMEOUT_MS);
+  if (!success) {
+    DWORD err = GetLastError();
+    derr << "Could not send device map request. "
+         << "Make sure that the ceph service is running. "
+         << "Error: " << win32_strerror(err) << dendl;
+    return -EINVAL;
+  }
+  if (reply.status) {
+    derr << "The ceph service failed to map the image. Error: "
+         << reply.status << dendl;
+  }
+
+  return reply.status;
+}
+
 // Spawn a subprocess using the specified command line, which is expected
 // to be a "rbd-wnbd map" command. A pipe is passed to the child process,
 // which will allow it to communicate the mapping status
@@ -540,9 +573,154 @@ class RBDService : public ServiceBase {
     {
     }
 
-    int run_hook() override {
-      return restart_registered_mappings(thread_count);
+    static int execute_command(ServiceRequest* request)
+    {
+      switch(request->command) {
+        case Connect:
+          dout(5) << "Received device connect request. Command line: "
+                  << (char*)request->arguments << dendl;
+          // TODO: consider validating the command, for example checking that
+          // the binary matches. Only admins can write to the named pipe and
+          // registry entry though.
+          return map_device_using_suprocess((char*)request->arguments);
+        default:
+          dout(5) << "Received unsupported command: "
+                  << request->command << dendl;
+          return -ENOSYS;
+      }
     }
+
+    static DWORD handle_connection(HANDLE pipe_handle)
+    {
+      PBYTE message[SERVICE_PIPE_BUFFSZ] = { 0 };
+      DWORD bytes_read = 0, bytes_written = 0;
+      DWORD err = 0;
+      DWORD reply_sz = 0;
+      ServiceReply reply = { 0 };
+
+      dout(20) << __func__ << ": Receiving message." << dendl;
+      BOOL success = ReadFile(
+        pipe_handle, message, SERVICE_PIPE_BUFFSZ,
+        &bytes_read, NULL);
+      if (!success || !bytes_read) {
+        err = GetLastError();
+        derr << "Could not read service command: "
+             << win32_strerror(err) << dendl;
+        goto exit;
+      }
+
+      dout(20) << __func__ << ": Executing command." << dendl;
+      reply.status = execute_command((ServiceRequest*) message);
+      reply_sz = sizeof(reply);
+
+      dout(20) << __func__ << ": Sending reply. Status: "
+               << reply.status << dendl;
+      success = WriteFile(
+        pipe_handle, &reply, reply_sz, &bytes_written, NULL);
+      if (!success || reply_sz != bytes_written) {
+        err = GetLastError();
+        derr << "Could not send service command result: "
+             << win32_strerror(err) << dendl;
+      }
+
+exit:
+      dout(20) << __func__ << ": Cleaning up connection." << dendl;
+      FlushFileBuffers(pipe_handle);
+      DisconnectNamedPipe(pipe_handle);
+      CloseHandle(pipe_handle);
+
+      return err;
+    }
+
+    // We have to support Windows server 2016. Unix sockets only work on
+    // WS 2019, so we can't use the Ceph admin socket abstraction.
+    // Getting the Ceph admin sockets to work with Windows named pipes
+    // would require quite a few changes.
+    static DWORD accept_pipe_connection() {
+      DWORD err = 0;
+      // We're currently using default ACLs, which grant full control to the
+      // LocalSystem account and administrator as well as the owner.
+      dout(20) << __func__ << ": opening new pipe instance" << dendl;
+      HANDLE pipe_handle = CreateNamedPipe(
+        SERVICE_PIPE_NAME,
+        PIPE_ACCESS_DUPLEX,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+        PIPE_UNLIMITED_INSTANCES,
+        SERVICE_PIPE_BUFFSZ,
+        SERVICE_PIPE_BUFFSZ,
+        SERVICE_PIPE_TIMEOUT_MS,
+        NULL);
+      if (pipe_handle == INVALID_HANDLE_VALUE) {
+        err = GetLastError();
+        derr << "CreatePipe failed: " << win32_strerror(err) << dendl;
+        return -EINVAL;
+      }
+
+      dout(20) << __func__ << ": waiting for connections." << dendl;
+      BOOL connected = ConnectNamedPipe(pipe_handle, NULL);
+      if (!connected) {
+        err = GetLastError();
+        if (err != ERROR_PIPE_CONNECTED) {
+          derr << "Pipe connection failed: " << win32_strerror(err) << dendl;
+
+          CloseHandle(pipe_handle);
+          return err;
+        }
+      }
+
+      dout(20) << __func__ << ": Connection received." << dendl;
+      // We'll handle the connection in a separate thread and at the same time
+      // accept a new connection.
+      HANDLE handler_thread = CreateThread(
+        NULL, 0, (LPTHREAD_START_ROUTINE) handle_connection, pipe_handle, 0, 0);
+      if (!handler_thread) {
+        err = GetLastError();
+        derr << "Could not start pipe connection handler thread: "
+             << win32_strerror(err) << dendl;
+        CloseHandle(pipe_handle);
+      } else {
+        CloseHandle(handler_thread);
+      }
+
+      return err;
+    }
+
+    static int pipe_server_loop(LPVOID arg)
+    {
+      dout(5) << "Accepting admin pipe connections." << dendl;
+      while (1) {
+        // This call will block until a connection is received, which will
+        // then be handled in a separate thread. The function returns, allowing
+        // us to accept another simultaneous connection.
+        accept_pipe_connection();
+      }
+      return 0;
+    }
+
+    int create_pipe_server() {
+      HANDLE handler_thread = CreateThread(
+        NULL, 0, (LPTHREAD_START_ROUTINE) pipe_server_loop, NULL, 0, 0);
+      DWORD err = 0;
+
+      if (!handler_thread) {
+        err = GetLastError();
+        derr << "Could not start pipe server: " << win32_strerror(err) << dendl;
+      } else {
+        CloseHandle(handler_thread);
+      }
+
+      return err;
+    }
+
+    int run_hook() override {
+      // Restart registered mappings before accepting new ones.
+      int r = restart_registered_mappings(thread_count);
+      if (r)
+        return r;
+
+      return create_pipe_server();
+    }
+
     // Invoked when the service is requested to stop.
     int stop_hook() override {
       return disconnect_all_mappings(
@@ -693,7 +871,7 @@ static int do_map(Config *cfg)
   librbd::image_info_t info;
 
   if (g_conf()->daemonize && !cfg->parent_pipe) {
-    return map_device_using_suprocess(GetCommandLine());
+    return send_map_request(GetCommandLine());
   }
 
   dout(0) << "Mapping RBD image: " << cfg->devpath << dendl;
