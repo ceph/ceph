@@ -35,7 +35,7 @@ target_link_libraries(crimson-alien-common
   crimson-common
   alien::cflags)
 
-add_library(crimson-alienstore STATIC
+set(alien_store_srcs
   alien_store.cc
   thread_pool.cc
   ${PROJECT_SOURCE_DIR}/src/os/ObjectStore.cc
@@ -52,6 +52,14 @@ add_library(crimson-alienstore STATIC
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/HybridAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/StupidAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapAllocator.cc)
+if(WITH_ZBD)
+  list(APPEND alien_store_srcs
+    ${PROJECT_SOURCE_DIR}/src/os/bluestore/zoned_types.cc
+    ${PROJECT_SOURCE_DIR}/src/os/bluestore/ZonedFreelistManager.cc
+    ${PROJECT_SOURCE_DIR}/src/os/bluestore/ZonedAllocator.cc)
+endif()
+add_library(crimson-alienstore STATIC
+  ${alien_store_srcs})
 if(WITH_LTTNG)
   add_dependencies(crimson-alienstore bluestore-tp)
 endif()
