@@ -17,6 +17,9 @@ namespace mirror {
 
 static const std::string CEPHFS_MIRROR_OBJECT("cephfs_mirror");
 
+typedef boost::variant<bool, uint64_t, std::string> AttributeValue;
+typedef std::map<std::string, AttributeValue> Attributes;
+
 // distinct filesystem identifier
 struct Filesystem {
   fs_cluster_id_t fscid;
