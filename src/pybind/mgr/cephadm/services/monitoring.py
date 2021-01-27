@@ -86,8 +86,8 @@ class GrafanaService(CephadmService):
     def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Grafana', 1)
         if warn and not force:
-            return HandleCommandResult(-errno.EBUSY, None, warn_message)
-        return HandleCommandResult(0, warn_message, None)
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+        return HandleCommandResult(0, warn_message, '')
 
 
 class AlertmanagerService(CephadmService):
@@ -177,8 +177,8 @@ class AlertmanagerService(CephadmService):
     def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Alertmanager', 1)
         if warn and not force:
-            return HandleCommandResult(-errno.EBUSY, None, warn_message)
-        return HandleCommandResult(0, warn_message, None)
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+        return HandleCommandResult(0, warn_message, '')
 
 
 class PrometheusService(CephadmService):
@@ -281,8 +281,8 @@ class PrometheusService(CephadmService):
     def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
         warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Prometheus', 1)
         if warn and not force:
-            return HandleCommandResult(-errno.EBUSY, None, warn_message)
-        return HandleCommandResult(0, warn_message, None)
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+        return HandleCommandResult(0, warn_message, '')
 
 
 class NodeExporterService(CephadmService):
@@ -300,4 +300,4 @@ class NodeExporterService(CephadmService):
         # since node exporter runs on each host and cannot compromise data, no extra checks required
         names = [f'{self.TYPE}.{d_id}' for d_id in daemon_ids]
         out = f'It is presumed safe to stop {names}'
-        return HandleCommandResult(0, out, None)
+        return HandleCommandResult(0, out, '')
