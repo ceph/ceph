@@ -154,7 +154,7 @@ $SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
 $SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
-systemctl status docker && ( $CEPHADM --docker version | grep 'ceph version' )
+systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph version' ) || echo "docker not installed"
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
