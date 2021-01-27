@@ -830,6 +830,7 @@ public:
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs,
                      bool modify_tail, bool assume_noent,
+                     RGWObjState *state,
                      void *index_op, optional_yield y);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs, optional_yield y);
@@ -923,74 +924,7 @@ public:
       shard_id = id;
     }
 
-    class UpdateIndex {
-      RGWRados::Bucket *target;
-      string optag;
-      rgw_obj obj;
-      uint16_t bilog_flags{0};
-      BucketShard bs;
-      bool bs_initialized{false};
-      bool blind;
-      bool prepared{false};
-      rgw_zone_set *zones_trace{nullptr};
-
-      int init_bs() {
-        int r =
-	  bs.init(target->get_bucket(), obj, nullptr /* no RGWBucketInfo */);
-        if (r < 0) {
-          return r;
-        }
-        bs_initialized = true;
-        return 0;
-      }
-
-      void invalidate_bs() {
-        bs_initialized = false;
-      }
-
-      int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
-    public:
-
-      UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
-                                                              bs(target->get_store()) {
-                                                                blind = (target->get_bucket_info().layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
-                                                              }
-
-      int get_bucket_shard(BucketShard **pbs) {
-        if (!bs_initialized) {
-          int r = init_bs();
-          if (r < 0) {
-            return r;
-          }
-        }
-        *pbs = &bs;
-        return 0;
-      }
-
-      void set_bilog_flags(uint16_t flags) {
-        bilog_flags = flags;
-      }
-      
-      void set_zones_trace(rgw_zone_set *_zones_trace) {
-        zones_trace = _zones_trace;
-      }
-
-      int prepare(RGWModifyOp, const string *write_tag, optional_yield y);
-      int complete(int64_t poolid, uint64_t epoch, uint64_t size,
-                   uint64_t accounted_size, ceph::real_time& ut,
-                   const string& etag, const string& content_type,
-                   const string& storage_class,
-                   bufferlist *acl_bl, RGWObjCategory category,
-		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr, bool appendable = false);
-      int complete_del(int64_t poolid, uint64_t epoch,
-                       ceph::real_time& removed_mtime, /* mtime of removed object */
-                       list<rgw_obj_index_key> *remove_objs);
-      int cancel();
-
-      const string *get_optag() { return &optag; }
-
-      bool is_prepared() { return prepared; }
-    }; // class UpdateIndex
+    class UpdateIndex;
 
     class List {
     protected:
@@ -1367,14 +1301,14 @@ public:
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
 			     map<string, bufferlist> *pattrs, bool create_entry_point);
 
-  int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *zones_trace = nullptr);
+  int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, optional_yield y, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
+                          const rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
+  int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch, const rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_del(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
+  int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
 
   using ent_map_t =

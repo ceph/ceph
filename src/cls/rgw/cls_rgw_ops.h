@@ -33,11 +33,9 @@ struct rgw_cls_obj_prepare_op
   cls_rgw_obj_key key;
   std::string tag;
   std::string locator;
-  bool log_op;
-  uint16_t bilog_flags;
   rgw_zone_set zones_trace;
 
-  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(7, 5, bl);
@@ -45,9 +43,9 @@ struct rgw_cls_obj_prepare_op
     encode(c, bl);
     encode(tag, bl);
     encode(locator, bl);
-    encode(log_op, bl);
+    encode(bool{false} /* legacy: log_op */, bl);
     encode(key, bl);
-    encode(bilog_flags, bl);
+    encode(uint16_t{false} /* bilog_flags */, bl);
     encode(zones_trace, bl);
     ENCODE_FINISH(bl);
   }
@@ -64,12 +62,16 @@ struct rgw_cls_obj_prepare_op
       decode(locator, bl);
     }
     if (struct_v >= 4) {
+      // just for legacy
+      bool log_op;
       decode(log_op, bl);
     }
     if (struct_v >= 5) {
       decode(key, bl);
     }
     if (struct_v >= 6) {
+      // just for legacy
+      uint16_t bilog_flags;
       decode(bilog_flags, bl);
     }
     if (struct_v >= 7) {
