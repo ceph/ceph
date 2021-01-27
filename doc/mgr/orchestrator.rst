@@ -581,9 +581,10 @@ Many service specifications can be applied at once using
 Retrieving the running Service Specification
 --------------------------------------------
 
-If started via ``ceph orch apply <rgw|mds|...>`` changing the Service
-Specification directly is normally a bit more complicated. It is easier to
-export the running Service Specification like so::
+If the services have been started via ``ceph orch apply...``, then directly changing
+the Services Specification is complicated. Instead of attempting to directly change
+the Services Specification, we suggest exporting the running Service Specification by
+following these instructions::
     
     ceph orch ls --service-name rgw.<realm>.<zone> --export > rgw.<realm>.<zone>.yaml
     ceph orch ls --service-type mgr --export > mgr.yaml
