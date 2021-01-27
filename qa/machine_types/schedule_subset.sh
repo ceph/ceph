@@ -28,7 +28,7 @@ echo "Scheduling " $2 " branch"
 if [ $2 = "master" ] ; then
         # run master branch with --newest option looking for good sha1 7 builds back with /100000 jobs
         # using '-p 80 --force-priority' as an execption ATM
-        teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/100000 --newest 7 -e $5 $7 -p 80 --force-priority
+        teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/100000 --newest 7 -e $5 $7 -p 100 --force-priority
 elif [ $2 = "jewel" ] ; then
         # run jewel branch with /40 jobs
         teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/40 -e $5 $7
@@ -48,7 +48,7 @@ elif [ $2 = "octopus" ] ; then
         teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/9999 -e $5 $7
         # run octopus branch with /100000 jobs for rados == ~ 300 job
 elif [ $2 = "pacific" ] ; then
-        teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/99999 -e $5 $7
+        teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/99999 -e $5 $7 -p 80 --force-priority
         # run pacific branch with /99999 jobs for rados == ~ 367 job
 else
         # run NON master branches without --newest
