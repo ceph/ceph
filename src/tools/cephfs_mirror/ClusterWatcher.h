@@ -17,6 +17,8 @@ class MonClient;
 namespace cephfs {
 namespace mirror {
 
+class ServiceDaemon;
+
 // watch peer changes for filesystems via FSMap updates
 
 class ClusterWatcher : public Dispatcher {
@@ -32,7 +34,8 @@ public:
     virtual void handle_peers_removed(const Filesystem &filesystem, const Peer &peer) = 0;
   };
 
-  ClusterWatcher(CephContext *cct, MonClient *monc, Listener &listener);
+  ClusterWatcher(CephContext *cct, MonClient *monc, ServiceDaemon *service_daemon,
+                 Listener &listener);
   ~ClusterWatcher();
 
   bool ms_can_fast_dispatch_any() const override {
@@ -59,6 +62,7 @@ public:
 private:
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::cluster_watcher");
   MonClient *m_monc;
+  ServiceDaemon *m_service_daemon;
   Listener &m_listener;
 
   std::map<Filesystem, Peers> m_filesystem_peers;

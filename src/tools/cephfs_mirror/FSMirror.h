@@ -18,13 +18,15 @@ namespace mirror {
 
 class MirrorAdminSocketHook;
 class PeerReplayer;
+class ServiceDaemon;
 
 // handle mirroring for a filesystem to a set of peers
 
 class FSMirror {
 public:
   FSMirror(CephContext *cct, const Filesystem &filesystem, uint64_t pool_id,
-           std::vector<const char*> args, ContextWQ *work_queue);
+           ServiceDaemon *service_daemon, std::vector<const char*> args,
+           ContextWQ *work_queue);
   ~FSMirror();
 
   void init(Context *on_finish);
@@ -93,6 +95,7 @@ private:
   CephContext *m_cct;
   Filesystem m_filesystem;
   uint64_t m_pool_id;
+  ServiceDaemon *m_service_daemon;
   std::vector<const char *> m_args;
   ContextWQ *m_work_queue;
 

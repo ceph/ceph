@@ -118,14 +118,21 @@ private:
 PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
                            const Filesystem &filesystem, const Peer &peer,
                            const std::set<std::string, std::less<>> &directories,
-                           MountRef mount)
+                           MountRef mount, ServiceDaemon *service_daemon)
   : m_cct(cct),
     m_fs_mirror(fs_mirror),
+    m_filesystem(filesystem),
     m_peer(peer),
     m_directories(directories.begin(), directories.end()),
     m_local_mount(mount),
+    m_service_daemon(service_daemon),
     m_asok_hook(new PeerReplayerAdminSocketHook(cct, filesystem, peer, this)),
     m_lock(ceph::make_mutex("cephfs::mirror::PeerReplayer::" + stringify(peer.uuid))) {
+  // reset sync stats sent via service daemon
+  m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, m_peer,
+                                                 SERVICE_DAEMON_FAILED_DIR_COUNT_KEY, (uint64_t)0);
+  m_service_daemon->add_or_update_peer_attribute(m_filesystem.fscid, m_peer,
+                                                 SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY, (uint64_t)0);
 }
 
 PeerReplayer::~PeerReplayer() {
