@@ -410,13 +410,12 @@ struct rgw_bucket_dir_entry {
   bool exists;
   rgw_bucket_dir_entry_meta meta;
   std::multimap<std::string, rgw_bucket_pending_info> pending_map;
-  uint64_t index_ver;
   std::string tag;
   uint16_t flags;
   uint64_t versioned_epoch;
 
   rgw_bucket_dir_entry() :
-    exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
+    exists(false), flags(0), versioned_epoch(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(8, 3, bl);
@@ -427,7 +426,7 @@ struct rgw_bucket_dir_entry {
     encode(pending_map, bl);
     encode(locator, bl);
     encode(ver, bl);
-    encode_packed_val(index_ver, bl);
+    encode_packed_val(std::uint64_t{0} /* index_ver */, bl);
     encode(tag, bl);
     encode(key.instance, bl);
     encode(flags, bl);
@@ -450,7 +449,11 @@ struct rgw_bucket_dir_entry {
       ver.pool = -1;
     }
     if (struct_v >= 5) {
-      decode_packed_val(index_ver, bl);
+      // just for backward compatibility; this field is unused
+      {
+        uint64_t index_ver;
+        decode_packed_val(index_ver, bl);
+      }
       decode(tag, bl);
     }
     if (struct_v >= 6) {
@@ -539,6 +542,38 @@ enum OLHLogOp {
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
 };
 
+// because of the need to preserve atomicity in  `Write::_do_write_meta()`
+// between updating Bucket Index (the `UpdateIndex::complete()` method)
+// and `RGWRados::set_olh()`, we reissue requests to link OLH basing OLH
+// log. However, to make that possible, these entries have to contain
+// some extra bits which are represented by the following struct.
+struct rgw_bucket_olh_log_bi_log_entry {
+  ceph::real_time timestamp;
+  std::string owner; /* only being set if it's a delete marker */
+  std::string owner_display_name; /* only being set if it's a delete marker */
+  rgw_zone_set zones_trace;
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(timestamp, bl);
+    encode(owner, bl);
+    encode(owner_display_name, bl);
+    encode(zones_trace, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(timestamp, bl);
+    decode(owner, bl);
+    decode(owner_display_name, bl);
+    decode(zones_trace, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_olh_log_bi_log_entry)
+
 struct rgw_bucket_olh_log_entry {
   uint64_t epoch;
   OLHLogOp op;
@@ -546,20 +581,23 @@ struct rgw_bucket_olh_log_entry {
   cls_rgw_obj_key key;
   bool delete_marker;
 
+  std::optional<rgw_bucket_olh_log_bi_log_entry> bi_log_replay_data;
+
   rgw_bucket_olh_log_entry() : epoch(0), op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
 
-
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(epoch, bl);
     encode((__u8)op, bl);
     encode(op_tag, bl);
     encode(key, bl);
     encode(delete_marker, bl);
+    // since struct_v >= 2
+    encode(bi_log_replay_data, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(epoch, bl);
     uint8_t c;
     decode(c, bl);
@@ -567,6 +605,9 @@ struct rgw_bucket_olh_log_entry {
     decode(op_tag, bl);
     decode(key, bl);
     decode(delete_marker, bl);
+    if (struct_v > 1) {
+      decode(bi_log_replay_data, bl);
+    }
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<rgw_bucket_olh_log_entry*>& o);
@@ -621,14 +662,13 @@ struct rgw_bi_log_entry {
   rgw_bucket_entry_ver ver;
   RGWModifyOp op;
   RGWPendingState state;
-  uint64_t index_ver;
   std::string tag;
   uint16_t bilog_flags;
   std::string owner; /* only being set if it's a delete marker */
   std::string owner_display_name; /* only being set if it's a delete marker */
   rgw_zone_set zones_trace;
 
-  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
+  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), bilog_flags(0) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(4, 1, bl);
@@ -641,7 +681,7 @@ struct rgw_bi_log_entry {
     encode(c, bl);
     c = (uint8_t)state;
     encode(c, bl);
-    encode_packed_val(index_ver, bl);
+    encode_packed_val(uint64_t{0} /* index_ver */, bl);
     encode(instance, bl);
     encode(bilog_flags, bl);
     encode(owner, bl);
@@ -661,7 +701,11 @@ struct rgw_bi_log_entry {
     op = (RGWModifyOp)c;
     decode(c, bl);
     state = (RGWPendingState)c;
-    decode_packed_val(index_ver, bl);
+    // just for backward compatibility; index_ver is unused
+    {
+      uint64_t index_ver;
+      decode_packed_val(index_ver, bl);
+    }
     if (struct_v >= 2) {
       decode(instance, bl);
       decode(bilog_flags, bl);

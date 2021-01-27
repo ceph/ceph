@@ -467,14 +467,14 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
     return;
   }
 
-  int shard_id;
-  string bn;
-  op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
-  if (op_ret < 0) {
-    return;
-  }
-
+  int shard_id = RGW_NO_SHARD;
   if (!bucket_instance.empty()) {
+    string bn;
+    op_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
+    if (op_ret < 0) {
+      ldpp_dout(s, 5) << "ERROR: cannot parse bucket_instance" << dendl;
+      return;
+    }
     rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
     op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
     if (op_ret < 0) {
@@ -488,9 +488,30 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
       return;
     }
   }
+  /* `RGWRados::get_bucket_stats()` mixes different resposibilities:
+   * retrieval of bucket's statistics with max_marker and sync control.
+   * Unfortunately, this is just a reflection of our data structures.
+   * The same `rgw_bucket_dir_header` carries things from both domains:
+   * _Bucket Index_ and _Bucket Index Log_.
+   * In the future we should consider introduction of an interface:
+   *
+   *   class RGWBucketMetaInfo {
+   *     virtual get_stats();
+   *     virtual get_max_marker();
+   *     virtual is_sync_stopped();
+   *   };
+   */
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->getRados()->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker, &syncstopped);
+  int ret =  store->getRados()->get_bucket_stats_and_bilog_meta(bucket_info,
+                                                                shard_id,
+                                                                &bucket_ver,
+                                                                &master_ver,
+                                                                stats,
+                                                                &max_marker,
+                                                                &syncstopped);
   if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(s, 5) << "ERROR: get_bucket_stats_and_bilog_meta returned "
+                    << ret << dendl;
     op_ret = ret;
     return;
   }
@@ -515,18 +536,31 @@ void RGWOp_BILog_Info::send_response() {
 }
 
 void RGWOp_BILog_Delete::execute(optional_yield y) {
+  if (s->info.args.exists("start-marker")) {
+    dout(5) << "start-marker is no longer accepted" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
+  string marker;
+  if (s->info.args.exists("end-marker")) {
+    if (!s->info.args.exists("marker")) {
+      marker = s->info.args.get("end-marker");
+    } else {
+      dout(5) << "end-marker and marker cannot both be provided" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+  }
+
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
-         start_marker = s->info.args.get("start-marker"),
-         end_marker = s->info.args.get("end-marker"),
          bucket_instance = s->info.args.get("bucket-instance");
-
-  RGWBucketInfo bucket_info;
 
   op_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
-      end_marker.empty()) {
-    ldpp_dout(s, 5) << "ERROR: one of bucket and bucket instance, and also end-marker is mandatory" << dendl;
+      marker.empty()) {
+    ldpp_dout(s, 5) << "ERROR: one of bucket and bucket instance, and also marker is mandatory" << dendl;
     op_ret = -EINVAL;
     return;
   }
@@ -538,6 +572,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     return;
   }
 
+  RGWBucketInfo bucket_info;
   if (!bucket_instance.empty()) {
     rgw_bucket b(rgw_bucket_key(tenant_name, bn, bucket_instance));
     op_ret = store->getRados()->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
@@ -552,7 +587,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
       return;
     }
   }
-  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
+  op_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, marker);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }

@@ -34,7 +34,7 @@ class RGWSI_BILog_RADOS;
 
 class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {
-  friend class RGWSI_BILog_RADOS;
+  friend class RGWSI_BILog_RADOS_InIndex;
 
   int open_pool(const rgw_pool& pool,
                 RGWSI_RADOS::Pool *index_pool,
@@ -54,12 +54,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
   int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
                               uint32_t num_shards, rgw::BucketHashType hash_type,
                               string *bucket_obj, int *shard_id);
-
-  int cls_bucket_head(const RGWBucketInfo& bucket_info,
-                      int shard_id,
-                      vector<rgw_bucket_dir_header> *headers,
-                      map<int, string> *bucket_instance_ids,
-                      optional_yield y);
 
 public:
 
@@ -127,6 +121,11 @@ public:
                         RGWSI_RADOS::Pool *index_pool,
                         map<int, string> *bucket_objs,
                         map<int, string> *bucket_instance_ids);
+
+  int get_dir_headers(const RGWBucketInfo& bucket_info,
+                      int shard_id,
+                      std::map<int, rgw_bucket_dir_header> *headers,
+                      optional_yield y) override;
 };
 
 

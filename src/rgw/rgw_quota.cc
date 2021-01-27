@@ -379,7 +379,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
   r = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver,
-                                  &master_ver, bucket_stats, nullptr);
+                                          &master_ver, bucket_stats);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket stats for bucket="
                            << bucket.name << dendl;

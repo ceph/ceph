@@ -5,6 +5,7 @@
 #define CEPH_CLS_RGW_OPS_H
 
 #include "cls/rgw/cls_rgw_types.h"
+#include "include/rados/librados_fwd.hpp"
 
 struct rgw_cls_tag_timeout_op
 {
@@ -33,11 +34,9 @@ struct rgw_cls_obj_prepare_op
   cls_rgw_obj_key key;
   std::string tag;
   std::string locator;
-  bool log_op;
-  uint16_t bilog_flags;
   rgw_zone_set zones_trace;
 
-  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN) {}
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(7, 5, bl);
@@ -45,9 +44,9 @@ struct rgw_cls_obj_prepare_op
     encode(c, bl);
     encode(tag, bl);
     encode(locator, bl);
-    encode(log_op, bl);
+    encode(bool{false} /* legacy: log_op */, bl);
     encode(key, bl);
-    encode(bilog_flags, bl);
+    encode(uint16_t{false} /* bilog_flags */, bl);
     encode(zones_trace, bl);
     ENCODE_FINISH(bl);
   }
@@ -64,12 +63,16 @@ struct rgw_cls_obj_prepare_op
       decode(locator, bl);
     }
     if (struct_v >= 4) {
+      // just for legacy
+      bool log_op;
       decode(log_op, bl);
     }
     if (struct_v >= 5) {
       decode(key, bl);
     }
     if (struct_v >= 6) {
+      // just for legacy
+      uint16_t bilog_flags;
       decode(bilog_flags, bl);
     }
     if (struct_v >= 7) {
@@ -82,21 +85,28 @@ struct rgw_cls_obj_prepare_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 
-struct rgw_cls_obj_complete_op
-{
-  RGWModifyOp op;
+struct cls_rgw_bi_log_related_op {
+  bool log_op = false;
+
   cls_rgw_obj_key key;
+  std::string op_tag;
+  rgw_zone_set zones_trace;
+  uint16_t bilog_flags = 0;
+  enum RGWModifyOp op;
+};
+
+struct rgw_cls_obj_complete_op : cls_rgw_bi_log_related_op
+{
   std::string locator;
   rgw_bucket_entry_ver ver;
   rgw_bucket_dir_entry_meta meta;
-  std::string tag;
-  bool log_op;
-  uint16_t bilog_flags;
 
   std::list<cls_rgw_obj_key> remove_objs;
   rgw_zone_set zones_trace;
 
-  rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false), bilog_flags(0) {}
+  rgw_cls_obj_complete_op() {
+    op = CLS_RGW_OP_ADD;
+  }
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(9, 7, bl);
@@ -104,7 +114,7 @@ struct rgw_cls_obj_complete_op
     encode(c, bl);
     encode(ver.epoch, bl);
     encode(meta, bl);
-    encode(tag, bl);
+    encode(op_tag, bl);
     encode(locator, bl);
     encode(remove_objs, bl);
     encode(ver, bl);
@@ -124,7 +134,7 @@ struct rgw_cls_obj_complete_op
     }
     decode(ver.epoch, bl);
     decode(meta, bl);
-    decode(tag, bl);
+    decode(op_tag, bl);
     if (struct_v >= 2) {
       decode(locator, bl);
     }
@@ -165,26 +175,22 @@ struct rgw_cls_obj_complete_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
-struct rgw_cls_link_olh_op {
-  cls_rgw_obj_key key;
+struct rgw_cls_link_olh_op : cls_rgw_bi_log_related_op {
   std::string olh_tag;
-  bool delete_marker;
-  std::string op_tag;
   rgw_bucket_dir_entry_meta meta;
-  uint64_t olh_epoch;
-  bool log_op;
-  uint16_t bilog_flags;
+  uint64_t olh_epoch = 0;
   ceph::real_time unmod_since; /* only create delete marker if newer then this */
-  bool high_precision_time;
-  rgw_zone_set zones_trace;
+  bool high_precision_time = false;
 
-  rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0), high_precision_time(false) {}
+  bool has_delete_marker() const {
+    return op == CLS_RGW_OP_LINK_OLH_DM;
+  }
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(5, 1, bl);
     encode(key, bl);
     encode(olh_tag, bl);
-    encode(delete_marker, bl);
+    encode(bool { has_delete_marker() }, bl);
     encode(op_tag, bl);
     encode(meta, bl);
     encode(olh_epoch, bl);
@@ -202,7 +208,13 @@ struct rgw_cls_link_olh_op {
     DECODE_START(5, bl);
     decode(key, bl);
     decode(olh_tag, bl);
-    decode(delete_marker, bl);
+    {
+      // legacy
+      bool delete_marker;
+      decode(delete_marker, bl);
+      op = delete_marker ? CLS_RGW_OP_LINK_OLH_DM
+                         : CLS_RGW_OP_LINK_OLH;
+    }
     decode(op_tag, bl);
     decode(meta, bl);
     decode(olh_epoch, bl);
@@ -232,16 +244,13 @@ struct rgw_cls_link_olh_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 
-struct rgw_cls_unlink_instance_op {
-  cls_rgw_obj_key key;
-  std::string op_tag;
-  uint64_t olh_epoch;
-  bool log_op;
-  uint16_t bilog_flags;
+struct rgw_cls_unlink_instance_op : cls_rgw_bi_log_related_op {
+  uint64_t olh_epoch = 0;
   std::string olh_tag;
-  rgw_zone_set zones_trace;
 
-  rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
+  rgw_cls_unlink_instance_op() {
+    op = CLS_RGW_OP_UNLINK_INSTANCE;
+  }
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(3, 1, bl);
@@ -1484,5 +1493,73 @@ struct cls_rgw_get_bucket_resharding_ret  {
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_ret)
+
+struct CLSRGWCompleteModifyOpBase : cls_rgw_bi_log_related_op {
+  void complete_op(librados::ObjectWriteOperation& o,
+                   const rgw_bucket_entry_ver& ver,
+                   const rgw_bucket_dir_entry_meta& dir_meta,
+                   const std::list<cls_rgw_obj_key> *remove_objs) const;
+};
+
+template <enum RGWModifyOp OpType>
+struct CLSRGWCompleteModifyOp : CLSRGWCompleteModifyOpBase {
+  template <class... Args>
+  CLSRGWCompleteModifyOp(Args&&... args)
+    : CLSRGWCompleteModifyOpBase{ std::forward<Args>(args)..., OpType } {
+  }
+};
+
+struct CLSRGWLinkOLHBase : private cls_rgw_bi_log_related_op {
+  template <class... Args>
+  CLSRGWLinkOLHBase(Args&&... args)
+    : cls_rgw_bi_log_related_op{ std::forward<Args>(args)... } {
+  }
+
+  static RGWModifyOp get_bilog_op_type(const bool delete_marker) {
+     return delete_marker ? CLS_RGW_OP_LINK_OLH_DM
+                          : CLS_RGW_OP_LINK_OLH;
+  }
+
+  std::string& get_op_tag_ref() {
+    return op_tag;
+  }
+
+  void link_olh(librados::ObjectWriteOperation& op,
+                ceph::bufferlist& olh_tag,
+                const rgw_bucket_dir_entry_meta *meta,
+                uint64_t olh_epoch,
+                ceph::real_time unmod_since,
+                bool high_precision_time) const;
+};
+
+template <bool DeleteMarkerV>
+struct CLSRGWLinkOLH : CLSRGWLinkOLHBase {
+  using CLSRGWLinkOLHBase::CLSRGWLinkOLHBase;
+
+  constexpr static enum RGWModifyOp get_bilog_op_type() {
+    return CLSRGWLinkOLHBase::get_bilog_op_type(DeleteMarkerV);
+  }
+
+  template <class... Args>
+  CLSRGWLinkOLH(Args&&... args)
+    : CLSRGWLinkOLHBase { std::forward<Args>(args)..., get_bilog_op_type() } {
+  }
+};
+
+struct CLSRGWUnlinkInstance : cls_rgw_bi_log_related_op {
+  template <class... Args>
+  CLSRGWUnlinkInstance(Args&&... args)
+    : cls_rgw_bi_log_related_op { std::forward<Args>(args)..., get_bilog_op_type() } {
+  }
+
+  constexpr static enum RGWModifyOp get_bilog_op_type() {
+    return CLS_RGW_OP_UNLINK_INSTANCE;
+  }
+
+  void unlink_instance(librados::ObjectWriteOperation& op,
+                       const std::string& olh_tag,
+                       uint64_t olh_epoch) const;
+};
+
 
 #endif /* CEPH_CLS_RGW_OPS_H */

@@ -830,6 +830,7 @@ public:
       int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs,
                      bool modify_tail, bool assume_noent,
+                     RGWObjState *state,
                      void *index_op, optional_yield y);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs, optional_yield y);
@@ -923,74 +924,7 @@ public:
       shard_id = id;
     }
 
-    class UpdateIndex {
-      RGWRados::Bucket *target;
-      string optag;
-      rgw_obj obj;
-      uint16_t bilog_flags{0};
-      BucketShard bs;
-      bool bs_initialized{false};
-      bool blind;
-      bool prepared{false};
-      rgw_zone_set *zones_trace{nullptr};
-
-      int init_bs() {
-        int r =
-	  bs.init(target->get_bucket(), obj, nullptr /* no RGWBucketInfo */);
-        if (r < 0) {
-          return r;
-        }
-        bs_initialized = true;
-        return 0;
-      }
-
-      void invalidate_bs() {
-        bs_initialized = false;
-      }
-
-      int guard_reshard(BucketShard **pbs, std::function<int(BucketShard *)> call);
-    public:
-
-      UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
-                                                              bs(target->get_store()) {
-                                                                blind = (target->get_bucket_info().layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
-                                                              }
-
-      int get_bucket_shard(BucketShard **pbs) {
-        if (!bs_initialized) {
-          int r = init_bs();
-          if (r < 0) {
-            return r;
-          }
-        }
-        *pbs = &bs;
-        return 0;
-      }
-
-      void set_bilog_flags(uint16_t flags) {
-        bilog_flags = flags;
-      }
-      
-      void set_zones_trace(rgw_zone_set *_zones_trace) {
-        zones_trace = _zones_trace;
-      }
-
-      int prepare(RGWModifyOp, const string *write_tag, optional_yield y);
-      int complete(int64_t poolid, uint64_t epoch, uint64_t size,
-                   uint64_t accounted_size, ceph::real_time& ut,
-                   const string& etag, const string& content_type,
-                   const string& storage_class,
-                   bufferlist *acl_bl, RGWObjCategory category,
-		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr, bool appendable = false);
-      int complete_del(int64_t poolid, uint64_t epoch,
-                       ceph::real_time& removed_mtime, /* mtime of removed object */
-                       list<rgw_obj_index_key> *remove_objs);
-      int cancel();
-
-      const string *get_optag() { return &optag; }
-
-      bool is_prepared() { return prepared; }
-    }; // class UpdateIndex
+    class UpdateIndex;
 
     class List {
     protected:
@@ -1295,23 +1229,48 @@ public:
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
   int olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
-  int bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state,
-                            const rgw_obj& obj_instance, bool delete_marker,
-                            const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
+  template <class CLSRGWBucketModifyOpT, class F, class... Args>
+  int with_bilog(F&& on_flushed, const RGWBucketInfo& bucket_info, Args&&... args);
+  template <bool DeleteMarkerV, class OpIssuerT>
+  int bucket_index_link_olh(OpIssuerT& op_issuer,
+                            const RGWBucketInfo& bucket_info,
+                            RGWObjState& olh_state,
+                            const rgw_obj& obj_instance,
+                            struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch,
-                            ceph::real_time unmod_since, bool high_precision_time,
-                            rgw_zone_set *zones_trace = nullptr,
+                            ceph::real_time unmod_since,
+                            bool high_precision_time,
                             bool log_data_change = false);
-  int bucket_index_unlink_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj_instance, const string& op_tag, const string& olh_tag, uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
+  template <class OpIssuerT>
+  int bucket_index_unlink_instance(OpIssuerT& op_issuer,
+                                   const RGWBucketInfo& bucket_info,
+                                   const rgw_obj& obj_instance,
+                                   const string& olh_tag,
+                                   uint64_t olh_epoch,
+                                   rgw_zone_set *zones_trace = nullptr);
   int bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
   int bucket_index_clear_olh(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
-  int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                    bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
-                    uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
-  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
-  int set_olh(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
+  template <class BILogHandlerT>
+  int apply_olh_log(RGWObjectCtx& ctx,
+                    RGWObjState& obj_state,
+                    const RGWBucketInfo& bucket_info,
+                    const rgw_obj& obj,
+                    bufferlist& obj_tag,
+                    map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
+                    BILogHandlerT&& bilog_handler,
+                    uint64_t *plast_ver,
+                    rgw_zone_set *zones_trace = nullptr);
+  template <class BILogHandlerT>
+  int update_olh(RGWObjectCtx& obj_ctx,
+                 RGWObjState *state,
+                 const RGWBucketInfo& bucket_info,
+                 const rgw_obj& obj,
+                 BILogHandlerT&& bilog_handler,
+                 rgw_zone_set *zones_trace = nullptr);
+  template <bool DeleteMarkerV>
+  int set_olh(RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
               optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
   int repair_olh(RGWObjState* state, const RGWBucketInfo& bucket_info,
@@ -1340,8 +1299,12 @@ public:
     rctx->set_prefetch_data(obj);
   }
   int decode_policy(bufferlist& bl, ACLOwner *owner);
+  int get_bucket_stats_and_bilog_meta(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
+      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = nullptr);
   int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
-      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = NULL);
+      map<RGWObjCategory, RGWStorageStats>& stats) {
+    return get_bucket_stats_and_bilog_meta(bucket_info, shard_id, bucket_ver, master_ver, stats, nullptr, nullptr);
+  }
   int get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs);
@@ -1367,14 +1330,15 @@ public:
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
 			     map<string, bufferlist> *pattrs, bool create_entry_point);
 
-  int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
+  int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, optional_yield y, rgw_zone_set *zones_trace = nullptr);
+  template <class CLSRGWBucketModifyOpT>
+  int cls_obj_complete_op(const RGWBucketInfo& bucket_info, BucketShard& bs, const rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch,
+                          const rgw_bucket_dir_entry& ent, RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
+  int cls_obj_complete_add(const RGWBucketInfo& bucket_info, BucketShard& bs, const rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch, const rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_del(BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
+  int cls_obj_complete_del(const RGWBucketInfo& bucket_info, BucketShard& bs, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
-  int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
+  int cls_obj_complete_cancel(const RGWBucketInfo& bucket_info, BucketShard& bs, string& tag, rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
 
   using ent_map_t =
@@ -1382,6 +1346,22 @@ public:
 
   using check_filter_t = bool (*)(const std::string&);
 
+  template <class BILogHandlerT>
+  int _do_cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
+				  const int shard_id,
+				  const rgw_obj_index_key& start_after,
+				  const string& prefix,
+				  const string& delimiter,
+				  const uint32_t num_entries,
+				  const bool list_versions,
+				  const uint16_t exp_factor, // 0 means ignore
+				  ent_map_t& m,
+				  bool* is_truncated,
+				  bool* cls_filtered,
+				  rgw_obj_index_key *last_entry,
+				  optional_yield y,
+				  check_filter_t force_check_filter,
+				  BILogHandlerT&& bilog_handler);
   int cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 			      const int shard_id,
 			      const rgw_obj_index_key& start_after,
@@ -1396,6 +1376,19 @@ public:
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
 			      check_filter_t force_check_filter = nullptr);
+  template <class BILogHandlerT>
+  int _do_cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
+				    int shard_id,
+				    const rgw_obj_index_key& start_after,
+				    const string& prefix,
+				    uint32_t num_entries,
+				    bool list_versions,
+				    vector<rgw_bucket_dir_entry>& ent_list,
+				    bool *is_truncated,
+				    rgw_obj_index_key *last_entry,
+				    optional_yield y,
+				    check_filter_t,
+				    BILogHandlerT&& bilog_handler);
   int cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 				int shard_id,
 				const rgw_obj_index_key& start_after,
@@ -1407,7 +1400,7 @@ public:
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
 				check_filter_t = nullptr);
-  int cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids = NULL);
+  int get_dir_headers(const RGWBucketInfo& bucket_info, int shard_id, std::map<int, rgw_bucket_dir_header>& headers);
   int cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
 
   int bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_dir_entry *dirent);
@@ -1498,12 +1491,14 @@ public:
    * and -errno on other failures. (-ENOENT is not a failure, and it
    * will encode that info as a suggested update.)
    */
+  template <class BILogHandlerT>
   int check_disk_state(librados::IoCtx io_ctx,
                        const RGWBucketInfo& bucket_info,
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,
-                       optional_yield y);
+                       optional_yield y,
+                       BILogHandlerT& bilog_handler);
 
   /**
    * Init pool iteration

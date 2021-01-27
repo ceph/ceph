@@ -8634,13 +8634,25 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
+    if (!start_marker.empty()) {
+      std::cerr << "start-marker not allowed." << std::endl;
+      return -EINVAL;
+    }
+    if (!end_marker.empty()) {
+      if (marker.empty()) {
+	marker = end_marker;
+      } else {
+	std::cerr << "end-marker and marker not both allowed." << std::endl;
+	return -EINVAL;
+      }
+    }
     RGWBucketInfo bucket_info;
     int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
+    ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8659,11 +8671,19 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    ret = store->svc()->bilog_rados->get_log_status(bucket_info, shard_id,
-						    &markers, null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    {
+      std::map<int, rgw_bucket_dir_header> headers;
+      ret = store->svc()->bi->get_dir_headers(bucket_info, shard_id, &headers,
+                                              null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      ret = store->svc()->bilog_rados->log_get_max_marker(bucket_info, headers, shard_id, &markers);
+      if (ret < 0) {
+        cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
     formatter->open_object_section("entries");
     encode_json("markers", markers, formatter.get());

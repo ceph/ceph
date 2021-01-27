@@ -114,8 +114,11 @@ void rgw_cls_obj_prepare_op::dump(Formatter *f) const
   f->dump_string("name", key.name);
   f->dump_string("tag", tag);
   f->dump_string("locator", locator);
-  f->dump_bool("log_op", log_op);
-  f->dump_int("bilog_flags", bilog_flags);
+
+  // for legacy only
+  f->dump_bool("log_op", false);
+  f->dump_int("bilog_flags", 0);
+
   encode_json("zones_trace", zones_trace, f);
 }
 
@@ -127,7 +130,7 @@ void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_
   op->locator = "locator";
   op->ver.pool = 2;
   op->ver.epoch = 100;
-  op->tag = "tag";
+  op->op_tag = "tag";
 
   list<rgw_bucket_dir_entry_meta *> l;
   rgw_bucket_dir_entry_meta::generate_test_instances(l);
@@ -151,7 +154,7 @@ void rgw_cls_obj_complete_op::dump(Formatter *f) const
   f->open_object_section("meta");
   meta.dump(f);
   f->close_section();
-  f->dump_string("tag", tag);
+  f->dump_string("tag", op_tag);
   f->dump_bool("log_op", log_op);
   f->dump_int("bilog_flags", bilog_flags);
   encode_json("zones_trace", zones_trace, f);
@@ -162,7 +165,7 @@ void rgw_cls_link_olh_op::generate_test_instances(list<rgw_cls_link_olh_op*>& o)
   rgw_cls_link_olh_op *op = new rgw_cls_link_olh_op;
   op->key.name = "name";
   op->olh_tag = "olh_tag";
-  op->delete_marker = true;
+  op->op = CLS_RGW_OP_LINK_OLH_DM;
   op->op_tag = "op_tag";
   op->olh_epoch = 123;
   list<rgw_bucket_dir_entry_meta *> l;
@@ -180,7 +183,7 @@ void rgw_cls_link_olh_op::dump(Formatter *f) const
 {
   encode_json("key", key, f);
   encode_json("olh_tag", olh_tag, f);
-  encode_json("delete_marker", delete_marker, f);
+  encode_json("delete_marker", has_delete_marker(), f);
   encode_json("op_tag", op_tag, f);
   encode_json("meta", meta, f);
   encode_json("olh_epoch", olh_epoch, f);

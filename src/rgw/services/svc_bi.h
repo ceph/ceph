@@ -38,5 +38,10 @@ public:
 
   virtual int handle_overwrite(const RGWBucketInfo& info,
                                const RGWBucketInfo& orig_info) = 0;
+
+  virtual int get_dir_headers(const RGWBucketInfo& bucket_info,
+                              int shard_id,
+                              std::map<int, rgw_bucket_dir_header> *headers,
+                              optional_yield y) = 0;
 };
 
