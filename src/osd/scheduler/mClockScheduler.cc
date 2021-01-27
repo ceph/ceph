@@ -45,13 +45,6 @@ mClockScheduler::mClockScheduler(CephContext *cct,
 {
   cct->_conf.add_observer(this);
   ceph_assert(num_shards > 0);
-  // Set default blocksize and cost for all op types.
-  for (op_type_t op_type = op_type_t::client_op;
-       op_type <= op_type_t::bg_pg_delete;
-       op_type = op_type_t(static_cast<size_t>(op_type) + 1)) {
-    client_cost_infos[op_type] = 4 * 1024;
-    client_scaled_cost_infos[op_type] = 1;
-  }
   set_max_osd_capacity();
   set_osd_mclock_cost_per_io();
   set_mclock_profile();
@@ -117,6 +110,8 @@ void mClockScheduler::set_max_osd_capacity()
         cct->_conf.get_val<double>("osd_mclock_max_capacity_iops_ssd");
     }
   }
+  // Set max osd bandwidth across all shards (at 4KiB blocksize)
+  max_osd_bandwidth = max_osd_capacity * 4 * 1024;
   // Set per op-shard iops limit
   max_osd_capacity /= num_shards;
 }
@@ -363,19 +358,10 @@ void mClockScheduler::set_global_recovery_options()
   cct->_conf.apply_changes(nullptr);
 }
 
-int mClockScheduler::calc_scaled_cost(op_type_t op_type, int cost)
+int mClockScheduler::calc_scaled_cost(int cost)
 {
-  double client_alloc = get_client_allocation(op_type);
-  if (client_alloc == 1.0) {
-    // Client not yet supported, return default cost.
-    return 1;
-  }
-
-  // Calculate bandwidth from max osd capacity (at 4KiB blocksize).
-  double max_osd_bandwidth = max_osd_capacity * num_shards * 4 * 1024;
-
-  // Calculate scaled cost based on item cost
-  double scaled_cost = (cost / max_osd_bandwidth) * client_alloc;
+  // Calculate scaled cost in msecs based on item cost
+  int scaled_cost = std::floor((cost / max_osd_bandwidth) * 1000);
 
   // Scale the cost down by an additional cost factor if specified
   // to account for different device characteristics (hdd, ssd).
@@ -385,45 +371,7 @@ int mClockScheduler::calc_scaled_cost(op_type_t op_type, int cost)
     scaled_cost *= osd_mclock_cost_per_io_msec / 1000.0;
   }
 
-  return std::floor(scaled_cost);
-}
-
-bool mClockScheduler::maybe_update_client_cost_info(
-  op_type_t op_type, int new_cost)
-{
-  int capped_item_cost = 4 * 1024 * 1024;
-
-  if (new_cost == 0) {
-    return false;
-  }
-
-  // The mclock params represented in terms of the per-osd capacity
-  // are scaled up or down according to the cost associated with
-  // item cost and updated within the dmclock server.
-  int cur_cost = client_cost_infos[op_type];
-
-  // Note: Cap the scaling of item cost to ~4MiB as the tag increments
-  // beyond this point are too long causing performance issues. This may
-  // need to be in place until benchmark data is available or a better
-  // scaling model can be put in place. This is a TODO.
-  if (new_cost >= capped_item_cost) {
-    new_cost = capped_item_cost;
-  }
-
-  bool cost_changed =
-    ((new_cost >= (cur_cost << 1)) || (cur_cost >= (new_cost << 1)));
-
-  if (cost_changed) {
-    client_cost_infos[op_type] = new_cost;
-    // Update client scaled cost info
-    int scaled_cost = std::max(calc_scaled_cost(op_type, new_cost), 1);
-    if (scaled_cost != client_scaled_cost_infos[op_type]) {
-      client_scaled_cost_infos[op_type] = scaled_cost;
-      return true;
-    }
-  }
-
-  return false;
+  return std::max(scaled_cost, 1);
 }
 
 void mClockScheduler::dump(ceph::Formatter &f) const
@@ -433,18 +381,13 @@ void mClockScheduler::dump(ceph::Formatter &f) const
 void mClockScheduler::enqueue(OpSchedulerItem&& item)
 {
   auto id = get_scheduler_id(item);
-  auto op_type = item.get_op_type();
-  int cost = client_scaled_cost_infos[op_type];
-
-  // Re-calculate the scaled cost for the client if the item cost changed
-  if (maybe_update_client_cost_info(op_type, item.get_cost())) {
-    cost = client_scaled_cost_infos[op_type];
-  }
 
   // TODO: move this check into OpSchedulerItem, handle backwards compat
-  if (op_scheduler_class::immediate == item.get_scheduler_class()) {
+  if (op_scheduler_class::immediate == id.class_id) {
     immediate.push_front(std::move(item));
   } else {
+    int cost = calc_scaled_cost(item.get_cost());
+    // Add item to scheduler queue
     scheduler.add_request(
       std::move(item),
       id,
