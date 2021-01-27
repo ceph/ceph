@@ -2,7 +2,7 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict
+from typing import TYPE_CHECKING, Optional, Dict, List
 
 import orchestrator
 from cephadm.serve import CephadmServe
@@ -21,7 +21,7 @@ class UpgradeState:
                  target_name: str,
                  progress_id: str,
                  target_id: Optional[str] = None,
-                 repo_digest: Optional[str] = None,
+                 repo_digests: Optional[List[str]] = None,
                  target_version: Optional[str] = None,
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
@@ -29,7 +29,7 @@ class UpgradeState:
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
         self.target_id: Optional[str] = target_id
-        self.repo_digest: Optional[str] = repo_digest
+        self.repo_digests: Optional[List[str]] = repo_digests
         self.target_version: Optional[str] = target_version
         self.error: Optional[str] = error
         self.paused: bool = paused or False
@@ -39,7 +39,7 @@ class UpgradeState:
             'target_name': self._target_name,
             'progress_id': self.progress_id,
             'target_id': self.target_id,
-            'repo_digest': self.repo_digest,
+            'repo_digests': self.repo_digests,
             'target_version': self.target_version,
             'error': self.error,
             'paused': self.paused,
@@ -75,10 +75,11 @@ class CephadmUpgrade:
         assert self.upgrade_state
         if not self.mgr.use_repo_digest:
             return self.upgrade_state._target_name
-        if not self.upgrade_state.repo_digest:
+        if not self.upgrade_state.repo_digests:
             return self.upgrade_state._target_name
 
-        return self.upgrade_state.repo_digest
+        # FIXME: we assume the first digest is the best one to use
+        return self.upgrade_state.repo_digests[0]
 
     def upgrade_status(self) -> orchestrator.UpgradeStatusSpec:
         r = orchestrator.UpgradeStatusSpec()
@@ -282,11 +283,11 @@ class CephadmUpgrade:
         target_image = self.target_image
         target_id = self.upgrade_state.target_id
         target_version = self.upgrade_state.target_version
-        if not target_id or not target_version or (self.mgr.use_repo_digest and not self.upgrade_state.repo_digest):
+        if not target_id or not target_version or (self.mgr.use_repo_digest and not self.upgrade_state.repo_digests):
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
             try:
-                target_id, target_version, repo_digest = CephadmServe(self.mgr)._get_container_image_info(
+                target_id, target_version, repo_digests = CephadmServe(self.mgr)._get_container_image_info(
                     target_image)
             except OrchestratorError as e:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
@@ -307,7 +308,7 @@ class CephadmUpgrade:
             self.upgrade_state.target_id = target_id
             # extract the version portion of 'ceph version {version} ({sha1})'
             self.upgrade_state.target_version = target_version.split(' ')[2]
-            self.upgrade_state.repo_digest = repo_digest
+            self.upgrade_state.repo_digests = repo_digests
             self._save_upgrade_state()
             target_image = self.target_image
         if target_version.startswith('ceph version '):

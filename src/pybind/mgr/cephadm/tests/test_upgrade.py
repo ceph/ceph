@@ -65,7 +65,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
 
             with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
                 'image_id': 'image_id',
-                'repo_digest': 'to_image@repo_digest',
+                'repo_digests': ['to_image@repo_digest'],
                 'ceph_version': 'ceph version 18.2.3 (hash)',
             }))):
 

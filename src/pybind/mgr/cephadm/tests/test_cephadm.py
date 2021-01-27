@@ -939,7 +939,7 @@ class TestCephadm(object):
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
         'image_id': 'image_id',
-                    'repo_digest': 'image@repo_digest',
+                    'repo_digests': ['image@repo_digest'],
     })))
     @pytest.mark.parametrize("use_repo_digest",
                              [

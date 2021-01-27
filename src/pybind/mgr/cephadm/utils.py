@@ -31,7 +31,7 @@ cephadmNoImage = CephadmNoImage.token
 class ContainerInspectInfo(NamedTuple):
     image_id: str
     ceph_version: Optional[str]
-    repo_digest: Optional[str]
+    repo_digests: Optional[List[str]]
 
 
 def name_to_config_section(name: str) -> ConfEntity:
