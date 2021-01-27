@@ -87,7 +87,7 @@ protected:
   rgw::sal::RGWRadosStore* store{nullptr};
   struct req_state *s{nullptr};
 
-  int do_init_permissions(optional_yield y);
+  int do_init_permissions(const DoutPrefixProvider *dpp, optional_yield y);
   int do_read_permissions(RGWOp* op, bool only_bucket, optional_yield y);
 
 public:
@@ -1947,8 +1947,8 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y);
-extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
+extern int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store, struct req_state* s, optional_yield y);
+extern int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, struct req_state *s,
 				     bool prefetch_data, optional_yield y);
 extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
@@ -2015,10 +2015,10 @@ static inline void format_xattr(std::string &xattr)
  * On failure returns a negative error code.
  *
  */
-inline int rgw_get_request_metadata(CephContext* const cct,
+inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp, 
+                                    CephContext* const cct,
 				    struct req_info& info,
 				    std::map<std::string, ceph::bufferlist>& attrs,
-                                    const DoutPrefixProvider *dpp,
 				    const bool allow_empty_attrs = true)
 {
   static const std::set<std::string> blocklisted_headers = {

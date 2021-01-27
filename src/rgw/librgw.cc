@@ -669,10 +669,11 @@ namespace rgw {
 
   int RGWLibRequest::read_permissions(RGWOp* op, optional_yield y) {
     /* bucket and object ops */
+    const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
     int ret =
-      rgw_build_bucket_policies(rgwlib.get_store(), get_state(), y);
+      rgw_build_bucket_policies(&dp, rgwlib.get_store(), get_state(), y);
     if (ret < 0) {
-      ldout(get_state()->cct, 10) << "read_permissions (bucket policy) on "
+      ldpp_dout(&dp, 10) << "read_permissions (bucket policy) on "
 				  << get_state()->bucket << ":"
 				  << get_state()->object
 				  << " only_bucket=" << only_bucket()
@@ -681,10 +682,10 @@ namespace rgw {
 	ret = -EACCES;
     } else if (! only_bucket()) {
       /* object ops */
-      ret = rgw_build_object_policies(rgwlib.get_store(), get_state(),
+      ret = rgw_build_object_policies(&dp, rgwlib.get_store(), get_state(),
 				      op->prefetch_data(), y);
       if (ret < 0) {
-	ldout(get_state()->cct, 10) << "read_permissions (object policy) on"
+	ldpp_dout(&dp, 10) << "read_permissions (object policy) on"
 				    << get_state()->bucket << ":"
 				    << get_state()->object
 				    << " ret=" << ret << dendl;

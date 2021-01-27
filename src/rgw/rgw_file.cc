@@ -1973,7 +1973,7 @@ namespace rgw {
       attrbl.append(val.c_str(), val.size() + 1);
     }
 
-    op_ret = rgw_get_request_metadata(state->cct, state->info, attrs, dpp);
+    op_ret = rgw_get_request_metadata(dpp, state->cct, state->info, attrs);
     if (op_ret < 0) {
       goto done;
     }

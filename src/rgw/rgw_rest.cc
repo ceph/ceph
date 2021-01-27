@@ -1865,7 +1865,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
     return 0;
   }
 
-  return do_init_permissions(y);
+  return do_init_permissions(op, y);
 }
 
 int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
