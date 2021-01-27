@@ -10,12 +10,10 @@
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
 #include "include/types.h"
-#include "json_spirit/json_spirit.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
 #include "aio_utils.h"
 #include "Mirror.h"
-
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
