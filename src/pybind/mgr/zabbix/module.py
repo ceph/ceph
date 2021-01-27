@@ -83,7 +83,7 @@ class Module(MgrModule):
             default=60),
         Option(
             name='discovery_interval',
-            type='count',
+            type='uint',
             default=100)
     ]
 
