@@ -1272,6 +1272,7 @@ class DaemonDescription(object):
                  container_id: Optional[str] = None,
                  container_image_id: Optional[str] = None,
                  container_image_name: Optional[str] = None,
+                 container_image_digests: Optional[List[str]] = None,
                  version: Optional[str] = None,
                  status: Optional[int] = None,
                  status_desc: Optional[str] = None,
@@ -1291,8 +1292,9 @@ class DaemonDescription(object):
         # justify having the container_id (runtime id) and container_image
         # (image name)
         self.container_id = container_id                  # runtime id
-        self.container_image_id = container_image_id      # image hash
+        self.container_image_id = container_image_id      # image id locally
         self.container_image_name = container_image_name  # image friendly name
+        self.container_image_digests = container_image_digests  # reg hashes
 
         # The type of service (osd, mon, mgr, etc.)
         self.daemon_type = daemon_type
@@ -1409,6 +1411,7 @@ class DaemonDescription(object):
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
         out['container_image_name'] = self.container_image_name
+        out['container_image_digests'] = self.container_image_digests
         out['version'] = self.version
         out['status'] = self.status
         out['status_desc'] = self.status_desc
