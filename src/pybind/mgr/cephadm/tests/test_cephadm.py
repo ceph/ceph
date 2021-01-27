@@ -776,7 +776,7 @@ class TestCephadm(object):
             match_glob(out, "Scheduled mds.fsname update...")
             CephadmServe(cephadm_module)._apply_all_services()
 
-            ok_to_stop.assert_called_with([daemon[4:]])
+            ok_to_stop.assert_called_with([daemon[4:]], force=True)
 
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host1')  # verifies ok-to-stop
             assert_rm_daemon(cephadm_module, spec.service_name(), 'host2')
