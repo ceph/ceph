@@ -243,11 +243,39 @@ bool WNBDDiskIterator::get(Config *cfg)
   return false;
 }
 
-int send_map_request(std::string command_line) {
+int get_exe_path(std::string& path) {
+  char buffer[MAX_PATH];
+  DWORD err = 0;
+
+  int ret = GetModuleFileNameA(NULL, buffer, MAX_PATH);
+  if (!ret || ret == MAX_PATH) {
+    err = GetLastError();
+    derr << "Could not retrieve executable path. "
+        << "Error: " << win32_strerror(err) << dendl;
+    return -EINVAL;
+  }
+
+  path = buffer;
+  return 0;
+}
+
+std::string get_cli_args() {
+  std::ostringstream cmdline;
+  for (int i=1; i<__argc; i++) {
+    if (i > 1)
+      cmdline << " ";
+    cmdline << std::quoted(__argv[i]);
+  }
+  return cmdline.str();
+}
+
+int send_map_request(std::string arguments) {
+  dout(15) << __func__ << ": command arguments: " << arguments << dendl;
+
   BYTE request_buff[SERVICE_PIPE_BUFFSZ] = { 0 };
   ServiceRequest* request = (ServiceRequest*) request_buff;
   request->command = Connect;
-  command_line.copy(
+  arguments.copy(
     (char*)request->arguments,
     SERVICE_PIPE_BUFFSZ - FIELD_OFFSET(ServiceRequest, arguments));
   ServiceReply reply = { 0 };
@@ -276,26 +304,23 @@ int send_map_request(std::string command_line) {
   return reply.status;
 }
 
-// Spawn a subprocess using the specified command line, which is expected
-// to be a "rbd-wnbd map" command. A pipe is passed to the child process,
+// Spawn a subprocess using the specified "rbd-wnbd" command
+// arguments. A pipe is passed to the child process,
 // which will allow it to communicate the mapping status
-int map_device_using_suprocess(std::string command_line)
+int map_device_using_suprocess(std::string arguments)
 {
   SECURITY_ATTRIBUTES sa;
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
   HANDLE read_pipe = NULL, write_pipe = NULL;
-  char buffer[4096];
   char ch;
-  DWORD err = 0, ret = 0;
+  DWORD err = 0;
   int exit_code = 0;
-
-  dout(5) << __func__ << ": command_line: " << command_line << dendl;
-
+  std::ostringstream command_line;
+  std::string exe_path;
   // We may get a command line containing an old pipe handle when
-  // recreating mappings, so we'll have to remove it.
-  std::regex pattern("(--pipe-handle [\'\"]?\\d+[\'\"]?)");
-  command_line = std::regex_replace(command_line, pattern, "");
+  // recreating mappings, so we'll have to replace it.
+  std::regex pipe_pattern("([\'\"]?--pipe-handle[\'\"]? [\'\"]?\\d+[\'\"]?)");
 
   // Set the security attribute such that a process created will
   // inherit the pipe handles.
@@ -311,22 +336,25 @@ int map_device_using_suprocess(std::string command_line)
     goto finally;
   }
 
-  GetStartupInfo(&si);
+  dout(5) << __func__ << ": command arguments: " << arguments << dendl;
 
-  // Pass an extra argument '--pipe-handle <write_pipe>'
-  ret = snprintf(
-    buffer, sizeof(buffer), "%s %s %lld",
-    command_line.c_str(), "--pipe-handle",
-    (intptr_t)write_pipe);
-  if ((uint64_t) ret > sizeof(buffer))
-  {
-    derr << "Command too long: " << command_line.c_str() << dendl;
+  // We'll avoid running arbitrary commands, instead using the executable
+  // path of this process (expected to be the full rbd-wnbd.exe path).
+  err = get_exe_path(exe_path);
+  if (err) {
     exit_code = -EINVAL;
     goto finally;
   }
+  command_line << std::quoted(exe_path)
+               << " " << std::regex_replace(arguments, pipe_pattern, "")
+               << " --pipe-handle " << (intptr_t)write_pipe;
 
+  dout(5) << __func__ << ": command line: " << command_line.str() << dendl;
+
+  GetStartupInfo(&si);
   // Create a detached child
-  if (!CreateProcess(NULL, buffer, NULL, NULL, TRUE, DETACHED_PROCESS,
+  if (!CreateProcess(NULL, (char*)command_line.str().c_str(),
+                     NULL, NULL, TRUE, DETACHED_PROCESS,
                      NULL, NULL, &si, &pi)) {
     err = GetLastError();
     derr << "CreateProcess failed: " << win32_strerror(err) << dendl;
@@ -403,7 +431,7 @@ int save_config_to_registry(Config* cfg)
       reg_key.set("nsname", cfg->nsname) ||
       reg_key.set("imgname", cfg->imgname) ||
       reg_key.set("snapname", cfg->snapname) ||
-      reg_key.set("command_line", GetCommandLine()) ||
+      reg_key.set("command_line", get_cli_args()) ||
       reg_key.set("persistent", cfg->persistent) ||
       reg_key.set("admin_sock_path", g_conf()->admin_socket) ||
       reg_key.flush()) {
@@ -591,9 +619,6 @@ class RBDService : public ServiceBase {
         case Connect:
           dout(5) << "Received device connect request. Command line: "
                   << (char*)request->arguments << dendl;
-          // TODO: consider validating the command, for example checking that
-          // the binary matches. Only admins can write to the named pipe and
-          // registry entry though.
           return map_device_using_suprocess((char*)request->arguments);
         default:
           dout(5) << "Received unsupported command: "
@@ -885,7 +910,7 @@ static int do_map(Config *cfg)
   librbd::image_info_t info;
 
   if (g_conf()->daemonize && !cfg->parent_pipe) {
-    return send_map_request(GetCommandLine());
+    return send_map_request(get_cli_args());
   }
 
   dout(0) << "Mapping RBD image: " << cfg->devpath << dendl;
