@@ -432,8 +432,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
       }))
   ).then_unpack([&new_progress, push_op](auto bl, auto attrs) {
     if (bl.length() == 0) {
-      logger().error("read_metadata_for_push_op: fail to read omap header");
-      return eversion_t{};
+      logger().warn("read_metadata_for_push_op: fail to read omap header");
     } else if (attrs.empty()) {
       logger().error("read_metadata_for_push_op: fail to read attrs");
       return eversion_t{};
