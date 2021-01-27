@@ -272,6 +272,10 @@ Similar to specifying a pool layout when creating a subvolume, pool layout can b
 
   $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
 
+Configure maximum number of concurrent clones. The default is set to 4::
+
+  $ ceph config set mgr mgr/volumes/max_concurrent_clones <value>
+
 To check the status of a clone operation use::
 
   $ ceph fs clone status <vol_name> <clone_name> [--group_name <group_name>]
