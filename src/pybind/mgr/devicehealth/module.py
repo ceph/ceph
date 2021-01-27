@@ -9,7 +9,7 @@ import operator
 import rados
 from threading import Event
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import cast, Any, Dict, List, Optional, Sequence, Tuple, TYPE_CHECKING, Union
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
@@ -85,7 +85,7 @@ class Module(MgrModule):
         ),
     ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
 
         # populate options (just until serve() runs)
@@ -97,7 +97,19 @@ class Module(MgrModule):
         self.event = Event()
         self.has_device_pool = False
 
-    def is_valid_daemon_name(self, who):
+        # for mypy which does not run the code
+        if TYPE_CHECKING:
+            self.enable_monitoring = True
+            self.scrape_frequency = 0.0
+            self.pool_name = ''
+            self.device_health_metrics = ''
+            self.retention_period = 0.0
+            self.mark_out_threshold = 0.0
+            self.warn_threshold = 0.0
+            self.self_heal = True
+            self.sleep_interval = 0.0
+
+    def is_valid_daemon_name(self, who: str) -> bool:
         parts = who.split('.')
         if len(parts) != 2:
             return False
@@ -108,7 +120,7 @@ class Module(MgrModule):
 
     @CLICommand('device query-daemon-health-metrics',
                 perm='r')
-    def do_query_daemon_health_metrics(self, who: str):
+    def do_query_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
         '''
         Get device health metrics for a given daemon
         '''
@@ -124,7 +136,7 @@ class Module(MgrModule):
 
     @CLICommand('device scrape-daemon-health-metrics',
                 perm='r')
-    def do_scrape_daemon_health_metrics(self, who: str):
+    def do_scrape_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
         '''
         Scrape and store device health metrics for a given daemon
         '''
@@ -135,7 +147,7 @@ class Module(MgrModule):
 
     @CLICommand('device scrape-daemon-health-metrics',
                 perm='r')
-    def do_scrape_health_metrics(self, devid: Optional[str] = None):
+    def do_scrape_health_metrics(self, devid: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Scrape and store device health metrics
         '''
@@ -146,7 +158,7 @@ class Module(MgrModule):
 
     @CLICommand('device get-health-metrics',
                 perm='r')
-    def do_get_health_metrics(self, devid: str, sample: Optional[str] = None):
+    def do_get_health_metrics(self, devid: str, sample: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Show stored device metrics for the device
         '''
@@ -154,7 +166,7 @@ class Module(MgrModule):
 
     @CLICommand('device check-health',
                 perm='rw')
-    def do_check_health(self):
+    def do_check_health(self) -> Tuple[int, str, str]:
         '''
         Check life expectancy of devices
         '''
@@ -162,7 +174,7 @@ class Module(MgrModule):
 
     @CLICommand('device monitoring on',
                 perm='rw')
-    def do_monitoring_on(self):
+    def do_monitoring_on(self) -> Tuple[int, str, str]:
         '''
         Enable device health monitoring
         '''
@@ -172,7 +184,7 @@ class Module(MgrModule):
 
     @CLICommand('device monitoring off',
                 perm='rw')
-    def do_monitoring_off(self):
+    def do_monitoring_off(self) -> Tuple[int, str, str]:
         '''
         Disable device health monitoring
         '''
@@ -182,13 +194,13 @@ class Module(MgrModule):
 
     @CLICommand('device predict-life-expectancy',
                 perm='r')
-    def do_predict_life_expectancy(self, devid: str):
+    def do_predict_life_expectancy(self, devid: str) -> Tuple[int, str, str]:
         '''
         Predict life expectancy with local predictor
         '''
         return self.predict_lift_expectancy(devid)
 
-    def self_test(self):
+    def self_test(self) -> None:
         self.config_notify()
         osdmap = self.get('osd_map')
         osd_id = osdmap['osds'][0]['osd']
@@ -204,21 +216,21 @@ class Module(MgrModule):
             assert r == 0
             assert before != after
 
-    def config_notify(self):
+    def config_notify(self) -> None:
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    def notify(self, notify_type, notify_id):
+    def notify(self, notify_type: str, notify_id: str) -> None:
         # create device_health_metrics pool if it doesn't exist
         if notify_type == "osd_map" and self.enable_monitoring:
             if not self.has_device_pool:
                 self.create_device_pool()
                 self.has_device_pool = True
 
-    def create_device_pool(self):
+    def create_device_pool(self) -> None:
         self.log.debug('create %s pool' % self.pool_name)
         # create pool
         result = CommandResult('')
@@ -242,7 +254,7 @@ class Module(MgrModule):
         r, outb, outs = result.wait()
         assert r == 0
 
-    def serve(self):
+    def serve(self) -> None:
         self.log.info("Starting")
         self.config_notify()
 
@@ -289,12 +301,12 @@ class Module(MgrModule):
             ret = self.event.wait(sleep_interval)
             self.event.clear()
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.log.info('Stopping')
         self.run = False
         self.event.set()
 
-    def open_connection(self, create_if_missing=True):
+    def open_connection(self, create_if_missing: bool = True) -> rados.Ioctx:
         osdmap = self.get("osd_map")
         assert osdmap is not None
         if len(osdmap['osds']) == 0:
@@ -308,7 +320,7 @@ class Module(MgrModule):
         ioctx = self.rados.open_ioctx(self.pool_name)
         return ioctx
 
-    def scrape_daemon(self, daemon_type, daemon_id):
+    def scrape_daemon(self, daemon_type: str, daemon_id: str) -> Tuple[int, str, str]:
         ioctx = self.open_connection()
         if not ioctx:
             return 0, "", ""
@@ -321,7 +333,7 @@ class Module(MgrModule):
         ioctx.close()
         return 0, "", ""
 
-    def scrape_all(self):
+    def scrape_all(self) -> Tuple[int, str, str]:
         osdmap = self.get("osd_map")
         assert osdmap is not None
         ioctx = self.open_connection()
@@ -349,7 +361,7 @@ class Module(MgrModule):
         ioctx.close()
         return 0, "", ""
 
-    def scrape_device(self, devid):
+    def scrape_device(self, devid: str) -> Tuple[int, str, str]:
         r = self.get("device " + devid)
         if not r or 'device' not in r.keys():
             return -errno.ENOENT, '', 'device ' + devid + ' not found'
@@ -371,7 +383,10 @@ class Module(MgrModule):
         ioctx.close()
         return 0, "", ""
 
-    def do_scrape_daemon(self, daemon_type, daemon_id, devid=''):
+    def do_scrape_daemon(self,
+                         daemon_type: str,
+                         daemon_id: str,
+                         devid: str = '') -> Optional[Dict[str, Any]]:
         """
         :return: a dict, or None if the scrape failed.
         """
@@ -390,8 +405,9 @@ class Module(MgrModule):
             self.log.error(
                 "Fail to parse JSON result from daemon {0}.{1} ({2})".format(
                     daemon_type, daemon_id, outb))
+            return None
 
-    def put_device_metrics(self, ioctx, devid, data):
+    def put_device_metrics(self, ioctx: rados.Ioctx, devid: str, data: Any) -> None:
         assert devid
         old_key = datetime.utcnow() - timedelta(
             seconds=self.retention_period)
@@ -427,7 +443,9 @@ class Module(MgrModule):
                 ioctx.remove_omap_keys(op, tuple(erase))
             ioctx.operate_write_op(op, devid)
 
-    def _get_device_metrics(self, devid, sample=None, min_sample=None):
+    def _get_device_metrics(self, devid: str,
+                            sample: Optional[str] = None,
+                            min_sample: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         res = {}
         ioctx = self.open_connection(create_if_missing=False)
         if not ioctx:
@@ -458,7 +476,7 @@ class Module(MgrModule):
                     raise
         return res
 
-    def show_device_metrics(self, devid, sample):
+    def show_device_metrics(self, devid: str, sample: Optional[str]) -> Tuple[int, str, str]:
         # verify device exists
         r = self.get("device " + devid)
         if not r or 'device' not in r.keys():
@@ -467,14 +485,14 @@ class Module(MgrModule):
         res = self._get_device_metrics(devid, sample=sample)
         return 0, json.dumps(res, indent=4, sort_keys=True), ''
 
-    def check_health(self):
+    def check_health(self) -> Tuple[int, str, str]:
         self.log.info('Check health')
         config = self.get('config')
         min_in_ratio = float(config.get('mon_osd_min_in_ratio'))
         mark_out_threshold_td = timedelta(seconds=self.mark_out_threshold)
         warn_threshold_td = timedelta(seconds=self.warn_threshold)
-        checks = {}
-        health_warnings = {
+        checks: Dict[str, Dict[str, Union[int, str, Sequence[str]]]] = {}
+        health_warnings: Dict[str, List[str]] = {
             DEVICE_HEALTH: [],
             DEVICE_HEALTH_IN_USE: [],
             }
@@ -576,21 +594,21 @@ class Module(MgrModule):
         self.set_health_checks(checks)
         return 0, "", ""
 
-    def is_osd_in(self, osdmap, osd_id):
+    def is_osd_in(self, osdmap: Dict[str, Any], osd_id: str) -> bool:
         for osd in osdmap['osds']:
-            if str(osd_id) == str(osd['osd']):
+            if osd_id == str(osd['osd']):
                 return bool(osd['in'])
         return False
 
-    def get_osd_num_pgs(self, osd_id):
+    def get_osd_num_pgs(self, osd_id: str) -> int:
         stats = self.get('osd_stats')
         assert stats is not None
         for stat in stats['osd_stats']:
-            if str(osd_id) == str(stat['osd']):
+            if osd_id == str(stat['osd']):
                 return stat['num_pgs']
         return -1
 
-    def mark_out_etc(self, osd_ids):
+    def mark_out_etc(self, osd_ids: List[str]) -> None:
         self.log.info('Marking out OSDs: %s' % osd_ids)
         result = CommandResult('')
         self.send_command(result, 'mon', '', json.dumps({
@@ -616,15 +634,15 @@ class Module(MgrModule):
                                  'r: [%s], outb: [%s], outs: [%s]',
                                  osd_id, r, outb, outs)
 
-    def extract_smart_features(self, raw):
+    def extract_smart_features(self, raw: Any) -> Any:
         # FIXME: extract and normalize raw smartctl --json output and
         # generate a dict of the fields we care about.
         return raw
 
-    def predict_lift_expectancy(self, devid):
+    def predict_lift_expectancy(self, devid: str) -> Tuple[int, str, str]:
         plugin_name = ''
         model = self.get_ceph_option('device_failure_prediction_mode')
-        if model and model.lower() == 'local':
+        if cast(str, model).lower() == 'local':
             plugin_name = 'diskprediction_local'
         else:
             return -1, '', 'unable to enable any disk prediction model[local/cloud]'
@@ -635,10 +653,10 @@ class Module(MgrModule):
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
-    def predict_all_devices(self):
+    def predict_all_devices(self) -> Tuple[int, str, str]:
         plugin_name = ''
         model = self.get_ceph_option('device_failure_prediction_mode')
-        if model and model.lower() == 'local':
+        if cast(str, model).lower() == 'local':
             plugin_name = 'diskprediction_local'
         else:
             return -1, '', 'unable to enable any disk prediction model[local/cloud]'
@@ -649,8 +667,8 @@ class Module(MgrModule):
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
-    def get_recent_device_metrics(self, devid, min_sample):
+    def get_recent_device_metrics(self, devid: str, min_sample: str) -> Dict[str, Dict[str, Any]]:
         return self._get_device_metrics(devid, min_sample=min_sample)
 
-    def get_time_format(self):
+    def get_time_format(self) -> str:
         return TIME_FORMAT
