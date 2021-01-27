@@ -10,7 +10,7 @@ import errno
 import re
 from subprocess import Popen, PIPE
 from threading import Event
-from mgr_module import MgrModule, Option, OptionValue
+from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule, Option, OptionValue
 from typing import cast, Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 
@@ -403,41 +403,38 @@ class Module(MgrModule):
         }
         return bool(self.send(data))
 
-    def handle_command(self, inbuf: str, command: Dict[str, Any]) -> Tuple[int, str, str]:
-        if command['prefix'] == 'zabbix config-show':
-            return 0, json.dumps(self.config, indent=4, sort_keys=True), ''
-        elif command['prefix'] == 'zabbix config-set':
-            key = command['key']
-            value = command['value']
-            if not value:
-                return -errno.EINVAL, '', 'Value should not be empty or None'
+    @CLIReadCommand('zabbix config-show')
+    def config_show(self) -> Tuple[int, str, str]:
+        return 0, json.dumps(self.config, indent=4, sort_keys=True), ''
 
-            self.log.debug('Setting configuration option %s to %s', key, value)
-            if self.set_config_option(key, value):
-                self.set_module_option(key, value)
-                if key == 'zabbix_host' or key == 'zabbix_port':
-                    self._parse_zabbix_hosts()
+    @CLIWriteCommand('zabbix config-set')
+    def config_set(self, key: str, value: str) -> Tuple[int, str, str]:
+        if not value:
+            return -errno.EINVAL, '', 'Value should not be empty or None'
+
+        self.log.debug('Setting configuration option %s to %s', key, value)
+        if self.set_config_option(key, value):
+            self.set_module_option(key, value)
+            if key == 'zabbix_host' or key == 'zabbix_port':
+                self._parse_zabbix_hosts()
                 return 0, 'Configuration option {0} updated'.format(key), ''
+        return 1,\
+            'Failed to update configuration option {0}'.format(key), ''
 
-            return 1,\
-                'Failed to update configuration option {0}'.format(key), ''
+    @CLIReadCommand('zabbix send')
+    def do_send(self) -> Tuple[int, str, str]:
+        data = self.get_data()
+        if self.send(data):
+            return 0, 'Sending data to Zabbix', ''
 
-        elif command['prefix'] == 'zabbix send':
-            data = self.get_data()
-            if self.send(data):
-                return 0, 'Sending data to Zabbix', ''
+        return 1, 'Failed to send data to Zabbix', ''
 
-            return 1, 'Failed to send data to Zabbix', ''
+    @CLIReadCommand('zabbix discovery')
+    def do_discovery(self) -> Tuple[int, str, str]:
+        if self.discovery():
+            return 0, 'Sending discovery data to Zabbix', ''
 
-        elif command['prefix'] == 'zabbix discovery':
-            if self.discovery():
-                return 0, 'Sending discovery data to Zabbix', ''
-
-            return 1, 'Failed to send discovery data to Zabbix', ''
-
-        else:
-            return (-errno.EINVAL, '',
-                    "Command not found '{0}'".format(command['prefix']))
+        return 1, 'Failed to send discovery data to Zabbix', ''
 
     def shutdown(self) -> None:
         self.log.info('Stopping zabbix')
