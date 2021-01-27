@@ -694,6 +694,16 @@ void Migrator::export_dir_nicely(CDir *dir, mds_rank_t dest)
   maybe_do_queued_export();
 }
 
+bool Migrator::should_throttle() const
+{
+  uint64_t max_total_size = max_export_size * 8;
+  if (max_total_size > total_exporting_size &&
+      max_total_size - total_exporting_size >=
+      max_export_size * (num_locking_exports + 1))
+    return false;
+  return true;
+}
+
 void Migrator::maybe_do_queued_export()
 {
   static bool running;
@@ -701,13 +711,7 @@ void Migrator::maybe_do_queued_export()
     return;
   running = true;
 
-  uint64_t max_total_size = max_export_size * 2;
-
-  while (!export_queue.empty() &&
-	 max_total_size > total_exporting_size &&
-	 max_total_size - total_exporting_size >=
-	 max_export_size * (num_locking_exports + 1)) {
-
+  while (!export_queue.empty() && !should_throttle()) {
     dirfrag_t df = export_queue.front().first;
     mds_rank_t dest = export_queue.front().second;
     export_queue.pop_front();
@@ -750,11 +754,8 @@ bool Migrator::export_try_grab_locks(CDir *dir, MutationRef& mut)
 
   MutationImpl::LockOpVec lov;
 
-  set<CDir*> wouldbe_bounds;
   set<CInode*> bound_inodes;
-  mdcache->get_wouldbe_subtree_bounds(dir, wouldbe_bounds);
-  for (auto& bound : wouldbe_bounds)
-    bound_inodes.insert(bound->get_inode());
+  mdcache->get_wouldbe_subtree_bound_inodes(dir, bound_inodes);
   for (auto& in : bound_inodes)
     lov.add_rdlock(&in->dirfragtreelock);
 
@@ -783,7 +784,7 @@ bool Migrator::export_try_grab_locks(CDir *dir, MutationRef& mut)
  * public method to initiate an export.
  * will fail if the directory is freezing, frozen, unpinnable, or root. 
  */
-int Migrator::export_dir(CDir *dir, mds_rank_t dest)
+int Migrator::export_dir(CDir *dir, mds_rank_t dest, bool recursive)
 {
   ceph_assert(dir->is_auth());
   ceph_assert(dest != mds->get_nodeid());
@@ -857,6 +858,7 @@ int Migrator::export_dir(CDir *dir, mds_rank_t dest)
   export_state_t& stat = export_state[dir->dirfrag()];
   num_locking_exports++;
   stat.base = dir;
+  stat.recursive = recursive;
   stat.state = EXPORT_LOCKING;
   stat.peer = dest;
   stat.tid = mdr->reqid.tid;
@@ -870,7 +872,7 @@ int Migrator::export_dir(CDir *dir, mds_rank_t dest)
  * check if directory is too large to be export in whole. If it is,
  * choose some subdirs, whose total size is suitable.
  */
-void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
+void Migrator::maybe_split_export(const export_state_t &stat, uint64_t max_size,
 				  vector<pair<CDir*, size_t> >& results)
 {
   static const unsigned frag_size = 800;
@@ -878,6 +880,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
   static const unsigned cap_size = 80;
   static const unsigned remote_size = 10;
   static const unsigned null_size = 1;
+  CDir *dir = stat.base;
 
   // state for depth-first search
   struct LevelData {
@@ -923,7 +926,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
       dirfrag_size += inode_size;
       dirfrag_size += in->get_client_caps().size() * cap_size;
 
-      if (in->is_dir()) {
+      if (stat.recursive && in->is_dir()) {
 	auto ls = in->get_nested_dirfrags();
 	std::reverse(ls.begin(), ls.end());
 
@@ -1002,7 +1005,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
   for (auto& p : stack)
     results.insert(results.end(), p.subdirs.begin(), p.subdirs.end());
 
-  if (results.empty() && (!skipped_size || !null_okay))
+  if (results.empty() && (!skipped_size || !stat.parent))
     results.emplace_back(dir, found_size + skipped_size);
 }
 
@@ -1102,13 +1105,21 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     //  redivvy it up.  And it's needed for the scatterlocks to work
     //  properly: when the auth is in a sync/lock state it keeps each
     //  dirfrag's portion in the local (auth OR replica) dirfrag.
-    set<CDir*> wouldbe_bounds;
-    set<CInode*> bound_inodes;
-    mdcache->get_wouldbe_subtree_bounds(dir, wouldbe_bounds);
-    for (auto& bound : wouldbe_bounds)
-      bound_inodes.insert(bound->get_inode());
-    for (auto& in : bound_inodes)
-      lov.add_rdlock(&in->dirfragtreelock);
+    if (it->second.recursive) {
+      set<CInode*> bound_inodes;
+      mdcache->get_wouldbe_subtree_bound_inodes(dir, bound_inodes);
+      for (auto& in : bound_inodes)
+	lov.add_rdlock(&in->dirfragtreelock);
+    } else {
+      for (auto p = dir->begin(); p != dir->end(); ++p) {
+	CDentry::linkage_t *dnl = p->second->get_projected_linkage();
+	if (dnl->is_primary()) {
+	  CInode *in = dnl->get_inode();
+	  if (in->is_dir())
+	    lov.add_rdlock(&in->dirfragtreelock);
+	}
+      }
+    }
 
     if (!mds->locker->rdlock_try_set(lov, mdr))
       return;
@@ -1121,10 +1132,8 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
 
   ceph_assert(g_conf()->mds_kill_export_at != 1);
 
-  auto parent = it->second.parent;
-
   vector<pair<CDir*, size_t> > results;
-  maybe_split_export(dir, max_export_size, (bool)parent, results);
+  maybe_split_export(it->second, max_export_size, results);
 
   if (results.size() == 1 && results.front().first == dir) {
     num_locking_exports--;
@@ -1143,12 +1152,13 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     total_exporting_size += it->second.approx_size;
 
     // start the freeze, but hold it up with an auth_pin.
-    dir->freeze_tree();
+    dir->freeze_tree(it->second.recursive);
     ceph_assert(dir->is_freezing_tree());
     dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir, it->second.tid));
     return;
   }
 
+  auto parent = it->second.parent;
   if (parent) {
     parent->pending_children += results.size();
   } else {

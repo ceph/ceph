@@ -317,7 +317,7 @@ class MDCache {
     return subtrees.count(root);
   }
   void get_subtree_bounds(CDir *root, std::set<CDir*>& bounds);
-  void get_wouldbe_subtree_bounds(CDir *root, std::set<CDir*>& bounds);
+  void get_wouldbe_subtree_bound_inodes(CDir *root, std::set<CInode*>& bound_inodes);
   void verify_subtree_bounds(CDir *root, const std::set<CDir*>& bounds);
   void verify_subtree_bounds(CDir *root, const std::list<dirfrag_t>& bounds);
 
