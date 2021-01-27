@@ -1621,7 +1621,7 @@ def infer_fsid(func):
             if not is_fsid(daemon['fsid']):
                 # 'unknown' fsid
                 continue
-            elif "name" in ctx or not ctx.name:
+            elif "name" not in ctx or not ctx.name:
                 # ctx.name not specified
                 fsids_set.add(daemon['fsid'])
             elif daemon['name'] == ctx.name:
