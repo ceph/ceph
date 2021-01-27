@@ -11,7 +11,7 @@ FSID='00000000-0000-0000-0000-0000deadbeef'
 # images that are used
 IMAGE_MASTER=${IMAGE_MASTER:-'quay.ceph.io/ceph-ci/ceph:master'}
 IMAGE_PACIFIC=${IMAGE_PACIFIC:-'quay.ceph.io/ceph-ci/ceph:pacific'}
-IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
+#IMAGE_OCTOPUS=${IMAGE_OCTOPUS:-'quay.ceph.io/ceph-ci/ceph:octopus'}
 
 OSD_IMAGE_NAME="${SCRIPT_NAME%.*}_osd.img"
 OSD_IMAGE_SIZE='6G'
@@ -129,7 +129,7 @@ function nfs_stop()
     # stop the running nfs server
     local units="nfs-server nfs-kernel-server"
     for unit in $units; do
-        if systemctl status $unit; then
+        if systemctl status $unit < /dev/null; then
             $SUDO systemctl stop $unit
         fi
     done
@@ -148,9 +148,9 @@ $SUDO $CEPHADM gather-facts
 $SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version
 $SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version \
     | grep 'ceph version 16'
-$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
-$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
-    | grep 'ceph version 15'
+#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
+#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
+#    | grep 'ceph version 15'
 $SUDO $CEPHADM_BIN --image $IMAGE_MASTER version | grep 'ceph version'
 
 # try force docker; this won't work if docker isn't installed
