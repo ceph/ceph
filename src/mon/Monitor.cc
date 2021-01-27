@@ -519,6 +519,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_PACIFIC);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_QUINCY);
   return compat;
 }
 
@@ -2476,6 +2477,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_PACIFIC));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_PACIFIC);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_QUINCY)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_QUINCY));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_QUINCY));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_QUINCY);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2507,6 +2515,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_PACIFIC)) {
     required_features |= CEPH_FEATUREMASK_SERVER_PACIFIC;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_QUINCY)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_QUINCY;
   }
 
   // monmap
