@@ -16,7 +16,7 @@ from teuthology.config import config as teuth_config
 from teuthology.config import set_config_attr
 from teuthology.exceptions import BranchNotFoundError, SkipJob, MaxWhileTries
 from teuthology.kill import kill_job
-from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
+from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology, ls_remote, build_git_url
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()
@@ -148,22 +148,37 @@ def prep_job(job_config, log_file_path, archive_dir):
     # store that value.
     teuthology_branch = job_config.get('teuthology_branch', 'master')
     job_config['teuthology_branch'] = teuthology_branch
+    teuthology_sha1 = job_config.get('teuthology_sha1')
+    if not teuthology_sha1:
+        repo_url = build_git_url('teuthology', 'ceph')
+        teuthology_sha1 = ls_remote(repo_url, teuthology_branch)
+        if not teuthology_sha1:
+            reason = "Teuthology branch {} not found; marking job as dead".format(teuthology_branch)
+            log.error(reason)
+            report.try_push_job_info(
+                job_config,
+                dict(status='dead', failure_reason=reason)
+            )
+            raise SkipJob()
+        log.info('Using teuthology sha1 %s', teuthology_sha1)
 
     try:
         if teuth_config.teuthology_path is not None:
             teuth_path = teuth_config.teuthology_path
         else:
-            teuth_path = fetch_teuthology(branch=teuthology_branch)
+            teuth_path = fetch_teuthology(branch=teuthology_branch,
+                                          commit=teuthology_sha1)
         # For the teuthology tasks, we look for suite_branch, and if we
         # don't get that, we look for branch, and fall back to 'master'.
         # last-in-suite jobs don't have suite_branch or branch set.
         ceph_branch = job_config.get('branch', 'master')
         suite_branch = job_config.get('suite_branch', ceph_branch)
+        suite_sha1 = job_config.get('suite_sha1')
         suite_repo = job_config.get('suite_repo')
         if suite_repo:
             teuth_config.ceph_qa_suite_git_url = suite_repo
         job_config['suite_path'] = os.path.normpath(os.path.join(
-            fetch_qa_suite(suite_branch),
+            fetch_qa_suite(suite_branch, suite_sha1),
             job_config.get('suite_relpath', ''),
         ))
     except BranchNotFoundError as exc:

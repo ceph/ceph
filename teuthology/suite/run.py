@@ -99,7 +99,7 @@ class Run(object):
         else:
             self.suite_repo_path = util.fetch_repos(
                 suite_branch, test_name=self.name)
-        teuthology_branch = self.choose_teuthology_branch()
+        teuthology_branch, teuthology_sha1 = self.choose_teuthology_branch()
 
 
         if self.args.distro_version:
@@ -113,6 +113,7 @@ class Run(object):
             ceph_hash=ceph_hash,
             ceph_repo=config.get_ceph_git_url(),
             teuthology_branch=teuthology_branch,
+            teuthology_sha1=teuthology_sha1,
             machine_type=self.args.machine_type,
             distro=self.args.distro,
             distro_version=self.args.distro_version,
@@ -200,8 +201,9 @@ class Run(object):
             log.info('skipping ceph package verification')
 
     def choose_teuthology_branch(self):
-        """Select teuthology branch, check if it is present in repo and
-        return the branch name value.
+        """Select teuthology branch, check if it is present in repo and return
+        tuple (branch, hash) where hash is commit sha1 corresponding
+        to the HEAD of the branch.
 
         The branch name value is determined in the following order:
 
@@ -220,6 +222,7 @@ class Run(object):
         Use ``master``.
 
         Generate exception if the branch is not present in the repo.
+
         """
         teuthology_branch = self.args.teuthology_branch
         if not teuthology_branch:
@@ -242,15 +245,15 @@ class Run(object):
         if not teuthology_branch:
             teuthology_branch = config.get('teuthology_branch', 'master')
 
-        teuthology_hash = util.git_ls_remote(
+        teuthology_sha1 = util.git_ls_remote(
             'teuthology',
             teuthology_branch
         )
-        if not teuthology_hash:
+        if not teuthology_sha1:
             exc = BranchNotFoundError(teuthology_branch, build_git_url('teuthology'))
             util.schedule_fail(message=str(exc), name=self.name)
-        log.info("teuthology branch: %s %s", teuthology_branch, teuthology_hash)
-        return teuthology_branch
+        log.info("teuthology branch: %s %s", teuthology_branch, teuthology_sha1)
+        return teuthology_branch, teuthology_sha1
 
     @property
     def ceph_repo_name(self):
