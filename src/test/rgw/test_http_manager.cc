@@ -49,6 +49,33 @@ TEST(HTTPManager, ReadTruncated)
   server.join();
 }
 
+TEST(HTTPManager, Head)
+{
+  using tcp = boost::asio::ip::tcp;
+  tcp::endpoint endpoint(tcp::v4(), 0);
+  boost::asio::io_context ioctx;
+  tcp::acceptor acceptor(ioctx);
+  acceptor.open(endpoint.protocol());
+  acceptor.bind(endpoint);
+  acceptor.listen();
+
+  std::thread server{[&] {
+    tcp::socket socket{ioctx};
+    acceptor.accept(socket);
+    std::string_view response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 1024\r\n"
+        "\r\n";
+    boost::asio::write(socket, boost::asio::buffer(response));
+  }};
+  const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
+
+  RGWHTTPClient client{g_ceph_context, "HEAD", url};
+  EXPECT_EQ(0, RGWHTTP::process(&client, null_yield));
+
+  server.join();
+}
+
 TEST(HTTPManager, SignalThread)
 {
   auto cct = g_ceph_context;
