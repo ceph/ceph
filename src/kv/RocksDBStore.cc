@@ -60,6 +60,7 @@ using ceph::Formatter;
 static const char* sharding_def_dir = "sharding";
 static const char* sharding_def_file = "sharding/def";
 static const char* sharding_recreate = "sharding/recreate_columns";
+static const char* resharding_column_lock = "reshardingXcommencingXlocked";
 
 static bufferlist to_bufferlist(rocksdb::Slice in) {
   bufferlist bl;
@@ -1093,8 +1094,16 @@ int RocksDBStore::do_open(ostream &out,
 
     ceph_assert(!recreate_mode || !open_readonly);
     if (recreate_mode == false && missing_cfs.size() != 0) {
-      derr << __func__ << " missing column families: " << missing_cfs_shard << dendl;
-      return -EIO;
+      // We do not accept when there are missing column families, except case that we are during resharding.
+      // We can get into this case if resharding was interrupted. It gives a chance to continue.
+      // Opening DB is only allowed in read-only mode.
+      if (open_readonly == false &&
+	  std::find_if(missing_cfs.begin(), missing_cfs.end(),
+		       [](const rocksdb::ColumnFamilyDescriptor& c) { return c.name == resharding_column_lock; }
+		       ) != missing_cfs.end()) {
+	derr << __func__ << " missing column families: " << missing_cfs_shard << dendl;
+	return -EIO;
+      }
     }
 
     if (existing_cfs.empty()) {
@@ -1136,7 +1145,11 @@ int RocksDBStore::do_open(ostream &out,
       default_cf = handles[handles.size() - 1];
       must_close_default_cf = true;
 
-      if (missing_cfs.size() > 0) {
+      if (missing_cfs.size() > 0 &&
+	  std::find_if(missing_cfs.begin(), missing_cfs.end(),
+		       [](const rocksdb::ColumnFamilyDescriptor& c) { return c.name == resharding_column_lock; }
+		       ) == missing_cfs.end())
+	{
 	dout(10) << __func__ << " missing_cfs=" << missing_cfs.size() << dendl;
 	ceph_assert(recreate_mode);
 	ceph_assert(missing_cfs.size() == missing_cfs_shard.size());
@@ -2948,11 +2961,11 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
   rocksdb::ReadFileToString(env,
 			    sharding_def_file,
 			    &stored_sharding_text);
-  if (stored_sharding_text.find("reshardingXcommencingXlocked") == string::npos) {
+  if (stored_sharding_text.find(resharding_column_lock) == string::npos) {
     rocksdb::Status status;
     if (stored_sharding_text.size() != 0)
       stored_sharding_text += " ";
-    stored_sharding_text += "reshardingXcommencingXlocked";
+    stored_sharding_text += resharding_column_lock;
     env->CreateDir(sharding_def_dir);
     status = rocksdb::WriteStringToFile(env, stored_sharding_text,
 					sharding_def_file, true);
@@ -3316,4 +3329,23 @@ int RocksDBStore::reshard(const std::string& new_sharding, const RocksDBStore::r
   }
 
   return r;
+}
+
+bool RocksDBStore::get_sharding(std::string& sharding) {
+  rocksdb::Status status;
+  std::string stored_sharding_text;
+  bool result = false;
+  sharding.clear();
+
+  status = env->FileExists(sharding_def_file);
+  if (status.ok()) {
+    status = rocksdb::ReadFileToString(env,
+				       sharding_def_file,
+				       &stored_sharding_text);
+    if(status.ok()) {
+      result = true;
+      sharding = stored_sharding_text;
+    }
+  }
+  return result;
 }
