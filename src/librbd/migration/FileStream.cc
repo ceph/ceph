@@ -121,7 +121,8 @@ struct FileStream<I>::ReadRequest {
 template <typename I>
 FileStream<I>::FileStream(I* image_ctx, const json_spirit::mObject& json_object)
   : m_cct(image_ctx->cct), m_asio_engine(image_ctx->asio_engine),
-    m_json_object(json_object), m_strand(*m_asio_engine) {
+    m_json_object(json_object),
+    m_strand(boost::asio::make_strand(*m_asio_engine)) {
 }
 
 template <typename I>
