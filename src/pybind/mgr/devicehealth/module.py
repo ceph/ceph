@@ -500,7 +500,6 @@ class Module(MgrModule):
         osdmap = self.get("osd_map")
         assert osdmap is not None
         for dev in devs['devices']:
-            devid = dev['devid']
             if 'life_expectancy_max' not in dev:
                 continue
             # ignore devices that are not consumed by any daemons
