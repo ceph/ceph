@@ -1,7 +1,7 @@
 import ceph_module  # noqa
 
 from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
-    NamedTuple, Sequence, Union, TYPE_CHECKING
+    Mapping, NamedTuple, Sequence, Union, TYPE_CHECKING
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -1276,7 +1276,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         self._ceph_send_command(result, svc_type, svc_id, command, tag, inbuf)
 
-    def set_health_checks(self, checks: Dict[str, Dict[str, Sequence[str]]]) -> None:
+    def set_health_checks(self,
+                          checks: Mapping[str, Mapping[str, Union[int, str, Sequence[str]]]]) -> None:
         """
         Set the module's current map of health checks.  Argument is a
         dict of check names to info, in this form:
