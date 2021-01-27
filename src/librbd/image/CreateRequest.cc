@@ -13,6 +13,8 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
+#include "librbd/group/AddImageRequest.h"
+#include "librbd/group/RemoveImageRequest.h"
 #include "librbd/image/Types.h"
 #include "librbd/image/ValidatePoolRequest.h"
 #include "librbd/journal/CreateRequest.h"
@@ -214,6 +216,9 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
     m_features |= RBD_FEATURE_STRIPINGV2;
   }
 
+  image_options.get(RBD_IMAGE_OPTION_GROUP_NAME, &m_group_name);
+  image_options.get(RBD_IMAGE_OPTION_GROUP_POOL, &m_group_pool);
+
   ldout(m_cct, 10) << "name=" << m_image_name << ", "
                    << "id=" << m_image_id << ", "
                    << "size=" << m_size << ", "
@@ -225,7 +230,8 @@ CreateRequest<I>::CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
                    << "journal_splay_width="
                    << (uint64_t)m_journal_splay_width << ", "
                    << "journal_pool=" << m_journal_pool << ", "
-                   << "data_pool=" << m_data_pool << dendl;
+                   << "data_pool=" << m_data_pool << ", "
+                   << "group=" << m_group_pool << "/" << m_group_name << dendl;
 }
 
 template<typename I>
@@ -275,7 +281,7 @@ void CreateRequest<I>::validate_data_pool() {
   }
 
   if (!m_config.get_val<bool>("rbd_validate_pool")) {
-    add_image_to_directory();
+    validate_group();
     return;
   }
 
@@ -297,6 +303,69 @@ void CreateRequest<I>::handle_validate_data_pool(int r) {
     return;
   } else if (r < 0) {
     lderr(m_cct) << "failed to validate pool: " << cpp_strerror(r) << dendl;
+    complete(r);
+    return;
+  }
+
+  validate_group();
+}
+
+template <typename I>
+void CreateRequest<I>::validate_group() {
+  if (m_group_name.empty()) {
+    add_image_to_directory();
+    return;
+  }
+
+  ldout(m_cct, 15) << dendl;
+
+  if (m_group_pool.empty() || m_group_pool == m_io_ctx.get_pool_name()) {
+    m_group_io_ctx = m_io_ctx;
+  } else {
+    int64_t pool_id = librados::Rados(m_io_ctx).pool_lookup(
+        m_group_pool.c_str());
+    if (pool_id < 0) {
+      lderr(m_cct) << "group pool " << m_group_pool << " does not exist" << dendl;
+      complete(-EINVAL);
+      return;
+    }
+    int r = util::create_ioctx(m_io_ctx, "group pool", pool_id, {},
+                               &m_group_io_ctx);
+    if (r < 0) {
+      lderr(m_cct) << "failed to open group pool " << m_group_pool << ": "
+                   << cpp_strerror(r) << dendl;
+      complete(r);
+      return;
+    }
+  }
+
+  librados::ObjectReadOperation op;
+  cls_client::dir_get_id_start(&op, m_group_name);
+
+  auto comp = create_rados_callback<
+      CreateRequest<I>, &CreateRequest<I>::handle_validate_group>(this);
+
+  m_outbl.clear();
+  int r = m_group_io_ctx.aio_operate(RBD_GROUP_DIRECTORY, comp, &op, &m_outbl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void CreateRequest<I>::handle_validate_group(int r) {
+  ldout(m_cct, 15) << "r=" << r << dendl;
+
+  if (r >= 0) {
+    auto it = m_outbl.cbegin();
+    r = cls_client::dir_get_id_finish(&it, &m_group_id);
+  }
+
+  if (r == -ENOENT) {
+    lderr(m_cct) << "group " << m_group_name << " does not exist" << dendl;
+    complete(r);
+    return;
+  } else if (r < 0) {
+    lderr(m_cct) << "failed to validate group: " << cpp_strerror(r) << dendl;
     complete(r);
     return;
   }
@@ -514,7 +583,7 @@ void CreateRequest<I>::handle_set_stripe_unit_count(int r) {
 template<typename I>
 void CreateRequest<I>::object_map_resize() {
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == 0) {
-    fetch_mirror_mode();
+    add_image_to_group();
     return;
   }
 
@@ -545,8 +614,39 @@ void CreateRequest<I>::handle_object_map_resize(int r) {
     return;
   }
 
-  fetch_mirror_mode();
+  add_image_to_group();
 }
+
+template<typename I>
+void CreateRequest<I>::add_image_to_group() {
+  if (m_group_id.empty()) {
+    fetch_mirror_mode();
+    return;
+  }
+
+  ldout(m_cct, 15) << dendl;
+
+  auto ctx = create_context_callback<
+    CreateRequest<I>, &CreateRequest<I>::handle_add_image_to_group>(this);
+  auto req = group::AddImageRequest<I>::create(m_group_io_ctx, m_group_id,
+                                               m_io_ctx, m_image_id, ctx);
+  req->send();
+}
+
+template<typename I>
+void CreateRequest<I>::handle_add_image_to_group(int r) {
+  ldout(m_cct, 15) << "r=" << r << dendl;
+
+   if (r < 0) {
+     lderr(m_cct) << "error adding image to group: " << cpp_strerror(r)
+                  << dendl;
+     m_r_saved = r;
+     remove_object_map();
+     return;
+   }
+
+   fetch_mirror_mode();
+ }
 
 template<typename I>
 void CreateRequest<I>::fetch_mirror_mode() {
@@ -578,7 +678,7 @@ void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
                  << dendl;
 
     m_r_saved = r;
-    remove_object_map();
+    remove_image_from_group();
     return;
   }
 
@@ -590,7 +690,7 @@ void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
       lderr(m_cct) << "Failed to retrieve mirror mode" << dendl;
 
       m_r_saved = r;
-      remove_object_map();
+      remove_image_from_group();
       return;
     }
   }
@@ -635,7 +735,7 @@ void CreateRequest<I>::handle_journal_create(int r) {
                  << dendl;
 
     m_r_saved = r;
-    remove_object_map();
+    remove_image_from_group();
     return;
   }
 
@@ -693,7 +793,7 @@ void CreateRequest<I>::complete(int r) {
 template<typename I>
 void CreateRequest<I>::journal_remove() {
   if ((m_features & RBD_FEATURE_JOURNALING) == 0) {
-    remove_object_map();
+    remove_image_from_group();
     return;
   }
 
@@ -719,6 +819,35 @@ void CreateRequest<I>::handle_journal_remove(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "error cleaning up journal after creation failed: "
+                 << cpp_strerror(r) << dendl;
+  }
+
+  remove_image_from_group();
+}
+
+template<typename I>
+void CreateRequest<I>::remove_image_from_group() {
+  if (m_group_id.empty()) {
+    remove_object_map();
+    return;
+  }
+
+  ldout(m_cct, 15) << dendl;
+
+  auto ctx = create_context_callback<
+    CreateRequest<I>, &CreateRequest<I>::handle_remove_image_from_group>(this);
+
+  auto req = group::RemoveImageRequest<I>::create(m_group_io_ctx, m_group_id,
+                                                  m_io_ctx, m_image_id, ctx);
+  req->send();
+}
+
+template<typename I>
+void CreateRequest<I>::handle_remove_image_from_group(int r) {
+  ldout(m_cct, 15) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "error cleaning up group after creation failed: "
                  << cpp_strerror(r) << dendl;
   }
 

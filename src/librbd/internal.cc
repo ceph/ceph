@@ -297,6 +297,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     {RBD_IMAGE_OPTION_FLATTEN, UINT64},
     {RBD_IMAGE_OPTION_CLONE_FORMAT, UINT64},
     {RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE, UINT64},
+    {RBD_IMAGE_OPTION_GROUP_NAME, STR},
+    {RBD_IMAGE_OPTION_GROUP_POOL, STR},
   };
 
   std::string image_option_name(int optname) {
@@ -329,6 +331,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return "clone_format";
     case RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE:
       return "mirror_image_mode";
+    case RBD_IMAGE_OPTION_GROUP_NAME:
+      return "group_name";
+    case RBD_IMAGE_OPTION_GROUP_POOL:
+      return "group_pool";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
