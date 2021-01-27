@@ -157,8 +157,11 @@ class Module(MgrModule):
         for server in servers:
             uri = re.match("(?:(?:\[?)([a-z0-9-\.]+|[a-f0-9:\.]+)(?:\]?))(?:((?::))([0-9]{1,5}))?$", server)
             if uri:
-                zabbix_host, sep, zabbix_port = uri.groups()
-                zabbix_port = zabbix_port if sep == ':' else self.config['zabbix_port']
+                zabbix_host, sep, opt_zabbix_port = uri.groups()
+                if sep == ':':
+                    zabbix_port = int(opt_zabbix_port)
+                else:
+                    zabbix_port = cast(int, self.config['zabbix_port'])
                 self._zabbix_hosts.append({'zabbix_host': zabbix_host, 'zabbix_port': zabbix_port})
             else:
                 self.log.error('Zabbix host "%s" is not valid', server)
