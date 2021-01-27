@@ -3171,17 +3171,15 @@ def command_inspect_image(ctx):
 
 
 def get_image_info_from_inspect(out, image):
-    # type: (str, str) -> Dict[str, str]
+    # type: (str, str) -> Dict[str, Union[str,List[str]]]
     image_id, digests = out.split(',', 1)
     if not out:
         raise Error('inspect {}: empty result'.format(image))
     r = {
         'image_id': normalize_container_id(image_id)
-    }
+    } # type: Dict[str, Union[str,List[str]]]
     if digests:
-        json_digests = digests[1:-1].split(' ')
-        if json_digests:
-            r['repo_digest'] = json_digests[0]
+        r['repo_digests'] = digests[1:-1].split(' ')
     return r
 
 

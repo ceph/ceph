@@ -686,15 +686,17 @@ class CephadmServe:
         for container_image_ref in set(settings.values()):
             if not is_repo_digest(container_image_ref):
                 image_info = self._get_container_image_info(container_image_ref)
-                if image_info.repo_digest:
-                    assert is_repo_digest(image_info.repo_digest), image_info
+                if image_info.repo_digests:
+                    # FIXME: we assume the first digest here is the best
+                    assert is_repo_digest(image_info.repo_digests[0]), image_info
                 digests[container_image_ref] = image_info
 
         for entity, container_image_ref in settings.items():
             if not is_repo_digest(container_image_ref):
                 image_info = digests[container_image_ref]
-                if image_info.repo_digest:
-                    self.mgr.set_container_image(entity, image_info.repo_digest)
+                if image_info.repo_digests:
+                    # FIXME: we assume the first digest here is the best
+                    self.mgr.set_container_image(entity, image_info.repo_digests[0])
 
     # ha-rgw needs definitve host list to create keepalived config files
     # if definitive host list has changed, all ha-rgw daemons must get new
@@ -995,7 +997,7 @@ class CephadmServe:
         r = ContainerInspectInfo(
             j['image_id'],
             j.get('ceph_version'),
-            j.get('repo_digest')
+            j.get('repo_digests')
         )
         self.log.debug(f'image {image_name} -> {r}')
         return r
