@@ -459,7 +459,7 @@ class Module(MgrModule):
             if discovery_counter == discovery_interval:
                 try:
                     self.discovery()
-                except Exception as exc:
+                except Exception:
                     # Shouldn't happen, but let's log it and retry next interval,
                     # rather than dying completely.
                     self.log.exception("Unexpected error during discovery():")
@@ -469,7 +469,7 @@ class Module(MgrModule):
             try:
                 data = self.get_data()
                 self.send(data)
-            except Exception as exc:
+            except Exception:
                 # Shouldn't happen, but let's log it and retry next interval,
                 # rather than dying completely.
                 self.log.exception("Unexpected error during send():")
