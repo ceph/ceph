@@ -5336,13 +5336,13 @@ class Apt(Packager):
 
     def install(self, ls):
         logger.info('Installing packages %s...' % ls)
-        call_throws(self.ctx, ['apt', 'install', '-y'] + ls)
+        call_throws(self.ctx, ['apt-get', 'install', '-y'] + ls)
 
     def install_podman(self):
         if self.distro == 'ubuntu':
             logger.info('Setting up repo for podman...')
             self.add_kubic_repo()
-            call_throws(self.ctx, ['apt', 'update'])
+            call_throws(self.ctx, ['apt-get', 'update'])
 
         logger.info('Attempting podman install...')
         try:
