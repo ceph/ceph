@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -569,37 +569,39 @@ ReplicatedRecoveryBackend::get_shards_to_push(const hobject_t& soid) const
 seastar::future<> ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 {
   logger().debug("{}: {}", __func__, *m);
-  return seastar::parallel_for_each(m->take_pulls(),
-				    [this, from=m->from](auto& pull_op) {
-    const hobject_t& soid = pull_op.soid;
-    logger().debug("handle_pull: {}", soid);
-    return backend->stat(coll, ghobject_t(soid)).then(
-      [this, &pull_op](auto st) {
-      ObjectRecoveryInfo &recovery_info = pull_op.recovery_info;
-      ObjectRecoveryProgress &progress = pull_op.recovery_progress;
-      if (progress.first && recovery_info.size == ((uint64_t) -1)) {
-        // Adjust size and copy_subset
-        recovery_info.size = st.st_size;
-        if (st.st_size) {
-          interval_set<uint64_t> object_range;
-          object_range.insert(0, st.st_size);
-          recovery_info.copy_subset.intersection_of(object_range);
-        } else {
-          recovery_info.copy_subset.clear();
+  return seastar::do_with(m->take_pulls(), [this, from=m->from](auto& pulls) {
+    return seastar::parallel_for_each(pulls,
+                                      [this, from](auto& pull_op) {
+      const hobject_t& soid = pull_op.soid;
+      logger().debug("handle_pull: {}", soid);
+      return backend->stat(coll, ghobject_t(soid)).then(
+        [this, &pull_op](auto st) {
+        ObjectRecoveryInfo &recovery_info = pull_op.recovery_info;
+        ObjectRecoveryProgress &progress = pull_op.recovery_progress;
+        if (progress.first && recovery_info.size == ((uint64_t) -1)) {
+          // Adjust size and copy_subset
+          recovery_info.size = st.st_size;
+          if (st.st_size) {
+            interval_set<uint64_t> object_range;
+            object_range.insert(0, st.st_size);
+            recovery_info.copy_subset.intersection_of(object_range);
+          } else {
+            recovery_info.copy_subset.clear();
+          }
+          assert(recovery_info.clone_subset.empty());
         }
-        assert(recovery_info.clone_subset.empty());
-      }
-      return build_push_op(recovery_info, progress, 0);
-    }).then([this, from](auto pop) {
-      auto msg = make_message<MOSDPGPush>();
-      msg->from = pg.get_pg_whoami();
-      msg->pgid = pg.get_pgid();
-      msg->map_epoch = pg.get_osdmap_epoch();
-      msg->min_epoch = pg.get_last_peering_reset();
-      msg->set_priority(pg.get_recovery_op_priority());
-      msg->pushes.push_back(std::move(pop));
-      return shard_services.send_to_osd(from.osd, std::move(msg),
-                                        pg.get_osdmap_epoch());
+        return build_push_op(recovery_info, progress, 0);
+      }).then([this, from](auto pop) {
+        auto msg = make_message<MOSDPGPush>();
+        msg->from = pg.get_pg_whoami();
+        msg->pgid = pg.get_pgid();
+        msg->map_epoch = pg.get_osdmap_epoch();
+        msg->min_epoch = pg.get_last_peering_reset();
+        msg->set_priority(pg.get_recovery_op_priority());
+        msg->pushes.push_back(std::move(pop));
+        return shard_services.send_to_osd(from.osd, std::move(msg),
+                                          pg.get_osdmap_epoch());
+      });
     });
   });
 }
