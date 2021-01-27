@@ -208,7 +208,7 @@ To update a topic, use the same command used for topic creation, with the topic 
 Request parameters:
 
 - push-endpoint: URI of an endpoint to send push notification to
-- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic
+- OpaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic
 
 The endpoint URI may include parameters depending with the type of endpoint:
 
@@ -586,7 +586,7 @@ the events will have an S3-compatible record format (JSON):
 - s3.object.metadata: not supported (an extension to the S3 notification API)
 - s3.object.tags: not supported (an extension to the S3 notification API)
 - s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
-- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the ropic (an extension to the S3 notification API)
+- s3.opaqueData: opaque data is set in the topic configuration and added to all notifications triggered by the topic (an extension to the S3 notification API)
 
 In case that the subscription was not created via a non S3-compatible notification, 
 the events will have the following event format (JSON):
