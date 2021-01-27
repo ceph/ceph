@@ -57,7 +57,10 @@ private:
    *                               VALIDATE DATA POOL           v (pool validation
    *                                     |                      .  disabled)
    *                                     v                      .
-   * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
+   *                               VALIDATE GROUP < . . . . . . .
+   *                                     |
+   *                                     v
+   * (error: bottom up)         ADD IMAGE TO DIRECTORY
    *  _______<_______                    |
    * |               |                   v
    * |               |            CREATE ID OBJECT
@@ -74,18 +77,21 @@ private:
    * |      REMOVE HEADER OBJ<------/    v                     /. (object-map
    * |               |\           OBJECT MAP RESIZE . . < . . * v  disabled)
    * |               | \              /  |  \ . . . . . > . . . .
-   * |               |  *<-----------/   v                     /. (journaling
+   * |               |  *<-----------/   v                     /. (group not
+   * |               |\          ADD IMAGE TO GROUP . . < . . * v  specified)
+   * |               | \              /  |  \ . . . . . > . . . .
+   * |      REMOVE OBJECT MAP<-------/   v                      . (journaling
    * |               |             FETCH MIRROR MODE. . < . . * v  disabled)
-   * |               |                /   |                     .
-   * |     REMOVE OBJECT MAP<--------/    v                     .
+   * |               |                /  |                      .
+   * |      REMOVE FROM GROUP <------/   v                      .
    * |               |\             JOURNAL CREATE              .
-   * |               | \               /  |                     .
-   * v               |  *<------------/   v                     .
-   * |               |           MIRROR IMAGE ENABLE            .
-   * |               |                /   |                     .
-   * |        JOURNAL REMOVE*<-------/    |                     .
-   * |                                    v                     .
-   * |_____________>___________________<finish> . . . . < . . . .
+   * |               | \              /  |                      .
+   * v               |  *<-----------/   v                      .
+   * |               |          MIRROR IMAGE ENABLE             .
+   * |               |               /   |                      .
+   * |        JOURNAL REMOVE*<------/    |                      .
+   * |                                   v                      .
+   * |_____________>__________________<finish>. . . . . < . . . .
    *
    * @endverbatim
    */
@@ -115,6 +121,10 @@ private:
   std::string m_journal_pool;
   std::string m_data_pool;
   int64_t m_data_pool_id = -1;
+  std::string m_group_name;
+  std::string m_group_id;
+  std::string m_group_pool;
+  IoCtx m_group_io_ctx;
   uint32_t m_create_flags;
   cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
@@ -136,6 +146,9 @@ private:
   void validate_data_pool();
   void handle_validate_data_pool(int r);
 
+  void validate_group();
+  void handle_validate_group(int r);
+
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
 
@@ -154,6 +167,9 @@ private:
   void object_map_resize();
   void handle_object_map_resize(int r);
 
+  void add_image_to_group();
+  void handle_add_image_to_group(int r);
+
   void fetch_mirror_mode();
   void handle_fetch_mirror_mode(int r);
 
@@ -168,6 +184,9 @@ private:
   // cleanup
   void journal_remove();
   void handle_journal_remove(int r);
+
+  void remove_image_from_group();
+  void handle_remove_image_from_group(int r);
 
   void remove_object_map();
   void handle_remove_object_map(int r);
