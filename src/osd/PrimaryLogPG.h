@@ -265,7 +265,8 @@ public:
     std::vector<ceph_tid_t> objecter_tids;
     int rval;
 
-    CLSGatherOp() {}
+    CLSGatherOp(OpContext *ctx_, ObjectContextRef obc_, OpRequestRef op_)
+      : ctx(ctx_), obc(obc_), op(op_) {}
     ~CLSGatherOp() {}
   };
   typedef std::shared_ptr<CLSGatherOp> CLSGatherOpRef;
