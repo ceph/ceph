@@ -5745,7 +5745,10 @@ class RGWGetBucketPeersCR : public RGWCoroutine {
   };
 
   std::shared_ptr<GetHintTargets> get_hint_targets_action;
+  std::set<rgw_bucket> hint_targets;
   std::set<rgw_bucket>::iterator hiter;
+
+  RGWBucketInfo hint_bucket_info;
 
 public:
   RGWGetBucketPeersCR(RGWDataSyncEnv *_sync_env,
@@ -6129,12 +6132,31 @@ int RGWGetBucketPeersCR::operate(const DoutPrefixProvider *dpp)
           return set_cr_error(retcode);
         }
 
+        for (hiter = get_hint_targets_action->targets.begin();
+             hiter != get_hint_targets_action->targets.end();
+             ++hiter) {
+          if (hiter->bucket_id.empty()) {
+            yield call(new RGWSyncGetBucketInfoCR(sync_env, 
+                                                  *hiter, 
+                                                  &hint_bucket_info,
+                                                  nullptr,
+                                                  tn));
+            if (retcode < 0) {
+              ldout(cct, 0) << "WARNING: failed to get info for target=" << *hiter << ": skipping" << dendl;
+              continue;
+            }
+            hint_targets.insert(hint_bucket_info.bucket);
+          } else {
+            hint_targets.insert(*hiter);
+          }
+        }
+
         /* hints might have incomplete bucket ids,
          * in which case we need to figure out the current
          * bucket_id
          */
-        for (hiter = get_hint_targets_action->targets.begin();
-             hiter != get_hint_targets_action->targets.end();
+        for (hiter = hint_targets.begin();
+             hiter != hint_targets.end();
              ++hiter) {
           ldpp_dout(dpp, 20) << "Got sync hint for bucket=" << *source_bucket << ": " << hiter->get_key() << dendl;
 
