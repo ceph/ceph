@@ -799,6 +799,75 @@ def ceph_iscsi(ctx, config):
     yield
 
 @contextlib.contextmanager
+def ceph_ha_rgw(ctx, config):
+    """
+    Deploy haproxy and keepaliveds
+    """
+    cluster_name = config['cluster']
+
+    nodes = []
+    daemons = {}
+    for remote, roles in ctx.cluster.remotes.items():
+        for role in [r for r in roles
+                    if teuthology.is_type('ha-rgw', cluster_name)(r)]:
+            c_, _, id_ = teuthology.split_role(role)
+            log.info('Adding %s on %s' % (role, remote.shortname))
+            nodes.append(remote.shortname + '=' + id_)
+            daemons[role] = (remote, id_)
+    if nodes:
+        # ha rgw can only be deployed using a spec file.
+        # create a sample spec file as a json object
+        ha_rgw_spec = {
+            "service_type": "ha-rgw",
+            "service_id": "haproxy_for_rgw",
+            "placement": str(len(nodes)) + ';' + ';'.join(nodes),
+            "spec": {
+                "virtual_ip_interface": "eth0",
+                "virtual_ip_address": "192.168.20.1/24",
+                "frontend_port": "8080",
+                "ha_proxy_port": "1967",
+                "ha_proxy_stats_enabled": "true",
+                "ha_proxy_stats_user": "admin",
+                "ha_proxy_stats_password": "admin",
+                "ha_proxy_enable_prometheus_exporter": "true",
+                "ha_proxy_monitor_uri": "/haproxy_health",
+                "keepalived_password": "admin",
+            },
+        }
+        ha_rgw_spec_json = json.dumps(ha_rgw_spec)
+
+        # need to get system prereqs correct on host(s) we want to deploy on
+        for role, i in daemons.items():
+            current_remote, id_ = i
+
+            # host must allow virtual ips for ha-rgw to work
+            # requires setting net.ipv4.ip_nonlocal_bind to 1
+            p = current_remote.run(args=['sudo', 'sysctl', '-n', 'net.ipv4.ip_nonlocal_bind'],
+                              wait=False, stdin=run.PIPE, stdout=StringIO())
+            if p.strip() != "1":
+                current_remote.run(args=['sudo', 'echo', '"net.ipv4.ip_nonlocal_bind=1"', '>>', "/etc/sysctl.conf"],
+                                  wait=False, stdin=run.PIPE, stdout=StringIO())
+                p = current_remote.run(args=['sudo', 'sysctl', '-n', 'net.ipv4.ip_nonlocal_bind'],
+                                  wait=False, stdin=run.PIPE, stdout=StringIO())
+            assert p.strip() == "1"
+
+            # host needs selinux in permissive mode
+            current_remote.run(args=['sudo', 'setenforce', '0'],
+                              wait=False, stdin=run.PIPE, stdout=StringIO())
+            p = current_remote.run(args=['sudo', 'getenforce'],
+                              wait=False, stdin=run.PIPE, stdout=StringIO())
+            assert p.strip() == "Permissive"
+
+        # actually apply spec and deploy daemons
+        # requires printing spec to a file first then using it in apply
+        _shell(ctx, cluster_name, remote, [
+            "echo", ha_rgw_spec_json, ">", "/tmp/ha-rgw-spec", ";",
+            "ceph", "orch", "apply", "-i", "/tmp/ha-rgw-spec"]
+        )
+
+    yield
+
+@contextlib.contextmanager
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
 
@@ -1241,6 +1310,7 @@ def task(ctx, config):
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: ceph_rgw(ctx=ctx, config=config),
+            lambda: ceph_ha_rgw(ctx=ctx, config=config),
             lambda: ceph_iscsi(ctx=ctx, config=config),
             lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),
             lambda: ceph_monitoring('node-exporter', ctx=ctx, config=config),

@@ -10,6 +10,7 @@ roles:
   - ceph.rgw.realm.zone.a
   - node-exporter.a
   - alertmanager.a
+  - ha-rgw.haproxy_for_rgw.a
 - - mon.b
   - mgr.x
   - osd.4
