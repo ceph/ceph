@@ -971,7 +971,10 @@ bool MDCache::export_dir_distributed(CDir *dir, MDSContext *fin)
   if (dest == mds->get_nodeid())
     return false;
 
-  int err = migrator->export_dir(dir, dest);
+  if (dir->get_num_any() && migrator->should_throttle())
+    return false;
+
+  int err = migrator->export_dir(dir, dest, false);
   if (err == 0 || err == -Migrator::ERR_EXPORT_INPROGRESS) {
     if (fin)
       dir->add_waiter(CDir::WAIT_EXPORTED, fin);
@@ -979,7 +982,7 @@ bool MDCache::export_dir_distributed(CDir *dir, MDSContext *fin)
   }
 
   if (fin) {
-    if (err == -Migrator::ERR_CLUSTER_DEGRADED) {
+    if (err == -Migrator::ERR_CLUSTER_DEGRADED && mds->is_active()) {
       mds->wait_for_cluster_recovered(fin);
       return true;
     }
@@ -1403,11 +1406,13 @@ void MDCache::get_subtree_bounds(CDir *dir, set<CDir*>& bounds)
   bounds = subtrees[dir];
 }
 
-void MDCache::get_wouldbe_subtree_bounds(CDir *dir, set<CDir*>& bounds)
+void MDCache::get_wouldbe_subtree_bound_inodes(CDir *dir, set<CInode*>& bound_inodes)
 {
-  if (subtrees.count(dir)) {
+  auto it = subtrees.find(dir);
+  if (it != subtrees.end()) {
     // just copy them, dir is a subtree.
-    get_subtree_bounds(dir, bounds);
+    for (auto& bound : it->second)
+      bound_inodes.insert(bound->inode);
   } else {
     // find them
     CDir *root = get_subtree_root(dir);
@@ -1419,7 +1424,7 @@ void MDCache::get_wouldbe_subtree_bounds(CDir *dir, set<CDir*>& bounds)
 	t = t->get_parent_dir();
 	ceph_assert(t);
 	if (t == dir) {
-	  bounds.insert(*p);
+	  bound_inodes.insert((*p)->inode);
 	  continue;
 	}
       }

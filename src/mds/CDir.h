@@ -514,6 +514,9 @@ public:
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
   bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
+  bool is_any_fetching() {
+    return state_test(CDir::STATE_FETCHING);
+  }
 
   int get_dir_rep() const { return dir_rep; }
   bool is_rep() const { 
@@ -580,7 +583,7 @@ public:
 
   void _walk_tree(std::function<bool(CDir*)> cb);
 
-  bool freeze_tree();
+  bool freeze_tree(bool recursive);
   void _freeze_tree();
   void unfreeze_tree();
   void adjust_freeze_after_rename(CDir *dir);

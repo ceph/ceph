@@ -1573,9 +1573,8 @@ void CDir::fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnab
   }
 
   if (!ignore_authpinnability &&
-      !state_test(CDir::STATE_FETCHING) &&
-      get_num_any() == 0 &&
-      mdcache->mds->is_active() &&
+      !is_any_fetching() &&
+      !inode->is_system() &&
       mdcache->export_dir_distributed(this, c)) {
     dout(7) << "distributing empty dirfrag, waiting" << dendl;
     return;
@@ -3089,7 +3088,7 @@ void CDir::_walk_tree(std::function<bool(CDir*)> callback)
   }
 }
 
-bool CDir::freeze_tree()
+bool CDir::freeze_tree(bool recursive)
 {
   ceph_assert(!is_frozen());
   ceph_assert(!is_freezing());
@@ -3106,18 +3105,20 @@ bool CDir::freeze_tree()
   if (!lock_caches_with_auth_pins.empty())
     mdcache->mds->locker->invalidate_lock_caches(this);
 
-  _walk_tree([this](CDir *dir) {
-      if (dir->freeze_tree_state)
-	return false;
-      if (dir->state_test(STATE_AUXBOUND) && dir != freeze_tree_state->dir)
-	return false;
-      dir->freeze_tree_state = freeze_tree_state;
-      freeze_tree_state->auth_pins += dir->get_auth_pins() + dir->get_dir_auth_pins();
-      if (!dir->lock_caches_with_auth_pins.empty())
-	mdcache->mds->locker->invalidate_lock_caches(dir);
-      return true;
-    }
-  );
+  if (recursive) {
+    _walk_tree([this](CDir *dir) {
+	if (dir->freeze_tree_state)
+	  return false;
+	if (dir->state_test(STATE_AUXBOUND) && dir != freeze_tree_state->dir)
+	  return false;
+	dir->freeze_tree_state = freeze_tree_state;
+	freeze_tree_state->auth_pins += dir->get_auth_pins() + dir->get_dir_auth_pins();
+	if (!dir->lock_caches_with_auth_pins.empty())
+	  mdcache->mds->locker->invalidate_lock_caches(dir);
+	return true;
+      }
+    );
+  }
 
   if (is_freezeable(true)) {
     _freeze_tree();

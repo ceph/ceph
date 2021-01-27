@@ -3694,14 +3694,14 @@ Server::rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn)
 }
 
 /**
- * try_open_auth_dirfrag -- open dirfrag, or forward to dirfrag auth
+ * try_get_complete_dirfrag -- open and fetch dirfrag, or forward to dirfrag auth
  *
  * @param diri base inode
  * @param fg the exact frag we want
  * @param mdr request
  * @returns the pointer, or NULL if it had to be delayed (but mdr is taken care of)
  */
-CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
+CDir* Server::try_get_complete_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
 {
   CDir *dir = diri->get_dirfrag(fg);
 
@@ -3709,8 +3709,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
     // am i auth for the dirfrag?
     if (!dir->is_auth()) {
       mds_rank_t auth = dir->authority().first;
-      dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
-	<< ", fw to mds." << auth << dendl;
+      dout(7) << __func__ << ": not auth for " << *dir << ", fw to mds." << auth << dendl;
       mdcache->request_forward(mdr, auth);
       return nullptr;
     }
@@ -3718,14 +3717,14 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
     // not open and inode not mine?
     if (!diri->is_auth()) {
       mds_rank_t inauth = diri->authority().first;
-      dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds." << inauth << dendl;
+      dout(7) << __func__ << ": not open, not inode auth, fw to mds." << inauth << dendl;
       mdcache->request_forward(mdr, inauth);
       return nullptr;
     }
 
     // not open and inode frozen?
     if (diri->is_frozen()) {
-      dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
+      dout(10) << __func__ << ": dir inode is frozen, waiting " << *diri << dendl;
       ceph_assert(diri->get_parent_dir());
       diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return nullptr;
@@ -3733,6 +3732,29 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
 
     // invent?
     dir = diri->get_or_open_dirfrag(mdcache, fg);
+  }
+
+  if (!dir->is_complete()) {
+    if (dir->is_frozen()) {
+      mds->locker->drop_locks(mdr.get());
+      mdr->drop_local_auth_pins();
+      dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+      return nullptr;
+    }
+
+    auto c =  new C_MDS_RetryRequest(mdcache, mdr);
+
+    if (!diri->is_system() &&
+	!dir->is_any_fetching() &&
+	mdcache->export_dir_distributed(dir, c)) {
+      dout(7) << "distributing dirfrag, waiting" << dendl;
+      mds->locker->drop_locks(mdr.get());
+      mdr->drop_local_auth_pins();
+      return nullptr;
+    }
+
+    dir->fetch(c, true);
+    return nullptr;
   }
 
   return dir;
@@ -4015,20 +4037,9 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
       return;
 
     frag_t frag = diri->dirfragtree[hash];
-    CDir *dir = try_open_auth_dirfrag(diri, frag, mdr);
+    CDir *dir = try_get_complete_dirfrag(diri, frag, mdr);
     if (!dir)
       return;
-
-    if (!dir->is_complete()) {
-      if (dir->is_frozen()) {
-	mds->locker->drop_locks(mdr.get());
-	mdr->drop_local_auth_pins();
-	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      }
-      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
-      return;
-    }
 
     respond_to_request(mdr, -CEPHFS_ESTALE);
     return;
@@ -4541,26 +4552,12 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     fg = newfg;
   }
   
-  CDir *dir = try_open_auth_dirfrag(diri, fg, mdr);
-  if (!dir) return;
+  CDir *dir = try_get_complete_dirfrag(diri, fg, mdr);
+  if (!dir)
+    return;
 
   // ok!
   dout(10) << "handle_client_readdir on " << *dir << dendl;
-  ceph_assert(dir->is_auth());
-
-  if (!dir->is_complete()) {
-    if (dir->is_frozen()) {
-      dout(7) << "dir is frozen " << *dir << dendl;
-      mds->locker->drop_locks(mdr.get());
-      mdr->drop_local_auth_pins();
-      dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
-    // fetch
-    dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << dendl;
-    dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
-    return;
-  }
 
 #ifdef MDS_VERIFY_FRAGSTAT
   dir->verify_fragstat();

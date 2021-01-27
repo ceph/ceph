@@ -211,19 +211,17 @@ public:
     ERR_EXPORT_INPROGRESS,
     ERR_FREEZING_OR_FROZEN,
   };
-  int export_dir(CDir *dir, mds_rank_t dest);
+  int export_dir(CDir *dir, mds_rank_t dest, bool recursive=true);
 
   void export_empty_import(CDir *dir);
   void export_dir_nicely(CDir *dir, mds_rank_t dest);
+  bool should_throttle() const;
   void maybe_do_queued_export();
   void clear_export_queue() {
     export_queue.clear();
     export_queue_gen++;
   }
   
-  void maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
-			  vector<pair<CDir*, size_t> >& results);
-
   bool export_try_grab_locks(CDir *dir, MutationRef& mut);
   void get_export_client_set(CDir *dir, std::set<client_t> &client_set);
   void get_export_client_set(CInode *in, std::set<client_t> &client_set);
@@ -310,6 +308,7 @@ protected:
   struct export_state_t {
     export_state_t() {}
     CDir *base = nullptr;
+    bool recursive = true;
 
     int state = 0;
     mds_rank_t peer = MDS_RANK_NONE;
@@ -364,6 +363,8 @@ protected:
   friend class C_MDS_ImportDirLoggedFinish;
   friend class C_M_LoggedImportCaps;
 
+  void maybe_split_export(const export_state_t &stat, uint64_t max_size,
+			  vector<pair<CDir*, size_t> >& results);
   void handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m);
   void export_frozen(dirfrag_t df, uint64_t tid);
   void handle_export_prep_ack(const cref_t<MExportDirPrepAck> &m);
@@ -428,7 +429,7 @@ protected:
   uint64_t total_exporting_size = 0;
   unsigned num_locking_exports = 0; // exports in locking state (approx_size == 0)
 
-  std::list<pair<dirfrag_t,mds_rank_t> >  export_queue;
+  std::deque<pair<dirfrag_t, mds_rank_t> >  export_queue;
   uint64_t export_queue_gen = 1;
 
   std::map<dirfrag_t, import_state_t>  import_state;
