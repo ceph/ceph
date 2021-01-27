@@ -123,7 +123,8 @@ namespace rgw {
 	RGWLibFS* fs = iter->first->ref();
 	uniq.unlock();
 	fs->gc();
-	fs->update_user();
+        const DoutPrefix dp(cct, dout_subsys, "librgw: ");
+	fs->update_user(&dp);
 	fs->rele();
 	uniq.lock();
 	if (cur_gen != gen)
@@ -460,14 +461,14 @@ namespace rgw {
   {
     RGWOp *op = (req->op) ? req->op : dynamic_cast<RGWOp*>(req);
     if (! op) {
-      dout(1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
+      ldpp_dout(op, 1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
       return -EINVAL;
     }
 
-    int ret = req->exec_finish();
+    int ret = req->exec_finish(op);
     int op_ret = op->get_ret();
 
-    dout(1) << "====== " << __func__
+    ldpp_dout(op, 1) << "====== " << __func__
 	    << " finishing continued request req=" << hex << req << dec
 	    << " op status=" << op_ret
 	    << " ======" << dendl;
@@ -537,7 +538,8 @@ namespace rgw {
       g_conf()->rgw_run_sync_thread &&
       g_conf()->rgw_nfs_run_sync_thread;
 
-    store = RGWStoreManager::get_storage(g_ceph_context,
+    const DoutPrefix dp(cct.get(), dout_subsys, "librgw: ");
+    store = RGWStoreManager::get_storage(&dp, g_ceph_context,
 					 run_gc,
 					 run_lc,
 					 run_quota,
@@ -656,7 +658,8 @@ namespace rgw {
 
   int RGWLibIO::set_uid(rgw::sal::RGWRadosStore *store, const rgw_user& uid)
   {
-    int ret = store->ctl()->user->get_info_by_uid(uid, &user_info, null_yield);
+    const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
+    int ret = store->ctl()->user->get_info_by_uid(&dp, uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
@@ -666,10 +669,11 @@ namespace rgw {
 
   int RGWLibRequest::read_permissions(RGWOp* op, optional_yield y) {
     /* bucket and object ops */
+    const DoutPrefix dp(store->ctx(), dout_subsys, "librgw: ");
     int ret =
-      rgw_build_bucket_policies(rgwlib.get_store(), get_state(), y);
+      rgw_build_bucket_policies(&dp, rgwlib.get_store(), get_state(), y);
     if (ret < 0) {
-      ldout(get_state()->cct, 10) << "read_permissions (bucket policy) on "
+      ldpp_dout(&dp, 10) << "read_permissions (bucket policy) on "
 				  << get_state()->bucket << ":"
 				  << get_state()->object
 				  << " only_bucket=" << only_bucket()
@@ -678,10 +682,10 @@ namespace rgw {
 	ret = -EACCES;
     } else if (! only_bucket()) {
       /* object ops */
-      ret = rgw_build_object_policies(rgwlib.get_store(), get_state(),
+      ret = rgw_build_object_policies(&dp, rgwlib.get_store(), get_state(),
 				      op->prefetch_data(), y);
       if (ret < 0) {
-	ldout(get_state()->cct, 10) << "read_permissions (object policy) on"
+	ldpp_dout(&dp, 10) << "read_permissions (object policy) on"
 				    << get_state()->bucket << ":"
 				    << get_state()->object
 				    << " ret=" << ret << dendl;

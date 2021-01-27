@@ -418,7 +418,8 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
+int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp, 
+                                              const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info)
 {
   bool new_sync_enabled = info.datasync_flag_enabled();
@@ -440,7 +441,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
     }
 
     for (int i = 0; i < shards_num; ++i, ++shard_id) {
-      ret = svc.datalog_rados->add_entry(info, shard_id);
+      ret = svc.datalog_rados->add_entry(dpp, info, shard_id);
       if (ret < 0) {
         lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
         return ret;

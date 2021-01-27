@@ -49,7 +49,8 @@ public:
                              real_time * const pmtime,
                              rgw_cache_entry_info * const cache_info,
                              map<string, bufferlist> * const pattrs,
-                             optional_yield y) = 0;
+                             optional_yield y,
+                             const DoutPrefixProvider *dpp) = 0;
 
   virtual int store_user_info(RGWSI_MetaBackend::Context *ctx,
                               const RGWUserInfo& info,
@@ -58,30 +59,35 @@ public:
                               const real_time& mtime,
                               bool exclusive,
                               map<string, bufferlist> *attrs,
-                              optional_yield y) = 0;
+                              optional_yield y,
+                              const DoutPrefixProvider *dpp) = 0;
 
   virtual int remove_user_info(RGWSI_MetaBackend::Context *ctx,
                                const RGWUserInfo& info,
                                RGWObjVersionTracker *objv_tracker,
-                               optional_yield y) = 0;
+                               optional_yield y,
+                               const DoutPrefixProvider *dpp) = 0;
 
   virtual int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                              const string& email, RGWUserInfo *info,
                              RGWObjVersionTracker *objv_tracker,
                              real_time *pmtime,
-                             optional_yield y) = 0;
+                             optional_yield y,
+                             const DoutPrefixProvider *dpp) = 0;
   virtual int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
                              const string& swift_name,
                              RGWUserInfo *info,        /* out */
                              RGWObjVersionTracker * const objv_tracker,
                              real_time * const pmtime,
-                             optional_yield y) = 0;
+                             optional_yield y,
+                             const DoutPrefixProvider *dpp) = 0;
   virtual int get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
                                   const std::string& access_key,
                                   RGWUserInfo *info,
                                   RGWObjVersionTracker* objv_tracker,
                                   real_time *pmtime,
-                                  optional_yield y) = 0;
+                                  optional_yield y,
+                                  const DoutPrefixProvider *dpp) = 0;
 
   virtual int add_bucket(RGWSI_MetaBackend::Context *ctx,
                          const rgw_user& user,

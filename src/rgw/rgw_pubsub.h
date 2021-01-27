@@ -694,8 +694,8 @@ public:
     
     static const int DEFAULT_MAX_EVENTS = 100;
     // followint virtual methods should only be called in derived
-    virtual int list_events(const string& marker, int max_events) {ceph_assert(false);}
-    virtual int remove_event(const string& event_id) {ceph_assert(false);}
+    virtual int list_events(const DoutPrefixProvider *dpp, const string& marker, int max_events) {ceph_assert(false);}
+    virtual int remove_event(const DoutPrefixProvider *dpp, const string& event_id) {ceph_assert(false);}
     virtual void dump(Formatter* f) const {ceph_assert(false);}
   };
 
@@ -715,8 +715,8 @@ public:
 
     virtual ~SubWithEvents() = default;
     
-    int list_events(const string& marker, int max_events) override;
-    int remove_event(const string& event_id) override;
+    int list_events(const DoutPrefixProvider *dpp, const string& marker, int max_events) override;
+    int remove_event(const DoutPrefixProvider *dpp, const string& event_id) override;
     void dump(Formatter* f) const override;
   };
 

@@ -463,7 +463,8 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 			 std::string_view& signature,            /* out */
 			 std::string_view& date,                 /* out */
 			 std::string_view& session_token,        /* out */
-			 const bool using_qs);                     /* in */
+			 const bool using_qs,                    /* in  */
+                         const DoutPrefixProvider *dpp);         /* in */
 
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
 {
@@ -593,20 +594,23 @@ get_v4_canon_req_hash(CephContext* cct,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
                       const std::string_view& signed_hdrs,
-                      const std::string_view& request_payload_hash);
+                      const std::string_view& request_payload_hash,
+                      const DoutPrefixProvider *dpp);
 
 AWSEngine::VersionAbstractor::string_to_sign_t
 get_v4_string_to_sign(CephContext* cct,
                       const std::string_view& algorithm,
                       const std::string_view& request_date,
                       const std::string_view& credential_scope,
-                      const sha256_digest_t& canonreq_hash);
+                      const sha256_digest_t& canonreq_hash,
+                      const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v4_signature(const std::string_view& credential_scope,
                  CephContext* const cct,
                  const std::string_view& secret_key,
-                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
+                 const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign,
+                 const DoutPrefixProvider *dpp);
 
 extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,

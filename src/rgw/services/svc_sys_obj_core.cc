@@ -53,14 +53,15 @@ int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
                                                  const rgw_raw_obj& obj,
                                                  RGWSysObjState **state,
                                                  RGWObjVersionTracker *objv_tracker,
-                                                 optional_yield y)
+                                                 optional_yield y,
+                                                 const DoutPrefixProvider *dpp)
 {
   if (obj.empty()) {
     return -EINVAL;
   }
 
   RGWSysObjState *s = rctx->get_state(obj);
-  ldout(cct, 20) << "get_system_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
+  ldpp_dout(dpp, 20) << "get_system_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
   if (s->has_attrs) {
     return 0;
@@ -83,11 +84,11 @@ int RGWSI_SysObj_Core::get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
   s->has_attrs = true;
   s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
 
-  if (s->obj_tag.length())
-    ldout(cct, 20) << "get_system_obj_state: setting s->obj_tag to "
-                   << s->obj_tag.c_str() << dendl;
-  else
-    ldout(cct, 20) << "get_system_obj_state: s->obj_tag was set empty" << dendl;
+  if (s->obj_tag.length()) {
+    ldpp_dout(dpp, 20) << "get_system_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
+  } else {
+    ldpp_dout(dpp, 20) << "get_system_obj_state: s->obj_tag was set empty" << dendl;
+  }
 
   return 0;
 }
@@ -96,12 +97,13 @@ int RGWSI_SysObj_Core::get_system_obj_state(RGWSysObjectCtxBase *rctx,
                                             const rgw_raw_obj& obj,
                                             RGWSysObjState **state,
                                             RGWObjVersionTracker *objv_tracker,
-                                            optional_yield y)
+                                            optional_yield y,
+                                            const DoutPrefixProvider *dpp)
 {
   int ret;
 
   do {
-    ret = get_system_obj_state_impl(rctx, obj, state, objv_tracker, y);
+    ret = get_system_obj_state_impl(rctx, obj, state, objv_tracker, y, dpp);
   } while (ret == -EAGAIN);
 
   return ret;
@@ -158,11 +160,12 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
                             real_time *lastmod,
                             uint64_t *obj_size,
                             RGWObjVersionTracker *objv_tracker,
-                            optional_yield y)
+                            optional_yield y,
+                            const DoutPrefixProvider *dpp)
 {
   RGWSysObjState *astate = nullptr;
 
-  int r = get_system_obj_state(&obj_ctx, obj, &astate, objv_tracker, y);
+  int r = get_system_obj_state(&obj_ctx, obj, &astate, objv_tracker, y, dpp);
   if (r < 0)
     return r;
 
@@ -179,7 +182,7 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       map<string, bufferlist>::iterator iter;
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
-        ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
+        ldpp_dout(dpp, 20) << "Read xattr: " << iter->first << dendl;
       }
     }
   }

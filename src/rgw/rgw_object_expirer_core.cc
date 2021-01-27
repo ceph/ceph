@@ -210,7 +210,7 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
 
 }
 
-int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
+int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
 
@@ -235,13 +235,14 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
 
   rgw_obj obj(bucket_info.bucket, key);
   store->getRados()->set_atomic(&rctx, obj);
-  ret = store->getRados()->delete_obj(rctx, bucket_info, obj,
+  ret = store->getRados()->delete_obj(dpp, rctx, bucket_info, obj,
           bucket_info.versioning_status(), 0, hint.exp_time);
 
   return ret;
 }
 
-void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /* in  */
+void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp, 
+                                  list<cls_timeindex_entry>& entries,      /* in  */
                                   bool& need_trim)                         /* out */
 {
   need_trim = false;
@@ -262,7 +263,7 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
 
     /* PRECOND_FAILED simply means that our hint is not valid.
      * We can silently ignore that and move forward. */
-    ret = garbage_single_object(hint);
+    ret = garbage_single_object(dpp, hint);
     if (ret == -ERR_PRECONDITION_FAILED) {
       ldout(store->ctx(), 15) << "not actual hint for object: " << hint.obj_key << dendl;
     } else if (ret < 0) {
@@ -296,7 +297,8 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
   return;
 }
 
-bool RGWObjectExpirer::process_single_shard(const string& shard,
+bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp, 
+                                            const string& shard,
                                             const utime_t& last_run,
                                             const utime_t& round_start)
 {
@@ -338,7 +340,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     }
 
     bool need_trim;
-    garbage_chunk(entries, need_trim);
+    garbage_chunk(dpp, entries, need_trim);
 
     if (need_trim) {
       trim_chunk(shard, last_run, round_start, marker, out_marker);
@@ -358,7 +360,8 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
 }
 
 /* Returns true if all shards have been processed successfully. */
-bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
+bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp, 
+                                          const utime_t& last_run,
                                           const utime_t& round_start)
 {
   CephContext * const cct = store->ctx();
@@ -371,7 +374,7 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
 
     ldout(store->ctx(), 20) << "processing shard = " << shard << dendl;
 
-    if (! process_single_shard(shard, last_run, round_start)) {
+    if (! process_single_shard(dpp, shard, last_run, round_start)) {
       all_done = false;
     }
   }
@@ -406,7 +409,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     ldout(cct, 2) << "object expiration: start" << dendl;
-    if (oe->inspect_all_shards(last_run, start)) {
+    if (oe->inspect_all_shards(this, last_run, start)) {
       /* All shards have been processed properly. Next time we can start
        * from this moment. */
       last_run = start;
@@ -439,3 +442,17 @@ void RGWObjectExpirer::OEWorker::stop()
   cond.notify_all();
 }
 
+CephContext *RGWObjectExpirer::OEWorker::get_cct() const 
+{ 
+  return cct; 
+}
+
+unsigned RGWObjectExpirer::OEWorker::get_subsys() const 
+{
+    return dout_subsys;
+}
+
+std::ostream& RGWObjectExpirer::OEWorker::gen_prefix(std::ostream& out) const 
+{ 
+  return out << "rgw object expirer Worker thread: "; 
+}

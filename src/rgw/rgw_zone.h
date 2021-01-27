@@ -138,7 +138,7 @@ public:
 			      bool old_format = false);
   virtual int set_as_default(optional_yield y, bool exclusive = false);
   int delete_default();
-  virtual int create(optional_yield y, bool exclusive = true);
+  virtual int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true);
   int delete_obj(optional_yield y, bool old_format = false);
   int rename(const std::string& new_name, optional_yield y);
   int update(optional_yield y) { return store_info(false, y);}
@@ -405,8 +405,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
   using RGWSystemMetaObj::init;
   int read_default_id(std::string& default_id, optional_yield y, bool old_format = false) override;
   int set_as_default(optional_yield y, bool exclusive = false) override;
-  int create_default(optional_yield y, bool old_format = false);
-  int create(optional_yield y, bool exclusive = true) override;
+  int create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format = false);
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true) override;
   int fix_pool_names(optional_yield y);
 
   const string& get_compression_type(const rgw_placement_rule& placement_rule) const;
@@ -814,7 +814,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   int read_default_id(std::string& default_id, optional_yield y, bool old_format = false) override;
   int set_as_default(optional_yield y, bool exclusive = false) override;
-  int create_default(optional_yield y, bool old_format = false);
+  int create_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format = false);
   int equals(const std::string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                const list<std::string>& endpoints, const std::string *ptier_type,
@@ -967,7 +967,7 @@ public:
     DECODE_FINISH(bl);
   }
 
-  int create(optional_yield y, bool exclusive = true) override;
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true) override;
   int delete_obj(optional_yield y);
   rgw_pool get_pool(CephContext *cct) const override;
   const std::string get_default_oid(bool old_format = false) const override;
@@ -1156,7 +1156,7 @@ public:
 	   const std::string &period_realm_name = "", bool setup_obj = true);
   int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y, bool setup_obj = true);  
 
-  int create(optional_yield y, bool exclusive = true);
+  int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true);
   int delete_obj(optional_yield y);
   int store_info(bool exclusive, optional_yield y);
   int add_zonegroup(const RGWZoneGroup& zonegroup, optional_yield y);
@@ -1165,7 +1165,8 @@ public:
   int update(optional_yield y);
 
   // commit a staging period; only for use on master zone
-  int commit(rgw::sal::RGWRadosStore *store,
+  int commit(const DoutPrefixProvider *dpp, 
+             rgw::sal::RGWRadosStore *store,
              RGWRealm& realm, const RGWPeriod &current_period,
              std::ostream& error_stream, optional_yield y,
 	     bool force_if_stale = false);

@@ -29,7 +29,8 @@ struct RadosEnv : public ::testing::Environment {
 
   void SetUp() override {
     rados.emplace(g_ceph_context);
-    ASSERT_EQ(0, rados->start(null_yield));
+    const NoDoutPrefix no_dpp(g_ceph_context, 1);
+    ASSERT_EQ(0, rados->start(null_yield, &no_dpp));
     int r = rados->pool({poolname}).create();
     if (r == -EEXIST)
       r = 0;

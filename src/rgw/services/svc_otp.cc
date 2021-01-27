@@ -60,7 +60,7 @@ void RGWSI_OTP::init(RGWSI_Zone *_zone_svc,
   svc.meta_be = _meta_be_svc;
 }
 
-int RGWSI_OTP::do_start(optional_yield)
+int RGWSI_OTP::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   /* create first backend handler for bucket entrypoints */
 
@@ -88,13 +88,13 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                         otp_devices_list_t *devices,
                         real_time *pmtime,
                         RGWObjVersionTracker *objv_tracker,
-                        optional_yield y)
+                        optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWSI_MBOTP_GetParams params;
   params.pdevices = devices;
   params.pmtime = pmtime;
 
-  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -107,14 +107,16 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                         otp_devices_list_t *devices,
                         real_time *pmtime,
                         RGWObjVersionTracker *objv_tracker,
-                        optional_yield y)
+                        optional_yield y,
+                        const DoutPrefixProvider *dpp)
 {
   return read_all(ctx,
                   uid.to_str(),
                   devices,
                   pmtime,
                   objv_tracker,
-                  y);
+                  y,
+                  dpp);
 }
 
 int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,

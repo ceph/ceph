@@ -29,7 +29,7 @@ namespace rgw {
     }
 
     s->info.args.set(p);
-    s->info.args.parse();
+    s->info.args.parse(s);
 
     if (*req_name != '/')
       return 0;

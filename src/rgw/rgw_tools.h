@@ -74,7 +74,7 @@ int rgw_parse_list_of_flags(struct rgw_name_to_flag *mapping,
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
 int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
@@ -177,7 +177,7 @@ public:
                                        name(_name),
 				       bucket_id(_bucket_id) {}
     Bucket(RGWDataAccess *_sd) : sd(_sd) {}
-    int init(optional_yield y);
+    int init(const DoutPrefixProvider *dpp, optional_yield y);
     int init(const RGWBucketInfo& _bucket_info, const map<string, bufferlist>& _attrs);
   public:
     int get_object(const rgw_obj_key& key,
@@ -232,13 +232,14 @@ public:
     friend class Bucket;
   };
 
-  int get_bucket(const string& tenant,
+  int get_bucket(const DoutPrefixProvider *dpp, 
+                 const string& tenant,
 		 const string name,
 		 const string bucket_id,
 		 BucketRef *bucket,
 		 optional_yield y) {
     bucket->reset(new Bucket(this, tenant, name, bucket_id));
-    return (*bucket)->init(y);
+    return (*bucket)->init(dpp, y);
   }
 
   int get_bucket(const RGWBucketInfo& bucket_info,
