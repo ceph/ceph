@@ -508,6 +508,9 @@ void RGWUserInfo::dump(Formatter *f) const
   case TYPE_LDAP:
     user_source_type = "ldap";
     break;
+  case TYPE_EXTERNAL_AUTHENTICATION:
+    user_source_type = "external_authentication";
+    break;
   case TYPE_NONE:
     user_source_type = "none";
     break;
@@ -586,6 +589,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
     type = TYPE_KEYSTONE;
   } else if (user_source_type == "ldap") {
     type = TYPE_LDAP;
+  } else if (user_source_type == "external_authentication") {
+    type = TYPE_EXTERNAL_AUTHENTICATION;
   } else if (user_source_type == "none") {
     type = TYPE_NONE;
   }
