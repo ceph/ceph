@@ -81,6 +81,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                         fsid='fsid',
                         container_id='container_id',
                         container_image_id='image_id',
+                        container_image_digests=['to_image@repo_digest'],
                         version='version',
                         state='running',
                     )
@@ -88,7 +89,12 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
             )):
                 CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
 
-            cephadm_module.upgrade._do_upgrade()
+            with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
+                'image_id': 'image_id',
+                'repo_digests': ['to_image@repo_digest'],
+                'ceph_version': 'ceph version 18.2.3 (hash)',
+            }))):
+                cephadm_module.upgrade._do_upgrade()
 
             _, image, _ = cephadm_module.check_mon_command({
                 'prefix': 'config get',
