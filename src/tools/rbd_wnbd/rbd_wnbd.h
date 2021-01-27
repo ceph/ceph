@@ -76,6 +76,9 @@ struct Config {
   int io_req_workers = DEFAULT_IO_WORKER_COUNT;
   int io_reply_workers = DEFAULT_IO_WORKER_COUNT;
   int service_thread_count = DEFAULT_SERVICE_THREAD_COUNT;
+
+  // register the mapping, recreating it when the Ceph service starts.
+  bool persistent = true;
 };
 
 enum Command {
