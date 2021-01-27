@@ -449,8 +449,8 @@ private:
           }
         }
 
-          ldout(cct, 20) << "l2_offset=" << l2_offset << ", "
-                         << "index=" << idx << dendl;
+        ldout(cct, 20) << "l2_offset=" << l2_offset << ", " << "index=" << idx
+                       << dendl;
         *l2_table = l2_cache.l2_table;
         return 0;
       }
@@ -1156,7 +1156,7 @@ void QCOWFormat<I>::handle_read_v2_header(int r, Context* on_finish) {
                  << "cluster_bits=" << m_cluster_bits << ", "
                  << "l1_table_offset=" << m_l1_table_offset << ", "
                  << "snapshot_count=" << m_snapshot_count << ", "
-                 << "snapshot_offset=" << m_snapshots_offset << dendl;
+                 << "snapshots_offset=" << m_snapshots_offset << dendl;
 
   // allocate memory for L1 table and L2 + cluster caches
   m_l2_table_cache = std::make_unique<L2TableCache>(this);
