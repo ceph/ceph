@@ -10108,10 +10108,7 @@ int PrimaryLogPG::cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> 
   ObjectContextRef obc = get_object_context(soid, false);
   C_GatherBuilder gather(cct);
 
-  CLSGatherOpRef cgop(std::make_shared<CLSGatherOp>());
-  cgop->ctx = ctx;
-  cgop->obc = obc;
-  cgop->op = op;
+  CLSGatherOpRef cgop(std::make_shared<CLSGatherOp>(ctx, obc, op));
   for (std::map<std::string, bufferlist*>::iterator it = src_objs->begin(); it != src_objs->end(); it++) {
     std::string oid = it->first;
     it->second = new bufferlist;
