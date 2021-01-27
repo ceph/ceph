@@ -235,6 +235,9 @@
 /* Define to 1 if you have sched.h. */
 #cmakedefine HAVE_SCHED 1
 
+/* Define to 1 if you have sigdescr_np. */
+#cmakedefine HAVE_SIGDESCR_NP 1
+
 /* Support SSE (Streaming SIMD Extensions) instructions */
 #cmakedefine HAVE_SSE
 
