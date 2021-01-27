@@ -290,7 +290,7 @@ static const char *get_acl_header(const RGWEnv *env,
   return env->get(header, NULL);
 }
 
-static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
+static int parse_grantee_str(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, string& grantee_str,
         const struct s3_acl_header *perm, ACLGrant& grant)
 {
   string id_type, id_val_quoted;
@@ -306,14 +306,14 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
   string id_val = rgw_trim_quotes(id_val_quoted);
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
-    ret = user_ctl->get_info_by_email(id_val, &info, null_yield);
+    ret = user_ctl->get_info_by_email(dpp, id_val, &info, null_yield);
     if (ret < 0)
       return ret;
 
     grant.set_canon(info.user_id, info.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
     rgw_user user(id_val);
-    ret = user_ctl->get_info_by_uid(user, &info, null_yield);
+    ret = user_ctl->get_info_by_uid(dpp, user, &info, null_yield);
     if (ret < 0)
       return ret;
 
@@ -331,7 +331,7 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
   return 0;
 }
 
-static int parse_acl_header(RGWUserCtl *user_ctl, const RGWEnv *env,
+static int parse_acl_header(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, const RGWEnv *env,
          const struct s3_acl_header *perm, std::list<ACLGrant>& _grants)
 {
   std::list<string> grantees;
@@ -346,7 +346,7 @@ static int parse_acl_header(RGWUserCtl *user_ctl, const RGWEnv *env,
 
   for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
     ACLGrant grant;
-    int ret = parse_grantee_str(user_ctl, *it, perm, grant);
+    int ret = parse_grantee_str(dpp, user_ctl, *it, perm, grant);
     if (ret < 0)
       return ret;
 
@@ -451,13 +451,13 @@ static const s3_acl_header acl_header_perms[] = {
   {0, NULL}
 };
 
-int RGWAccessControlPolicy_S3::create_from_headers(RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner)
+int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
   int r = 0;
 
   for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    r = parse_acl_header(user_ctl, env, p, grants);
+    r = parse_acl_header(dpp, user_ctl, env, p, grants);
     if (r < 0) {
       return r;
     }
@@ -474,7 +474,7 @@ int RGWAccessControlPolicy_S3::create_from_headers(RGWUserCtl *user_ctl, const R
 /*
   can only be called on object that was parsed
  */
-int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
+int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
                                        std::string &err_msg)
 {
   if (!owner)
@@ -488,7 +488,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
   }
 
   RGWUserInfo owner_info;
-  if (user_ctl->get_info_by_uid(owner->get_id(), &owner_info, null_yield) < 0) {
+  if (user_ctl->get_info_by_uid(dpp, owner->get_id(), &owner_info, null_yield) < 0) {
     ldout(cct, 10) << "owner info does not exist" << dendl;
     err_msg = "Invalid id";
     return -EINVAL;
@@ -522,7 +522,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
         }
         email = u.id;
         ldout(cct, 10) << "grant user email=" << email << dendl;
-        if (user_ctl->get_info_by_email(email, &grant_user, null_yield) < 0) {
+        if (user_ctl->get_info_by_email(dpp, email, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user email not found or other error" << dendl;
           err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
@@ -539,7 +539,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
           }
         }
     
-        if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(uid, &grant_user, null_yield) < 0) {
+        if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(dpp, uid, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           err_msg = "Invalid id";
           return -EINVAL;

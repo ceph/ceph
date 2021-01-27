@@ -38,7 +38,7 @@ int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysO
   return 0;
 }
 
-int RGWSI_MDLog::do_start(optional_yield y)
+int RGWSI_MDLog::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   auto& current_period = svc.zone->get_current_period();
 
@@ -51,20 +51,21 @@ int RGWSI_MDLog::do_start(optional_yield y)
   if (run_sync &&
       svc.zone->need_to_sync()) {
     // initialize the log period history
-    svc.mdlog->init_oldest_log_period(y);
+    svc.mdlog->init_oldest_log_period(y, dpp);
   }
   return 0;
 }
 
 int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
                               RGWObjVersionTracker *objv_tracker,
-			      optional_yield y) const
+			      optional_yield y,
+                              const DoutPrefixProvider *dpp) const
 {
   auto obj_ctx = svc.sysobj->init_obj_ctx();
   auto& pool = svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr, y);
+  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -277,16 +278,16 @@ Cursor RGWSI_MDLog::find_oldest_period(optional_yield y)
   return cursor;
 }
 
-Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
+Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp)
 {
   // read the mdlog history
   RGWMetadataLogHistory state;
   RGWObjVersionTracker objv;
-  int ret = read_history(&state, &objv, y);
+  int ret = read_history(&state, &objv, y, dpp);
 
   if (ret == -ENOENT) {
     // initialize the mdlog history and write it
-    ldout(cct, 10) << "initializing mdlog history" << dendl;
+    ldpp_dout(dpp, 10) << "initializing mdlog history" << dendl;
     auto cursor = find_oldest_period(y);
     if (!cursor) {
       return cursor;
@@ -298,13 +299,13 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
     constexpr bool exclusive = true; // don't overwrite
     int ret = write_history(state, &objv, y, exclusive);
     if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 1) << "failed to write mdlog history: "
+      ldpp_dout(dpp, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;
       return Cursor{ret};
     }
     return cursor;
   } else if (ret < 0) {
-    ldout(cct, 1) << "failed to read mdlog history: "
+    ldpp_dout(dpp, 1) << "failed to read mdlog history: "
         << cpp_strerror(ret) << dendl;
     return Cursor{ret};
   }
@@ -346,17 +347,17 @@ Cursor RGWSI_MDLog::init_oldest_log_period(optional_yield y)
   return period_history->attach(std::move(period), y);
 }
 
-Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y) const
+Cursor RGWSI_MDLog::read_oldest_log_period(optional_yield y, const DoutPrefixProvider *dpp) const
 {
   RGWMetadataLogHistory state;
-  int ret = read_history(&state, nullptr, y);
+  int ret = read_history(&state, nullptr, y, dpp);
   if (ret < 0) {
-    ldout(cct, 1) << "failed to read mdlog history: "
+    ldpp_dout(dpp, 1) << "failed to read mdlog history: "
         << cpp_strerror(ret) << dendl;
     return Cursor{ret};
   }
 
-  ldout(cct, 10) << "read mdlog history with oldest period id="
+  ldpp_dout(dpp, 10) << "read mdlog history with oldest period id="
       << state.oldest_period_id << " realm_epoch="
       << state.oldest_realm_epoch << dendl;
 

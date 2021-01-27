@@ -22,7 +22,7 @@ public:
 
 class TestRGWUser : public sal::RGWUser {
 public:
-  virtual int list_buckets(const string&, const string&, uint64_t, bool, sal::RGWBucketList&, optional_yield y) override {
+  virtual int list_buckets(const DoutPrefixProvider *dpp, const string&, const string&, uint64_t, bool, sal::RGWBucketList&, optional_yield y) override {
     return 0;
   }
 
@@ -30,7 +30,7 @@ public:
     return nullptr;
   }
 
-  virtual int load_by_id(optional_yield y) override {
+  virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 

@@ -17,11 +17,11 @@
 
 static string log_lock_name = "rgw_log_lock";
 
-int RGWSI_Cls::do_start(optional_yield y)
+int RGWSI_Cls::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
-  int r = mfa.do_start(y);
+  int r = mfa.do_start(y, dpp);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start mfa service" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to start mfa service" << dendl;
     return r;
   }
 

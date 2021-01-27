@@ -281,7 +281,7 @@ static void dump_status(struct req_state *s, int status,
   try {
     RESTFUL_IO(s)->send_status(status, status_name);
   } catch (rgw::io::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err="
+    ldpp_dout(s, 0) << "ERROR: s->cio->send_status() returned err="
                      << e.what() << dendl;
   }
 }
@@ -337,7 +337,7 @@ void dump_header(struct req_state* const s,
   try {
     RESTFUL_IO(s)->send_header(name, val);
   } catch (rgw::io::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: s->cio->send_header() returned err="
+    ldpp_dout(s, 0) << "ERROR: s->cio->send_header() returned err="
                      << e.what() << dendl;
   }
 }
@@ -376,7 +376,7 @@ void dump_content_length(struct req_state* const s, const uint64_t len)
   try {
     RESTFUL_IO(s)->send_content_length(len);
   } catch (rgw::io::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: s->cio->send_content_length() returned err="
+    ldpp_dout(s, 0) << "ERROR: s->cio->send_content_length() returned err="
                      << e.what() << dendl;
   }
   dump_header(s, "Accept-Ranges", "bytes");
@@ -387,7 +387,7 @@ static void dump_chunked_encoding(struct req_state* const s)
   try {
     RESTFUL_IO(s)->send_chunked_transfer_encoding();
   } catch (rgw::io::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->send_chunked_transfer_encoding()"
+    ldpp_dout(s, 0) << "ERROR: RESTFUL_IO(s)->send_chunked_transfer_encoding()"
                      << " returned err=" << e.what() << dendl;
   }
 }
@@ -623,7 +623,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   try {
     RESTFUL_IO(s)->complete_header();
   } catch (rgw::io::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->complete_header() returned err="
+    ldpp_dout(s, 0) << "ERROR: RESTFUL_IO(s)->complete_header() returned err="
 		     << e.what() << dendl;
   }
 
@@ -661,13 +661,13 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
   if (op != NULL) {
     int new_err_no;
     new_err_no = op->error_handler(err_no, &error_content, y);
-    ldout(s->cct, 1) << "op->ERRORHANDLER: err_no=" << err_no
+    ldpp_dout(s, 1) << "op->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   } else if (handler != NULL) {
     int new_err_no;
     new_err_no = handler->error_handler(err_no, &error_content, y);
-    ldout(s->cct, 1) << "handler->ERRORHANDLER: err_no=" << err_no
+    ldpp_dout(s, 1) << "handler->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   }
@@ -724,7 +724,7 @@ void dump_continue(struct req_state * const s)
   try {
     RESTFUL_IO(s)->send_100_continue();
   } catch (rgw::io::Exception& e) {
-    ldout(s->cct, 0) << "ERROR: RESTFUL_IO(s)->send_100_continue() returned err="
+    ldpp_dout(s, 0) << "ERROR: RESTFUL_IO(s)->send_100_continue() returned err="
 		     << e.what() << dendl;
   }
 }
@@ -1018,7 +1018,7 @@ int RGWPutObj_ObjStore::get_params(optional_yield y)
   {
     int ret = 0;
     ret = torrent.get_params();
-    ldout(s->cct, 5) << "NOTICE:  open produce torrent file " << dendl;
+    ldpp_dout(s, 5) << "NOTICE:  open produce torrent file " << dendl;
     if (ret < 0)
     {
       return ret;
@@ -1410,12 +1410,12 @@ int RGWPostObj_ObjStore::get_params(optional_yield y)
   }
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-    ldout(s->cct, 20) << "request content_type_str="
+    ldpp_dout(s, 20) << "request content_type_str="
 		      << req_content_type_str << dendl;
-    ldout(s->cct, 20) << "request content_type params:" << dendl;
+    ldpp_dout(s, 20) << "request content_type params:" << dendl;
 
     for (const auto& pair : params) {
-      ldout(s->cct, 20) << " " << pair.first << " -> " << pair.second
+      ldpp_dout(s, 20) << " " << pair.first << " -> " << pair.second
 			<< dendl;
     }
   }
@@ -1438,7 +1438,7 @@ int RGWPutACLs_ObjStore::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
-  ldout(s->cct, 0) << "RGWPutACLs_ObjStore::get_params read data is: " << data.c_str() << dendl;
+  ldpp_dout(s, 0) << "RGWPutACLs_ObjStore::get_params read data is: " << data.c_str() << dendl;
   return op_ret;
 }
 
@@ -1574,7 +1574,7 @@ int RGWListMultipart_ObjStore::get_params(optional_yield y)
     string err;
     marker = strict_strtol(marker_str.c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(s->cct, 20) << "bad marker: "  << marker << dendl;
+      ldpp_dout(s, 20) << "bad marker: "  << marker << dendl;
       op_ret = -EINVAL;
       return op_ret;
     }
@@ -1850,7 +1850,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
     if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
         map<string, bufferlist> uattrs;
-        if (auto ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &uattrs, y); ! ret) {
+        if (auto ret = store->ctl()->user->get_attrs_by_uid(s, s->user->get_id(), &uattrs, y); ! ret) {
           auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());
           s->iam_user_policies.insert(s->iam_user_policies.end(),
                                       std::make_move_iterator(user_policies.begin()),
@@ -1865,7 +1865,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
     return 0;
   }
 
-  return do_init_permissions(y);
+  return do_init_permissions(op, y);
 }
 
 int RGWHandler_REST::read_permissions(RGWOp* op_obj, optional_yield y)
@@ -2037,7 +2037,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   if (api_s3website_priority_rawpos != apis.end()) {
     api_priority_s3website = apis.size() - std::distance(apis.begin(), api_s3website_priority_rawpos);
   }
-  ldout(s->cct, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
+  ldpp_dout(s, 10) << "rgw api priority: s3=" << api_priority_s3 << " s3website=" << api_priority_s3website << dendl;
   bool s3website_enabled = api_priority_s3website >= 0;
 
   if (info.host.size()) {
@@ -2053,7 +2053,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
         info.host = info.host.substr(0, pos);
       }
     }
-    ldout(s->cct, 10) << "host=" << info.host << dendl;
+    ldpp_dout(s, 10) << "host=" << info.host << dendl;
     string domain;
     string subdomain;
     bool in_hosted_domain_s3website = false;
@@ -2071,7 +2071,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       }
     }
 
-    ldout(s->cct, 20)
+    ldpp_dout(s, 20)
       << "subdomain=" << subdomain 
       << " domain=" << domain 
       << " in_hosted_domain=" << in_hosted_domain 
@@ -2085,13 +2085,13 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       bool found;
       int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
-	ldout(s->cct, 0)
+	ldpp_dout(s, 0)
 	  << "WARNING: rgw_resolver->resolve_cname() returned r=" << r
 	  << dendl;
       }
 
       if (found) {
-	ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
+	ldpp_dout(s, 5) << "resolved host cname " << info.host << " -> "
 			 << cname << dendl;
 	in_hosted_domain =
 	  rgw_find_host_in_domains(cname, &domain, &subdomain, hostnames_set);
@@ -2110,7 +2110,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
 	  }
         }
 
-        ldout(s->cct, 20)
+        ldpp_dout(s, 20)
           << "subdomain=" << subdomain 
           << " domain=" << domain 
           << " in_hosted_domain=" << in_hosted_domain 
@@ -2159,7 +2159,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       s->info.domain = domain;
     }
 
-    ldout(s->cct, 20)
+    ldpp_dout(s, 20)
       << "final domain/bucket"
       << " subdomain=" << subdomain
       << " domain=" << domain
@@ -2239,14 +2239,14 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       string err;
       s->content_length = strict_strtoll(s->length, 10, &err);
       if (!err.empty()) {
-	ldout(s->cct, 10) << "bad content length, aborting" << dendl;
+	ldpp_dout(s, 10) << "bad content length, aborting" << dendl;
 	return -EINVAL;
       }
     }
   }
 
   if (s->content_length < 0) {
-    ldout(s->cct, 10) << "negative content length, aborting" << dendl;
+    ldpp_dout(s, 10) << "negative content length, aborting" << dendl;
     return -EINVAL;
   }
 
@@ -2265,7 +2265,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   }
   s->op = op_from_method(info.method);
 
-  info.init_meta_info(&s->has_bad_meta);
+  info.init_meta_info(s, &s->has_bad_meta);
 
   return 0;
 }

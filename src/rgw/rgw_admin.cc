@@ -78,7 +78,7 @@ static rgw::sal::RGWRadosStore *store = NULL;
 
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {
-    CephContext *get_cct() const override { return store->ctx(); }
+    CephContext *get_cct() const override { return dout_context; }
     unsigned get_subsys() const override { return dout_subsys; }
     std::ostream& gen_prefix(std::ostream& out) const override { return out; }
   };
@@ -1122,10 +1122,10 @@ static int init_bucket(const string& tenant_name,
     auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
     int r;
     if (bucket_id.empty()) {
-      r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, nullptr, null_yield, pattrs);
+      r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, nullptr, null_yield, dpp(), pattrs);
     } else {
       string bucket_instance_id = bucket_name + ":" + bucket_id;
-      r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs, null_yield);
+      r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs, null_yield, dpp());
     }
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
@@ -1298,7 +1298,7 @@ int set_bucket_quota(rgw::sal::RGWRadosStore *store, OPT opt_cmd,
 {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  int r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
+  int r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, null_yield, dpp(), &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1306,7 +1306,7 @@ int set_bucket_quota(rgw::sal::RGWRadosStore *store, OPT opt_cmd,
 
   set_quota_info(bucket_info.quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-   r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
+   r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &attrs, dpp());
   if (r < 0) {
     cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1324,7 +1324,7 @@ int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
   op_state.set_bucket_quota(user_info.bucket_quota);
 
   string err;
-  int r = user.modify(op_state, null_yield, &err);
+  int r = user.modify(dpp(), op_state, null_yield, &err);
   if (r < 0) {
     cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
     return -r;
@@ -1342,7 +1342,7 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   op_state.set_user_quota(user_info.user_quota);
 
   string err;
-  int r = user.modify(op_state, null_yield, &err);
+  int r = user.modify(dpp(), op_state, null_yield, &err);
   if (r < 0) {
     cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
     return -r;
@@ -1353,7 +1353,7 @@ int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
 int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info, rgw::sal::RGWObject* obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
   RGWObjectCtx obj_ctx(store);
-  int ret = obj->get_obj_attrs(&obj_ctx, null_yield);
+  int ret = obj->get_obj_attrs(&obj_ctx, null_yield, dpp());
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1415,7 +1415,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
-  int ret = read_op.prepare(null_yield);
+  int ret = read_op.prepare(null_yield, dpp());
   bool needs_fixing = (ret == -ENOENT);
 
   f->dump_bool("needs_fixing", needs_fixing);
@@ -1450,7 +1450,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, 
   bool needs_fixing;
   string status;
 
-  int ret = store->getRados()->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing, null_yield);
+  int ret = store->getRados()->fix_tail_obj_locator(dpp(), bucket_info, key, fix, &needs_fixing, null_yield);
   if (ret < 0) {
     cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
     status = "failed";
@@ -1510,7 +1510,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   f->open_array_section("check_objects");
   do {
-    ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated, null_yield);
+    ret = list_op.list_objects(dpp(), max_entries - count, &result, &common_prefixes, &truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1661,7 +1661,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
       return ret;
     }
     // the master zone can commit locally
-    ret = period.commit(store, realm, current_period, cerr, null_yield, force);
+    ret = period.commit(dpp(), store, realm, current_period, cerr, null_yield, force);
     if (ret < 0) {
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
     }
@@ -2467,7 +2467,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
     auto& hint_bucket = *hint_entity.bucket;
 
     RGWBucketSyncPolicyHandlerRef hint_bucket_handler;
-    int r = store->ctl()->bucket->get_sync_policy_handler(zid, hint_bucket, &hint_bucket_handler, null_yield);
+    int r = store->ctl()->bucket->get_sync_policy_handler(zid, hint_bucket, &hint_bucket_handler, null_yield, dpp());
     if (r < 0) {
       ldout(store->ctx(), 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
       continue;
@@ -2518,14 +2518,14 @@ static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo&
   out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
   out << indented{width, "bucket"} << info.bucket << "\n\n";
 
-  if (!store->ctl()->bucket->bucket_imports_data(info.bucket, null_yield)) {
+  if (!store->ctl()->bucket->bucket_imports_data(info.bucket, null_yield, dpp())) {
     out << "Sync is disabled for bucket " << info.bucket.name << '\n';
     return 0;
   }
 
   RGWBucketSyncPolicyHandlerRef handler;
 
-  int r = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, info.bucket, &handler, null_yield);
+  int r = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, info.bucket, &handler, null_yield, dpp());
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
     return r;
@@ -2559,14 +2559,14 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
   out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
   out << indented{width, "bucket"} << info.bucket << "\n\n";
 
-  if (!store->ctl()->bucket->bucket_imports_data(info.bucket, null_yield)) {
+  if (!store->ctl()->bucket->bucket_imports_data(info.bucket, null_yield, dpp())) {
     out << "Sync is disabled for bucket " << info.bucket.name << " or bucket has no sync sources" << std::endl;
     return 0;
   }
 
   RGWBucketSyncPolicyHandlerRef handler;
 
-  int r = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, info.bucket, &handler, null_yield);
+  int r = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, info.bucket, &handler, null_yield, dpp());
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
     return r;
@@ -2917,7 +2917,7 @@ public:
       return 0;
     }
 
-    int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs);
+    int ret = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs, dpp());
     if (ret < 0) {
       cerr << "failed to store bucket info: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3877,9 +3877,9 @@ int main(int argc, const char **argv)
   bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
 
   if (raw_storage_op) {
-    store = RGWStoreManager::get_raw_storage(g_ceph_context);
+    store = RGWStoreManager::get_raw_storage(dpp(), g_ceph_context);
   } else {
-    store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false,
+    store = RGWStoreManager::get_storage(dpp(), g_ceph_context, false, false, false, false, false,
       need_cache && g_conf()->rgw_cache_enabled);
   }
   if (!store) {
@@ -4125,7 +4125,7 @@ int main(int argc, const char **argv)
 	}
 
 	RGWRealm realm(realm_name, g_ceph_context, store->svc()->sysobj);
-	int ret = realm.create(null_yield);
+	int ret = realm.create(dpp(), null_yield);
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't create realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4288,7 +4288,7 @@ int main(int argc, const char **argv)
 	if (new_realm) {
 	  cout << "clearing period and epoch for new realm" << std::endl;
 	  realm.clear_current_period_and_epoch();
-	  ret = realm.create(null_yield);
+	  ret = realm.create(dpp(), null_yield);
 	  if (ret < 0) {
 	    cerr << "ERROR: couldn't create new realm: " << cpp_strerror(-ret) << std::endl;
 	    return 1;
@@ -4376,7 +4376,7 @@ int main(int argc, const char **argv)
             return -ret;
           }
         }
-        ret = realm.create(null_yield, false);
+        ret = realm.create(dpp(), null_yield, false);
         if (ret < 0 && ret != -EEXIST) {
           cerr << "Error storing realm " << realm.get_id() << ": "
             << cpp_strerror(ret) << std::endl;
@@ -4476,7 +4476,7 @@ int main(int argc, const char **argv)
 
 	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store->svc()->sysobj, realm.get_id(), endpoints);
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
-	ret = zonegroup.create(null_yield);
+	ret = zonegroup.create(dpp(), null_yield);
 	if (ret < 0) {
 	  cerr << "failed to create zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4671,7 +4671,7 @@ int main(int argc, const char **argv)
 	if (zonegroup.realm_id.empty() && !default_realm_not_exist) {
 	  zonegroup.realm_id = realm.get_id();
 	}
-	ret = zonegroup.create(null_yield);
+	ret = zonegroup.create(dpp(), null_yield);
 	if (ret < 0 && ret != -EEXIST) {
 	  cerr << "ERROR: couldn't create zonegroup info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
@@ -4906,7 +4906,7 @@ int main(int argc, const char **argv)
           }
         }
 
-	ret = zone.create(null_yield);
+	ret = zone.create(dpp(), null_yield);
 	if (ret < 0) {
 	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -5542,7 +5542,7 @@ int main(int argc, const char **argv)
   RGWUser user;
   int ret = 0;
   if (!(user_id.empty() && access_key.empty()) || !subuser.empty()) {
-    ret = user.init(store, user_op, null_yield);
+    ret = user.init(dpp(), store, user_op, null_yield);
     if (ret < 0) {
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5573,7 +5573,7 @@ int main(int argc, const char **argv)
     if (!user_op.has_existing_user()) {
       user_op.set_generate_key(); // generate a new key by default
     }
-    ret = user.add(user_op, null_yield, &err_msg);
+    ret = user.add(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not create user: " << err_msg << std::endl;
       if (ret == -ERR_INVALID_TENANT_NAME)
@@ -5582,7 +5582,7 @@ int main(int argc, const char **argv)
       return -ret;
     }
     if (!subuser.empty()) {
-      ret = user.subusers.add(user_op, null_yield, &err_msg);
+      ret = user.subusers.add(dpp(), user_op, null_yield, &err_msg);
       if (ret < 0) {
         cerr << "could not create subuser: " << err_msg << std::endl;
         return -ret;
@@ -5590,7 +5590,7 @@ int main(int argc, const char **argv)
     }
     break;
   case OPT::USER_RM:
-    ret = user.remove(user_op, null_yield, &err_msg);
+    ret = user.remove(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
       return -ret;
@@ -5602,7 +5602,7 @@ int main(int argc, const char **argv)
     if (yes_i_really_mean_it) {
       user_op.set_overwrite_new_user(true);
     }
-    ret = user.rename(user_op, null_yield, &err_msg);
+    ret = user.rename(user_op, null_yield, dpp(), &err_msg);
     if (ret < 0) {
       if (ret == -EEXIST) {
         err_msg += ". to overwrite this user, add --yes-i-really-mean-it";
@@ -5615,7 +5615,7 @@ int main(int argc, const char **argv)
   case OPT::USER_ENABLE:
   case OPT::USER_SUSPEND:
   case OPT::USER_MODIFY:
-    ret = user.modify(user_op, null_yield, &err_msg);
+    ret = user.modify(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not modify user: " << err_msg << std::endl;
       return -ret;
@@ -5623,7 +5623,7 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::SUBUSER_CREATE:
-    ret = user.subusers.add(user_op, null_yield, &err_msg);
+    ret = user.subusers.add(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not create subuser: " << err_msg << std::endl;
       return -ret;
@@ -5631,7 +5631,7 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::SUBUSER_MODIFY:
-    ret = user.subusers.modify(user_op, null_yield, &err_msg);
+    ret = user.subusers.modify(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not modify subuser: " << err_msg << std::endl;
       return -ret;
@@ -5639,7 +5639,7 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::SUBUSER_RM:
-    ret = user.subusers.remove(user_op, null_yield, &err_msg);
+    ret = user.subusers.remove(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not remove subuser: " << err_msg << std::endl;
       return -ret;
@@ -5647,7 +5647,7 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::CAPS_ADD:
-    ret = user.caps.add(user_op, null_yield, &err_msg);
+    ret = user.caps.add(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not add caps: " << err_msg << std::endl;
       return -ret;
@@ -5655,7 +5655,7 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::CAPS_RM:
-    ret = user.caps.remove(user_op, null_yield, &err_msg);
+    ret = user.caps.remove(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not remove caps: " << err_msg << std::endl;
       return -ret;
@@ -5663,7 +5663,7 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::KEY_CREATE:
-    ret = user.keys.add(user_op, null_yield, &err_msg);
+    ret = user.keys.add(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not create key: " << err_msg << std::endl;
       return -ret;
@@ -5671,7 +5671,7 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::KEY_RM:
-    ret = user.keys.remove(user_op, null_yield, &err_msg);
+    ret = user.keys.remove(dpp(), user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not remove key: " << err_msg << std::endl;
       return -ret;
@@ -5771,7 +5771,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, path, assume_role_doc, tenant);
-      ret = role.create(true, null_yield);
+      ret = role.create(dpp(), true, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5785,7 +5785,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.delete_obj(null_yield);
+      ret = role.delete_obj(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5799,7 +5799,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get(null_yield);
+      ret = role.get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5827,7 +5827,7 @@ int main(int argc, const char **argv)
       }
 
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get(null_yield);
+      ret = role.get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5842,7 +5842,7 @@ int main(int argc, const char **argv)
   case OPT::ROLE_LIST:
     {
       vector<RGWRole> result;
-      ret = RGWRole::get_roles_by_path_prefix(store->getRados(), g_ceph_context, path_prefix, tenant, result, null_yield);
+      ret = RGWRole::get_roles_by_path_prefix(dpp(), store->getRados(), g_ceph_context, path_prefix, tenant, result, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5875,7 +5875,7 @@ int main(int argc, const char **argv)
       }
 
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get(null_yield);
+      ret = role.get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5894,7 +5894,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get(null_yield);
+      ret = role.get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5914,7 +5914,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      int ret = role.get(null_yield);
+      int ret = role.get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5938,7 +5938,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store->getRados()->pctl, role_name, tenant);
-      ret = role.get(null_yield);
+      ret = role.get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -5970,13 +5970,13 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT::POLICY) {
     if (format == "xml") {
-      int ret = RGWBucketAdminOp::dump_s3_policy(store, bucket_op, cout);
+      int ret = RGWBucketAdminOp::dump_s3_policy(store, bucket_op, cout, dpp());
       if (ret < 0) {
         cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
     } else {
-      int ret = RGWBucketAdminOp::get_policy(store, bucket_op, f);
+      int ret = RGWBucketAdminOp::get_policy(store, bucket_op, f, dpp());
       if (ret < 0) {
         cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -5996,7 +5996,7 @@ int main(int argc, const char **argv)
       user_ids.push_back(user_id.id);
       ret =
 	RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, f,
-				      null_yield, warnings_only);
+				      null_yield, dpp(), warnings_only);
     } else {
       /* list users in groups of max-keys, then perform user-bucket
        * limit-check on each group */
@@ -6018,7 +6018,7 @@ int main(int argc, const char **argv)
 	  /* ok, do the limit checks for this group */
 	  ret =
 	    RGWBucketAdminOp::limit_check(store, bucket_op, user_ids, f,
-					  null_yield, warnings_only);
+					  null_yield, dpp(), warnings_only);
 	  if (ret < 0)
 	    break;
 	}
@@ -6037,7 +6037,7 @@ int main(int argc, const char **argv)
           return -ENOENT;
         }
       }
-      RGWBucketAdminOp::info(store, bucket_op, f, null_yield);
+      RGWBucketAdminOp::info(store, bucket_op, f, null_yield, dpp());
     } else {
       RGWBucketInfo bucket_info;
       int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
@@ -6077,7 +6077,7 @@ int main(int argc, const char **argv)
 
       do {
         const int remaining = max_entries - count;
-        ret = list_op.list_objects(std::min(remaining, paginate_size),
+        ret = list_op.list_objects(dpp(), std::min(remaining, paginate_size),
 				   &result, &common_prefixes, &truncated,
 				   null_yield);
         if (ret < 0) {
@@ -6102,9 +6102,9 @@ int main(int argc, const char **argv)
     RGWRadosList lister(store,
 			max_concurrent_ios, orphan_stale_secs, tenant);
     if (bucket_name.empty()) {
-      ret = lister.run();
+      ret = lister.run(dpp());
     } else {
-      ret = lister.run(bucket_name);
+      ret = lister.run(dpp(), bucket_name);
     }
 
     if (ret < 0) {
@@ -6133,7 +6133,7 @@ int main(int argc, const char **argv)
     }
     bucket_op.set_fetch_stats(true);
 
-    int r = RGWBucketAdminOp::info(store, bucket_op, f, null_yield);
+    int r = RGWBucketAdminOp::info(store, bucket_op, f, null_yield, dpp());
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
@@ -6144,7 +6144,7 @@ int main(int argc, const char **argv)
     bucket_op.set_bucket_id(bucket_id);
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
-    int r = RGWBucketAdminOp::link(store, bucket_op, &err);
+    int r = RGWBucketAdminOp::link(store, bucket_op, dpp(), &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
@@ -6152,7 +6152,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT::BUCKET_UNLINK) {
-    int r = RGWBucketAdminOp::unlink(store, bucket_op);
+    int r = RGWBucketAdminOp::unlink(store, bucket_op, dpp());
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -6166,7 +6166,7 @@ int main(int argc, const char **argv)
     string err;
     string marker;
 
-    int r = RGWBucketAdminOp::chown(store, bucket_op, marker, &err);
+    int r = RGWBucketAdminOp::chown(store, bucket_op, marker, dpp(), &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
@@ -6472,12 +6472,12 @@ next:
 
     RGWObjState *state;
 
-    ret = store->getRados()->get_obj_state(&rctx, bucket_info, obj, &state, false, null_yield); /* don't follow olh */
+    ret = store->getRados()->get_obj_state(dpp(), &rctx, bucket_info, obj, &state, false, null_yield); /* don't follow olh */
     if (ret < 0) {
       return -ret;
     }
 
-    ret = store->getRados()->bucket_index_read_olh_log(bucket_info, *state, obj, 0, &log, &is_truncated);
+    ret = store->getRados()->bucket_index_read_olh_log(dpp(), bucket_info, *state, obj, 0, &log, &is_truncated);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6542,7 +6542,7 @@ next:
 
     rgw_obj obj(bucket, key);
 
-    ret = store->getRados()->bi_put(bucket, obj, entry);
+    ret = store->getRados()->bi_put(dpp(), bucket, obj, entry);
     if (ret < 0) {
       cerr << "ERROR: bi_put(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6576,7 +6576,7 @@ next:
       RGWRados::BucketShard bs(store->getRados());
       int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
 
-      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */);
+      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */, dpp());
       marker.clear();
 
       if (ret < 0) {
@@ -6640,7 +6640,7 @@ next:
     for (int i = 0; i < max_shards; i++) {
       RGWRados::BucketShard bs(store->getRados());
       int shard_id = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */);
+      int ret = bs.init(bucket, shard_id, bucket_info.layout.current_index, nullptr /* no RGWBucketInfo */, dpp());
       if (ret < 0) {
         cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6670,7 +6670,7 @@ next:
     RGWDataAccess::BucketRef b;
     RGWDataAccess::ObjectRef obj;
 
-    int ret = data_access.get_bucket(tenant, bucket_name, bucket_id, &b, null_yield);
+    int ret = data_access.get_bucket(dpp(), tenant, bucket_name, bucket_id, &b, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed to init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6703,7 +6703,7 @@ next:
       return -ret;
     }
     rgw_obj_key key(object, object_version);
-    ret = rgw_remove_object(store, bucket_info, bucket, key);
+    ret = rgw_remove_object(dpp(), store, bucket_info, bucket, key);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -6750,14 +6750,14 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE) {
-    if (!store->getRados()->process_expire_objects()) {
+    if (!store->getRados()->process_expire_objects(dpp())) {
       cerr << "ERROR: process_expire_objects() processing returned error." << std::endl;
       return 1;
     }
   }
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_LIST) {
-    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, true);
+    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, dpp(), true);
     if (ret < 0) {
       cerr << "ERROR: listing returned " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6765,7 +6765,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECTS_EXPIRE_STALE_RM) {
-    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, false);
+    ret = RGWBucketAdminOp::fix_obj_expiry(store, bucket_op, f, dpp(), false);
     if (ret < 0) {
       cerr << "ERROR: removing returned " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6821,7 +6821,7 @@ next:
       result.reserve(NUM_ENTRIES);
 
       int r = store->getRados()->cls_bucket_list_ordered(
-	bucket_info, RGW_NO_SHARD,
+	dpp(), bucket_info, RGW_NO_SHARD,
 	marker, empty_prefix, empty_delimiter,
 	NUM_ENTRIES, true, expansion_factor,
 	result, &is_truncated, &cls_filtered, &marker,
@@ -6915,7 +6915,7 @@ next:
       max_entries = DEFAULT_RESHARD_MAX_ENTRIES;
     }
 
-    return br.execute(num_shards, max_entries,
+    return br.execute(num_shards, max_entries, dpp(),
                       verbose, &cout, formatter.get());
   }
 
@@ -6940,7 +6940,7 @@ next:
 
     int num_source_shards = (bucket_info.layout.current_index.layout.normal.num_shards > 0 ? bucket_info.layout.current_index.layout.normal.num_shards : 1);
 
-    RGWReshard reshard(store);
+    RGWReshard reshard(store, dpp());
     cls_rgw_reshard_entry entry;
     entry.time = real_clock::now();
     entry.tenant = tenant;
@@ -6963,7 +6963,7 @@ next:
     int num_logshards =
       store->ctx()->_conf.get_val<uint64_t>("rgw_reshard_num_logs");
 
-    RGWReshard reshard(store);
+    RGWReshard reshard(store, dpp());
 
     formatter->open_array_section("reshard");
     for (int i = 0; i < num_logshards; i++) {
@@ -7025,7 +7025,7 @@ next:
   if (opt_cmd == OPT::RESHARD_PROCESS) {
     RGWReshard reshard(store, true, &cout);
 
-    int ret = reshard.process_all_logshards();
+    int ret = reshard.process_all_logshards(dpp());
     if (ret < 0) {
       cerr << "ERROR: failed to process reshard logs, error=" << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7074,7 +7074,7 @@ next:
       }
     }
 
-    RGWReshard reshard(store);
+    RGWReshard reshard(store, dpp());
 
     cls_rgw_reshard_entry entry;
     entry.tenant = tenant;
@@ -7127,7 +7127,7 @@ next:
     read_op.params.attrs = &attrs;
     read_op.params.obj_size = &obj_size;
 
-    ret = read_op.prepare(null_yield);
+    ret = read_op.prepare(null_yield, dpp());
     if (ret < 0) {
       cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -7176,20 +7176,20 @@ next:
       }
       do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
     } else {
-      RGWBucketAdminOp::check_index(store, bucket_op, f, null_yield);
+      RGWBucketAdminOp::check_index(store, bucket_op, f, null_yield, dpp());
     }
   }
 
   if (opt_cmd == OPT::BUCKET_RM) {
     if (!inconsistent_index) {
-      RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, bypass_gc, true);
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, dpp(), bypass_gc, true);
     } else {
       if (!yes_i_really_mean_it) {
 	cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
 	<< "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
 	return 1;
       }
-      RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, bypass_gc, false);
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, dpp(), bypass_gc, false);
     }
   }
 
@@ -7320,7 +7320,7 @@ next:
 
 
   if (opt_cmd == OPT::LC_RESHARD_FIX) {
-    ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op,f);
+    ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op, f, dpp());
     if (ret < 0) {
       cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
     }
@@ -7361,7 +7361,7 @@ next:
       cerr << "could not init search, ret=" << ret << std::endl;
       return -ret;
     }
-    ret = search.run();
+    ret = search.run(dpp());
     if (ret < 0) {
       return -ret;
     }
@@ -7435,7 +7435,7 @@ next:
   }
 
   if (opt_cmd == OPT::USER_CHECK) {
-    check_bad_user_bucket_mapping(store, user_id, fix, null_yield);
+    check_bad_user_bucket_mapping(store, user_id, fix, null_yield, dpp());
   }
 
   if (opt_cmd == OPT::USER_STATS) {
@@ -7478,7 +7478,7 @@ next:
           return -ret;
         }
       } else {
-        int ret = rgw_user_sync_all_stats(store, user_id, null_yield);
+        int ret = rgw_user_sync_all_stats(dpp(), store, user_id, null_yield);
         if (ret < 0) {
           cerr << "ERROR: could not sync user stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -7515,7 +7515,7 @@ next:
   }
 
   if (opt_cmd == OPT::METADATA_GET) {
-    int ret = store->ctl()->meta.mgr->get(metadata_key, formatter.get(), null_yield);
+    int ret = store->ctl()->meta.mgr->get(metadata_key, formatter.get(), null_yield, dpp());
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7531,7 +7531,7 @@ next:
       cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->ctl()->meta.mgr->put(metadata_key, bl, null_yield, RGWMDLogSyncType::APPLY_ALWAYS, false);
+    ret = store->ctl()->meta.mgr->put(metadata_key, bl, null_yield, dpp(), RGWMDLogSyncType::APPLY_ALWAYS, false);
     if (ret < 0) {
       cerr << "ERROR: can't put key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7539,7 +7539,7 @@ next:
   }
 
   if (opt_cmd == OPT::METADATA_RM) {
-    int ret = store->ctl()->meta.mgr->remove(metadata_key, null_yield);
+    int ret = store->ctl()->meta.mgr->remove(metadata_key, null_yield, dpp());
     if (ret < 0) {
       cerr << "ERROR: can't remove key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7696,7 +7696,7 @@ next:
 
   if (opt_cmd == OPT::MDLOG_AUTOTRIM) {
     // need a full history for purging old mdlog periods
-    store->svc()->mdlog->init_oldest_log_period(null_yield);
+    store->svc()->mdlog->init_oldest_log_period(null_yield, dpp());
 
     RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
     RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
@@ -8006,13 +8006,13 @@ next:
       return -ret;
     }
 
-    if (!store->ctl()->bucket->bucket_imports_data(bucket_info.bucket, null_yield)) {
+    if (!store->ctl()->bucket->bucket_imports_data(bucket_info.bucket, null_yield, dpp())) {
       std::cout << "Sync is disabled for bucket " << bucket_name << std::endl;
       return 0;
     }
 
     RGWBucketSyncPolicyHandlerRef handler;
-    ret = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, bucket, &handler, null_yield);
+    ret = store->ctl()->bucket->get_sync_policy_handler(std::nullopt, bucket, &handler, null_yield, dpp());
     if (ret < 0) {
       std::cerr << "ERROR: failed to get policy handler for bucket ("
           << bucket_info.bucket << "): r=" << ret << ": " << cpp_strerror(-ret) << std::endl;
@@ -8041,7 +8041,7 @@ next:
     }
     bucket_op.set_tenant(tenant);
     string err_msg;
-    ret = RGWBucketAdminOp::sync_bucket(store, bucket_op, &err_msg);
+    ret = RGWBucketAdminOp::sync_bucket(store, bucket_op, dpp(), &err_msg);
     if (ret < 0) {
       cerr << err_msg << std::endl;
       return -ret;
@@ -8910,7 +8910,7 @@ next:
 
     int ret = store->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 					     mtime, &objv_tracker,
-					     null_yield,
+					     null_yield, dpp(),
 					     MDLOG_STATUS_WRITE,
 					     [&] {
       return store->svc()->cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
@@ -8924,7 +8924,7 @@ next:
     user_info.mfa_ids.insert(totp_serial);
     user_op.set_mfa_ids(user_info.mfa_ids);
     string err;
-    ret = user.modify(user_op, null_yield, &err);
+    ret = user.modify(dpp(), user_op, null_yield, &err);
     if (ret < 0) {
       cerr << "ERROR: failed storing user info, error: " << err << std::endl;
       return -ret;
@@ -8946,7 +8946,7 @@ next:
 
     int ret = store->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 					     mtime, &objv_tracker,
-					     null_yield,
+					     null_yield, dpp(),
 					     MDLOG_STATUS_WRITE,
 					     [&] {
       return store->svc()->cls->mfa.remove_mfa(user_id, totp_serial, &objv_tracker, mtime, null_yield);
@@ -8960,7 +8960,7 @@ next:
     user_info.mfa_ids.erase(totp_serial);
     user_op.set_mfa_ids(user_info.mfa_ids);
     string err;
-    ret = user.modify(user_op, null_yield, &err);
+    ret = user.modify(dpp(), user_op, null_yield, &err);
     if (ret < 0) {
       cerr << "ERROR: failed storing user info, error: " << err << std::endl;
       return -ret;
@@ -9090,7 +9090,7 @@ next:
 
     ret = store->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 				         mtime, &objv_tracker,
-				         null_yield,
+				         null_yield, dpp(),
 				         MDLOG_STATUS_WRITE,
 				         [&] {
       return store->svc()->cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
@@ -9110,7 +9110,7 @@ next:
      return EINVAL;
    }
 
-   ret = RGWBucketAdminOp::list_stale_instances(store, bucket_op,f);
+   ret = RGWBucketAdminOp::list_stale_instances(store, bucket_op, f, dpp());
    if (ret < 0) {
      cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
    }
@@ -9122,7 +9122,7 @@ next:
      return EINVAL;
    }
 
-   ret = RGWBucketAdminOp::clear_stale_instances(store, bucket_op,f);
+   ret = RGWBucketAdminOp::clear_stale_instances(store, bucket_op,f, dpp());
    if (ret < 0) {
      cerr << "ERROR: deleting stale instances" << cpp_strerror(-ret) << std::endl;
    }
@@ -9255,7 +9255,7 @@ next:
       max_entries = RGWPubSub::Sub::DEFAULT_MAX_EVENTS;
     }
     auto sub = ps.get_sub_with_events(sub_name);
-    ret = sub->list_events(marker, max_entries);
+    ret = sub->list_events(dpp(), marker, max_entries);
     if (ret < 0) {
       cerr << "ERROR: could not list events: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9281,7 +9281,7 @@ next:
     RGWPubSub ps(store, tenant);
 
     auto sub = ps.get_sub_with_events(sub_name);
-    ret = sub->remove_event(event_id);
+    ret = sub->remove_event(dpp(), event_id);
     if (ret < 0) {
       cerr << "ERROR: could not remove event: " << cpp_strerror(-ret) << std::endl;
       return -ret;

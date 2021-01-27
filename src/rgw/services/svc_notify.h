@@ -63,7 +63,7 @@ private:
     rados_svc = _rados_svc;
     finisher_svc = _finisher_svc;
   }
-  int do_start(optional_yield) override;
+  int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
   int unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle);

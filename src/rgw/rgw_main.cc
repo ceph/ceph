@@ -327,8 +327,9 @@ int radosgw_Main(int argc, const char **argv)
   FCGX_Init();
 #endif
 
+  const DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::sal::RGWRadosStore *store =
-    RGWStoreManager::get_storage(g_ceph_context,
+    RGWStoreManager::get_storage(&dp, g_ceph_context,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
 				 g_conf()->rgw_enable_quota_threads,
