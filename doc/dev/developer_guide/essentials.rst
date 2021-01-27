@@ -22,7 +22,7 @@ RGW       Yehuda Sadeh     yehudasa
 RGW       Matt Benjamin    mattbenjamin
 RBD       Jason Dillaman   dillaman
 CephFS    Patrick Donnelly batrick
-Dashboard Lenz Grimmer     LenzGr
+Dashboard Ernesto Puerta   epuertat
 MON       Joao Luis        jecluis
 Build/Ops Ken Dreyer       ktdreyer
 Docs      Zac Dover        zdover23
