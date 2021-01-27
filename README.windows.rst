@@ -24,30 +24,31 @@ account different package managers, package names or paths (e.g. mingw paths).
 
 The script accepts the following flags:
 
-============  ===============================  ===============================
-Flag          Description                      Default value
-============  ===============================  ===============================
-OS            Host OS distribution, for mingw  ubuntu (also valid: suse)
-              and other OS specific settings.
-CEPH_DIR      The Ceph source code directory.  The same as the script.
-BUILD_DIR     The directory where the          $CEPH_DIR/build
-              generated artifacts will be
-              placed.
-DEPS_DIR      The directory where the Ceph     $CEPH_DIR/build.deps
-              dependencies will be built.
-NUM_WORKERS   The number of workers to use     The number of vcpus
-              when building Ceph.              available
-CLEAN_BUILD   Clean the build directory.
-SKIP_BUILD    Run cmake without actually
-              performing the build.
-SKIP_TESTS    Skip building Ceph tests.
-BUILD_ZIP     Build a zip archive containing
-              the generated binaries.
-ZIP_DEST      Where to put a zip containing    $BUILD_DIR/ceph.zip
-              the generated binaries.
-STRIP_ZIPPED  If set, the zip will contain
-              stripped binaries.
-============  ===============================  ===============================
+=============  ===============================  ===============================
+Flag           Description                      Default value
+=============  ===============================  ===============================
+OS             Host OS distribution, for mingw  ubuntu (also valid: suse)
+               and other OS specific settings.
+CEPH_DIR       The Ceph source code directory.  The same as the script.
+BUILD_DIR      The directory where the          $CEPH_DIR/build
+               generated artifacts will be
+               placed.
+DEPS_DIR       The directory where the Ceph     $CEPH_DIR/build.deps
+               dependencies will be built.
+NUM_WORKERS    The number of workers to use     The number of vcpus
+               when building Ceph.              available
+CLEAN_BUILD    Clean the build directory.
+SKIP_BUILD     Run cmake without actually
+               performing the build.
+SKIP_TESTS     Skip building Ceph tests.
+BUILD_ZIP      Build a zip archive containing
+               the generated binaries.
+ZIP_DEST       Where to put a zip containing    $BUILD_DIR/ceph.zip
+               the generated binaries.
+STRIP_ZIPPED   If set, the zip will contain
+               stripped binaries.
+ENABLE_SHARED  Dynamically link Ceph libs.      False
+=============  ===============================  ===============================
 
 In order to build debug binaries as well as an archive containing stripped
 binaries that may be easily moved around, one may use the following:
@@ -85,10 +86,6 @@ in userspace, pretty much like Fuse.
 
 RBD images can be mounted using the ``rbd`` or ``rbd-wnbd`` commands. The
 ``WNBD`` driver is required for mapping RBD images on Windows.
-
-The libraries have to be built statically at the moment. The reason is that
-there are a few circular library dependencies or unspecified dependencies,
-which isn't supported when building DLLs. This mostly affects ``cls`` libraries.
 
 A significant number of tests from the ``tests`` directory have been ported,
 providing adequate coverage.

@@ -300,6 +300,8 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     blk
     ceph-common
     cls_rbd_client
+    libneorados
+    librados
     StdFilesystem::filesystem)
 
   if(WITH_RBD_RWL)
@@ -326,11 +328,11 @@ target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
-  libneorados
-  librados
   cls_rbd_client
   cls_lock_client
   cls_journal_client
+  libneorados
+  librados
   ceph-common
   pthread
   ${CMAKE_DL_LIBS}

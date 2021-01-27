@@ -62,6 +62,8 @@
 %endif
 %bcond_with seastar
 %bcond_with jaeger
+%bcond_with rbd_rwl_cache
+%bcond_with rbd_ssd_cache
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
@@ -1267,6 +1269,12 @@ ${CMAKE} .. \
 %endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE=ON \
+%endif
+%if 0%{with rbd_rwl_cache}
+    -DWITH_RBD_RWL=ON \
+%endif
+%if 0%{with rbd_ssd_cache}
+    -DWITH_RBD_SSD_CACHE=ON \
 %endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
     -DWITH_GRAFANA=ON

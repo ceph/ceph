@@ -59,12 +59,12 @@ template <typename I>
 void LoadRequest<I>::finish(int r) {
   if (r == 0) {
     // load crypto layers to image and its ancestors
-    auto image_dispatch = CryptoImageDispatch::create(
-            m_crypto->get_data_offset());
     auto ictx = m_image_ctx;
     while (ictx != nullptr) {
       auto object_dispatch = CryptoObjectDispatch<I>::create(
               ictx, m_crypto);
+      auto image_dispatch = CryptoImageDispatch::create(
+            m_crypto->get_data_offset());
       ictx->io_object_dispatcher->register_dispatch(object_dispatch);
       ictx->io_image_dispatcher->register_dispatch(image_dispatch);
 
