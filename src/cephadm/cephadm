@@ -6125,6 +6125,7 @@ class HostFacts():
         up_secs, _ = raw_time.split()
         return float(up_secs)
 
+    @property
     def kernel_security(self):
         # type: () -> Optional[Dict[str, str]]
         """Determine the security features enabled in the kernel - SELinux, AppArmor"""
