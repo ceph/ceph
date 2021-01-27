@@ -660,6 +660,8 @@ class Module(MgrModule):
             can_run, _ = self.remote(plugin_name, 'can_run')
             if can_run:
                 return self.remote(plugin_name, 'predict_life_expectancy', devid=devid)
+            else:
+                return -1, '', f'{plugin_name} is not available'
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
@@ -674,6 +676,8 @@ class Module(MgrModule):
             can_run, _ = self.remote(plugin_name, 'can_run')
             if can_run:
                 return self.remote(plugin_name, 'predict_all_devices')
+            else:
+                return -1, '', f'{plugin_name} is not available'
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
