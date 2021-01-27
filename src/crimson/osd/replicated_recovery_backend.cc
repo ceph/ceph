@@ -357,7 +357,7 @@ seastar::future<PushOp> ReplicatedRecoveryBackend::build_push_op(
 			  recovery_info.version,
 			  PushOp(),
     [this, &recovery_info, &progress, stat]
-    (auto new_progress, auto available, auto v, auto pop) {
+    (auto& new_progress, auto& available, auto& v, auto& pop) {
     return read_metadata_for_push_op(recovery_info.soid,
                                      progress, new_progress,
                                      v, &pop).then([&](eversion_t local_ver) mutable {
