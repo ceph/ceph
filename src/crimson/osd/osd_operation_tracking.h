@@ -83,9 +83,6 @@ struct HistoricBackend
               const Operation&) override {
   }
 
-  // TODO: make this a configuration parameter.
-  static const std::size_t historic_op_registry_max_size = 42;
-
   void handle(ClientRequest::DoneEvent&, const Operation& op) override;
 };
 

@@ -19,6 +19,9 @@ void HistoricBackend::handle(ClientRequest::DoneEvent&, const Operation& op)
     ClientRequest::ICRef(&client_request, /* add_ref= */true)
   ).detach();
 
+  const auto historic_op_registry_max_size =
+    local_conf().get_val<std::size_t>("osd_op_history_size");
+
   // check whether the history size limit is not exceeded; if so, then
   // purge the oldest op.
   // NOTE: Operation uses the auto-unlink feature of boost::intrusive.
