@@ -261,6 +261,7 @@ class CephadmServe:
                 sd.container_id = sd.container_id[0:12]
             sd.container_image_name = d.get('container_image_name')
             sd.container_image_id = d.get('container_image_id')
+            sd.container_image_digests = d.get('container_image_digests')
             sd.version = d.get('version')
             if sd.daemon_type == 'osd':
                 sd.osdspec_affinity = self.mgr.osd_service.get_osdspec_affinity(sd.daemon_id)
