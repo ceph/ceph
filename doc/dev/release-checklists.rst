@@ -35,8 +35,8 @@ Make sure X (and, ideally, X+1) is defined:
 Scripts
 ~~~~~~~
 
-- [ ] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`... but for X-1)
-- [ ] src/script/ceph-release-notes (X-1)
+- [x] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`... but for X-1)
+- [x] src/script/ceph-release-notes (X-1)
 - [ ] ceph-build.git scripts/build_utils.sh `release_from_version()`
 
 Misc
