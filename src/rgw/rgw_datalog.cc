@@ -931,6 +931,8 @@ RGWDataChangesLog::~RGWDataChangesLog() {
 }
 
 void RGWDataChangesLog::renew_run() noexcept {
+  static constexpr auto runs_per_prune = 150;
+  auto run = 0;
   for (;;) {
     dout(2) << "RGWDataChangesLog::ChangesRenewThread: start" << dendl;
     int r = renew_entries();
@@ -940,6 +942,25 @@ void RGWDataChangesLog::renew_run() noexcept {
 
     if (going_down())
       break;
+
+    if (run == runs_per_prune) {
+      std::optional<uint64_t> through;
+      dout(2) << "RGWDataChangesLog::ChangesRenewThread: pruning old generations" << dendl;
+      trim_generations(through);
+      if (r < 0) {
+	derr << "RGWDataChangesLog::ChangesRenewThread: failed pruning r="
+	     << r << dendl;
+      } else if (through) {
+	dout(2) << "RGWDataChangesLog::ChangesRenewThread: pruned generations "
+		<< "through " << *through << "." << dendl;
+      } else {
+	dout(2) << "RGWDataChangesLog::ChangesRenewThread: nothing to prune."
+		<< dendl;
+      }
+      run = 0;
+    } else {
+      ++run;
+    }
 
     int interval = cct->_conf->rgw_data_log_window * 3 / 4;
     std::unique_lock locker{renew_lock};
