@@ -404,6 +404,7 @@ int save_config_to_registry(Config* cfg)
       reg_key.set("imgname", cfg->imgname) ||
       reg_key.set("snapname", cfg->snapname) ||
       reg_key.set("command_line", GetCommandLine()) ||
+      reg_key.set("persistent", cfg->persistent) ||
       reg_key.set("admin_sock_path", g_conf()->admin_socket) ||
       reg_key.flush()) {
     ret_val = -EINVAL;
@@ -441,6 +442,7 @@ int load_mapping_config_from_registry(string devpath, Config* cfg)
   reg_key.get("imgname", cfg->imgname);
   reg_key.get("snapname", cfg->snapname);
   reg_key.get("command_line", cfg->command_line);
+  reg_key.get("persistent", cfg->persistent);
   reg_key.get("admin_sock_path", cfg->admin_sock_path);
 
   return 0;
@@ -463,6 +465,16 @@ int restart_registered_mappings(int worker_count)
     if (cfg.wnbd_mapped) {
       dout(5) << __func__ << ": device already mapped: "
               << cfg.devpath << dendl;
+      continue;
+    }
+    if (!cfg.persistent) {
+      dout(5) << __func__ << ": cleaning up non-persistent mapping: "
+              << cfg.devpath << dendl;
+      r = remove_config_from_registry(&cfg);
+      if (r) {
+        derr << __func__ << ": could not clean up non-persistent mapping: "
+             << cfg.devpath << dendl;
+      }
       continue;
     }
 
@@ -747,6 +759,8 @@ Map options:
   --device <device path>  Optional mapping unique identifier
   --exclusive             Forbid writes by other clients
   --read-only             Map read-only
+  --non-persistent        Do not recreate the mapping when the Ceph service
+                          restarts. By default, mappings are persistent
   --io-req-workers        The number of workers that dispatch IO requests.
                           Default: 4
   --io-reply-workers      The number of workers that dispatch IO replies.
@@ -935,6 +949,11 @@ static int do_map(Config *cfg)
     goto close_ret;
   }
 
+  // We're storing mapping details in the registry even for non-persistent
+  // mappings. This allows us to easily retrieve mapping details such
+  // as the rbd pool or admin socket path.
+  // We're cleaning up the registry entry when the non-persistent mapping
+  // gets disconnected or when the ceph service restarts.
   r = save_config_to_registry(cfg);
   if (r < 0)
     goto close_ret;
@@ -966,6 +985,16 @@ static int do_map(Config *cfg)
 
   handler->wait();
   handler->shutdown();
+
+  if (!cfg->persistent) {
+    dout(5) << __func__ << ": cleaning up non-persistent mapping: "
+            << cfg->devpath << dendl;
+    r = remove_config_from_registry(cfg);
+    if (r) {
+      derr << __func__ << ": could not clean up non-persistent mapping: "
+           << cfg->devpath << dendl;
+    }
+  }
 
 close_ret:
   std::unique_lock l{shutdown_lock};
@@ -1144,6 +1173,7 @@ static int do_show_mapped_device(std::string format, bool pretty_format,
   f->dump_string("namespace", cfg.nsname);
   f->dump_string("image", cfg.imgname);
   f->dump_string("snap", cfg.snapname);
+  f->dump_int("persistent", cfg.persistent);
   f->dump_int("disk_number", conn_info.DiskNumber ? conn_info.DiskNumber : -1);
   f->dump_string("status", cfg.active ? WNBD_STATUS_ACTIVE : WNBD_STATUS_INACTIVE);
   f->dump_string("pnp_device_id", to_string(conn_info.PNPDeviceID));
@@ -1228,6 +1258,8 @@ static int parse_args(std::vector<const char*>& args,
       cfg->readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       cfg->exclusive = true;
+    } else if (ceph_argparse_flag(args, i, "--non-persistent", (char *)NULL)) {
+      cfg->persistent = false;
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->parent_pipe, err,
