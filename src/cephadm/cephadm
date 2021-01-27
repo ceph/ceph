@@ -4453,6 +4453,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
     # keep track of ceph versions we see
     seen_versions = {}  # type: Dict[str, Optional[str]]
 
+    # keep track of image digests
+    seen_digests = {}   # type: Dict[str, List[str]]
+
     # /var/lib/ceph
     if os.path.exists(data_dir):
         for i in os.listdir(data_dir):
@@ -4509,6 +4512,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         container_id = None
                         image_name = None
                         image_id = None
+                        image_digests = None
                         version = None
                         start_stamp = None
 
@@ -4525,6 +4529,22 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             image_id = normalize_container_id(image_id)
                             daemon_type = name.split('.', 1)[0]
                             start_stamp = try_convert_datetime(start)
+
+                            # collect digests for this image id
+                            image_digests = seen_digests.get(image_id)
+                            if not image_digests:
+                                out, err, code = call(
+                                    ctx,
+                                    [
+                                        container_path, 'image', 'inspect', image_name,
+                                        '--format', '{{.RepoDigests}}',
+                                    ],
+                                    verbosity=CallVerbosity.DEBUG)
+                                if not code:
+                                    image_digests = out.strip()[1:-1].split(' ')
+                                    seen_digests[image_id] = image_digests
+
+                            # identify software version inside the container (if we can)
                             if not version or '.' not in version:
                                 version = seen_versions.get(image_id, None)
                             if daemon_type == NFSGanesha.daemon_type:
@@ -4592,6 +4612,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         val['container_id'] = container_id
                         val['container_image_name'] = image_name
                         val['container_image_id'] = image_id
+                        val['container_image_digests'] = image_digests
                         val['version'] = version
                         val['started'] = start_stamp
                         val['created'] = get_file_timestamp(
