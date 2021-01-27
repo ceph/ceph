@@ -135,6 +135,8 @@ private:
 protected:
   const int shards;
 
+private:
+
   uint64_t watchcookie = 0;
 
   obj_version version;
