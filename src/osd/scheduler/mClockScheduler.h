@@ -38,7 +38,6 @@ constexpr uint64_t default_max = 999999;
 
 using client_id_t = uint64_t;
 using profile_id_t = uint64_t;
-using op_type_t = OpSchedulerItem::OpQueueable::op_type_t;
 
 struct client_profile_id_t {
   client_id_t client_id;
@@ -68,6 +67,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const uint32_t num_shards;
   bool is_rotational;
   double max_osd_capacity;
+  double max_osd_bandwidth;
   uint64_t osd_mclock_cost_per_io_msec;
   std::string mclock_profile = "high_client_ops";
   struct ClientAllocs {
@@ -95,8 +95,6 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
     ClientAllocs(1, 1, 1), // immediate (not used)
     ClientAllocs(1, 1, 1)  // client
   };
-  std::map<op_type_t, int> client_cost_infos;
-  std::map<op_type_t, int> client_scaled_cost_infos;
   class ClientRegistry {
     std::array<
       crimson::dmclock::ClientInfo,
@@ -172,10 +170,7 @@ public:
   void set_global_recovery_options();
 
   // Calculate scale cost per item
-  int calc_scaled_cost(op_type_t op_type, int cost);
-
-  // Update mclock client cost info
-  bool maybe_update_client_cost_info(op_type_t op_type, int new_cost);
+  int calc_scaled_cost(int cost);
 
   // Enqueue op in the back of the regular queue
   void enqueue(OpSchedulerItem &&item) final;
