@@ -16,7 +16,7 @@ from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
 
 from .vol_spec import VolSpec
-from .exception import VolumeException
+from .exception import VolumeException, ClusterError, ClusterTimeout, EvictionError
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
@@ -254,11 +254,35 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.ALLOW_ACCESS) as subvolume:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.AUTH_LIST) as subvolume:
                         auths = subvolume.authorized_list()
                         ret = 0, json.dumps(auths, indent=4, sort_keys=True), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def evict(self, **kwargs):
+        ret = 0, "", ""
+        volname     = kwargs['vol_name']
+        subvolname  = kwargs['sub_name']
+        authid      = kwargs['auth_id']
+        groupname   = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EVICT) as subvolume:
+                        key = subvolume.evict(volname, authid)
+                        ret = 0, "", ""
+        except (VolumeException, ClusterTimeout, ClusterError, EvictionError) as e:
+            if isinstance(e, VolumeException):
+                ret = self.volume_exception_to_retval(e)
+            elif isinstance(e, ClusterTimeout):
+                ret = -errno.ETIMEDOUT , "", "Timedout trying to talk to ceph cluster"
+            elif isinstance(e, ClusterError):
+                ret = e._result_code , "", e._result_str
+            elif isinstance(e, EvictionError):
+                ret = -errno.EINVAL, "", str(e)
         return ret
 
     def resize_subvolume(self, **kwargs):
