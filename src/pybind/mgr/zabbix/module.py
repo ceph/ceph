@@ -9,7 +9,7 @@ import errno
 import re
 from subprocess import Popen, PIPE
 from threading import Event
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option
 
 
 def avg(data):
@@ -60,33 +60,28 @@ class Module(MgrModule):
                 for o in self.MODULE_OPTIONS)
 
     MODULE_OPTIONS = [
-            {
-                'name': 'zabbix_sender',
-                'default': '/usr/bin/zabbix_sender'
-            },
-            {
-                'name': 'zabbix_host',
-                'default': None
-            },
-            {
-                'name': 'zabbix_port',
-                'type': 'int',
-                'default': 10051
-            },
-            {
-                'name': 'identifier',
-                'default': ""
-            },
-            {
-                'name': 'interval',
-                'type': 'secs',
-                'default': 60
-            },
-            {
-                'name': 'discovery_interval',
-                'type': 'count',
-                'default': 100
-            }
+        Option(
+            name='zabbix_sender',
+            default='/usr/bin/zabbix_sender'),
+        Option(
+            name='zabbix_host',
+            type='str',
+            default=None),
+        Option(
+            name='zabbix_port',
+            type='int',
+            default=10051),
+        Option(
+            name='identifier',
+            default=""),
+        Option(
+            name='interval',
+            type='secs',
+            default=60),
+        Option(
+            name='discovery_interval',
+            type='count',
+            default=100)
     ]
 
     COMMANDS = [
