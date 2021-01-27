@@ -942,7 +942,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Text that is appended to all daemon's ceph.conf.
         Mainly a workaround, till `config generate-minimal-conf` generates
         a complete ceph.conf.
-             
+
         Warning: this is a dangerous operation.
         """
         if inbuf:
