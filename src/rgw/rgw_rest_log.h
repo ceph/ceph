@@ -24,8 +24,7 @@
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;
   uint32_t format_ver{0};
-  bool truncated;
-  uint64_t gen; // next generation number output from log list
+  bool truncated{false};
   std::optional<rgw::bucket_log_layout_generation> next_log_layout;
 
 public:

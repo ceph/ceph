@@ -493,10 +493,12 @@ void RGWOp_BILog_List::send_response_end() {
   if (format_ver >= 2) {
     encode_json("truncated", truncated, s->formatter);
 
-    s->formatter->open_object_section("next_log");
-    encode_json("generation", next_log_layout->gen, s->formatter);
-    encode_json("num_shards", next_log_layout->layout.in_index.layout.num_shards, s->formatter);
-    s->formatter->close_section(); // next_log
+    if (next_log_layout) {
+      s->formatter->open_object_section("next_log");
+      encode_json("generation", next_log_layout->gen, s->formatter);
+      encode_json("num_shards", next_log_layout->layout.in_index.layout.num_shards, s->formatter);
+      s->formatter->close_section(); // next_log
+    }
 
     s->formatter->close_section(); // result
   }

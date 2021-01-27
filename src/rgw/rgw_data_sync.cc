@@ -4206,9 +4206,11 @@ int RGWBucketShardIncrementalSyncCR::operate()
         return set_cr_error(retcode);
       }
       list_result = std::move(extended_result.entries);
-      next_gen = extended_result.next_log->generation;
-      next_num_shards = extended_result.next_log->num_shards;
       truncated = extended_result.truncated;
+      if (extended_result.next_log) {
+        next_gen = extended_result.next_log->generation;
+        next_num_shards = extended_result.next_log->num_shards;
+      }
 
       squash_map.clear();
       entries_iter = list_result.begin();
