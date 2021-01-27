@@ -37,11 +37,11 @@ class ZabbixSender(object):
 
         self.log.debug('Executing: %s', cmd)
 
-        proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+        proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE, encoding='utf-8')
 
         for key, value in data.items():
             assert proc.stdin
-            proc.stdin.write('{0} ceph.{1} {2}\n'.format(hostname, key, value).encode('utf-8'))
+            proc.stdin.write('{0} ceph.{1} {2}\n'.format(hostname, key, value))
 
         stdout, stderr = proc.communicate()
         if proc.returncode != 0:
