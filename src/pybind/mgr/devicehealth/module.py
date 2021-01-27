@@ -115,9 +115,6 @@ class Module(MgrModule):
             return False
         return parts[0] in ('osd', 'mon')
 
-    def handle_command(self, _, cmd):
-        self.log.error("handle_command")
-
     @CLICommand('device query-daemon-health-metrics',
                 perm='r')
     def do_query_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
