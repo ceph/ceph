@@ -36,6 +36,7 @@
 #include "cls/log/cls_log_types.h"
 
 #include "rgw_basic_types.h"
+#include "rgw_log_backing.h"
 #include "rgw_sync_policy.h"
 #include "rgw_zone.h"
 #include "rgw_trim_bilog.h"
@@ -121,11 +122,22 @@ class RGWDataChangesLog;
 
 class RGWDataChangesBE;
 
-class DataLogBackends
-  : private bc::flat_map<uint64_t, boost::intrusive_ptr<RGWDataChangesBE>> {
+class DataLogBackends final
+  : public logback_generations,
+    private bc::flat_map<uint64_t, boost::intrusive_ptr<RGWDataChangesBE>> {
+  friend class logback_generations;
   friend class GenTrim;
 
   std::mutex m;
+  RGWDataChangesLog& datalog;
+
+  DataLogBackends(librados::IoCtx& ioctx,
+		  std::string oid,
+		  fu2::unique_function<std::string(
+		    uint64_t, int) const>&& get_oid,
+		  int shards, RGWDataChangesLog& datalog) noexcept
+    : logback_generations(ioctx, oid, std::move(get_oid),
+			  shards), datalog(datalog) {}
 public:
 
   boost::intrusive_ptr<RGWDataChangesBE> head() {
@@ -144,19 +156,27 @@ public:
   void set_zero(RGWDataChangesBE* be) {
     emplace(0, be);
   }
+
+  bs::error_code handle_init(entries_t e) noexcept override;
+  bs::error_code handle_new_gens(entries_t e) noexcept override;
+  bs::error_code handle_empty_to(uint64_t new_tail) noexcept override;
 };
 
 class RGWDataChangesLog {
+  friend DataLogBackends;
   CephContext *cct;
   librados::IoCtx ioctx;
   rgw::BucketChangeObserver *observer = nullptr;
   const RGWZone* zone;
-  DataLogBackends bes;
+  std::unique_ptr<DataLogBackends> bes;
 
   const int num_shards;
   std::string get_prefix() {
     auto prefix = cct->_conf->rgw_data_log_obj_prefix;
     return prefix.empty() ? prefix : "data_log"s;
+  }
+  std::string metadata_log_oid() {
+    return get_prefix() + "generations_metadata"s;
   }
   std::string prefix;
 
