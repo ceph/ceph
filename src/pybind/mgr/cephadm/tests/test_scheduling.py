@@ -474,7 +474,7 @@ class NodeAssignmentTest2(NamedTuple):
             'mgr',
             PlacementSpec(count=1, hosts='host1 host2 host3'.split()),
             'host1 host2 host3'.split(),
-            [DaemonDescription('mgr', 'mgr.a', 'host1'),],
+            [DaemonDescription('mgr', 'mgr.a', 'host1')],
             1,
             ['host1', 'host2', 'host3'],
         ),
