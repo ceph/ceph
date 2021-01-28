@@ -82,8 +82,7 @@ def get_result(key, results):
             if o != k and o != '*':
                 return False
         return True
-    return [v for k, v in results
-     if match(k)][0]
+    return [v for k, v in results if match(k)][0]
 
 
 def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
@@ -184,13 +183,13 @@ test_explicit_scheduler_results = [
 ]
 
 @pytest.mark.parametrize("spec_section_key,spec_section",
-    [
+    [   # noqa: E128
         ('h', 'hosts'),
         ('l', 'label'),
         ('p', 'host_pattern'),
     ])
 @pytest.mark.parametrize("count",
-    [
+    [   # noqa: E128
         None,
         0,
         1,
@@ -198,14 +197,14 @@ test_explicit_scheduler_results = [
         3,
     ])
 @pytest.mark.parametrize("explicit_key, explicit",
-    [
+    [   # noqa: E128
         ('e', []),
         ('1', ['1']),
         ('12', ['1', '2']),
         ('123', ['1', '2', '3']),
     ])
 @pytest.mark.parametrize("host_key, hosts",
-    [
+    [   # noqa: E128
         ('1', ['1']),
         ('12', ['1', '2']),
         ('123', ['1', '2', '3']),
@@ -264,13 +263,13 @@ test_scheduler_daemons_results = [
 
 
 @pytest.mark.parametrize("spec_section_key,spec_section",
-    [
+    [   # noqa: E128
         ('h', 'hosts'),
         ('l', 'label'),
         ('p', 'host_pattern'),
     ])
 @pytest.mark.parametrize("daemons_key, daemons",
-    [
+    [   # noqa: E128
         ('e', []),
         ('1', ['1']),
         ('3', ['3']),
@@ -280,19 +279,19 @@ test_scheduler_daemons_results = [
         ('123', ['1', '2', '3']),
     ])
 @pytest.mark.parametrize("count",
-    [
+    [   # noqa: E128
         None,
         1,
         2,
         3,
     ])
 @pytest.mark.parametrize("explicit_key, explicit",
-    [
+    [   # noqa: E128
         ('1', ['1']),
         ('123', ['1', '2', '3']),
     ])
 @pytest.mark.parametrize("host_key, hosts",
-    [
+    [   # noqa: E128
         ('1', ['1']),
         ('12', ['1', '2']),
         ('123', ['1', '2', '3']),
@@ -327,7 +326,7 @@ class NodeAssignmentTest(NamedTuple):
     expected: List[str]
 
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
-    [
+    [   # noqa: E128
         # just hosts
         NodeAssignmentTest(
             'mgr',
@@ -450,7 +449,7 @@ class NodeAssignmentTest2(NamedTuple):
     in_set: List[str]
 
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,in_set",
-    [
+    [   # noqa: E128
         # just count
         NodeAssignmentTest2(
             'mgr',
@@ -521,7 +520,7 @@ def test_node_assignment2(service_type, placement, hosts,
         assert h in in_set
 
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,must_have",
-    [
+    [   # noqa: E128
         # hosts + (smaller) count, (more) existing
         NodeAssignmentTest2(
             'mgr',
@@ -553,7 +552,7 @@ def test_node_assignment3(service_type, placement, hosts,
 
 
 @pytest.mark.parametrize("placement",
-    [
+    [   # noqa: E128
         ('1 *'),
         ('* label:foo'),
         ('* host1 host2'),
@@ -574,7 +573,7 @@ class NodeAssignmentTestBadSpec(NamedTuple):
     daemons: List[DaemonDescription]
     expected: str
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
-    [
+    [   # noqa: E128
         # unknown host
         NodeAssignmentTestBadSpec(
             'mgr',

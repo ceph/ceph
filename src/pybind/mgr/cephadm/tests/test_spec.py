@@ -291,7 +291,7 @@ def test_dd_octopus(dd_json):
 
 
 @pytest.mark.parametrize("spec,dd,valid",
-[
+[   # noqa: E128
     # https://tracker.ceph.com/issues/44934
     (
         RGWSpec(
