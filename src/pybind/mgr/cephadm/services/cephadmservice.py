@@ -66,7 +66,7 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
         self.extra_files = extra_files or {}
 
         # TCP ports used by the daemon
-        self.ports:  List[int] = ports or []
+        self.ports: List[int] = ports or []
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)

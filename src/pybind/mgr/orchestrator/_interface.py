@@ -248,8 +248,8 @@ class _Promise(object):
         val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
         prefix = {
             self.INITIALIZED: '      ',
-            self.RUNNING:     '   >>>',
-            self.FINISHED:    '(done)'
+            self.RUNNING:     '   >>>',  # noqa: E241
+            self.FINISHED:    '(done)',  # noqa: E241
         }[self._state]
         return '{} {}({}),'.format(prefix, name, val)
 
