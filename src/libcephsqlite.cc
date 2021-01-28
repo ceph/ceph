@@ -1,927 +1,822 @@
-#include <iostream>
-#include <sstream>
-#include <iomanip>
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
-#include <pthread.h>
-#include <sqlite3.h>
-#include <assert.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2021 Red Hat, Inc.
+ *
+ * This is free software; you can redistribute it and/or modify it under the
+ * terms of the GNU Lesser General Public License version 2.1, as published by
+ * the Free Software Foundation.  See file COPYING.
+ *
+ */
+
+#include <boost/smart_ptr/intrusive_ptr.hpp>
+#include <fmt/format.h>
+
 #include <fcntl.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <iomanip>
+#include <iostream>
+#include <regex>
+#include <sstream>
+#include <string_view>
+
 #include <limits.h>
+#include <string.h>
 
+#include <sqlite3ext.h>
+SQLITE_EXTENSION_INIT1
 
+#include "include/ceph_assert.h"
 #include "include/rados/librados.hpp"
-#include "include/radosstriper/libradosstriper.hpp"
+
+#include "common/Clock.h"
+#include "common/Formatter.h"
+#include "common/ceph_argparse.h"
 #include "common/ceph_mutex.h"
+#include "common/common_init.h"
+#include "common/config.h"
+#include "common/debug.h"
+#include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/version.h"
 
-static int _cephsqlite3_Close(sqlite3_file *pFile);
-static int _cephsqlite3_Read(sqlite3_file *pFile, void *zBuf, int iAmt, sqlite_int64 iOfst);
-static int _cephsqlite3_Write(sqlite3_file *pFile, const void *zBuf, int iAmt, sqlite_int64 iOfst);
-static int _cephsqlite3_Truncate(sqlite3_file *pFile, sqlite_int64 size);
-static int _cephsqlite3_Sync(sqlite3_file *pFile, int flags);
-static int _cephsqlite3_FileSize(sqlite3_file *pFile, sqlite_int64 *pSize);
-static int _cephsqlite3_Lock(sqlite3_file *pFile, int eLock);
-static int _cephsqlite3_Unlock(sqlite3_file *pFile, int eLock);
-static int _cephsqlite3_CheckReservedLock(sqlite3_file *pFile, int *pResOut);
-static int _cephsqlite3_FileControl(sqlite3_file *pFile, int op, void *pArg);
-static int _cephsqlite3_SectorSize(sqlite3_file *pFile);
-static int _cephsqlite3_DeviceCharacteristics(sqlite3_file *pFile);
+#include "include/libcephsqlite.h"
+#include "SimpleRADOSStriper.h"
 
-static int _cephsqlite3_Open(sqlite3_vfs *pVfs, const char *zName, sqlite3_file *pFile, int flags, int *pOutFlags);
-static int _cephsqlite3_Delete(sqlite3_vfs *pVfs, const char *zPath, int dirSync);
-static int _cephsqlite3_Access(sqlite3_vfs *pVfs, const char *zPath, int flags, int *pResOut);
-static int _cephsqlite3_FullPathname(sqlite3_vfs *pVfs, const char *zPath, int nPathOut, char *zPathOut);
-static void *_cephsqlite3_DlOpen(sqlite3_vfs *pVfs, const char *zPath);
-static void _cephsqlite3_DlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg);
-static void (*_cephsqlite3_DlSym(sqlite3_vfs *pVfs, void *pH, const char *z))(void);
-static void _cephsqlite3_DlClose(sqlite3_vfs *pVfs, void *pHandle);
-static int _cephsqlite3_Randomness(sqlite3_vfs *pVfs, int nByte, char *zByte);
-static int _cephsqlite3_Sleep(sqlite3_vfs *pVfs, int nMicro);
-static int _cephsqlite3_CurrentTime(sqlite3_vfs *pVfs, double *pTime);
+#define dout_subsys ceph_subsys_cephsqlite
+#undef dout_prefix
+#define dout_prefix *_dout << "cephsqlite: " << __func__ << ": "
+#define d(vfs,lvl) ldout(getcct(vfs), (lvl)) << "(client." << getdata(vfs).cluster.get_instance_id() << ") "
+#define dv(lvl) d(vfs,(lvl))
+#define df(lvl) d(f->vfs,(lvl)) << f->loc << " "
 
-static sqlite3_vfs *_cephsqlite3__vfs(void);
-static librados::IoCtx *get_io_ctx(const char *zPath);
-static libradosstriper::RadosStriper *get_radosstriper(const char *zPath);
-static std::string get_db_name(const char *zName);
-static int get_lock_type(const std::string &db_name, const std::string &file_name);
-static void set_lock_type(const std::string &db_name, const std::string &file_name, int eLock);
-static std::string get_lock_file_name(const std::string &db_name, int eLock);
-static int create_lock_files(librados::IoCtx *io_ctx, const std::string &db_name, bool must_create);
-static int remove_lock_files(librados::IoCtx *io_ctx, const std::string &db_file);
-static int lock_file_in_rados(librados::IoCtx *io_ctx, const std::string &lock_file_name, const std::string &lock_name, bool exclusive);
-
-
-struct CephVFSContext {
-  librados::IoCtx               *io_ctx = nullptr;
-  libradosstriper::RadosStriper *rs     = nullptr;
-  /* file name -> lock type map (SQLITE_LOCK_NONE, etc.)
-   * file names include main as well as temporary files: eg. *-journal, *-wal, etc.)
-   */
-  std::map<std::string, int>    lock_info;
+enum {
+  P_FIRST = 0xf0000,
+  P_OP_OPEN,
+  P_OP_DELETE,
+  P_OP_ACCESS,
+  P_OP_FULLPATHNAME,
+  P_OP_CURRENTTIME,
+  P_OPF_CLOSE,
+  P_OPF_READ,
+  P_OPF_WRITE,
+  P_OPF_TRUNCATE,
+  P_OPF_SYNC,
+  P_OPF_FILESIZE,
+  P_OPF_LOCK,
+  P_OPF_UNLOCK,
+  P_OPF_CHECKRESERVEDLOCK,
+  P_OPF_FILECONTROL,
+  P_OPF_SECTORSIZE,
+  P_OPF_DEVICECHARACTERISTICS,
+  P_LAST,
 };
 
-struct CephFile {
-  sqlite3_file  base;
-  const char   *name                = nullptr;
-  int           file_open_flags     = 0;
+struct cephsqlite_appdata {
+  ~cephsqlite_appdata() {
+    if (logger) {
+      cct->get_perfcounters_collection()->remove(logger.get());
+    }
+    if (striper_logger) {
+      cct->get_perfcounters_collection()->remove(striper_logger.get());
+    }
+  }
+  int setup_perf() {
+    ceph_assert(cct);
+    PerfCountersBuilder plb(cct.get(), "libcephsqlite_vfs", P_FIRST, P_LAST);
+    plb.add_time_avg(P_OP_OPEN, "op_open", "Time average of Open operations");
+    plb.add_time_avg(P_OP_DELETE, "op_delete", "Time average of Delete operations");
+    plb.add_time_avg(P_OP_ACCESS, "op_access", "Time average of Access operations");
+    plb.add_time_avg(P_OP_FULLPATHNAME, "op_fullpathname", "Time average of FullPathname operations");
+    plb.add_time_avg(P_OP_CURRENTTIME, "op_currenttime", "Time average of Currenttime operations");
+    plb.add_time_avg(P_OPF_CLOSE, "opf_close", "Time average of Close file operations");
+    plb.add_time_avg(P_OPF_READ, "opf_read", "Time average of Read file operations");
+    plb.add_time_avg(P_OPF_WRITE, "opf_write", "Time average of Write file operations");
+    plb.add_time_avg(P_OPF_TRUNCATE, "opf_truncate", "Time average of Truncate file operations");
+    plb.add_time_avg(P_OPF_SYNC, "opf_sync", "Time average of Sync file operations");
+    plb.add_time_avg(P_OPF_FILESIZE, "opf_filesize", "Time average of FileSize file operations");
+    plb.add_time_avg(P_OPF_LOCK, "opf_lock", "Time average of Lock file operations");
+    plb.add_time_avg(P_OPF_UNLOCK, "opf_unlock", "Time average of Unlock file operations");
+    plb.add_time_avg(P_OPF_CHECKRESERVEDLOCK, "opf_checkreservedlock", "Time average of CheckReservedLock file operations");
+    plb.add_time_avg(P_OPF_FILECONTROL, "opf_filecontrol", "Time average of FileControl file operations");
+    plb.add_time_avg(P_OPF_SECTORSIZE, "opf_sectorsize", "Time average of SectorSize file operations");
+    plb.add_time_avg(P_OPF_DEVICECHARACTERISTICS, "opf_devicecharacteristics", "Time average of DeviceCharacteristics file operations");
+    logger.reset(plb.create_perf_counters());
+    if (int rc = SimpleRADOSStriper::config_logger(cct.get(), "libcephsqlite_striper", &striper_logger); rc < 0) {
+      return rc;
+    }
+    cct->get_perfcounters_collection()->add(logger.get());
+    cct->get_perfcounters_collection()->add(striper_logger.get());
+    return 0;
+  }
+  int init_cluster() {
+    ceph_assert(cct);
+    ldout(cct, 5) << "initializing RADOS handle as " << cct->_conf->name << dendl;
+    if (int rc = cluster.init_with_context(cct.get()); rc < 0) {
+      lderr(cct) << "cannot initialize RADOS: " << cpp_strerror(rc) << dendl;
+      return rc;
+    }
+    if (int rc = cluster.connect(); rc < 0) {
+      lderr(cct) << "cannot connect: " << cpp_strerror(rc) << dendl;
+      return rc;
+    }
+    auto s = cluster.get_addrs();
+    ldout(cct, 5) << "completed connection to RADOS with address " << s << dendl;
+    return 0;
+  }
+
+  boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<PerfCounters> logger;
+  std::shared_ptr<PerfCounters> striper_logger;
+  librados::Rados cluster;
+  struct sqlite3_vfs vfs{};
 };
 
-// map to hold pointers to vfs contexts for various databases
-static ceph::mutex                             vfs_context_map_mutex("vfs_context_map_mutex");
-static std::map<std::string, CephVFSContext*>  vfs_context_map;
+struct cephsqlite_fileloc {
+  std::string pool;
+  std::string radosns;
+  std::string name;
+};
 
-static const std::string lock_name = "cephsqlite3_vfs_lock";
-static const std::string emptystr = "";
+struct cephsqlite_fileio {
+  librados::IoCtx ioctx;
+  std::unique_ptr<SimpleRADOSStriper> rs;
+};
+
+std::ostream& operator<<(std::ostream &out, const cephsqlite_fileloc& fileloc) {
+  return out
+    << "["
+    << fileloc.pool
+    << ":"
+    << fileloc.radosns
+    << "/"
+    << fileloc.name
+    << "]"
+    ;
+}
+
+struct cephsqlite_file {
+  sqlite3_file base;
+  struct sqlite3_vfs* vfs = nullptr;
+  int flags = 0;
+  // There are 5 lock states: https://sqlite.org/c3ref/c_lock_exclusive.html
+  int lock = 0;
+  struct cephsqlite_fileloc loc{};
+  struct cephsqlite_fileio io{};
+};
 
 
-/*
-** Close a file.
-*/
-static
-int _cephsqlite3_Close(sqlite3_file *pFile)
+#define getdata(vfs) (*((cephsqlite_appdata*)((vfs)->pAppData)))
+
+static CephContext* getcct(sqlite3_vfs* vfs)
 {
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
+  auto&& appd = getdata(vfs);
+  auto& cct = appd.cct;
+  if (cct) {
+    return cct.get();
+  }
 
-  CephFile *p = (CephFile*)pFile;
+  /* bootstrap cct */
+  std::vector<const char*> env_args;
+  env_to_vec(env_args, "CEPH_ARGS");
+  std::string cluster, conf_file_list; // unused
+  CephInitParameters iparams = ceph_argparse_early_args(env_args, CEPH_ENTITY_TYPE_CLIENT, &cluster, &conf_file_list);
+  cct = boost::intrusive_ptr<CephContext>(common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0), false);
+  cct->_conf.parse_config_files(nullptr, &std::cerr, 0);
+  cct->_conf.parse_env(cct->get_module_type()); // environment variables override
+  cct->_conf.apply_changes(nullptr);
+  common_init_finish(cct.get());
 
-  // if only we are closing the main database
-  if (get_db_name(p->name) == p->name) {
-    CephVFSContext *cc = nullptr;
+  if (int rc = appd.setup_perf(); rc < 0) {
+    ceph_abort("cannot setup perf counters");
+  }
 
-    vfs_context_map_mutex.lock();
-    cc = vfs_context_map[std::string(p->name)];
-    if (cc)
-      vfs_context_map.erase(std::string(p->name));
-    vfs_context_map_mutex.unlock();
+  if (int rc = appd.init_cluster(); rc < 0) {
+    ceph_abort("cannot setup RADOS cluster handle");
+  }
 
-    if (cc) {
-      delete cc->rs;
-      if (cc->io_ctx) {
-        cc->io_ctx->close();
-        delete cc->io_ctx;
-      }
-      delete cc;
+  return cct.get();
+}
+
+static int Lock(sqlite3_file *file, int ilock)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << std::hex << ilock << dendl;
+
+  auto& lock = f->lock;
+  ceph_assert(!f->io.rs->is_locked() || lock > SQLITE_LOCK_NONE);
+  ceph_assert(lock <= ilock);
+  if (!f->io.rs->is_locked() && ilock > SQLITE_LOCK_NONE) {
+    if (int rc = f->io.rs->lock(0); rc < 0) {
+      df(5) << "failed: " << rc << dendl;
+      return SQLITE_IOERR;
     }
   }
 
+  lock = ilock;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_LOCK, end-start);
   return SQLITE_OK;
 }
 
-/*
-** Read data from a file.
-*/
-static
-int _cephsqlite3_Read(sqlite3_file *pFile, void *zBuf, int iAmt, sqlite_int64 iOfst)
+static int Unlock(sqlite3_file *file, int ilock)
 {
-  CephFile *p = (CephFile*)pFile;
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << "read(" << p->name << ", " << std::dec << iAmt << ", " << std::dec << iOfst << ")" << std::endl;
-  libradosstriper::RadosStriper *rs = get_radosstriper(get_db_name(p->name).c_str());
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << std::hex << ilock << dendl;
 
-  /* ceph::bufferlist buffer pointers are all char* */
-  char *b = static_cast<char*>(zBuf);
-  if (rs->read(p->name, b, iAmt, iOfst) < 0) {
-    // int e = errno;
-    // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::errno:" << e << std::endl;
+  auto& lock = f->lock;
+  ceph_assert(lock == SQLITE_LOCK_NONE || (lock > SQLITE_LOCK_NONE && f->io.rs->is_locked()));
+  ceph_assert(lock >= ilock);
+  if (ilock <= SQLITE_LOCK_NONE && SQLITE_LOCK_NONE < lock) {
+    if (int rc = f->io.rs->unlock(); rc < 0) {
+      df(5) << "failed: " << rc << dendl;
+      return SQLITE_IOERR;
+    }
+  }
+
+  lock = ilock;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_UNLOCK, end-start);
+  return SQLITE_OK;
+}
+
+static int CheckReservedLock(sqlite3_file *file, int *result)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << dendl;
+
+  auto& lock = f->lock;
+  if (lock > SQLITE_LOCK_SHARED) {
+    *result = 1;
+  }
+
+  df(10);
+  f->io.rs->print_lockers(*_dout);
+  *_dout << dendl;
+
+  *result = 0;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_CHECKRESERVEDLOCK, end-start);
+  return SQLITE_OK;
+}
+
+static int Close(sqlite3_file *file)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << dendl;
+  f->~cephsqlite_file();
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_CLOSE, end-start);
+  return SQLITE_OK;
+}
+
+static int Read(sqlite3_file *file, void *buf, int len, sqlite_int64 off)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << buf << " " << off << "~" << len << dendl;
+
+  if (int rc = f->io.rs->read(buf, len, off); rc < 0) {
+    df(5) << "read failed: " << cpp_strerror(rc) << dendl;
     return SQLITE_IOERR_READ;
-  }
-
-  return SQLITE_OK;
-}
-
-/*
-** Write data to a crash-file.
-*/
-static
-int _cephsqlite3_Write(sqlite3_file *pFile, const void *zBuf, int iAmt, sqlite_int64 iOfst)
-{
-  CephFile *p = (CephFile*)pFile;
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << "write(" << p->name << ", " << std::dec << iAmt << ", " << std::dec << iOfst << ")" << std::endl;
-  libradosstriper::RadosStriper *rs = get_radosstriper(get_db_name(p->name).c_str());
-
-  /* ceph::bufferlist buffer pointers are all char* */
-  char *b = reinterpret_cast<char*>(const_cast<void*>(zBuf));
-  ceph::bufferlist bl = ceph::bufferlist::static_from_mem(b, iAmt);
-
-  if (rs->write(p->name, bl, iAmt, iOfst) < 0)
-    return SQLITE_IOERR;
-
-  return SQLITE_OK;
-}
-
-/*
-** Truncate a file. This is a no-op for this VFS (see header comments at
-** the top of the file).
-*/
-static
-int _cephsqlite3_Truncate(sqlite3_file *pFile, sqlite_int64 size)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  CephFile *p = (CephFile*)pFile;
-  libradosstriper::RadosStriper *rs = get_radosstriper(get_db_name(p->name).c_str());
-
-  if (rs->trunc(p->name, size) != 0)
-    return SQLITE_IOERR;
-
-  return SQLITE_OK;
-}
-
-/*
-** Sync the contents of the file to the persistent media.
-*/
-static
-int _cephsqlite3_Sync(sqlite3_file *pFile, int flags)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  return SQLITE_OK;
-}
-
-
-/*
-** Write the size of the file in bytes to *pSize.
-*/
-static
-int _cephsqlite3_FileSize(sqlite3_file *pFile, sqlite_int64 *pSize)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  CephFile *p = (CephFile*)pFile;
-  libradosstriper::RadosStriper *rs = get_radosstriper(get_db_name(p->name).c_str());
-
-  uint64_t  size = 0;
-  time_t    mtime = 0;
-  int       rc = rs->stat(p->name, &size, &mtime);
-
-  *pSize = 0;
-
-  if (rc == 0)
-    *pSize = (sqlite_int64)size;
-
-  return SQLITE_OK;
-}
-
-#define CASE(x) case x: return #x
-
-static
-const char *lock_type_str(int eLock)
-{
-  switch (eLock) {
-    CASE(SQLITE_LOCK_NONE);
-    CASE(SQLITE_LOCK_SHARED);
-    CASE(SQLITE_LOCK_RESERVED);
-    CASE(SQLITE_LOCK_PENDING);
-    CASE(SQLITE_LOCK_EXCLUSIVE);
-  }
-  return "UNKNOWN";
-}
-
-static
-std::string get_lock_file_name(const std::string &db_name, int eLock)
-{
-  std::string lock_file_name = db_name;
-  lock_file_name += "-";
-  lock_file_name += lock_type_str(eLock);
-  return lock_file_name;
-}
-
-std::string get_cookie()
-{
-  std::stringstream ss;
-
-  ss << std::hex << std::setfill('0') << std::setw(16) << "0x" << pthread_self();
-
-  return ss.str();
-}
-
-/*
-** Locking functions. The xLock() and xUnlock() methods are both no-ops.
-** The xCheckReservedLock() always indicates that no other process holds
-** a reserved lock on the database file. This ensures that if a hot-journal
-** file is found in the file-system it is rolled back.
-*/
-static
-int _cephsqlite3_Lock(sqlite3_file *pFile, int eLock)
-{
-  CephFile *p = (CephFile *)pFile;
-
-  assert(p != NULL);
-
-  std::string db_name = get_db_name(p->name);
-  std::string db_file = p->name;
-  /* Make sure the locking sequence is correct.
-  **  (1) We never move from unlocked to anything higher than shared lock.
-  **  (2) SQLite never explicitly requests a pendig lock.
-  **  (3) A shared lock is always held when a reserve lock is requested.
-  */
-  int curr_lock_type = get_lock_type(db_name, db_file);
-
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::eLock " << p->name << " from:" << lock_type_str(curr_lock_type) << " to:" << lock_type_str(eLock) << std::endl;
-
-  assert(curr_lock_type != SQLITE_LOCK_NONE || eLock == SQLITE_LOCK_SHARED);
-  assert(eLock != SQLITE_LOCK_PENDING);
-  assert(eLock != SQLITE_LOCK_RESERVED || curr_lock_type == SQLITE_LOCK_SHARED);
-
-
-  if (curr_lock_type == eLock)
-      return SQLITE_OK;
-
-  librados::IoCtx *io_ctx = get_io_ctx(db_name.c_str());
-  assert(io_ctx != nullptr);
-
-  std::string lock_file_name;
-
-  if (curr_lock_type == SQLITE_LOCK_NONE) {
-    if (eLock == SQLITE_LOCK_SHARED) {
-      lock_file_name = get_lock_file_name(db_file, SQLITE_LOCK_SHARED);
-      if (lock_file_in_rados(io_ctx, lock_file_name, lock_name, false) != 0)
-        return SQLITE_BUSY;
-      set_lock_type(db_name, db_file, SQLITE_LOCK_SHARED);
+  } else {
+    df(5) << "= " << rc << dendl;
+    auto end = ceph::coarse_mono_clock::now();
+    getdata(f->vfs).logger->tinc(P_OPF_READ, end-start);
+    if (rc < len) {
+      memset(buf, 0, len-rc);
+      return SQLITE_IOERR_SHORT_READ;
+    } else {
       return SQLITE_OK;
     }
-    return SQLITE_IOERR_RDLOCK;
-  } else if (curr_lock_type == SQLITE_LOCK_SHARED) {
-    lock_file_name = get_lock_file_name(db_file, SQLITE_LOCK_SHARED /*SQLITE_LOCK_EXCLUSIVE*/);
+  }
+}
 
-    // unlock in shared mode and lock in exclusive mode
-    if (io_ctx->unlock(lock_file_name, lock_name, get_cookie()) == 0) {
-      if (lock_file_in_rados(io_ctx, lock_file_name, lock_name, true) != 0) {
-        // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::returning SQLITE_BUSY" << std::endl;
-        return SQLITE_BUSY;
+static int Write(sqlite3_file *file, const void *buf, int len, sqlite_int64 off)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << off << "~" << len << dendl;
+
+  if (int rc = f->io.rs->write(buf, len, off); rc < 0) {
+    df(5) << "write failed: " << cpp_strerror(rc) << dendl;
+    return SQLITE_IOERR_WRITE;
+  } else {
+    df(5) << "= " << rc << dendl;
+    auto end = ceph::coarse_mono_clock::now();
+    getdata(f->vfs).logger->tinc(P_OPF_WRITE, end-start);
+    return SQLITE_OK;
+  }
+
+}
+
+static int Truncate(sqlite3_file *file, sqlite_int64 size)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << size << dendl;
+
+  if (int rc = f->io.rs->truncate(size); rc < 0) {
+    df(5) << "truncate failed: " << cpp_strerror(rc) << dendl;
+    return SQLITE_IOERR;
+  }
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_TRUNCATE, end-start);
+  return SQLITE_OK;
+}
+
+static int Sync(sqlite3_file *file, int flags)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << flags << dendl;
+
+  if (int rc = f->io.rs->flush(); rc < 0) {
+    df(5) << "failed: " << cpp_strerror(rc) << dendl;
+    return SQLITE_IOERR;
+  }
+
+  df(5) << " = 0" << dendl;
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_SYNC, end-start);
+  return SQLITE_OK;
+}
+
+
+static int FileSize(sqlite3_file *file, sqlite_int64 *osize)
+{
+  auto f = (cephsqlite_file*)file;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << dendl;
+
+  uint64_t size = 0;
+  if (int rc = f->io.rs->stat(&size); rc < 0) {
+    df(5) << "stat failed: " << cpp_strerror(rc) << dendl;
+    return SQLITE_NOTFOUND;
+  }
+
+  *osize = (sqlite_int64)size;
+
+  df(5) << "= " << size << dendl;
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_FILESIZE, end-start);
+  return SQLITE_OK;
+}
+
+
+static bool parsepath(std::string_view path, struct cephsqlite_fileloc* fileloc)
+{
+  static const std::regex re1{"^/*(\\*[[:digit:]]+):([[:alnum:]-_.]*)/([[:alnum:]-._]+)$"};
+  static const std::regex re2{"^/*([[:alnum:]-_.]+):([[:alnum:]-_.]*)/([[:alnum:]-._]+)$"};
+
+  std::cmatch cm;
+  if (!std::regex_match(path.data(), cm, re1)) {
+    if (!std::regex_match(path.data(), cm, re2)) {
+      return false;
+    }
+  }
+  fileloc->pool = cm[1];
+  fileloc->radosns = cm[2];
+  fileloc->name = cm[3];
+
+  return true;
+}
+
+static int makestriper(sqlite3_vfs* vfs, const cephsqlite_fileloc& loc, cephsqlite_fileio* io)
+{
+  auto&& appd = getdata(vfs);
+  auto& cct = appd.cct;
+  auto& cluster = appd.cluster;
+  bool gotmap = false;
+
+  dv(10) << loc << dendl;
+
+enoent_retry:
+  if (loc.pool[0] == '*') {
+    std::string err;
+    int64_t id = strict_strtoll(loc.pool.c_str()+1, 10, &err);
+    ceph_assert(err.empty());
+    if (int rc = cluster.ioctx_create2(id, io->ioctx); rc < 0) {
+      if (rc == -ENOENT && !gotmap) {
+        cluster.wait_for_latest_osdmap();
+        gotmap = true;
+        goto enoent_retry;
       }
-      set_lock_type(db_name, db_file, eLock);
-      return SQLITE_OK;
+      dv(10) << "cannot create ioctx: " << cpp_strerror(rc) << dendl;
+      return rc;
     }
-  } else if (eLock == SQLITE_LOCK_RESERVED || eLock == SQLITE_LOCK_PENDING || eLock == SQLITE_LOCK_EXCLUSIVE) {
-    set_lock_type(db_name, db_file, eLock);
-    return SQLITE_OK;
+  } else {
+    if (int rc = cluster.ioctx_create(loc.pool.c_str(), io->ioctx); rc < 0) {
+      if (rc == -ENOENT && !gotmap) {
+        cluster.wait_for_latest_osdmap();
+        gotmap = true;
+        goto enoent_retry;
+      }
+      dv(10) << "cannot create ioctx: " << cpp_strerror(rc) << dendl;
+      return rc;
+    }
   }
 
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::returning SQLITE_IOERR_LOCK" << std::endl;
-  return SQLITE_IOERR_LOCK;
-}
+  if (!loc.radosns.empty())
+    io->ioctx.set_namespace(loc.radosns);
 
-static
-int _cephsqlite3_Unlock(sqlite3_file *pFile, int eLock)
-{
-  CephFile *p = (CephFile *)pFile;
+  io->rs = std::make_unique<SimpleRADOSStriper>(io->ioctx, loc.name);
+  io->rs->set_logger(appd.striper_logger);
+  io->rs->set_lock_timeout(cct->_conf.get_val<std::chrono::milliseconds>("cephsqlite_lock_renewal_timeout"));
+  io->rs->set_lock_interval(cct->_conf.get_val<std::chrono::milliseconds>("cephsqlite_lock_renewal_interval"));
+  io->rs->set_blocklist_the_dead(cct->_conf.get_val<bool>("cephsqlite_blocklist_dead_locker"));
 
-  assert(p != NULL);
-
-
-  std::string db_name = get_db_name(p->name);
-  std::string db_file = p->name;
-
-  librados::IoCtx *io_ctx = get_io_ctx(db_name.c_str());
-  assert(io_ctx != nullptr);
-
-  int curr_lock_type = get_lock_type(db_name, db_file);
-
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::eLock " << p->name << " from:" << lock_type_str(curr_lock_type) << " to:" << lock_type_str(eLock) << std::endl;
-
-  if (eLock == curr_lock_type)
-    return SQLITE_OK;
-
-  assert(eLock < curr_lock_type);
-
-  std::string lock_file_name = get_lock_file_name(db_file, SQLITE_LOCK_SHARED);
-  if (eLock <= SQLITE_LOCK_SHARED) {
-    if (io_ctx->unlock(lock_file_name, lock_name, get_cookie()) != 0)
-      return SQLITE_IOERR_UNLOCK;
-  }
-
-  if (eLock == SQLITE_LOCK_SHARED) {
-    if (lock_file_in_rados(io_ctx, lock_file_name, lock_name, false) != 0)
-      return SQLITE_BUSY;
-  }
-
-  set_lock_type(db_name, db_file, eLock);
-
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << ":: returning SQLITE_OK" << std::endl;
-  return SQLITE_OK;
-}
-
-static
-int _cephsqlite3_CheckReservedLock(sqlite3_file *pFile, int *pResOut)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  CephFile *p = (CephFile *)pFile;
-
-  assert(p != NULL);
-
-  std::string db_name = get_db_name(p->name);
-  std::string db_file = p->name;
-  // librados::IoCtx *io_ctx = get_io_ctx(db_name.c_str());
-  // assert(io_ctx != nullptr);
-  int curr_lock_type = get_lock_type(db_name, db_file);
-
-  *pResOut = (curr_lock_type > SQLITE_LOCK_SHARED);
-  return SQLITE_OK;
-}
-
-/*
-** No xFileControl() verbs are implemented by this VFS.
-*/
-static
-int _cephsqlite3_FileControl(sqlite3_file *pFile, int op, void *pArg)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  return SQLITE_NOTFOUND;
-}
-
-/*
-** The xSectorSize() and xDeviceCharacteristics() methods. These two
-** may return special values allowing SQLite to optimize file-system
-** access to some extent. But it is also safe to simply return 0.
-*/
-static
-int _cephsqlite3_SectorSize(sqlite3_file *pFile)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  return 4096;
-}
-
-static
-int _cephsqlite3_DeviceCharacteristics(sqlite3_file *pFile)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
   return 0;
 }
 
-/*
-** Open a file handle.
-*/
-static
-int _cephsqlite3_Open(
-  sqlite3_vfs *pVfs,              /* VFS */
-  const char *zName,              /* File to open, or 0 for a temp file */
-  sqlite3_file *pFile,            /* Pointer to DemoFile struct to populate */
-  int flags,                      /* Input SQLITE_OPEN_XXX flags */
-  int *pOutFlags                  /* Output SQLITE_OPEN_XXX flags (or NULL) */
-)
+static int SectorSize(sqlite3_file* sf)
 {
-  static const sqlite3_io_methods _cephsqlite3_io = {
-    1,                                     /* iVersion */
-    _cephsqlite3_Close,                    /* xClose */
-    _cephsqlite3_Read,                     /* xRead */
-    _cephsqlite3_Write,                    /* xWrite */
-    _cephsqlite3_Truncate,                 /* xTruncate */
-    _cephsqlite3_Sync,                     /* xSync */
-    _cephsqlite3_FileSize,                 /* xFileSize */
-    _cephsqlite3_Lock,                     /* xLock */
-    _cephsqlite3_Unlock,                   /* xUnlock */
-    _cephsqlite3_CheckReservedLock,        /* xCheckReservedLock */
-    _cephsqlite3_FileControl,              /* xFileControl */
-    _cephsqlite3_SectorSize,               /* xSectorSize */
-    _cephsqlite3_DeviceCharacteristics     /* xDeviceCharacteristics */
+  static const int size = 65536;
+  auto start = ceph::coarse_mono_clock::now();
+  auto f = (cephsqlite_file*)sf;
+  df(5) << " = " << size << dendl;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_SECTORSIZE, end-start);
+  return size;
+}
+
+static int FileControl(sqlite3_file* sf, int op, void *arg)
+{
+  auto f = (cephsqlite_file*)sf;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << op << ", " << arg << dendl;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_FILECONTROL, end-start);
+  return SQLITE_NOTFOUND;
+}
+
+static int DeviceCharacteristics(sqlite3_file* sf)
+{
+  auto f = (cephsqlite_file*)sf;
+  auto start = ceph::coarse_mono_clock::now();
+  df(5) << dendl;
+  static const int c = 0
+      |SQLITE_IOCAP_ATOMIC
+      |SQLITE_IOCAP_POWERSAFE_OVERWRITE
+      |SQLITE_IOCAP_UNDELETABLE_WHEN_OPEN
+      |SQLITE_IOCAP_SAFE_APPEND
+      ;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(f->vfs).logger->tinc(P_OPF_DEVICECHARACTERISTICS, end-start);
+  return c;
+}
+
+static int Open(sqlite3_vfs *vfs, const char *name, sqlite3_file *file,
+                int flags,  int *oflags)
+{
+  static const sqlite3_io_methods io = {
+    1,                        /* iVersion */
+    Close,                    /* xClose */
+    Read,                     /* xRead */
+    Write,                    /* xWrite */
+    Truncate,                 /* xTruncate */
+    Sync,                     /* xSync */
+    FileSize,                 /* xFileSize */
+    Lock,                     /* xLock */
+    Unlock,                   /* xUnlock */
+    CheckReservedLock,        /* xCheckReservedLock */
+    FileControl,              /* xFileControl */
+    SectorSize,               /* xSectorSize */
+    DeviceCharacteristics     /* xDeviceCharacteristics */
   };
 
-  CephFile *p = (CephFile*)pFile; /* Populate this structure */
+  auto start = ceph::coarse_mono_clock::now();
+  bool gotmap = false;
+  auto& cluster = getdata(vfs).cluster;
 
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << "zName:" << zName << std::endl;
-
-  if ((zName == 0) || (strncmp(zName, ":memory:", 8) == 0)) {
-    /* we are not going to create temporary files */
+  /* we are not going to create temporary files */
+  if (name == NULL) {
+    dv(-1) << " cannot open temporary database" << dendl;
+    return SQLITE_CANTOPEN;
+  }
+  auto path = std::string_view(name);
+  if (path == ":memory:"sv) {
+    dv(-1) << " cannot open temporary database" << dendl;
     return SQLITE_IOERR;
   }
 
+  dv(5) << path << " flags=" << std::hex << flags << dendl;
 
-  p->name = zName; /* save the file name */
-  p->file_open_flags = flags;
-  libradosstriper::RadosStriper* rs = get_radosstriper(get_db_name(zName).c_str());
+  auto f = new (file)cephsqlite_file();
+  f->vfs = vfs;
+  if (!parsepath(path, &f->loc)) {
+    ceph_assert(0); /* xFullPathname validates! */
+  }
+  f->flags = flags;
 
-  // std::cerr << "rs:" << std::hex << rs << std::endl;
+enoent_retry:
+  if (int rc = makestriper(vfs, f->loc, &f->io); rc < 0) {
+    f->~cephsqlite_file();
+    dv(5) << "cannot open striper" << dendl;
+    return SQLITE_IOERR;
+  }
 
-  assert(rs != nullptr);
-
-  /* exclusive create
-   * radosstriper doesn't have a create()! ... since the data is striped,
-   * radosstriper can't decide beforehand which of the stripe files it needs
-   * to create
-   * so here, we just force create the first stripe by writing to offset zero
-   * so that the rest of the interface functions work as expected
-   */
   if (flags & SQLITE_OPEN_CREATE) {
-    // std::cerr << __FUNCTION__ << "::creating database" << std::endl;
-    char dummy[4096] = {0,};
-    ceph::bufferlist bl = ceph::bufferlist::static_from_mem(dummy, sizeof(dummy));
-    if (rs->write(p->name, bl, sizeof(dummy), 0) != 0) {
-      // int e = errno;
-      // std::cerr << __FUNCTION__ << "::error: during write():errno(" << e << ")" << std::endl;
-      return SQLITE_IOERR_WRITE;
+    dv(10) << "OPEN_CREATE" << dendl;
+    if (int rc = f->io.rs->create(); rc < 0 && rc != -EEXIST) {
+      if (rc == -ENOENT && !gotmap) {
+        /* we may have an out of date OSDMap which cancels the op in the
+         * Objecter. Try to get a new one and retry. This is mostly noticable
+         * in testing when pools are getting created/deleted left and right.
+         */
+        dv(5) << "retrying create after getting latest OSDMap" << dendl;
+        cluster.wait_for_latest_osdmap();
+        gotmap = true;
+        goto enoent_retry;
+      }
+      dv(5) << "file cannot be created: " << cpp_strerror(rc) << dendl;
+      return SQLITE_IOERR;
     }
-    if (rs->trunc(p->name, 0) < 0) {
-      // int e = errno;
-      // std::cerr << __FUNCTION__ << "::error: during trunc():errno(" << e << ")" << std::endl;
-      return SQLITE_IOERR_TRUNCATE;
-    }
-
-    // we also create the sentinel file which would be for locking operations
-    librados::IoCtx *io_ctx = get_io_ctx(get_db_name(zName).c_str());
-
-    if (create_lock_files(io_ctx, std::string(zName), true) != SQLITE_OK)
-      return SQLITE_ERROR;
   }
 
-  if (pOutFlags) {
-    *pOutFlags = flags;
+  if (int rc = f->io.rs->open(); rc < 0) {
+    if (rc == -ENOENT && !gotmap) {
+      /* See comment above for create case. */
+      dv(5) << "retrying open after getting latest OSDMap" << dendl;
+      cluster.wait_for_latest_osdmap();
+      gotmap = true;
+      goto enoent_retry;
+    }
+    dv(10) << "cannot open striper: " << cpp_strerror(rc) << dendl;
+    return rc;
   }
-  p->base.pMethods = &_cephsqlite3_io;
+
+  if (oflags) {
+    *oflags = flags;
+  }
+  f->base.pMethods = &io;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(vfs).logger->tinc(P_OP_OPEN, end-start);
   return SQLITE_OK;
 }
 
 /*
-** Delete the file identified by argument zPath. If the dirSync parameter
+** Delete the file identified by argument path. If the dsync parameter
 ** is non-zero, then ensure the file-system modification to delete the
 ** file has been synced to disk before returning.
 */
-static
-int _cephsqlite3_Delete(sqlite3_vfs *pVfs, const char *zPath, int dirSync)
+static int Delete(sqlite3_vfs* vfs, const char* path, int dsync)
 {
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  libradosstriper::RadosStriper *rs = get_radosstriper(get_db_name(zPath).c_str());
-  librados::IoCtx *io_ctx           = get_io_ctx(get_db_name(zPath).c_str());
+  auto start = ceph::coarse_mono_clock::now();
+  dv(5) << "'" << path << "', " << dsync << dendl;
 
-  int ret = rs->remove(zPath);
-  if (ret == 0) {
-    // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::deleted " << zPath << std::endl;
-    return SQLITE_OK;
+  cephsqlite_fileloc fileloc;
+  if (!parsepath(path, &fileloc)) {
+    dv(5) << "path does not parse!" << dendl;
+    return SQLITE_NOTFOUND;
   }
 
-  remove_lock_files(io_ctx, std::string(zPath));
+  cephsqlite_fileio io;
+  if (int rc = makestriper(vfs, fileloc, &io); rc < 0) {
+    dv(5) << "cannot open striper" << dendl;
+    return SQLITE_IOERR;
+  }
 
-  // int e = errno;
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::error deleting " << zPath << " ret:" << ret << ", errno:" << e << std::endl;
-  return SQLITE_IOERR_DELETE;
+  if (int rc = io.rs->lock(0); rc < 0) {
+    return SQLITE_IOERR;
+  }
+
+  if (int rc = io.rs->remove(); rc < 0) {
+    dv(5) << "= " << rc << dendl;
+    return SQLITE_IOERR_DELETE;
+  }
+
+  /* No need to unlock */
+  dv(5) << "= 0" << dendl;
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(vfs).logger->tinc(P_OP_DELETE, end-start);
+
+  return SQLITE_OK;
 }
 
 /*
 ** Query the file-system to see if the named file exists, is readable or
 ** is both readable and writable.
 */
-static
-int _cephsqlite3_Access(sqlite3_vfs *pVfs, const char *zPath, int flags, int *pResOut)
+static int Access(sqlite3_vfs* vfs, const char* path, int flags, int* result)
 {
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << ":zPath:" << zPath << std::endl;
+  auto start = ceph::coarse_mono_clock::now();
+  dv(5) << path << " " << std::hex << flags << dendl;
 
-  assert(flags == SQLITE_ACCESS_EXISTS  ||       /* access(zPath, F_OK) */
-         flags == SQLITE_ACCESS_READ    ||       /* access(zPath, R_OK) */
-         flags == SQLITE_ACCESS_READWRITE        /* access(zPath, R_OK|W_OK) */
-  );
+  cephsqlite_fileloc fileloc;
+  if (!parsepath(path, &fileloc)) {
+    dv(5) << "path does not parse!" << dendl;
+    return SQLITE_NOTFOUND;
+  }
 
-  libradosstriper::RadosStriper *rs = get_radosstriper(get_db_name(zPath).c_str());
+  cephsqlite_fileio io;
+  if (int rc = makestriper(vfs, fileloc, &io); rc < 0) {
+    dv(5) << "cannot open striper" << dendl;
+    return SQLITE_IOERR;
+  }
 
-  uint64_t  size = 0;
-  time_t    mtime = 0;
-  int       rc = rs->stat(zPath, &size, &mtime);
-
-  *pResOut = (rc == 0);
-
-  return SQLITE_OK;
-}
-
-/*
-** Argument zPath points to a nul-terminated string containing a file path.
-** If zPath is an absolute path, then it is copied as is into the output
-** buffer. Otherwise, if it is a relative path, then the equivalent full
-** path is written to the output buffer.
-**
-** This function assumes that paths are UNIX style. Specifically, that:
-**
-**   1. Path components are separated by a '/'. and
-**   2. Full paths begin with a '/' character.
-*/
-static
-int _cephsqlite3_FullPathname(
-  sqlite3_vfs *pVfs,              /* VFS */
-  const char *zPath,              /* Input path (possibly a relative path) */
-  int nPathOut,                   /* Size of output buffer in bytes */
-  char *zPathOut                  /* Pointer to output buffer */
-)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << ":zPath:" << zPath << std::endl;
-
-  /* There are no directories to be searched for RADOS obects.
-   * They are always at the root.
-   * So, just copy the path if starting with '/' or prefix the path with a '/'
-   * and copy to output.
-   */
-  if (strlen(zPath) >= (unsigned long)nPathOut)
-    return SQLITE_ERROR;
-
-  memcpy(zPathOut, zPath, strlen(zPath) + 1);
-  zPathOut[strlen(zPath)] = '\0';
-
-  return SQLITE_OK;
-}
-
-/*
-** The following four VFS methods:
-**
-**   xDlOpen
-**   xDlError
-**   xDlSym
-**   xDlClose
-**
-** are supposed to implement the functionality needed by SQLite to load
-** extensions compiled as shared objects. This VFS does not support
-** this functionality, so the following functions are no-ops.
-*/
-static
-void *_cephsqlite3_DlOpen(sqlite3_vfs *pVfs, const char *zPath)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  return 0;
-}
-
-static
-void _cephsqlite3_DlError(sqlite3_vfs *pVfs, int nByte, char *zErrMsg)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  snprintf(zErrMsg, nByte, "Loadable extensions are not supported");
-  zErrMsg[nByte-1] = '\0';
-}
-
-static
-void (*_cephsqlite3_DlSym(sqlite3_vfs *pVfs, void *pH, const char *z))(void)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  return 0;
-}
-
-static
-void _cephsqlite3_DlClose(sqlite3_vfs *pVfs, void *pHandle)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  return;
-}
-
-/*
-** Parameter zByte points to a buffer nByte bytes in size. Populate this
-** buffer with pseudo-random data.
-*/
-static
-int _cephsqlite3_Randomness(sqlite3_vfs *pVfs, int nByte, char *zByte)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  int fd = open("/dev/urandom", O_RDONLY);
-  if (fd >= 0) {
-    if (read(fd, zByte, nByte) == nByte) {
-      close(fd);
+  if (int rc = io.rs->open(); rc < 0) {
+    if (rc == -ENOENT) {
+      *result = 0;
       return SQLITE_OK;
-    }
-    close(fd);
-  }
-  return SQLITE_ERROR;
-}
-
-/*
-** Sleep for at least nMicro microseconds. Return the (approximate) number
-** of microseconds slept for.
-*/
-static
-int _cephsqlite3_Sleep(sqlite3_vfs *pVfs, int nMicro)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  sleep(nMicro / 1000000);
-  usleep(nMicro % 1000000);
-  return nMicro;
-}
-
-/*
-** Set *pTime to the current UTC time expressed as a Julian day. Return
-** SQLITE_OK if successful, or an error code otherwise.
-**
-**   http://en.wikipedia.org/wiki/Julian_day
-**
-** This implementation is not very good. The current time is rounded to
-** an integer number of seconds. Also, assuming time_t is a signed 32-bit
-** value, it will stop working some time in the year 2038 AD (the so-called
-** "year 2038" problem that afflicts systems that store time this way).
-*/
-static
-int _cephsqlite3_CurrentTime(sqlite3_vfs *pVfs, double *pTime)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  time_t t = time(0);
-  *pTime = t/86400.0 + 2440587.5;
-  return SQLITE_OK;
-}
-
-static
-sqlite3_vfs *_cephsqlite3__vfs(void)
-{
-  static sqlite3_vfs _cephsqlite3_vfs = {
-    1,                               /* iVersion */
-    sizeof(CephFile),                /* szOsFile */
-    PATH_MAX,                     /* mxPathname */
-    0,                               /* pNext */
-    "cephsqlite3",                   /* zName */
-    0,                               /* pAppData */
-    _cephsqlite3_Open,               /* xOpen */
-    _cephsqlite3_Delete,             /* xDelete */
-    _cephsqlite3_Access,             /* xAccess */
-    _cephsqlite3_FullPathname,       /* xFullPathname */
-    _cephsqlite3_DlOpen,             /* xDlOpen */
-    _cephsqlite3_DlError,            /* xDlError */
-    _cephsqlite3_DlSym,              /* xDlSym */
-    _cephsqlite3_DlClose,            /* xDlClose */
-    _cephsqlite3_Randomness,         /* xRandomness */
-    _cephsqlite3_Sleep,              /* xSleep */
-    _cephsqlite3_CurrentTime,        /* xCurrentTime */
-  };
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  return &_cephsqlite3_vfs;
-}
-
-static
-void __attribute__ ((constructor)) _cephsqlite3__vfs_register()
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  sqlite3_vfs_register(_cephsqlite3__vfs(), 1);
-}
-
-static
-void __attribute__ ((destructor)) _cephsqlite3__vfs_unregister()
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << std::endl;
-  sqlite3_vfs_unregister(_cephsqlite3__vfs());
-}
-
-extern "C"
-sqlite3 *ceph_sqlite3_open(
-  librados::Rados &cluster,
-  const char *dbname,           /* eg. "sql" instead of "sql.db" */
-  const char *rados_namespace,
-  int ceph_pool_id,
-  bool must_create
-)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::must_create:" << must_create << std::endl;
-  int ret = -1;
-  /* FIXME
-   * how long should the io_ctx and cluster objects exist for radosstriper
-   * to be functional ?
-   */
-  librados::IoCtx *io_ctx = new librados::IoCtx;
-  libradosstriper::RadosStriper *rs = new libradosstriper::RadosStriper;
-
-  ret = cluster.ioctx_create2(ceph_pool_id, *io_ctx);
-  if (ret < 0) {
-    /* unable to create the IO Context */
-    return NULL;
-  }
-
-  io_ctx->set_namespace(rados_namespace);
-
-  ret = libradosstriper::RadosStriper::striper_create(*io_ctx, rs);
-  if (ret < 0) {
-    /* unable to create the striper */
-    return NULL;
-  }
-
-  uint64_t alignment = 0;
-  ret = io_ctx->pool_required_alignment2(&alignment);
-  if (ret < 0) {
-    /* no alignment retrieved */
-    return NULL;
-  }
-
-  rs->set_object_layout_stripe_unit(alignment);
-
-  sqlite3 *db = NULL;
-  const int db_open_flags = SQLITE_OPEN_NOMUTEX       | /* single client access */
-                            SQLITE_OPEN_PRIVATECACHE  |
-                            SQLITE_OPEN_READWRITE     |
-                            SQLITE_OPEN_URI           |
-                            (must_create ? SQLITE_OPEN_CREATE : 0);
-
-  std::stringstream ss;
-
-  /* pass the address of the RadosStriper C++ object in the URI so that the VFS
-   * methods can access it
-   */
-  std::string mode = (must_create ? "rwc" : "rw");
-  /* create a URI based file name */
-  ss << "file:" << dbname << ".db?mode=" << mode << "&cache=private&vfs=cephsqlite3";
-  std::string filename = ss.str();
-
-  // (void) pthread_once(&ceph_vfs_context_key_once, make_key);
-  CephVFSContext *cc = NULL;
-  vfs_context_map_mutex.lock();
-  if (vfs_context_map[std::string(dbname) + ".db"] == nullptr) {
-    cc = new CephVFSContext;
-    cc->io_ctx = io_ctx;
-    cc->rs     = rs;
-    vfs_context_map[std::string(dbname) + ".db"] = cc;
-  }
-  vfs_context_map_mutex.unlock();
-
-  ret = sqlite3_open_v2(filename.c_str(), &db, db_open_flags, "cephsqlite3");
-  if (ret < 0) {
-    /* db creation failed */
-    return NULL;
-  }
-
-  return db;
-}
-
-extern "C"
-void ceph_sqlite3_set_db_params(
-  const char *dbname,           /* eg. "sql" instead of "sql.db" */
-  int stripe_count,
-  int obj_size
-)
-{
-  vfs_context_map_mutex.lock();
-  CephVFSContext *cc = vfs_context_map[std::string(dbname) + ".db"];
-
-  if (cc) {
-    libradosstriper::RadosStriper *rs = cc->rs;
-
-    if (rs) {
-      rs->set_object_layout_stripe_count(stripe_count);
-      rs->set_object_layout_object_size(obj_size);
+    } else {
+      dv(10) << "cannot open striper: " << cpp_strerror(rc) << dendl;
+      *result = 0;
+      return SQLITE_IOERR;
     }
   }
-  vfs_context_map_mutex.unlock();
+
+  uint64_t size = 0;
+  if (int rc = io.rs->stat(&size); rc < 0) {
+    dv(5) << "= " << rc << " (" << cpp_strerror(rc) << ")" << dendl;
+    *result = 0;
+  } else {
+    dv(5) << "= 0" << dendl;
+    *result = 1;
+  }
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(vfs).logger->tinc(P_OP_ACCESS, end-start);
+  return SQLITE_OK;
 }
 
-static
-int create_lock_files(librados::IoCtx *io_ctx, const std::string &db_file, bool must_create)
+/* This method is only called once for each database. It provides a chance to
+ * reformat the path into a canonical format.
+ */
+static int FullPathname(sqlite3_vfs* vfs, const char* ipath, int opathlen, char* opath)
 {
-  int ret = io_ctx->create(get_lock_file_name(db_file, SQLITE_LOCK_SHARED), must_create);
-  if (ret < 0 && ret != -EEXIST) {
-    // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::error: while creating:" << get_lock_file_name(db_file, SQLITE_LOCK_SHARED) << std::endl;
-    return SQLITE_ERROR;
+  auto start = ceph::coarse_mono_clock::now();
+  auto path = std::string_view(ipath);
+
+  dv(5) << "1: " <<  path << dendl;
+
+  cephsqlite_fileloc fileloc;
+  if (!parsepath(path, &fileloc)) {
+    dv(5) << "path does not parse!" << dendl;
+    return SQLITE_NOTFOUND;
+  }
+  dv(5) << " parsed " << fileloc << dendl;
+
+  auto p = fmt::format("{}:{}/{}", fileloc.pool, fileloc.radosns, fileloc.name);
+  if (p.size() >= (size_t)opathlen) {
+    dv(5) << "path too long!" << dendl;
+    return SQLITE_CANTOPEN;
+  }
+  strcpy(opath, p.c_str());
+  dv(5) << " output " << p << dendl;
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(vfs).logger->tinc(P_OP_FULLPATHNAME, end-start);
+  return SQLITE_OK;
+}
+
+static int CurrentTime(sqlite3_vfs* vfs, sqlite3_int64* time)
+{
+  auto start = ceph::coarse_mono_clock::now();
+  dv(5) << time << dendl;
+
+  auto t = ceph_clock_now();
+  *time = t.to_msec() + 2440587.5;
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(vfs).logger->tinc(P_OP_CURRENTTIME, end-start);
+  return SQLITE_OK;
+}
+
+LIBCEPHSQLITE_API int cephsqlite_setcct(CephContext* cct, char** ident)
+{
+  ldout(cct, 1) << "cct: " << cct << dendl;
+
+  if (sqlite3_api == nullptr) {
+    lderr(cct) << "API violation: must have sqlite3 init libcephsqlite" << dendl;
+    return -EINVAL;
   }
 
-  ret = io_ctx->create(get_lock_file_name(db_file, SQLITE_LOCK_RESERVED), must_create);
-  if (ret < 0 && ret != -EEXIST) {
-    // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::error: while creating:" << get_lock_file_name(db_file, SQLITE_LOCK_RESERVED) << std::endl;
-    return SQLITE_ERROR;
+  auto vfs = sqlite3_vfs_find("ceph");
+  if (!vfs) {
+    lderr(cct) << "API violation: must have sqlite3 init libcephsqlite" << dendl;
+    return -EINVAL;
   }
 
-  ret = io_ctx->create(get_lock_file_name(db_file, SQLITE_LOCK_PENDING), must_create);
-  if (ret < 0 && ret != -EEXIST) {
-    // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::error: while creating:" << get_lock_file_name(db_file, SQLITE_LOCK_PENDING) << std::endl;
-    return SQLITE_ERROR;
+  auto& appd = getdata(vfs);
+  appd.cct = cct;
+  if (int rc = appd.setup_perf(); rc < 0) {
+    appd.cct = nullptr;
+    return rc;
+  }
+  if (int rc = appd.init_cluster(); rc < 0) {
+    appd.cct = nullptr;
+    return rc;
   }
 
-  ret = io_ctx->create(get_lock_file_name(db_file, SQLITE_LOCK_EXCLUSIVE), must_create);
-  if (ret < 0 && ret != -EEXIST) {
-    // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::error: while creating:" << get_lock_file_name(db_file, SQLITE_LOCK_EXCLUSIVE) << std::endl;
-    return SQLITE_ERROR;
+  auto s = appd.cluster.get_addrs();
+  if (ident) {
+    *ident = strdup(s.c_str());
+  }
+
+  ldout(cct, 1) << "complete" << dendl;
+
+  return 0;
+}
+
+static void f_perf(sqlite3_context* ctx, int argc, sqlite3_value** argv)
+{
+  auto vfs = (sqlite3_vfs*)sqlite3_user_data(ctx);
+  dv(10) << dendl;
+  auto&& appd = getdata(vfs);
+  JSONFormatter f(false);
+  f.open_object_section("ceph_perf");
+  appd.logger->dump_formatted(&f, false);
+  appd.striper_logger->dump_formatted(&f, false);
+  f.close_section();
+  {
+    CachedStackStringStream css;
+    f.flush(*css);
+    auto sv = css->strv();
+    dv(20) << " = " << sv << dendl;
+    sqlite3_result_text(ctx, sv.data(), sv.size(), SQLITE_TRANSIENT);
+  }
+}
+
+static void f_status(sqlite3_context* ctx, int argc, sqlite3_value** argv)
+{
+  auto vfs = (sqlite3_vfs*)sqlite3_user_data(ctx);
+  dv(10) << dendl;
+  auto&& appd = getdata(vfs);
+  JSONFormatter f(false);
+  f.open_object_section("ceph_status");
+  f.dump_int("id", appd.cluster.get_instance_id());
+  f.dump_string("addr", appd.cluster.get_addrs());
+  f.close_section();
+  {
+    CachedStackStringStream css;
+    f.flush(*css);
+    auto sv = css->strv();
+    dv(20) << " = " << sv << dendl;
+    sqlite3_result_text(ctx, sv.data(), sv.size(), SQLITE_TRANSIENT);
+  }
+}
+
+static int autoreg(sqlite3* db, char** err, const struct sqlite3_api_routines* thunk)
+{
+  auto vfs = sqlite3_vfs_find("ceph");
+  if (!vfs) {
+    ceph_abort("ceph vfs not found");
+  }
+
+  if (int rc = sqlite3_create_function(db, "ceph_perf", 0, SQLITE_UTF8, vfs, f_perf, nullptr, nullptr); rc) {
+    return rc;
+  }
+
+  if (int rc = sqlite3_create_function(db, "ceph_status", 0, SQLITE_UTF8, vfs, f_status, nullptr, nullptr); rc) {
+    return rc;
   }
 
   return SQLITE_OK;
 }
 
-static
-int remove_lock_files(librados::IoCtx *io_ctx, const std::string &db_file)
+LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sqlite3_api_routines* api)
 {
-  io_ctx->remove(get_lock_file_name(db_file, SQLITE_LOCK_SHARED));
-  io_ctx->remove(get_lock_file_name(db_file, SQLITE_LOCK_RESERVED));
-  io_ctx->remove(get_lock_file_name(db_file, SQLITE_LOCK_PENDING));
-  io_ctx->remove(get_lock_file_name(db_file, SQLITE_LOCK_EXCLUSIVE));
+  SQLITE_EXTENSION_INIT2(api);
 
-  return SQLITE_OK;
-}
-
-/* input is the full URI file name*/
-static
-librados::IoCtx *get_io_ctx(const char *zPath)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << "zPath:" << zPath << std::endl;
-
-  librados::IoCtx *io_ctx = nullptr;
-
-  vfs_context_map_mutex.lock();
-  if (vfs_context_map[std::string(zPath)])
-    io_ctx = vfs_context_map[std::string(zPath)]->io_ctx;
-  vfs_context_map_mutex.unlock();
-
-  return io_ctx;
-}
-
-/* input is the full URI file name*/
-static
-libradosstriper::RadosStriper *get_radosstriper(const char *zPath)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << "zPath:" << zPath << std::endl;
-
-  libradosstriper::RadosStriper *rs = nullptr;
-
-  vfs_context_map_mutex.lock();
-  if (vfs_context_map[std::string(zPath)])
-    rs = vfs_context_map[std::string(zPath)]->rs;
-  vfs_context_map_mutex.unlock();
-
-  return rs;
-}
-
-static
-std::string get_db_name(const char *zName)
-{
-  // std::cerr << std::hex << pthread_self() << ":" << __FUNCTION__ << "::" << "zName:" << zName << std::endl;
-  /* eg. "accounts.db-journal"
-   * so filename should be extracted as "accounts.db"
-   * NOTE main database file name will always have a .db extension
-   *      see ceph_sqlite3_open()
-   */
-  const char *e = strstr(zName, ".db-");
-  if (!e)
-      return std::string(zName);
-
-  e += 3; // point to the '-' after .db
-
-  return std::string(zName, e - zName);
-}
-
-static
-int get_lock_type(const std::string &db_name, const std::string &file_name)
-{
-  int eLock = SQLITE_LOCK_NONE;
-
-  vfs_context_map_mutex.lock();
-  CephVFSContext *cc = vfs_context_map[db_name];
-  assert(cc);
-
-  eLock = cc->lock_info[file_name];
-  vfs_context_map_mutex.unlock();
-
-  return eLock;
-}
-
-static
-void set_lock_type(const std::string &db_name, const std::string &file_name, int eLock)
-{
-  vfs_context_map_mutex.lock();
-  CephVFSContext *cc = vfs_context_map[db_name];
-  assert(cc != NULL);
-
-  cc->lock_info[file_name] = eLock;
-  vfs_context_map_mutex.unlock();
-}
-
-static
-int lock_file_in_rados(librados::IoCtx *io_ctx, const std::string &lock_file_name, const std::string &lock_name, bool exclusive)
-{
-  int ret = -1;
-  int retries = 20;
-
-  while (retries--) {
-    if (exclusive)
-      ret = io_ctx->lock_exclusive(lock_file_name, lock_name, get_cookie(), emptystr, NULL, 0);
-    else
-      ret = io_ctx->lock_shared(lock_file_name, lock_name, get_cookie(), emptystr, emptystr, NULL, 0);
-    
-    if (ret == 0)
-      return ret;
-
-    if (ret == -EBUSY)
-      usleep(1000); // sleep for 1 milisecond
+  auto vfs = sqlite3_vfs_find("ceph");
+  if (!vfs) {
+    auto appd = new cephsqlite_appdata;
+    vfs = &appd->vfs;
+    vfs->iVersion = 2;
+    vfs->szOsFile = sizeof(struct cephsqlite_file);
+    vfs->mxPathname = 4096;
+    vfs->zName = "ceph";
+    vfs->pAppData = appd;
+    vfs->xOpen = Open;
+    vfs->xDelete = Delete;
+    vfs->xAccess = Access;
+    vfs->xFullPathname = FullPathname;
+    vfs->xCurrentTimeInt64 = CurrentTime;
+    appd->cct = nullptr;
+    sqlite3_vfs_register(vfs, 0);
   }
-  return ret;
+
+  if (int rc = sqlite3_auto_extension((void(*)(void))autoreg); rc) {
+    return rc;
+  }
+  if (int rc = autoreg(db, err, api); rc) {
+    return rc;
+  }
+
+  return SQLITE_OK_LOAD_PERMANENTLY;
 }
