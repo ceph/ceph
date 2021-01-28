@@ -7,6 +7,7 @@ Please see the ceph-mgr module developer's guide for more information.
 
 import copy
 import datetime
+import enum
 import errno
 import logging
 import pickle
@@ -1255,6 +1256,12 @@ def handle_type_error(method: FuncT) -> FuncT:
     return cast(FuncT, inner)
 
 
+class DaemonDescriptionStatus(enum.IntEnum):
+    error = -1
+    stopped = 0
+    running = 1
+
+
 class DaemonDescription(object):
     """
     For responding to queries about the status of a particular daemon,
@@ -1277,7 +1284,7 @@ class DaemonDescription(object):
                  container_image_name: Optional[str] = None,
                  container_image_digests: Optional[List[str]] = None,
                  version: Optional[str] = None,
-                 status: Optional[int] = None,
+                 status: Optional[DaemonDescriptionStatus] = None,
                  status_desc: Optional[str] = None,
                  last_refresh: Optional[datetime.datetime] = None,
                  created: Optional[datetime.datetime] = None,
@@ -1316,7 +1323,7 @@ class DaemonDescription(object):
         # Service status: -1 error, 0 stopped, 1 running
         self.status = status
 
-        # Service status description when status == -1.
+        # Service status description when status == error.
         self.status_desc = status_desc
 
         # datetime when this info was last refreshed
@@ -1416,7 +1423,7 @@ class DaemonDescription(object):
         out['container_image_name'] = self.container_image_name
         out['container_image_digests'] = self.container_image_digests
         out['version'] = self.version
-        out['status'] = self.status
+        out['status'] = self.status.value if self.status is not None else None
         out['status_desc'] = self.status_desc
         if self.daemon_type == 'osd':
             out['osdspec_affinity'] = self.osdspec_affinity
@@ -1445,7 +1452,9 @@ class DaemonDescription(object):
             if k in c:
                 c[k] = str_to_datetime(c[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
-        return cls(events=events, **c)
+        status_int = c.pop('status', None)
+        status = DaemonDescriptionStatus(status_int) if status_int is not None else None
+        return cls(events=events, status=status, **c)
 
     def __copy__(self) -> 'DaemonDescription':
         # feel free to change this:
