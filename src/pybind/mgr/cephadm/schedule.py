@@ -124,7 +124,7 @@ class HostAssignment(object):
             logger.debug('Provided hosts: %s' % candidates)
             # if asked to place even number of mons, deploy 1 less
             if self.spec.service_type == 'mon' and (len(candidates) % 2) == 0:
-                logger.info("deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
+                logger.info("Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
                     len(candidates) - 1, len(candidates)))
                 return candidates[0:len(candidates)-1]
 
@@ -144,7 +144,7 @@ class HostAssignment(object):
             # is determining factor in how many mons will be placed
             if count >= len(candidates):
                 if (len(candidates) % 2) == 0:
-                    logger.info("deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
+                    logger.info("Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
                         len(candidates) - 1, len(candidates)))
                     count = len(candidates) - 1
             # if count < number of candidates then count is determining
@@ -152,7 +152,7 @@ class HostAssignment(object):
             else:
                 if (count % 2) == 0:
                     logger.info(
-                        "deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (count - 1, count))
+                        "Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (count - 1, count))
                     count = count - 1
 
         # prefer hosts that already have services.
@@ -181,11 +181,11 @@ class HostAssignment(object):
                     if self.spec.service_type == 'ha-rgw':
                         logger.info(
                             f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
-                logger.info('filtered %s down to %s' % (old, others))
+                logger.debug('filtered %s down to %s' % (old, others))
 
             # ask the scheduler to return a set of hosts with a up to the value of <count>
             others = self.scheduler.place(others, need)
-            logger.info('Combine hosts with existing daemons %s + new hosts %s' % (
+            logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
                 hosts_with_daemons, others))
             # if a host already has the anticipated daemon, merge it with the candidates
             # to get a list of HostPlacementSpec that can be deployed on.

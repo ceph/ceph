@@ -338,7 +338,7 @@ class CephadmUpgrade:
         daemons = self.mgr.cache.get_daemons()
         done = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
-            logger.info('Upgrade: Checking %s daemons...' % daemon_type)
+            logger.info('Upgrade: Checking %s daemons' % daemon_type)
             need_upgrade_self = False
             for d in daemons:
                 if d.daemon_type != daemon_type:
@@ -399,7 +399,7 @@ class CephadmUpgrade:
                         continue
                 if not self._wait_for_ok_to_stop(d):
                     return
-                logger.info('Upgrade: Redeploying %s.%s' %
+                logger.info('Upgrade: Updating %s.%s' %
                             (d.daemon_type, d.daemon_id))
                 try:
                     self.mgr._daemon_action(
@@ -455,7 +455,7 @@ class CephadmUpgrade:
 
             # push down configs
             if image_settings.get(daemon_type) != target_image:
-                logger.info('Upgrade: Setting container_image for all %s...' %
+                logger.info('Upgrade: Setting container_image for all %s' %
                             daemon_type)
                 self.mgr.set_container_image(name_to_config_section(daemon_type), target_image)
             to_clean = []
@@ -463,7 +463,7 @@ class CephadmUpgrade:
                 if section.startswith(name_to_config_section(daemon_type) + '.'):
                     to_clean.append(section)
             if to_clean:
-                logger.debug('Upgrade: Cleaning up container_image for %s...' %
+                logger.debug('Upgrade: Cleaning up container_image for %s' %
                              to_clean)
                 for section in to_clean:
                     ret, image, err = self.mgr.check_mon_command({
