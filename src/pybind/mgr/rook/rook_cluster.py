@@ -725,7 +725,7 @@ class RookCluster(object):
                 deleted = not api_response.items
                 if retries > 5:
                     sleep(0.1)
-                ++retries
+                retries += 1
             if retries == 10 and not deleted:
                 raise orchestrator.OrchestratorError(
                     "Light <{}> in <{}:{}> cannot be executed. Cannot delete previous job <{}>".format(
