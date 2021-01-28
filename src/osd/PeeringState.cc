@@ -3928,8 +3928,8 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
-    psdout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
-	       << ":" << pg_stats_publish.reported_seq << dendl;
+    psdout(15) << "publish_stats_to_osd " << pre_publish.reported_epoch
+	       << ":" << pre_publish.reported_seq << dendl;
     return std::make_optional(std::move(pre_publish));
   }
 }
