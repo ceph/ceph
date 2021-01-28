@@ -11,8 +11,11 @@ def test_datetime_to_str_1():
 
 
 def test_datetime_to_str_2():
-    dt = datetime.datetime.strptime('2019-04-24T17:06:53.039991',
-                                    '%Y-%m-%dT%H:%M:%S.%f')
+    # note: tz isn't specified in the string, so explicitly store this as UTC
+    dt = datetime.datetime.strptime(
+        '2019-04-24T17:06:53.039991',
+        '%Y-%m-%dT%H:%M:%S.%f'
+    ).replace(tzinfo=datetime.timezone.utc)
     assert datetime_to_str(dt) == '2019-04-24T17:06:53.039991Z'
 
 
