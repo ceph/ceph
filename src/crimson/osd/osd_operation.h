@@ -537,9 +537,6 @@ struct OrderedPipelinePhaseT : public OrderedPipelinePhase,
 };
 
 template <class T>
-void track_event(const T& blocker, std::uint64_t timestamp);
-
-template <class T>
 // TODO: class BlockingPhasedOperationT : public OperationT<T> {
 class BlockingOperationT : public OperationT<T> {
   T* that() {
@@ -556,25 +553,28 @@ class BlockingOperationT : public OperationT<T> {
 public:
   using OperationT<T>::OperationT;
 
+  template <class EventT, class... Args>
+  void track_event(Args&&... args) {
+    // the idea is to have a visitor-like interface that allows to double
+    // dispatch (backend, blocker type)
+    std::get<EventT>(that()->blockers).trigger(*that(),
+                                               std::forward<Args>(args)...);
+  }
+
   template <class BlockerT, class Func>
   auto with_blocker(Func&& f) {
     using HandleT = typename BlockerT::TimedPtr;
     HandleT new_timedref;
-    auto fut = std::forward<Func>(f)(new_timedref);
-    // mimic the with_blocking_future's behaviour exactly; don't worry
-    // about correct timestamping yet.
-
-    // the idea is to have a visitor-like interface that allows to double
-    // dispatch (backend, blocker type)
-    assert(new_timedref.blocker);
-    std::get<HandleT>(that()->blockers).trigger(static_cast<T&>(*this));
-    if (fut.available()) {
+    // each blocker is also an event, so let's trigger its trackers now.
+    track_event<HandleT>();
+    if (auto fut = std::forward<Func>(f)(new_timedref); fut.available()) {
       return fut;
     } else {
-      // FIXME: use after std::move
-      std::get<HandleT>(that()->blockers).blocker = new_timedref.blocker;
-      return std::move(fut).then_wrapped([this] (auto&& arg) {
-        std::get<HandleT>(that()->blockers).blocker = nullptr;
+      assert(new_timedref.blocker);
+      auto& blocker = std::get<HandleT>(that()->blockers).blocker;
+      blocker = new_timedref.blocker;
+      return std::move(fut).then_wrapped([&blocker] (auto&& arg) {
+        blocker = nullptr;
         return std::move(arg);
       });
     }
