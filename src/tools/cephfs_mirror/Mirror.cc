@@ -35,11 +35,6 @@ public:
     : SafeTimer(cct, timer_lock, true) {
     init();
   }
-
-  ~SafeTimerSingleton() {
-    std::scoped_lock locker(timer_lock);
-    shutdown();
-  }
 };
 
 class ThreadPoolSingleton : public ThreadPool {
@@ -51,13 +46,6 @@ public:
     work_queue = new ContextWQ("Mirror::work_queue", ceph::make_timespan(60), this);
 
     start();
-  }
-
-  ~ThreadPoolSingleton() override {
-    work_queue->drain();
-    delete work_queue;
-
-    stop();
   }
 };
 
@@ -212,6 +200,7 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args,
                          "cephfs::mirror::thread_pool", false, cct));
   auto safe_timer = &(cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
                         "cephfs::mirror::safe_timer", false, cct));
+  m_thread_pool = thread_pool;
   m_work_queue = thread_pool->work_queue;
   m_timer = safe_timer;
   m_timer_lock = &safe_timer->timer_lock;
@@ -221,12 +210,25 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args,
 
 Mirror::~Mirror() {
   dout(10) << dendl;
+  {
+    std::scoped_lock timer_lock(*m_timer_lock);
+    m_timer->shutdown();
+  }
+
+  m_work_queue->drain();
+  delete m_work_queue;
+  {
+    std::scoped_lock locker(m_lock);
+    m_thread_pool->stop();
+    m_cluster_watcher.reset();
+  }
 }
 
 int Mirror::init_mon_client() {
   dout(20) << dendl;
 
   m_monc->set_messenger(m_msgr);
+  m_msgr->add_dispatcher_head(m_monc);
   m_monc->set_want_keys(CEPH_ENTITY_TYPE_MON);
 
   int r = m_monc->init();
@@ -262,20 +264,14 @@ void Mirror::shutdown() {
   dout(20) << dendl;
 
   std::unique_lock locker(m_lock);
-  if (m_mirror_actions.empty()) {
-    return;
-  }
-
   m_stopping = true;
   m_cond.notify_all();
-  m_cond.wait(locker, [this] {return m_stopped;});
 }
 
 void Mirror::handle_signal(int signum) {
   dout(10) << ": signal=" << signum << dendl;
   ceph_assert(signum == SIGTERM || signum == SIGINT);
   shutdown();
-  ::exit(0);
 }
 
 void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
@@ -537,9 +533,6 @@ void Mirror::run() {
       dout(10) << ": shutdown filesystem=" << filesystem << ", r=" << r << dendl;
     }
   }
-
-  m_stopped = true;
-  m_cond.notify_all();
 }
 
 } // namespace mirror

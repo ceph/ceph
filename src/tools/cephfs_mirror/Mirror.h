@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "common/ceph_mutex.h"
+#include "common/WorkQueue.h"
 #include "mds/FSMap.h"
 #include "ClusterWatcher.h"
 #include "FSMirror.h"
@@ -88,13 +89,13 @@ private:
   Messenger *m_msgr;
   ClusterListener m_listener;
 
+  ThreadPool *m_thread_pool = nullptr;
   ContextWQ *m_work_queue = nullptr;
   SafeTimer *m_timer = nullptr;
   ceph::mutex *m_timer_lock = nullptr;
   Context *m_timer_task = nullptr;
 
   bool m_stopping = false;
-  bool m_stopped = false;
   std::unique_ptr<ClusterWatcher> m_cluster_watcher;
   std::map<Filesystem, MirrorAction> m_mirror_actions;
 
