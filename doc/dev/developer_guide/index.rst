@@ -17,9 +17,8 @@ Contributing to Ceph: A Guide for Developers
    Issue tracker <issue-tracker>
    Basic workflow <basic-workflow>
    Tests: Unit Tests <tests-unit-tests>
-   Tests: Integration Tests <tests-integration-tests>
-   Running Tests Locally <running-tests-locally>
-   Running Integration Tests using Teuthology <running-tests-using-teuth>
-   Running Tests in the Cloud <running-tests-in-cloud>
+   Tests: Integration Tests <testing_integration_tests/index>
+   Tests: Running Tests (Locally) <running-tests-locally>
+   Tests: Running Tests in the Cloud <running-tests-in-cloud>
    Ceph Dashboard Developer Documentation (formerly HACKING.rst) <dash-devel>
    cephadm Developer Documentation  <../cephadm/index>
