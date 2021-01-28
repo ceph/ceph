@@ -10099,7 +10099,7 @@ struct C_gather : public Context {
   }
 };
 
-int PrimaryLogPG::cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> *src_objs, const std::string& pool,
+int PrimaryLogPG::cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs, const std::string& pool,
 			     const char *cls, const char *method, bufferlist& inbl)
 {
   OpRequestRef op = ctx->op;
@@ -10114,16 +10114,15 @@ int PrimaryLogPG::cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> 
   C_GatherBuilder gather(cct);
 
   CLSGatherOpRef cgop(std::make_shared<CLSGatherOp>(ctx, obc, op));
-  for (std::map<std::string, bufferlist*>::iterator it = src_objs->begin(); it != src_objs->end(); it++) {
+  for (std::map<std::string, bufferlist>::iterator it = src_obj_buffs->begin(); it != src_obj_buffs->end(); it++) {
     std::string oid = it->first;
-    it->second = new bufferlist;
     ObjectOperation obj_op;
     obj_op.call(cls, method, inbl);
     int64_t ret = osd->objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name), pool);
     uint32_t flags = 0;
     ceph_tid_t tid = osd->objecter->read(
 					 object_t(oid), oloc, obj_op,
-					 m->get_snapid(), it->second,
+					 m->get_snapid(), &it->second,
 					 flags, gather.new_sub());
     cgop->objecter_tids.push_back(tid);
     dout(10) << __func__ << " src=" << oid << ", tgt=" << soid << dendl;

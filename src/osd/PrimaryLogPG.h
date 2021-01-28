@@ -1551,7 +1551,7 @@ public:
   int do_tmapup_slow(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op, ceph::buffer::list& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
-  int cls_gather(OpContext *ctx, std::map<std::string, bufferlist*> *src_objs, const std::string& pool,
+  int cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::string, bufferlist> > src_objs, const std::string& pool,
 		 const char *cls, const char *method, bufferlist& inbl);
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
