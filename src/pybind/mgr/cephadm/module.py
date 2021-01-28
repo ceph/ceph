@@ -524,7 +524,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 # if _ANY_ osd that is currently in the queue appears to be empty,
                 # start the removal process
                 if int(osd.get('osd')) in self.to_remove_osds.as_osd_ids():
-                    self.log.debug(f"Found empty osd. Starting removal process")
+                    self.log.debug('Found empty osd. Starting removal process')
                     # if the osd that is now empty is also part of the removal queue
                     # start the process
                     self._kick_serve_loop()
@@ -1341,7 +1341,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         :raises OrchestratorError: Hostname is invalid, host is already in maintenance
         """
         if len(self.cache.get_hosts()) == 1:
-            raise OrchestratorError(f"Maintenance feature is not supported on single node clusters")
+            raise OrchestratorError("Maintenance feature is not supported on single node clusters")
 
         # if upgrade is active, deny
         if self.upgrade.upgrade_state:
