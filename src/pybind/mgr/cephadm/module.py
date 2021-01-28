@@ -1325,7 +1325,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         Placing a host into maintenance disables the cluster's ceph target in systemd
         and stops all ceph daemons. If the host is an osd host we apply the noout flag
-        for the host subtree in crush to prevent data movement during a host maintenance 
+        for the host subtree in crush to prevent data movement during a host maintenance
         window.
 
         :param hostname: (str) name of the host (must match an inventory hostname)
@@ -1394,7 +1394,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Exit maintenance mode and return a host to an operational state
 
         Returning from maintnenance will enable the clusters systemd target and
-        start it, and remove any noout that has been added for the host if the 
+        start it, and remove any noout that has been added for the host if the
         host has osd daemons
 
         :param hostname: (str) host name
