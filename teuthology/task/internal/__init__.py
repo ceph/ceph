@@ -361,6 +361,9 @@ def archive(ctx, config):
         )
     )
 
+    # Add logs directory to job's info log file
+    misc.add_remote_path(ctx, 'init', archive_dir)
+
     try:
         yield
     except Exception:

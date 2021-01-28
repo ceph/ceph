@@ -130,6 +130,7 @@ setup(
             'teuthology-prune-logs = scripts.prune_logs:main',
             'teuthology-describe = scripts.describe:main',
             'teuthology-reimage = scripts.reimage:main',
+            'teuthology-dispatcher = scripts.dispatcher:main',
             'teuthology-wait = scripts.wait:main',
             ],
         },
