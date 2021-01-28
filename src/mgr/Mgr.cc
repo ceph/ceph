@@ -13,6 +13,8 @@
 
 #include <Python.h>
 
+#include <sqlite3.h>
+
 #include "osdc/Objecter.h"
 #include "client/Client.h"
 #include "common/errno.h"
@@ -20,6 +22,10 @@
 #include "include/stringify.h"
 #include "global/global_context.h"
 #include "global/signal_handler.h"
+
+#ifdef WITH_LIBCEPHSQLITE
+#  include "include/libcephsqlite.h"
+#endif
 
 #include "mgr/MgrContext.h"
 
@@ -352,6 +358,32 @@ void Mgr::init()
     "mgr_status", this,
     "Dump mgr status");
   ceph_assert(r == 0);
+
+#ifdef WITH_LIBCEPHSQLITE
+  dout(4) << "Using sqlite3 version: " << sqlite3_libversion() << dendl;
+  /* See libcephsqlite.h for rationale of this code. */
+  sqlite3_auto_extension((void (*)())sqlite3_cephsqlite_init);
+  {
+    sqlite3* db = nullptr;
+    if (int rc = sqlite3_open_v2(":memory:", &db, SQLITE_OPEN_READWRITE, nullptr); rc == SQLITE_OK) {
+      sqlite3_close(db);
+    } else {
+      derr << "could not open sqlite3: " << rc << dendl;
+      ceph_abort();
+    }
+  }
+  {
+    char *ident = nullptr;
+    if (int rc = cephsqlite_setcct(g_ceph_context, &ident); rc < 0) {
+      derr << "could not set libcephsqlite cct: " << rc << dendl;
+      ceph_abort();
+    }
+    entity_addrvec_t addrv;
+    addrv.parse(ident);
+    ident = (char*)realloc(ident, 0);
+    py_module_registry->register_client("libcephsqlite", addrv);
+  }
+#endif
 
   dout(4) << "Complete." << dendl;
   initializing = false;
