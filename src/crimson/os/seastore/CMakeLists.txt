@@ -15,9 +15,6 @@ add_library(crimson-seastore STATIC
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc
   onode.cc
-  onode_manager/simple-fltree/onode_block.cc
-  onode_manager/simple-fltree/onode_delta.cc
-  onode_manager/simple-fltree/onode_node.cc
   onode_manager/staged-fltree/node.cc
   onode_manager/staged-fltree/node_extent_manager.cc
   onode_manager/staged-fltree/node_extent_manager/seastore.cc
