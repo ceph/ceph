@@ -7699,7 +7699,7 @@ MPGStats* OSD::collect_pg_stats()
     if (!pg->is_primary()) {
       continue;
     }
-    pg->get_pg_stats([&](const pg_stat_t& s, epoch_t lec) {
+    pg->with_pg_stats([&](const pg_stat_t& s, epoch_t lec) {
 	m->pg_stat[pg->pg_id.pgid] = s;
 	min_last_epoch_clean = std::min(min_last_epoch_clean, lec);
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);

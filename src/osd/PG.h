@@ -533,8 +533,8 @@ public:
   void dump_pgstate_history(ceph::Formatter *f);
   void dump_missing(ceph::Formatter *f);
 
-  void get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f);
-  void with_heartbeat_peers(std::function<void(int)> f);
+  void with_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)>&& f);
+  void with_heartbeat_peers(std::function<void(int)>&& f);
 
   void shutdown();
   virtual void on_shutdown() = 0;
