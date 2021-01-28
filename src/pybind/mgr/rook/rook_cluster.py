@@ -21,13 +21,11 @@ from urllib.parse import urljoin
 from urllib3.exceptions import ProtocolError
 
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec
 from mgr_util import merge_dicts
 
-try:
-    from typing import Optional
-except ImportError:
-    pass  # just for type annotations
+from typing import Optional, TypeVar, List, Callable, Any, cast, Generic, \
+    Iterable, Dict, Iterator, Type
 
 try:
     from kubernetes import client, watch
@@ -40,6 +38,7 @@ from .rook_client.ceph import cephfilesystem as cfs
 from .rook_client.ceph import cephnfs as cnfs
 from .rook_client.ceph import cephobjectstore as cos
 from .rook_client.ceph import cephcluster as ccl
+from .rook_client._helper import CrdClass
 
 
 import orchestrator
@@ -47,14 +46,20 @@ import orchestrator
 
 try:
     from rook.module import RookEnv
-    from typing import List, Dict
 except ImportError:
     pass  # just used for type checking.
+
+
+T = TypeVar('T')
+FuncT = TypeVar('FuncT', bound=Callable)
+
+CrdClassT = TypeVar('CrdClassT', bound=CrdClass)
+
 
 log = logging.getLogger(__name__)
 
 
-def _urllib3_supports_read_chunked():
+def __urllib3_supports_read_chunked() -> bool:
     # There is a bug in CentOS 7 as it ships a urllib3 which is lower
     # than required by kubernetes-client
     try:
@@ -64,7 +69,7 @@ def _urllib3_supports_read_chunked():
         return False
 
 
-_urllib3_supports_read_chunked = _urllib3_supports_read_chunked()
+_urllib3_supports_read_chunked = __urllib3_supports_read_chunked()
 
 class ApplyException(orchestrator.OrchestratorError):
     """
@@ -74,17 +79,17 @@ class ApplyException(orchestrator.OrchestratorError):
     """
 
 
-def threaded(f):
-    def wrapper(*args, **kwargs):
+def threaded(f: Callable[..., None]) -> Callable[..., threading.Thread]:
+    def wrapper(*args: Any, **kwargs: Any) -> threading.Thread:
         t = threading.Thread(target=f, args=args, kwargs=kwargs)
         t.start()
         return t
 
-    return wrapper
+    return cast(Callable[..., threading.Thread], wrapper)
 
 
-class KubernetesResource(object):
-    def __init__(self, api_func, **kwargs):
+class KubernetesResource(Generic[T]):
+    def __init__(self, api_func: Callable, **kwargs: Any) -> None:
         """
         Generic kubernetes Resource parent class
 
@@ -99,13 +104,13 @@ class KubernetesResource(object):
         self.api_func = api_func
 
         # ``_items`` is accessed by different threads. I assume assignment is atomic.
-        self._items = dict()
+        self._items: Dict[str, T] = dict()
         self.thread = None  # type: Optional[threading.Thread]
-        self.exception = None
+        self.exception: Optional[Exception] = None
         if not _urllib3_supports_read_chunked:
             logging.info('urllib3 is too old. Fallback to full fetches')
 
-    def _fetch(self):
+    def _fetch(self) -> str:
         """ Execute the requested api method as a one-off fetch"""
         response = self.api_func(**self.kwargs)
         # metadata is a client.V1ListMeta object type
@@ -115,7 +120,7 @@ class KubernetesResource(object):
         return metadata.resource_version
 
     @property
-    def items(self):
+    def items(self) -> Iterable[T]:
         """
         Returns the items of the request.
         Creates the watcher as a side effect.
@@ -135,7 +140,7 @@ class KubernetesResource(object):
         return self._items.values()
 
     @threaded
-    def _watch(self, res_ver):
+    def _watch(self, res_ver: Optional[str]) -> None:
         """ worker thread that runs the kubernetes watch """
 
         self.exception = None
@@ -183,29 +188,31 @@ class KubernetesResource(object):
 
 
 class RookCluster(object):
-    def __init__(self, coreV1_api, batchV1_api, rook_env):
+    # import of client.CoreV1Api must be optional at import time.
+    # Instead allow mgr/rook to be imported anyway.
+    def __init__(self, coreV1_api: 'client.CoreV1Api', batchV1_api: 'client.BatchV1Api', rook_env: 'RookEnv'):
         self.rook_env = rook_env  # type: RookEnv
         self.coreV1_api = coreV1_api  # client.CoreV1Api
         self.batchV1_api = batchV1_api
 
         #  TODO: replace direct k8s calls with Rook API calls
         # when they're implemented
-        self.inventory_maps = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
+        self.inventory_maps: KubernetesResource[client.V1ConfigMapList] = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
                                                  namespace=self.rook_env.operator_namespace,
                                                  label_selector="app=rook-discover")
 
-        self.rook_pods = KubernetesResource(self.coreV1_api.list_namespaced_pod,
+        self.rook_pods: KubernetesResource[client.V1Pod] = KubernetesResource(self.coreV1_api.list_namespaced_pod,
                                             namespace=self.rook_env.namespace,
                                             label_selector="rook_cluster={0}".format(
                                                 self.rook_env.namespace))
-        self.nodes = KubernetesResource(self.coreV1_api.list_node)
+        self.nodes: KubernetesResource[client.V1Node] = KubernetesResource(self.coreV1_api.list_node)
 
-    def rook_url(self, path):
+    def rook_url(self, path: str) -> str:
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
             self.rook_env.crd_version, self.rook_env.namespace)
         return urljoin(prefix, path)
 
-    def rook_api_call(self, verb, path, **kwargs):
+    def rook_api_call(self, verb: str, path: str, **kwargs: Any) -> Any:
         full_path = self.rook_url(path)
         log.debug("[%s] %s" % (verb, full_path))
 
@@ -218,22 +225,22 @@ class RookCluster(object):
             _preload_content=True,
             **kwargs)
 
-    def rook_api_get(self, path, **kwargs):
+    def rook_api_get(self, path: str, **kwargs: Any) -> Any:
         return self.rook_api_call("GET", path, **kwargs)
 
-    def rook_api_delete(self, path):
+    def rook_api_delete(self, path: str) -> Any:
         return self.rook_api_call("DELETE", path)
 
-    def rook_api_patch(self, path, **kwargs):
+    def rook_api_patch(self, path: str, **kwargs: Any) -> Any:
         return self.rook_api_call("PATCH", path,
                                   header_params={"Content-Type": "application/json-patch+json"},
                                   **kwargs)
 
-    def rook_api_post(self, path, **kwargs):
+    def rook_api_post(self, path: str, **kwargs: Any) -> Any:
         return self.rook_api_call("POST", path, **kwargs)
 
-    def get_discovered_devices(self, nodenames=None):
-        def predicate(item):
+    def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, dict]:
+        def predicate(item: client.V1ConfigMapList) -> bool:
             if nodenames is not None:
                 return item.metadata.labels['rook.io/node'] in nodenames
             else:
@@ -252,7 +259,7 @@ class RookCluster(object):
 
         return nodename_to_devices
 
-    def get_nfs_conf_url(self, nfs_cluster, instance):
+    def get_nfs_conf_url(self, nfs_cluster: str, instance: str) -> Optional[str]:
         #
         # Fetch cephnfs object for "nfs_cluster" and then return a rados://
         # URL for the instance within that cluster. If the fetch fails, just
@@ -273,7 +280,10 @@ class RookCluster(object):
             url = "rados://{0}/{1}/conf-{2}.{3}".format(pool, namespace, nfs_cluster, instance)
         return url
 
-    def describe_pods(self, service_type, service_id, nodename):
+    def describe_pods(self,
+                      service_type: Optional[str],
+                      service_id: Optional[str],
+                      nodename: Optional[str]) -> List[Dict[str, Any]]:
         """
         Go query the k8s API about deployment, containers related to this
         filesystem
@@ -358,9 +368,8 @@ class RookCluster(object):
 
         return pods_summary
 
-    def remove_pods(self, names):
+    def remove_pods(self, names: List[str]) -> List[str]:
         pods = [i for i in self.rook_pods.items]
-        num = 0
         for p in pods:
             d = p.to_dict()
             daemon_type = d['metadata']['labels']['app'].replace('rook-ceph-','')
@@ -372,14 +381,13 @@ class RookCluster(object):
                     self.rook_env.namespace,
                     body=client.V1DeleteOptions()
                 )
-                num += 1
-        return "Removed %d pods" % num
+        return [f'Removed Pod {n}' for n in names]
 
-    def get_node_names(self):
+    def get_node_names(self) -> List[str]:
         return [i.metadata.name for i in self.nodes.items]
 
     @contextmanager
-    def ignore_409(self, what):
+    def ignore_409(self, what: str) -> Iterator[None]:
         try:
             yield
         except ApiException as e:
@@ -389,7 +397,7 @@ class RookCluster(object):
             else:
                 raise
 
-    def apply_filesystem(self, spec: ServiceSpec) -> None:
+    def apply_filesystem(self, spec: ServiceSpec) -> str:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
@@ -411,15 +419,17 @@ class RookCluster(object):
                     )
                 )
             )
+        assert spec.service_id is not None
         return self._create_or_patch(
             cfs.CephFilesystem, 'cephfilesystems', spec.service_id,
             _update_fs, _create_fs)
 
-    def apply_objectstore(self, spec):
+    def apply_objectstore(self, spec: RGWSpec) -> str:
 
         # FIXME: service_id is $realm.$zone, but rook uses realm
         # $crname and zone $crname.  The '.'  will confuse kubernetes.
         # For now, assert that realm==zone.
+        assert spec.service_id is not None
         (realm, zone) = spec.service_id.split('.', 1)
         assert realm == zone
         assert spec.subcluster is None
@@ -456,7 +466,7 @@ class RookCluster(object):
             cos.CephObjectStore, 'cephobjectstores', name,
             _update_zone, _create_zone)
 
-    def apply_nfsgw(self, spec: NFSServiceSpec) -> None:
+    def apply_nfsgw(self, spec: NFSServiceSpec) -> str:
         # TODO use spec.placement
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
@@ -489,10 +499,11 @@ class RookCluster(object):
 
             return rook_nfsgw
 
+        assert spec.service_id is not None
         return self._create_or_patch(cnfs.CephNFS, 'cephnfses', spec.service_id,
                 _update_nfs, _create_nfs)
 
-    def rm_service(self, rooktype, service_id):
+    def rm_service(self, rooktype: str, service_id: str) -> str:
 
         objpath = "{0}/{1}".format(rooktype, service_id)
 
@@ -505,7 +516,9 @@ class RookCluster(object):
             else:
                 raise
 
-    def can_create_osd(self):
+        return f'Removed {objpath}'
+
+    def can_create_osd(self) -> bool:
         current_cluster = self.rook_api_get(
             "cephclusters/{0}".format(self.rook_env.cluster_name))
         use_all_nodes = current_cluster['spec'].get('useAllNodes', False)
@@ -514,12 +527,14 @@ class RookCluster(object):
         # to anything we put in 'nodes', so can't do OSD creation.
         return not use_all_nodes
 
-    def node_exists(self, node_name):
+    def node_exists(self, node_name: str) -> bool:
         return node_name in self.get_node_names()
 
-    def update_mon_count(self, newcount):
+    def update_mon_count(self, newcount: Optional[int]) -> str:
         def _update_mon_count(current, new):
             # type: (ccl.CephCluster, ccl.CephCluster) -> ccl.CephCluster
+            if newcount is None:
+                raise orchestrator.OrchestratorError('unable to set mon count to None')
             new.spec.mon.count = newcount
             return new
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _update_mon_count)
@@ -588,7 +603,7 @@ class RookCluster(object):
 
         return self._patch(ccl.CephCluster, 'cephclusters', self.rook_env.cluster_name, _add_osds)
 
-    def _patch(self, crd, crd_name, cr_name, func):
+    def _patch(self, crd: Type, crd_name: str, cr_name: str, func: Callable[[CrdClassT, CrdClassT], CrdClassT]) -> str:
         current_json = self.rook_api_get(
             "{}/{}".format(crd_name, cr_name)
         )
@@ -616,7 +631,12 @@ class RookCluster(object):
 
         return "Success"
 
-    def _create_or_patch(self, crd, crd_name, cr_name, update_func, create_func):
+    def _create_or_patch(self,
+                         crd: Type,
+                         crd_name: str,
+                         cr_name: str,
+                         update_func: Callable[[CrdClassT], CrdClassT],
+                         create_func: Callable[[], CrdClassT]) -> str:
         try:
             current_json = self.rook_api_get(
                 "{}/{}".format(crd_name, cr_name)
