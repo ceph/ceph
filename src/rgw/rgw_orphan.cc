@@ -573,7 +573,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
 
       if (!detailed_mode &&
           entry.meta.accounted_size <= (uint64_t)store->ctx()->_conf->rgw_max_chunk_size) {
-        ldpp_dout(this, 5) << __func__ << "skipping stat as the object " << entry.key.name
+        ldpp_dout(dpp, 5) << __func__ << "skipping stat as the object " << entry.key.name
                               << "fits in a head" << dendl;
         continue;
       }
