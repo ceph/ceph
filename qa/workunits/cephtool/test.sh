@@ -1546,7 +1546,13 @@ function test_mon_osd()
   ceph osd info
   info_json=$(ceph osd info --format=json | jq -cM '.')
   dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
-  [[ "${info_json}" == "${dump_json}" ]]
+  if [[ "${info_json}" != "${dump_json}" ]]; then
+    echo "waiting for OSDs to settle"
+    sleep 10
+    info_json=$(ceph osd info --format=json | jq -cM '.')
+    dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
+    [[ "${info_json}" == "${dump_json}" ]]
+  fi
 
   info_json=$(ceph osd info 0 --format=json | jq -cM '.')
   dump_json=$(ceph osd dump --format=json | \
