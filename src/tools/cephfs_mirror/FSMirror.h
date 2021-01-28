@@ -128,6 +128,8 @@ private:
   void init_mirror_watcher();
   void handle_init_mirror_watcher(int r);
 
+  void shutdown_peer_replayers();
+
   void shutdown_mirror_watcher();
   void handle_shutdown_mirror_watcher(int r);
 
