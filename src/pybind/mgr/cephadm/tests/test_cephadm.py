@@ -417,7 +417,7 @@ class TestCephadm(object):
 
             _run_cephadm.return_value = (['{}'], '', 0)
 
-            assert CephadmServe(cephadm_module)._apply_all_services() == False
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
@@ -873,7 +873,7 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'test'):
             cephadm_module.set_module_option('manage_etc_ceph_ceph_conf', True)
             cephadm_module.config_notify()
-            assert cephadm_module.manage_etc_ceph_ceph_conf == True
+            assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')
