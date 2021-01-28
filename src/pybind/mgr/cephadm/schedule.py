@@ -124,9 +124,10 @@ class HostAssignment(object):
             logger.debug('Provided hosts: %s' % candidates)
             # if asked to place even number of mons, deploy 1 less
             if self.spec.service_type == 'mon' and (len(candidates) % 2) == 0:
+                count = len(candidates) - 1
                 logger.info("Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
-                    len(candidates) - 1, len(candidates)))
-                return candidates[0:len(candidates)-1]
+                    count, len(candidates)))
+                return candidates[0:count]
 
             # do not deploy ha-rgw on hosts that don't support virtual ips
             if self.spec.service_type == 'ha-rgw' and self.filter_new_host:
