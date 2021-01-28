@@ -785,11 +785,7 @@ class CephadmServe:
                 if daemon_spec.daemon_type == 'cephadm-exporter':
                     if not reconfig:
                         assert daemon_spec.host
-                        deploy_ok = self._deploy_cephadm_binary(daemon_spec.host)
-                        if not deploy_ok:
-                            msg = f"Unable to deploy the cephadm binary to {daemon_spec.host}"
-                            self.log.warning(msg)
-                            return msg
+                        self._deploy_cephadm_binary(daemon_spec.host)
 
                 if daemon_spec.daemon_type == 'haproxy':
                     haspec = cast(HA_RGWSpec, daemon_spec.spec)
@@ -1051,16 +1047,19 @@ class CephadmServe:
             return f"Host {host} failed to login to {url} as {username} with given password"
         return None
 
-    def _deploy_cephadm_binary(self, host: str) -> bool:
+    def _deploy_cephadm_binary(self, host: str) -> None:
         # Use tee (from coreutils) to create a copy of cephadm on the target machine
         self.log.info(f"Deploying cephadm binary to {host}")
         with self._remote_connection(host) as tpl:
             conn, _connr = tpl
             _out, _err, code = remoto.process.check(
                 conn,
-                ['tee', '-', '/var/lib/ceph/{}/cephadm'.format(self.mgr._cluster_fsid)],
+                ['tee', '-', self.mgr.cephadm_binary_path],
                 stdin=self.mgr._cephadm.encode('utf-8'))
-        return code == 0
+        if code:
+            msg = f"Unable to deploy the cephadm binary to {host}: {_err}"
+            self.log.warning(msg)
+            raise OrchestratorError(msg)
 
     @contextmanager
     def _remote_connection(self,

@@ -2500,7 +2500,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
                 config_js = get_parm(ctx.config_json)
             assert isinstance(config_js, dict)
 
-            cephadm_exporter = CephadmDaemon(ctx, fsid, daemon_id, port)
+            cephadm_exporter = CephadmDaemon(ctx, fsid, config_js['binary'], daemon_id, port)
             cephadm_exporter.deploy_daemon_unit(config_js)
         else:
             if c:
@@ -6488,7 +6488,6 @@ class CephadmDaemon():
 
     daemon_type = "cephadm-exporter"
     default_port = 9443
-    bin_name = 'cephadm'
     key_name = "key"
     crt_name = "crt"
     token_name = "token"
@@ -6500,9 +6499,10 @@ class CephadmDaemon():
     loop_delay = 1
     thread_check_interval = 5
 
-    def __init__(self, ctx: CephadmContext, fsid, daemon_id=None, port=None):
+    def __init__(self, ctx: CephadmContext, fsid, binary, daemon_id=None, port=None):
         self.ctx = ctx
         self.fsid = fsid
+        self.binary_path = binary
         self.daemon_id = daemon_id 
         if not port:
             self.port = CephadmDaemon.default_port
@@ -6521,7 +6521,7 @@ class CephadmDaemon():
         errors = []
 
         if not config or not all([k_name in config for k_name in CephadmDaemon.config_requirements]):
-            raise Error(f"config must contain the following fields : {reqs}")
+            raise Error(f"config must contain the following fields : {reqs} but got {config.keys()}")
         
         if not all([isinstance(config[k_name], str) for k_name in CephadmDaemon.config_requirements]):
             errors.append(f"the following fields must be strings: {reqs}")
@@ -6579,14 +6579,6 @@ class CephadmDaemon():
             self.ctx.data_dir,
             self.fsid,
             f'{self.daemon_type}.{self.daemon_id}'
-        )
-
-    @property
-    def binary_path(self):
-        return os.path.join(
-            self.ctx.data_dir,
-            self.fsid,
-            CephadmDaemon.bin_name
         )
 
     def _handle_thread_exception(self, exc, thread_type):
@@ -6950,7 +6942,7 @@ WantedBy=ceph-{fsid}.target
 
 
 def command_exporter(ctx: CephadmContext):
-    exporter = CephadmDaemon(ctx, ctx.fsid, daemon_id=ctx.id, port=ctx.port)
+    exporter = CephadmDaemon(ctx, ctx.fsid, binary=ctx.binary, daemon_id=ctx.id, port=ctx.port)
 
     if ctx.fsid not in os.listdir(ctx.data_dir):
         raise Error(f"cluster fsid '{ctx.fsid}' not found in '{ctx.data_dir}'")
@@ -7589,6 +7581,10 @@ def _get_parser():
         type=str,
         default=get_hostname().split('.')[0],
         help='daemon identifer for the exporter')
+    parser_exporter.add_argument(
+        '--binary',
+        type=str,
+        help='path to the cephadm binary')
     parser_exporter.set_defaults(func=command_exporter)
 
     parser_maintenance = subparsers.add_parser(
