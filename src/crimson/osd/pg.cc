@@ -158,7 +158,7 @@ void PG::clear_publish_stats()
   pg_stats.reset();
 }
 
-pg_stat_t PG::get_stats()
+pg_stat_t PG::get_stats() const
 {
   return pg_stats.value_or(pg_stat_t{});
 }

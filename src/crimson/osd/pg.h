@@ -566,7 +566,7 @@ public:
   // PeeringListener
   void publish_stats_to_osd() final;
   void clear_publish_stats() final;
-  pg_stat_t get_stats();
+  pg_stat_t get_stats() const;
 private:
   std::optional<pg_stat_t> pg_stats;
 
