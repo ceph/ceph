@@ -420,7 +420,7 @@ class TestCephadm(object):
 
             _run_cephadm.return_value = (['{}'], '', 0)
 
-            assert CephadmServe(cephadm_module)._apply_all_services() == False
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
@@ -609,38 +609,6 @@ class TestCephadm(object):
                     'prefix': 'auth rm',
                     'entity': 'mgr.x',
                 })
-
-    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_daemon_add_fail(self, _run_cephadm, cephadm_module):
-        _run_cephadm.return_value = '{}', '', 0
-        with with_host(cephadm_module, 'test'):
-            spec = ServiceSpec(
-                service_type='mgr',
-                placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1)
-            )
-            _run_cephadm.side_effect = OrchestratorError('fail')
-            with pytest.raises(OrchestratorError):
-                wait(cephadm_module, cephadm_module.add_mgr(spec))
-            cephadm_module.assert_issued_mon_command({
-                'prefix': 'auth rm',
-                'entity': 'mgr.x',
-            })
-
-    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
-    def test_daemon_add_fail(self, _run_cephadm, cephadm_module):
-        _run_cephadm.return_value = '{}', '', 0
-        with with_host(cephadm_module, 'test'):
-            spec = ServiceSpec(
-                service_type='mgr',
-                placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1)
-            )
-            _run_cephadm.side_effect = OrchestratorError('fail')
-            with pytest.raises(OrchestratorError):
-                wait(cephadm_module, cephadm_module.add_mgr(spec))
-            cephadm_module.assert_issued_mon_command({
-                'prefix': 'auth rm',
-                'entity': 'mgr.x',
-            })
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
@@ -930,7 +898,7 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'test'):
             cephadm_module.set_module_option('manage_etc_ceph_ceph_conf', True)
             cephadm_module.config_notify()
-            assert cephadm_module.manage_etc_ceph_ceph_conf == True
+            assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')

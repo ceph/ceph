@@ -688,9 +688,9 @@ spec:
     assert spec.virtual_ip_address == "192.168.20.1/24"
     assert spec.frontend_port == 8080
     assert spec.ha_proxy_port == 1967
-    assert spec.ha_proxy_stats_enabled == True
+    assert spec.ha_proxy_stats_enabled is True
     assert spec.ha_proxy_stats_user == "admin"
     assert spec.ha_proxy_stats_password == "admin"
-    assert spec.ha_proxy_enable_prometheus_exporter == True
+    assert spec.ha_proxy_enable_prometheus_exporter is True
     assert spec.ha_proxy_monitor_uri == "/haproxy_health"
     assert spec.keepalived_password == "admin"
