@@ -279,12 +279,9 @@ endif(WITH_QATZIP)
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
-find_package(SQLite3)
-if(SQLITE3_FOUND)
-  option(WITH_LIBCEPHSQLITE "libcephsqlite client library" ON)
-else()
-  message(WARNING "disabling WITH_LIBCEPHSQLITE, which depends on SQLite3")
-  set(WITH_LIBCEPHSQLITE OFF)
+option(WITH_LIBCEPHSQLITE "libcephsqlite client library" ON)
+if(WITH_LIBCEPHSQLITE)
+  find_package(SQLite3 REQUIRED)
 endif()
 
 # key-value store
