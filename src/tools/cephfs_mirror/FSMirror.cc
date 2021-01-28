@@ -134,12 +134,14 @@ void FSMirror::init(Context *on_finish) {
   int r = connect(g_ceph_context->_conf->name.to_str(),
                   g_ceph_context->_conf->cluster, &m_cluster);
   if (r < 0) {
+    m_init_failed = true;
     on_finish->complete(r);
     return;
   }
 
   r = m_cluster->ioctx_create2(m_pool_id, m_ioctx);
   if (r < 0) {
+    m_init_failed = true;
     m_cluster.reset();
     derr << ": error accessing local pool (id=" << m_pool_id << "): "
          << cpp_strerror(r) << dendl;
@@ -149,6 +151,7 @@ void FSMirror::init(Context *on_finish) {
 
   r = mount(m_cluster, m_filesystem, true, &m_mount);
   if (r < 0) {
+    m_init_failed = true;
     m_ioctx.close();
     m_cluster.reset();
     on_finish->complete(r);
@@ -196,8 +199,11 @@ void FSMirror::init_instance_watcher(Context *on_finish) {
   dout(20) << dendl;
 
   m_on_init_finish = new LambdaContext([this, on_finish](int r) {
-                                         if (r < 0) {
-                                           m_init_failed = true;
+                                         {
+                                           std::scoped_lock locker(m_lock);
+                                           if (r < 0) {
+                                             m_init_failed = true;
+                                           }
                                          }
                                          on_finish->complete(r);
                                          if (m_on_shutdown_finish != nullptr) {
