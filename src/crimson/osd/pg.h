@@ -561,13 +561,15 @@ private:
 
   PeeringState peering_state;
   eversion_t projected_last_update;
+
 public:
   // PeeringListener
   void publish_stats_to_osd() final;
-  void clear_publish_stats() final {
-    // Not needed yet
-  }
+  void clear_publish_stats() final;
   pg_stat_t get_stats();
+private:
+  std::optional<pg_stat_t> pg_stats;
+
 public:
   RecoveryBackend* get_recovery_backend() final {
     return recovery_backend.get();

@@ -145,21 +145,24 @@ void PG::publish_stats_to_osd()
 {
   if (!is_primary())
     return;
+  const bool is_stats_valid = pg_stats.has_value();
+  if (auto new_pg_stats = peering_state.prepare_stats_for_publish(
+        is_stats_valid,
+        pg_stats.value_or(pg_stat_t{}),
+        object_stat_collection_t());
+      new_pg_stats.has_value()) {
+    pg_stats = std::move(new_pg_stats);
+  }
+}
 
-  (void) peering_state.prepare_stats_for_publish(
-    false,
-    pg_stat_t(),
-    object_stat_collection_t());
+void PG::clear_publish_stats()
+{
+  pg_stats.reset();
 }
 
 pg_stat_t PG::get_stats()
 {
-  auto stats = peering_state.prepare_stats_for_publish(
-    false,
-    pg_stat_t(),
-    object_stat_collection_t());
-  ceph_assert(stats);
-  return *stats;
+  return pg_stats.value_or(pg_stat_t{});
 }
 
 void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
