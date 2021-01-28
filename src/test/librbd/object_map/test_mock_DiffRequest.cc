@@ -186,9 +186,9 @@ TEST_F(TestMockObjectMapDiffRequest, FullDelta) {
 
   BitVector<2> expected_diff_state;
   expected_diff_state.resize(object_count);
-  expected_diff_state[1] = DIFF_STATE_UPDATED;
-  expected_diff_state[2] = DIFF_STATE_UPDATED;
-  expected_diff_state[3] = DIFF_STATE_HOLE;
+  expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
+  expected_diff_state[2] = DIFF_STATE_DATA_UPDATED;
+  expected_diff_state[3] = DIFF_STATE_HOLE_UPDATED;
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
@@ -233,8 +233,9 @@ TEST_F(TestMockObjectMapDiffRequest, IntermediateDelta) {
 
   BitVector<2> expected_diff_state;
   expected_diff_state.resize(object_count);
-  expected_diff_state[2] = DIFF_STATE_UPDATED;
-  expected_diff_state[3] = DIFF_STATE_UPDATED;
+  expected_diff_state[1] = DIFF_STATE_DATA;
+  expected_diff_state[2] = DIFF_STATE_DATA_UPDATED;
+  expected_diff_state[3] = DIFF_STATE_DATA_UPDATED;
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
@@ -279,7 +280,9 @@ TEST_F(TestMockObjectMapDiffRequest, EndDelta) {
 
   BitVector<2> expected_diff_state;
   expected_diff_state.resize(object_count);
-  expected_diff_state[3] = DIFF_STATE_HOLE;
+  expected_diff_state[1] = DIFF_STATE_DATA;
+  expected_diff_state[2] = DIFF_STATE_DATA_UPDATED;
+  expected_diff_state[3] = DIFF_STATE_HOLE_UPDATED;
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
@@ -370,7 +373,7 @@ TEST_F(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
 
   BitVector<2> expected_diff_state;
   expected_diff_state.resize(object_count);
-  expected_diff_state[1] = DIFF_STATE_UPDATED;
+  expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
@@ -430,7 +433,7 @@ TEST_F(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
 
   BitVector<2> expected_diff_state;
   expected_diff_state.resize(object_count);
-  expected_diff_state[1] = DIFF_STATE_UPDATED;
+  expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
