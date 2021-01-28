@@ -141,6 +141,27 @@ bool PG::try_flush_or_schedule_async() {
   return false;
 }
 
+void PG::publish_stats_to_osd()
+{
+  if (!is_primary())
+    return;
+
+  (void) peering_state.prepare_stats_for_publish(
+    false,
+    pg_stat_t(),
+    object_stat_collection_t());
+}
+
+pg_stat_t PG::get_stats()
+{
+  auto stats = peering_state.prepare_stats_for_publish(
+    false,
+    pg_stat_t(),
+    object_stat_collection_t());
+  ceph_assert(stats);
+  return *stats;
+}
+
 void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
 {
   // handle the peering event in the background
