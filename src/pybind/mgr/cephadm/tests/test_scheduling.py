@@ -113,9 +113,9 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
         assert False
 
     hosts = [
-            HostSpec(h, labels=['mylabel']) if h in explicit else HostSpec(h)
-            for h in hosts
-        ]
+        HostSpec(h, labels=['mylabel']) if h in explicit else HostSpec(h)
+        for h in hosts
+    ]
 
     return mk_spec, hosts
 
@@ -839,8 +839,8 @@ class OddMonsTest(NamedTuple):
                                 PlacementSpec(count=5),
                                 'host1 host2 host3 host4'.split(),
                                 [
-                                   DaemonDescription('mon', 'a', 'host1'),
-                                   DaemonDescription('mon', 'b', 'host2'),
+                                    DaemonDescription('mon', 'a', 'host1'),
+                                    DaemonDescription('mon', 'b', 'host2'),
                                 ],
                                 3
                             ),
@@ -849,9 +849,9 @@ class OddMonsTest(NamedTuple):
                                 PlacementSpec(hosts='host1 host2 host3 host4'.split()),
                                 'host1 host2 host3 host4 host5'.split(),
                                 [
-                                   DaemonDescription('mon', 'a', 'host1'),
-                                   DaemonDescription('mon', 'b', 'host2'),
-                                   DaemonDescription('mon', 'c', 'host3'),
+                                    DaemonDescription('mon', 'a', 'host1'),
+                                    DaemonDescription('mon', 'b', 'host2'),
+                                    DaemonDescription('mon', 'c', 'host3'),
                                 ],
                                 3
                             ),
