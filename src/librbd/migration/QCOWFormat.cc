@@ -718,7 +718,7 @@ private:
     previous_l2_table = l2_table;
     l2_table.reset();
 
-    auto ctx = new LambdaContext([this, snap_id](int r) {
+    auto ctx = new LambdaContext([this, snap_id = snap_id](int r) {
       boost::asio::post(qcow_format->m_strand, [this, snap_id, r]() {
         handle_get_l2_table(r, snap_id);
         });
