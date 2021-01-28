@@ -207,7 +207,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   recovery_queued(false),
   recovery_ops_active(0),
   backfill_reserving(false),
-  pg_stats_publish_valid(false),
   finish_sync_event(NULL),
   scrub_after_recovery(false),
   active_pushes(0),
@@ -823,12 +822,10 @@ void PG::publish_stats_to_osd()
 
   std::lock_guard l{pg_stats_publish_lock};
   auto stats = recovery_state.prepare_stats_for_publish(
-    pg_stats_publish_valid,
     pg_stats_publish,
     unstable_stats);
   if (stats) {
-    pg_stats_publish = stats.value();
-    pg_stats_publish_valid = true;
+    pg_stats_publish = std::move(stats);
   }
 }
 
@@ -841,7 +838,7 @@ void PG::clear_publish_stats()
 {
   dout(15) << "clear_stats" << dendl;
   std::lock_guard l{pg_stats_publish_lock};
-  pg_stats_publish_valid = false;
+  pg_stats_publish.reset();
 }
 
 /**
@@ -2797,8 +2794,8 @@ void PG::dump_missing(Formatter *f)
 void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
 {
   std::lock_guard l{pg_stats_publish_lock};
-  if (pg_stats_publish_valid) {
-    f(pg_stats_publish, pg_stats_publish.get_effective_last_epoch_clean());
+  if (pg_stats_publish) {
+    f(*pg_stats_publish, pg_stats_publish->get_effective_last_epoch_clean());
   }
 }
 

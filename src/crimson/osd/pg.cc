@@ -145,10 +145,8 @@ void PG::publish_stats_to_osd()
 {
   if (!is_primary())
     return;
-  const bool is_stats_valid = pg_stats.has_value();
   if (auto new_pg_stats = peering_state.prepare_stats_for_publish(
-        is_stats_valid,
-        pg_stats.value_or(pg_stat_t{}),
+        pg_stats,
         object_stat_collection_t());
       new_pg_stats.has_value()) {
     pg_stats = std::move(new_pg_stats);
