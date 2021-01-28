@@ -764,7 +764,8 @@ private:
 template <typename I>
 HttpClient<I>::HttpClient(I* image_ctx, const std::string& url)
   : m_cct(image_ctx->cct), m_image_ctx(image_ctx),
-    m_asio_engine(image_ctx->asio_engine), m_url(url), m_strand(*m_asio_engine),
+    m_asio_engine(image_ctx->asio_engine), m_url(url),
+    m_strand(boost::asio::make_strand(*m_asio_engine)),
     m_ssl_context(boost::asio::ssl::context::sslv23_client) {
     m_ssl_context.set_default_verify_paths();
 }
