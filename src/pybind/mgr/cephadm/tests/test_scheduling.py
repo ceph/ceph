@@ -90,9 +90,9 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
 
     if spec_section == 'hosts':
         mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(
-                    hosts=explicit,
-                    count=count,
-                ))
+            hosts=explicit,
+            count=count,
+        ))
     elif spec_section == 'label':
         mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(
             label='mylabel',
@@ -106,9 +106,9 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
             '123': '*',
         }[explicit_key]
         mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(
-                    host_pattern=pattern,
-                    count=count,
-                ))
+            host_pattern=pattern,
+            count=count,
+        ))
     else:
         assert False
 
