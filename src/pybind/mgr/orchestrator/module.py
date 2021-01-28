@@ -284,7 +284,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 self._refresh_health()
             return HandleCommandResult(stdout=str(completion.result))
 
-        except:
+        except Exception:
             # There are several reasons the try: block might fail:
             # 1. the device no longer exist
             # 2. the device is no longer known to Ceph
