@@ -2791,7 +2791,7 @@ void PG::dump_missing(Formatter *f)
   }
 }
 
-void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
+void PG::with_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)>&& f)
 {
   std::lock_guard l{pg_stats_publish_lock};
   if (pg_stats_publish) {
@@ -2799,7 +2799,7 @@ void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
   }
 }
 
-void PG::with_heartbeat_peers(std::function<void(int)> f)
+void PG::with_heartbeat_peers(std::function<void(int)>&& f)
 {
   std::lock_guard l{heartbeat_peer_lock};
   for (auto p : heartbeat_peers) {
