@@ -186,7 +186,7 @@ int ImageCopyRequest<I>::send_next_object_copy() {
     bool skip = true;
     for (auto src_ono : src_objects) {
       if (src_ono >= m_object_diff_state.size() ||
-          m_object_diff_state[src_ono] != object_map::DIFF_STATE_NONE) {
+          m_object_diff_state[src_ono] != object_map::DIFF_STATE_HOLE) {
         skip = false;
         break;
       }
