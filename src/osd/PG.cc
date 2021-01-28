@@ -2183,13 +2183,13 @@ void PG::scrub_send_replmaps_ready(epoch_t epoch_queued,
 
 bool PG::ops_blocked_by_scrub() const
 {
-  return (waiting_for_scrub.size() != 0);
+  return !waiting_for_scrub.empty();
 }
 
 Scrub::scrub_prio_t PG::is_scrub_blocking_ops() const
 {
-  return waiting_for_scrub.size() ? Scrub::scrub_prio_t::high_priority
-				  : Scrub::scrub_prio_t::low_priority;
+  return waiting_for_scrub.empty() ? Scrub::scrub_prio_t::low_priority
+				   : Scrub::scrub_prio_t::high_priority;
 }
 
 bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
