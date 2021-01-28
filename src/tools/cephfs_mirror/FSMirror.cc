@@ -173,13 +173,12 @@ void FSMirror::shutdown(Context *on_finish) {
     if (m_on_init_finish != nullptr) {
       dout(10) << ": delaying shutdown -- init in progress" << dendl;
       m_on_shutdown_finish = new LambdaContext([this, on_finish](int r) {
-                                                 cleanup();
                                                  if (r < 0) {
                                                    on_finish->complete(0);
                                                    return;
                                                  }
                                                  m_on_shutdown_finish = on_finish;
-                                                 shutdown_mirror_watcher();
+                                                 shutdown_peer_replayers();
                                                });
       return;
     }
@@ -187,11 +186,18 @@ void FSMirror::shutdown(Context *on_finish) {
     m_on_shutdown_finish = on_finish;
   }
 
+  shutdown_peer_replayers();
+}
+
+void FSMirror::shutdown_peer_replayers() {
+  dout(20) << dendl;
+
   for (auto &[peer, peer_replayer] : m_peer_replayers) {
-      dout(5) << ": shutting down replayer for peer=" << peer << dendl;
-      shutdown_replayer(peer_replayer.get());
+    dout(5) << ": shutting down replayer for peer=" << peer << dendl;
+    shutdown_replayer(peer_replayer.get());
   }
   m_peer_replayers.clear();
+
   shutdown_mirror_watcher();
 }
 
@@ -287,11 +293,13 @@ void FSMirror::shutdown_instance_watcher() {
   std::scoped_lock locker(m_lock);
   Context *ctx = new C_CallbackAdapter<
     FSMirror, &FSMirror::handle_shutdown_instance_watcher>(this);
-  m_instance_watcher->shutdown(ctx);
+  m_instance_watcher->shutdown(new C_AsyncCallback<ContextWQ>(m_work_queue, ctx));
 }
 
 void FSMirror::handle_shutdown_instance_watcher(int r) {
   dout(20) << ": r=" << r << dendl;
+
+  cleanup();
 
   Context *on_init_finish = nullptr;
   Context *on_shutdown_finish = nullptr;
