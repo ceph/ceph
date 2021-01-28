@@ -15,24 +15,73 @@ using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
 
-class TMTestState {
+class EphemeralTestState {
 protected:
   std::unique_ptr<segment_manager::EphemeralSegmentManager> segment_manager;
+
+  EphemeralTestState()
+    : segment_manager(segment_manager::create_test_ephemeral()) {
+    // init(); derived class must call
+  }
+
+  virtual void _init() = 0;
+  void init() {
+    _init();
+  }
+
+  virtual void _destroy() = 0;
+  void destroy() {
+    _destroy();
+  }
+
+  virtual seastar::future<> _teardown() = 0;
+  virtual seastar::future<> _mkfs() = 0;
+  virtual seastar::future<> _mount() = 0;
+
+  void restart() {
+    _teardown().get0();
+    destroy();
+    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
+    init();
+    _mount().get0();
+  }
+
+  seastar::future<> tm_setup() {
+    return segment_manager->init(
+    ).safe_then([this] {
+      return _mkfs();
+    }).safe_then([this] {
+      return _teardown();
+    }).safe_then([this] {
+      destroy();
+      static_cast<segment_manager::EphemeralSegmentManager*>(
+	&*segment_manager)->remount();
+      init();
+      return _mount();
+    }).handle_error(crimson::ct_error::assert_all{});
+  }
+
+  seastar::future<> tm_teardown() {
+    return _teardown();
+  }
+};
+
+class TMTestState : public EphemeralTestState {
+protected:
   std::unique_ptr<SegmentCleaner> segment_cleaner;
   std::unique_ptr<Journal> journal;
   std::unique_ptr<Cache> cache;
   LBAManagerRef lba_manager;
   std::unique_ptr<TransactionManager> tm;
 
-  TMTestState()
-    : segment_manager(segment_manager::create_test_ephemeral()) {
+  TMTestState() : EphemeralTestState() {
     init();
   }
 
-  void init() {
+  void _init() final {
     segment_cleaner = std::make_unique<SegmentCleaner>(
       SegmentCleaner::config_t::default_from_segment_manager(
-	*segment_manager),
+       *segment_manager),
       true);
     journal = std::make_unique<Journal>(*segment_manager);
     cache = std::make_unique<Cache>(*segment_manager);
@@ -44,7 +93,7 @@ protected:
     segment_cleaner->set_extent_callback(&*tm);
   }
 
-  void destroy() {
+  void _destroy() final {
     tm.reset();
     lba_manager.reset();
     cache.reset();
@@ -52,31 +101,24 @@ protected:
     segment_cleaner.reset();
   }
 
-  void restart() {
-    tm->close().unsafe_get();
-    destroy();
-    static_cast<segment_manager::EphemeralSegmentManager*>(&*segment_manager)->remount();
-    init();
-    tm->mount().unsafe_get();
-  }
-
-  seastar::future<> tm_setup() {
-    return segment_manager->init(
-    ).safe_then([this] {
-      return tm->mkfs();
-    }).safe_then([this] {
-      return tm->close();
-    }).safe_then([this] {
-      destroy();
-      static_cast<segment_manager::EphemeralSegmentManager*>(
-	&*segment_manager)->remount();
-      init();
-      return tm->mount();
-    }).handle_error(crimson::ct_error::assert_all{});
-  }
-
-  seastar::future<> tm_teardown() {
+  seastar::future<> _teardown() final {
     return tm->close(
-    ).handle_error(crimson::ct_error::assert_all{});
+    ).handle_error(
+      crimson::ct_error::assert_all{"Error in teardown"}
+    );
+  }
+
+  seastar::future<> _mount() final {
+    return tm->mount(
+    ).handle_error(
+      crimson::ct_error::assert_all{"Error in mount"}
+    );
+  }
+
+  seastar::future<> _mkfs() final {
+    return tm->mkfs(
+    ).handle_error(
+      crimson::ct_error::assert_all{"Error in teardown"}
+    );
   }
 };
