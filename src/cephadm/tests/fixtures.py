@@ -36,6 +36,7 @@ def exporter():
        mock.patch('cephadm.CephadmDaemon.run', _mock_run), \
        mock.patch('cephadm.CephadmDaemon._scrape_host_facts', _mock_scrape_host):
 
-        exporter = cd.CephadmDaemon(fsid='foobar', daemon_id='test')
+        ctx = cd.CephadmContext()
+        exporter = cd.CephadmDaemon(ctx, fsid='foobar', daemon_id='test')
         assert exporter.token == 'MyAccessToken' 
         yield exporter

@@ -467,6 +467,7 @@ class HostCache():
         """Provide a list of the types of daemons on the host"""
         result = set()
         for _d, dm in self.daemons[hostname].items():
+            assert dm.daemon_type is not None
             result.add(dm.daemon_type)
         return list(result)
 

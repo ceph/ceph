@@ -171,9 +171,14 @@ class CephadmServe:
         refresh(self.mgr.cache.get_hosts())
 
         health_changed = False
-        if 'CEPHADM_HOST_CHECK_FAILED' in self.mgr.health_checks:
-            del self.mgr.health_checks['CEPHADM_HOST_CHECK_FAILED']
-            health_changed = True
+        for k in [
+                'CEPHADM_HOST_CHECK_FAILED',
+                'CEPHADM_FAILED_DAEMON'
+                'CEPHADM_REFRESH_FAILED',
+        ]:
+            if k in self.mgr.health_checks:
+                del self.mgr.health_checks[k]
+                health_changed = True
         if bad_hosts:
             self.mgr.health_checks['CEPHADM_HOST_CHECK_FAILED'] = {
                 'severity': 'warning',
@@ -190,8 +195,19 @@ class CephadmServe:
                 'detail': failures,
             }
             health_changed = True
-        elif 'CEPHADM_REFRESH_FAILED' in self.mgr.health_checks:
-            del self.mgr.health_checks['CEPHADM_REFRESH_FAILED']
+        failed_daemons = []
+        for dd in self.mgr.cache.get_daemons():
+            if dd.status is not None and dd.status < 0:
+                failed_daemons.append('daemon %s on %s is in %s state' % (
+                    dd.name(), dd.hostname, dd.status_desc
+                ))
+        if failed_daemons:
+            self.mgr.health_checks['CEPHADM_FAILED_DAEMON'] = {
+                'severity': 'warning',
+                'summary': '%d failed cephadm daemon(s)' % len(failed_daemons),
+                'count': len(failed_daemons),
+                'detail': failed_daemons,
+            }
             health_changed = True
         if health_changed:
             self.mgr.set_health_checks(self.mgr.health_checks)
@@ -592,7 +608,8 @@ class CephadmServe:
         # remove any?
         def _ok_to_stop(remove_daemon_hosts: Set[orchestrator.DaemonDescription]) -> bool:
             daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
-            r = self.mgr.cephadm_services[service_type].ok_to_stop(daemon_ids)
+            assert None not in daemon_ids
+            r = self.mgr.cephadm_services[service_type].ok_to_stop(cast(List[str], daemon_ids))
             return not r.retval
 
         while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
@@ -602,6 +619,7 @@ class CephadmServe:
             r = True
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
+            assert d.hostname is not None
             self._remove_daemon(d.name(), d.hostname)
 
         if r is None:
@@ -615,6 +633,9 @@ class CephadmServe:
         for dd in daemons:
             # orphan?
             spec = self.mgr.spec_store.specs.get(dd.service_name(), None)
+            assert dd.hostname is not None
+            assert dd.daemon_type is not None
+            assert dd.daemon_id is not None
             if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
@@ -720,6 +741,7 @@ class CephadmServe:
             ha_rgw_daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
             for daemon in ha_rgw_daemons:
                 if daemon.hostname in [h.hostname for h in hosts] and daemon.hostname not in add_hosts:
+                    assert daemon.hostname is not None
                     self.mgr.cache.schedule_daemon_action(
                         daemon.hostname, daemon.name(), 'reconfig')
         return spec

@@ -102,9 +102,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # TODO: configure k8s API addr instead of assuming local
     ]
 
-    def process(self, completions):
-        # type: (List[RookCompletion]) -> None
-
+    def process(self, completions: List[RookCompletion]) -> None:  # type: ignore
         if completions:
             self.log.info("process: completions={0}".format(orchestrator.pretty_print(completions)))
 

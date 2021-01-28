@@ -685,7 +685,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return False, 'SSH keys not set. Use `ceph cephadm set-priv-key` and `ceph cephadm set-pub-key` or `ceph cephadm generate-key`'
         return True, ''
 
-    def process(self, completions: List[CephadmCompletion]) -> None:
+    def process(self, completions: List[CephadmCompletion]) -> None:  # type: ignore
         """
         Does nothing, as completions are processed in another thread.
         """
@@ -1253,8 +1253,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _host_ok_to_stop(self, hostname: str) -> Tuple[int, str]:
         self.log.debug("running host-ok-to-stop checks")
         daemons = self.cache.get_daemons()
-        daemon_map = defaultdict(lambda: [])
+        daemon_map: Dict[str, List[str]] = defaultdict(lambda: [])
         for dd in daemons:
+            assert dd.hostname is not None
+            assert dd.daemon_type is not None
+            assert dd.daemon_id is not None
             if dd.hostname == hostname:
                 daemon_map[dd.daemon_type].append(dd.daemon_id)
 
@@ -1283,18 +1286,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         in_maintenance = self.inventory.get_host_with_state("maintenance")
         if not in_maintenance:
-            self.set_health_checks({
-                "HOST_IN_MAINTENANCE": {}
-            })
+            del self.health_checks["HOST_IN_MAINTENANCE"]
         else:
             s = "host is" if len(in_maintenance) == 1 else "hosts are"
-            self.set_health_checks({
-                "HOST_IN_MAINTENANCE": {
-                    "severity": "warning",
-                    "summary": f"{len(in_maintenance)} {s} in maintenance mode",
-                    "detail": [f"{h} is in maintenance" for h in in_maintenance],
-                }
-            })
+            self.health_checks["HOST_IN_MAINTENANCE"] = {
+                "severity": "warning",
+                "summary": f"{len(in_maintenance)} {s} in maintenance mode",
+                "detail": [f"{h} is in maintenance" for h in in_maintenance],
+            }
+        self.set_health_checks(self.health_checks)
 
     @trivial_completion
     @host_exists()
@@ -1446,6 +1446,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         osd_count = 0
         for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
+                assert dd.hostname is not None
+                assert dd.daemon_type is not None
+
                 if service_type and service_type != dd.daemon_type:
                     continue
                 n: str = dd.service_name()
@@ -1464,7 +1467,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 else:
                     spec = ServiceSpec(
                         unmanaged=True,
-                        service_type=dd.daemon_type,
+                        service_type=daemon_type_to_service(dd.daemon_type),
                         service_id=dd.service_id(),
                         placement=PlacementSpec(
                             hosts=[dd.hostname]
@@ -1619,6 +1622,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def daemon_action(self, action: str, daemon_name: str, image: Optional[str] = None) -> str:
         d = self.cache.get_daemon(daemon_name)
+        assert d.daemon_type is not None
+        assert d.daemon_id is not None
 
         if action == 'redeploy' and self.daemon_is_self(d.daemon_type, d.daemon_id) \
                 and not self.mgr_service.mgr_map_has_standby():
@@ -1635,6 +1640,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     def _schedule_daemon_action(self, daemon_name: str, action: str) -> str:
         dd = self.cache.get_daemon(daemon_name)
+        assert dd.daemon_type is not None
+        assert dd.daemon_id is not None
+        assert dd.hostname is not None
         if action == 'redeploy' and self.daemon_is_self(dd.daemon_type, dd.daemon_id) \
                 and not self.mgr_service.mgr_map_has_standby():
             raise OrchestratorError(
@@ -2225,6 +2233,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return f"Unable to find OSDs: {osd_ids}"
 
         for daemon in to_remove_daemons:
+            assert daemon.daemon_id is not None
             try:
                 self.to_remove_osds.enqueue(OSD(osd_id=int(daemon.daemon_id),
                                                 replace=replace,
