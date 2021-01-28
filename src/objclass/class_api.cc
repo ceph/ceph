@@ -168,22 +168,26 @@ int cls_log(int level, const char *format, ...)
 }
 
 struct GatherFinisher : public PrimaryLogPG::OpFinisher {
-  std::map<std::string, bufferlist*> *src_objs;
-  GatherFinisher(std::map<std::string, bufferlist*> *so) : src_objs(so) {}
+  std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs;
+  GatherFinisher(std::shared_ptr<std::map<std::string, bufferlist> > sob) : src_obj_buffs(sob) {}
   int execute() override {
     return 0;
   }
 };
 
-int cls_cxx_gather(cls_method_context_t hctx, std::map<std::string, bufferlist*> *src_objs, const std::string& pool,
+int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
 		   const char *cls, const char *method, bufferlist& inbl)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
-  (*pctx)->op_finishers[(*pctx)->current_osd_subop_num].reset(new GatherFinisher(src_objs));
-  return (*pctx)->pg->cls_gather(*pctx, src_objs, pool, cls, method, inbl);
+  std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs(new std::map<std::string, bufferlist>);
+  for (std::set<std::string>::const_iterator it = src_objs.begin(); it != src_objs.end(); ++it) {
+    (*src_obj_buffs)[*it] = bufferlist();
+  }
+  (*pctx)->op_finishers[(*pctx)->current_osd_subop_num].reset(new GatherFinisher(src_obj_buffs));
+  return (*pctx)->pg->cls_gather(*pctx, src_obj_buffs, pool, cls, method, inbl);
 }
 
-std::map<std::string, bufferlist*> *cls_cxx_get_gathered_data(cls_method_context_t hctx)
+std::shared_ptr<std::map<std::string, bufferlist> > cls_cxx_get_gathered_data(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
   PrimaryLogPG::OpFinisher* op_finisher = nullptr;
@@ -194,9 +198,9 @@ std::map<std::string, bufferlist*> *cls_cxx_get_gathered_data(cls_method_context
     }
   }
   if (op_finisher == NULL) {
-    return NULL;
+    return std::shared_ptr<std::map<std::string, bufferlist> >(new std::map<std::string, bufferlist>);
   } else {
     GatherFinisher *gf = (GatherFinisher*)op_finisher;
-    return gf->src_objs;
+    return std::move(gf->src_obj_buffs);
   }
 }
