@@ -1598,14 +1598,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self._daemon_action_set_image(action, image, daemon_type, daemon_id)
 
-        if action == 'redeploy':
-            if self.daemon_is_self(daemon_type, daemon_id):
-                self.mgr_service.fail_over()
-                return ''  # unreachable
-            # stop, recreate the container+unit, then restart
-            return CephadmServe(self)._create_daemon(daemon_spec)
-        elif action == 'reconfig':
-            return CephadmServe(self)._create_daemon(daemon_spec, reconfig=True)
+        if action == 'redeploy' and self.daemon_is_self(daemon_type, daemon_id):
+            self.mgr_service.fail_over()
+            return ''  # unreachable
+
+        if action == 'redeploy' or action == 'reconfig':
+            if daemon_type != 'osd':
+                daemon_spec = self.cephadm_services[daemon_type_to_service(
+                    daemon_type)].prepare_create(daemon_spec)
+            return CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig'))
 
         actions = {
             'start': ['reset-failed', 'start'],
