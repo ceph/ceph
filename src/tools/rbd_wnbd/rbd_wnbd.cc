@@ -42,6 +42,7 @@
 
 #include "global/global_init.h"
 
+#include "include/uuid.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
@@ -307,34 +308,68 @@ int send_map_request(std::string arguments) {
 // Spawn a subprocess using the specified "rbd-wnbd" command
 // arguments. A pipe is passed to the child process,
 // which will allow it to communicate the mapping status
-int map_device_using_suprocess(std::string arguments)
+int map_device_using_suprocess(std::string arguments, int timeout_ms)
 {
-  SECURITY_ATTRIBUTES sa;
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
-  HANDLE read_pipe = NULL, write_pipe = NULL;
   char ch;
-  DWORD err = 0;
+  DWORD err = 0, status = 0;
   int exit_code = 0;
   std::ostringstream command_line;
   std::string exe_path;
+  // Windows async IO context
+  OVERLAPPED connect_o, read_o;
+  HANDLE connect_event = NULL, read_event = NULL;
+  // Used for waiting on multiple events that are going to be initialized later.
+  HANDLE wait_events[2] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE};
+  DWORD bytes_read = 0;
   // We may get a command line containing an old pipe handle when
   // recreating mappings, so we'll have to replace it.
-  std::regex pipe_pattern("([\'\"]?--pipe-handle[\'\"]? [\'\"]?\\d+[\'\"]?)");
+  std::regex pipe_pattern("([\'\"]?--pipe-name[\'\"]? +[\'\"]?[^ ]+[\'\"]?)");
 
-  // Set the security attribute such that a process created will
-  // inherit the pipe handles.
-  sa.nLength = sizeof(sa);
-  sa.lpSecurityDescriptor = NULL;
-  sa.bInheritHandle = TRUE;
+  uuid_d uuid;
+  uuid.generate_random();
+  std::ostringstream pipe_name;
+  pipe_name << "\\\\.\\pipe\\rbd-wnbd-" << uuid;
 
-  // Create an anonymous pipe to communicate with the child. */
-  if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
+  // Create an unique named pipe to communicate with the child. */
+  HANDLE pipe_handle = CreateNamedPipe(
+    pipe_name.str().c_str(),
+    PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE |
+      FILE_FLAG_OVERLAPPED,
+    PIPE_WAIT,
+    1, // Only accept one instance
+    SERVICE_PIPE_BUFFSZ,
+    SERVICE_PIPE_BUFFSZ,
+    SERVICE_PIPE_TIMEOUT_MS,
+    NULL);
+  if (pipe_handle == INVALID_HANDLE_VALUE) {
     err = GetLastError();
-    derr << "CreatePipe failed: " << win32_strerror(err) << dendl;
+    derr << "CreateNamedPipe failed: " << win32_strerror(err) << dendl;
     exit_code = -ECHILD;
     goto finally;
   }
+  connect_event = CreateEvent(0, TRUE, FALSE, NULL);
+  read_event = CreateEvent(0, TRUE, FALSE, NULL);
+  if (!connect_event || !read_event) {
+    err = GetLastError();
+    derr << "CreateEvent failed: " << win32_strerror(err) << dendl;
+    exit_code = -ECHILD;
+    goto finally;
+  }
+  connect_o.hEvent = connect_event;
+  read_o.hEvent = read_event;
+
+  status = ConnectNamedPipe(pipe_handle, &connect_o);
+  err = GetLastError();
+  if (status || err != ERROR_IO_PENDING) {
+    if (status)
+      err = status;
+    derr << "ConnectNamedPipe failed: " << win32_strerror(err) << dendl;
+    exit_code = -ECHILD;
+    goto finally;
+  }
+  err = 0;
 
   dout(5) << __func__ << ": command arguments: " << arguments << dendl;
 
@@ -347,14 +382,14 @@ int map_device_using_suprocess(std::string arguments)
   }
   command_line << std::quoted(exe_path)
                << " " << std::regex_replace(arguments, pipe_pattern, "")
-               << " --pipe-handle " << (intptr_t)write_pipe;
+               << " --pipe-name " << pipe_name.str();
 
   dout(5) << __func__ << ": command line: " << command_line.str() << dendl;
 
   GetStartupInfo(&si);
   // Create a detached child
   if (!CreateProcess(NULL, (char*)command_line.str().c_str(),
-                     NULL, NULL, TRUE, DETACHED_PROCESS,
+                     NULL, NULL, FALSE, DETACHED_PROCESS,
                      NULL, NULL, &si, &pi)) {
     err = GetLastError();
     derr << "CreateProcess failed: " << win32_strerror(err) << dendl;
@@ -362,23 +397,76 @@ int map_device_using_suprocess(std::string arguments)
     goto finally;
   }
 
-  // Close one end of the pipe in the parent.
-  CloseHandle(write_pipe);
-  write_pipe = NULL;
-
+  wait_events[0] = connect_event;
+  wait_events[1] = pi.hProcess;
+  status = WaitForMultipleObjects(2, wait_events, FALSE, timeout_ms);
+  switch(status) {
+    case WAIT_OBJECT_0:
+      if (!GetOverlappedResultEx(pipe_handle, &connect_o,
+                                 &bytes_read, timeout_ms, TRUE)) {
+        err = GetLastError();
+        derr << "Couln't establish a connection with the child process. "
+             << "Error: " << win32_strerror(err) << dendl;
+        exit_code = -ECHILD;
+        goto clean_process;
+      }
+      // We have an incoming connection.
+      break;
+    case WAIT_OBJECT_0 + 1:
+      // The process has exited prematurely.
+      goto clean_process;
+    case WAIT_TIMEOUT:
+      derr << "Timed out waiting for child process connection." << dendl;
+      goto clean_process;
+    default:
+      derr << "Failed waiting for child process. Status: " << status << dendl;
+      goto clean_process;
+  }
   // Block and wait for child to say it is ready.
   dout(5) << __func__ << ": waiting for child notification." << dendl;
-  if (!ReadFile(read_pipe, &ch, 1, NULL, NULL)) {
+  if (!ReadFile(pipe_handle, &ch, 1, NULL, &read_o)) {
     err = GetLastError();
-    derr << "Could not start RBD daemon. Receiving child process reply "
-            "failed with: " << win32_strerror(err) << dendl;
+    if (err != ERROR_IO_PENDING) {
+      derr << "Receiving child process reply failed with: "
+           << win32_strerror(err) << dendl;
+      exit_code = -ECHILD;
+      goto clean_process;
+    }
+  }
+  wait_events[0] = read_event;
+  wait_events[1] = pi.hProcess;
+  // The RBD daemon is expected to write back right after opening the
+  // pipe. We'll use the same timeout value for now.
+  status = WaitForMultipleObjects(2, wait_events, FALSE, timeout_ms);
+  switch(status) {
+    case WAIT_OBJECT_0:
+      if (!GetOverlappedResultEx(pipe_handle, &read_o,
+                                 &bytes_read, timeout_ms, TRUE)) {
+        err = GetLastError();
+        derr << "Receiving child process reply failed with: "
+             << win32_strerror(err) << dendl;
+        exit_code = -ECHILD;
+        goto clean_process;
+      }
+      break;
+    case WAIT_OBJECT_0 + 1:
+      // The process has exited prematurely.
+      goto clean_process;
+    case WAIT_TIMEOUT:
+      derr << "Timed out waiting for child process message." << dendl;
+      goto clean_process;
+    default:
+      derr << "Failed waiting for child process. Status: " << status << dendl;
+      goto clean_process;
+  }
 
-    // Give the child process a chance to exit so that we can retrieve the
-    // exit code.
-    WaitForSingleObject(pi.hProcess, 5000);
+  dout(5) << __func__ << ": received child notification." << dendl;
+  goto finally;
+
+  clean_process:
     if (!is_process_running(pi.dwProcessId)) {
-        GetExitCodeProcess(pi.hProcess, (PDWORD)&exit_code);
-        derr << "Daemon failed with: " << cpp_strerror(exit_code) << dendl;
+      GetExitCodeProcess(pi.hProcess, (PDWORD)&exit_code);
+      derr << "Daemon failed with: " << cpp_strerror(exit_code) << dendl;
     } else {
       // The process closed the pipe without notifying us or exiting.
       // This is quite unlikely, but we'll terminate the process.
@@ -386,15 +474,16 @@ int map_device_using_suprocess(std::string arguments)
       TerminateProcess(pi.hProcess, 1);
       exit_code = -EINVAL;
     }
-  } else {
-    dout(5) << __func__ << ": received child notification." << dendl;
-  }
 
   finally:
-    if (write_pipe)
-      CloseHandle(write_pipe);
-    if (read_pipe)
-      CloseHandle(read_pipe);
+    if (exit_code)
+      derr << "Could not start RBD daemon." << dendl;
+    if (pipe_handle)
+      CloseHandle(pipe_handle);
+    if (connect_event)
+      CloseHandle(connect_event);
+    if (read_event)
+      CloseHandle(read_event);
   return exit_code;
 }
 
@@ -476,11 +565,21 @@ int load_mapping_config_from_registry(string devpath, Config* cfg)
   return 0;
 }
 
-int restart_registered_mappings(int worker_count)
+int restart_registered_mappings(
+  int worker_count,
+  int total_timeout,
+  int image_map_timeout)
 {
   Config cfg;
   WNBDDiskIterator iterator;
   int err = 0, r;
+
+  int total_timeout_ms = max(total_timeout, total_timeout * 1000);
+  int image_map_timeout_ms = max(image_map_timeout, image_map_timeout * 1000);
+
+  LARGE_INTEGER start_t, counter_freq;
+  QueryPerformanceFrequency(&counter_freq);
+  QueryPerformanceCounter(&start_t);
 
   boost::asio::thread_pool pool(worker_count);
   while (iterator.get(&cfg)) {
@@ -509,14 +608,30 @@ int restart_registered_mappings(int worker_count)
     boost::asio::post(pool,
       [&, cfg]() mutable
       {
-        dout(5) << "Remapping: " << cfg.devpath << dendl;
+        LARGE_INTEGER curr_t, elapsed_ms;
+        QueryPerformanceCounter(&curr_t);
+        elapsed_ms.QuadPart = curr_t.QuadPart - start_t.QuadPart;
+        elapsed_ms.QuadPart *= 1000;
+        elapsed_ms.QuadPart /= counter_freq.QuadPart;
+
+        int time_left_ms = max(
+          0,
+          total_timeout_ms - (int)elapsed_ms.QuadPart);
+        time_left_ms = min(image_map_timeout_ms, time_left_ms);
+        if (!time_left_ms) {
+          err = -ETIMEDOUT;
+          return;
+        }
+
+        dout(5) << "Remapping: " << cfg.devpath
+                << ". Timeout: " << time_left_ms << " ms." << dendl;
 
         // We'll try to map all devices and return a non-zero value
         // if any of them fails.
-        r = map_device_using_suprocess(cfg.command_line);
+        r = map_device_using_suprocess(cfg.command_line, time_left_ms);
         if (r) {
           err = r;
-          derr << "Could not crecreate mapping: "
+          derr << "Could not create mapping: "
                << cfg.devpath << ". Error: " << r << dendl;
         } else {
           dout(5) << "Successfully remapped: " << cfg.devpath << dendl;
@@ -601,15 +716,21 @@ class RBDService : public ServiceBase {
     bool hard_disconnect;
     int soft_disconnect_timeout;
     int thread_count;
+    int service_start_timeout;
+    int image_map_timeout;
 
   public:
     RBDService(bool _hard_disconnect,
                int _soft_disconnect_timeout,
-               int _thread_count)
+               int _thread_count,
+               int _service_start_timeout,
+               int _image_map_timeout)
       : ServiceBase(g_ceph_context)
       , hard_disconnect(_hard_disconnect)
       , soft_disconnect_timeout(_soft_disconnect_timeout)
       , thread_count(_thread_count)
+      , service_start_timeout(_service_start_timeout)
+      , image_map_timeout(_image_map_timeout)
     {
     }
 
@@ -619,7 +740,10 @@ class RBDService : public ServiceBase {
         case Connect:
           dout(5) << "Received device connect request. Command line: "
                   << (char*)request->arguments << dendl;
-          return map_device_using_suprocess((char*)request->arguments);
+          // TODO: use the configured service map timeout.
+          // TODO: add ceph.conf options.
+          return map_device_using_suprocess(
+            (char*)request->arguments, DEFAULT_MAP_TIMEOUT_MS);
         default:
           dout(5) << "Received unsupported command: "
                   << request->command << dendl;
@@ -751,7 +875,8 @@ exit:
 
     int run_hook() override {
       // Restart registered mappings before accepting new ones.
-      int r = restart_registered_mappings(thread_count);
+      int r = restart_registered_mappings(
+        thread_count, service_start_timeout, image_map_timeout);
       if (r)
         return r;
 
@@ -810,6 +935,8 @@ Service options:
                               disconnect will be issued when hitting the timeout
   --service-thread-count      The number of workers used when mapping or
                               unmapping images. Default: 8
+  --start-timeout             The service start timeout in seconds. Default: 120
+  --map-timeout               Individual image map timeout in seconds. Default: 20
 
 Show|List options:
   --format plain|json|xml Output format (default: plain)
@@ -886,7 +1013,7 @@ boost::intrusive_ptr<CephContext> do_global_init(
   global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, code_env, flags);
   // Avoid cluttering the console when spawning a mapping that will run
   // in the background.
-  if (g_conf()->daemonize && !cfg->parent_pipe) {
+  if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
     flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
   }
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
@@ -908,8 +1035,10 @@ static int do_map(Config *cfg)
   librados::IoCtx io_ctx;
   librbd::Image image;
   librbd::image_info_t info;
+  HANDLE parent_pipe_handle = INVALID_HANDLE_VALUE;
+  int err = 0;
 
-  if (g_conf()->daemonize && !cfg->parent_pipe) {
+  if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
     return send_map_request(get_cli_args());
   }
 
@@ -994,16 +1123,24 @@ static int do_map(Config *cfg)
 
   // We're informing the parent processes that the initialization
   // was successful.
-  if (cfg->parent_pipe) {
-    if (!WriteFile((HANDLE)cfg->parent_pipe, "a", 1, NULL, NULL)) {
+  if (!cfg->parent_pipe.empty()) {
+    parent_pipe_handle = CreateFile(
+      cfg->parent_pipe.c_str(), GENERIC_WRITE, 0, NULL,
+      OPEN_EXISTING, 0, NULL);
+    if (parent_pipe_handle == INVALID_HANDLE_VALUE) {
+      derr << "Could not open parent pipe: " << win32_strerror(err) << dendl;
+    } else if (!WriteFile(parent_pipe_handle, "a", 1, NULL, NULL)) {
       // TODO: consider exiting in this case. The parent didn't wait for us,
       // maybe it was killed after a timeout.
-      int err = GetLastError();
+      err = GetLastError();
       derr << "Failed to communicate with the parent: "
            << win32_strerror(err) << dendl;
     } else {
       dout(5) << __func__ << ": submitted parent notification." << dendl;
     }
+
+    if (parent_pipe_handle != INVALID_HANDLE_VALUE)
+      CloseHandle(parent_pipe_handle);
 
     global_init_postfork_finish(g_ceph_context);
   }
@@ -1288,13 +1425,9 @@ static int parse_args(std::vector<const char*>& args,
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->parent_pipe, err,
-                                     "--pipe-handle", (char *)NULL)) {
+                                     "--pipe-name", (char *)NULL)) {
       if (!err.str().empty()) {
         *err_msg << "rbd-wnbd: " << err.str();
-        return -EINVAL;
-      }
-      if (cfg->parent_pipe < 0) {
-        *err_msg << "rbd-wnbd: Invalid argument for pipe-handle!";
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->wnbd_log_level,
@@ -1352,6 +1485,30 @@ static int parse_args(std::vector<const char*>& args,
       }
       if (cfg->soft_disconnect_timeout < 0) {
         *err_msg << "rbd-nbd: Invalid argument for soft-disconnect-timeout";
+        return -EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i,
+                                     (int*)&cfg->service_start_timeout,
+                                     err, "--start-timeout",
+                                     (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->service_start_timeout <= 0) {
+        *err_msg << "rbd-nbd: Invalid argument for start-timeout";
+        return -EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i,
+                                     (int*)&cfg->image_map_timeout,
+                                     err, "--map-timeout",
+                                     (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->image_map_timeout <= 0) {
+        *err_msg << "rbd-nbd: Invalid argument for map-timeout";
         return -EINVAL;
       }
     } else {
@@ -1479,7 +1636,9 @@ static int rbd_wnbd(int argc, const char *argv[])
     case Service:
     {
       RBDService service(cfg.hard_disconnect, cfg.soft_disconnect_timeout,
-                         cfg.service_thread_count);
+                         cfg.service_thread_count,
+                         cfg.service_start_timeout,
+                         cfg.image_map_timeout);
       // This call will block until the service stops.
       r = RBDService::initialize(&service);
       if (r < 0)
