@@ -65,7 +65,8 @@ def create_volume(mgr, volname, placement):
         #cleanup
         remove_pool(mgr, data_pool)
         remove_pool(mgr, metadata_pool)
-    return r, outb, outs
+        return r, outb, outs
+    return create_mds(mgr, volname, placement)
 
 
 def delete_volume(mgr, volname, metadata_pool, data_pools):
