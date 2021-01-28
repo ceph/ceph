@@ -834,28 +834,27 @@ class OddMonsTest(NamedTuple):
                                  ],
                                  3
                              ),
-                            OddMonsTest(
-                                'mon',
-                                PlacementSpec(count=5),
-                                'host1 host2 host3 host4'.split(),
-                                [
-                                    DaemonDescription('mon', 'a', 'host1'),
-                                    DaemonDescription('mon', 'b', 'host2'),
-                                ],
-                                3
-                            ),
-                            OddMonsTest(
-                                'mon',
-                                PlacementSpec(hosts='host1 host2 host3 host4'.split()),
-                                'host1 host2 host3 host4 host5'.split(),
-                                [
-                                    DaemonDescription('mon', 'a', 'host1'),
-                                    DaemonDescription('mon', 'b', 'host2'),
-                                    DaemonDescription('mon', 'c', 'host3'),
-                                ],
-                                3
-                            ),
-
+                             OddMonsTest(
+                                 'mon',
+                                 PlacementSpec(count=5),
+                                 'host1 host2 host3 host4'.split(),
+                                 [
+                                     DaemonDescription('mon', 'a', 'host1'),
+                                     DaemonDescription('mon', 'b', 'host2'),
+                                 ],
+                                 3
+                             ),
+                             OddMonsTest(
+                                 'mon',
+                                 PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+                                 'host1 host2 host3 host4 host5'.split(),
+                                 [
+                                     DaemonDescription('mon', 'a', 'host1'),
+                                     DaemonDescription('mon', 'b', 'host2'),
+                                     DaemonDescription('mon', 'c', 'host3'),
+                                 ],
+                                 3
+                             ),
                          ])
 def test_odd_mons(service_type, placement, hosts, daemons, expected_count):
 
