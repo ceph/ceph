@@ -105,7 +105,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
     # misuse lambda to copy `wrapper`
-    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
     wrapper_copy._prefix = prefix  # type: ignore
     wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
     wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
