@@ -2,7 +2,7 @@ Running Tests in the Cloud
 ==========================
 
 In this chapter, we will explain in detail how use an OpenStack
-tenant as an environment for Ceph `integration testing`_.
+tenant as an environment for Ceph `Integration Testing`_.
 
 Assumptions and caveat
 ----------------------
@@ -124,7 +124,7 @@ uploaded to http://teuthology-logs.public.ceph.com.
 Run a standalone test
 ---------------------
 
-The standalone test explained in `Reading a standalone test`_ can be run
+The standalone test explained in :ref:`reading a standalone test<reading-standalone-test>` can be run
 with the following command
 
 .. prompt:: bash $
@@ -282,8 +282,7 @@ server list`` on the teuthology machine, but the target VM hostnames (e.g.
 ``target149202171058.teuthology``) are resolvable within the teuthology
 cluster.
 
-.. _Integration testing: ../tests-integration-tests
+.. _Integration Testing: ../testing_integration_tests/tests-integration-testing-teuthology-intro
 .. _IRC:  ../essentials/#irc
 .. _Mailing List: ../essentials/#mailing-list
-.. _Reading A Standalone Test: ../testing-integration-tests/#reading-a-standalone-test
 .. _teuthology framework: https://github.com/ceph/teuthology

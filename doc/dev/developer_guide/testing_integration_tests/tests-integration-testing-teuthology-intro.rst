@@ -1,14 +1,14 @@
-.. _testing-integration-tests:
+.. _tests-integration-testing-teuthology-intro:
 
-Testing - Integration Tests
-===========================
+Testing - Integration Tests - Introduction
+==========================================
 
-Ceph has two types of tests: :ref:`make check <make-check>` tests and integration tests.
-When a test requires multiple machines, root access or lasts for a
-longer time (for example, to simulate a realistic Ceph deployment), it
-is deemed to be an integration test. Integration tests are organized into
-"suites", which are defined in the `ceph/qa sub-directory`_ and run with
-the ``teuthology-suite`` command.
+Ceph has two types of tests: :ref:`make check <make-check>` tests and
+integration tests. When a test requires multiple machines, root access or lasts
+for a longer time (for example, to simulate a realistic Ceph deployment), it is
+deemed to be an integration test. Integration tests are organized into "suites",
+which are defined in the `ceph/qa sub-directory`_ and run with the
+``teuthology-suite`` command.
 
 The ``teuthology-suite`` command is part of the `teuthology framework`_.
 In the sections that follow we attempt to provide a detailed introduction
@@ -23,12 +23,12 @@ multiple platforms using the same packages (RPM, DEB) that can be
 installed on any machine running those platforms.
 
 Teuthology has a `list of platforms that it supports
-<https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_ (as
-of September 2020 the list consisted of "RHEL/CentOS 8" and "Ubuntu 18.04").  It
-expects to be provided pre-built Ceph packages for these platforms.
-Teuthology deploys these platforms on machines (bare-metal or
-cloud-provisioned), installs the packages on them, and deploys Ceph
-clusters on them - all as called for by the test.
+<https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_ (as of
+September 2020 the list consisted of "RHEL/CentOS 8" and "Ubuntu 18.04"). It
+expects to be provided pre-built Ceph packages for these platforms.  Teuthology
+deploys these platforms on machines (bare-metal or cloud-provisioned), installs
+the packages on them, and deploys Ceph clusters on them - all as called for by
+the test.
 
 The Nightlies
 -------------
@@ -40,9 +40,8 @@ nightlies" because the Ceph core developers used to live and work in
 the same time zone and from their perspective the tests were run overnight.
 
 The results of the nightlies are published at http://pulpito.ceph.com/. The
-developer nick shows in the
-test results URL and in the first column of the Pulpito dashboard.  The
-results are also reported on the `ceph-qa mailing list
+developer nick shows in the test results URL and in the first column of the
+Pulpito dashboard.  The results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.
 
 Testing Priority
@@ -80,10 +79,10 @@ Job priority should be selected based on the following recommendations:
 * **200 <= Priority < 1000:** Use this priority for large test runs that can
   be done over the course of a week.
 
-In case you don't know how many jobs would be triggered by
-``teuthology-suite`` command, use ``--dry-run`` to get a count first and then
-issue ``teuthology-suite`` command again, this time without ``--dry-run`` and
-with ``-p`` and an appropriate number as an argument to it.
+In case you don't know how many jobs would be triggered by ``teuthology-suite``
+command, use ``--dry-run`` to get a count first and then issue
+``teuthology-suite`` command again, this time without ``--dry-run`` and with
+``-p`` and an appropriate number as an argument to it.
 
 To skip the priority check, use ``--force-priority``. In order to be sensitive
 to the runs of other developers who also need to do testing, please use it in
@@ -92,15 +91,15 @@ emergency only.
 Suites Inventory
 ----------------
 
-The ``suites`` directory of the `ceph/qa sub-directory`_ contains
-all the integration tests, for all the Ceph components.
+The ``suites`` directory of the `ceph/qa sub-directory`_ contains all the
+integration tests, for all the Ceph components.
 
 `ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
-  install a Ceph cluster with ``ceph-deploy`` (:ref:`ceph-deploy man page <ceph-deploy>`)
+  install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
-  verify the :ref:`testing-integration-tests` infrastructure works as expected)
+  verify the integration testing infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
   test CephFS mounted using FUSE
@@ -138,20 +137,17 @@ all the integration tests, for all the Ceph components.
   for various versions of Ceph, verify that upgrades can happen
   without disrupting an ongoing workload
 
-.. _`ceph-deploy man page`: ../../man/8/ceph-deploy
+`ceph-deploy man page`_
 
 teuthology-describe-tests
 -------------------------
 
-In February 2016, a new feature called ``teuthology-describe-tests`` was
-added to the `teuthology framework`_ to facilitate documentation and better
-understanding of integration tests (`feature announcement
-<http://article.gmane.org/gmane.comp.file-systems.ceph.devel/29287>`_).
+``teuthology-describe`` was added to the `teuthology framework`_ to facilitate
+documentation and better understanding of integration tests.
 
 The upshot is that tests can be documented by embedding ``meta:``
 annotations in the yaml files used to define the tests. The results can be
-seen in the `ceph-qa-suite wiki
-<http://tracker.ceph.com/projects/ceph-qa-suite/wiki/>`_.
+seen in the `teuthology-desribe usecases`_
 
 Since this is a new feature, many yaml files have yet to be annotated.
 Developers are encouraged to improve the documentation, in terms of both
@@ -164,14 +160,14 @@ Given that - as a new Ceph developer - you will typically not have access
 to the `Sepia lab`_, you may rightly ask how you can run the integration
 tests in your own environment.
 
-One option is to set up a teuthology cluster on bare metal. Though this is
-a non-trivial task, it `is` possible. Here are `some notes
-<http://docs.ceph.com/teuthology/docs/LAB_SETUP.html>`_ to get you started
-if you decide to go this route.
+One option is to set up a teuthology cluster on bare metal. Though this is a
+non-trivial task, it `is` possible. Here are `some notes
+<https://docs.ceph.com/projects/teuthology/en/latest/LAB_SETUP.html>`_ to get
+you started if you decide to go this route.
 
 If you have access to an OpenStack tenant, you have another option: the
 `teuthology framework`_ has an OpenStack backend, which is documented `here
-<https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`__.
+<https://docs.ceph.com/projects/teuthology/en/latest/openstack_backend.html>`__.
 This OpenStack backend can build packages from a given git commit or
 branch, provision VMs, install the packages and run integration tests
 on those VMs. This process is controlled using a tool called
@@ -193,7 +189,7 @@ available by running the following command on the teuthology machine
 
    teuthology-suite --help
 
-.. _teuthology-suite: http://docs.ceph.com/teuthology/docs/teuthology.suite.html
+.. _teuthology-suite: https://docs.ceph.com/projects/teuthology/en/latest/commands/teuthology-suite.html
 
 How integration tests are defined
 ---------------------------------
@@ -204,6 +200,9 @@ code found in the ``tasks`` subdirectory. Some tests ("standalone tests")
 are defined in a single yaml file, while other tests are defined by a
 directory tree containing yaml files that are combined, at runtime, into a
 larger yaml file.
+
+
+.. _reading-standalone-test:
 
 Reading a standalone test
 -------------------------
@@ -526,3 +525,5 @@ test will be first.
 .. _Sepia Lab: https://wiki.sepia.ceph.com/doku.php
 .. _teuthology repository: https://github.com/ceph/teuthology
 .. _teuthology framework: https://github.com/ceph/teuthology
+.. _teuthology-desribe usecases: https://gist.github.com/jdurgin/09711d5923b583f60afc
+.. _ceph-deploy man page: ../../../../man/8/ceph-deploy
