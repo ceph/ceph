@@ -915,8 +915,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
         except OrchestratorError as e:
             self.log.exception(f"check-host failed for '{host}'")
-            return 1, '', ('check-host failed:\n' +
-                           f"Host '{host}' not found. Use 'ceph orch host ls' to see all managed hosts.")
+            return 1, '', ('check-host failed:\n'
+                           + f"Host '{host}' not found. Use 'ceph orch host ls' to see all managed hosts.")
         # if we have an outstanding health alert for this host, give the
         # serve thread a kick
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
@@ -1184,8 +1184,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         return [
             h for h in self.inventory.all_specs()
-            if self.cache.host_had_daemon_refresh(h.hostname) and
-            h.status.lower() not in ['maintenance', 'offline']
+            if self.cache.host_had_daemon_refresh(h.hostname)
+            and h.status.lower() not in ['maintenance', 'offline']
         ]
 
     def _add_host(self, spec):
@@ -1295,8 +1295,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return 1, '\n'.join(error_notifications)
 
         if notifications:
-            return 0, (f'It is presumed safe to stop host {hostname}. ' +
-                       'Note the following:\n\n' + '\n'.join(notifications))
+            return 0, (f'It is presumed safe to stop host {hostname}. '
+                       + 'Note the following:\n\n' + '\n'.join(notifications))
         return 0, f'It is presumed safe to stop host {hostname}'
 
     @trivial_completion
