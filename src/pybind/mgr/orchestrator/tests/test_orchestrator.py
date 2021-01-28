@@ -205,7 +205,7 @@ def test_pretty_print():
     mgr.process = lambda cs: [c.finalize(None) for c in cs]
 
     def add_one(x):
-        return x+1
+        return x + 1
 
     c = Completion(value=1, on_complete=add_one).then(
         str

@@ -1541,7 +1541,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     sm[n].container_image_name = 'mix'
                 if dd.daemon_type == 'haproxy' or dd.daemon_type == 'keepalived':
                     # ha-rgw has 2 daemons running per host
-                    sm[n].size = sm[n].size*2
+                    sm[n].size = sm[n].size * 2
         for n, spec in self.spec_store.specs.items():
             if n in sm:
                 continue
@@ -1560,7 +1560,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 sm[n].rados_config_location = spec.rados_config_location()
             if spec.service_type == 'ha-rgw':
                 # ha-rgw has 2 daemons running per host
-                sm[n].size = sm[n].size*2
+                sm[n].size = sm[n].size * 2
         return list(sm.values())
 
     @trivial_completion
