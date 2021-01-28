@@ -101,6 +101,7 @@ def test_spec_octopus(spec_json):
     # Please do not modify those JSON values.
 
     spec = ServiceSpec.from_json(spec_json)
+
     # just some verification that we can sill read old octopus specs
     def convert_to_old_style_json(j):
         j_c = dict(j.copy())
@@ -121,6 +122,7 @@ def test_spec_octopus(spec_json):
         j_c.pop('objectstore', None)
         j_c.pop('filter_logic', None)
         return j_c
+
     assert spec_json == convert_to_old_style_json(spec.to_json())
 
 
