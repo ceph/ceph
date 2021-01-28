@@ -518,7 +518,7 @@ class HostCache():
         def alter(host: str, dd_orig: orchestrator.DaemonDescription) -> orchestrator.DaemonDescription:
             dd = copy(dd_orig)
             if host in self.mgr.offline_hosts:
-                dd.status = -1
+                dd.status = orchestrator.DaemonDescriptionStatus.error
                 dd.status_desc = 'host is offline'
             dd.events = self.mgr.events.get_for_daemon(dd.name())
             return dd

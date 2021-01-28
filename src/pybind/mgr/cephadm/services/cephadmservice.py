@@ -11,7 +11,7 @@ from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
 from mgr_util import ServerConfigException, verify_tls
@@ -76,7 +76,7 @@ class CephadmDaemonDeploySpec:
 
         return files
 
-    def to_daemon_description(self, status: int, status_desc: str) -> DaemonDescription:
+    def to_daemon_description(self, status: DaemonDescriptionStatus, status_desc: str) -> DaemonDescription:
         return DaemonDescription(
             daemon_type=self.daemon_type,
             daemon_id=self.daemon_id,
@@ -249,7 +249,9 @@ class CephadmService(metaclass=ABCMeta):
         # Provides a warning about if it possible or not to stop <n> daemons in a service
         names = [f'{daemon_type}.{d_id}' for d_id in daemon_ids]
         number_of_running_daemons = len(
-            [daemon for daemon in self.mgr.cache.get_daemons_by_type(daemon_type) if daemon.status == 1])
+            [daemon
+             for daemon in self.mgr.cache.get_daemons_by_type(daemon_type)
+             if daemon.status == DaemonDescriptionStatus.running])
         if (number_of_running_daemons - len(daemon_ids)) >= low_limit:
             return False, f'It is presumed safe to stop {names}'
 
