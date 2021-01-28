@@ -240,7 +240,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _get_device_locations(self, dev_id):
         # type: (str) -> List[DeviceLightLoc]
         locs = [d['location'] for d in self.get('devices')['devices'] if d['devid'] == dev_id]
-        return [DeviceLightLoc(**l) for l in sum(locs, [])]
+        return [DeviceLightLoc(**loc) for loc in sum(locs, [])]
 
     @_cli_read_command(prefix='device ls-lights')
     def _device_ls(self) -> HandleCommandResult:
