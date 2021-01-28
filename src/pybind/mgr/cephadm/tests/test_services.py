@@ -6,7 +6,7 @@ from cephadm.services.cephadmservice import MonService, MgrService, MdsService, 
     RbdMirrorService, CrashService, CephadmService, AuthEntity
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
-from cephadm.services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
+from cephadm.services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 

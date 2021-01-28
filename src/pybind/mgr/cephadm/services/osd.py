@@ -1,5 +1,6 @@
 import json
 import logging
+from threading import Lock
 from typing import List, Dict, Any, Set, Union, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment import translate
@@ -304,76 +305,6 @@ class RemoveUtil(object):
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr: "CephadmOrchestrator" = mgr
 
-    def process_removal_queue(self) -> None:
-        """
-        Performs actions in the _serve() loop to remove an OSD
-        when criteria is met.
-        """
-
-        # make sure that we don't run on OSDs that are not in the cluster anymore.
-        self.cleanup()
-
-        logger.debug(
-            f"{self.mgr.to_remove_osds.queue_size()} OSDs are scheduled "
-            f"for removal: {self.mgr.to_remove_osds.all_osds()}")
-
-        # find osds that are ok-to-stop and not yet draining
-        ok_to_stop_osds = self.find_osd_stop_threshold(self.mgr.to_remove_osds.idling_osds())
-        if ok_to_stop_osds:
-            # start draining those
-            _ = [osd.start_draining() for osd in ok_to_stop_osds]
-
-        # Check all osds for their state and take action (remove, purge etc)
-        to_remove_osds = self.mgr.to_remove_osds.all_osds()
-        new_queue = set()
-        for osd in to_remove_osds:
-            if not osd.force:
-                # skip criteria
-                if not osd.is_empty:
-                    logger.info(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
-                    new_queue.add(osd)
-                    continue
-
-            if not osd.safe_to_destroy():
-                logger.info(
-                    f"OSD <{osd.osd_id}> is not safe-to-destroy yet. Waiting a bit more")
-                new_queue.add(osd)
-                continue
-
-            # abort criteria
-            if not osd.down():
-                # also remove it from the remove_osd list and set a health_check warning?
-                raise orchestrator.OrchestratorError(
-                    f"Could not set OSD <{osd.osd_id}> to 'down'")
-
-            if osd.replace:
-                if not osd.destroy():
-                    raise orchestrator.OrchestratorError(
-                        f"Could not destroy OSD <{osd.osd_id}>")
-            else:
-                if not osd.purge():
-                    raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
-
-            if not osd.exists:
-                continue
-            assert osd.fullname is not None
-            assert osd.hostname is not None
-            self.mgr._remove_daemon(osd.fullname, osd.hostname)
-            logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.hostname}")
-            logger.debug(f"Removing {osd.osd_id} from the queue.")
-
-        # self.mgr.to_remove_osds could change while this is processing (osds get added from the CLI)
-        # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
-        # osds that were added while this method was executed'
-        self.mgr.to_remove_osds.intersection_update(new_queue)
-        self.save_to_store()
-
-    def cleanup(self) -> None:
-        # OSDs can always be cleaned up manually. This ensures that we run on existing OSDs
-        not_in_cluster_osds = self.mgr.to_remove_osds.not_in_cluster()
-        for osd in not_in_cluster_osds:
-            self.mgr.to_remove_osds.remove(osd)
-
     def get_osds_in_cluster(self) -> List[str]:
         osd_map = self.mgr.get_osdmap()
         return [str(x.get('osd')) for x in osd_map.dump().get('osds', [])]
@@ -481,18 +412,6 @@ class RemoveUtil(object):
         self.mgr.log.debug(f"cmd: {cmd_args.get('prefix')} returns: {out}")
         return True
 
-    def save_to_store(self) -> None:
-        osd_queue = [osd.to_json() for osd in self.mgr.to_remove_osds.all_osds()]
-        logger.debug(f"Saving {osd_queue} to store")
-        self.mgr.set_store('osd_remove_queue', json.dumps(osd_queue))
-
-    def load_from_store(self) -> None:
-        for k, v in self.mgr.get_store_prefix('osd_remove_queue').items():
-            for osd in json.loads(v):
-                logger.debug(f"Loading osd ->{osd} from store")
-                osd_obj = OSD.from_json(osd, ctx=self)
-                self.mgr.to_remove_osds.add(osd_obj)
-
 
 class NotFoundError(Exception):
     pass
@@ -549,7 +468,7 @@ class OSD:
         self.fullname = fullname
 
         # mgr obj to make mgr/mon calls
-        self.rm_util = remove_util
+        self.rm_util: RemoveUtil = remove_util
 
     def start(self) -> None:
         if self.started:
@@ -651,13 +570,13 @@ class OSD:
         return out
 
     @classmethod
-    def from_json(cls, inp: Optional[Dict[str, Any]], ctx: Optional[RemoveUtil] = None) -> Optional["OSD"]:
+    def from_json(cls, inp: Optional[Dict[str, Any]], rm_util: RemoveUtil) -> Optional["OSD"]:
         if not inp:
             return None
         for date_field in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if inp.get(date_field):
                 inp.update({date_field: str_to_datetime(inp.get(date_field, ''))})
-        inp.update({'remove_util': ctx})
+        inp.update({'remove_util': rm_util})
         if 'nodename' in inp:
             hostname = inp.pop('nodename')
             inp['hostname'] = hostname
@@ -675,45 +594,153 @@ class OSD:
         return f"<OSD>(osd_id={self.osd_id}, draining={self.draining})"
 
 
-class OSDQueue(Set):
+class OSDRemovalQueue(object):
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr: "CephadmOrchestrator" = mgr
+        self.osds: Set[OSD] = set()
+        self.rm_util = RemoveUtil(mgr)
+
+        # locks multithreaded access to self.osds. Please avoid locking
+        # network calls, like mon commands.
+        self.lock = Lock()
+
+    def process_removal_queue(self) -> None:
+        """
+        Performs actions in the _serve() loop to remove an OSD
+        when criteria is met.
+
+        we can't hold self.lock, as we're calling _remove_daemon in the loop
+        """
+
+        # make sure that we don't run on OSDs that are not in the cluster anymore.
+        self.cleanup()
+
+        # find osds that are ok-to-stop and not yet draining
+        ok_to_stop_osds = self.rm_util.find_osd_stop_threshold(self.idling_osds())
+        if ok_to_stop_osds:
+            # start draining those
+            _ = [osd.start_draining() for osd in ok_to_stop_osds]
+
+        all_osds = self.all_osds()
+
+        logger.debug(
+            f"{self.queue_size()} OSDs are scheduled "
+            f"for removal: {all_osds}")
+
+        # Check all osds for their state and take action (remove, purge etc)
+        new_queue: Set[OSD] = set()
+        for osd in all_osds:  # type: OSD
+            if not osd.force:
+                # skip criteria
+                if not osd.is_empty:
+                    logger.info(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
+                    new_queue.add(osd)
+                    continue
+
+            if not osd.safe_to_destroy():
+                logger.info(
+                    f"OSD <{osd.osd_id}> is not safe-to-destroy yet. Waiting a bit more")
+                new_queue.add(osd)
+                continue
+
+            # abort criteria
+            if not osd.down():
+                # also remove it from the remove_osd list and set a health_check warning?
+                raise orchestrator.OrchestratorError(
+                    f"Could not set OSD <{osd.osd_id}> to 'down'")
+
+            if osd.replace:
+                if not osd.destroy():
+                    raise orchestrator.OrchestratorError(
+                        f"Could not destroy OSD <{osd.osd_id}>")
+            else:
+                if not osd.purge():
+                    raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
+
+            if not osd.exists:
+                continue
+            assert osd.fullname is not None
+            assert osd.hostname is not None
+            self.mgr._remove_daemon(osd.fullname, osd.hostname)
+            logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.hostname}")
+            logger.debug(f"Removing {osd.osd_id} from the queue.")
+
+        # self could change while this is processing (osds get added from the CLI)
+        # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
+        # osds that were added while this method was executed'
+        with self.lock:
+            self.osds.intersection_update(new_queue)
+            self._save_to_store()
+
+    def cleanup(self) -> None:
+        # OSDs can always be cleaned up manually. This ensures that we run on existing OSDs
+        with self.lock:
+            for osd in self._not_in_cluster():
+                self.osds.remove(osd)
+
+    def _save_to_store(self) -> None:
+        osd_queue = [osd.to_json() for osd in self.osds]
+        logger.debug(f"Saving {osd_queue} to store")
+        self.mgr.set_store('osd_remove_queue', json.dumps(osd_queue))
+
+    def load_from_store(self) -> None:
+        with self.lock:
+            for k, v in self.mgr.get_store_prefix('osd_remove_queue').items():
+                for osd in json.loads(v):
+                    logger.debug(f"Loading osd ->{osd} from store")
+                    osd_obj = OSD.from_json(osd, rm_util=self.rm_util)
+                    if osd_obj is not None:
+                        self.osds.add(osd_obj)
 
     def as_osd_ids(self) -> List[int]:
-        return [osd.osd_id for osd in self]
+        with self.lock:
+            return [osd.osd_id for osd in self.osds]
 
     def queue_size(self) -> int:
-        return len(self)
+        with self.lock:
+            return len(self.osds)
 
     def draining_osds(self) -> List["OSD"]:
-        return [osd for osd in self if osd.is_draining]
+        with self.lock:
+            return [osd for osd in self.osds if osd.is_draining]
 
     def idling_osds(self) -> List["OSD"]:
-        return [osd for osd in self if not osd.is_draining and not osd.is_empty]
+        with self.lock:
+            return [osd for osd in self.osds if not osd.is_draining and not osd.is_empty]
 
     def empty_osds(self) -> List["OSD"]:
-        return [osd for osd in self if osd.is_empty]
+        with self.lock:
+            return [osd for osd in self.osds if osd.is_empty]
 
     def all_osds(self) -> List["OSD"]:
-        return [osd for osd in self]
+        with self.lock:
+            return [osd for osd in self.osds]
 
-    def not_in_cluster(self) -> List["OSD"]:
-        return [osd for osd in self if not osd.exists]
+    def _not_in_cluster(self) -> List["OSD"]:
+        return [osd for osd in self.osds if not osd.exists]
 
     def enqueue(self, osd: "OSD") -> None:
         if not osd.exists:
             raise NotFoundError()
-        self.add(osd)
+        with self.lock:
+            self.osds.add(osd)
         osd.start()
 
     def rm(self, osd: "OSD") -> None:
         if not osd.exists:
             raise NotFoundError()
         osd.stop()
-        try:
-            logger.debug(f'Removing {osd} from the queue.')
-            self.remove(osd)
-        except KeyError:
-            logger.debug(f"Could not find {osd} in queue.")
-            raise KeyError
+        with self.lock:
+            try:
+                logger.debug(f'Removing {osd} from the queue.')
+                self.osds.remove(osd)
+            except KeyError:
+                logger.debug(f"Could not find {osd} in queue.")
+                raise KeyError
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, OSDRemovalQueue):
+            return False
+        with self.lock:
+            return self.osds == other.osds

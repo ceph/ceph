@@ -44,7 +44,7 @@ from .services.cephadmservice import MonService, MgrService, MdsService, RgwServ
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nfs import NFSService
-from .services.osd import RemoveUtil, OSDQueue, OSDService, OSD, NotFoundError
+from .services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 from .schedule import HostAssignment
@@ -353,9 +353,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.cache = HostCache(self)
         self.cache.load()
 
-        self.rm_util = RemoveUtil(self)
-        self.to_remove_osds = OSDQueue()
-        self.rm_util.load_from_store()
+        self.to_remove_osds = OSDRemovalQueue(self)
+        self.to_remove_osds.load_from_store()
 
         self.spec_store = SpecStore(self)
         self.spec_store.load()
@@ -503,7 +502,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                     self.log.debug(f"Found empty osd. Starting removal process")
                     # if the osd that is now empty is also part of the removal queue
                     # start the process
-                    self.rm_util.process_removal_queue()
+                    self._kick_serve_loop()
 
     def pause(self) -> None:
         if not self.paused:
@@ -2237,7 +2236,7 @@ To check that the host is reachable:
                                                 hostname=daemon.hostname,
                                                 fullname=daemon.name(),
                                                 process_started_at=datetime.datetime.utcnow(),
-                                                remove_util=self.rm_util))
+                                                remove_util=self.to_remove_osds.rm_util))
             except NotFoundError:
                 return f"Unable to find OSDs: {osd_ids}"
 
@@ -2254,7 +2253,7 @@ To check that the host is reachable:
         for osd_id in osd_ids:
             try:
                 self.to_remove_osds.rm(OSD(osd_id=int(osd_id),
-                                           remove_util=self.rm_util))
+                                           remove_util=self.to_remove_osds.rm_util))
             except (NotFoundError, KeyError):
                 return f'Unable to find OSD in the queue: {osd_id}'
 
