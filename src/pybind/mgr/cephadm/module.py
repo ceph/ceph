@@ -637,10 +637,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if ssh_config is None or len(ssh_config.strip()) == 0:
             raise OrchestratorValidationError('ssh_config cannot be empty')
         # StrictHostKeyChecking is [yes|no] ?
-        l = re.findall(r'StrictHostKeyChecking\s+.*', ssh_config)
-        if not l:
+        res = re.findall(r'StrictHostKeyChecking\s+.*', ssh_config)
+        if not res:
             raise OrchestratorValidationError('ssh_config requires StrictHostKeyChecking')
-        for s in l:
+        for s in res:
             if 'ask' in s.lower():
                 raise OrchestratorValidationError(f'ssh_config cannot contain: \'{s}\'')
 
