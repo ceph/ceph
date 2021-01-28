@@ -274,15 +274,7 @@ public:
   void clear_want_pg_temp() final {
     shard_services.remove_want_pg_temp(pgid.pgid);
   }
-  void publish_stats_to_osd() final {
-    if (!is_primary())
-      return;
-
-    (void) peering_state.prepare_stats_for_publish(
-      false,
-      pg_stat_t(),
-      object_stat_collection_t());
-  }
+  void publish_stats_to_osd() final;
   void clear_publish_stats() final {
     // Not needed yet
   }
@@ -448,14 +440,7 @@ public:
   bool is_backfilling() const final {
     return peering_state.is_backfilling();
   }
-  pg_stat_t get_stats() {
-    auto stats = peering_state.prepare_stats_for_publish(
-      false,
-      pg_stat_t(),
-      object_stat_collection_t());
-    ceph_assert(stats);
-    return *stats;
-  }
+  pg_stat_t get_stats();
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
   }
