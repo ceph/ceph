@@ -115,7 +115,8 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
 
 
 class InnerCliCommandCallable(Protocol):
-    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]: ...
+    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]:
+        ...
 
 
 def _cli_command(perm: str) -> InnerCliCommandCallable:

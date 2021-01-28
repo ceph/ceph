@@ -69,7 +69,8 @@ def _or(expected, *inners):
         assert False, f"_or failed: {expected}"
 
 
-def _always_true(_): pass
+def _always_true(_):
+    pass
 
 
 def k(s):
