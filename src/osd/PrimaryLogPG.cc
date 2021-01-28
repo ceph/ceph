@@ -10086,8 +10086,13 @@ struct C_gather : public Context {
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
-    // TODO: check errors
     pg->lock();
+    map<hobject_t,PrimaryLogPG::CLSGatherOpRef>::iterator p = pg->cls_gather_ops.find(oid);
+    if (p == pg->cls_gather_ops.end()) {
+      // op was cancelled
+      pg->unlock();
+      return;
+    }
     pg->cls_gather_ops.erase(oid);
     pg->execute_ctx(ctx);
     pg->unlock();
