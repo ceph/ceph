@@ -272,23 +272,23 @@ class HostAssignment(object):
         return existing
 
 
-def merge_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec]) -> Iterable[HostPlacementSpec]:
+def merge_hostspecs(lh: List[HostPlacementSpec], rh: List[HostPlacementSpec]) -> Iterable[HostPlacementSpec]:
     """
-    Merge two lists of HostPlacementSpec by hostname. always returns `l` first.
+    Merge two lists of HostPlacementSpec by hostname. always returns `lh` first.
 
     >>> list(merge_hostspecs([HostPlacementSpec(hostname='h', name='x', network='')],
     ...                      [HostPlacementSpec(hostname='h', name='y', network='')]))
     [HostPlacementSpec(hostname='h', network='', name='x')]
 
     """
-    l_names = {h.hostname for h in l}
-    yield from l
-    yield from (h for h in r if h.hostname not in l_names)
+    lh_names = {h.hostname for h in lh}
+    yield from lh
+    yield from (h for h in rh if h.hostname not in lh_names)
 
 
-def difference_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
+def difference_hostspecs(lh: List[HostPlacementSpec], rh: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
     """
-    returns l "minus" r by hostname.
+    returns lh "minus" rh by hostname.
 
     >>> list(difference_hostspecs([HostPlacementSpec(hostname='h1', name='x', network=''),
     ...                           HostPlacementSpec(hostname='h2', name='y', network='')],
@@ -296,5 +296,5 @@ def difference_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec])
     [HostPlacementSpec(hostname='h1', network='', name='x')]
 
     """
-    r_names = {h.hostname for h in r}
-    return [h for h in l if h.hostname not in r_names]
+    rh_names = {h.hostname for h in rh}
+    return [h for h in lh if h.hostname not in rh_names]
