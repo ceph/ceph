@@ -104,7 +104,6 @@ FSMirror::~FSMirror() {
     std::scoped_lock locker(m_lock);
     delete m_instance_watcher;
     delete m_mirror_watcher;
-    m_cluster.reset();
   }
   // outside the lock so that in-progress commands can acquire
   // lock and finish executing.
@@ -123,6 +122,7 @@ void FSMirror::shutdown_replayer(PeerReplayer *peer_replayer) {
 void FSMirror::cleanup() {
   dout(20) << dendl;
   ceph_unmount(m_mount);
+  ceph_release(m_mount);
   m_ioctx.close();
   m_cluster.reset();
 }
