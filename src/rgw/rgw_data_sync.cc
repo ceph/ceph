@@ -1371,7 +1371,7 @@ public:
                                                                                                   _stage_type),
                                                                          RGWDataSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
-    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
+    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->dpp,
                                                     _sc->conns.sip,
                                                     _sc->env->http_manager,
                                                     data_type,
@@ -2125,6 +2125,7 @@ public:
 void RGWDataSyncCtx::init(RGWDataSyncEnv *_env,
                           const RGWRemoteCtl::Conns& _conns,
                           const rgw_zone_id& _source_zone) {
+  dpp = _env->dpp;
   cct = _env->cct;
   env = _env;
   conns = _conns;
@@ -3679,7 +3680,7 @@ public:
                                                                                                     _stage_type),
                                                                            RGWBucketPipeSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >();
-    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->cct,
+    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->dpp,
                                                     _sc->conns.sip,
                                                     _sc->env->http_manager,
                                                     data_type,
@@ -5085,88 +5086,6 @@ done:
     return 0;
   }
 };
-
-
-class SIPClientCRHandler {
-  CephContext *cct;
-  RGWAsyncRadosProcessor *async_rados;
-
-  SIClientRef sipc;
-
-  struct InitMarkersAction : public RGWGenericAsyncCR::Action {
-    CephContext *cct;
-    SIClientRef sipc;
-
-    InitMarkersAction(CephContext *_cct, SIClientRef _sipc) : cct(_cct),
-                                                              sipc(_sipc) {}
-    int operate(const DoutPrefixProvider *dpp) override {
-      int r = sipc->init_markers(null_yield);
-      if (r < 0) {
-        ldout(cct, 0) << "ERROR: " << __func__ << "(): init_markers() failed (r=" << r << ")" << dendl;
-        return r;
-      }
-
-      return 0;
-    }
-  };
-
-  struct FetchAction : public RGWGenericAsyncCR::Action {
-    CephContext *cct;
-    SIClientRef sipc;
-
-    int shard_id;
-    int max;
-
-    std::shared_ptr<SIProvider::fetch_result> result;
-
-
-    FetchAction(CephContext *_cct,
-                SIClientRef _sipc,
-                int _shard_id,
-                int _max,
-                std::shared_ptr<SIProvider::fetch_result>& _result) : cct(_cct),
-                                                                      sipc(_sipc),
-                                                                      shard_id(_shard_id),
-                                                                      max(_max),
-                                                                      result(_result) {}
-    int operate(const DoutPrefixProvider *dpp) override {
-      int r = sipc->fetch(shard_id, max, result.get());
-      if (r < 0) {
-        ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to fetch bucket sync info (r=" << r << ")" << dendl;
-        return r;
-      }
-
-      return 0;
-    }
-  };
-
-public:
-  SIPClientCRHandler(CephContext *_cct,
-                     RGWAsyncRadosProcessor *_async_rados,
-                     SIClientRef& _sipc) : cct(_cct),
-                                           async_rados(_async_rados),
-                                           sipc(_sipc) {}
-
-  RGWCoroutine *init_markers_cr() {
-    auto init_action = make_shared<InitMarkersAction>(cct, sipc);
-
-    return new RGWGenericAsyncCR(cct,
-                                 async_rados,
-                                 init_action);
-  }
-
-
-  RGWCoroutine *fetch_cr(int shard_id,
-                         int max,
-                         std::shared_ptr<SIProvider::fetch_result>& result) {
-    auto fetch_action = make_shared<FetchAction>(cct, sipc, shard_id, max, result);
-
-    return new RGWGenericAsyncCR(cct,
-                                 async_rados,
-                                 fetch_action);
-  }
-};
-
 
 #define BUCKET_SYNC_SPAWN_WINDOW 20
 

@@ -26,13 +26,19 @@ class SIProviderCRMgr
   };
 
 protected:
+  const DoutPrefixProvider *dpp;
   CephContext *cct;
 
   SIProvider::Info info;
 
 public:
-  SIProviderCRMgr(CephContext *_cct) : cct(_cct) {}
+  SIProviderCRMgr(const DoutPrefixProvider *_dpp) : dpp(_dpp),
+                                              cct(_dpp->get_cct()) {}
   virtual ~SIProviderCRMgr() {}
+
+  const DoutPrefixProvider *get_dpp() {
+    return dpp;
+  }
 
   CephContext *ctx() {
     return cct;
@@ -68,7 +74,8 @@ class SIProviderCRMgr_Local : public SIProviderCRMgr
   RGWAsyncRadosProcessor *async_rados;
   SIProviderRef provider;
 public:
-  SIProviderCRMgr_Local(RGWSI_SIP_Marker *_sip_marker_svc,
+  SIProviderCRMgr_Local(const DoutPrefixProvider *dpp,
+                        RGWSI_SIP_Marker *_sip_marker_svc,
                         RGWAsyncRadosProcessor *_async_rados,
                         SIProviderRef& _provider);
 
@@ -113,24 +120,24 @@ class SIProviderCRMgr_REST : public SIProviderCRMgr
   SIProvider::TypeHandlerProvider *type_provider;
 
 public:
-  SIProviderCRMgr_REST(CephContext *_cct,
+  SIProviderCRMgr_REST(const DoutPrefixProvider *_dpp,
                        RGWRESTConn *_conn,
                        RGWHTTPManager *_http_manager,
                        const string& _remote_provider_name,
                        SIProvider::TypeHandlerProvider *_type_provider,
-                       std::optional<string> _instance) : SIProviderCRMgr(_cct),
+                       std::optional<string> _instance) : SIProviderCRMgr(_dpp),
                                                           conn(_conn),
                                                           http_manager(_http_manager),
                                                           remote_provider_name(_remote_provider_name),
                                                           instance(_instance.value_or(string())),
                                                           type_provider(_type_provider) {}
-  SIProviderCRMgr_REST(CephContext *_cct,
+  SIProviderCRMgr_REST(const DoutPrefixProvider *_dpp,
                        RGWRESTConn *_conn,
                        RGWHTTPManager *_http_manager,
                        const string& _data_type,
                        SIProvider::StageType _stage_type,
                        SIProvider::TypeHandlerProvider *_type_provider,
-                       std::optional<string> _instance) : SIProviderCRMgr(_cct),
+                       std::optional<string> _instance) : SIProviderCRMgr(_dpp),
                                                           conn(_conn),
                                                           http_manager(_http_manager),
                                                           data_type(_data_type),

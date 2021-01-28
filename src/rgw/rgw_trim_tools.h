@@ -24,7 +24,7 @@ class RGWTrimSIPMgr {
 public:
   virtual ~RGWTrimSIPMgr() {}
 
-  virtual RGWCoroutine *init_cr() = 0;
+  virtual RGWCoroutine *init_cr(const DoutPrefixProvider *dpp) = 0;
   virtual RGWCoroutine *get_targets_info_cr(std::vector<std::optional<std::string> > *min_shard_markers,
                                             std::vector<std::optional<std::string> > *min_source_pos,
                                             std::set<std::string> *sip_targets,

@@ -24,9 +24,9 @@ void siprovider_meta_info::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("id", id, obj);
 }
 
-int SIProvider_MetaFull::init()
+int SIProvider_MetaFull::init(const DoutPrefixProvider *dpp)
 {
-  int r = get_all_sections();
+  int r = get_all_sections(dpp);
   if (r < 0) {
     lderr(cct) << __func__ << "(): get_all_sections() returned r=" << r << dendl;
     return r;
@@ -70,7 +70,7 @@ void SIProvider_MetaFull::rearrange_sections() {
             std::back_inserter(sections));
 }
 
-int SIProvider_MetaFull::get_all_sections() {
+int SIProvider_MetaFull::get_all_sections(const DoutPrefixProvider *dpp) {
   void *handle;
 
   int ret = meta.mgr->list_keys_init(string(), string(), &handle); /* iterate top handler */
@@ -100,12 +100,13 @@ int SIProvider_MetaFull::get_all_sections() {
   return 0;
 }
 
-int SIProvider_MetaFull::next_section(const std::string& section, string *next)
+int SIProvider_MetaFull::next_section(const DoutPrefixProvider *dpp,
+                                      const std::string& section, string *next)
 {
   auto iter = next_section_map.find(section);
   if (iter == next_section_map.end()) {
     if (section.empty()) {
-      ldout(cct, 5) << "ERROR: " << __func__ << "(): next_section_map() is not initialized" << dendl;
+      ldpp_dout(dpp, 5) << "ERROR: " << __func__ << "(): next_section_map() is not initialized" << dendl;
       return -EINVAL;
     }
     return -ENOENT;
@@ -119,7 +120,8 @@ std::string SIProvider_MetaFull::to_marker(const std::string& section, const std
   return section + "/" + k;
 }
 
-int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_MetaFull::do_fetch(const DoutPrefixProvider *dpp,
+                                  int shard_id, std::string marker, int max, fetch_result *result)
 {
   if (shard_id > 0) {
     return -ERANGE;
@@ -136,7 +138,7 @@ int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fet
     section = marker.substr(0, pos);
     m = marker.substr(pos + 1);
   } else {
-    int r = next_section(section, &section);
+    int r = next_section(dpp, section, &section);
     if (r < 0) {
       return r;
     }
@@ -182,7 +184,7 @@ int SIProvider_MetaFull::do_fetch(int shard_id, std::string marker, int max, fet
     }
 
     if (!truncated) {
-      ret = next_section(section, &section);
+      ret = next_section(dpp, section, &section);
       if (ret == -ENOENT) {
         result->done = true;
         result->more = false;
@@ -215,13 +217,14 @@ SIProvider_MetaInc::SIProvider_MetaInc(CephContext *_cct,
                                                                    mdlog(_mdlog),
                                                                    period_id(_period_id) {}
 
-int SIProvider_MetaInc::init()
+int SIProvider_MetaInc::init(const DoutPrefixProvider *dpp)
 {
   meta_log = mdlog->get_log(period_id);
   return 0;
 }
 
-int SIProvider_MetaInc::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_MetaInc::do_fetch(const DoutPrefixProvider *dpp,
+                                 int shard_id, std::string marker, int max, fetch_result *result)
 {
   if (shard_id >= stage_info.num_shards) {
     return -ERANGE;
@@ -263,21 +266,23 @@ int SIProvider_MetaInc::do_fetch(int shard_id, std::string marker, int max, fetc
 }
 
 
-int SIProvider_MetaInc::do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const
+int SIProvider_MetaInc::do_get_start_marker(const DoutPrefixProvider *dpp,
+                                            int shard_id, std::string *marker, ceph::real_time *timestamp) const
 {
   marker->clear();
   *timestamp = ceph::real_time();
   return 0;
 }
 
-int SIProvider_MetaInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+int SIProvider_MetaInc::do_get_cur_state(const DoutPrefixProvider *dpp,
+                                         int shard_id, std::string *marker, ceph::real_time *timestamp,
                                          bool *disabled, optional_yield y) const
 {
   RGWMetadataLogInfo info;
 
   int ret = meta_log->get_info(shard_id, &info);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to get meta log info for shard_id=" << shard_id << ": ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to get meta log info for shard_id=" << shard_id << ": ret=" << ret << dendl;
     return ret;
   }
 
@@ -288,7 +293,8 @@ int SIProvider_MetaInc::do_get_cur_state(int shard_id, std::string *marker, ceph
   return 0;
 }
 
-int SIProvider_MetaInc::do_trim(int shard_id, const std::string& marker)
+int SIProvider_MetaInc::do_trim(const DoutPrefixProvider *dpp,
+                                int shard_id, const std::string& marker)
 {
   utime_t start_time, end_time;
   int ret;
@@ -298,7 +304,7 @@ int SIProvider_MetaInc::do_trim(int shard_id, const std::string& marker)
                          end_time.to_real_time(), string(), marker);
   } while (ret == 0);
   if (ret < 0 && ret != -ENODATA) {
-    ldout(cct, 20) << "ERROR: meta_log->trim(): returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: meta_log->trim(): returned ret=" << ret << dendl;
     return ret;
   }
   return 0;

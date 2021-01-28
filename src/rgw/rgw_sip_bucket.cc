@@ -168,7 +168,7 @@ SIProvider::Entry SIProvider_BucketFull::create_entry(rgw_bucket_dir_entry& be) 
   return e;
 }
 
-int SIProvider_BucketFull::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_BucketFull::do_fetch(const DoutPrefixProvider *dpp, int shard_id, std::string marker, int max, fetch_result *result)
 {
   int num_shards = (bucket_info.layout.current_index.layout.normal.num_shards ? : 1);
 
@@ -193,7 +193,7 @@ int SIProvider_BucketFull::do_fetch(int shard_id, std::string marker, int max, f
 
     bool is_truncated;
 
-    int ret = list_op.list_objects(max, &objs, nullptr, &is_truncated, null_yield);
+    int ret = list_op.list_objects(dpp, max, &objs, nullptr, &is_truncated, null_yield);
     if (ret < 0) {
       ldout(cct, 5) << __func__ << "(): list_op.list_objects() returned ret=" << ret << dendl;
       return ret;
@@ -219,7 +219,7 @@ int SIProvider_BucketFull::do_fetch(int shard_id, std::string marker, int max, f
   return 0;
 }
 
-SIProviderRef RGWSIPGen_BucketFull::get(std::optional<std::string> instance)
+SIProviderRef RGWSIPGen_BucketFull::get(const DoutPrefixProvider *dpp, std::optional<std::string> instance)
 {
   if (!instance) {
     return nullptr;
@@ -234,7 +234,7 @@ SIProviderRef RGWSIPGen_BucketFull::get(std::optional<std::string> instance)
   }
 
   RGWBucketInfo bucket_info;
-  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield);
+  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp);
   if (r < 0) {
     ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
     return nullptr;
@@ -282,7 +282,7 @@ SIProvider::Entry SIProvider_BucketInc::create_entry(rgw_bi_log_entry& be) const
   return e;
 }
 
-int SIProvider_BucketInc::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_BucketInc::do_fetch(const DoutPrefixProvider *dpp, int shard_id, std::string marker, int max, fetch_result *result)
 {
   int num_shards = (bucket_info.layout.current_index.layout.normal.num_shards ? : 1);
 
@@ -305,7 +305,7 @@ int SIProvider_BucketInc::do_fetch(int shard_id, std::string marker, int max, fe
 
     int ret = store->svc()->bilog_rados->log_list(bucket_info, sid, marker, max - count, entries, &truncated);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: list_bi_log_entries(): ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: list_bi_log_entries(): ret=" << ret << dendl;
       return -ret;
     }
 
@@ -326,7 +326,8 @@ int SIProvider_BucketInc::do_fetch(int shard_id, std::string marker, int max, fe
   return 0;
 }
 
-int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+int SIProvider_BucketInc::do_get_cur_state(const DoutPrefixProvider *dpp,
+                                           int shard_id, std::string *marker, ceph::real_time *timestamp,
                                            bool *disabled,
                                            optional_yield y) const
 {
@@ -335,7 +336,7 @@ int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker, ce
   map<int, RGWSI_BILog_RADOS::Status> markers;
   int ret = store->svc()->bilog_rados->get_log_status(bucket_info, sid, &markers, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << ": get_log_status() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": get_log_status() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -351,19 +352,20 @@ int SIProvider_BucketInc::do_get_cur_state(int shard_id, std::string *marker, ce
   return 0;
 }
 
-int SIProvider_BucketInc::do_trim( int shard_id, const std::string& marker)
+int SIProvider_BucketInc::do_trim(const DoutPrefixProvider *dpp, int shard_id, const std::string& marker)
 {
   int sid = (bucket_info.layout.current_index.layout.normal.num_shards > 0  ? shard_id : -1);
 
   int ret = store->svc()->bilog_rados->log_trim(bucket_info, sid, string(), marker);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << ": log_trim() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " marker=" << marker << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": log_trim() bucket=" << bucket_info.bucket << " shard_id=" << shard_id << " marker=" << marker << " returned ret=" << ret << dendl;
     return ret;
   }
   return 0;
 }
 
-SIProviderRef RGWSIPGen_BucketInc::get(std::optional<std::string> instance)
+SIProviderRef RGWSIPGen_BucketInc::get(const DoutPrefixProvider *dpp,
+                                       std::optional<std::string> instance)
 {
   if (!instance) {
     return nullptr;
@@ -378,7 +380,7 @@ SIProviderRef RGWSIPGen_BucketInc::get(std::optional<std::string> instance)
   }
 
   RGWBucketInfo bucket_info;
-  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield);
+  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp);
   if (r < 0) {
     ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
     return nullptr;
@@ -391,7 +393,8 @@ SIProviderRef RGWSIPGen_BucketInc::get(std::optional<std::string> instance)
   return result;
 }
 
-SIProviderRef RGWSIPGen_BucketContainer::get(std::optional<std::string> instance)
+SIProviderRef RGWSIPGen_BucketContainer::get(const DoutPrefixProvider *dpp,
+                                             std::optional<std::string> instance)
 {
   if (!instance) {
     return nullptr;
@@ -406,7 +409,7 @@ SIProviderRef RGWSIPGen_BucketContainer::get(std::optional<std::string> instance
   }
 
   RGWBucketInfo bucket_info;
-  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield);
+  r = ctl.bucket->read_bucket_info(bucket, &bucket_info, null_yield, dpp);
   if (r < 0) {
     ldout(cct, 20) << "failed to read bucket info (bucket=" << bucket << ") r=" << r << dendl;
     return nullptr;

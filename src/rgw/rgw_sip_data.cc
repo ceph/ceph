@@ -26,24 +26,25 @@ void siprovider_data_info::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("timestamp", timestamp, obj);
 }
 
-int siprovider_data_create_entry(CephContext *cct,
-                                 RGWBucketCtl *bucket_ctl,
-                                 const string& key,
-                                 std::optional<ceph::real_time> timestamp,
-                                 const std::string& m,
-                                 SIProvider::Entry *result)
+static int siprovider_data_create_entry(const DoutPrefixProvider *dpp,
+                                        RGWBucketCtl *bucket_ctl,
+                                        const string& key,
+                                        std::optional<ceph::real_time> timestamp,
+                                        const std::string& m,
+                                        SIProvider::Entry *result)
 {
   rgw_bucket bucket;
   int shard_id;
-  rgw_bucket_parse_bucket_key(cct, key, &bucket, &shard_id);
+  rgw_bucket_parse_bucket_key(dpp->get_cct(), key, &bucket, &shard_id);
 
   RGWBucketInfo info;
 
   int ret = bucket_ctl->read_bucket_instance_info(bucket,
                                                   &info,
-                                                  null_yield);
+                                                  null_yield,
+                                                  dpp);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): cannot read bucket instance info for bucket=" << bucket << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): cannot read bucket instance info for bucket=" << bucket << dendl;
     return ret;
   }
 
@@ -58,7 +59,8 @@ int siprovider_data_create_entry(CephContext *cct,
 }
 
 
-int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_DataFull::do_fetch(const DoutPrefixProvider *dpp,
+                                  int shard_id, std::string marker, int max, fetch_result *result)
 {
   if (shard_id != 0) {
     return -ERANGE;
@@ -97,10 +99,10 @@ int SIProvider_DataFull::do_fetch(int shard_id, std::string marker, int max, fet
 
       for (auto& k : entries) {
         SIProvider::Entry e;
-        ret = siprovider_data_create_entry(cct, ctl.bucket, k.key, std::nullopt,
+        ret = siprovider_data_create_entry(dpp, ctl.bucket, k.key, std::nullopt,
                                            k.marker, &e);
         if (ret < 0) {
-          ldout(cct, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << k.key << " ret=" << ret << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << k.key << " ret=" << ret << dendl;
           continue;
         }
 
@@ -133,13 +135,14 @@ SIProvider_DataInc::SIProvider_DataInc(CephContext *_cct,
   ctl.bucket = _bucket_ctl;
 }
 
-int SIProvider_DataInc::init()
+int SIProvider_DataInc::init(const DoutPrefixProvider *dpp)
 {
   data_log = svc.datalog;
   return 0;
 }
 
-int SIProvider_DataInc::do_fetch(int shard_id, std::string marker, int max, fetch_result *result)
+int SIProvider_DataInc::do_fetch(const DoutPrefixProvider *dpp,
+                                 int shard_id, std::string marker, int max, fetch_result *result)
 {
   if (shard_id >= stage_info.num_shards ||
       shard_id < 0) {
@@ -168,10 +171,10 @@ int SIProvider_DataInc::do_fetch(int shard_id, std::string marker, int max, fetc
 
     for (auto& entry : entries) {
       SIProvider::Entry e;
-      ret = siprovider_data_create_entry(cct, ctl.bucket, entry.entry.key, entry.entry.timestamp,
+      ret = siprovider_data_create_entry(dpp, ctl.bucket, entry.entry.key, entry.entry.timestamp,
                                          entry.log_id, &e);
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << entry.entry.key << " ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): skipping entry,siprovider_data_create_entry() returned error: key=" << entry.entry.key << " ret=" << ret << dendl;
         continue;
       }
 
@@ -186,14 +189,16 @@ int SIProvider_DataInc::do_fetch(int shard_id, std::string marker, int max, fetc
 }
 
 
-int SIProvider_DataInc::do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const
+int SIProvider_DataInc::do_get_start_marker(const DoutPrefixProvider *dpp,
+                                            int shard_id, std::string *marker, ceph::real_time *timestamp) const
 {
   marker->clear();
   *timestamp = ceph::real_time();
   return 0;
 }
 
-int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+int SIProvider_DataInc::do_get_cur_state(const DoutPrefixProvider *dpp,
+                                         int shard_id, std::string *marker, ceph::real_time *timestamp,
                                          bool *disabled, optional_yield y) const
 {
   RGWDataChangesLogInfo info;
@@ -211,7 +216,8 @@ int SIProvider_DataInc::do_get_cur_state(int shard_id, std::string *marker, ceph
   return 0;
 }
 
-int SIProvider_DataInc::do_trim(int shard_id, const std::string& marker)
+int SIProvider_DataInc::do_trim(const DoutPrefixProvider *dpp,
+                                int shard_id, const std::string& marker)
 {
   utime_t start_time, end_time;
   int ret;
@@ -220,7 +226,7 @@ int SIProvider_DataInc::do_trim(int shard_id, const std::string& marker)
     ret = data_log->trim_entries(shard_id, marker);
   } while (ret == 0);
   if (ret < 0 && ret != -ENODATA) {
-    ldout(cct, 20) << "ERROR: data_log->trim(): returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: data_log->trim(): returned ret=" << ret << dendl;
     return ret;
   }
   return 0;

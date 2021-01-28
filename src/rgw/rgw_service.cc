@@ -397,7 +397,7 @@ int RGWCtlDef::init(RGWServices& svc, const DoutPrefixProvider *dpp)
 
   otp->init((RGWOTPMetadataHandler *)meta.otp.get());
 
-  remote->init();
+  remote->init(dpp);
 
   si.mgr.reset(new RGWSIPManager());
 
@@ -453,14 +453,14 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
   }
 
   auto meta_full_sip = new SIProvider_MetaFull(cct, meta.mgr);
-  r = meta_full_sip->init();
+  r = meta_full_sip->init(dpp);
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;
   }
 
   auto meta_inc_sip = new SIProvider_MetaInc(cct, svc->mdlog, svc->zone->get_current_period_id());
-  r = meta_inc_sip->init();
+  r = meta_inc_sip->init(dpp);
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.inc)" << dendl;
     return r;
@@ -474,14 +474,14 @@ int RGWCtl::init(RGWServices *_svc, const DoutPrefixProvider *dpp)
                                                                                      SIProviderRef(meta_inc_sip) } )));
 
   auto data_full_sip = new SIProvider_DataFull(cct, meta.mgr, bucket);
-  r = data_full_sip->init();
+  r = data_full_sip->init(dpp);
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;
   }
 
   auto data_inc_sip = new SIProvider_DataInc(cct, svc->datalog_rados, bucket);
-  r = data_inc_sip->init();
+  r = data_inc_sip->init(dpp);
   if (r < 0) {
     lderr(cct) << "ERROR: " << __func__ << "(): failed to initialize sync info provider (meta.full)" << dendl;
     return r;

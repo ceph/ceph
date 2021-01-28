@@ -53,20 +53,24 @@ class SIProvider_MetaFull : public SIProvider_SingleStage
 
   void append_section_from_set(std::set<std::string>& all_sections, const std::string& name);
   void rearrange_sections();
-  int get_all_sections();
+  int get_all_sections(const DoutPrefixProvider *dpp);
 
-  int next_section(const std::string& section, string *next);
+  int next_section(const DoutPrefixProvider *dpp,
+                   const std::string& section, string *next);
 
 protected:
-  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
+  int do_fetch(const DoutPrefixProvider *dpp,
+               int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const override {
+  int do_get_start_marker(const DoutPrefixProvider *dpp,
+                          int shard_id, std::string *marker, ceph::real_time *timestamp) const override {
     marker->clear();
     *timestamp = ceph::real_time();
     return 0;
   }
 
-  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled, optional_yield y) const {
+  int do_get_cur_state(const DoutPrefixProvider *dpp,
+                       int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled, optional_yield y) const {
     marker->clear(); /* full data, no current incremental state */
     *timestamp = ceph::real_time();
     *disabled = false;
@@ -74,7 +78,8 @@ protected:
   }
 
 
-  int do_trim(int shard_id, const std::string& marker) override {
+  int do_trim(const DoutPrefixProvider *dpp,
+              int shard_id, const std::string& marker) override {
     return 0;
   }
 
@@ -91,7 +96,7 @@ public:
     meta.mgr = meta_mgr;
   }
 
-  int init();
+  int init(const DoutPrefixProvider *dpp);
 
   int next_meta_section(const std::string& cur_section, std::string *next) const;
 
@@ -119,18 +124,22 @@ class SIProvider_MetaInc : public SIProvider_SingleStage
   RGWMetadataLog *meta_log{nullptr};
 
 protected:
-  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
+  int do_fetch(const DoutPrefixProvider *dpp,
+               int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const override;
-  int do_get_cur_state(int shard_id, std::string *marke, ceph::real_time *timestamp,
+  int do_get_start_marker(const DoutPrefixProvider *dpp,
+                          int shard_id, std::string *marker, ceph::real_time *timestamp) const override;
+  int do_get_cur_state(const DoutPrefixProvider *dpp,
+                       int shard_id, std::string *marke, ceph::real_time *timestamp,
                        bool *disabled, optional_yield y) const;
 
-  int do_trim( int shard_id, const std::string& marker) override;
+  int do_trim(const DoutPrefixProvider *dpp,
+              int shard_id, const std::string& marker) override;
 public:
   SIProvider_MetaInc(CephContext *_cct,
                      RGWSI_MDLog *_mdlog,
                      const string& _period_id);
 
-  int init();
+  int init(const DoutPrefixProvider *dpp);
 };
 

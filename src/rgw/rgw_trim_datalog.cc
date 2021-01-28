@@ -103,6 +103,8 @@ void take_min_markers(IterIn first, IterIn last, IterOut dest)
 
 
 class DataLogTrimCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
+
   using TrimCR = DatalogTrimImplCR;
   const DoutPrefixProvider *dpp;
   rgw::sal::RadosStore* store;
@@ -144,7 +146,7 @@ int DataLogTrimCR::operate(const DoutPrefixProvider *dpp)
                                                  SIProvider::StageType::INC,
                                                  nullopt));
 
-    yield call(sip_mgr->init_cr());
+    yield call(sip_mgr->init_cr(dpp));
     if (retcode < 0) {
       ldout(cct, 0) << "ERROR: failed to initialize trim sip manager for data.inc: retcode=" << retcode << dendl;
       return set_cr_error(retcode);

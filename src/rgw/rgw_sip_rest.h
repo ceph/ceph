@@ -33,14 +33,14 @@ class SIProvider_REST : public SIProviderCommon
   } proxy_type_provider;
 
 public:
-  SIProvider_REST(CephContext *_cct,
+  SIProvider_REST(const DoutPrefixProvider *_dpp,
                   RGWCoroutinesManager *_cr_mgr,
                   RGWRESTConn *_conn,
                   RGWHTTPManager *_http_manager,
                   const std::string& _remote_provider_name,
                   std::optional<std::string> _instance);
 
-  SIProvider_REST(CephContext *_cct,
+  SIProvider_REST(const DoutPrefixProvider *_dpp,
                   RGWCoroutinesManager *_cr_mgr,
                   RGWRESTConn *_conn,
                   RGWHTTPManager *_http_manager,
@@ -50,16 +50,22 @@ public:
 
   virtual ~SIProvider_REST();
 
-  int init() override;
-  stage_id_t get_first_stage() override;
-  stage_id_t get_last_stage() override;
-  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override;
-  std::vector<stage_id_t> get_stages() override;
-  int get_stage_info(const stage_id_t& sid, SIProvider::StageInfo *sinfo) override;
-  int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
-  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
-  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled, optional_yield y) override;
-  int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
+  int init(const DoutPrefixProvider *dpp) override;
+  stage_id_t get_first_stage(const DoutPrefixProvider *dpp) override;
+  stage_id_t get_last_stage(const DoutPrefixProvider *dpp) override;
+  int get_next_stage(const DoutPrefixProvider *dpp,
+                     const stage_id_t& sid, stage_id_t *next_sid) override;
+  std::vector<stage_id_t> get_stages(const DoutPrefixProvider *dpp) override;
+  int get_stage_info(const DoutPrefixProvider *dpp,
+                     const stage_id_t& sid, SIProvider::StageInfo *sinfo) override;
+  int fetch(const DoutPrefixProvider *dpp,
+            const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
+  int get_start_marker(const DoutPrefixProvider *dpp,
+                       const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
+  int get_cur_state(const DoutPrefixProvider *dpp,
+                    const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp, bool *disabled, optional_yield y) override;
+  int trim(const DoutPrefixProvider *dpp,
+           const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
 class SIProvider_REST_SingleType : public SIProvider_REST
@@ -67,23 +73,23 @@ class SIProvider_REST_SingleType : public SIProvider_REST
   SIProvider::TypeHandlerProviderRef type_provider;
 
 public:
-  SIProvider_REST_SingleType(CephContext *_cct,
+  SIProvider_REST_SingleType(const DoutPrefixProvider *_dpp,
                              RGWCoroutinesManager *_cr_mgr,
                              RGWRESTConn *_conn,
                              RGWHTTPManager *_http_manager,
                              const std::string& _remote_provider_name,
                              std::optional<std::string> _instance,
-                             SIProvider::TypeHandlerProviderRef _type_provider) : SIProvider_REST(_cct, _cr_mgr, _conn,
+                             SIProvider::TypeHandlerProviderRef _type_provider) : SIProvider_REST(_dpp, _cr_mgr, _conn,
                                                                                                   _http_manager, _remote_provider_name,
                                                                                                   _instance), type_provider(_type_provider) {}
-  SIProvider_REST_SingleType(CephContext *_cct,
+  SIProvider_REST_SingleType(const DoutPrefixProvider *_dpp,
                              RGWCoroutinesManager *_cr_mgr,
                              RGWRESTConn *_conn,
                              RGWHTTPManager *_http_manager,
                              const std::string& _data_type,
                              SIProvider::StageType _stage_type,
                              std::optional<std::string> _instance,
-                             SIProvider::TypeHandlerProviderRef _type_provider) : SIProvider_REST(_cct, _cr_mgr, _conn,
+                             SIProvider::TypeHandlerProviderRef _type_provider) : SIProvider_REST(_dpp, _cr_mgr, _conn,
                                                                                                   _http_manager, _data_type, _stage_type,
                                                                                                   _instance), type_provider(_type_provider) {}
   SIProvider::TypeHandlerProvider *get_type_provider() override {

@@ -6,8 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "common/dout.h"
-
+class DoutPrefixProvider;
 class RGWCoroutine;
 class RGWRados;
 class RGWHTTPManager;

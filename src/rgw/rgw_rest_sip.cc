@@ -29,9 +29,10 @@ void RGWOp_SIP_GetInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
   if (provider) {
-    sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(*provider, opt_instance);
+    sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(this, *provider, opt_instance);
   } else {
-    sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(*data_type,
+    sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip_by_type(this,
+                                                 *data_type,
                                                  SIProvider::stage_type_from_str(*stage_type),
                                                  opt_instance);
   }
@@ -50,14 +51,14 @@ void RGWOp_SIP_GetInfo::send_response() {
   if (op_ret < 0)
     return;
 
-  encode_json("info", sip->get_info(), s->formatter);
+  encode_json("info", sip->get_info(this), s->formatter);
   flusher.flush();
 }
 
 void RGWOp_SIP_GetStageStatus::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -79,13 +80,13 @@ void RGWOp_SIP_GetStageStatus::execute(optional_yield y) {
     return;
   }
 
-  op_ret = sip->get_start_marker(sid, shard_id, &start_pos.marker, &start_pos.timestamp);
+  op_ret = sip->get_start_marker(this, sid, shard_id, &start_pos.marker, &start_pos.timestamp);
   if (op_ret < 0) {
     ldout(s->cct, 5) << "ERROR: sip->get_start_marker() returned error: ret=" << op_ret << dendl;
     return;
   }
 
-  op_ret = sip->get_cur_state(sid, shard_id, &cur_pos.marker, &cur_pos.timestamp, &disabled, y);
+  op_ret = sip->get_cur_state(this, sid, shard_id, &cur_pos.marker, &cur_pos.timestamp, &disabled, y);
   if (op_ret < 0) {
     ldout(s->cct, 5) << "ERROR: sip->get_cur_state() returned error: ret=" << op_ret << dendl;
     return;
@@ -115,7 +116,7 @@ void RGWOp_SIP_GetStageStatus::send_response() {
 void RGWOp_SIP_GetMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -170,7 +171,7 @@ void RGWOp_SIP_GetMarkerInfo::send_response() {
 void RGWOp_SIP_SetMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -236,7 +237,7 @@ void RGWOp_SIP_SetMarkerInfo::send_response() {
 void RGWOp_SIP_RemoveMarkerInfo::execute(optional_yield y) {
   auto opt_instance = s->info.args.get_std_optional("instance");
 
-  auto sip = store->ctl()->si.mgr->find_sip(provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 5) << "ERROR: sync info provider not found" << dendl;
     op_ret = -ENOENT;
@@ -325,13 +326,13 @@ void RGWOp_SIP_Fetch::execute(optional_yield y) {
     return;
   }
 
-  sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
+  sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 20) << "ERROR: sync info provider not found" << dendl;
     return;
   }
 
-  stage_id = opt_stage_id.value_or(sip->get_first_stage());
+  stage_id = opt_stage_id.value_or(sip->get_first_stage(this));
 
   type_handler = sip->get_type_handler();
   if (!type_handler) {
@@ -340,7 +341,7 @@ void RGWOp_SIP_Fetch::execute(optional_yield y) {
     return;
   }
 
-  op_ret = sip->fetch(stage_id, shard_id, marker, max_entries, &result);
+  op_ret = sip->fetch(this, stage_id, shard_id, marker, max_entries, &result);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to fetch entries: " << op_ret << dendl;
     return;
@@ -392,15 +393,15 @@ void RGWOp_SIP_Trim::execute(optional_yield y) {
     return;
   }
 
-  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(provider, opt_instance);
+  auto sip = static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr->find_sip(this, provider, opt_instance);
   if (!sip) {
     ldout(s->cct, 20) << "ERROR: sync info provider not found" << dendl;
     return;
   }
 
-  auto stage_id = opt_stage_id.value_or(sip->get_first_stage());
+  auto stage_id = opt_stage_id.value_or(sip->get_first_stage(this));
 
-  op_ret = sip->trim(stage_id, shard_id, marker);
+  op_ret = sip->trim(this, stage_id, shard_id, marker);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to fetch entries: " << op_ret << dendl;
     return;

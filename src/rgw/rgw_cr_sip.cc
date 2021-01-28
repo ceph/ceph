@@ -209,9 +209,10 @@ public:
 };
 
 
-SIProviderCRMgr_Local::SIProviderCRMgr_Local(RGWSI_SIP_Marker *_sip_marker_svc,
+SIProviderCRMgr_Local::SIProviderCRMgr_Local(const DoutPrefixProvider *dpp,
+                                             RGWSI_SIP_Marker *_sip_marker_svc,
                                              RGWAsyncRadosProcessor *_async_rados,
-                                             SIProviderRef& _provider) : SIProviderCRMgr(_sip_marker_svc->ctx()),
+                                             SIProviderRef& _provider) : SIProviderCRMgr(dpp),
                                                                          async_rados(_async_rados),
                                                                          provider(_provider) {
   svc.sip_marker = _sip_marker_svc;
@@ -224,7 +225,7 @@ RGWCoroutine *SIProviderCRMgr_Local::get_stages_cr(std::vector<SIProvider::stage
                                async_rados,
                                stages,
                                [=](std::vector<SIProvider::stage_id_t> *_stages) {
-                                 *_stages = pvd->get_stages();
+                                 *_stages = pvd->get_stages(dpp);
                                  return 0;
                                });
 }
@@ -236,7 +237,7 @@ RGWCoroutine *SIProviderCRMgr_Local::get_stage_info_cr(const SIProvider::stage_i
                                async_rados,
                                stage_info,
                                [=](SIProvider::StageInfo *_stage_info) {
-                                 return pvd->get_stage_info(sid, _stage_info);
+                                 return pvd->get_stage_info(dpp, sid, _stage_info);
                                });
 }
 
@@ -247,7 +248,7 @@ RGWCoroutine *SIProviderCRMgr_Local::init_cr()
                                async_rados,
                                &info,
                                [=](SIProvider::Info *_info) {
-                                 *_info = pvd->get_info();
+                                 *_info = pvd->get_info(dpp);
                                  return 0;
                                });
 }
@@ -259,7 +260,7 @@ RGWCoroutine *SIProviderCRMgr_Local::fetch_cr(const SIProvider::stage_id_t& sid,
                                async_rados,
                                result,
                                [=](SIProvider::fetch_result *_result) {
-                                 return pvd->fetch(sid, shard_id, marker, max, _result);
+                                 return pvd->fetch(dpp, sid, shard_id, marker, max, _result);
                                });
 }
 
@@ -270,7 +271,7 @@ RGWCoroutine *SIProviderCRMgr_Local::get_start_marker_cr(const SIProvider::stage
                                async_rados,
                                pos,
                                [=](rgw_sip_pos *_pos) {
-                                 return pvd->get_start_marker(sid, shard_id, &_pos->marker, &_pos->timestamp);
+                                 return pvd->get_start_marker(dpp, sid, shard_id, &_pos->marker, &_pos->timestamp);
                                });
 }
 
@@ -282,7 +283,7 @@ RGWCoroutine *SIProviderCRMgr_Local::get_cur_state_cr(const SIProvider::stage_id
                                pos,
                                disabled,
                                [=](rgw_sip_pos *_pos, bool *_disabled) {
-                                 return pvd->get_cur_state(sid, shard_id, &_pos->marker, &_pos->timestamp, _disabled, null_yield);
+                                 return pvd->get_cur_state(dpp, sid, shard_id, &_pos->marker, &_pos->timestamp, _disabled, null_yield);
                                });
 }
 
@@ -292,7 +293,7 @@ RGWCoroutine *SIProviderCRMgr_Local::trim_cr(const SIProvider::stage_id_t& sid, 
   return new RGWAsyncLambdaCR<void>(cct,
                                async_rados,
                                [=]() {
-                                 return pvd->trim(sid, shard_id, marker);
+                                 return pvd->trim(dpp, sid, shard_id, marker);
                                });
 }
 
@@ -305,7 +306,7 @@ RGWCoroutine *SIProviderCRMgr_Local::update_marker_cr(const SIProvider::stage_id
                                [=]() {
                                  auto marker_handler = svc.sip_marker->get_handler(provider);
                                  if (!marker_handler) {
-                                   ldout(cct, 0) << "ERROR: can't get sip marker handler" << dendl;
+                                   ldpp_dout(dpp, 0) << "ERROR: can't get sip marker handler" << dendl;
                                    return -EIO;
                                  }
 
@@ -313,7 +314,7 @@ RGWCoroutine *SIProviderCRMgr_Local::update_marker_cr(const SIProvider::stage_id
 
                                  int r = marker_handler->set_marker(sid, shard_id, params, &result);
                                  if (r < 0) {
-                                   ldout(cct, 0) << "ERROR: failed to set target marker info: r=" << r << dendl;
+                                   ldpp_dout(dpp, 0) << "ERROR: failed to set target marker info: r=" << r << dendl;
                                    return r;
                                  }
                                  return 0;
@@ -329,13 +330,13 @@ RGWCoroutine *SIProviderCRMgr_Local::set_min_source_pos_cr(const SIProvider::sta
                                [=]() {
                                  auto marker_handler = svc.sip_marker->get_handler(provider);
                                  if (!marker_handler) {
-                                   ldout(cct, 0) << "ERROR: can't get sip marker handler" << dendl;
+                                   ldpp_dout(dpp, 0) << "ERROR: can't get sip marker handler" << dendl;
                                    return -EIO;
                                  }
 
                                  int r = marker_handler->set_min_source_pos(sid, shard_id, pos);
                                  if (r < 0) {
-                                   ldout(cct, 0) << "ERROR: failed to set marker min source pos info: r=" << r << dendl;
+                                   ldpp_dout(dpp, 0) << "ERROR: failed to set marker min source pos info: r=" << r << dendl;
                                    return r;
                                  }
                                  return 0;
@@ -470,7 +471,7 @@ struct SIProviderRESTCRs {
           }
         }
 
-        ldout(mgr->ctx(), 10) << "GetStageInfoCR(): sid not found: provider=" << mgr->remote_provider_name << " sid=" << sid << dendl;
+        ldpp_dout(mgr->get_dpp(), 10) << "GetStageInfoCR(): sid not found: provider=" << mgr->remote_provider_name << " sid=" << sid << dendl;
 
         return set_cr_error(-ENOENT);
       }
@@ -537,19 +538,19 @@ struct SIProviderRESTCRs {
 
         JSONParser p;
         if (!p.parse(bl.c_str(), bl.length())) {
-          ldout(cct, 0) << "ERROR: failed to parse fetch result: bl=" << bl.to_str() << dendl;
+          ldpp_dout(mgr->get_dpp(), 0) << "ERROR: failed to parse fetch result: bl=" << bl.to_str() << dendl;
           return set_cr_error(-EIO);
         }
 
         auto type_handler = mgr->type_provider->get_type_handler();
         if (!type_handler) {
-          ldout(cct, 0) << "ERROR: " << __func__ << "(): get_type_provider for sid=" << sid << " is null, likely a bug" << dendl;
+          ldpp_dout(mgr->get_dpp(), 0) << "ERROR: " << __func__ << "(): get_type_provider for sid=" << sid << " is null, likely a bug" << dendl;
           return set_cr_error(-EIO);
         }
 
         int r = type_handler->decode_json_results(sid, &p, result);
         if (r < 0) {
-          ldout(cct, 0) << "ERROR: failed to decode fetch result: bl=" << bl.to_str() << dendl;
+          ldpp_dout(mgr->get_dpp(), 0) << "ERROR: failed to decode fetch result: bl=" << bl.to_str() << dendl;
           return set_cr_error(r);
         }
 

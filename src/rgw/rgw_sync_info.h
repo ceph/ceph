@@ -117,22 +117,28 @@ public:
 
   virtual ~SIProvider() {}
 
-  virtual Info get_info() = 0;
+  virtual Info get_info(const DoutPrefixProvider *dpp) = 0;
 
 
-  virtual int init() {
+  virtual int init(const DoutPrefixProvider *dpp) {
     return 0;
   }
 
-  virtual stage_id_t get_first_stage() = 0;
-  virtual stage_id_t get_last_stage() = 0;
-  virtual int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) = 0;
-  virtual std::vector<stage_id_t> get_stages() = 0;
+  virtual stage_id_t get_first_stage(const DoutPrefixProvider *dpp) = 0;
+  virtual stage_id_t get_last_stage(const DoutPrefixProvider *dpp) = 0;
+  virtual int get_next_stage(const DoutPrefixProvider *dpp,
+                             const stage_id_t& sid, stage_id_t *next_sid) = 0;
 
-  virtual int get_stage_info(const stage_id_t& sid, StageInfo *stage_info) = 0;
-  virtual int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) = 0;
-  virtual int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) = 0;
-  virtual int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
+  virtual std::vector<stage_id_t> get_stages(const DoutPrefixProvider *dpp) = 0;
+
+  virtual int get_stage_info(const DoutPrefixProvider *dpp,
+                             const stage_id_t& sid, StageInfo *stage_info) = 0;
+  virtual int fetch(const DoutPrefixProvider *dpp,
+                    const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) = 0;
+  virtual int get_start_marker(const DoutPrefixProvider *dpp,
+                               const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) = 0;
+  virtual int get_cur_state(const DoutPrefixProvider *dpp,
+                            const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
                             bool *disabled, optional_yield y) = 0;
 
   virtual const std::string& get_name() const = 0;
@@ -154,7 +160,8 @@ public:
     return tp->get_type_handler();
   }
 
-  virtual int trim(const stage_id_t& sid,
+  virtual int trim(const DoutPrefixProvider *dpp,
+                   const stage_id_t& sid,
                    int shard_id,
                    const std::string& marker) = 0;
 
@@ -178,7 +185,7 @@ public:
                                                            name(_name),
                                                            instance(_instance) {}
 
-  SIProvider::Info get_info() override;
+  SIProvider::Info get_info(const DoutPrefixProvider *dpp) override;
 
   const std::string& get_name() const override {
     return name;
@@ -198,11 +205,11 @@ protected:
   StageInfo stage_info;
   SIProvider::TypeHandlerProviderRef type_provider;
 
-  virtual int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) = 0;
-  virtual int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const = 0;
-  virtual int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+  virtual int do_fetch(const DoutPrefixProvider *dpp, int shard_id, std::string marker, int max, fetch_result *result) = 0;
+  virtual int do_get_start_marker(const DoutPrefixProvider *dpp, int shard_id, std::string *marker, ceph::real_time *timestamp) const = 0;
+  virtual int do_get_cur_state(const DoutPrefixProvider *dpp, int shard_id, std::string *marker, ceph::real_time *timestamp,
                                bool *disabled, optional_yield y) const = 0;
-  virtual int do_trim(int shard_id, const std::string& marker) = 0;
+  virtual int do_trim(const DoutPrefixProvider *dpp, int shard_id, const std::string& marker) = 0;
 public:
   SIProvider_SingleStage(CephContext *_cct,
                          const std::string& name,
@@ -219,21 +226,23 @@ public:
     return type_provider.get();
   }
 
-  stage_id_t get_first_stage() override {
+  stage_id_t get_first_stage(const DoutPrefixProvider *dpp) override {
     return stage_info.sid;
   }
-  stage_id_t get_last_stage() override {
+  stage_id_t get_last_stage(const DoutPrefixProvider *dpp) override {
     return stage_info.sid;
   }
 
-  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override {
+  int get_next_stage(const DoutPrefixProvider *dpp,
+                     const stage_id_t& sid, stage_id_t *next_sid) override {
     return -ENOENT;
   }
-  std::vector<stage_id_t> get_stages() override {
+  std::vector<stage_id_t> get_stages(const DoutPrefixProvider *dpp) override {
     return { stage_info.sid };
   }
 
-  int get_stage_info(const stage_id_t& sid, StageInfo *sinfo) override {
+  int get_stage_info(const DoutPrefixProvider *dpp,
+                     const stage_id_t& sid, StageInfo *sinfo) override {
     if (sid != stage_info.sid) {
       return -ERANGE;
     }
@@ -242,12 +251,16 @@ public:
     return 0;
   }
 
-  int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
-  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
-  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
+  int fetch(const DoutPrefixProvider *dpp,
+            const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
+  int get_start_marker(const DoutPrefixProvider *dpp,
+                       const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
+  int get_cur_state(const DoutPrefixProvider *dpp,
+                    const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
                     bool *disabled, optional_yield y) override;
 
-  int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
+  int trim(const DoutPrefixProvider *dpp,
+           const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
 using SIProviderRef = std::shared_ptr<SIProvider>;
@@ -282,24 +295,31 @@ public:
                        std::optional<std::string> _instance,
                        std::vector<SIProviderRef> _providers);
 
-  stage_id_t get_first_stage() override;
-  stage_id_t get_last_stage() override;
+  stage_id_t get_first_stage(const DoutPrefixProvider *dpp) override;
+  stage_id_t get_last_stage(const DoutPrefixProvider *dpp) override;
 
-  int get_next_stage(const stage_id_t& sid, stage_id_t *next_sid) override;
-  std::vector<SIProvider::stage_id_t> get_stages() override;
+  int get_next_stage(const DoutPrefixProvider *dpp,
+                     const stage_id_t& sid, stage_id_t *next_sid) override;
 
-  int get_stage_info(const stage_id_t& sid, StageInfo *sinfo) override;
+  std::vector<SIProvider::stage_id_t> get_stages(const DoutPrefixProvider *dpp) override;
 
-  int fetch(const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
-  int get_start_marker(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
-  int get_cur_state(const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
+  int get_stage_info(const DoutPrefixProvider *dpp,
+                     const stage_id_t& sid, StageInfo *sinfo) override;
+
+  int fetch(const DoutPrefixProvider *dpp,
+            const stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result) override;
+  int get_start_marker(const DoutPrefixProvider *dpp,
+                       const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp) override;
+  int get_cur_state(const DoutPrefixProvider *dpp,
+                    const stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp,
                     bool *disabled, optional_yield y) override;
 
   SIProvider::TypeHandlerProvider *get_type_provider() override {
     return &type_provider;
   }
 
-  int trim(const stage_id_t& sid, int shard_id, const std::string& marker) override;
+  int trim(const DoutPrefixProvider *dpp,
+           const stage_id_t& sid, int shard_id, const std::string& marker) override;
 };
 
 template<class T>
@@ -363,82 +383,12 @@ public:
   }
 };
 
-/*
- * stateful entity that is responsible for fetching data
- */
-class SIClient
-{
-public:
-  virtual ~SIClient() {}
-
-  virtual int init_markers(optional_yield y) = 0;
-  virtual int fetch(int shard_id, int max, SIProvider::fetch_result *result) = 0;
-
-  virtual int load_state() = 0;
-  virtual int save_state() = 0;
-
-  virtual SIProvider::StageInfo get_stage_info() = 0;
-
-  virtual int stage_num_shards() = 0;
-
-  virtual bool is_shard_done(int shard_id) = 0;
-  virtual bool stage_complete() = 0;
-};
-
-using SIClientRef = std::shared_ptr<SIClient>;
-
-
-/*
- * provider client: a client that connects directly to a provider
- */
-class SIProviderClient : public SIClient
-{
-  SIProviderRef provider;
-
-  using stage_id_t = SIProvider::stage_id_t;
-
-  struct State {
-    std::vector<std::string> markers;
-    std::map<stage_id_t, std::vector<std::string> > initial_stage_markers;
-    SIProvider::StageInfo stage_info;
-    int num_complete{0};
-    std::vector<bool> done;
-  } state;
-
-  int init_stage(const stage_id_t& new_stage);
-
-public:
-  SIProviderClient(SIProviderRef& _provider) : provider(_provider) {}
-
-  int init_markers(optional_yield y) override;
-
-  int fetch(int shard_id, int max, SIProvider::fetch_result *result) override;
-
-  SIProvider::StageInfo get_stage_info() override {
-    return state.stage_info;
-  }
-
-  int stage_num_shards() override {
-    return state.stage_info.num_shards;
-  }
-
-  bool is_shard_done(int shard_id) override {
-    return (shard_id < stage_num_shards() &&
-            state.done[shard_id]);
-  }
-
-  bool stage_complete() override {
-    return (state.num_complete == stage_num_shards());
-  }
-
-  int promote_stage(int *new_num_shards);
-};
-
 class RGWSIPGenerator {
 public:
   virtual ~RGWSIPGenerator() {}
 
-  virtual SIProviderRef get(std::optional<std::string> instance) = 0;
+  virtual SIProviderRef get(const DoutPrefixProvider *dpp,
+                            std::optional<std::string> instance) = 0;
 };
 
 using RGWSIPGeneratorRef = std::shared_ptr<RGWSIPGenerator>;
@@ -451,7 +401,8 @@ class RGWSIPGen_Single : public RGWSIPGenerator
 public:
   RGWSIPGen_Single(SIProvider *_sip) : sip(_sip) {}
 
-  SIProviderRef get(std::optional<std::string> instance) override {
+  SIProviderRef get(const DoutPrefixProvider *dpp,
+                    std::optional<std::string> instance) override {
     return sip;
   }
 };
@@ -479,21 +430,23 @@ public:
     }
   }
 
-  SIProviderRef find_sip(const std::string& id, std::optional<std::string> instance) {
+  SIProviderRef find_sip(const DoutPrefixProvider *dpp,
+                         const std::string& id, std::optional<std::string> instance) {
     auto iter = sip_gens.find(id);
     if (iter == sip_gens.end()) {
       return nullptr;
     }
-    return iter->second->get(instance);
+    return iter->second->get(dpp, instance);
   }
 
-  SIProviderRef find_sip_by_type(const std::string& data_type, SIProvider::StageType stage_type,
+  SIProviderRef find_sip_by_type(const DoutPrefixProvider *dpp,
+                                 const std::string& data_type, SIProvider::StageType stage_type,
                                  std::optional<std::string> instance) {
     auto iter = sip_type_index.find(TypeInfo(data_type, stage_type));
     if (iter == sip_type_index.end()) {
       return nullptr;
     }
-    return find_sip(iter->second, instance);
+    return find_sip(dpp, iter->second, instance);
   }
 
   std::vector<std::string> list_sip() const {

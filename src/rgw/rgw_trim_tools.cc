@@ -31,24 +31,28 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
   std::optional<SIProviderCRMgr_Local> sip_cr;
 
   class InitCR : public RGWCoroutine {
+    const DoutPrefixProvider *dpp;
     RGWTrimSIPMgrImpl *mgr;
     rgw::sal::RGWRadosStore *store;
   public:
-    InitCR(RGWTrimSIPMgrImpl *_mgr) : RGWCoroutine(_mgr->ctx()),
+    InitCR(const DoutPrefixProvider *_dpp,
+           RGWTrimSIPMgrImpl *_mgr) : RGWCoroutine(_mgr->ctx()),
+                                      dpp(_dpp),
                                       mgr(_mgr),
                                       store(mgr->store) {}
 
     int operate() override {
       reenter(this) {
-        mgr->sip = store->ctl()->si.mgr->find_sip_by_type(mgr->sip_data_type, mgr->sip_stage_type, mgr->sip_instance);
+        mgr->sip = store->ctl()->si.mgr->find_sip_by_type(dpp, mgr->sip_data_type, mgr->sip_stage_type, mgr->sip_instance);
         if (!mgr->sip) {
           return set_cr_error(-ENOENT);
         }
-        mgr->sip_cr.emplace(store->svc()->sip_marker,
+        mgr->sip_cr.emplace(dpp,
+                            store->svc()->sip_marker,
                             store->svc()->rados->get_async_processor(),
                             mgr->sip);
 
-        mgr->sid = mgr->sip->get_first_stage();
+        mgr->sid = mgr->sip->get_first_stage(dpp);
 
         yield call(mgr->sip_cr->get_stage_info_cr(mgr->sid, &mgr->stage_info));
         if (retcode < 0) {
@@ -82,8 +86,8 @@ public:
     return store->ctx();
   }
 
-  RGWCoroutine *init_cr() override {
-    return new InitCR(this);
+  RGWCoroutine *init_cr(const DoutPrefixProvider *dpp) override {
+    return new InitCR(dpp, this);
   }
 
   RGWCoroutine *get_targets_info_cr(std::vector<std::optional<std::string> > *min_shard_markers,

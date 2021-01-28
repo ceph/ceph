@@ -108,7 +108,8 @@ class SIProvider_BucketFull : public SIProvider_SingleStage
   std::string to_marker(const cls_rgw_obj_key& k) const;
   SIProvider::Entry create_entry(rgw_bucket_dir_entry& be) const;
 
-  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+  int do_get_cur_state(const DoutPrefixProvider *dpp,
+                       int shard_id, std::string *marker, ceph::real_time *timestamp,
                        bool *disabled, optional_yield y) const  override {
     marker->clear(); /* full data, no current incremental state */
     *timestamp = ceph::real_time();
@@ -117,15 +118,15 @@ class SIProvider_BucketFull : public SIProvider_SingleStage
   }
 
 protected:
-  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
+  int do_fetch(const DoutPrefixProvider *dpp, int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const override {
+  int do_get_start_marker(const DoutPrefixProvider *dpp, int shard_id, std::string *marker, ceph::real_time *timestamp) const override {
     marker->clear();
     *timestamp = ceph::real_time();
     return 0;
   }
 
-  int do_trim( int shard_id, const std::string& marker) override {
+  int do_trim(const DoutPrefixProvider *dpp, int shard_id, const std::string& marker) override {
     return 0;
   }
 
@@ -167,7 +168,8 @@ public:
     ctl.bucket = _bucket_ctl;
   }
 
-  SIProviderRef get(std::optional<std::string> instance) override;
+  SIProviderRef get(const DoutPrefixProvider *dpp,
+                    std::optional<std::string> instance) override;
 };
 
 class SIProvider_BucketInc : public SIProvider_SingleStage
@@ -176,18 +178,22 @@ class SIProvider_BucketInc : public SIProvider_SingleStage
   SIProvider::Entry create_entry(rgw_bi_log_entry& be) const;
 
 protected:
-  int do_fetch(int shard_id, std::string marker, int max, fetch_result *result) override;
+  int do_fetch(const DoutPrefixProvider *dpp,
+               int shard_id, std::string marker, int max, fetch_result *result) override;
 
-  int do_get_start_marker(int shard_id, std::string *marker, ceph::real_time *timestamp) const override {
+  int do_get_start_marker(const DoutPrefixProvider *dpp,
+                          int shard_id, std::string *marker, ceph::real_time *timestamp) const override {
     marker->clear();
     *timestamp = ceph::real_time();
     return 0;
   }
 
-  int do_get_cur_state(int shard_id, std::string *marker, ceph::real_time *timestamp,
+  int do_get_cur_state(const DoutPrefixProvider *dpp,
+                       int shard_id, std::string *marker, ceph::real_time *timestamp,
                        bool *disabled, optional_yield y) const override;
 
-  int do_trim( int shard_id, const std::string& marker) override;
+  int do_trim(const DoutPrefixProvider *dpp,
+              int shard_id, const std::string& marker) override;
 
   rgw::sal::RGWRadosStore *store;
 
@@ -226,7 +232,8 @@ public:
     ctl.bucket = _bucket_ctl;
   }
 
-  SIProviderRef get(std::optional<std::string> instance) override;
+  SIProviderRef get(const DoutPrefixProvider *dpp,
+                    std::optional<std::string> instance) override;
 };
 
 class RGWSIPGen_BucketContainer : public RGWSIPGenerator
@@ -246,6 +253,7 @@ public:
     ctl.bucket = _bucket_ctl;
   }
 
-  SIProviderRef get(std::optional<std::string> instance) override;
+  SIProviderRef get(const DoutPrefixProvider *dpp,
+                    std::optional<std::string> instance) override;
 };
 
