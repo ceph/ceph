@@ -82,12 +82,18 @@ int main(int argc, const char **argv) {
   }
 
   mirror->run();
+  delete mirror;
 
 cleanup:
   monc.shutdown();
 cleanup_messenger:
   msgr->shutdown();
-  delete mirror;
+  msgr->wait();
+  delete msgr;
+
+  unregister_async_signal_handler(SIGINT, handle_signal);
+  unregister_async_signal_handler(SIGTERM, handle_signal);
+  shutdown_async_signal_handler();
 
   return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
