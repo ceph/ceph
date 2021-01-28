@@ -182,6 +182,7 @@ test_explicit_scheduler_results = [
     (k("123 123 * *"), exactly('1', '2', '3')),
 ]
 
+
 @pytest.mark.parametrize("spec_section_key,spec_section",
     [   # noqa: E128
         ('h', 'hosts'),
@@ -325,6 +326,7 @@ class NodeAssignmentTest(NamedTuple):
     daemons: List[DaemonDescription]
     expected: List[str]
 
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
     [   # noqa: E128
         # just hosts
@@ -448,6 +450,7 @@ class NodeAssignmentTest2(NamedTuple):
     expected_len: int
     in_set: List[str]
 
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,in_set",
     [   # noqa: E128
         # just count
@@ -519,6 +522,7 @@ def test_node_assignment2(service_type, placement, hosts,
     for h in [h.hostname for h in hosts]:
         assert h in in_set
 
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,must_have",
     [   # noqa: E128
         # hosts + (smaller) count, (more) existing
@@ -572,6 +576,8 @@ class NodeAssignmentTestBadSpec(NamedTuple):
     hosts: List[str]
     daemons: List[DaemonDescription]
     expected: str
+
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
     [   # noqa: E128
         # unknown host
@@ -606,6 +612,7 @@ def test_bad_specs(service_type, placement, hosts, daemons, expected):
             hosts=[HostSpec(h) for h in hosts],
             get_daemons_func=lambda _: daemons).place()
     assert str(e.value) == expected
+
 
 class ActiveAssignmentTest(NamedTuple):
     service_type: str
@@ -755,6 +762,7 @@ def test_active_assignment(service_type, placement, hosts, daemons, expected):
         hosts=[HostSpec(h) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
     assert sorted([h.hostname for h in hosts]) in expected
+
 
 class OddMonsTest(NamedTuple):
     service_type: str
