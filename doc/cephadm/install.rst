@@ -121,10 +121,11 @@ The default bootstrap behavior will work for the vast majority of
 users.  See below for a few options that may be useful for some users,
 or run ``cephadm bootstrap -h`` to see all available options:
 
-* In production environments it is recommended to have network separation
-  between the public network traffic and the cluster traffic which handles
-  replication, recovery and heartbeats between OSD daemons. To define the 
-  `cluster network`_ you can supply the ``--cluster-network`` option. This
+* In larger Ceph clusters, network separation between the public
+  network traffic and cluster traffic which handles replication,
+  recovery and heartbeats between OSD daemons, can lead to performance
+  improvements. To define the `cluster network`_ you can supply the
+  ``--cluster-network`` option to the ``bootstrap`` subcommand. This
   parameter must define a subnet in CIDR notation, for example
   10.90.90.0/24 or fe80::/64.
 
