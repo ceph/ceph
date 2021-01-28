@@ -662,7 +662,7 @@ def test_custom_container_spec_config_json():
         assert key not in config_json
 
 def test_HA_RGW_spec():
-    yaml_str ="""service_type: ha-rgw
+    yaml_str = """service_type: ha-rgw
 service_id: haproxy_for_rgw
 placement:
   hosts:
