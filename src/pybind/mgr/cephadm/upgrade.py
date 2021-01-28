@@ -25,7 +25,7 @@ class UpgradeState:
                  target_version: Optional[str] = None,
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
-                 fs_original_max_mds: Optional[Dict[str,int]] = None,
+                 fs_original_max_mds: Optional[Dict[str, int]] = None,
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -34,7 +34,7 @@ class UpgradeState:
         self.target_version: Optional[str] = target_version
         self.error: Optional[str] = error
         self.paused: bool = paused or False
-        self.fs_original_max_mds: Optional[Dict[str,int]] = fs_original_max_mds
+        self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
 
     def to_json(self) -> dict:
         return {
