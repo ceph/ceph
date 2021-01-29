@@ -687,7 +687,7 @@ int disconnect_all_mappings(
 
         dout(5) << "Removing mapping: " << cfg.devpath
                 << ". Timeout: " << cfg.soft_disconnect_timeout
-                << "ms. Hard disconnect: " << cfg.hard_disconnect
+                << "s. Hard disconnect: " << cfg.hard_disconnect
                 << dendl;
 
         r = do_unmap(&cfg, unregister);
@@ -718,19 +718,22 @@ class RBDService : public ServiceBase {
     int thread_count;
     int service_start_timeout;
     int image_map_timeout;
+    bool remap_failure_fatal;
 
   public:
     RBDService(bool _hard_disconnect,
                int _soft_disconnect_timeout,
                int _thread_count,
                int _service_start_timeout,
-               int _image_map_timeout)
+               int _image_map_timeout,
+               bool _remap_failure_fatal)
       : ServiceBase(g_ceph_context)
       , hard_disconnect(_hard_disconnect)
       , soft_disconnect_timeout(_soft_disconnect_timeout)
       , thread_count(_thread_count)
       , service_start_timeout(_service_start_timeout)
       , image_map_timeout(_image_map_timeout)
+      , remap_failure_fatal(_remap_failure_fatal)
     {
     }
 
@@ -877,8 +880,14 @@ exit:
       // Restart registered mappings before accepting new ones.
       int r = restart_registered_mappings(
         thread_count, service_start_timeout, image_map_timeout);
-      if (r)
-        return r;
+      if (r) {
+        if (remap_failure_fatal) {
+          derr << "Couldn't remap all images. Cleaning up." << dendl;
+          return r;
+        } else {
+          dout(0) << "Ignoring image remap failure." << dendl;
+        }
+      }
 
       return create_pipe_server();
     }
@@ -937,6 +946,9 @@ Service options:
                               unmapping images. Default: 8
   --start-timeout             The service start timeout in seconds. Default: 120
   --map-timeout               Individual image map timeout in seconds. Default: 20
+  --remap-failure-fatal       If set, the service will stop when failing to remap
+                              an image at start time, unmapping images that have
+                              been mapped so far.
 
 Show|List options:
   --format plain|json|xml Output format (default: plain)
@@ -1424,6 +1436,8 @@ static int parse_args(std::vector<const char*>& args,
       cfg->persistent = false;
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
+    } else if (ceph_argparse_flag(args, i, "--remap-failure-fatal", (char *)NULL)) {
+      cfg->remap_failure_fatal = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->parent_pipe, err,
                                      "--pipe-name", (char *)NULL)) {
       if (!err.str().empty()) {
@@ -1638,7 +1652,8 @@ static int rbd_wnbd(int argc, const char *argv[])
       RBDService service(cfg.hard_disconnect, cfg.soft_disconnect_timeout,
                          cfg.service_thread_count,
                          cfg.service_start_timeout,
-                         cfg.image_map_timeout);
+                         cfg.image_map_timeout,
+                         cfg.remap_failure_fatal);
       // This call will block until the service stops.
       r = RBDService::initialize(&service);
       if (r < 0)
