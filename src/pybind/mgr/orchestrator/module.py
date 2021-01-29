@@ -322,9 +322,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return cast(str, self.get_module_option("orchestrator"))
 
     @_cli_write_command('orch host add')
-    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None) -> HandleCommandResult:
+    def _add_host(self, hostname: str, addr: Optional[str] = None, labels: Optional[List[str]] = None, maintenance: Optional[bool] = False) -> HandleCommandResult:
         """Add a host"""
-        s = HostSpec(hostname=hostname, addr=addr, labels=labels)
+        _status = 'maintenance' if maintenance else ''
+        s = HostSpec(hostname=hostname, addr=addr, labels=labels, status=_status)
         completion = self.add_host(s)
         self._orchestrator_wait([completion])
         raise_if_exception(completion)
