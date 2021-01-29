@@ -1874,6 +1874,7 @@ fi
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
 %{_bindir}/rgw-gap-list
+%{_bindir}/rgw-gap-list-comparator
 %{_bindir}/rgw-orphan-list
 %{_mandir}/man8/radosgw.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
