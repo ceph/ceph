@@ -18,8 +18,7 @@ def list_iscsi_gateways(_):
 
 
 @CLIWriteCommand('dashboard iscsi-gateway-add',
-                 None,
-                 'Add iSCSI gateway configuration. Gateway URL read from -i <file>')
+                 desc='Add iSCSI gateway configuration. Gateway URL read from -i <file>')
 @CLICheckNonemptyFileInput
 def add_iscsi_gateway(_, inbuf):
     service_url = inbuf
