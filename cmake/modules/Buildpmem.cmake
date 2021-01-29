@@ -16,7 +16,7 @@ function(build_pmem)
 
   ExternalProject_Add(pmdk_ext
       GIT_REPOSITORY "https://github.com/ceph/pmdk.git"
-      GIT_TAG "1.7"
+      GIT_TAG "1.10"
       GIT_SHALLOW TRUE
       SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
       CONFIGURE_COMMAND ""
@@ -24,7 +24,7 @@ function(build_pmem)
       # build system tests statically linking to librbd (which uses
       # libpmemobj) will not link (because we don't build the ndctl
       # static library here).
-      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} NDCTL_ENABLE=n
+      BUILD_COMMAND ${make_cmd} CC=${CMAKE_C_COMPILER} NDCTL_ENABLE=n DOC=n
       BUILD_IN_SOURCE 1
       BUILD_BYPRODUCTS "${PMDK_LIB}/libpmem.a" "${PMDK_LIB}/libpmemobj.a"
       INSTALL_COMMAND "true")
