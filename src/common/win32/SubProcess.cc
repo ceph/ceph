@@ -142,18 +142,20 @@ int SubProcess::join() {
   close(stdout_pipe_in_fd);
   close(stderr_pipe_in_fd);
 
-  DWORD status = 0;
+  int status = 0;
 
   if (WaitForSingleObject(proc_handle, INFINITE) != WAIT_FAILED) {
     if (!GetExitCodeProcess(proc_handle, &status)) {
       errstr << cmd << ": Could not get exit code: " << pid
              << ". Error code: " << GetLastError();
+      status = -ECHILD;
     } else if (status) {
       errstr << cmd << ": exit status: " << status;
     }
   } else {
     errstr << cmd << ": Waiting for child process failed: " << pid
            << ". Error code: " << GetLastError();
+    status = -ECHILD;
   }
 
   close_h(proc_handle);
