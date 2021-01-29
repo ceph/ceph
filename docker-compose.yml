@@ -11,7 +11,13 @@ services:
             POSTGRES_DB: paddles
             PGDATA: /var/lib/postgresql/data/pgdata
         volumes:
-            - ${TEUTHOLOGY_DATA:-"$HOME/.teuthology/postgres"}:/var/lib/postgresql/data
+            - $HOME/.teuthology/postgres:/var/lib/postgresql/data
+        healthcheck:
+            test: |
+                psql -h localhost -U paddles -c 'SELECT 1=1' paddles
+            timeout: 60s
+            interval: 5s
+            start_period: 10s
     paddles:
         build: ../paddles
         environment:
@@ -20,7 +26,8 @@ services:
         ports:
             - "8180:8080"
         depends_on:
-            - postgres
+            postgres:
+                condition: service_healthy
     pulpito:
         build: ../pulpito
         environment:
