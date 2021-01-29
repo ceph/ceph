@@ -11,6 +11,7 @@ then deploying the needed services.
 Requirements
 ============
 
+- Python 3
 - Systemd
 - Podman or Docker for running containers
 - Time synchronization (such as chrony or NTP)
@@ -44,8 +45,9 @@ curl-based installation
   standalone script. 
   
   .. prompt:: bash #
+     :substitutions:
 
-   curl --silent --remote-name --location https://github.com/ceph/ceph/raw/octopus/src/cephadm/cephadm
+     curl --silent --remote-name --location https://github.com/ceph/ceph/raw/|stable-release|/src/cephadm/cephadm
 
   Make the ``cephadm`` script executable:
 
@@ -65,9 +67,10 @@ curl-based installation
   run the following commands:
 
   .. prompt:: bash #
+     :substitutions:
 
-    ./cephadm add-repo --release octopus
-    ./cephadm install
+     ./cephadm add-repo --release |stable-release|
+     ./cephadm install
 
   Confirm that ``cephadm`` is now in your PATH by running ``which``:
 
@@ -236,9 +239,10 @@ command.  There are several ways to do this:
   CephFS file systems), etc.:
 
   .. prompt:: bash #
+     :substitutions:
 
-    cephadm add-repo --release octopus
-    cephadm install ceph-common
+     cephadm add-repo --release |stable-release|
+     cephadm install ceph-common
 
 Confirm that the ``ceph`` command is accessible with:
 
