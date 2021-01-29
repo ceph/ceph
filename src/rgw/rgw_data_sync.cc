@@ -1226,8 +1226,6 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWRESTConn *conn{nullptr};
   rgw_zone_id last_zone;
 
-  int ret{0};
-
   int source_num_shards{0};
   int target_num_shards{0};
 
