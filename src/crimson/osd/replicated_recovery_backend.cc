@@ -910,29 +910,17 @@ ReplicatedRecoveryBackend::prep_push_target(
 
   ghobject_t target_oid;
   if (complete) {
+    // overwrite the original object
     target_oid = ghobject_t(recovery_info.soid);
-    if (!recovery_info.object_exist) {
-      t->remove(coll->get_cid(), target_oid);
-      t->touch(coll->get_cid(), target_oid);
-      bufferlist bv = attrs.at(OI_ATTR);
-      object_info_t oi(bv);
-      t->set_alloc_hint(coll->get_cid(), target_oid,
-                        oi.expected_object_size,
-                        oi.expected_write_size,
-                        oi.alloc_hint_flags);
-    }
-    // remove xattr and update later if overwrite on original object
-    t->rmattrs(coll->get_cid(), target_oid);
-    // if need update omap, clear the previous content first
-    if (clear_omap) {
-      t->omap_clear(coll->get_cid(), target_oid);
-    }
   } else {
     target_oid = ghobject_t(get_temp_recovery_object(recovery_info.soid,
                                                      recovery_info.version));
     logger().debug("{}: Adding oid {} in the temp collection",
                    __func__, target_oid);
     add_temp_obj(target_oid.hobj);
+  }
+  // create a new object
+  if (!complete || !recovery_info.object_exist) {
     t->remove(coll->get_cid(), target_oid);
     t->touch(coll->get_cid(), target_oid);
     bufferlist bv = attrs.at(OI_ATTR);
@@ -942,7 +930,14 @@ ReplicatedRecoveryBackend::prep_push_target(
                       oi.expected_write_size,
                       oi.alloc_hint_flags);
   }
-
+  if (complete) {
+    // remove xattr and update later if overwrite on original object
+    t->rmattrs(coll->get_cid(), target_oid);
+    // if need update omap, clear the previous content first
+    if (clear_omap) {
+      t->omap_clear(coll->get_cid(), target_oid);
+    }
+  }
   t->truncate(coll->get_cid(), target_oid, recovery_info.size);
   if (omap_header.length()) {
     t->omap_setheader(coll->get_cid(), target_oid, omap_header);
