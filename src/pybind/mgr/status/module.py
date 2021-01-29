@@ -244,9 +244,10 @@ class Module(MgrModule):
 
         if len(mds_versions) == 1:
             if output_format in ('json', 'json-pretty'):
-                json_output['mds_version'] = list(mds_versions)[0]
+                json_output['mds_version'] = [dict(version=k, daemon=v)
+                                              for k, v in mds_versions.items()]
             else:
-                output += "MDS version: {0}".format(list(mds_versions)[0])
+                output += "MDS version: {0}".format([*mds_versions][0])
         else:
             version_table = PrettyTable(["VERSION", "DAEMONS"],
                                         border=False)
