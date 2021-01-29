@@ -330,7 +330,7 @@ class Module(MgrModule):
     def scrape_daemon(self, daemon_type: str, daemon_id: str) -> Tuple[int, str, str]:
         ioctx = self.open_connection()
         if not ioctx:
-            return 0, "", ""
+            return -errno.EAGAIN, "", "device_health_metrics pool not yet available"
         raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id)
         if raw_smart_data:
             for device, raw_data in raw_smart_data.items():
@@ -345,7 +345,7 @@ class Module(MgrModule):
         assert osdmap is not None
         ioctx = self.open_connection()
         if not ioctx:
-            return 0, "", ""
+            return -errno.EAGAIN, "", "device_health_metrics pool not yet available"
         did_device = {}
         ids = []
         for osd in osdmap['osds']:
@@ -379,7 +379,7 @@ class Module(MgrModule):
         (daemon_type, daemon_id) = daemons[0].split('.')
         ioctx = self.open_connection()
         if not ioctx:
-            return 0, "", ""
+            return -errno.EAGAIN, "", "device_health_metrics pool not yet available"
         raw_smart_data = self.do_scrape_daemon(daemon_type, daemon_id,
                                                devid=devid)
         if raw_smart_data:
