@@ -1309,7 +1309,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Raise/update or clear the maintenance health check as needed"""
 
         in_maintenance = [h for h in self.inventory.all_specs() if h.maintenance]
-        if not in_maintenance:
+        if not in_maintenance and 'HOST_IN_MAINTENANCE' in self.health_checks:
             del self.health_checks["HOST_IN_MAINTENANCE"]
         else:
             s = "host is" if len(in_maintenance) == 1 else "hosts are"
