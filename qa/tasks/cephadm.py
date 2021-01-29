@@ -99,7 +99,7 @@ def download_cephadm(ctx, config, ref):
 
     if config.get('cephadm_mode') != 'cephadm-package':
         ref = config.get('cephadm_branch', ref)
-        git_url = teuth_config.get_ceph_git_url()
+        git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
         log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
         if git_url.startswith('https://github.com/'):
             # git archive doesn't like https:// URLs, which we use with github.
