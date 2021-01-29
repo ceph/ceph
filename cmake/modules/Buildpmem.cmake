@@ -9,7 +9,7 @@ function(build_pmem)
     set(source_dir_args
       SOURCE_DIR ${CMAKE_BINARY_DIR}/src/pmdk
       GIT_REPOSITORY https://github.com/ceph/pmdk.git
-      GIT_TAG "1.7"
+      GIT_TAG "1.10"
       GIT_SHALLOW TRUE
       GIT_CONFIG advice.detachedHead=false)
   endif()
