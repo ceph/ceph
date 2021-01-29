@@ -594,6 +594,13 @@ class MdsService(CephService):
         # if no mds found, return empty Daemon Desc
         return DaemonDescription()
 
+    def purge(self, service_name: str) -> None:
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': service_name,
+            'name': 'mds_join_fs',
+        })
+
 
 class RgwService(CephService):
     TYPE = 'rgw'
