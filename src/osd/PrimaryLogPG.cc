@@ -3332,6 +3332,44 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
   }
 }
 
+int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_oid) 
+{
+  int cnt = 0;
+  // head
+  for (auto &p : obc->obs.oi.manifest.chunk_map) {
+    if (p.second.oid.oid.name == fp_oid) {
+      cnt++;
+    }
+  }
+  // snap
+  SnapSet& ss = obc->ssc->snapset;
+  for (vector<snapid_t>::const_reverse_iterator p = ss.clones.rbegin();
+      p != ss.clones.rend();
+      ++p) {
+    object_ref_delta_t refs;
+    ObjectContextRef obc_l = nullptr;
+    ObjectContextRef obc_g = nullptr;
+    hobject_t clone_oid = obc->obs.oi.soid;
+    clone_oid.snap = *p;
+    ObjectContextRef clone_obc = get_object_context(clone_oid, false);
+    if (!clone_obc) {
+      break;
+    }
+    get_adjacent_clones(clone_obc, obc_l, obc_g);
+    clone_obc->obs.oi.manifest.calc_refs_to_inc_on_set(
+      obc_g ? &(obc_g->obs.oi.manifest) : nullptr ,
+      nullptr,
+      refs);
+    for (auto p = refs.begin(); p != refs.end(); ++p) {
+      if (p->first.oid.name == fp_oid && p->second > 0) {
+	cnt += p->second;
+      }
+    }
+  }
+
+  return cnt;
+}
+
 ObjectContextRef PrimaryLogPG::get_prev_clone_obc(ObjectContextRef obc)
 {
   auto s = std::find(obc->ssc->snapset.clones.begin(), obc->ssc->snapset.clones.end(),
