@@ -482,3 +482,14 @@ uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
   // FIXME
   return 4096;
 }
+
+int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
+		   const char *cls, const char *method, bufferlist& inbl)
+{
+  return 0;
+}
+
+std::shared_ptr<std::map<std::string, bufferlist> > cls_cxx_get_gathered_data(cls_method_context_t hctx)
+{
+  return std::shared_ptr<std::map<std::string, bufferlist> >(new std::map<std::string, bufferlist>);
+}

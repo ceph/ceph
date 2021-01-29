@@ -8,7 +8,6 @@
 #include "common/debug.h"
 
 #include "objclass/objclass.h"
-#include "osd/PrimaryLogPG.h"
 #include "osd/ClassHandler.h"
 
 #include "auth/Crypto.h"
@@ -165,42 +164,4 @@ int cls_log(int level, const char *format, ...)
      }
      size *= 2;
    }
-}
-
-struct GatherFinisher : public PrimaryLogPG::OpFinisher {
-  std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs;
-  GatherFinisher(std::shared_ptr<std::map<std::string, bufferlist> > sob) : src_obj_buffs(sob) {}
-  int execute() override {
-    return 0;
-  }
-};
-
-int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
-		   const char *cls, const char *method, bufferlist& inbl)
-{
-  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
-  std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs(new std::map<std::string, bufferlist>);
-  for (std::set<std::string>::const_iterator it = src_objs.begin(); it != src_objs.end(); ++it) {
-    (*src_obj_buffs)[*it] = bufferlist();
-  }
-  (*pctx)->op_finishers[(*pctx)->current_osd_subop_num].reset(new GatherFinisher(src_obj_buffs));
-  return (*pctx)->pg->cls_gather(*pctx, src_obj_buffs, pool, cls, method, inbl);
-}
-
-std::shared_ptr<std::map<std::string, bufferlist> > cls_cxx_get_gathered_data(cls_method_context_t hctx)
-{
-  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
-  PrimaryLogPG::OpFinisher* op_finisher = nullptr;
-  {
-    auto op_finisher_it = (*pctx)->op_finishers.find((*pctx)->current_osd_subop_num);
-    if (op_finisher_it != (*pctx)->op_finishers.end()) {
-      op_finisher = op_finisher_it->second.get();
-    }
-  }
-  if (op_finisher == NULL) {
-    return std::shared_ptr<std::map<std::string, bufferlist> >(new std::map<std::string, bufferlist>);
-  } else {
-    GatherFinisher *gf = (GatherFinisher*)op_finisher;
-    return std::move(gf->src_obj_buffs);
-  }
 }
