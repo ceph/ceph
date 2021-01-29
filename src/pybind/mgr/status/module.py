@@ -9,7 +9,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import errno
 import fnmatch
 import mgr_util
-import prettytable
 import json
 
 from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
@@ -18,7 +17,6 @@ from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
 class Module(MgrModule):
     def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-        #self.log.error("get_latest {0} data={1}".format(stat, data))
         if data:
             return data[-1][1]
         else:
@@ -26,14 +24,15 @@ class Module(MgrModule):
 
     def get_rate(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-        #self.log.error("get_latest {0} data={1}".format(stat, data))
         if data and len(data) > 1 and data[-1][0] != data[-2][0]:
             return (data[-1][1] - data[-2][1]) // int(data[-1][0] - data[-2][0])
         else:
             return 0
 
     @CLIReadCommand("fs status")
-    def handle_fs_status(self, fs: Optional[str] = None, format: str = 'plain') -> Tuple[int, str, str]:
+    def handle_fs_status(self,
+                         fs: Optional[str] = None,
+                         format: str = 'plain') -> Tuple[int, str, str]:
         """
         Show the status of a CephFS filesystem
         """
@@ -194,7 +193,7 @@ class Module(MgrModule):
             for pool_id in [metadata_pool_id] + data_pool_ids:
                 pool_type = "metadata" if pool_id == metadata_pool_id else "data"
                 stats = pool_stats[pool_id]
-                
+
                 if output_format in ('json', 'json-pretty'):
                     json_output['pools'].append({
                         'id': pool_id,
@@ -209,7 +208,7 @@ class Module(MgrModule):
                         mgr_util.format_bytes(stats['bytes_used'], 5),
                         mgr_util.format_bytes(stats['max_avail'], 5)
                     ])
-            
+
             if output_format in ('json', 'json-pretty'):
                 json_output['clients'].append({
                     'fs': mdsmap['fs_name'],
@@ -273,7 +272,8 @@ class Module(MgrModule):
         if output_format == "json":
             return HandleCommandResult(stdout=json.dumps(json_output, sort_keys=True))
         elif output_format == "json-pretty":
-            return HandleCommandResult(stdout=json.dumps(json_output, sort_keys=True, indent=4, separators=(',', ': ')))
+            return HandleCommandResult(stdout=json.dumps(json_output, sort_keys=True, indent=4,
+                                                         separators=(',', ': ')))
         else:
             return HandleCommandResult(stdout=output)
 
@@ -334,14 +334,18 @@ class Module(MgrModule):
                 kb_used = stats['kb_used'] * 1024
                 kb_avail = stats['kb_avail'] * 1024
 
+            wr_ops_rate = (self.get_rate("osd", osd_id.__str__(), "osd.op_w") +
+                           self.get_rate("osd", osd_id.__str__(), "osd.op_rw"))
+            wr_byte_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_in_bytes")
+            rd_ops_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_r")
+            rd_byte_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_out_bytes")
             osd_table.add_row([osd_id, hostname,
                                mgr_util.format_bytes(kb_used, 5),
                                mgr_util.format_bytes(kb_avail, 5),
-                               mgr_util.format_dimless(self.get_rate("osd", osd_id.__str__(), "osd.op_w") +
-                               self.get_rate("osd", osd_id.__str__(), "osd.op_rw"), 5),
-                               mgr_util.format_bytes(self.get_rate("osd", osd_id.__str__(), "osd.op_in_bytes"), 5),
-                               mgr_util.format_dimless(self.get_rate("osd", osd_id.__str__(), "osd.op_r"), 5),
-                               mgr_util.format_bytes(self.get_rate("osd", osd_id.__str__(), "osd.op_out_bytes"), 5),
+                               mgr_util.format_dimless(wr_ops_rate, 5),
+                               mgr_util.format_bytes(wr_byte_rate, 5),
+                               mgr_util.format_dimless(rd_ops_rate, 5),
+                               mgr_util.format_bytes(rd_byte_rate, 5),
                                ','.join(osd['state']),
                                ])
 
