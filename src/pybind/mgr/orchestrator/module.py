@@ -560,7 +560,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             return HandleCommandResult(stdout="No services reported")
         elif format != Format.plain:
             if export:
-                data = [s.spec for s in services]
+                data = [s.spec for s in services if s.deleted is None]
                 return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
             else:
                 return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
@@ -588,10 +588,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     pl = '<unmanaged>'
                 else:
                     pl = s.spec.placement.pretty_str()
+                if s.deleted:
+                    refreshed = '<deleting>'
+                else:
+                    refreshed = nice_delta(now, s.last_refresh, ' ago')
+
                 table.add_row((
                     s.spec.service_name(),
                     '%d/%d' % (s.running, s.size),
-                    nice_delta(now, s.last_refresh, ' ago'),
+                    refreshed,
                     nice_delta(now, s.created),
                     pl,
                     ukn(s.container_image_name),

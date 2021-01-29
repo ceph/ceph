@@ -1519,6 +1519,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                             self.inventory.all_specs())
 
                     sm[n].created = self.spec_store.spec_created[n]
+                    sm[n].deleted = self.spec_store.spec_deleted.get(n, None)
+
                     if service_type == 'nfs':
                         spec = cast(NFSServiceSpec, spec)
                         sm[n].rados_config_location = spec.rados_config_location()

@@ -1480,6 +1480,7 @@ class ServiceDescription(object):
                  service_url: Optional[str] = None,
                  last_refresh: Optional[datetime.datetime] = None,
                  created: Optional[datetime.datetime] = None,
+                 deleted: Optional[datetime.datetime] = None,
                  size: int = 0,
                  running: int = 0,
                  events: Optional[List['OrchestratorEvent']] = None) -> None:
@@ -1506,6 +1507,7 @@ class ServiceDescription(object):
         # datetime when this info was last refreshed
         self.last_refresh: Optional[datetime.datetime] = last_refresh
         self.created: Optional[datetime.datetime] = created
+        self.deleted: Optional[datetime.datetime] = deleted
 
         self.spec: ServiceSpec = spec
 
