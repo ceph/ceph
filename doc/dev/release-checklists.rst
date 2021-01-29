@@ -17,7 +17,7 @@ Versions and tags
 
 - [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
 - [x] Update src/ceph_release with the new release name, number, and type ('dev')
-- [ ] Initial tag vX.0.0 (so that we can distinguish from (and sort
+- [x] Initial tag vX.0.0 (so that we can distinguish from (and sort
   after) the backported (X-1).2.Z versions.
 
 
@@ -37,7 +37,7 @@ Scripts
 
 - [x] src/script/backport-resolve-issue (`releases()`, `ver_to_release()`... but for X-1)
 - [x] src/script/ceph-release-notes (X-1)
-- [x] ceph-build.git scripts/build_utils.sh `release_from_version()`
+- [ ] ceph-build.git scripts/build_utils.sh `release_from_version()`
 
 Misc
 ~~~~
@@ -90,7 +90,7 @@ QA suite
 - [x] remove qa/suites/upgrade/(X-3)-x-*
 - [x] remove qa/suites/rados/upgrade/(X-3)-x-singleton symlink
 - [x] create qa/releases/X.yaml
-- [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [ ] create qa/suites/rados/cephadm/thrash-old-clients/1-install/(X-1).yaml
 
 
 
