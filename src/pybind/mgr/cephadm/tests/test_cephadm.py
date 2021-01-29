@@ -773,6 +773,25 @@ class TestCephadm(object):
             with with_service(cephadm_module, spec, meth, 'test'):
                 pass
 
+    @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_mds_config_purge(self, cephadm_module: CephadmOrchestrator):
+        spec = ServiceSpec('mds', service_id='fsname')
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, spec, host='test'):
+                ret, out, err = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': spec.service_name(),
+                    'key': 'mds_join_fs',
+                })
+                assert out == 'fsname'
+            ret, out, err = cephadm_module.check_mon_command({
+                'prefix': 'config get',
+                'who': spec.service_name(),
+                'key': 'mds_join_fs',
+            })
+            assert not out
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")
     def test_daemon_ok_to_stop(self, ok_to_stop, cephadm_module: CephadmOrchestrator):
