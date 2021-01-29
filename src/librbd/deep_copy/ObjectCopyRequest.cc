@@ -77,6 +77,16 @@ void ObjectCopyRequest<I>::send_list_snaps() {
           m_dst_image_ctx->layout.object_size, m_image_extents);
   ldout(m_cct, 20) << "image_extents=" << m_image_extents << dendl;
 
+  auto ctx = create_async_context_callback(
+    *m_src_image_ctx, create_context_callback<
+      ObjectCopyRequest, &ObjectCopyRequest<I>::handle_list_snaps>(this));
+  if ((m_flags & OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN) != 0) {
+    // skip listing the snaps if we know the destination exists and is clean,
+    // but we do need to update the object-map
+    ctx->complete(0);
+    return;
+  }
+
   io::SnapIds snap_ids;
   snap_ids.reserve(1 + m_snap_map.size());
   snap_ids.push_back(m_src_snap_id_start);
@@ -90,9 +100,6 @@ void ObjectCopyRequest<I>::send_list_snaps() {
 
   m_snapshot_delta.clear();
 
-  auto ctx = create_async_context_callback(
-    *m_src_image_ctx, create_context_callback<
-      ObjectCopyRequest, &ObjectCopyRequest<I>::handle_list_snaps>(this));
   auto aio_comp = io::AioCompletion::create_and_start(
     ctx, get_image_ctx(m_src_image_ctx), io::AIO_TYPE_GENERIC);
   auto req = io::ImageDispatchSpec::create_list_snaps(

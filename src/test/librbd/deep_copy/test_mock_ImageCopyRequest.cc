@@ -59,6 +59,7 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
     ceph_assert(s_instance != nullptr);
     std::lock_guard locker{s_instance->lock};
     s_instance->snap_map = &snap_map;
+    s_instance->flags = flags;
     s_instance->object_contexts[object_number] = on_finish;
     s_instance->cond.notify_all();
     return s_instance;
@@ -71,6 +72,7 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
 
   const SnapMap *snap_map = nullptr;
   std::map<uint64_t, Context *> object_contexts;
+  uint32_t flags = 0;
 
   ObjectCopyRequest() {
     s_instance = this;
@@ -169,8 +171,12 @@ public:
                 }));
   }
 
-  void expect_object_copy_send(MockObjectCopyRequest &mock_object_copy_request) {
-    EXPECT_CALL(mock_object_copy_request, send());
+  void expect_object_copy_send(MockObjectCopyRequest &mock_object_copy_request,
+                               uint32_t flags) {
+    EXPECT_CALL(mock_object_copy_request, send())
+      .WillOnce(Invoke([&mock_object_copy_request, flags]() {
+        ASSERT_EQ(flags, mock_object_copy_request.flags);
+      }));
   }
 
   bool complete_object_copy(MockObjectCopyRequest &mock_object_copy_request,
@@ -273,7 +279,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SimpleImage) {
   expect_diff_send(mock_diff_request, {}, -EINVAL);
   expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
   expect_get_image_size(mock_src_image_ctx, 0);
-  expect_object_copy_send(mock_object_copy_request);
+  expect_object_copy_send(mock_object_copy_request, 0);
 
   librbd::deep_copy::NoOpHandler no_op;
   C_SaferCond ctx;
@@ -288,7 +294,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SimpleImage) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockDeepCopyImageCopyRequest, FastDiff) {
+TEST_F(TestMockDeepCopyImageCopyRequest, FastDiffNonExistent) {
   librados::snap_t snap_id_end;
   ASSERT_EQ(0, create_snap("copy", &snap_id_end));
 
@@ -313,6 +319,73 @@ TEST_F(TestMockDeepCopyImageCopyRequest, FastDiff) {
                                           m_snap_seqs, &no_op, &ctx);
   request->send();
 
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockDeepCopyImageCopyRequest, FastDiffExistsDirty) {
+  librados::snap_t snap_id_end;
+  ASSERT_EQ(0, create_snap("copy", &snap_id_end));
+
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  InSequence seq;
+
+  MockDiffRequest mock_diff_request;
+  BitVector<2> diff_state;
+  diff_state.resize(1);
+  diff_state[0] = object_map::DIFF_STATE_DATA_UPDATED;
+  expect_diff_send(mock_diff_request, diff_state, 0);
+
+  expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
+  expect_get_image_size(mock_src_image_ctx, 0);
+  MockObjectCopyRequest mock_object_copy_request;
+  expect_object_copy_send(mock_object_copy_request, 0);
+
+  librbd::deep_copy::NoOpHandler no_op;
+  C_SaferCond ctx;
+  auto request = new MockImageCopyRequest(&mock_src_image_ctx,
+                                          &mock_dst_image_ctx,
+                                          0, snap_id_end, 0, false, boost::none,
+                                          m_snap_seqs, &no_op, &ctx);
+  request->send();
+
+  ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, nullptr, 0));
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockDeepCopyImageCopyRequest, FastDiffExistsClean) {
+  librados::snap_t snap_id_end;
+  ASSERT_EQ(0, create_snap("copy", &snap_id_end));
+
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+
+  InSequence seq;
+
+  MockDiffRequest mock_diff_request;
+  BitVector<2> diff_state;
+  diff_state.resize(1);
+  diff_state[0] = object_map::DIFF_STATE_DATA;
+  expect_diff_send(mock_diff_request, diff_state, 0);
+
+  expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
+  expect_get_image_size(mock_src_image_ctx, 0);
+  MockObjectCopyRequest mock_object_copy_request;
+  expect_object_copy_send(mock_object_copy_request,
+                          OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN);
+
+  librbd::deep_copy::NoOpHandler no_op;
+  C_SaferCond ctx;
+  auto request = new MockImageCopyRequest(&mock_src_image_ctx,
+                                          &mock_dst_image_ctx,
+                                          0, snap_id_end, 0, false, boost::none,
+                                          m_snap_seqs, &no_op, &ctx);
+  request->send();
+
+  ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, nullptr, 0));
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -409,7 +482,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SnapshotSubset) {
   expect_get_image_size(mock_src_image_ctx, 0);
   expect_get_image_size(mock_src_image_ctx, 0);
   expect_get_image_size(mock_src_image_ctx, 0);
-  expect_object_copy_send(mock_object_copy_request);
+  expect_object_copy_send(mock_object_copy_request, 0);
 
   librbd::deep_copy::NoOpHandler no_op;
   C_SaferCond ctx;
@@ -441,7 +514,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, RestartPartialSync) {
   expect_diff_send(mock_diff_request, {}, -EINVAL);
   expect_get_image_size(mock_src_image_ctx, 2 * (1 << m_src_image_ctx->order));
   expect_get_image_size(mock_src_image_ctx, 0);
-  expect_object_copy_send(mock_object_copy_request);
+  expect_object_copy_send(mock_object_copy_request, 0);
 
   librbd::deep_copy::NoOpHandler no_op;
   C_SaferCond ctx;
@@ -477,7 +550,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, Cancel) {
   expect_diff_send(mock_diff_request, {}, -EINVAL);
   expect_get_image_size(mock_src_image_ctx, 1 << m_src_image_ctx->order);
   expect_get_image_size(mock_src_image_ctx, 0);
-  expect_object_copy_send(mock_object_copy_request);
+  expect_object_copy_send(mock_object_copy_request, 0);
 
   librbd::deep_copy::NoOpHandler no_op;
   C_SaferCond ctx;
