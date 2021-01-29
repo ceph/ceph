@@ -115,6 +115,10 @@ if 'UNITTEST' in os.environ:
                 self.mock_store_set('config', f'{cmd["who"]}/{cmd["name"]}', cmd['value'])
                 return ''
 
+            def config_rm():
+                self.mock_store_set('config', f'{cmd["who"]}/{cmd["name"]}', None)
+                return ''
+
             def config_dump():
                 r = []
                 for prefix, value in self.mock_store_preifx('config', '').items():
@@ -133,6 +137,8 @@ if 'UNITTEST' in os.environ:
                 outb = config_set()
             elif cmd['prefix'] == 'config dump':
                 outb = config_dump()
+            elif cmd['prefix'] == 'config rm':
+                outb = config_rm()
             elif hasattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_')):
                 a = getattr(self, '_mon_command_mock_' + cmd['prefix'].replace(' ', '_'))
                 outb = a(cmd)
