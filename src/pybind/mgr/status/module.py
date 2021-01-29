@@ -101,8 +101,9 @@ class Module(MgrModule):
                         if output_format not in ('json', 'json-pretty'):
                             activity = "Reqs: " + mgr_util.format_dimless(rate, 5) + "/s"
 
-                    defaults = defaultdict(lambda: None, {'version' : 'unknown'})
-                    metadata = self.get_metadata('mds', info['name'], default=defaults)
+                    metadata = self.get_metadata('mds', info['name'],
+                                                 default=defaultdict(lambda: 'unknown'))
+                    assert metadata
                     mds_versions[metadata['ceph_version']].append(info['name'])
 
                     if output_format in ('json', 'json-pretty'):
@@ -150,8 +151,9 @@ class Module(MgrModule):
                 if output_format not in ('json', 'json-pretty'):
                     activity = "Evts: " + mgr_util.format_dimless(events, 5) + "/s"
 
-                defaults = defaultdict(lambda: None, {'version' : 'unknown'})
-                metadata = self.get_metadata('mds', daemon_info['name'], default=defaults)
+                metadata = self.get_metadata('mds', daemon_info['name'],
+                                             default=defaultdict(lambda: 'unknown'))
+                assert metadata
                 mds_versions[metadata['ceph_version']].append(daemon_info['name'])
 
                 if output_format in ('json', 'json-pretty'):
@@ -224,8 +226,9 @@ class Module(MgrModule):
         standby_table.left_padding_width = 0
         standby_table.right_padding_width = 2
         for standby in fsmap['standbys']:
-            defaults = defaultdict(lambda: None, {'version' : 'unknown'})
-            metadata = self.get_metadata('mds', standby['name'], default=defaults)
+            metadata = self.get_metadata('mds', standby['name'],
+                                         default=defaultdict(lambda: 'unknown'))
+            assert metadata
             mds_versions[metadata['ceph_version']].append(standby['name'])
 
             if output_format in ('json', 'json-pretty'):
@@ -320,9 +323,9 @@ class Module(MgrModule):
             kb_avail = 0
 
             if osd_id in osd_stats:
-                defaults = defaultdict(lambda: None, {'hostname' : ''})
-                metadata = self.get_metadata('osd', str(osd_id), default=defaults)
+                metadata = self.get_metadata('osd', str(osd_id), default=defaultdict(str))
                 stats = osd_stats[osd_id]
+                assert metadata
                 hostname = metadata['hostname']
                 kb_used = stats['kb_used'] * 1024
                 kb_avail = stats['kb_avail'] * 1024
