@@ -5,32 +5,17 @@ High level status display commands
 
 from collections import defaultdict
 from prettytable import PrettyTable
+from typing import Optional
 import errno
 import fnmatch
 import mgr_util
 import prettytable
 import json
 
-from mgr_module import MgrModule, HandleCommandResult
+from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
 
 
 class Module(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "fs status "
-                   "name=fs,type=CephString,req=false",
-            "desc": "Show the status of a CephFS filesystem",
-            "perm": "r"
-        },
-        {
-            "cmd": "osd status "
-                   "name=bucket,type=CephString,req=false",
-            "desc": "Show the status of OSDs within a bucket, or all",
-            "perm": "r"
-        },
-    ]
-
-        
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         #self.log.error("get_latest {0} data={1}".format(stat, data))
@@ -48,12 +33,16 @@ class Module(MgrModule):
         else:
             return 0
 
-    def handle_fs_status(self, cmd):
+    @CLIReadCommand("fs status")
+    def handle_fs_status(self, fs: Optional[str] = None, format: str = 'plain'):
+        """
+        Show the status of a CephFS filesystem
+        """
         output = ""
         json_output = defaultdict(list)
-        output_format = cmd.get('format', 'plain')
+        output_format = format
 
-        fs_filter = cmd.get('fs', None)
+        fs_filter = fs
 
         mds_versions = defaultdict(list)
 
@@ -281,7 +270,11 @@ class Module(MgrModule):
         else:
             return HandleCommandResult(stdout=output)
 
-    def handle_osd_status(self, cmd):
+    @CLIReadCommand("osd status")
+    def handle_osd_status(self, bucket: Optional[str] = None):
+        """
+        Show the status of OSDs within a bucket, or all
+        """
         osd_table = PrettyTable(['ID', 'HOST', 'USED', 'AVAIL', 'WR OPS',
                                  'WR DATA', 'RD OPS', 'RD DATA', 'STATE'],
                                 border=False)
@@ -300,15 +293,15 @@ class Module(MgrModule):
 
         filter_osds = set()
         bucket_filter = None
-        if 'bucket' in cmd:
-            self.log.debug("Filtering to bucket '{0}'".format(cmd['bucket']))
-            bucket_filter = cmd['bucket']
+        if bucket is not None:
+            self.log.debug(f"Filtering to bucket '{bucket}'")
+            bucket_filter = bucket
             crush = self.get("osd_map_crush")
             found = False
-            for bucket in crush['buckets']:
-                if fnmatch.fnmatch(bucket['name'], bucket_filter):
+            for bucket_ in crush['buckets']:
+                if fnmatch.fnmatch(bucket_['name'], bucket_filter):
                     found = True
-                    filter_osds.update([i['id'] for i in bucket['items']])
+                    filter_osds.update([i['id'] for i in bucket_['items']])
 
             if not found:
                 msg = "Bucket '{0}' not found".format(bucket_filter)
@@ -346,15 +339,3 @@ class Module(MgrModule):
                                ])
 
         return 0, osd_table.get_string(), ""
-
-    def handle_command(self, inbuf, cmd):
-        self.log.error("handle_command")
-
-        if cmd['prefix'] == "fs status":
-            return self.handle_fs_status(cmd)
-        elif cmd['prefix'] == "osd status":
-            return self.handle_osd_status(cmd)
-        else:
-            # mgr should respect our self.COMMANDS and not call us for
-            # any prefix we don't advertise
-            raise NotImplementedError(cmd['prefix'])
