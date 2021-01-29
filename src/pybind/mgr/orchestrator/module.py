@@ -531,7 +531,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
     @_cli_read_command('orch ls')
     def _list_services(self,
-                       host: Optional[str] = None,
                        service_type: Optional[str] = None,
                        service_name: Optional[str] = None,
                        export: bool = False,
