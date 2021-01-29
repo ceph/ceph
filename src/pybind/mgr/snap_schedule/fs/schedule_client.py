@@ -16,7 +16,7 @@ from threading import Timer
 from typing import cast, Any, Callable, Dict, Iterator, List, Set, Optional, \
     Tuple, TypeVar, Union
 import sqlite3
-from .schedule import Schedule, parse_retention
+from .schedule import Schedule
 import traceback
 
 
@@ -34,8 +34,10 @@ log = logging.getLogger(__name__)
 
 CephfsClientT = TypeVar('CephfsClientT', bound=CephfsClient)
 
+
 @contextmanager
-def open_ioctx(self: CephfsClientT, pool: Union[int, str]) -> Iterator[rados.Ioctx]:
+def open_ioctx(self: CephfsClientT,
+               pool: Union[int, str]) -> Iterator[rados.Ioctx]:
     try:
         if type(pool) is int:
             with self.mgr.rados.open_ioctx2(pool) as ioctx:
@@ -51,6 +53,7 @@ def open_ioctx(self: CephfsClientT, pool: Union[int, str]) -> Iterator[rados.Ioc
 
 
 FuncT = TypeVar('FuncT', bound=Callable[..., None])
+
 
 def updates_schedule_db(func: FuncT) -> FuncT:
     def f(self: 'SnapSchedClient', fs: str, schedule_or_path: str, *args: Any) -> None:
@@ -93,13 +96,16 @@ def get_prune_set(candidates: Set[Tuple[cephfs.DirEntry, datetime]],
             if snap_ts != last:
                 last = snap_ts
                 if snap not in keep:
-                    log.debug(f'keeping {snap[0].d_name} due to {period_count}{period}')
+                    log.debug((f'keeping {snap[0].d_name} due to '
+                               f'{period_count}{period}'))
                     keep.append(snap)
                     if len(keep) == period_count:
-                        log.debug(f'found enough snapshots for {period_count}{period}')
+                        log.debug(('found enough snapshots for '
+                                   f'{period_count}{period}'))
                         break
     if len(keep) > MAX_SNAPS_PER_PATH:
-        log.info(f'Would keep more then {MAX_SNAPS_PER_PATH}, pruning keep set')
+        log.info((f'Would keep more then {MAX_SNAPS_PER_PATH}, '
+                  'pruning keep set'))
         keep = keep[:MAX_SNAPS_PER_PATH]
     return candidates - set(keep)
 
@@ -133,7 +139,8 @@ class SnapSchedClient(CephfsClient):
                                         size).decode('utf-8')
                         con.executescript(db)
                     except rados.ObjectNotFound:
-                        log.debug(f'No schedule DB found in {fs}, creating one.')
+                        log.debug((f'No schedule DB found in {fs}, '
+                                   'creating one.'))
                         con.executescript(Schedule.CREATE_TABLES)
         return self.sqlite_connections[fs]
 
@@ -156,24 +163,27 @@ class SnapSchedClient(CephfsClient):
     def _is_allowed_repeat(self, exec_row: Dict[str, str], path: str) -> bool:
         if Schedule.parse_schedule(exec_row['schedule'])[1] == 'M':
             if self.allow_minute_snaps:
-                log.debug(f'Minute repeats allowed, scheduling snapshot on path {path}')
+                log.debug(('Minute repeats allowed, '
+                           f'scheduling snapshot on path {path}'))
                 return True
             else:
-                log.info(f'Minute repeats disabled, skipping snapshot on path {path}')
+                log.info(('Minute repeats disabled, '
+                          f'skipping snapshot on path {path}'))
                 return False
         else:
             return True
 
-
     def refresh_snap_timers(self, fs: str, path: str) -> None:
         try:
-            log.debug(f'SnapDB on {fs} changed for {path}, updating next Timer')
+            log.debug((f'SnapDB on {fs} changed for {path}, '
+                       'updating next Timer'))
             db = self.get_schedule_db(fs)
             rows = []
             with db:
                 cur = db.execute(Schedule.EXEC_QUERY, (path,))
                 all_rows = cur.fetchall()
-                rows = [r for r in all_rows if self._is_allowed_repeat(r, path)][0:1]
+                rows = [r for r in all_rows
+                        if self._is_allowed_repeat(r, path)][0:1]
             timers = self.active_timers.get((fs, path), [])
             for timer in timers:
                 timer.cancel()
@@ -195,8 +205,11 @@ class SnapSchedClient(CephfsClient):
         log.error(traceback.format_exc())
 
     def create_scheduled_snapshot(self,
-                                  fs_name: str, path: str,
-                                  retention: str, start: str, repeat: str) -> None:
+                                  fs_name: str,
+                                  path: str,
+                                  retention: str,
+                                  start: str,
+                                  repeat: str) -> None:
         log.debug(f'Scheduled snapshot of {path} triggered')
         try:
             db = self.get_schedule_db(fs_name)
@@ -259,7 +272,10 @@ class SnapSchedClient(CephfsClient):
         db = self.get_schedule_db(fs)
         return Schedule.get_db_schedules(path, db, fs)
 
-    def list_snap_schedules(self, fs: str, path: str, recursive: bool) -> List[Schedule]:
+    def list_snap_schedules(self,
+                            fs: str,
+                            path: str,
+                            recursive: bool) -> List[Schedule]:
         db = self.get_schedule_db(fs)
         return Schedule.list_schedules(path, db, fs, recursive)
 
