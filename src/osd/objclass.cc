@@ -682,20 +682,10 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
-bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
+int cls_get_manifest_ref_count(cls_method_context_t hctx, string fp_oid)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
-  if (!ctx->obc->obs.oi.has_manifest()) {
-    return false;
-  }
-
-  for (auto &p : ctx->obc->obs.oi.manifest.chunk_map) {
-    if (p.second.oid.oid.name == fp_oid) {
-      return true;
-    }
-  }
-
-  return false;
+  return ctx->pg->get_manifest_ref_count(ctx->obc, fp_oid);
 }
 
 uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
