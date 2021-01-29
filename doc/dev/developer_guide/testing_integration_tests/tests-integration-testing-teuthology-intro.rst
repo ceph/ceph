@@ -4,8 +4,8 @@ Testing - Integration Tests - Introduction
 ==========================================
 
 Ceph has two types of tests: :ref:`make check <make-check>` tests and
-integration tests. When a test requires multiple machines, root access or lasts
-for a longer time (for example, to simulate a realistic Ceph deployment), it is
+integration tests. When a test requires multiple machines, root access, or lasts
+for a long time (for example, to simulate a realistic Ceph workload), it is
 deemed to be an integration test. Integration tests are organized into "suites",
 which are defined in the `ceph/qa sub-directory`_ and run with the
 ``teuthology-suite`` command.
@@ -39,10 +39,10 @@ branch and the stable branches). Traditionally, these tests are called "the
 nightlies" because the Ceph core developers used to live and work in
 the same time zone and from their perspective the tests were run overnight.
 
-The results of the nightlies are published at http://pulpito.ceph.com/. The
-developer nick shows in the test results URL and in the first column of the
-Pulpito dashboard.  The results are also reported on the `ceph-qa mailing list
-<https://ceph.com/irc/>`_ for analysis.
+The results of nightly test runs are published at http://pulpito.ceph.com/
+under the user ``teuthology``. The developer nick appears in URL of the the
+test results and in the first column of the Pulpito dashboard.  The results are
+also reported on the `ceph-qa mailing list <https://ceph.com/irc/>`_.
 
 Testing Priority
 ----------------
@@ -79,10 +79,9 @@ Job priority should be selected based on the following recommendations:
 * **200 <= Priority < 1000:** Use this priority for large test runs that can
   be done over the course of a week.
 
-In case you don't know how many jobs would be triggered by ``teuthology-suite``
-command, use ``--dry-run`` to get a count first and then issue
-``teuthology-suite`` command again, this time without ``--dry-run`` and with
-``-p`` and an appropriate number as an argument to it.
+To learn how many jobs the ``teuthology-suite`` command will trigger, use the
+``--dry-run`` flag. If you are happy with the number of jobs, issue the ``teuthology-suite`` command again without
+``--dry-run`` and with ``-p`` and an appropriate number as an argument. 
 
 To skip the priority check, use ``--force-priority``. In order to be sensitive
 to the runs of other developers who also need to do testing, please use it in
@@ -92,14 +91,14 @@ Suites Inventory
 ----------------
 
 The ``suites`` directory of the `ceph/qa sub-directory`_ contains all the
-integration tests, for all the Ceph components.
+integration tests for all the Ceph components.
 
 `ceph-deploy <https://github.com/ceph/ceph/tree/master/qa/suites/ceph-deploy>`_
   install a Ceph cluster with ``ceph-deploy`` (`ceph-deploy man page`_)
 
 `dummy <https://github.com/ceph/ceph/tree/master/qa/suites/dummy>`_
   get a machine, do nothing and return success (commonly used to
-  verify the integration testing infrastructure works as expected)
+  verify that the integration testing infrastructure works as expected)
 
 `fs <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_
   test CephFS mounted using FUSE
@@ -145,20 +144,20 @@ teuthology-describe-tests
 ``teuthology-describe`` was added to the `teuthology framework`_ to facilitate
 documentation and better understanding of integration tests.
 
-The upshot is that tests can be documented by embedding ``meta:``
-annotations in the yaml files used to define the tests. The results can be
-seen in the `teuthology-desribe usecases`_
+Tests can be documented by embedding ``meta:`` annotations in the yaml files
+used to define the tests. The results can be seen in the `teuthology-desribe
+usecases`_
 
 Since this is a new feature, many yaml files have yet to be annotated.
-Developers are encouraged to improve the documentation, in terms of both
-coverage and quality.
+Developers are encouraged to improve the coverage and the quality of the
+documentation. 
 
 How integration tests are run
 -----------------------------
 
-Given that - as a new Ceph developer - you will typically not have access
-to the `Sepia lab`_, you may rightly ask how you can run the integration
-tests in your own environment.
+As a new Ceph developer you will probably not have access to the `Sepia lab`_.
+You might however be able to run some integration tests in your own
+environment. Ask members from the relevant team how to do this. 
 
 One option is to set up a teuthology cluster on bare metal. Though this is a
 non-trivial task, it `is` possible. Here are `some notes
