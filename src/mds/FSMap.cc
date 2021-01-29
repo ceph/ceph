@@ -224,6 +224,43 @@ void FSMap::print(ostream& out) const
   }
 }
 
+void FSMap::print_fs_summary(ostream& out) const
+{
+  if (!filesystems.empty()) {
+    int num_failed = 0, num_recovering = 0, num_stopped = 0, num_healthy = 0;
+    int num_damaged = 0;
+    for (auto& [fscid, fs] : filesystems) {
+      if (fs->mds_map.is_any_damaged()) {
+	++num_damaged;
+      }
+      if (fs->mds_map.is_any_failed()) {
+	++num_failed;
+      } else if (fs->mds_map.is_degraded()) {
+	++num_recovering;
+      } else if (fs->mds_map.get_max_mds() == 0) {
+	++num_stopped;
+      } else {
+	++num_healthy;
+      }
+    }
+    out << "    volumes: "
+	<< num_healthy << "/" << filesystems.size() << " healthy";
+    if (num_recovering) {
+      out << ", " << num_recovering << " recovering";
+    }
+    if (num_failed) {
+      out << ", " << num_failed << " failed";
+    }
+    if (num_stopped) {
+      out << ", " << num_stopped << " stopped";
+    }
+    if (num_damaged) {
+      out << "; " << num_damaged << " damaged";
+    }
+    out << "\n";
+  }
+}
+
 void FSMap::print_summary(Formatter *f, ostream *out) const
 {
   if (f) {
