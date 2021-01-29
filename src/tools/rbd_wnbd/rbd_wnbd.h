@@ -66,6 +66,7 @@ struct Config {
 
   int service_start_timeout = DEFAULT_SERVICE_START_TIMEOUT;
   int image_map_timeout = DEFAULT_IMAGE_MAP_TIMEOUT;
+  bool remap_failure_fatal = false;
 
   // TODO: consider moving those fields to a separate structure. Those
   // provide connection information without actually being configurable.
