@@ -2797,24 +2797,15 @@ void PeeringState::activate(
 				<< " from (" << pi.log_tail << "," << pi.last_update
 				<< "] " << pi.last_backfill
 				<< " to " << info.last_update;
-	if (!pi.is_empty()) {
-	  psdout(10) << "activate peer osd." << peer
-		     << " is up to date, queueing in pending_activators" << dendl;
-	  ctx.send_info(
-	    peer.osd,
-	    spg_t(info.pgid.pgid, peer.shard),
-	    get_osdmap_epoch(), // fixme: use lower epoch?
-	    get_osdmap_epoch(),
-	    info,
-	    get_lease());
-	} else {
-	  psdout(10) << "activate peer osd." << peer
-		     << " is up to date, but sending pg_log anyway" << dendl;
-	  m = make_message<MOSDPGLog>(
-	    i->shard, pg_whoami.shard,
-	    get_osdmap_epoch(), info,
-	    last_peering_reset);
-	}
+  if (pi.is_empty()) {
+    psdout(10) << "activate peer osd." << peer
+        << " is up to date, but sending pg_log anyway" << dendl;
+
+    m = make_message<MOSDPGLog>(
+        i->shard, pg_whoami.shard,
+        get_osdmap_epoch(), info,
+        last_peering_reset);
+  }
       } else if (
 	pg_log.get_tail() > pi.last_update ||
 	pi.last_backfill == hobject_t() ||
@@ -5176,6 +5167,22 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
       ps->get_osdmap_epoch());
     ++backfill_osd_it;
   } else {
+    auto &rctx = context<PeeringMachine>().get_recovery_ctx();
+    auto peer = ps->pg_whoami;
+    auto epoch = ps->get_osdmap_epoch();
+    auto info = ps->info;
+    const pg_info_t& pi = ps->peer_info[peer];
+    if (!pi.is_empty()) {
+      rctx.send_info(
+	peer.osd,
+	spg_t(ps->info.pgid.pgid, peer.shard),
+	epoch,
+	epoch,
+	info,
+	ps->get_lease());
+      psdout(10) << "AllBackfillsReserved " << peer
+      << " send_info" << dendl;
+    }
     ps->peer_bytes.clear();
     post_event(AllBackfillsReserved());
   }
