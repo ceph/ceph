@@ -1141,7 +1141,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_counter(self,
                     svc_type: str,
                     svc_name: str,
-                    path: str) -> List[Tuple[float, int]]:
+                    path: str) -> Dict[str, List[Tuple[float, int]]]:
         """
         Called by the plugin to fetch the latest performance counter data for a
         particular counter on a particular service.
@@ -1150,8 +1150,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param str svc_name:
         :param str path: a period-separated concatenation of the subsystem and the
             counter name, for example "mds.inodes".
-        :return: A list of two-tuples of (timestamp, value) is returned.  This may be
-            empty if no data is available.
+        :return: A dict of counter names to their values. each value is a list of
+            of two-tuples of (timestamp, value).  This may be empty if no data is
+            available.
         """
         return self._ceph_get_counter(svc_type, svc_name, path)
 
