@@ -608,7 +608,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 
 seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
   pg_shard_t from,
-  const PushOp& pop,
+  PushOp& pop,
   PullOp* response,
   ceph::os::Transaction* t)
 {
@@ -659,8 +659,9 @@ seastar::future<bool> ReplicatedRecoveryBackend::_handle_pull_response(
     bool complete = pi.is_complete();
     bool clear_omap = !pop.before_progress.omap_complete;
     return submit_push_data(pi.recovery_info, first, complete, clear_omap,
-	  std::move(data_zeros), usable_intervals, data, pop.omap_header,
-	  pop.attrset, pop.omap_entries, t).then(
+                            std::move(data_zeros), std::move(usable_intervals),
+                            std::move(data), std::move(pop.omap_header),
+                            pop.attrset, std::move(pop.omap_entries), t).then(
       [this, response, &pi, &pop, complete, t, bytes_recovered=data.length()] {
       pi.stat.num_keys_recovered += pop.omap_entries.size();
       pi.stat.num_bytes_recovered += bytes_recovered;
@@ -732,7 +733,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_pull_response(
 
 seastar::future<> ReplicatedRecoveryBackend::_handle_push(
   pg_shard_t from,
-  const PushOp &pop,
+  PushOp &pop,
   PushReplyOp *response,
   ceph::os::Transaction *t)
 {
@@ -754,8 +755,10 @@ seastar::future<> ReplicatedRecoveryBackend::_handle_push(
   response->soid = pop.recovery_info.soid;
 
   return submit_push_data(pop.recovery_info, first, complete, clear_omap,
-        std::move(data_zeros), pop.data_included, pop.data, pop.omap_header,
-        pop.attrset, pop.omap_entries, t).then([this, complete, &pop, t] {
+                          std::move(data_zeros), std::move(pop.data_included),
+                          std::move(pop.data), std::move(pop.omap_header),
+                          pop.attrset, std::move(pop.omap_entries), t).then(
+    [this, complete, &pop, t] {
     if (complete) {
       pg.get_recovery_handler()->on_local_recover(
         pop.recovery_info.soid, pop.recovery_info,
@@ -773,7 +776,7 @@ seastar::future<> ReplicatedRecoveryBackend::handle_push(
 
   logger().debug("{}: {}", __func__, *m);
   return seastar::do_with(PushReplyOp(), [this, m](auto& response) {
-    const PushOp& pop = m->pushes[0]; //TODO: only one push per message for now
+    PushOp& pop = m->pushes[0]; // TODO: only one push per message for now
     return seastar::do_with(ceph::os::Transaction(),
       [this, m, &pop, &response](auto& t) {
       return _handle_push(m->from, pop, &response, &t).then(
@@ -971,21 +974,26 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
   bool first,
   bool complete,
   bool clear_omap,
-  interval_set<uint64_t> data_zeros,
-  const interval_set<uint64_t> &intervals_included,
-  bufferlist data_included,
-  bufferlist omap_header,
+  interval_set<uint64_t>&& data_zeros,
+  interval_set<uint64_t>&& intervals_included,
+  bufferlist&& data_included,
+  bufferlist&& omap_header,
   const map<string, bufferlist> &attrs,
-  const map<string, bufferlist> &omap_entries,
+  map<string, bufferlist>&& omap_entries,
   ObjectStore::Transaction *t)
 {
   logger().debug("{}", __func__);
   return prep_push_target(recovery_info, first, complete,
                           clear_omap, t, attrs,
                           std::move(omap_header)).then(
-    [this, data_zeros=std::move(data_zeros),
-     &recovery_info, intervals_included, t,
-     &omap_entries, &attrs, data_included, complete, first](auto target_oid) mutable {
+    [this,
+     &recovery_info, t,
+     first, complete,
+     data_zeros=std::move(data_zeros),
+     intervals_included=std::move(intervals_included),
+     data_included=std::move(data_included),
+     omap_entries=std::move(omap_entries),
+     &attrs](auto target_oid) mutable {
     uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
     // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
     if (!data_zeros.empty()) {
