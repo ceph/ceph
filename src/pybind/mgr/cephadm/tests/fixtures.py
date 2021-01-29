@@ -140,11 +140,16 @@ def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):
 
 
 @contextmanager
-def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str) -> Iterator[List[str]]:
-    if spec.placement.is_empty():
+def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth=None, host: str = '') -> Iterator[List[str]]:
+    if spec.placement.is_empty() and host:
         spec.placement = PlacementSpec(hosts=[host], count=1)
-    c = meth(cephadm_module, spec)
-    assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+    if meth is not None:
+        c = meth(cephadm_module, spec)
+        assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+    else:
+        c = cephadm_module.apply([spec])
+        assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
+
     specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
     assert spec in specs
 
@@ -152,7 +157,8 @@ def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, h
 
     dds = wait(cephadm_module, cephadm_module.list_daemons())
     own_dds = [dd for dd in dds if dd.service_name() == spec.service_name()]
-    assert own_dds
+    if host:
+        assert own_dds
 
     yield [dd.name() for dd in own_dds]
 
