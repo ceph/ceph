@@ -402,6 +402,33 @@ TEST(mempool, btree_map_test)
   ASSERT_EQ(0, mempool::osd::allocated_bytes());
 }
 
+TEST(mempool, check_shard_select)
+{
+  const size_t samples = 100;
+  std::atomic_int shards[mempool::num_shards] = {0};
+  std::vector<std::thread> workers;
+  for (size_t i = 0; i < samples; i++) {
+    workers.push_back(
+      std::thread([&](){
+          size_t i = mempool::pool_t::pick_a_shard_int();
+          shards[i]++;
+        }));
+  }
+  for (auto& t:workers) {
+    t.join();
+  }
+  workers.clear();
+
+  double EX = (double)samples / (double)mempool::num_shards;
+  double VarX = 0;
+  for (size_t i = 0; i < mempool::num_shards; i++) {
+    VarX += (EX - shards[i]) * (EX - shards[i]);
+  }
+  //random gives VarX below 200
+  //when half slots are 0, we get ~300
+  //when all samples go into one slot, we get ~9000
+  EXPECT_LT(VarX, 200);
+}
 
 
 int main(int argc, char **argv)
