@@ -9,7 +9,7 @@ import logging
 from os import environ
 import re
 import sqlite3
-from typing import Tuple, Any
+from typing import cast, Any, Dict, List, Tuple, Optional, Union
 
 log = logging.getLogger(__name__)
 
@@ -30,12 +30,12 @@ except AttributeError:
     log.info(('Couldn\'t find datetime.fromisoformat, falling back to '
               f'static timestamp parsing ({SNAP_DB_TS_FORMAT}'))
 
-    def ts_parser(ts):
+    def ts_parser(data_string: str) -> datetime: # type: ignore
         try:
-            date = datetime.strptime(ts, SNAP_DB_TS_FORMAT)
+            date = datetime.strptime(data_string, SNAP_DB_TS_FORMAT)
             return date
         except ValueError:
-            msg = f'''The date string {ts} does not match the required format
+            msg = f'''The date string {data_string} does not match the required format
             {SNAP_DB_TS_FORMAT}. For more flexibel date parsing upgrade to
             python3.7 or install
             https://github.com/movermeyer/backports.datetime_fromisoformat'''
@@ -43,7 +43,7 @@ except AttributeError:
             raise ValueError(msg)
 
 
-def parse_timestamp(ts):
+def parse_timestamp(ts: str) -> datetime:
     date = ts_parser(ts)
     # normalize any non utc timezone to utc. If no tzinfo is supplied, assume
     # its already utc
@@ -53,7 +53,7 @@ def parse_timestamp(ts):
     return date
 
 
-def parse_retention(retention):
+def parse_retention(retention: str) -> Dict[str, int]:
     ret = {}
     log.debug(f'parse_retention({retention})')
     matches = re.findall(r'\d+[a-z]', retention)
@@ -69,7 +69,7 @@ def parse_retention(retention):
 RETENTION_MULTIPLIERS = ['n', 'M', 'h', 'd', 'w', 'm', 'y']
 
 
-def dump_retention(retention):
+def dump_retention(retention: Dict[str, str]) -> str:
     ret = ''
     for mult in RETENTION_MULTIPLIERS:
         if mult in retention:
@@ -82,21 +82,21 @@ class Schedule(object):
     Wrapper to work with schedules stored in sqlite
     '''
     def __init__(self,
-                 path,
-                 schedule,
-                 fs_name,
-                 rel_path,
-                 start=None,
-                 subvol=None,
-                 retention_policy='{}',
-                 created=None,
-                 first=None,
-                 last=None,
-                 last_pruned=None,
-                 created_count=0,
-                 pruned_count=0,
-                 active=True,
-                 ):
+                 path: str,
+                 schedule: str,
+                 fs_name: str,
+                 rel_path: str,
+                 start: Optional[str] = None,
+                 subvol: Optional[str] = None,
+                 retention_policy: str = '{}',
+                 created: Optional[str] = None,
+                 first: Optional[str] = None,
+                 last: Optional[str] = None,
+                 last_pruned: Optional[str] = None,
+                 created_count: int = 0,
+                 pruned_count: int = 0,
+                 active: bool = True,
+                 ) -> None:
         self.fs = fs_name
         self.subvol = subvol
         self.path = path
@@ -112,47 +112,47 @@ class Schedule(object):
         else:
             self.start = parse_timestamp(start)
         if created is None:
-            self.created = datetime.now(timezone.utc)
+            self.created: Optional[datetime] = datetime.now(timezone.utc)
         else:
             self.created = parse_timestamp(created)
         if first:
-            self.first = parse_timestamp(first)
+            self.first: Optional[datetime] = parse_timestamp(first)
         else:
-            self.first = first
+            self.first = None
         if last:
-            self.last = parse_timestamp(last)
+            self.last: Optional[datetime] = parse_timestamp(last)
         else:
-            self.last = last
+            self.last = None
         if last_pruned:
-            self.last_pruned = parse_timestamp(last_pruned)
+            self.last_pruned: Optional[datetime] = parse_timestamp(last_pruned)
         else:
-            self.last_pruned = last_pruned
+            self.last_pruned = None
         self.created_count = created_count
         self.pruned_count = pruned_count
         self.active = bool(active)
 
     @classmethod
-    def _from_db_row(cls, table_row, fs):
-        return cls(table_row['path'],
-                   table_row['schedule'],
+    def _from_db_row(cls, table_row: Dict[str, Union[int, str]], fs: str) -> 'Schedule':
+        return cls(cast(str, table_row['path']),
+                   cast(str, table_row['schedule']),
                    fs,
-                   table_row['rel_path'],
-                   table_row['start'],
-                   table_row['subvol'],
-                   table_row['retention'],
-                   table_row['created'],
-                   table_row['first'],
-                   table_row['last'],
-                   table_row['last_pruned'],
-                   table_row['created_count'],
-                   table_row['pruned_count'],
-                   table_row['active'],
+                   cast(str, table_row['rel_path']),
+                   cast(str, table_row['start']),
+                   cast(str, table_row['subvol']),
+                   cast(str, table_row['retention']),
+                   cast(str, table_row['created']),
+                   cast(str, table_row['first']),
+                   cast(str, table_row['last']),
+                   cast(str, table_row['last_pruned']),
+                   cast(int, table_row['created_count']),
+                   cast(int, table_row['pruned_count']),
+                   cast(bool, table_row['active']),
                   )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'''{self.path} {self.schedule} {dump_retention(self.retention)}'''
 
-    def json_list(self):
+    def json_list(self) -> str:
         return json.dumps({'path': self.path, 'schedule': self.schedule,
                            'retention': dump_retention(self.retention)})
 
@@ -204,10 +204,13 @@ class Schedule(object):
     GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'''
 
     @classmethod
-    def get_db_schedules(cls, path, db, fs,
-                         schedule=None,
-                         start=None,
-                         repeat=None):
+    def get_db_schedules(cls,
+                         path: str,
+                         db: sqlite3.Connection,
+                         fs: str,
+                         schedule: Optional[str] = None,
+                         start: Optional[str] = None,
+                         repeat: Optional[str] = None) -> List['Schedule']:
         query = cls.GET_SCHEDULES
         data: Tuple[Any, ...] = (path,)
         if repeat:
@@ -224,7 +227,10 @@ class Schedule(object):
         return [cls._from_db_row(row, fs) for row in c.fetchall()]
 
     @classmethod
-    def list_schedules(cls, path, db, fs, recursive):
+    def list_schedules(cls,
+                       path: str,
+                       db: sqlite3.Connection,
+                       fs: str, recursive: bool) -> List['Schedule']:
         with db:
             if recursive:
                 c = db.execute(cls.PROTO_GET_SCHEDULES + ' path LIKE ?',
@@ -242,7 +248,7 @@ class Schedule(object):
         active)
         SELECT ?, ?, ?, ?, ?, ?'''
 
-    def store_schedule(self, db):
+    def store_schedule(self, db: sqlite3.Connection) -> None:
         sched_id = None
         with db:
             try:
@@ -260,6 +266,7 @@ class Schedule(object):
                                (self.path,))
                 sched_id = c.fetchone()[0]
                 pass
+            assert self.created, "self.created should be set"
             db.execute(self.INSERT_SCHEDULE_META,
                        (sched_id,
                         self.start.strftime(SNAP_DB_TS_FORMAT),
@@ -269,7 +276,11 @@ class Schedule(object):
                         1))
 
     @classmethod
-    def rm_schedule(cls, db, path, repeat, start):
+    def rm_schedule(cls,
+                    db: sqlite3.Connection,
+                    path: str,
+                    repeat: Optional[str],
+                    start: Optional[str]) -> None:
         with db:
             cur = db.execute('SELECT id FROM schedules WHERE path = ?',
                              (path,))
@@ -317,7 +328,7 @@ class Schedule(object):
     WHERE path = ?'''
 
     @classmethod
-    def add_retention(cls, db, path, retention_spec):
+    def add_retention(cls, db: sqlite3.Connection, path: str, retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
             if not row:
@@ -336,7 +347,7 @@ class Schedule(object):
             db.execute(cls.UPDATE_RETENTION, (json.dumps(current_retention), path))
 
     @classmethod
-    def rm_retention(cls, db, path, retention_spec):
+    def rm_retention(cls, db: sqlite3.Connection, path: str, retention_spec: str) -> None:
         with db:
             row = db.execute(cls.GET_RETENTION, (path,)).fetchone()
             if not row:
@@ -351,19 +362,19 @@ class Schedule(object):
                 current_retention.pop(r)
             db.execute(cls.UPDATE_RETENTION, (json.dumps(current_retention), path))
 
-    def report(self):
+    def report(self) -> str:
         return self.report_json()
 
-    def report_json(self):
+    def report_json(self) -> str:
         return json.dumps(dict(self.__dict__),
                           default=lambda o: o.strftime(SNAP_DB_TS_FORMAT))
 
     @classmethod
-    def parse_schedule(cls, schedule):
+    def parse_schedule(cls, schedule: str) -> Tuple[int, str]:
         return int(schedule[0:-1]), schedule[-1]
 
     @property
-    def repeat(self):
+    def repeat(self) -> int:
         period, mult = self.parse_schedule(self.schedule)
         if mult == 'M':
             return period * 60
@@ -389,7 +400,7 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def update_last(self, time, db):
+    def update_last(self, time: datetime, db: sqlite3.Connection) -> None:
         with db:
             db.execute(self.UPDATE_LAST, (time.strftime(SNAP_DB_TS_FORMAT),
                                           time.strftime(SNAP_DB_TS_FORMAT),
@@ -412,7 +423,7 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def set_inactive(self, db):
+    def set_inactive(self, db: sqlite3.Connection) -> None:
         with db:
             log.debug(f'Deactivating schedule ({self.repeat}, {self.start}) on path {self.path}')
             db.execute(self.UPDATE_INACTIVE, (self.path,
@@ -431,7 +442,7 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def set_active(self, db):
+    def set_active(self, db: sqlite3.Connection) -> None:
         with db:
             log.debug(f'Activating schedule ({self.repeat}, {self.start}) on path {self.path}')
             db.execute(self.UPDATE_ACTIVE, (self.path,
@@ -451,7 +462,10 @@ class Schedule(object):
       AND schedules_meta.start = ?
       AND schedules_meta.repeat = ?);'''
 
-    def update_pruned(self, time, db, pruned):
+    def update_pruned(self,
+                      time: datetime,
+                      db: sqlite3.Connection,
+                      pruned: int) -> None:
         with db:
             db.execute(self.UPDATE_PRUNED, (time.strftime(SNAP_DB_TS_FORMAT), pruned,
                                             self.path,
