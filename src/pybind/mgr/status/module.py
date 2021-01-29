@@ -5,7 +5,7 @@ High level status display commands
 
 from collections import defaultdict
 from prettytable import PrettyTable
-from typing import Optional
+from typing import Dict, List, Optional, Tuple, Union
 import errno
 import fnmatch
 import mgr_util
@@ -16,7 +16,7 @@ from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
 
 
 class Module(MgrModule):
-    def get_latest(self, daemon_type, daemon_name, stat):
+    def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         #self.log.error("get_latest {0} data={1}".format(stat, data))
         if data:
@@ -24,9 +24,8 @@ class Module(MgrModule):
         else:
             return 0
 
-    def get_rate(self, daemon_type, daemon_name, stat):
+    def get_rate(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-
         #self.log.error("get_latest {0} data={1}".format(stat, data))
         if data and len(data) > 1 and data[-1][0] != data[-2][0]:
             return (data[-1][1] - data[-2][1]) // int(data[-1][0] - data[-2][0])
@@ -34,12 +33,16 @@ class Module(MgrModule):
             return 0
 
     @CLIReadCommand("fs status")
-    def handle_fs_status(self, fs: Optional[str] = None, format: str = 'plain'):
+    def handle_fs_status(self, fs: Optional[str] = None, format: str = 'plain') -> Tuple[int, str, str]:
         """
         Show the status of a CephFS filesystem
         """
         output = ""
-        json_output = defaultdict(list)
+        json_output: Dict[str, List[Dict[str, Union[int, str, List[str]]]]] = \
+            dict(mdsmap=[],
+                 pools=[],
+                 clients=[],
+                 mds_version=[])
         output_format = format
 
         fs_filter = fs
@@ -275,7 +278,7 @@ class Module(MgrModule):
             return HandleCommandResult(stdout=output)
 
     @CLIReadCommand("osd status")
-    def handle_osd_status(self, bucket: Optional[str] = None):
+    def handle_osd_status(self, bucket: Optional[str] = None) -> Tuple[int, str, str]:
         """
         Show the status of OSDs within a bucket, or all
         """
