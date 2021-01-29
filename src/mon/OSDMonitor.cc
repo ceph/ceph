@@ -660,26 +660,23 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf().get_val<bool>("mon_debug_no_require_pacific")) {
-    if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
-      derr << __func__ << " mon_debug_no_require_pacific and octopus=true" << dendl;
+  if (g_conf().get_val<bool>("mon_debug_no_require_quincy")) {
+    if (g_conf().get_val<bool>("mon_debug_no_require_pacific")) {
+      derr << __func__ << " mon_debug_no_require_quincy and pacific=true" << dendl;
       newmap.require_osd_release = ceph_release_t::nautilus;
     } else {
-      derr << __func__ << " mon_debug_no_require_pacific=true" << dendl;
-      newmap.require_osd_release = ceph_release_t::octopus;
+      derr << __func__ << " mon_debug_no_require_quincy=true" << dendl;
+      newmap.require_osd_release = ceph_release_t::pacific;
     }
   } else {
-    newmap.require_osd_release = ceph_release_t::pacific;
+    newmap.require_osd_release = ceph_release_t::quincy;
   }
 
-  if (newmap.require_osd_release >= ceph_release_t::octopus) {
-    ceph_release_t r = ceph_release_from_name(
-      g_conf()->mon_osd_initial_require_min_compat_client);
-    if (!r) {
-      ceph_abort_msg("mon_osd_initial_require_min_compat_client is not valid");
-    }
-    newmap.require_min_compat_client = r;
+  ceph_release_t r = ceph_release_from_name(g_conf()->mon_osd_initial_require_min_compat_client);
+  if (!r) {
+    ceph_abort_msg("mon_osd_initial_require_min_compat_client is not valid");
   }
+  newmap.require_min_compat_client = r;
 
   // encode into pending incremental
   uint64_t features = newmap.get_encoding_features();
@@ -3473,43 +3470,15 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   ceph_assert(m->get_orig_source_inst().name.is_osd());
 
-  // force all osds to have gone through luminous prior to upgrade to nautilus
-  {
-    vector<string> missing;
-    if (!HAVE_FEATURE(m->osd_features, SERVER_LUMINOUS)) {
-      missing.push_back("CEPH_FEATURE_SERVER_LUMINOUS");
-    }
-    if (!HAVE_FEATURE(m->osd_features, SERVER_JEWEL)) {
-      missing.push_back("CEPH_FEATURE_SERVER_JEWEL");
-    }
-    if (!HAVE_FEATURE(m->osd_features, SERVER_KRAKEN)) {
-      missing.push_back("CEPH_FEATURE_SERVER_KRAKEN");
-    }
-    if (!HAVE_FEATURE(m->osd_features, OSD_RECOVERY_DELETES)) {
-      missing.push_back("CEPH_FEATURE_OSD_RECOVERY_DELETES");
-    }
-
-    if (!missing.empty()) {
-      using std::experimental::make_ostream_joiner;
-
-      stringstream ss;
-      copy(begin(missing), end(missing), make_ostream_joiner(ss, ";"));
-
-      mon.clog->info() << "disallowing boot of OSD "
-			<< m->get_orig_source_inst()
-			<< " because the osd lacks " << ss.str();
-      goto ignore;
-    }
+  // lower bound of N-2
+  if (!HAVE_FEATURE(m->osd_features, SERVER_OCTOPUS)) {
+    mon.clog->info() << "disallowing boot of OSD "
+		     << m->get_orig_source_inst()
+		     << " because the osd lacks CEPH_FEATURE_SERVER_OCTOPUS";
+    goto ignore;
   }
 
   // make sure osd versions do not span more than 3 releases
-  if (HAVE_FEATURE(m->osd_features, SERVER_OCTOPUS) &&
-      osdmap.require_osd_release < ceph_release_t::mimic) {
-    mon.clog->info() << "disallowing boot of octopus+ OSD "
-		      << m->get_orig_source_inst()
-		      << " because require_osd_release < mimic";
-    goto ignore;
-  }
   if (HAVE_FEATURE(m->osd_features, SERVER_PACIFIC) &&
       osdmap.require_osd_release < ceph_release_t::nautilus) {
     mon.clog->info() << "disallowing boot of pacific+ OSD "
@@ -3517,15 +3486,11 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 		      << " because require_osd_release < nautilus";
     goto ignore;
   }
-
-  // The release check here is required because for OSD_PGLOG_HARDLIMIT,
-  // we are reusing a jewel feature bit that was retired in luminous.
-  if (osdmap.require_osd_release >= ceph_release_t::luminous &&
-      osdmap.test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT) &&
-      !(m->osd_features & CEPH_FEATURE_OSD_PGLOG_HARDLIMIT)) {
-    mon.clog->info() << "disallowing boot of OSD "
+  if (HAVE_FEATURE(m->osd_features, SERVER_QUINCY) &&
+      osdmap.require_osd_release < ceph_release_t::octopus) {
+    mon.clog->info() << "disallowing boot of quincy+ OSD "
 		      << m->get_orig_source_inst()
-		      << " because 'pglog_hardlimit' osdmap flag is set and OSD lacks the OSD_PGLOG_HARDLIMIT feature";
+		      << " because require_osd_release < octopus";
     goto ignore;
   }
 
@@ -11436,33 +11401,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    if (rel == ceph_release_t::mimic) {
-      if (!mon.monmap->get_required_features().contains_all(
-	    ceph::features::mon::FEATURE_MIMIC)) {
-	ss << "not all mons are mimic";
-	err = -EPERM;
-	goto reply;
-      }
-      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_MIMIC))
-           && !sure) {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_MIMIC feature";
-	err = -EPERM;
-	goto reply;
-      }
-    } else if (rel == ceph_release_t::nautilus) {
-      if (!mon.monmap->get_required_features().contains_all(
-	    ceph::features::mon::FEATURE_NAUTILUS)) {
-	ss << "not all mons are nautilus";
-	err = -EPERM;
-	goto reply;
-      }
-      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_NAUTILUS))
-           && !sure) {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_NAUTILUS feature";
-	err = -EPERM;
-	goto reply;
-      }
-    } else if (rel == ceph_release_t::octopus) {
+    if (rel == ceph_release_t::octopus) {
       if (!mon.monmap->get_required_features().contains_all(
 	    ceph::features::mon::FEATURE_OCTOPUS)) {
 	ss << "not all mons are octopus";
@@ -11488,8 +11427,21 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply;
       }
+    } else if (rel == ceph_release_t::quincy) {
+      if (!mon.monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_QUINCY)) {
+	ss << "not all mons are quincy";
+	err = -EPERM;
+	goto reply;
+      }
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_QUINCY))
+           && !sure) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_QUINCY feature";
+	err = -EPERM;
+	goto reply;
+      }
     } else {
-      ss << "not supported for this release yet";
+      ss << "not supported for this release";
       err = -EPERM;
       goto reply;
     }
