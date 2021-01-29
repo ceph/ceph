@@ -267,9 +267,9 @@ public:
 
     CLSGatherOp(OpContext *ctx_, ObjectContextRef obc_, OpRequestRef op_)
       : ctx(ctx_), obc(obc_), op(op_) {}
+    CLSGatherOp() {}
     ~CLSGatherOp() {}
   };
-  typedef std::shared_ptr<CLSGatherOp> CLSGatherOpRef;
 
   friend struct RefCountCallback;
   struct ManifestOp {
@@ -1404,8 +1404,8 @@ protected:
   friend struct C_Flush;
 
   // -- cls_gather --
-  std::map<hobject_t, CLSGatherOpRef> cls_gather_ops;
-  void cancel_cls_gather(CLSGatherOpRef cgop, bool requeue, std::vector<ceph_tid_t> *tids);
+  std::map<hobject_t, CLSGatherOp> cls_gather_ops;
+  void cancel_cls_gather(CLSGatherOp cgop, bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   // -- scrub --
