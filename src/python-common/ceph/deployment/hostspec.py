@@ -1,7 +1,4 @@
-try:
-    from typing import Optional, List, Any
-except ImportError:
-    pass  # just for type checking
+from typing import Optional, List, Any, Dict
 
 
 class HostSpec(object):
@@ -13,6 +10,7 @@ class HostSpec(object):
                  addr=None,  # type: Optional[str]
                  labels=None,  # type: Optional[List[str]]
                  status=None,  # type: Optional[str]
+                 maintenance: bool = False,
                  ):
         self.service_type = 'host'
 
@@ -28,20 +26,24 @@ class HostSpec(object):
         #: human readable status
         self.status = status or ''  # type: str
 
-    def to_json(self) -> dict:
-        return {
+        self.maintenance = maintenance
+
+    def to_json(self) -> Dict[str, Any]:
+        ret: Dict[str, Any] = {
             'hostname': self.hostname,
             'addr': self.addr,
             'labels': self.labels,
-            'status': self.status,
         }
+        if self.maintenance:
+            ret['maintenance'] = self.maintenance,
+        return ret
 
     @classmethod
     def from_json(cls, host_spec: dict) -> 'HostSpec':
         _cls = cls(host_spec['hostname'],
                    host_spec['addr'] if 'addr' in host_spec else None,
                    host_spec['labels'] if 'labels' in host_spec else None,
-                   host_spec['status'] if 'status' in host_spec else None)
+                   maintenance=host_spec.get('maintenance', False))
         return _cls
 
     def __repr__(self) -> str:
@@ -52,6 +54,8 @@ class HostSpec(object):
             args.append(self.labels)
         if self.status:
             args.append(self.status)
+        if self.maintenance:
+            args.append('maintenance=' + str(self.maintenance))
 
         return "HostSpec({})".format(', '.join(map(repr, args)))
 
@@ -64,4 +68,5 @@ class HostSpec(object):
         # Let's omit `status` for the moment, as it is still the very same host.
         return self.hostname == other.hostname and \
                self.addr == other.addr and \
-               self.labels == other.labels
+               self.labels == other.labels and \
+               self.maintenance == other.maintenance

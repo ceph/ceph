@@ -89,7 +89,8 @@ class TestCephadm(object):
 
             # Be careful with backward compatibility when changing things here:
             assert json.loads(cephadm_module.get_store('inventory')) == \
-                {"test": {"hostname": "test", "addr": "test", "labels": [], "status": ""}}
+                {"test": {"hostname": "test", "addr": "test",
+                          "labels": []}}
 
             with with_host(cephadm_module, 'second'):
                 assert wait(cephadm_module, cephadm_module.get_hosts()) == [
