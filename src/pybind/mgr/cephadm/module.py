@@ -1693,6 +1693,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def remove_service(self, service_name: str) -> str:
         self.log.info('Remove service %s' % service_name)
         self._trigger_preview_refresh(service_name=service_name)
+        if service_name in self.spec_store:
+            if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
+                return f'Unable to remove {service_name} service.\n' \
+                       f'Note, you might want to mark the {service_name} service as "unmanaged"'
         found = self.spec_store.rm(service_name)
         if found:
             self._kick_serve_loop()
@@ -1894,6 +1898,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
         """
+        if spec.service_name() not in self.spec_store:
+            raise OrchestratorError('Unable to add a Daemon without Service.\n'
+                                    'Please use `ceph orch apply ...` to create a Service.\n'
+                                    'Note, you might want to create the service with "unmanaged=true"')
+
         self.log.debug('_add_daemon %s spec %s' % (daemon_type, spec.placement))
         if not spec.placement.hosts:
             raise OrchestratorError('must specify host(s) to deploy on')
