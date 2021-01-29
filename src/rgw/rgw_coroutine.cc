@@ -1010,6 +1010,7 @@ bool RGWCoroutine::drain_children(int num_cr_left,
           int r = (*cb)(stack_id, ret);
           if (r < 0) {
             drain_status.ret = r;
+            drain_status.should_exit = true;
             num_cr_left = 0; /* need to drain all */
           }
         }
