@@ -3053,7 +3053,9 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
       const FSMap *fsmapp = &fsmap_copy;
 
       if (fsmapp->filesystem_count() > 0 and mdsmon()->should_print_status()){
-        ss << "    mds: " << spacing << *fsmapp << "\n";
+        ss << "    mds: " << spacing;
+	fsmapp->print_daemon_summary(ss);
+	ss << "\n";
       }
 
       ss << "    osd: " << spacing;
