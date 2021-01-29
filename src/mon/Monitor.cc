@@ -3083,6 +3083,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f,
     }
 
     ss << "\n \n  data:\n";
+    mdsmon()->print_fs_summary(ss);
     mgrstatmon()->print_summary(NULL, &ss);
 
     auto& pem = mgrstatmon()->get_progress_events();

@@ -332,6 +332,9 @@ public:
   void get_failed_mds_set(std::set<mds_rank_t>& s) const {
     s = failed;
   }
+  void get_damaged_mds_set(std::set<mds_rank_t>& s) const {
+    s = damaged;
+  }
 
   // features
   uint64_t get_up_features();
@@ -473,7 +476,10 @@ public:
   // recovery_set.
   bool is_degraded() const;
   bool is_any_failed() const {
-    return failed.size();
+    return !failed.empty();
+  }
+  bool is_any_damaged() const {
+    return !damaged.empty();
   }
   bool is_resolving() const {
     return
