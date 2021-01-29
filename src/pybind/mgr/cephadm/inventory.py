@@ -2,7 +2,8 @@ import datetime
 from copy import copy
 import json
 import logging
-from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast
+from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
+    NamedTuple
 
 import orchestrator
 from ceph.deployment import inventory
@@ -113,6 +114,12 @@ class Inventory:
         self.mgr.set_store('inventory', json.dumps(self._inventory))
 
 
+class SpecDescription(NamedTuple):
+    spec: ServiceSpec
+    created: datetime.datetime
+    deleted: Optional[datetime.datetime]
+
+
 class SpecStore():
     def __init__(self, mgr):
         # type: (CephadmOrchestrator) -> None
@@ -128,6 +135,16 @@ class SpecStore():
         returns active and deleted specs. Returns read-only dict.
         """
         return self._specs
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._specs
+
+    def __getitem__(self, name: str) -> SpecDescription:
+        if name not in self._specs:
+            raise OrchestratorError(f'Service {name} not found.')
+        return SpecDescription(self._specs[name],
+                               self.spec_created[name],
+                               self.spec_deleted.get(name, None))
 
     @property
     def active_specs(self) -> Mapping[str, ServiceSpec]:
