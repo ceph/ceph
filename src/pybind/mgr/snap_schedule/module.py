@@ -113,7 +113,7 @@ class Module(MgrModule):
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.store_snap_schedule(use_fs,
                                             abs_path,
                                             (abs_path, snap_schedule,
@@ -143,7 +143,7 @@ class Module(MgrModule):
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.rm_snap_schedule(use_fs, abs_path, repeat, start)
         except CephfsConnectionException as e:
             return e.to_tuple()
@@ -163,7 +163,7 @@ class Module(MgrModule):
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.add_retention_spec(use_fs, abs_path,
                                           retention_spec_or_period,
                                           retention_count)
@@ -185,7 +185,7 @@ class Module(MgrModule):
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.rm_retention_spec(use_fs, abs_path,
                                           retention_spec_or_period,
                                           retention_count)
@@ -207,7 +207,7 @@ class Module(MgrModule):
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.activate_snap_schedule(use_fs, abs_path, repeat, start)
         except CephfsConnectionException as e:
             return e.to_tuple()
@@ -227,7 +227,7 @@ class Module(MgrModule):
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.deactivate_snap_schedule(use_fs, abs_path, repeat, start)
         except CephfsConnectionException as e:
             return e.to_tuple()
