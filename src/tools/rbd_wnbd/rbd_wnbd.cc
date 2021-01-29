@@ -1131,7 +1131,11 @@ static int do_map(Config *cfg)
                             g_conf().get_val<bool>("rbd_cache"),
                             cfg->io_req_workers,
                             cfg->io_reply_workers);
-  handler->start();
+  r = handler->start();
+  if (r) {
+    r = r == ERROR_ALREADY_EXISTS ? -EEXIST : -EINVAL;
+    goto close_ret;
+  }
 
   // We're informing the parent processes that the initialization
   // was successful.
@@ -1160,6 +1164,7 @@ static int do_map(Config *cfg)
   handler->wait();
   handler->shutdown();
 
+  // The registry record shouldn't be removed for (already) running mappings.
   if (!cfg->persistent) {
     dout(5) << __func__ << ": cleaning up non-persistent mapping: "
             << cfg->devpath << dendl;
