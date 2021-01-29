@@ -83,7 +83,10 @@ describe('ServicesComponent', () => {
   it('should have columns that are sortable', () => {
     expect(
       component.columns
+        // Filter the 'Expand/Collapse Row' column.
         .filter((column) => !(column.cellClass === 'cd-datatable-expand-collapse'))
+        // Filter the 'Placement' column.
+        .filter((column) => !(column.prop === ''))
         .every((column) => Boolean(column.prop))
     ).toBeTruthy();
   });

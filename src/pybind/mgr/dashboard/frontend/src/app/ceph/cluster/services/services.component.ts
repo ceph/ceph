@@ -22,6 +22,7 @@ import { CephServiceSpec } from '../../../shared/models/service.interface';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
+import { PlacementPipe } from './placement.pipe';
 
 const BASE_URL = 'services';
 
@@ -102,6 +103,12 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         customTemplateConfig: {
           length: 12
         }
+      },
+      {
+        name: this.i18n('Placement'),
+        prop: '',
+        pipe: new PlacementPipe(this.i18n),
+        flexGrow: 1
       },
       {
         name: this.i18n('Running'),
