@@ -48,12 +48,13 @@ tasks:
       - echo remove overlay
       - sudo ceph osd tier remove-overlay base
       - sleep 20
-      - echo add writeback overlay
-      - sudo ceph osd tier cache-mode cache writeback
-      - sudo ceph osd pool set cache cache_target_full_ratio .8
-      - sudo ceph osd tier set-overlay base cache
-      - sleep 30
-      - sudo ceph osd tier cache-mode cache readproxy
+      # Disabled due to https://tracker.ceph.com/issues/46323
+      #- echo add writeback overlay
+      #- sudo ceph osd tier cache-mode cache writeback
+      #- sudo ceph osd pool set cache cache_target_full_ratio .8
+      #- sudo ceph osd tier set-overlay base cache
+      #- sleep 30
+      #- sudo ceph osd tier cache-mode cache readproxy
       - done
 - rados:
     clients: [client.0]
