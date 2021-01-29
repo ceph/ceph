@@ -367,8 +367,8 @@ cond="curl -k -s -H \"Authorization: Bearer $token\" \
 is_available "exporter_threads_active" "$cond" 3
 
 # check we deployed for all hosts
-$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls cephadm-exporter --format json
-host_pattern=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls cephadm-exporter --format json | jq -r '.[0].placement.host_pattern')
+$CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json
+host_pattern=$($CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING ceph orch ls --service-type cephadm-exporter --format json | jq -r '.[0].placement.host_pattern')
 [[ "$host_pattern" = "*" ]]
 
 ## run
