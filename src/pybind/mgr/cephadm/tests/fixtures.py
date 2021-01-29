@@ -123,9 +123,20 @@ def with_host(m: CephadmOrchestrator, name, refresh_hosts=True):
     wait(m, m.remove_host(name))
 
 
-def assert_rm_service(cephadm, srv_name):
+def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):
+    mon_or_mgr = cephadm.spec_store[srv_name].spec.service_type in ('mon', 'mgr')
+    if mon_or_mgr:
+        assert 'Unable' in wait(cephadm, cephadm.remove_service(srv_name))
+        return
     assert wait(cephadm, cephadm.remove_service(srv_name)) == f'Removed service {srv_name}'
+    assert cephadm.spec_store[srv_name].deleted is not None
+    CephadmServe(cephadm)._check_daemons()
     CephadmServe(cephadm)._apply_all_services()
+    assert cephadm.spec_store[srv_name].deleted
+    unmanaged = cephadm.spec_store[srv_name].spec.unmanaged
+    CephadmServe(cephadm)._purge_deleted_services()
+    if not unmanaged:  # cause then we're not deleting daemons
+        assert srv_name not in cephadm.spec_store, f'{cephadm.spec_store[srv_name]!r}'
 
 
 @contextmanager
