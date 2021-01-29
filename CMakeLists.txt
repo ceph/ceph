@@ -350,6 +350,13 @@ else(ALLOCATOR)
   endif(gperftools_FOUND)
 endif(ALLOCATOR)
 
+if(${ALLOCATOR} STREQUAL "libc" AND WITH_SYSTEM_BOOST)
+  # valgrind can only work with libc allocator
+  # if system boost is not used, valgrind use should
+  #   be indicated via the WITH_BOOST_VALGRIND parameter
+  add_definitions(-DBOOST_USE_VALGRIND)
+endif()
+
 # Mingw generates incorrect entry points when using "-pie".
 if(WIN32 OR (HAVE_LIBTCMALLOC AND WITH_STATIC_LIBSTDCXX))
   set(EXE_LINKER_USE_PIE FALSE)
