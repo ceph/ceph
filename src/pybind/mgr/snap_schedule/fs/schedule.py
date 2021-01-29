@@ -201,7 +201,7 @@ class Schedule(object):
               INNER JOIN schedules_meta sm ON sm.schedule_id = s.id
           WHERE'''
 
-    GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'''
+    GET_SCHEDULES = PROTO_GET_SCHEDULES + ' s.path = ?'
 
     @classmethod
     def get_db_schedules(cls,
