@@ -567,6 +567,7 @@ public:
 
   void print(std::ostream& out) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
+  void print_daemon_summary(std::ostream& out) const;
   void print_fs_summary(std::ostream& out) const;
 
   void dump(ceph::Formatter *f) const;

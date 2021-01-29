@@ -305,6 +305,15 @@ public:
   int get_num_failed_mds() const {
     return failed.size();
   }
+  unsigned get_num_standby_replay_mds() const {
+    unsigned num = 0;
+    for (auto& i : mds_info) {
+      if (i.second.state == MDSMap::STATE_STANDBY_REPLAY) {
+	++num;
+      }
+    }
+    return num;
+  }
   unsigned get_num_mds(int state) const;
   // data pools
   void add_data_pool(int64_t poolid) {
