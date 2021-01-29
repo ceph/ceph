@@ -947,29 +947,28 @@ ReplicatedRecoveryBackend::prep_push_target(
   if (omap_header.length()) {
     t->omap_setheader(coll->get_cid(), target_oid, omap_header);
   }
+  if (complete || !recovery_info.object_exist) {
+    return seastar::make_ready_future<hobject_t>(target_oid.hobj);
+  }
+  // clone overlap content in local object if using a new object
   return store->stat(coll, ghobject_t(recovery_info.soid)).then(
-    [this, &recovery_info, complete, t, target_oid] (auto st) {
-      // TODO: pg num bytes counting
-      if (!complete) {
-        // clone overlap content in local object
-        if (recovery_info.object_exist) {
-          uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
-          interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
-          if (local_size) {
-            local_intervals_included.insert(0, local_size);
-            local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
-            local_intervals_included.subtract(local_intervals_excluded);
-          }
-          for (auto [off, len] : local_intervals_included) {
-            logger().debug(" clone_range {} {}~{}",
-                           recovery_info.soid, off, len);
-            t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
-                           target_oid, off, len, off);
-          }
-        }
-      }
-      return seastar::make_ready_future<hobject_t>(target_oid.hobj);
-    });
+    [this, &recovery_info, t, target_oid] (auto st) {
+    // TODO: pg num bytes counting
+    uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
+    interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
+    if (local_size) {
+      local_intervals_included.insert(0, local_size);
+      local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
+      local_intervals_included.subtract(local_intervals_excluded);
+    }
+    for (auto [off, len] : local_intervals_included) {
+      logger().debug(" clone_range {} {}~{}",
+                     recovery_info.soid, off, len);
+      t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
+                     target_oid, off, len, off);
+    }
+    return seastar::make_ready_future<hobject_t>(target_oid.hobj);
+  });
 }
 
 seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
