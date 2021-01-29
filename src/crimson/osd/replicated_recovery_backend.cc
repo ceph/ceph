@@ -892,6 +892,86 @@ ReplicatedRecoveryBackend::trim_pushed_data(
   return {intervals_usable, data_usable};
 }
 
+seastar::future<hobject_t>
+ReplicatedRecoveryBackend::prep_push_target(
+  const ObjectRecoveryInfo& recovery_info,
+  bool first,
+  bool complete,
+  bool clear_omap,
+  ObjectStore::Transaction* t,
+  const map<string, bufferlist>& attrs,
+  bufferlist&& omap_header)
+{
+  if (!first) {
+    return seastar::make_ready_future<hobject_t>(
+      get_temp_recovery_object(recovery_info.soid,
+                               recovery_info.version));
+  }
+
+  ghobject_t target_oid;
+  if (complete) {
+    target_oid = ghobject_t(recovery_info.soid);
+    if (!recovery_info.object_exist) {
+      t->remove(coll->get_cid(), target_oid);
+      t->touch(coll->get_cid(), target_oid);
+      bufferlist bv = attrs.at(OI_ATTR);
+      object_info_t oi(bv);
+      t->set_alloc_hint(coll->get_cid(), target_oid,
+                        oi.expected_object_size,
+                        oi.expected_write_size,
+                        oi.alloc_hint_flags);
+    }
+    // remove xattr and update later if overwrite on original object
+    t->rmattrs(coll->get_cid(), target_oid);
+    // if need update omap, clear the previous content first
+    if (clear_omap) {
+      t->omap_clear(coll->get_cid(), target_oid);
+    }
+  } else {
+    target_oid = ghobject_t(get_temp_recovery_object(recovery_info.soid,
+                                                     recovery_info.version));
+    logger().debug("{}: Adding oid {} in the temp collection",
+                   __func__, target_oid);
+    add_temp_obj(target_oid.hobj);
+    t->remove(coll->get_cid(), target_oid);
+    t->touch(coll->get_cid(), target_oid);
+    bufferlist bv = attrs.at(OI_ATTR);
+    object_info_t oi(bv);
+    t->set_alloc_hint(coll->get_cid(), target_oid,
+                      oi.expected_object_size,
+                      oi.expected_write_size,
+                      oi.alloc_hint_flags);
+  }
+
+  t->truncate(coll->get_cid(), target_oid, recovery_info.size);
+  if (omap_header.length()) {
+    t->omap_setheader(coll->get_cid(), target_oid, omap_header);
+  }
+  return store->stat(coll, ghobject_t(recovery_info.soid)).then(
+    [this, &recovery_info, complete, t, target_oid] (auto st) {
+      // TODO: pg num bytes counting
+      if (!complete) {
+        // clone overlap content in local object
+        if (recovery_info.object_exist) {
+          uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
+          interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
+          if (local_size) {
+            local_intervals_included.insert(0, local_size);
+            local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
+            local_intervals_included.subtract(local_intervals_excluded);
+          }
+          for (auto [off, len] : local_intervals_included) {
+            logger().debug(" clone_range {} {}~{}",
+                           recovery_info.soid, off, len);
+            t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
+                           target_oid, off, len, off);
+          }
+        }
+      }
+      return seastar::make_ready_future<hobject_t>(target_oid.hobj);
+    });
+}
+
 seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
   const ObjectRecoveryInfo &recovery_info,
   bool first,
@@ -906,82 +986,12 @@ seastar::future<> ReplicatedRecoveryBackend::submit_push_data(
   ObjectStore::Transaction *t)
 {
   logger().debug("{}", __func__);
-  hobject_t target_oid;
-  if (first && complete) {
-    target_oid = recovery_info.soid;
-  } else {
-    target_oid = get_temp_recovery_object(recovery_info.soid,
-					  recovery_info.version);
-    if (first) {
-      logger().debug("{}: Adding oid {} in the temp collection",
-	  __func__, target_oid);
-      add_temp_obj(target_oid);
-    }
-  }
-
-  return [this, &recovery_info, first, complete, t,
-    &omap_header, &attrs, target_oid, clear_omap] {
-    if (first) {
-      if (!complete) {
-	t->remove(coll->get_cid(), ghobject_t(target_oid));
-	t->touch(coll->get_cid(), ghobject_t(target_oid));
-	bufferlist bv = attrs.at(OI_ATTR);
-	object_info_t oi(bv);
-	t->set_alloc_hint(coll->get_cid(), ghobject_t(target_oid),
-			  oi.expected_object_size,
-			  oi.expected_write_size,
-			  oi.alloc_hint_flags);
-      } else {
-        if (!recovery_info.object_exist) {
-	  t->remove(coll->get_cid(), ghobject_t(target_oid));
-          t->touch(coll->get_cid(), ghobject_t(target_oid));
-          bufferlist bv = attrs.at(OI_ATTR);
-          object_info_t oi(bv);
-          t->set_alloc_hint(coll->get_cid(), ghobject_t(target_oid),
-                            oi.expected_object_size,
-                            oi.expected_write_size,
-                            oi.alloc_hint_flags);
-        }
-        //remove xattr and update later if overwrite on original object
-        t->rmattrs(coll->get_cid(), ghobject_t(target_oid));
-        //if need update omap, clear the previous content first
-        if (clear_omap)
-          t->omap_clear(coll->get_cid(), ghobject_t(target_oid));
-      }
-
-      t->truncate(coll->get_cid(), ghobject_t(target_oid), recovery_info.size);
-      if (omap_header.length())
-	t->omap_setheader(coll->get_cid(), ghobject_t(target_oid), omap_header);
-
-      return store->stat(coll, ghobject_t(recovery_info.soid)).then(
-	[this, &recovery_info, complete, t, target_oid,
-	omap_header = std::move(omap_header)] (auto st) {
-	//TODO: pg num bytes counting
-	if (!complete) {
-	  //clone overlap content in local object
-	  if (recovery_info.object_exist) {
-	    uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
-	    interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
-	    if (local_size) {
-	      local_intervals_included.insert(0, local_size);
-	      local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
-	      local_intervals_included.subtract(local_intervals_excluded);
-	    }
-	    for (auto [off, len] : local_intervals_included) {
-	      logger().debug(" clone_range {} {}~{}",
-		  recovery_info.soid, off, len);
-	      t->clone_range(coll->get_cid(), ghobject_t(recovery_info.soid),
-			     ghobject_t(target_oid), off, len, off);
-	    }
-	  }
-	}
-	return seastar::make_ready_future<>();
-      });
-    }
-    return seastar::make_ready_future<>();
-  }().then([this, data_zeros=std::move(data_zeros),
-	    &recovery_info, intervals_included, t, target_oid,
-	    &omap_entries, &attrs, data_included, complete, first]() mutable {
+  return prep_push_target(recovery_info, first, complete,
+                          clear_omap, t, attrs,
+                          std::move(omap_header)).then(
+    [this, data_zeros=std::move(data_zeros),
+     &recovery_info, intervals_included, t,
+     &omap_entries, &attrs, data_included, complete, first](auto target_oid) mutable {
     uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
     // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
     if (!data_zeros.empty()) {

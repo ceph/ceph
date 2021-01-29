@@ -148,4 +148,12 @@ private:
     ObjectRecoveryProgress& new_progress,
     uint64_t* max_len,
     PushOp* push_op);
+  seastar::future<hobject_t> prep_push_target(
+    const ObjectRecoveryInfo &recovery_info,
+    bool first,
+    bool complete,
+    bool clear_omap,
+    ObjectStore::Transaction* t,
+    const map<string, bufferlist> &attrs,
+    bufferlist&& omap_header);
 };
