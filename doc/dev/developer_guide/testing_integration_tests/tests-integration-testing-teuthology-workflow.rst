@@ -53,13 +53,8 @@ teuthology. This procedure explains how to run tests using teuthology.
 
        ssh <username>@teuthology.front.sepia.ceph.com
 
-   This requires that you have access to the Sepia lab. Learn about requesting
-   access here: 
-   
-       https://ceph.github.io/sepia/adding_users/
-
-#. Install teuthology in a virtual environment and activate that virtual
-   environment. Follow the relevant instructions in `Running Your First Test`_.
+   This requires Sepia lab access. To request access to the Sepia lab, see:
+   https://ceph.github.io/sepia/adding_users/
 
 #. Run the ``teuthology-suite`` command:
 
@@ -112,6 +107,11 @@ teuthology. This procedure explains how to run tests using teuthology.
 
 
 
+Other frequently used/useful options are ``-d`` (or ``--distro``),
+``--distroversion``, ``--filter-out``, ``--timeout``, ``flavor``, ``-rerun``,
+``-l`` (for limiting number of jobs) , ``-n`` (for how many times the job will
+run). Run ``teuthology-suite --help`` to read descriptions of these and other
+options.
 
 .. _teuthology_testing_qa_changes:
 
@@ -124,12 +124,14 @@ rebuild the binaries before you re-run tests. If you make changes only in
 You just have to make sure to tell the ``teuthology-suite`` command to use a
 separate branch for running the tests.
 
-The separate branch can be passed to the command by using ``--suite-repo`` and
-``--suite-branch``. The first option (``--suite-repo``) accepts the link to the GitHub fork where your PR branch exists and the second option (``--suite-branch``) accepts the name of the PR branch.
+If you made changes only in ``qa/``
+(https://github.com/ceph/ceph/tree/master/qa), you do not need to rebuild the
+binaries. You can use existing binaries that are built periodically for master and other stable branches and run your test changes against them.
+Your branch with the qa changes can be tested by passing two extra arguments to the ``teuthology-suite`` command: (1) ``--suite-repo``, specifying your ceph repo, and (2) ``--suite-branch``, specifying your branch name. 
 
 For example, if you want to make changes in ``qa/`` after testing ``branch-x``
-(which shows up in ceph-ci as a branch named ``wip-username-branch-x``), you
-can do so by running following command:
+(for which the ceph-ci branch is ``wip-username-branch-x``), run the following
+command::
 
 .. prompt:: bash $
 
@@ -191,28 +193,26 @@ Viewing Tests Results
 Pulpito Dashboard
 *****************
 
-Once the teuthology job is scheduled, the status/results for test run could
-be checked from https://pulpito.ceph.com/.
-It could be used for quickly checking out job logs, their status, etc.
+After the teuthology job is scheduled, the status and results of the test run 
+can be checked at https://pulpito.ceph.com/.
 
 Teuthology Archives
 *******************
 
-Once the tests have finished running, the log for the job can be obtained by
-clicking on job ID at the Pulpito page for your tests. It's more convenient to
-download the log and then view it rather than viewing it in an internet browser
-since these logs can easily be up to size of 1 GB. It is easier to
-ssh into the teuthology machine again (``teuthology.front.sepia.ceph.com``), and
-access the following path::
+After the tests have finished running, the log for the job can be obtained by
+clicking on the job ID at the Pulpito page associated with your tests. It's
+more convenient to download the log and then view it rather than viewing it in
+an internet browser since these logs can easily be up to 1 GB in size. It is
+easier to ssh into the teuthology machine (``teuthology.front.sepia.ceph.com``)
+and access the following path::
 
     /ceph/teuthology-archive/<test-id>/<job-id>/teuthology.log
 
-For example, for above test ID path is::
+For example: for the above test ID, the path is::
 
    /ceph/teuthology-archive/teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi/4588482/teuthology.log
 
-This way the log can be viewed remotely without having to wait too
-much.
+This method can be used to view the log more quickly than would be possible through a browser.
 
 .. note:: To access archives more conveniently, ``/a/`` has been symbolically
    linked to ``/ceph/teuthology-archive/``. For instance, to access the previous
@@ -222,13 +222,15 @@ much.
 
 Killing Tests
 -------------
-Sometimes a teuthology job might not complete running for several minutes or
-even hours after tests that were trigged have completed running and other
-times wrong set of tests can be triggered is filter wasn't chosen carefully.
-To save resource it's better to termniate such a job. Following is the command
-to terminate a job::
+``teuthology-kill`` can be used to kill jobs that have been running
+unexpectedly for several hours, or when developers want to terminate tests
+before they complete.
 
-      teuthology-kill -r teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi
+Here is the command that terminates jobs:
+
+.. prompt:: bash $
+
+   teuthology-kill -r teuthology-2019-12-10_05:00:03-smoke-master-testing-basic-smithi
 
 Let's call the argument passed to ``-r`` as test ID. It can be found
 easily in the link to the Pulpito page for the tests you triggered. For
