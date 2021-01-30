@@ -133,7 +133,7 @@ public:
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
-  int init();
+  int init(const DoutPrefixProvider *dpp);
 
   int read_job(const string& job_name, RGWOrphanSearchState& state);
   int write_job(const string& job_name, const RGWOrphanSearchState& state);
@@ -141,7 +141,7 @@ public:
   int list_jobs(map<string,RGWOrphanSearchState> &job_list);
 
 
-  int store_entries(const string& oid, const map<string, bufferlist>& entries);
+  int store_entries(const DoutPrefixProvider *dpp, const string& oid, const map<string, bufferlist>& entries);
   int read_entries(const string& oid, const string& marker, map<string, bufferlist> *entries, bool *truncated);
 };
 
@@ -172,16 +172,15 @@ class RGWOrphanSearch {
     list<string>::iterator end;
   };
 
-  int log_oids(map<int, string>& log_shards, map<int, list<string> >& oids);
+  int log_oids(const DoutPrefixProvider *dpp, map<int, string>& log_shards, map<int, list<string> >& oids);
 
 #define RGW_ORPHANSEARCH_HASH_PRIME 7877
   int orphan_shard(const string& str) {
     return ceph_str_hash_linux(str.c_str(), str.size()) % RGW_ORPHANSEARCH_HASH_PRIME % search_info.num_shards;
   }
 
-  int handle_stat_result(map<int, list<string> >& oids, rgw::sal::Object::StatOp::Result& result);
-  int pop_and_handle_stat_op(map<int, list<string> >& oids, std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops);
-
+  int handle_stat_result(const DoutPrefixProvider *dpp, map<int, list<string> >& oids, rgw::sal::Object::StatOp::Result& result);
+  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, map<int, list<string> >& oids, std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops);
 
   int remove_index(map<int, string>& index);
 public:
@@ -194,15 +193,15 @@ public:
     return orphan_store.write_job(search_info.job_name, state);
   }
 
-  int init(const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode=false);
+  int init(const DoutPrefixProvider *dpp, const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode=false);
 
   int create(const string& job_name, int num_shards);
 
-  int build_all_oids_index();
-  int build_buckets_instance_index();
+  int build_all_oids_index(const DoutPrefixProvider *dpp);
+  int build_buckets_instance_index(const DoutPrefixProvider *dpp);
   int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const string& bucket_instance_id, map<int, list<string> >& oids);
   int build_linked_oids_index(const DoutPrefixProvider *dpp);
-  int compare_oid_indexes();
+  int compare_oid_indexes(const DoutPrefixProvider *dpp);
 
   int run(const DoutPrefixProvider *dpp);
   int finish();
@@ -260,11 +259,13 @@ class RGWRadosList {
   bool include_rgw_obj_name;
   std::string field_separator;
 
-  int handle_stat_result(rgw::sal::Object::StatOp::Result& result,
+  int handle_stat_result(const DoutPrefixProvider *dpp,
+                         rgw::sal::Object::StatOp::Result& result,
 			 std::string& bucket_name,
 			 rgw_obj_key& obj_key,
 			 std::set<string>& obj_oids);
-  int pop_and_handle_stat_op(RGWObjectCtx& obj_ctx,
+  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, 
+                             RGWObjectCtx& obj_ctx,
 			     std::deque<std::unique_ptr<rgw::sal::Object::StatOp>>& ops);
 
 public:

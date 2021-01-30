@@ -107,27 +107,29 @@ public:
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
-  int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
-  int cancel();
-  static int clear_resharding(rgw::sal::RadosStore* store,
+  int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
+  int cancel(const DoutPrefixProvider *dpp);
+  static int clear_resharding(const DoutPrefixProvider *dpp, rgw::sal::RadosStore* store,
 			      const RGWBucketInfo& bucket_info);
-  int clear_resharding() {
-    return clear_resharding(store, bucket_info);
+  int clear_resharding(const DoutPrefixProvider *dpp) {
+    return clear_resharding(dpp, store, bucket_info);
   }
-  static int clear_index_shard_reshard_status(rgw::sal::RadosStore* store,
+  static int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp,
+                                              rgw::sal::RadosStore* store,
 					      const RGWBucketInfo& bucket_info);
-  int clear_index_shard_reshard_status() {
-    return clear_index_shard_reshard_status(store, bucket_info);
+  int clear_index_shard_reshard_status(const DoutPrefixProvider *dpp) {
+    return clear_index_shard_reshard_status(dpp, store, bucket_info);
   }
-  static int set_resharding_status(rgw::sal::RadosStore* store,
+  static int set_resharding_status(const DoutPrefixProvider *dpp,
+                                   rgw::sal::RadosStore* store,
 				   const RGWBucketInfo& bucket_info,
 				   const string& new_instance_id,
 				   int32_t num_shards,
 				   cls_rgw_reshard_status status);
-  int set_resharding_status(const string& new_instance_id,
+  int set_resharding_status(const DoutPrefixProvider *dpp, const string& new_instance_id,
 			    int32_t num_shards,
 			    cls_rgw_reshard_status status) {
-    return set_resharding_status(store, bucket_info,
+    return set_resharding_status(dpp, store, bucket_info,
 				 new_instance_id, num_shards, status);
   }
 
@@ -233,10 +235,10 @@ protected:
 
 public:
   RGWReshard(rgw::sal::RadosStore* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
-  int add(cls_rgw_reshard_entry& entry);
-  int update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
+  int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
+  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
   int get(cls_rgw_reshard_entry& entry);
-  int remove(cls_rgw_reshard_entry& entry);
+  int remove(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
   int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
   int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 

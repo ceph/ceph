@@ -18,13 +18,15 @@
 #include "services/svc_zone_utils.h"
 #include "include/ceph_assert.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 class OpsLogSocket;
 
 namespace rgw {
 
   class RGWLibFrontend;
 
-  class RGWLib {
+  class RGWLib : public DoutPrefixProvider {
     RGWFrontendConfig* fec;
     RGWLibFrontend* fe;
     OpsLogSocket* olog;
@@ -43,6 +45,10 @@ namespace rgw {
     RGWLibFrontend* get_fe() { return fe; }
 
     rgw::LDAPHelper* get_ldh() { return ldh; }
+
+    CephContext *get_cct() const override { return cct.get(); }
+    unsigned get_subsys() const { return dout_subsys; }
+    std::ostream& gen_prefix(std::ostream& out) const { return out << "lib rgw: "; }
 
     int init();
     int init(vector<const char *>& args);
