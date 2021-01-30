@@ -14,8 +14,8 @@ class RGWLogStatRemoteObjCBCR : public RGWStatRemoteObjCBCR {
 public:
   RGWLogStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
                           rgw_bucket& _src_bucket, rgw_obj_key& _key) : RGWStatRemoteObjCBCR(_sc, _src_bucket, _key) {}
-  int operate() override {
-    ldout(sync_env->cct, 0) << "SYNC_LOG: stat of remote obj: z=" << sc->source_zone
+  int operate(const DoutPrefixProvider *dpp) override {
+    ldpp_dout(sync_env->dpp, 0) << "SYNC_LOG: stat of remote obj: z=" << sc->source_zone
                             << " b=" << src_bucket << " k=" << key << " size=" << size << " mtime=" << mtime
                             << " attrs=" << attrs << dendl;
     return set_cr_done();

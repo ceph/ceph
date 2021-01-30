@@ -118,16 +118,16 @@ int RGWSI_RADOS::Obj::open()
   return 0;
 }
 
-int RGWSI_RADOS::Obj::operate(librados::ObjectWriteOperation *op,
+int RGWSI_RADOS::Obj::operate(const DoutPrefixProvider *dpp, librados::ObjectWriteOperation *op,
                               optional_yield y, int flags)
 {
-  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, y, flags);
+  return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, y, flags);
 }
 
-int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op,
+int RGWSI_RADOS::Obj::operate(const DoutPrefixProvider *dpp, librados::ObjectReadOperation *op,
 			      bufferlist *pbl, optional_yield y, int flags)
 {
-  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, pbl, y, flags);
+  return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, pbl, y, flags);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
@@ -156,10 +156,10 @@ int RGWSI_RADOS::Obj::unwatch(uint64_t handle)
   return ref.pool.ioctx().unwatch2(handle);
 }
 
-int RGWSI_RADOS::Obj::notify(bufferlist& bl, uint64_t timeout_ms,
+int RGWSI_RADOS::Obj::notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms,
                              bufferlist *pbl, optional_yield y)
 {
-  return rgw_rados_notify(ref.pool.ioctx(), ref.obj.oid, bl, timeout_ms, pbl, y);
+  return rgw_rados_notify(dpp, ref.pool.ioctx(), ref.obj.oid, bl, timeout_ms, pbl, y);
 }
 
 void RGWSI_RADOS::Obj::notify_ack(uint64_t notify_id,

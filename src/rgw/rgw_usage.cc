@@ -157,15 +157,15 @@ int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store,
 		   uint64_t start_epoch, uint64_t end_epoch)
 {
   if (bucket) {
-    return bucket->trim_usage(start_epoch, end_epoch);
+    return bucket->trim_usage(dpp, start_epoch, end_epoch);
   } else if (user) {
-    return user->trim_usage(start_epoch, end_epoch);
+    return user->trim_usage(dpp, start_epoch, end_epoch);
   } else {
-    return store->trim_all_usage(start_epoch, end_epoch);
+    return store->trim_all_usage(dpp, start_epoch, end_epoch);
   }
 }
 
-int RGWUsage::clear(rgw::sal::RGWStore* store)
+int RGWUsage::clear(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store)
 {
-  return store->clear_usage();
+  return store->clear_usage(dpp);
 }

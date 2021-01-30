@@ -39,7 +39,7 @@ RGWCallStatRemoteObjCR::RGWCallStatRemoteObjCR(RGWDataSyncCtx *_sc,
                                                                                                  src_bucket(_src_bucket), key(_key) {
 }
 
-int RGWCallStatRemoteObjCR::operate() {
+int RGWCallStatRemoteObjCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
     yield {
       call(new RGWStatRemoteObjCR(sync_env->async_rados, sync_env->store,
@@ -47,10 +47,10 @@ int RGWCallStatRemoteObjCR::operate() {
                                   src_bucket, key, &mtime, &size, &etag, &attrs, &headers));
     }
     if (retcode < 0) {
-      ldout(sync_env->cct, 10) << "RGWStatRemoteObjCR() returned " << retcode << dendl;
+      ldpp_dout(sync_env->dpp, 10) << "RGWStatRemoteObjCR() returned " << retcode << dendl;
       return set_cr_error(retcode);
     }
-    ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sc->source_zone
+    ldpp_dout(sync_env->dpp, 20) << "stat of remote obj: z=" << sc->source_zone
                              << " b=" << src_bucket << " k=" << key
                              << " size=" << size << " mtime=" << mtime << dendl;
     yield {
@@ -61,7 +61,7 @@ int RGWCallStatRemoteObjCR::operate() {
       }
     }
     if (retcode < 0) {
-      ldout(sync_env->cct, 10) << "RGWStatRemoteObjCR() callback returned " << retcode << dendl;
+      ldpp_dout(sync_env->dpp, 10) << "RGWStatRemoteObjCR() callback returned " << retcode << dendl;
       return set_cr_error(retcode);
     }
     return set_cr_done();

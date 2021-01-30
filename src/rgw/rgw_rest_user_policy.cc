@@ -109,7 +109,7 @@ int RGWPutUserPolicy::get_params()
   return 0;
 }
 
-void RGWPutUserPolicy::execute(optional_yield y)
+void RGWPutUserPolicy::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -134,7 +134,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(dpp, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -193,7 +193,7 @@ int RGWGetUserPolicy::get_params()
   return 0;
 }
 
-void RGWGetUserPolicy::execute(optional_yield y)
+void RGWGetUserPolicy::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -257,7 +257,7 @@ int RGWListUserPolicies::get_params()
   return 0;
 }
 
-void RGWListUserPolicies::execute(optional_yield y)
+void RGWListUserPolicies::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -319,7 +319,7 @@ int RGWDeleteUserPolicy::get_params()
   return 0;
 }
 
-void RGWDeleteUserPolicy::execute(optional_yield y)
+void RGWDeleteUserPolicy::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -341,7 +341,7 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   }
 
   ceph::bufferlist in_data;
-  op_ret = store->forward_request_to_master(s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = store->forward_request_to_master(dpp, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     // a policy might've been uploaded to this site when there was no sync
     // req. in earlier releases, proceed deletion

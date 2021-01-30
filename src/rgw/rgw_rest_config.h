@@ -32,7 +32,7 @@ public:
   int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   void send_response() override;
   const char* name() const override {
     if (old_format) {
@@ -54,7 +54,7 @@ public:
   int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(optional_yield) override {} /* store already has the info we need, just need to send response */
+  void execute(const DoutPrefixProvider *dpp, optional_yield) override {} /* store already has the info we need, just need to send response */
   void send_response() override ;
   const char* name() const override {
     return "get_zone_config";

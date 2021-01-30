@@ -153,11 +153,12 @@ int RGWRadosUser::read_attrs(const DoutPrefixProvider *dpp, optional_yield y, RG
   return store->ctl()->user->get_attrs_by_uid(dpp, get_id(), uattrs, y, tracker);
 }
 
-int RGWRadosUser::read_stats(optional_yield y, RGWStorageStats* stats,
+int RGWRadosUser::read_stats(const DoutPrefixProvider *dpp, 
+                             optional_yield y, RGWStorageStats* stats,
 			     ceph::real_time *last_stats_sync,
 			     ceph::real_time *last_stats_update)
 {
-  return store->ctl()->user->read_stats(get_id(), stats, y, last_stats_sync, last_stats_update);
+  return store->ctl()->user->read_stats(dpp, get_id(), stats, y, last_stats_sync, last_stats_update);
 }
 
 int RGWRadosUser::read_stats_async(RGWGetUserStats_CB *cb)
@@ -165,9 +166,9 @@ int RGWRadosUser::read_stats_async(RGWGetUserStats_CB *cb)
   return store->ctl()->user->read_stats_async(get_id(), cb);
 }
 
-int RGWRadosUser::complete_flush_stats(optional_yield y)
+int RGWRadosUser::complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->ctl()->user->complete_flush_stats(get_id(), y);
+  return store->ctl()->user->complete_flush_stats(dpp, get_id(), y);
 }
 
 int RGWRadosUser::read_usage(uint64_t start_epoch, uint64_t end_epoch,
@@ -181,11 +182,11 @@ int RGWRadosUser::read_usage(uint64_t start_epoch, uint64_t end_epoch,
 				       usage_iter, usage);
 }
 
-int RGWRadosUser::trim_usage(uint64_t start_epoch, uint64_t end_epoch)
+int RGWRadosUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
 {
   std::string bucket_name;
 
-  return store->getRados()->trim_usage(get_id(), bucket_name, start_epoch, end_epoch);
+  return store->getRados()->trim_usage(dpp, get_id(), bucket_name, start_epoch, end_epoch);
 }
 
 int RGWRadosUser::load_by_id(const DoutPrefixProvider *dpp, optional_yield y)
@@ -256,7 +257,7 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
     }
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info, y);
+  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y);
   if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -276,7 +277,7 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
   RGWPubSub ps(store, info.owner.tenant);
   RGWPubSub::Bucket ps_bucket(&ps, info.bucket);
-  const auto ps_ret = ps_bucket.remove_notifications(y);
+  const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
     lderr(store->ctx()) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
   }
@@ -288,7 +289,7 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
 
   if (forward_to_master) {
     bufferlist in_data;
-    ret = store->forward_request_to_master(owner, &ot.read_version, in_data, nullptr, *req_info, y);
+    ret = store->forward_request_to_master(dpp, owner, &ot.read_version, in_data, nullptr, *req_info, y);
     if (ret < 0) {
       if (ret == -ENOENT) {
 	/* adjust error, we want to return with NoSuchBucket and not
@@ -350,9 +351,9 @@ int RGWRadosBucket::read_bucket_stats(const DoutPrefixProvider *dpp, optional_yi
       return ret;
 }
 
-int RGWRadosBucket::sync_user_stats(optional_yield y)
+int RGWRadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return store->ctl()->bucket->sync_user_stats(owner->get_id(), info, y);
+  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y);
 }
 
 int RGWRadosBucket::update_container_stats(const DoutPrefixProvider *dpp)
@@ -485,9 +486,9 @@ int RGWRadosBucket::read_usage(uint64_t start_epoch, uint64_t end_epoch,
 				       usage_iter, usage);
 }
 
-int RGWRadosBucket::trim_usage(uint64_t start_epoch, uint64_t end_epoch)
+int RGWRadosBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
 {
-  return store->getRados()->trim_usage(owner->get_id(), get_name(), start_epoch, end_epoch);
+  return store->getRados()->trim_usage(dpp, owner->get_id(), get_name(), start_epoch, end_epoch);
 }
 
 int RGWRadosBucket::remove_objs_from_index(std::list<rgw_obj_index_key>& objs_to_unlink)
@@ -735,7 +736,7 @@ int RGWRadosStore::create_bucket(const DoutPrefixProvider *dpp,
 
   if (!svc()->zone->is_meta_master()) {
     JSONParser jp;
-    ret = forward_request_to_master(&u, NULL, in_data, &jp, req_info, y);
+    ret = forward_request_to_master(dpp, &u, NULL, in_data, &jp, req_info, y);
     if (ret < 0) {
       return ret;
     }
@@ -767,7 +768,7 @@ int RGWRadosStore::create_bucket(const DoutPrefixProvider *dpp,
 
   if (*existed) {
     rgw_placement_rule selected_placement_rule;
-    ret = svc()->zone->select_bucket_placement(u.get_info(),
+    ret = svc()->zone->select_bucket_placement(dpp, u.get_info(),
 					       zid, placement_rule,
 					       &selected_placement_rule, nullptr, y);
     if (selected_placement_rule != info.placement_rule) {
@@ -803,7 +804,7 @@ bool RGWRadosStore::is_meta_master()
   return svc()->zone->is_meta_master();
 }
 
-int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
+int RGWRadosStore::forward_request_to_master(const DoutPrefixProvider *dpp, RGWUser* user, obj_version *objv,
 					     bufferlist& in_data,
 					     JSONParser *jp, req_info& info,
 					     optional_yield y)
@@ -814,22 +815,22 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
   }
 
   if (!svc()->zone->get_master_conn()) {
-    ldout(ctx(), 0) << "rest connection is invalid" << dendl;
+    ldpp_dout(dpp, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
-  ldout(ctx(), 0) << "sending request to master zonegroup" << dendl;
+  ldpp_dout(dpp, 0) << "sending request to master zonegroup" << dendl;
   bufferlist response;
   string uid_str = user->get_id().to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = svc()->zone->get_master_conn()->forward(rgw_user(uid_str), info,
+  int ret = svc()->zone->get_master_conn()->forward(dpp, rgw_user(uid_str), info,
                                                     objv, MAX_REST_RESPONSE,
 						    &in_data, &response, y);
   if (ret < 0)
     return ret;
 
-  ldout(ctx(), 20) << "response: " << response.c_str() << dendl;
+  ldpp_dout(dpp, 20) << "response: " << response.c_str() << dendl;
   if (jp && !jp->parse(response.c_str(), response.length())) {
-    ldout(ctx(), 0) << "failed parsing response from master zonegroup" << dendl;
+    ldpp_dout(dpp, 0) << "failed parsing response from master zonegroup" << dendl;
     return -EINVAL;
   }
 
@@ -897,9 +898,9 @@ std::unique_ptr<Writer> RGWRadosStore::get_writer(Aio *aio, rgw::sal::RGWBucket*
   return std::unique_ptr<Writer>(new RadosWriter(aio, this, bucket, obj_ctx, std::move(_head_obj), dpp, y));
 }
 
-int RGWRadosStore::delete_raw_obj(const rgw_raw_obj& obj)
+int RGWRadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
 {
-  return rados->delete_raw_obj(obj);
+  return rados->delete_raw_obj(dpp, obj);
 }
 
 int RGWRadosStore::delete_raw_obj_aio(const rgw_raw_obj& obj, Completions* aio)
@@ -919,9 +920,9 @@ int RGWRadosStore::get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_r
   return rados->get_max_chunk_size(obj.pool, chunk_size, dpp);
 }
 
-int RGWRadosStore::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+int RGWRadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
 {
-    return rados->log_usage(usage_info);
+    return rados->log_usage(dpp, usage_info);
 }
 
 int RGWRadosStore::log_op(string& oid, bufferlist& bl)
@@ -990,12 +991,12 @@ int RGWRadosStore::read_all_usage(uint64_t start_epoch, uint64_t end_epoch,
 			   is_truncated, usage_iter, usage);
 }
 
-int RGWRadosStore::trim_all_usage(uint64_t start_epoch, uint64_t end_epoch)
+int RGWRadosStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
 {
   rgw_user uid;
   std::string bucket_name;
 
-  return rados->trim_usage(uid, bucket_name, start_epoch, end_epoch);
+  return rados->trim_usage(dpp, uid, bucket_name, start_epoch, end_epoch);
 }
 
 int RGWRadosStore::get_config_key_val(string name, bufferlist *bl)
@@ -1003,13 +1004,13 @@ int RGWRadosStore::get_config_key_val(string name, bufferlist *bl)
   return svc()->config_key->get(name, true, bl);
 }
 
-int RGWRadosStore::put_system_obj(const rgw_pool& pool, const string& oid,
+int RGWRadosStore::put_system_obj(const DoutPrefixProvider *dpp, const rgw_pool& pool, const string& oid,
 				  bufferlist& data, bool exclusive,
 				  RGWObjVersionTracker *objv_tracker, real_time set_mtime,
 				  optional_yield y, map<string, bufferlist> *pattrs)
 {
   auto obj_ctx = svc()->sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, pool, oid, data, exclusive, objv_tracker, set_mtime, y, pattrs);
+  return rgw_put_system_obj(dpp, obj_ctx, pool, oid, data, exclusive, objv_tracker, set_mtime, y, pattrs);
 }
 
 int RGWRadosStore::get_system_obj(const DoutPrefixProvider *dpp,
@@ -1024,10 +1025,10 @@ int RGWRadosStore::get_system_obj(const DoutPrefixProvider *dpp,
   return rgw_get_system_obj(obj_ctx, pool, key, bl, objv_tracker, pmtime, y, dpp, pattrs, cache_info, refresh_version);
 }
 
-int RGWRadosStore::delete_system_obj(const rgw_pool& pool, const string& oid,
+int RGWRadosStore::delete_system_obj(const DoutPrefixProvider *dpp, const rgw_pool& pool, const string& oid,
 				     RGWObjVersionTracker *objv_tracker, optional_yield y)
 {
-    return rgw_delete_system_obj(svc()->sysobj, pool, oid, objv_tracker, y);
+    return rgw_delete_system_obj(dpp, svc()->sysobj, pool, oid, objv_tracker, y);
 }
 
 int RGWRadosStore::meta_list_keys_init(const string& section, const string& marker, void** phandle)
@@ -1224,7 +1225,7 @@ void RGWRadosObject::get_raw_obj(rgw_raw_obj* raw_obj)
   store->getRados()->obj_to_raw((bucket->get_info()).placement_rule, get_obj(), raw_obj);
 }
 
-int RGWRadosObject::omap_get_vals(const string& marker, uint64_t count,
+int RGWRadosObject::omap_get_vals(const DoutPrefixProvider *dpp, const string& marker, uint64_t count,
 				  std::map<string, bufferlist> *m,
 				  bool *pmore, optional_yield y)
 {
@@ -1233,10 +1234,10 @@ int RGWRadosObject::omap_get_vals(const string& marker, uint64_t count,
   get_raw_obj(&raw_obj);
   auto sysobj = obj_ctx.get_obj(raw_obj);
 
-  return sysobj.omap().get_vals(marker, count, m, pmore, y);
+  return sysobj.omap().get_vals(dpp, marker, count, m, pmore, y);
 }
 
-int RGWRadosObject::omap_get_all(std::map<string, bufferlist> *m,
+int RGWRadosObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<string, bufferlist> *m,
 				 optional_yield y)
 {
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
@@ -1244,7 +1245,7 @@ int RGWRadosObject::omap_get_all(std::map<string, bufferlist> *m,
   get_raw_obj(&raw_obj);
   auto sysobj = obj_ctx.get_obj(raw_obj);
 
-  return sysobj.omap().get_all(m, y);
+  return sysobj.omap().get_all(dpp, m, y);
 }
 
 int RGWRadosObject::omap_get_vals_by_keys(const std::string& oid,
@@ -1265,7 +1266,7 @@ int RGWRadosObject::omap_get_vals_by_keys(const std::string& oid,
   return cur_ioctx.omap_get_vals_by_keys(oid, keys, vals);
 }
 
-int RGWRadosObject::omap_set_val_by_key(const std::string& key, bufferlist& val,
+int RGWRadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 					bool must_exist, optional_yield y)
 {
   rgw_raw_obj raw_meta_obj;
@@ -1276,7 +1277,7 @@ int RGWRadosObject::omap_set_val_by_key(const std::string& key, bufferlist& val,
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_meta_obj);
 
-  return sysobj.omap().set_must_exist(must_exist).set(key, val, y);
+  return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
 }
 
 MPSerializer* RGWRadosObject::get_serializer(const std::string& lock_name)
@@ -1640,12 +1641,12 @@ MPRadosSerializer::MPRadosSerializer(RGWRadosStore* store, RGWRadosObject* obj, 
   store->getRados()->open_pool_ctx(meta_pool, ioctx, true);
 }
 
-int MPRadosSerializer::try_lock(utime_t dur, optional_yield y)
+int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
   op.assert_exists();
   lock.set_duration(dur);
   lock.lock_exclusive(&op);
-  int ret = rgw_rados_operate(ioctx, oid, &op, y);
+  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, y);
   if (! ret) {
     locked = true;
   }
@@ -1659,7 +1660,7 @@ LCRadosSerializer::LCRadosSerializer(RGWRadosStore* store, const std::string& _o
   lock.set_cookie(cookie);
 }
 
-int LCRadosSerializer::try_lock(utime_t dur, optional_yield y)
+int LCRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
   lock.set_duration(dur);
   return lock.lock_exclusive(ioctx, oid);
@@ -1758,9 +1759,9 @@ LCSerializer* RadosLifecycle::get_serializer(const std::string& lock_name, const
   return new LCRadosSerializer(store, oid, lock_name, cookie);
 }
 
-int RadosNotification::publish_reserve(RGWObjTags* obj_tags)
+int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)
 {
-  return rgw::notify::publish_reserve(event_type, res, obj_tags);
+  return rgw::notify::publish_reserve(dpp, event_type, res, obj_tags);
 }
 
 int RadosNotification::publish_commit(const DoutPrefixProvider *dpp, uint64_t size,
@@ -1769,10 +1770,10 @@ int RadosNotification::publish_commit(const DoutPrefixProvider *dpp, uint64_t si
   return rgw::notify::publish_commit(obj, size, mtime, etag, event_type, res, dpp);
 }
 
-void RadosGCChain::update(RGWObjManifest* manifest)
+void RadosGCChain::update(const DoutPrefixProvider *dpp, RGWObjManifest* manifest)
 {
   rgw_obj target = obj->get_obj();
-  store->getRados()->update_gc_chain(target, *manifest, &chain);
+  store->getRados()->update_gc_chain(dpp, target, *manifest, &chain);
 }
 
 int RadosGCChain::send(const std::string& tag)
@@ -1860,7 +1861,7 @@ RadosWriter::~RadosWriter()
       continue;
     }
 
-    int r = store->delete_raw_obj(obj);
+    int r = store->delete_raw_obj(dpp, obj);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }

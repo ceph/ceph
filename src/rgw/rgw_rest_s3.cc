@@ -449,7 +449,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
     if (block_crypt != nullptr) {
       auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s->cct, cb, std::move(block_crypt));
       if (manifest_bl != nullptr) {
-        res = f->read_manifest(*manifest_bl);
+        res = f->read_manifest(this, *manifest_bl);
         if (res == 0) {
           *filter = std::move(f);
         }
@@ -618,7 +618,7 @@ void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
   }
 }
 
-int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
+int RGWPutBucketTags_ObjStore_S3::get_params(const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWXMLParser parser;
 
@@ -654,7 +654,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params(optional_yield y)
     return r;
 
   obj_tags.encode(tags_bl);
-  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+  ldpp_dout(dpp, 20) << "Read " << obj_tags.count() << "tags" << dendl;
 
   // forward bucket tags requests to meta master zone
   if (!store->is_meta_master()) {
@@ -2569,7 +2569,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
       //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
       if (f != nullptr) {
         if (manifest_bl != nullptr) {
-          res = f->read_manifest(*manifest_bl);
+          res = f->read_manifest(this, *manifest_bl);
           if (res == 0) {
             *filter = std::move(f);
           }
@@ -3368,7 +3368,7 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-void RGWGetLC_ObjStore_S3::execute(optional_yield y)
+void RGWGetLC_ObjStore_S3::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   config.set_ctx(s->cct);
 
@@ -3973,7 +3973,7 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   ::encode_json("head", head_obj, &f);
   ::encode_json("manifest", *manifest, &f);
   f.open_array_section("data_location");
-  for (auto miter = manifest->obj_begin(); miter != manifest->obj_end(); ++miter) {
+  for (auto miter = manifest->obj_begin(this); miter != manifest->obj_end(this); ++miter) {
     f.open_object_section("obj");
     rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
     uint64_t ofs = miter.get_ofs();
@@ -5003,7 +5003,7 @@ RGWOp* RGWHandler_REST_S3Website::op_head()
   return get_obj_op(false);
 }
 
-int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errordoc_key, optional_yield y) {
+int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string& errordoc_key, optional_yield y) {
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
@@ -5068,7 +5068,7 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
    *   x-amz-error-message: The specified key does not exist.
    *   x-amz-error-detail-Key: foo
    */
-  getop->execute(y);
+  getop->execute(dpp, y);
   getop->complete();
   return 0;
 }
@@ -5116,7 +5116,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
        On success, it will return zero, and no further content should be sent to the socket
        On failure, we need the double-error handler
      */
-    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(http_error_code, s->bucket->get_info().website_conf.error_doc, y);
+    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(s, http_error_code, s->bucket->get_info().website_conf.error_doc, y);
     if (new_err_no != -1) {
       err_no = new_err_no;
     }
@@ -5493,7 +5493,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
   std::string string_to_sign;
   utime_t header_time;
-  if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
+  if (! rgw_create_s3_canonical_header(s, s->info, &header_time, string_to_sign,
         qsr)) {
     ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;

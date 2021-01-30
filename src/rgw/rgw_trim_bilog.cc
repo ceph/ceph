@@ -446,13 +446,13 @@ class BucketTrimInstanceCR : public RGWCoroutine {
     source_policy = make_shared<rgw_bucket_get_sync_policy_result>();
   }
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int BucketTrimInstanceCR::operate()
+int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
-    ldout(cct, 4) << "starting trim on bucket=" << bucket_instance << dendl;
+    ldpp_dout(dpp, 4) << "starting trim on bucket=" << bucket_instance << dendl;
 
     get_policy_params.zone = zone_id;
     get_policy_params.bucket = bucket;
@@ -637,7 +637,7 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
   const std::string start_marker;
   MetadataListCallback callback;
 
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
  public:
   AsyncMetadataList(CephContext *cct, RGWCoroutine *caller,
                     RGWAioCompletionNotifier *cn, RGWMetadataManager *mgr,
@@ -648,7 +648,7 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
   {}
 };
 
-int AsyncMetadataList::_send_request()
+int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
 {
   void* handle = nullptr;
   std::list<std::string> keys;
@@ -753,7 +753,7 @@ class MetadataListCR : public RGWSimpleCoroutine {
     request_cleanup();
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     req = new AsyncMetadataList(cct, this, stack->create_completion_notifier(),
                                 mgr, section, start_marker, callback);
     async_rados->queue(req);
@@ -794,19 +794,19 @@ class BucketTrimCR : public RGWCoroutine {
       observer(observer), obj(obj), counter(config.counter_size), dpp(dpp)
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
 const std::string BucketTrimCR::section{"bucket.instance"};
 
-int BucketTrimCR::operate()
+int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     start_time = ceph::mono_clock::now();
 
     if (config.buckets_per_interval) {
       // query watch/notify for hot buckets
-      ldout(cct, 10) << "fetching active bucket counters" << dendl;
+      ldpp_dout(dpp, 10) << "fetching active bucket counters" << dendl;
       set_status("fetching active bucket counters");
       yield {
         // request the top bucket counters from each peer gateway
@@ -819,7 +819,7 @@ int BucketTrimCR::operate()
                                   &notify_replies));
       }
       if (retcode < 0) {
-        ldout(cct, 10) << "failed to fetch peer bucket counters" << dendl;
+        ldpp_dout(dpp, 10) << "failed to fetch peer bucket counters" << dendl;
         return set_cr_error(retcode);
       }
 
@@ -843,17 +843,17 @@ int BucketTrimCR::operate()
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
+      yield call(new ReadStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
                                 &status, true, &objv));
       if (retcode < 0) {
-        ldout(cct, 10) << "failed to read bilog trim status: "
+        ldpp_dout(dpp, 10) << "failed to read bilog trim status: "
             << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
       }
       if (status.marker == "MAX") {
         status.marker.clear(); // restart at the beginning
       }
-      ldout(cct, 10) << "listing cold buckets from marker="
+      ldpp_dout(dpp, 10) << "listing cold buckets from marker="
           << status.marker << dendl;
 
       set_status("listing cold buckets for trim");
@@ -891,7 +891,7 @@ int BucketTrimCR::operate()
 
     // trim bucket instances with limited concurrency
     set_status("trimming buckets");
-    ldout(cct, 4) << "collected " << buckets.size() << " buckets for trim" << dendl;
+    ldpp_dout(dpp, 4) << "collected " << buckets.size() << " buckets for trim" << dendl;
     yield call(new BucketTrimInstanceCollectCR(store, http, observer, buckets,
                                                config.concurrent_buckets, dpp));
     // ignore errors from individual buckets
@@ -902,7 +902,7 @@ int BucketTrimCR::operate()
       status.marker = std::move(last_cold_marker);
       ldpp_dout(dpp, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
+      yield call(new WriteStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
                                  status, &objv));
       if (retcode < 0) {
         ldpp_dout(dpp, 4) << "failed to write updated trim status: "
@@ -927,7 +927,7 @@ int BucketTrimCR::operate()
       return set_cr_error(retcode);
     }
 
-    ldout(cct, 4) << "bucket index log processing completed in "
+    ldpp_dout(dpp, 4) << "bucket index log processing completed in "
         << ceph::mono_clock::now() - start_time << dendl;
     return set_cr_done();
   }
@@ -954,10 +954,10 @@ class BucketTrimPollCR : public RGWCoroutine {
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       dpp(dpp) {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int BucketTrimPollCR::operate()
+int BucketTrimPollCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     for (;;) {

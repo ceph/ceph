@@ -34,7 +34,7 @@ class RGWCreateOIDCProvider : public RGWRestOIDCProviderWrite {
 public:
   RGWCreateOIDCProvider() = default;
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   int get_params();
   const char* name() const override { return "create_oidc_provider"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_OIDC_PROVIDER; }
@@ -44,7 +44,7 @@ public:
 class RGWDeleteOIDCProvider : public RGWRestOIDCProviderWrite {
 public:
   RGWDeleteOIDCProvider() = default;
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   const char* name() const override { return "delete_oidc_provider"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OIDC_PROVIDER; }
   uint64_t get_op() override { return rgw::IAM::iamDeleteOIDCProvider; }
@@ -53,7 +53,7 @@ public:
 class RGWGetOIDCProvider : public RGWRestOIDCProviderRead {
 public:
   RGWGetOIDCProvider() = default;
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   const char* name() const override { return "get_oidc_provider"; }
   RGWOpType get_type() override { return RGW_OP_GET_OIDC_PROVIDER; }
   uint64_t get_op() override { return rgw::IAM::iamGetOIDCProvider; }
@@ -63,7 +63,7 @@ class RGWListOIDCProviders : public RGWRestOIDCProviderRead {
 public:
   RGWListOIDCProviders() = default;
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   int get_params();
   const char* name() const override { return "list_oidc_providers"; }
   RGWOpType get_type() override { return RGW_OP_LIST_OIDC_PROVIDERS; }

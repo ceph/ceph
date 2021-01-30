@@ -124,7 +124,7 @@ int RGWCreateRole::get_params()
   return 0;
 }
 
-void RGWCreateRole::execute(optional_yield y)
+void RGWCreateRole::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -164,7 +164,7 @@ int RGWDeleteRole::get_params()
   return 0;
 }
 
-void RGWDeleteRole::execute(optional_yield y)
+void RGWDeleteRole::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -223,7 +223,7 @@ int RGWGetRole::get_params()
   return 0;
 }
 
-void RGWGetRole::execute(optional_yield y)
+void RGWGetRole::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -271,7 +271,7 @@ int RGWModifyRole::get_params()
   return 0;
 }
 
-void RGWModifyRole::execute(optional_yield y)
+void RGWModifyRole::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -279,7 +279,7 @@ void RGWModifyRole::execute(optional_yield y)
   }
 
   _role.update_trust_policy(trust_policy);
-  op_ret = _role.update(y);
+  op_ret = _role.update(this, y);
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -315,7 +315,7 @@ int RGWListRoles::get_params()
   return 0;
 }
 
-void RGWListRoles::execute(optional_yield y)
+void RGWListRoles::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -363,7 +363,7 @@ int RGWPutRolePolicy::get_params()
   return 0;
 }
 
-void RGWPutRolePolicy::execute(optional_yield y)
+void RGWPutRolePolicy::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -371,7 +371,7 @@ void RGWPutRolePolicy::execute(optional_yield y)
   }
 
   _role.set_perm_policy(policy_name, perm_policy);
-  op_ret = _role.update(y);
+  op_ret = _role.update(this, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("PutRolePolicyResponse");
@@ -394,7 +394,7 @@ int RGWGetRolePolicy::get_params()
   return 0;
 }
 
-void RGWGetRolePolicy::execute(optional_yield y)
+void RGWGetRolePolicy::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -432,7 +432,7 @@ int RGWListRolePolicies::get_params()
   return 0;
 }
 
-void RGWListRolePolicies::execute(optional_yield y)
+void RGWListRolePolicies::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -466,7 +466,7 @@ int RGWDeleteRolePolicy::get_params()
   return 0;
 }
 
-void RGWDeleteRolePolicy::execute(optional_yield y)
+void RGWDeleteRolePolicy::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -479,7 +479,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
   }
 
   if (op_ret == 0) {
-    op_ret = _role.update(y);
+    op_ret = _role.update(this, y);
   }
 
   s->formatter->open_object_section("DeleteRolePoliciesResponse");

@@ -84,7 +84,7 @@ public:
   }
   ~RGWStatAccount_ObjStore_SWIFT() override {}
 
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   void send_response() override;
 };
 
@@ -243,7 +243,7 @@ public:
   RGWInfo_ObjStore_SWIFT() {}
   ~RGWInfo_ObjStore_SWIFT() override {}
 
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   void send_response() override;
   static void list_swift_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::RGWStore* store);
   static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::RGWStore* store);

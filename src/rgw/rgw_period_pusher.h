@@ -29,7 +29,7 @@ using RGWZonesNeedPeriod = RGWPeriod;
 class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
-  explicit RGWPeriodPusher(rgw::sal::RGWStore* store, optional_yield y);
+  explicit RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::RGWStore* store, optional_yield y);
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones

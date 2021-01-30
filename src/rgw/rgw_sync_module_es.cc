@@ -647,9 +647,9 @@ public:
                           ElasticConfigRef _conf) : RGWCoroutine(_sc->cct),
                                                     sc(_sc), sync_env(_sc->env),
                                                     conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sync_env->cct, 5) << conf->id << ": get elasticsearch info for zone: " << sc->source_zone << dendl;
+      ldpp_dout(sync_env->dpp, 5) << conf->id << ": get elasticsearch info for zone: " << sc->source_zone << dendl;
       yield call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
                                                     conf->conn.get(),
                                                     sync_env->http_manager,
@@ -657,11 +657,11 @@ public:
                                                     &(conf->default_headers),
                                                     &(conf->es_info)));
       if (retcode < 0) {
-        ldout(sync_env->cct, 5) << conf->id << ": get elasticsearch failed: " << retcode << dendl;
+        ldpp_dout(sync_env->dpp, 5) << conf->id << ": get elasticsearch failed: " << retcode << dendl;
         return set_cr_error(retcode);
       }
 
-      ldout(sync_env->cct, 5) << conf->id << ": got elastic version=" << conf->es_info.get_version_str() << dendl;
+      ldpp_dout(sync_env->dpp, 5) << conf->id << ": got elastic version=" << conf->es_info.get_version_str() << dendl;
       return set_cr_done();
     }
     return 0;
@@ -678,9 +678,9 @@ public:
                          ElasticConfigRef _conf) : RGWCoroutine(_sc->cct),
                                                    sc(_sc), sync_env(_sc->env),
                                                    conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sc->cct, 5) << conf->id << ": put elasticsearch index for zone: " << sc->source_zone << dendl;
+      ldpp_dout(dpp, 5) << conf->id << ": put elasticsearch index for zone: " << sc->source_zone << dendl;
 
       yield {
         string path = conf->get_index_path();
@@ -709,7 +709,7 @@ public:
           return set_cr_error(retcode);
         }
 
-        ldout(sync_env->cct, 0) << "elasticsearch: index already exists, assuming external initialization" << dendl;
+        ldpp_dout(sync_env->dpp, 0) << "elasticsearch: index already exists, assuming external initialization" << dendl;
       }
       return set_cr_done();
     }
@@ -752,7 +752,7 @@ public:
                           ElasticConfigRef _conf) : RGWCoroutine(_sc->cct),
                                                     sc(_sc), sync_env(_sc->env),
                                                     conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
 
       yield call(new RGWElasticGetESInfoCBCR(sc, conf));
@@ -782,9 +782,9 @@ public:
                           ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sc, _sync_pipe.info.source_bs.bucket, _key),
                                                                                sync_pipe(_sync_pipe), conf(_conf),
                                                                                versioned_epoch(_versioned_epoch) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sync_env->cct, 10) << ": stat of remote obj: z=" << sc->source_zone
+      ldpp_dout(sync_env->dpp, 10) << ": stat of remote obj: z=" << sc->source_zone
                                << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key
                                << " size=" << size << " mtime=" << mtime << dendl;
 
@@ -840,9 +840,9 @@ public:
                           ElasticConfigRef _conf) : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
                                                         sync_pipe(_sync_pipe), key(_key),
                                                         mtime(_mtime), conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sync_env->cct, 10) << ": remove remote obj: z=" << sc->source_zone
+      ldpp_dout(sync_env->dpp, 10) << ": remove remote obj: z=" << sc->source_zone
                                << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
         string path = conf->get_obj_path(sync_pipe.dest_bucket_info, key);

@@ -135,7 +135,7 @@ namespace rgw {
     }
   }
 
-  void RGWLibProcess::handle_request(RGWRequest* r)
+  void RGWLibProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
   {
     /*
      * invariant: valid requests are derived from RGWLibRequst
@@ -317,7 +317,7 @@ namespace rgw {
 
       ldpp_dout(s, 2) << "executing" << dendl;
       op->pre_exec();
-      op->execute(null_yield);
+      op->execute(s, null_yield);
       op->complete();
 
     } catch (const ceph::crypto::DigestException& e) {
@@ -579,7 +579,7 @@ namespace rgw {
     ldh->init();
     ldh->bind();
 
-    rgw_log_usage_init(g_ceph_context, store);
+    rgw_log_usage_init(&dp, g_ceph_context, store);
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 

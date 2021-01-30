@@ -65,11 +65,11 @@ class RGWSI_Zone : public RGWServiceInstance
   void shutdown() override;
 
   int replace_region_with_zonegroup(const DoutPrefixProvider *dpp, optional_yield y);
-  int init_zg_from_period(bool *initialized, optional_yield y);
+  int init_zg_from_period(const DoutPrefixProvider *dpp, bool *initialized, optional_yield y);
   int init_zg_from_local(const DoutPrefixProvider *dpp, bool *creating_defaults, optional_yield y);
   int convert_regionmap(const DoutPrefixProvider *dpp, optional_yield y);
 
-  int update_placement_map(optional_yield y);
+  int update_placement_map(const DoutPrefixProvider *dpp, optional_yield y);
 public:
   RGWSI_Zone(CephContext *cct);
   ~RGWSI_Zone();
@@ -124,19 +124,19 @@ public:
   RGWRESTConn *get_zone_conn_by_name(const string& name);
   bool find_zone_id_by_name(const string& name, rgw_zone_id *id);
 
-  int select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id,
+  int select_bucket_placement(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const string& zonegroup_id,
                               const rgw_placement_rule& rule,
                               rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info, optional_yield y);
-  int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info, optional_yield y);
-  int select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id,
+  int select_legacy_bucket_placement(const DoutPrefixProvider *dpp, RGWZonePlacementInfo *rule_info, optional_yield y);
+  int select_new_bucket_location(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const string& zonegroup_id,
                                  const rgw_placement_rule& rule,
                                  rgw_placement_rule *pselected_rule_name, RGWZonePlacementInfo *rule_info,
 				 optional_yield y);
-  int select_bucket_location_by_rule(const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info, optional_yield y);
+  int select_bucket_location_by_rule(const DoutPrefixProvider *dpp, const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info, optional_yield y);
 
-  int add_bucket_placement(const rgw_pool& new_pool, optional_yield y);
-  int remove_bucket_placement(const rgw_pool& old_pool, optional_yield y);
-  int list_placement_set(set<rgw_pool>& names, optional_yield y);
+  int add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& new_pool, optional_yield y);
+  int remove_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& old_pool, optional_yield y);
+  int list_placement_set(const DoutPrefixProvider *dpp, set<rgw_pool>& names, optional_yield y);
 
   bool is_meta_master() const;
 
@@ -151,5 +151,5 @@ public:
   int list_zones(list<string>& zones);
   int list_realms(list<string>& realms);
   int list_periods(list<string>& periods);
-  int list_periods(const string& current_period, list<string>& periods, optional_yield y);
+  int list_periods(const DoutPrefixProvider *dpp, const string& current_period, list<string>& periods, optional_yield y);
 };

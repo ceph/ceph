@@ -113,7 +113,7 @@ void RGWLoadGenProcess::gen_request(const string& method,
   req_wq.queue(req);
 } /* RGWLoadGenProcess::gen_request */
 
-void RGWLoadGenProcess::handle_request(RGWRequest* r)
+void RGWLoadGenProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
 {
   RGWLoadGenRequest* req = static_cast<RGWLoadGenRequest*>(r);
 
@@ -127,7 +127,7 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
   env.request_method = req->method;
   env.uri = req->resource;
   env.set_date(tm);
-  env.sign(access_key);
+  env.sign(dpp, access_key);
 
   RGWLoadGenIO real_client_io(&env);
   RGWRestfulIO client_io(cct, &real_client_io);

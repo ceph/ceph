@@ -52,14 +52,15 @@ struct reservation_t {
     cls_2pc_reservation::id_t res_id;
   };
 
+  const DoutPrefixProvider *dpp;
   std::vector<topic_t> topics;
   rgw::sal::RGWRadosStore* const store;
   const req_state* const s;
   size_t size;
   rgw::sal::RGWObject* const object;
 
-  reservation_t(rgw::sal::RGWRadosStore* _store, const req_state* _s, rgw::sal::RGWObject* _object) : 
-      store(_store), s(_s), object(_object) {}
+  reservation_t(const DoutPrefixProvider *_dpp, rgw::sal::RGWRadosStore* _store, const req_state* _s, rgw::sal::RGWObject* _object) : 
+      dpp(_dpp), store(_store), s(_s), object(_object) {}
 
   // dtor doing resource leak guarding
   // aborting the reservation if not already committed or aborted
@@ -67,7 +68,8 @@ struct reservation_t {
 };
 
 // create a reservation on the 2-phase-commit queue
-int publish_reserve(EventType event_type,
+int publish_reserve(const DoutPrefixProvider *dpp, 
+        EventType event_type,
         reservation_t& reservation,
         const RGWObjTags* req_tags);
 
@@ -81,7 +83,7 @@ int publish_commit(rgw::sal::RGWObject* obj,
         const DoutPrefixProvider *dpp);
 
 // cancel the reservation
-int publish_abort(reservation_t& reservation);
+int publish_abort(const DoutPrefixProvider *dpp, reservation_t& reservation);
 
 }
 

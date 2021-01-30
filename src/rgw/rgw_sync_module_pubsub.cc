@@ -366,20 +366,20 @@ class RGWSingletonCR : public RGWCoroutine {
     return true;
   }
 
-  int operate_wrapper() override {
+  int operate_wrapper(const DoutPrefixProvider *dpp) override {
     reenter(&wrapper_state) {
       while (!is_done()) {
-        ldout(cct, 20) << __func__ << "(): operate_wrapper() -> operate()" << dendl;
-        operate_ret = operate();
+        ldpp_dout(dpp, 20) << __func__ << "(): operate_wrapper() -> operate()" << dendl;
+        operate_ret = operate(dpp);
         if (operate_ret < 0) {
-          ldout(cct, 20) << *this << ": operate() returned r=" << operate_ret << dendl;
+          ldpp_dout(dpp, 20) << *this << ": operate() returned r=" << operate_ret << dendl;
         }
         if (!is_done()) {
           yield;
         }
       }
 
-      ldout(cct, 20) << __func__ << "(): RGWSingletonCR: operate_wrapper() done, need to wake up " << waiters.size() << " waiters" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): RGWSingletonCR: operate_wrapper() done, need to wake up " << waiters.size() << " waiters" << dendl;
       /* we're done, can't yield anymore */
 
       WaiterInfoRef waiter;
@@ -464,7 +464,7 @@ class PSSubscription {
       retention_days = conf->events_retention_days;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
 
         rule.init_simple_days_rule("Pubsub Expiration", "" /* all objects in bucket */, retention_days);
@@ -529,7 +529,7 @@ class PSSubscription {
                                     sub_conf(sub->sub_conf) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         get_bucket_info.tenant = conf->user.tenant;
         get_bucket_info.bucket_name = sub_conf->data_bucket_name;
@@ -610,7 +610,7 @@ class PSSubscription {
                                      oid_prefix(sub->sub_conf->data_oid_prefix) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       rgw_object_simple_put_params put_obj;
       reenter(this) {
 
@@ -660,18 +660,18 @@ class PSSubscription {
                                      sub_conf(_sub->sub_conf) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         ceph_assert(sub_conf->push_endpoint);
         yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
       
         if (retcode < 0) {
-          ldout(sync_env->cct, 10) << "failed to push event: " << event->id <<
+          ldpp_dout(sync_env->dpp, 10) << "failed to push event: " << event->id <<
             " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << dendl;
           return set_cr_error(retcode);
         }
         
-        ldout(sync_env->cct, 20) << "event: " << event->id <<
+        ldpp_dout(sync_env->dpp, 20) << "event: " << event->id <<
           " pushed to endpoint: " << sub_conf->push_endpoint_name << dendl;
         return set_cr_done();
       }
@@ -764,10 +764,10 @@ class PSManager
     }
     ~GetSubCR() { }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         if (owner.empty()) {
-          ldout(sync_env->cct, 1) << "ERROR: missing user info when getting subscription: " << sub_name << dendl;
+          ldpp_dout(sync_env->dpp, 1) << "ERROR: missing user info when getting subscription: " << sub_name << dendl;
             mgr->remove_get_sub(owner, sub_name);
             return set_cr_error(-EINVAL);
         } else {
@@ -777,7 +777,7 @@ class PSManager
             rgw_raw_obj obj;
             ps.get_sub_meta_obj(sub_name, &obj);
             bool empty_on_enoent = false;
-            call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
+            call(new ReadInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
                                 obj,
                                 &user_sub_conf, empty_on_enoent));
           }
@@ -791,7 +791,7 @@ class PSManager
 
         yield (*ref)->call_init_cr(this);
         if (retcode < 0) {
-          ldout(sync_env->cct, 1) << "ERROR: failed to init subscription when getting subscription: " << sub_name << dendl;
+          ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to init subscription when getting subscription: " << sub_name << dendl;
           mgr->remove_get_sub(owner, sub_name);
           return set_cr_error(retcode);
         }
@@ -885,7 +885,7 @@ public:
                        PSEnvRef& _env) : RGWCoroutine(_sc->cct),
                                                     sc(_sc), sync_env(_sc->env),
                                                     env(_env), conf(env->conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldpp_dout(sync_env->dpp, 1) << ": init pubsub config zone=" << sc->source_zone << dendl;
 
@@ -960,7 +960,7 @@ public:
                                                           topics(_topics) {
     *topics = std::make_shared<vector<PSTopicConfigRef> >();
   }
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ps.get_bucket_meta_obj(bucket, &bucket_obj);
       ps.get_meta_obj(&user_obj);
@@ -968,7 +968,7 @@ public:
       using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_bucket_topics>;
       yield {
         bool empty_on_enoent = true;
-        call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
+        call(new ReadInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
                             bucket_obj,
                             &bucket_topics, empty_on_enoent));
       }
@@ -976,13 +976,13 @@ public:
         return set_cr_error(retcode);
       }
 
-      ldout(sync_env->cct, 20) << "RGWPSFindBucketTopicsCR(): found " << bucket_topics.topics.size() << " topics for bucket " << bucket << dendl;
+      ldpp_dout(sync_env->dpp, 20) << "RGWPSFindBucketTopicsCR(): found " << bucket_topics.topics.size() << " topics for bucket " << bucket << dendl;
 
       if (!bucket_topics.topics.empty()) {
 	using ReadUserTopicsInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_topics>;
 	yield {
 	  bool empty_on_enoent = true;
-	  call(new ReadUserTopicsInfoCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
+	  call(new ReadUserTopicsInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
 					user_obj,
 					&user_topics, empty_on_enoent));
 	}
@@ -1039,13 +1039,13 @@ public:
                                           has_subscriptions(false),
                                           event_handled(false) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sc->cct, 20) << ": handle event: obj: z=" << sc->source_zone
+      ldpp_dout(dpp, 20) << ": handle event: obj: z=" << sc->source_zone
                                << " event=" << json_str("event", *event, false)
                                << " owner=" << owner << dendl;
 
-      ldout(sc->cct, 20) << "pubsub: " << topics->size() << " topics found for path" << dendl;
+      ldpp_dout(dpp, 20) << "pubsub: " << topics->size() << " topics found for path" << dendl;
      
       // outside caller should check that
       ceph_assert(!topics->empty());
@@ -1054,17 +1054,17 @@ public:
 
       // loop over all topics related to the bucket/object
       for (titer = topics->begin(); titer != topics->end(); ++titer) {
-        ldout(sc->cct, 20) << ": notification for " << event->source << ": topic=" << 
+        ldpp_dout(dpp, 20) << ": notification for " << event->source << ": topic=" << 
           (*titer)->name << ", has " << (*titer)->subs.size() << " subscriptions" << dendl;
         // loop over all subscriptions of the topic
         for (siter = (*titer)->subs.begin(); siter != (*titer)->subs.end(); ++siter) {
-          ldout(sc->cct, 20) << ": subscription: " << *siter << dendl;
+          ldpp_dout(dpp, 20) << ": subscription: " << *siter << dendl;
           has_subscriptions = true;
           // try to read subscription configuration
           yield PSManager::call_get_subscription_cr(sc, env->manager, this, owner, *siter, &sub);
           if (retcode < 0) {
             if (perfcounter) perfcounter->inc(l_rgw_pubsub_missing_conf);
-            ldout(sc->cct, 1) << "ERROR: failed to find subscription config for subscription=" << *siter 
+            ldpp_dout(dpp, 1) << "ERROR: failed to find subscription config for subscription=" << *siter 
               << " ret=" << retcode << dendl;
             if (retcode == -ENOENT) {
               // missing subscription info should be reflected back as invalid argument
@@ -1076,21 +1076,21 @@ public:
           }
           if (sub->sub_conf->s3_id.empty()) {
             // subscription was not made by S3 compatible API
-            ldout(sc->cct, 20) << "storing event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
+            ldpp_dout(dpp, 20) << "storing event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
             yield call(PSSubscription::store_event_cr(sc, sub, event));
             if (retcode < 0) {
               if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
-              ldout(sc->cct, 1) << "ERROR: failed to store event for subscription=" << *siter << " ret=" << retcode << dendl;
+              ldpp_dout(dpp, 1) << "ERROR: failed to store event for subscription=" << *siter << " ret=" << retcode << dendl;
             } else {
               if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_ok);
               event_handled = true;
             }
             if (sub->sub_conf->push_endpoint) {
-              ldout(sc->cct, 20) << "push event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
+              ldpp_dout(dpp, 20) << "push event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
               yield call(PSSubscription::push_event_cr(sc, sub, event));
               if (retcode < 0) {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
-                ldout(sc->cct, 1) << "ERROR: failed to push event for subscription=" << *siter << " ret=" << retcode << dendl;
+                ldpp_dout(dpp, 1) << "ERROR: failed to push event for subscription=" << *siter << " ret=" << retcode << dendl;
               } else {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
                 event_handled = true;
@@ -1098,23 +1098,23 @@ public:
             } 
           } else {
             // subscription was made by S3 compatible API
-            ldout(sc->cct, 20) << "storing s3 event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
+            ldpp_dout(dpp, 20) << "storing s3 event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
             s3_event->configurationId = sub->sub_conf->s3_id;
             s3_event->opaque_data = (*titer)->opaque_data;
             yield call(PSSubscription::store_event_cr(sc, sub, s3_event));
             if (retcode < 0) {
               if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
-              ldout(sc->cct, 1) << "ERROR: failed to store s3 event for subscription=" << *siter << " ret=" << retcode << dendl;
+              ldpp_dout(dpp, 1) << "ERROR: failed to store s3 event for subscription=" << *siter << " ret=" << retcode << dendl;
             } else {
               if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_ok);
               event_handled = true;
             }
             if (sub->sub_conf->push_endpoint) {
-                ldout(sc->cct, 20) << "push s3 event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
+                ldpp_dout(dpp, 20) << "push s3 event for subscription=" << *siter << " owner=" << owner << " ret=" << retcode << dendl;
               yield call(PSSubscription::push_event_cr(sc, sub, s3_event));
               if (retcode < 0) {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
-                ldout(sc->cct, 1) << "ERROR: failed to push s3 event for subscription=" << *siter << " ret=" << retcode << dendl;
+                ldpp_dout(dpp, 1) << "ERROR: failed to push s3 event for subscription=" << *siter << " ret=" << retcode << dendl;
               } else {
                 if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
                 event_handled = true;
@@ -1157,9 +1157,9 @@ public:
                                                                       versioned_epoch(_versioned_epoch),
                                                                       topics(_topics) {
   }
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sc->cct, 20) << ": stat of remote obj: z=" << sc->source_zone
+      ldpp_dout(dpp, 20) << ": stat of remote obj: z=" << sc->source_zone
                                << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
                                << " attrs=" << attrs << dendl;
       {
@@ -1236,18 +1236,18 @@ public:
 
   ~RGWPSHandleObjCreateCR() override {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       yield call(new RGWPSFindBucketTopicsCR(sc, env, sync_pipe.dest_bucket_info.owner,
                                              sync_pipe.info.source_bs.bucket, key,
                                              rgw::notify::ObjectCreated,
                                              &topics));
       if (retcode < 0) {
-        ldout(sc->cct, 1) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
         return set_cr_error(retcode);
       }
       if (topics->empty()) {
-        ldout(sc->cct, 20) << "no topics found for " << sync_pipe.info.source_bs.bucket << "/" << key << dendl;
+        ldpp_dout(dpp, 20) << "no topics found for " << sync_pipe.info.source_bs.bucket << "/" << key << dendl;
         return set_cr_done();
       }
       yield call(new RGWPSHandleRemoteObjCR(sc, sync_pipe, key, env, versioned_epoch, topics));
@@ -1283,17 +1283,17 @@ public:
                                                              bucket(_sync_pipe.dest_bucket_info.bucket),
                                                              key(_key),
                                                              mtime(_mtime), event_type(_event_type) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      ldout(sc->cct, 20) << ": remove remote obj: z=" << sc->source_zone
+      ldpp_dout(dpp, 20) << ": remove remote obj: z=" << sc->source_zone
                                << " b=" << bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield call(new RGWPSFindBucketTopicsCR(sc, env, owner, bucket, key, event_type, &topics));
       if (retcode < 0) {
-        ldout(sc->cct, 1) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
         return set_cr_error(retcode);
       }
       if (topics->empty()) {
-        ldout(sc->cct, 20) << "no topics found for " << bucket << "/" << key << dendl;
+        ldpp_dout(dpp, 20) << "no topics found for " << bucket << "/" << key << dendl;
         return set_cr_done();
       }
       // at this point we don't know whether we need the ceph event or S3 event

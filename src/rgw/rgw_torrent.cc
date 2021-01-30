@@ -250,10 +250,10 @@ int seed::save_torrent_file(optional_yield y)
   int op_ret = 0;
   string key = RGW_OBJ_TORRENT;
 
-  op_ret = s->object->omap_set_val_by_key(key, bl, false, y);
+  op_ret = s->object->omap_set_val_by_key(s, key, bl, false, y);
   if (op_ret < 0)
   {
-    ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;
     return op_ret;
   }
 

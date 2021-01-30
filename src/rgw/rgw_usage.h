@@ -8,6 +8,7 @@
 #include <map>
 
 #include "common/Formatter.h"
+#include "common/dout.h"
 #include "rgw_formats.h"
 #include "rgw_user.h"
 
@@ -27,7 +28,7 @@ public:
 		  rgw::sal::RGWUser* user , rgw::sal::RGWBucket* bucket,
 		  uint64_t start_epoch, uint64_t end_epoch);
 
-  static int clear(rgw::sal::RGWStore *store);
+  static int clear(const DoutPrefixProvider *dpp, rgw::sal::RGWStore *store);
 };
 
 

@@ -233,10 +233,10 @@ protected:
 
 public:
   RGWReshard(rgw::sal::RGWRadosStore* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
-  int add(cls_rgw_reshard_entry& entry);
-  int update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
+  int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
+  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
   int get(cls_rgw_reshard_entry& entry);
-  int remove(cls_rgw_reshard_entry& entry);
+  int remove(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
   int list(int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
   int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 

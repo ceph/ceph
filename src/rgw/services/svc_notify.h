@@ -53,7 +53,7 @@ private:
 
   bool finalized{false};
 
-  int init_watch(optional_yield y);
+  int init_watch(const DoutPrefixProvider *dpp, optional_yield y);
   void finalize_watch();
 
   void init(RGWSI_Zone *_zone_svc,
@@ -70,14 +70,16 @@ private:
   void add_watcher(int i);
   void remove_watcher(int i);
 
-  int watch_cb(uint64_t notify_id,
+  int watch_cb(const DoutPrefixProvider *dpp,
+               uint64_t notify_id,
                uint64_t cookie,
                uint64_t notifier_id,
                bufferlist& bl);
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
+  int robust_notify(const DoutPrefixProvider *dpp, 
+                    RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
                     optional_yield y);
 
   void schedule_context(Context *c);
@@ -88,14 +90,15 @@ public:
   class CB {
     public:
       virtual ~CB() {}
-      virtual int watch_cb(uint64_t notify_id,
+      virtual int watch_cb(const DoutPrefixProvider *dpp,
+                           uint64_t notify_id,
                            uint64_t cookie,
                            uint64_t notifier_id,
                            bufferlist& bl) = 0;
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const string& key, bufferlist& bl, optional_yield y);
+  int distribute(const DoutPrefixProvider *dpp, const string& key, bufferlist& bl, optional_yield y);
 
   void register_watch_cb(CB *cb);
 };

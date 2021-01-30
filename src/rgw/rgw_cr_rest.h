@@ -69,13 +69,13 @@ public:
     request_cleanup();
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
         new RGWRESTReadResource(conn, path, params, &extra_headers, http_manager));
 
     init_new_io(op.get());
 
-    int ret = op->aio_read();
+    int ret = op->aio_read(dpp);
     if (ret < 0) {
       log_error() << "failed to send http operation: " << op->to_str()
           << " ret=" << ret << std::endl;
@@ -186,13 +186,13 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
     request_cleanup();
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
         new RGWRESTSendResource(conn, method, path, params, &headers, http_manager));
 
     init_new_io(op.get());
 
-    int ret = op->aio_send(input_bl);
+    int ret = op->aio_send(dpp, input_bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send request" << dendl;
       op->put();
@@ -341,7 +341,7 @@ public:
     request_cleanup();
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     auto op = boost::intrusive_ptr<RGWRESTDeleteResource>(
         new RGWRESTDeleteResource(conn, path, params, nullptr, http_manager));
 
@@ -349,7 +349,7 @@ public:
 
     bufferlist bl;
 
-    int ret = op->aio_send(bl);
+    int ret = op->aio_send(dpp, bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send DELETE request" << dendl;
       op->put();
@@ -421,7 +421,7 @@ protected:
   boost::asio::coroutine read_state;
 
 public:
-  virtual int init() = 0;
+  virtual int init(const DoutPrefixProvider *dpp) = 0;
   virtual int read(bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
   virtual int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) = 0;
   virtual bool has_attrs() = 0;
@@ -436,7 +436,7 @@ protected:
 
 public:
   virtual int init() = 0;
-  virtual void send_ready(const rgw_rest_obj& rest_obj) = 0;
+  virtual void send_ready(const DoutPrefixProvider *dpp, const rgw_rest_obj& rest_obj) = 0;
   virtual int send() = 0;
   virtual int write(bufferlist& data, bool *need_retry) = 0; /* reentrant */
   virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
@@ -486,7 +486,7 @@ public:
   }
   ~RGWStreamReadHTTPResourceCRF();
 
-  int init() override;
+  int init(const DoutPrefixProvider *dpp) override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
   int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override;
   bool has_attrs() override;
@@ -549,7 +549,7 @@ public:
   int init() override {
     return 0;
   }
-  void send_ready(const rgw_rest_obj& rest_obj) override;
+  void send_ready(const DoutPrefixProvider *dpp, const rgw_rest_obj& rest_obj) override;
   int send() override;
   int write(bufferlist& data, bool *need_retry) override; /* reentrant */
   void write_drain_notify(uint64_t pending_size);
@@ -586,5 +586,5 @@ public:
                     std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
   ~RGWStreamSpliceCR();
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };

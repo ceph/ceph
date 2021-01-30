@@ -146,7 +146,7 @@ public:
   }
   virtual int get_params() = 0;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
 
   const char* name() const override { return "metadata_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
@@ -158,7 +158,7 @@ void RGWMetadataSearchOp::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWMetadataSearchOp::execute(optional_yield y)
+void RGWMetadataSearchOp::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -245,16 +245,16 @@ void RGWMetadataSearchOp::execute(optional_yield y)
   if (marker > 0) {
     params.push_back(param_pair_t("from", marker_str.c_str()));
   }
-  ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
+  ldpp_dout(s, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
   auto& extra_headers = es_module->get_request_headers();
-  op_ret = conn->get_resource(resource, &params, &extra_headers,
+  op_ret = conn->get_resource(dpp, resource, &params, &extra_headers,
                               out, &in, nullptr, y);
   if (op_ret < 0) {
-    ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
+    ldpp_dout(s, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;
   }
 
-  ldout(s->cct, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
+  ldpp_dout(s, 20) << "response: " << string(out.c_str(), out.length()) << dendl;
 
   JSONParser jparser;
   if (!jparser.parse(out.c_str(), out.length())) {

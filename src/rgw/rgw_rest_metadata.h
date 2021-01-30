@@ -26,7 +26,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   const char* name() const override { return "list_metadata"; }
 };
 
@@ -38,7 +38,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   const char* name() const override { return "get_metadata"; }
 };
 
@@ -47,7 +47,7 @@ public:
   RGWOp_Metadata_Get_Myself() {}
   ~RGWOp_Metadata_Get_Myself() override {}
 
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
 };
 
 class RGWOp_Metadata_Put : public RGWRESTOp {
@@ -61,7 +61,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "set_metadata"; }
   RGWOpType get_type() override { return RGW_OP_ADMIN_SET_METADATA; }
@@ -75,7 +75,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
   const char* name() const override { return "remove_metadata"; }
 };
 

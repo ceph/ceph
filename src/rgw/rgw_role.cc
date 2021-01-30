@@ -30,7 +30,7 @@ const string RGWRole::role_oid_prefix = "roles.";
 const string RGWRole::role_path_oid_prefix = "role_paths.";
 const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
-int RGWRole::store_info(bool exclusive, optional_yield y)
+int RGWRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   using ceph::encode;
   string oid = get_info_oid_prefix() + id;
@@ -38,11 +38,11 @@ int RGWRole::store_info(bool exclusive, optional_yield y)
   bufferlist bl;
   encode(*this, bl);
 
-  return store->put_system_obj(store->get_zone()->get_params().roles_pool, oid,
+  return store->put_system_obj(dpp, store->get_zone()->get_params().roles_pool, oid,
 			       bl, exclusive, NULL, real_time(), y, NULL);
 }
 
-int RGWRole::store_name(bool exclusive, optional_yield y)
+int RGWRole::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   RGWNameToId nameToId;
   nameToId.obj_id = id;
@@ -53,16 +53,16 @@ int RGWRole::store_name(bool exclusive, optional_yield y)
   using ceph::encode;
   encode(nameToId, bl);
 
-  return store->put_system_obj(store->get_zone()->get_params().roles_pool, oid,
+  return store->put_system_obj(dpp, store->get_zone()->get_params().roles_pool, oid,
 			       bl, exclusive, NULL, real_time(), y, NULL);
 }
 
-int RGWRole::store_path(bool exclusive, optional_yield y)
+int RGWRole::store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
 {
   string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
 
   bufferlist bl;
-  return store->put_system_obj(store->get_zone()->get_params().roles_pool, oid,
+  return store->put_system_obj(dpp, store->get_zone()->get_params().roles_pool, oid,
 			       bl, exclusive, NULL, real_time(), y, NULL);
 }
 
@@ -110,21 +110,21 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
   creation_date.assign(buf, strlen(buf));
 
   auto& pool = store->get_zone()->get_params().roles_pool;
-  ret = store_info(exclusive, y);
+  ret = store_info(dpp, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  ret = store_name(exclusive, y);
+  ret = store_name(dpp, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: storing role name in pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
 
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
-    int info_ret = store->delete_system_obj(pool, oid, nullptr, y);
+    int info_ret = store->delete_system_obj(dpp, pool, oid, nullptr, y);
     if (info_ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
@@ -132,20 +132,20 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
     return ret;
   }
 
-  ret = store_path(exclusive, y);
+  ret = store_path(dpp, exclusive, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: storing role path in pool: " << pool.name << ": "
                   << path << ": " << cpp_strerror(-ret) << dendl;
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
-    int info_ret = store->delete_system_obj(pool, oid, nullptr, y);
+    int info_ret = store->delete_system_obj(dpp, pool, oid, nullptr, y);
     if (info_ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
     }
     //Delete role name that was stored in previous call
     oid = tenant + get_names_oid_prefix() + name;
-    int name_ret = store->delete_system_obj(pool, oid, nullptr, y);
+    int name_ret = store->delete_system_obj(dpp, pool, oid, nullptr, y);
     if (name_ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-name_ret) << dendl;
@@ -175,7 +175,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
   // Delete id
   string oid = get_info_oid_prefix() + id;
-  ret = store->delete_system_obj(pool, oid, nullptr, y);
+  ret = store->delete_system_obj(dpp, pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-ret) << dendl;
@@ -183,7 +183,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
   // Delete name
   oid = tenant + get_names_oid_prefix() + name;
-  ret = store->delete_system_obj(pool, oid, nullptr, y);
+  ret = store->delete_system_obj(dpp, pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
@@ -191,7 +191,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
   // Delete path
   oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
-  ret = store->delete_system_obj(pool, oid, nullptr, y);
+  ret = store->delete_system_obj(dpp, pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
                   << path << ": " << cpp_strerror(-ret) << dendl;
@@ -224,13 +224,13 @@ int RGWRole::get_by_id(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int RGWRole::update(optional_yield y)
+int RGWRole::update(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto& pool = store->get_zone()->get_params().roles_pool;
 
-  int ret = store_info(false, y);
+  int ret = store_info(dpp, false, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR:  storing info in pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR:  storing info in pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }

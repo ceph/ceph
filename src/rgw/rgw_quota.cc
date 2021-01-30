@@ -203,7 +203,7 @@ int RGWQuotaCache<T>::get_stats(const rgw_user& user, const rgw_bucket& bucket, 
     if (qs.async_refresh_time.sec() > 0 && now >= qs.async_refresh_time) {
       int r = async_refresh(user, bucket, qs);
       if (r < 0) {
-        ldout(store->ctx(), 0) << "ERROR: quota async refresh returned ret=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: quota async refresh returned ret=" << r << dendl;
 
         /* continue processing, might be a transient error, async refresh is just optimization */
       }
@@ -298,15 +298,15 @@ int BucketAsyncRefreshHandler::init_fetch()
   const DoutPrefix dp(store->ctx(), dout_subsys, "rgw bucket async refresh handler: ");
   int r = store->get_bucket(&dp, nullptr, bucket, &rbucket, null_yield);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
   }
 
-  ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
+  ldpp_dout(&dp, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
   r = rbucket->get_bucket_stats_async(RGW_NO_SHARD, this);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
+    ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
     /* get_bucket_stats_async() dropped our reference already */
     return r;
@@ -368,7 +368,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
 
   int r = store->get_bucket(dpp, user.get(), _b, &bucket, y);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
     return r;
   }
 
@@ -378,7 +378,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
   r = bucket->get_bucket_stats(RGW_NO_SHARD, &bucket_ver, &master_ver, bucket_stats);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get bucket stats for bucket="
+    ldpp_dout(dpp, 0) << "could not get bucket stats for bucket="
                            << _b.name << dendl;
     return r;
   }
@@ -623,9 +623,9 @@ int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& _u,
                                                 const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(_u);
-  int r = user->read_stats(y, &stats);
+  int r = user->read_stats(dpp, y, &stats);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get user stats for user=" << user << dendl;
+    ldpp_dout(dpp, 0) << "could not get user stats for user=" << user << dendl;
     return r;
   }
 
@@ -639,13 +639,13 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& _u, rgw_bucket& _b, optional_
 
   int r = store->get_bucket(dpp, user.get(), _b, &bucket, y);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
     return r;
   }
 
-  r = bucket->sync_user_stats(y);
+  r = bucket->sync_user_stats(dpp, y);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: sync_user_stats() for user=" << _u << ", bucket=" << bucket << " returned " << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: sync_user_stats() for user=" << _u << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
   }
 
@@ -659,15 +659,15 @@ int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& 
   ceph::real_time last_stats_update;
   std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(rgw_user(_u.to_str()));
 
-  int ret = user->read_stats(y, &stats, &last_stats_sync, &last_stats_update);
+  int ret = user->read_stats(dpp, y, &stats, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
-    ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
   }
 
   if (!store->ctx()->_conf->rgw_user_quota_sync_idle_users &&
       last_stats_update < last_stats_sync) {
-    ldout(store->ctx(), 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
+    ldpp_dout(dpp, 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
     return 0;
   }
 
@@ -679,7 +679,7 @@ int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& 
 
   ret = rgw_user_sync_all_stats(dpp, store, user.get(), y);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
     return ret;
   }
 
@@ -693,7 +693,7 @@ int RGWUserStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yi
 
   int ret = store->meta_list_keys_init(key, string(), &handle);
   if (ret < 0) {
-    ldout(store->ctx(), 10) << "ERROR: can't get key: ret=" << ret << dendl;
+    ldpp_dout(dpp, 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
   }
 
@@ -704,17 +704,17 @@ int RGWUserStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yi
     list<string> keys;
     ret = store->meta_list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       goto done;
     }
     for (list<string>::iterator iter = keys.begin();
          iter != keys.end() && !going_down(); 
          ++iter) {
       rgw_user user(*iter);
-      ldout(store->ctx(), 20) << "RGWUserStatsCache: sync user=" << user << dendl;
+      ldpp_dout(dpp, 20) << "RGWUserStatsCache: sync user=" << user << dendl;
       int ret = sync_user(dpp, user, y);
       if (ret < 0) {
-        ldout(store->ctx(), 5) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
+        ldpp_dout(dpp, 5) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
 
         /* continuing to next user */
         continue;

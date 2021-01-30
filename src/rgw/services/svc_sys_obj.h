@@ -98,11 +98,11 @@ public:
       ROp(Obj& _source);
 
       int stat(optional_yield y, const DoutPrefixProvider *dpp);
-      int read(int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
-      int read(bufferlist *pbl, optional_yield y) {
-        return read(0, -1, pbl, y);
+      int read(const DoutPrefixProvider *dpp, int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
+      int read(const DoutPrefixProvider *dpp, bufferlist *pbl, optional_yield y) {
+        return read(dpp, 0, -1, pbl, y);
       }
-      int get_attr(const char *name, bufferlist *dest, optional_yield y);
+      int get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist *dest, optional_yield y);
     };
 
     struct WOp {
@@ -146,12 +146,12 @@ public:
 
       WOp(Obj& _source) : source(_source) {}
 
-      int remove(optional_yield y);
-      int write(bufferlist& bl, optional_yield y);
+      int remove(const DoutPrefixProvider *dpp, optional_yield y);
+      int write(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y);
 
-      int write_data(bufferlist& bl, optional_yield y); /* write data only */
-      int write_attrs(optional_yield y); /* write attrs only */
-      int write_attr(const char *name, bufferlist& bl,
+      int write_data(const DoutPrefixProvider *dpp, bufferlist& bl, optional_yield y); /* write data only */
+      int write_attrs(const DoutPrefixProvider *dpp, optional_yield y); /* write attrs only */
+      int write_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& bl,
                      optional_yield y); /* write attrs only */
     };
 
@@ -167,13 +167,13 @@ public:
 
       OmapOp(Obj& _source) : source(_source) {}
 
-      int get_all(std::map<string, bufferlist> *m, optional_yield y);
-      int get_vals(const string& marker, uint64_t count,
+      int get_all(const DoutPrefixProvider *dpp, std::map<string, bufferlist> *m, optional_yield y);
+      int get_vals(const DoutPrefixProvider *dpp, const string& marker, uint64_t count,
                    std::map<string, bufferlist> *m,
                    bool *pmore, optional_yield y);
-      int set(const std::string& key, bufferlist& bl, optional_yield y);
-      int set(const map<std::string, bufferlist>& m, optional_yield y);
-      int del(const std::string& key, optional_yield y);
+      int set(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& bl, optional_yield y);
+      int set(const DoutPrefixProvider *dpp, const map<std::string, bufferlist>& m, optional_yield y);
+      int del(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y);
     };
 
     struct WNOp {
@@ -181,7 +181,7 @@ public:
 
       WNOp(Obj& _source) : source(_source) {}
 
-      int notify(bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
+      int notify(const DoutPrefixProvider *dpp, bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
                  optional_yield y);
     };
     ROp rop() {
