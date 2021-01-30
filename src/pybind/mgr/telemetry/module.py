@@ -9,7 +9,6 @@ import errno
 import hashlib
 import json
 import rbd
-import re
 import requests
 import uuid
 import time
@@ -23,9 +22,9 @@ from mgr_module import MgrModule, Option, OptionValue, Union
 
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
 
-LICENSE='sharing-1-0'
-LICENSE_NAME='Community Data License Agreement - Sharing - Version 1.0'
-LICENSE_URL='https://cdla.io/sharing-1-0/'
+LICENSE = 'sharing-1-0'
+LICENSE_NAME = 'Community Data License Agreement - Sharing - Version 1.0'
+LICENSE_URL = 'https://cdla.io/sharing-1-0/'
 
 # If the telemetry revision has changed since this point, re-require
 # an opt-in.  This should happen each time we add new information to
@@ -61,16 +60,17 @@ REVISION = 3
 #   - rgw daemons, zones, zonegroups; which rgw frontends
 #   - crush map stats
 
+
 class Module(MgrModule):
     metadata_keys = [
-            "arch",
-            "ceph_version",
-            "os",
-            "cpu",
-            "kernel_description",
-            "kernel_version",
-            "distro_description",
-            "distro"
+        "arch",
+        "ceph_version",
+        "os",
+        "cpu",
+        "kernel_description",
+        "kernel_version",
+        "distro_description",
+        "distro"
     ]
 
     MODULE_OPTIONS = [
@@ -316,7 +316,7 @@ class Module(MgrModule):
         r, outb, outs = self.mon_command({
             'prefix': 'config dump',
             'format': 'json'
-        });
+        })
         if r != 0:
             return {}
         try:
@@ -329,7 +329,7 @@ class Module(MgrModule):
                 cluster.add(name)
         # daemon-reported options (which may include ceph.conf)
         active = set()
-        ls = self.get("modified_config_options");
+        ls = self.get("modified_config_options")
         for opt in ls.get('options', {}):
             active.add(opt)
         return {
@@ -373,7 +373,7 @@ class Module(MgrModule):
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
         try:
             time_format = self.remote('devicehealth', 'get_time_format')
-        except:
+        except Exception:
             return {}
         cutoff = datetime.utcnow() - timedelta(hours=self.interval * 2)
         min_sample = cutoff.strftime(time_format)
@@ -388,13 +388,13 @@ class Module(MgrModule):
                 # this is a map of stamp -> {device info}
                 m = self.remote('devicehealth', 'get_recent_device_metrics',
                                 devid, min_sample)
-            except:
+            except Exception:
                 continue
 
             # anonymize host id
             try:
                 host = d['location'][0]['host']
-            except:
+            except KeyError:
                 continue
             anon_host = self.get_store('host-id/%s' % host)
             if not anon_host:
@@ -431,7 +431,6 @@ class Module(MgrModule):
 
     def get_latest(self, daemon_type: str, daemon_name: str, stat: str) -> int:
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
-        #self.log.error("get_latest {0} data={1}".format(stat, data))
         if data:
             return data[-1][1]
         else:
@@ -759,20 +758,26 @@ class Module(MgrModule):
             r = {}
             for opt in self.MODULE_OPTIONS:
                 r[opt['name']] = getattr(self, opt['name'])
-            r['last_upload'] = time.ctime(self.last_upload) if self.last_upload else self.last_upload
+            r['last_upload'] = (time.ctime(self.last_upload)
+                                if self.last_upload else self.last_upload)
             return 0, json.dumps(r, indent=4, sort_keys=True), ''
         elif command['prefix'] == 'telemetry on':
             if command.get('license') != LICENSE:
-                return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '--license " + LICENSE + "' to the 'ceph telemetry on' command."
+                return -errno.EPERM, '', f'''Telemetry data is licensed under the {LICENSE_NAME} ({LICENSE_URL}).
+To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
             self.on()
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
             self.off()
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
-            if self.last_opt_revision < LAST_REVISION_RE_OPT_IN and command.get('license') != LICENSE:
-                self.log.debug('A telemetry send attempt while opted-out. Asking for license agreement')
-                return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo manually send telemetry data, add '--license " + LICENSE + "' to the 'ceph telemetry send' command.\nPlease consider enabling the telemetry module with 'ceph telemetry on'."
+            if self.last_opt_revision < LAST_REVISION_RE_OPT_IN and \
+               command.get('license') != LICENSE:
+                self.log.debug(('A telemetry send attempt while opted-out. '
+                                'Asking for license agreement'))
+                return -errno.EPERM, '', f'''Telemetry data is licensed under the {LICENSE_NAME} ({LICENSE_URL}).
+To manually send telemetry data, add '--license {LICENSE}' to the 'ceph telemetry send' command.
+Please consider enabling the telemetry module with 'ceph telemetry on'.'''
             self.last_report = self.compile_report()
             return self.send(self.last_report, endpoint)
 
@@ -780,7 +785,9 @@ class Module(MgrModule):
             report = self.get_report(channels=command.get('channels', None))
             report = json.dumps(report, indent=4, sort_keys=True)
             if self.channel_device:
-                report += '\n \nDevice report is generated separately. To see it run \'ceph telemetry show-device\'.'
+                report += '''
+
+Device report is generated separately. To see it run 'ceph telemetry show-device'.'''
             return 0, report, ''
         elif command['prefix'] == 'telemetry show-device':
             return 0, json.dumps(self.get_report('device'), indent=4, sort_keys=True), ''
@@ -857,14 +864,14 @@ class Module(MgrModule):
                 continue
 
             now = int(time.time())
-            if not self.last_upload or (now - self.last_upload) > \
-                            self.interval * 3600:
+            if not self.last_upload or \
+               (now - self.last_upload) > self.interval * 3600:
                 self.log.info('Compiling and sending report to %s',
                               self.url)
 
                 try:
                     self.last_report = self.compile_report()
-                except:
+                except Exception:
                     self.log.exception('Exception while compiling report:')
 
                 self.send(self.last_report)
