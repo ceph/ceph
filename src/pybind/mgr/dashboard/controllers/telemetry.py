@@ -235,6 +235,6 @@ class Telemetry(RESTController):
                         'Sharing - Version 1.0 (https://cdla.io/sharing-1-0/). To enable, add '
                         '{"license": "sharing-1-0"} to the request payload.'
                 )
-            mgr.remote('telemetry', 'on')
+            mgr.remote('telemetry', 'on', license_name)
         else:
             mgr.remote('telemetry', 'off')
