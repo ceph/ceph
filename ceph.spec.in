@@ -230,6 +230,7 @@ BuildRequires:  procps
 BuildRequires:	python%{python3_pkgversion}
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	snappy-devel
+BuildRequires:	sqlite-devel
 BuildRequires:	sudo
 BuildRequires:	pkgconfig(udev)
 BuildRequires:	util-linux
@@ -554,6 +555,7 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-mgr-modules-core = %{_epoch_prefix}%{version}-%{release}
+Requires:	    libcephsqlite = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
@@ -921,6 +923,33 @@ Obsoletes:	python-rados < %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Ceph RADOS
 object store.
+
+%package -n libcephsqlite
+Summary:	SQLite3 VFS for Ceph
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
+Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	sqlite-libs
+%description -n libcephsqlite
+A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+distributed object store.
+
+%package -n libcephsqlite-devel
+Summary:	SQLite3 VFS for Ceph headers
+%if 0%{?suse_version}
+Group:		Development/Libraries/C and C++
+%endif
+Requires:	sqlite-devel
+Requires:	libcephsqlite = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
+Provides:	libcephsqlite-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	libcephsqlite-devel < %{_epoch_prefix}%{version}-%{release}
+%description -n libcephsqlite-devel
+A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
+distributed object store.
 
 %if 0%{with libradosstriper}
 %package -n libradosstriper1
@@ -2164,6 +2193,16 @@ fi
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
 %{python3_sitearch}/rados-*.egg-info
+
+%files -n libcephsqlite
+%{_libdir}/libcephsqlite.so
+
+%post -n libcephsqlite -p /sbin/ldconfig
+
+%postun -n libcephsqlite -p /sbin/ldconfig
+
+%files -n libcephsqlite-devel
+%{_includedir}/libcephsqlite.h
 
 %if 0%{with libradosstriper}
 %files -n libradosstriper1
