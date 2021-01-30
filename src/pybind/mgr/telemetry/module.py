@@ -17,7 +17,7 @@ from threading import Event
 from collections import defaultdict
 from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar, TYPE_CHECKING
 
-from mgr_module import MgrModule, Option, OptionValue, Union
+from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, Union
 
 
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
@@ -122,47 +122,6 @@ class Module(MgrModule):
                default=True,
                desc=('Share device health metrics '
                      '(e.g., SMART data, minus potentially identifying info like serial numbers)')),
-    ]
-
-    COMMANDS = [
-        {
-            "cmd": "telemetry status",
-            "desc": "Show current configuration",
-            "perm": "r"
-        },
-        {
-            "cmd": "telemetry send "
-                   "name=endpoint,type=CephChoices,strings=ceph|device,n=N,req=false "
-                   "name=license,type=CephString,req=false",
-            "desc": "Force sending data to Ceph telemetry",
-            "perm": "rw"
-        },
-        {
-            "cmd": "telemetry show "
-                   "name=channels,type=CephString,n=N,req=False",
-            "desc": "Show last report or report to be sent",
-            "perm": "r"
-        },
-        {
-            "cmd": "telemetry show-device",
-            "desc": "Show last device report or device report to be sent",
-            "perm": "r"
-        },
-        {
-            "cmd": "telemetry show-all",
-            "desc": "Show report of all channels",
-            "perm": "r"
-        },
-        {
-            "cmd": "telemetry on name=license,type=CephString,req=false",
-            "desc": "Enable telemetry reports from this cluster",
-            "perm": "rw",
-        },
-        {
-            "cmd": "telemetry off",
-            "desc": "Disable telemetry reports from this cluster",
-            "perm": "rw",
-        },
     ]
 
     @property
@@ -753,57 +712,74 @@ class Module(MgrModule):
             return 1, '', '\n'.join(success + failed)
         return 0, '', '\n'.join(success)
 
-    def handle_command(self, inbuf, command):
-        if command['prefix'] == 'telemetry status':
-            r = {}
-            for opt in self.MODULE_OPTIONS:
-                r[opt['name']] = getattr(self, opt['name'])
-            r['last_upload'] = (time.ctime(self.last_upload)
-                                if self.last_upload else self.last_upload)
-            return 0, json.dumps(r, indent=4, sort_keys=True), ''
-        elif command['prefix'] == 'telemetry on':
-            if command.get('license') != LICENSE:
-                return -errno.EPERM, '', f'''Telemetry data is licensed under the {LICENSE_NAME} ({LICENSE_URL}).
+    @CLIReadCommand('telemetry status')
+    def status(self) -> Tuple[int, str, str]:
+        '''
+        Show current configuration
+        '''
+        r = {}
+        for opt in self.MODULE_OPTIONS:
+            r[opt['name']] = getattr(self, opt['name'])
+        r['last_upload'] = (time.ctime(self.last_upload)
+                            if self.last_upload else self.last_upload)
+        return 0, json.dumps(r, indent=4, sort_keys=True), ''
+
+    @CLICommand('telemetry on')
+    def on(self, license: Optional[str] = None) -> Tuple[int, str, str]:
+        '''
+        Enable telemetry reports from this cluster
+        '''
+        if license != LICENSE:
+            return -errno.EPERM, '', f'''Telemetry data is licensed under the {LICENSE_NAME} ({LICENSE_URL}).
 To enable, add '--license {LICENSE}' to the 'ceph telemetry on' command.'''
-            self.on()
+        else:
+            self.set_module_option('enabled', True)
+            self.set_module_option('last_opt_revision', REVISION)
             return 0, '', ''
-        elif command['prefix'] == 'telemetry off':
-            self.off()
-            return 0, '', ''
-        elif command['prefix'] == 'telemetry send':
-            if self.last_opt_revision < LAST_REVISION_RE_OPT_IN and \
-               command.get('license') != LICENSE:
-                self.log.debug(('A telemetry send attempt while opted-out. '
-                                'Asking for license agreement'))
-                return -errno.EPERM, '', f'''Telemetry data is licensed under the {LICENSE_NAME} ({LICENSE_URL}).
+
+    @CLICommand('telemetry off')
+    def off(self) -> Tuple[int, str, str]:
+        '''
+        Disable telemetry reports from this cluster
+        '''
+        self.set_module_option('enabled', False)
+        self.set_module_option('last_opt_revision', 1)
+        return 0, '', ''
+
+    @CLICommand('telemetry send')
+    def do_send(self,
+                endpoint: Optional[List[EndPoint]] = None,
+                license: Optional[str] = None) -> Tuple[int, str, str]:
+        if self.last_opt_revision < LAST_REVISION_RE_OPT_IN and license != LICENSE:
+            self.log.debug(('A telemetry send attempt while opted-out. '
+                            'Asking for license agreement'))
+            return -errno.EPERM, '', f'''Telemetry data is licensed under the {LICENSE_NAME} ({LICENSE_URL}).
 To manually send telemetry data, add '--license {LICENSE}' to the 'ceph telemetry send' command.
 Please consider enabling the telemetry module with 'ceph telemetry on'.'''
+        else:
             self.last_report = self.compile_report()
             return self.send(self.last_report, endpoint)
 
-        elif command['prefix'] == 'telemetry show':
-            report = self.get_report(channels=command.get('channels', None))
-            report = json.dumps(report, indent=4, sort_keys=True)
-            if self.channel_device:
-                report += '''
+    @CLIReadCommand('telemetry show')
+    def show(self, channels: Optional[List[str]] = None) -> Tuple[int, str, str]:
+        '''
+        Show report of all channels
+        '''
+        report = self.get_report(channels=channels)
+        report = json.dumps(report, indent=4, sort_keys=True)
+        if self.channel_device:
+            report += '''
 
 Device report is generated separately. To see it run 'ceph telemetry show-device'.'''
-            return 0, report, ''
-        elif command['prefix'] == 'telemetry show-device':
-            return 0, json.dumps(self.get_report('device'), indent=4, sort_keys=True), ''
-        elif command['prefix'] == 'telemetry show-all':
-            return 0, json.dumps(self.get_report('all'), indent=4, sort_keys=True), ''
-        else:
-            return (-errno.EINVAL, '',
-                    "Command not found '{0}'".format(command['prefix']))
+        return 0, report, ''
 
-    def on(self) -> None:
-        self.set_module_option('enabled', True)
-        self.set_module_option('last_opt_revision', REVISION)
+    @CLIReadCommand('telemetry show-device')
+    def show_device(self) -> Tuple[int, str, str]:
+        return 0, json.dumps(self.get_report('device'), indent=4, sort_keys=True), ''
 
-    def off(self) -> None:
-        self.set_module_option('enabled', False)
-        self.set_module_option('last_opt_revision', 1)
+    @CLIReadCommand('telemetry show-all')
+    def show_all(self) -> Tuple[int, str, str]:
+        return 0, json.dumps(self.get_report('all'), indent=4, sort_keys=True), ''
 
     def get_report(self,
                    report_type: str = 'default',
