@@ -624,7 +624,7 @@ static int get_swift_container_settings(req_state * const s,
     RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
     int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
     if (r < 0) {
-      dout(0) << "Error creating/updating the cors configuration" << dendl;
+      ldpp_dout(s, 0) << "Error creating/updating the cors configuration" << dendl;
       delete swift_cors;
       return r;
     }
@@ -3006,7 +3006,7 @@ int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::Store* store,
 
   next_tok(req, first, '/');
 
-  dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
+  ldpp_dout(s, 10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
   if (first.size() == 0)
     return 0;
 

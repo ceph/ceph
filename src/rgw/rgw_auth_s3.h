@@ -419,6 +419,7 @@ public:
 } /* namespace rgw */
 
 void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
   const char *method,
   const char *content_md5,
   const char *content_type,
@@ -428,16 +429,17 @@ void rgw_create_s3_canonical_header(
   const char *request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
-bool rgw_create_s3_canonical_header(const req_info& info,
+bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
+                                    const req_info& info,
                                     utime_t *header_time,       /* out */
                                     std::string& dest,          /* out */
                                     bool qsr);
 static inline std::tuple<bool, std::string, utime_t>
-rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
+rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp, const req_info& info, const bool qsr) {
   std::string dest;
   utime_t header_time;
 
-  const bool ok = rgw_create_s3_canonical_header(info, &header_time, dest, qsr);
+  const bool ok = rgw_create_s3_canonical_header(dpp, info, &header_time, dest, qsr);
   return std::make_tuple(ok, dest, header_time);
 }
 

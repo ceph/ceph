@@ -159,7 +159,7 @@ class Store {
 			    std::unique_ptr<Bucket>* bucket,
 			    optional_yield y) = 0;
     virtual bool is_meta_master() = 0;
-    virtual int forward_request_to_master(User* user, obj_version* objv,
+    virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
 					  bufferlist& in_data, JSONParser* jp, req_info& info,
 					  optional_yield y) = 0;
     virtual int defer_gc(const DoutPrefixProvider* dpp, RGWObjectCtx* rctx, Bucket* bucket, Object* obj,
@@ -177,13 +177,13 @@ class Store {
               const DoutPrefixProvider* dpp, optional_yield y) = 0;
     virtual RGWLC* get_rgwlc(void) = 0;
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
-    virtual int delete_raw_obj(const rgw_raw_obj& obj) = 0;
-    virtual int delete_raw_obj_aio(const rgw_raw_obj& obj, Completions* aio) = 0;
+    virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) = 0;
+    virtual int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, Completions* aio) = 0;
     virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) = 0;
     virtual int get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) = 0;
 
-    virtual int log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
-    virtual int log_op(std::string& oid, bufferlist& bl) = 0;
+    virtual int log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
+    virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) = 0;
     virtual int register_to_service_map(const std::string& daemon_type,
 					const map<std::string, std::string>& meta) = 0;
     virtual void get_quota(RGWQuotaInfo& bucket_quota, RGWQuotaInfo& user_quota) = 0;
@@ -197,14 +197,14 @@ class Store {
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) = 0;
     virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) = 0;
-    virtual int clear_usage() = 0;
-    virtual int read_all_usage(uint64_t start_epoch, uint64_t end_epoch,
+    virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
+    virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
 			       RGWUsageIter& usage_iter,
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
-    virtual int trim_all_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
+    virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual int get_config_key_val(std::string name, bufferlist* bl) = 0;
-    virtual int meta_list_keys_init(const std::string& section, const std::string& marker, void** phandle) = 0;
+    virtual int meta_list_keys_init(const DoutPrefixProvider *dpp, const std::string& section, const std::string& marker, void** phandle) = 0;
     virtual int meta_list_keys_next(void* handle, int max, list<std::string>& keys, bool* truncated) = 0;
     virtual void meta_list_keys_complete(void* handle) = 0;
     virtual std::string meta_get_marker(void* handle) = 0;
@@ -272,15 +272,16 @@ class User {
     static bool empty(User* u) { return (!u || u->info.user_id.id.empty()); }
     static bool empty(std::unique_ptr<User>& u) { return (!u || u->info.user_id.id.empty()); }
     virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-    virtual int read_stats(optional_yield y, RGWStorageStats* stats,
+    virtual int read_stats(const DoutPrefixProvider *dpp,
+                           optional_yield y, RGWStorageStats* stats,
 			   ceph::real_time* last_stats_sync = nullptr,
 			   ceph::real_time* last_stats_update = nullptr) = 0;
-    virtual int read_stats_async(RGWGetUserStats_CB* cb) = 0;
-    virtual int complete_flush_stats(optional_yield y) = 0;
-    virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+    virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB* cb) = 0;
+    virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+    virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
-    virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
+    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
     virtual RGWObjVersionTracker& get_version_tracker() { return objv_tracker; }
     virtual Attrs& get_attrs() { return attrs; }
     virtual void set_attrs(Attrs& _attrs) { attrs = _attrs; }
@@ -379,14 +380,14 @@ class Bucket {
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) = 0;
     virtual int get_bucket_info(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-    virtual int get_bucket_stats(int shard_id,
+    virtual int get_bucket_stats(const DoutPrefixProvider *dpp, int shard_id,
 				 std::string* bucket_ver, std::string* master_ver,
 				 std::map<RGWObjCategory, RGWStorageStats>& stats,
 				 std::string* max_marker = nullptr,
 				 bool* syncstopped = nullptr) = 0;
-    virtual int get_bucket_stats_async(int shard_id, RGWGetBucketStats_CB* ctx) = 0;
+    virtual int get_bucket_stats_async(const DoutPrefixProvider *dpp, int shard_id, RGWGetBucketStats_CB* ctx) = 0;
     virtual int read_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-    virtual int sync_user_stats(optional_yield y) = 0;
+    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int update_container_stats(const DoutPrefixProvider* dpp) = 0;
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp) = 0;
     virtual int link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr) = 0;
@@ -402,14 +403,14 @@ class Bucket {
     virtual int check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     virtual int set_instance_attrs(const DoutPrefixProvider* dpp, Attrs& attrs, optional_yield y) = 0;
     virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) = 0;
-    virtual int read_usage(uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+    virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
-    virtual int trim_usage(uint64_t start_epoch, uint64_t end_epoch) = 0;
-    virtual int remove_objs_from_index(std::list<rgw_obj_index_key>& objs_to_unlink) = 0;
-    virtual int check_index(std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) = 0;
-    virtual int rebuild_index() = 0;
-    virtual int set_tag_timeout(uint64_t timeout) = 0;
+    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
+    virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) = 0;
+    virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) = 0;
+    virtual int rebuild_index(const DoutPrefixProvider *dpp) = 0;
+    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
     virtual int purge_instance(const DoutPrefixProvider* dpp) = 0;
 
     bool empty() const { return info.bucket.name.empty(); }
@@ -616,7 +617,7 @@ class Object {
 
       virtual ~StatOp() = default;
 
-      virtual int stat_async() = 0;
+      virtual int stat_async(const DoutPrefixProvider *dpp) = 0;
       virtual int wait() = 0;
     };
 
@@ -681,7 +682,7 @@ class Object {
     virtual void gen_rand_obj_instance_name() = 0;
     virtual void raw_obj_to_obj(const rgw_raw_obj& raw_obj) = 0;
     virtual void get_raw_obj(rgw_raw_obj* raw_obj) = 0;
-    virtual MPSerializer* get_serializer(const std::string& lock_name) = 0;
+    virtual MPSerializer* get_serializer(const DoutPrefixProvider *dpp, const std::string& lock_name) = 0;
     virtual int transition(RGWObjectCtx& rctx,
 			   Bucket* bucket,
 			   const rgw_placement_rule& placement_rule,
@@ -734,15 +735,15 @@ class Object {
     virtual std::unique_ptr<StatOp> get_stat_op(RGWObjectCtx*) = 0;
 
     /* OMAP */
-    virtual int omap_get_vals(const std::string& marker, uint64_t count,
+    virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
 			      std::map<std::string, bufferlist>* m,
 			      bool* pmore, optional_yield y) = 0;
-    virtual int omap_get_all(std::map<std::string, bufferlist>* m,
+    virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>* m,
 			     optional_yield y) = 0;
-    virtual int omap_get_vals_by_keys(const std::string& oid,
+    virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 			      const std::set<std::string>& keys,
 			      Attrs* vals) = 0;
-    virtual int omap_set_val_by_key(const std::string& key, bufferlist& val,
+    virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 				    bool must_exist, optional_yield y) = 0;
 
     static bool empty(Object* o) { return (!o || o->empty()); }
@@ -779,7 +780,7 @@ struct Serializer {
   Serializer() = default;
   virtual ~Serializer() = default;
 
-  virtual int try_lock(utime_t dur, optional_yield y) = 0;
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) = 0;
   virtual int unlock()  = 0;
 };
 
@@ -842,7 +843,7 @@ protected:
     Notification(Object* _obj, rgw::notify::EventType _type) : obj(_obj), event_type(_type) {}
     virtual ~Notification() = default;
 
-    virtual int publish_reserve(RGWObjTags* obj_tags = nullptr) = 0;
+    virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) = 0;
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 			       const ceph::real_time& mtime, const std::string& etag) = 0;
 };
@@ -855,9 +856,9 @@ protected:
     GCChain(Object* _obj) : obj(_obj) {}
     virtual ~GCChain() = default;
 
-    virtual void update(RGWObjManifest* manifest) = 0;
+    virtual void update(const DoutPrefixProvider *dpp, RGWObjManifest* manifest) = 0;
     virtual int send(const std::string& tag) = 0;
-    virtual void delete_inline(const std::string& tag) = 0;
+    virtual void delete_inline(const DoutPrefixProvider *dpp, const std::string& tag) = 0;
 };
 
 using RawObjSet = std::set<rgw_raw_obj>;

@@ -206,7 +206,7 @@ static int sign_request_v2(const DoutPrefixProvider *dpp, RGWAccessKey& key,
   }
 
   string canonical_header;
-  if (!rgw_create_s3_canonical_header(info, NULL, canonical_header, false)) {
+  if (!rgw_create_s3_canonical_header(dpp, info, NULL, canonical_header, false)) {
     ldpp_dout(dpp, 0) << "failed to create canonical s3 header" << dendl;
     return -EINVAL;
   }
@@ -346,7 +346,7 @@ static void scope_from_api_name(CephContext *cct,
   }
 }
 
-int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
 
   string date_str;
@@ -386,9 +386,9 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     new_env.set("HTTP_X_AMZ_CONTENT_SHA256", maybe_payload_hash);
   }
 
-  int ret = sign_request(this, key, region, service, new_env, new_info, nullptr);
+  int ret = sign_request(dpp, key, region, service, new_env, new_info, nullptr);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
   }
 
@@ -599,7 +599,7 @@ void RGWRESTGenerateHTTPHeaders::set_extra_headers(const map<string, string>& ex
   }
 }
 
-int RGWRESTGenerateHTTPHeaders::set_obj_attrs(map<string, bufferlist>& rgw_attrs)
+int RGWRESTGenerateHTTPHeaders::set_obj_attrs(const DoutPrefixProvider *dpp, map<string, bufferlist>& rgw_attrs)
 {
   map<string, string> new_attrs;
 
@@ -616,9 +616,9 @@ int RGWRESTGenerateHTTPHeaders::set_obj_attrs(map<string, bufferlist>& rgw_attrs
   }
 
   RGWAccessControlPolicy policy;
-  int ret = rgw_policy_from_attrset(cct, rgw_attrs, &policy);
+  int ret = rgw_policy_from_attrset(dpp, cct, rgw_attrs, &policy);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: couldn't get policy ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: couldn't get policy ret=" << ret << dendl;
     return ret;
   }
 
@@ -660,11 +660,11 @@ void RGWRESTGenerateHTTPHeaders::set_policy(RGWAccessControlPolicy& policy)
   add_grants_headers(grants_by_type, *new_env, new_info->x_meta_map);
 }
 
-int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key, const bufferlist *opt_content)
+int RGWRESTGenerateHTTPHeaders::sign(const DoutPrefixProvider *dpp, RGWAccessKey& key, const bufferlist *opt_content)
 {
-  int ret = sign_request(this, key, region, service, *new_env, *new_info, opt_content);
+  int ret = sign_request(dpp, key, region, service, *new_env, *new_info, opt_content);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
     return ret;
   }
 
@@ -701,25 +701,25 @@ void RGWRESTStreamS3PutObj::send_init(rgw::sal::Object* obj)
   url = headers_gen.get_url();
 }
 
-void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs)
+void RGWRESTStreamS3PutObj::send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, bufferlist>& rgw_attrs)
 {
-  headers_gen.set_obj_attrs(rgw_attrs);
+  headers_gen.set_obj_attrs(dpp, rgw_attrs);
 
-  send_ready(key);
+  send_ready(dpp, key);
 }
 
-void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
+void RGWRESTStreamS3PutObj::send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, const map<string, string>& http_attrs,
                                        RGWAccessControlPolicy& policy)
 {
   headers_gen.set_http_attrs(http_attrs);
   headers_gen.set_policy(policy);
 
-  send_ready(key);
+  send_ready(dpp, key);
 }
 
-void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key)
+void RGWRESTStreamS3PutObj::send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key)
 {
-  headers_gen.sign(key, nullptr);
+  headers_gen.sign(dpp, key, nullptr);
 
   for (const auto& kv: new_env.get_map()) {
     headers.emplace_back(kv);
@@ -728,10 +728,10 @@ void RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key)
   out_cb = new RGWRESTStreamOutCB(this);
 }
 
-void RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::Object* obj, map<string, bufferlist>& attrs)
+void RGWRESTStreamS3PutObj::put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::Object* obj, map<string, bufferlist>& attrs)
 {
   send_init(obj);
-  send_ready(key, attrs);
+  send_ready(dpp, key, attrs);
 }
 
 void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
@@ -783,33 +783,33 @@ static void send_prepare_convert(const rgw_obj& obj, string *resource)
   *resource = urlsafe_bucket + "/" + urlsafe_object;
 }
 
-int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr)
+int RGWRESTStreamRWRequest::send_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr)
 {
   string resource;
   send_prepare_convert(obj, &resource);
 
-  return send_request(&key, extra_headers, resource, mgr);
+  return send_request(dpp, &key, extra_headers, resource, mgr);
 }
 
-int RGWRESTStreamRWRequest::send_prepare(RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj)
+int RGWRESTStreamRWRequest::send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj)
 {
   string resource;
   send_prepare_convert(obj, &resource);
 
-  return do_send_prepare(&key, extra_headers, resource);
+  return do_send_prepare(dpp, &key, extra_headers, resource);
 }
 
-int RGWRESTStreamRWRequest::send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+int RGWRESTStreamRWRequest::send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
                                            bufferlist *send_data)
 {
   string new_resource;
   //do not encode slash
   url_encode(resource, new_resource, false);
 
-  return do_send_prepare(key, extra_headers, new_resource, send_data);
+  return do_send_prepare(dpp, key, extra_headers, new_resource, send_data);
 }
 
-int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
                                          bufferlist *send_data)
 {
   string new_url = url;
@@ -865,10 +865,10 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
   return 0;
 }
 
-int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+int RGWRESTStreamRWRequest::send_request(const DoutPrefixProvider *dpp, RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
                                          RGWHTTPManager *mgr, bufferlist *send_data)
 {
-  int ret = send_prepare(key, extra_headers, resource, send_data);
+  int ret = send_prepare(dpp, key, extra_headers, resource, send_data);
   if (ret < 0) {
     return ret;
   }
@@ -880,7 +880,7 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
 int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
 {
   if (!headers_gen) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likey a bug!" << dendl;
+    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likey a bug!" << dendl;
     return -EINVAL;
   }
 
@@ -891,9 +891,9 @@ int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
   }
 
   if (sign_key) {
-    int r = headers_gen->sign(*sign_key, outblp);
+    int r = headers_gen->sign(this, *sign_key, outblp);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+      ldpp_dout(this, 0) << "ERROR: failed to sign request" << dendl;
       return r;
     }
   }

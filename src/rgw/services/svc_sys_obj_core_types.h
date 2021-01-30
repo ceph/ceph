@@ -18,7 +18,8 @@ struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
 
   RGWSI_SysObj_Core_GetObjState() {}
 
-  int get_rados_obj(RGWSI_RADOS *rados_svc,
+  int get_rados_obj(const DoutPrefixProvider *dpp,
+                    RGWSI_RADOS *rados_svc,
                     RGWSI_Zone *zone_svc,
                     const rgw_raw_obj& obj,
                     RGWSI_RADOS::Obj **pobj);

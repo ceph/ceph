@@ -19,7 +19,7 @@
 void RGWHandler_REST_IAM::rgw_iam_parse_input()
 {
   if (post_body.size() > 0) {
-    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
       boost::char_separator<char> sep("&");
@@ -89,7 +89,7 @@ int RGWHandler_REST_IAM::init(rgw::sal::Store* store,
   s->dialect = "iam";
 
   if (int ret = RGWHandler_REST_IAM::init_from_header(s, RGW_FORMAT_XML, true); ret < 0) {
-    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return ret;
   }
 

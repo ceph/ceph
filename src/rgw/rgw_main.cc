@@ -422,7 +422,7 @@ int radosgw_Main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   std::string output;
-  r = rgw::lua::install_packages(store, null_yield, failed_packages, output);
+  r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
   if (r < 0) {
     dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
   }
@@ -632,12 +632,12 @@ int radosgw_Main(int argc, const char **argv)
 
 
   // add a watcher to respond to realm configuration changes
-  RGWPeriodPusher pusher(store, null_yield);
+  RGWPeriodPusher pusher(&dp, store, null_yield);
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
   auto reloader = std::make_unique<RGWRealmReloader>(store,
 						     service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->get_zone()->get_realm());
+  RGWRealmWatcher realm_watcher(&dp, g_ceph_context, store->get_zone()->get_realm());
   realm_watcher.add_watcher(RGWRealmNotify::Reload, *reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 
