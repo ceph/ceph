@@ -68,6 +68,11 @@ public:
                                            hook,
                                            "Dump internal statistics for bluefs.");
         ceph_assert(r == 0);
+	r = admin_socket->register_command("bluefs debug_inject_read_zeros",
+					   "bluefs debug_inject_read_zeros",
+					   hook,
+					   "Injects 8K zeros into next BlueFS read. Debug only.");
+	ceph_assert(r == 0);
       }
     }
     return hook;
@@ -114,6 +119,8 @@ private:
       } else if (command == "bluestore bluefs stats") {
         bluefs->dump_block_extents(ss);
         bluefs->dump_volume_selector(ss);
+      } else if (command == "bluefs debug_inject_read_zeros") {
+        bluefs->inject_read_zeros++;
       } else {
         ss << "Invalid command" << std::endl;
         r = false;
@@ -235,6 +242,10 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_read_prefetch_bytes, "read_prefetch_bytes",
 		    "Bytes requested in prefetch read mode", NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64(l_bluefs_read_zeros_candidate, "read_zeros_candidate",
+	    "How many times bluefs read found page with all 0s");
+  b.add_u64(l_bluefs_read_zeros_errors, "read_zeros_errors",
+	    "How many times bluefs read found transient page with all 0s");
 
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -601,6 +612,147 @@ void BlueFS::_stop_alloc()
     }
   }
   alloc.clear();
+}
+
+int BlueFS::read(uint8_t ndev, uint64_t off, uint64_t len,
+		 ceph::buffer::list *pbl, IOContext *ioc, bool buffered)
+{
+  dout(10) << __func__ << " dev " << int(ndev)
+           << ": 0x" << std::hex << off << "~" << len << std::dec
+	   << (buffered ? " buffered" : "")
+	   << dendl;
+  int r;
+  bufferlist bl;
+  r = bdev[ndev]->read(off, len, &bl, ioc, buffered);
+  if (r != 0) {
+    return r;
+  }
+  uint64_t block_size = bdev[ndev]->get_block_size();
+  if (inject_read_zeros) {
+    if (len >= block_size * 2) {
+      derr << __func__ << " injecting error, zeros at "
+	   << int(ndev) << ": 0x" << std::hex << (off + len / 2)
+	   << "~" << (block_size * 2) << std::dec << dendl;
+      //use beginning, replace 8K in the middle with zeros, use tail
+      bufferlist temp;
+      bl.splice(0, len / 2 - block_size, &temp);
+      temp.append_zero(block_size * 2);
+      bl.splice(block_size * 2, len / 2 - block_size, &temp);
+      bl = temp;
+      inject_read_zeros--;
+    }
+  }
+  //make a check if there is a block with all 0
+  uint64_t to_check_len = len;
+  uint64_t skip = p2nphase(off, block_size);
+  if (skip >= to_check_len) {
+    return r;
+  }
+  auto it = bl.begin();
+  it.seek(skip);
+  to_check_len -= skip;
+  bool all_zeros = false;
+  while (all_zeros == false && to_check_len >= block_size) {
+    // checking 0s step
+    unsigned block_left = block_size;
+    unsigned avail;
+    const char* data;
+    all_zeros = true;
+    while (all_zeros && block_left > 0) {
+      avail = it.get_ptr_and_advance(block_left, &data);
+      block_left -= avail;
+      all_zeros = mem_is_zero(data, avail);
+    }
+    // skipping step
+    while (block_left > 0) {
+      avail = it.get_ptr_and_advance(block_left, &data);
+      block_left -= avail;
+    }
+    to_check_len -= block_size;
+  }
+  if (all_zeros) {
+    logger->inc(l_bluefs_read_zeros_candidate, 1);
+    bufferlist bl_reread;
+    r = bdev[ndev]->read(off, len, &bl_reread, ioc, buffered);
+    if (r != 0) {
+      return r;
+    }
+    // check if both read gave the same
+    if (!bl.contents_equal(bl_reread)) {
+      // report problems to log, but continue, maybe it will be good now...
+      derr << __func__ << " initial read of " << int(ndev)
+	   << ": 0x" << std::hex << off << "~" << len
+	   << std::dec << ": different then re-read " << dendl;
+      logger->inc(l_bluefs_read_zeros_errors, 1);
+    }
+    // use second read will be better if is different
+    pbl->append(bl_reread);
+  } else {
+    pbl->append(bl);
+  }
+  return r;
+}
+
+int BlueFS::read_random(uint8_t ndev, uint64_t off, uint64_t len, char *buf, bool buffered)
+{
+  dout(10) << __func__ << " dev " << int(ndev)
+           << ": 0x" << std::hex << off << "~" << len << std::dec
+	   << (buffered ? " buffered" : "")
+	   << dendl;
+  int r;
+  r = bdev[ndev]->read_random(off, len, buf, buffered);
+  if (r != 0) {
+    return r;
+  }
+  uint64_t block_size = bdev[ndev]->get_block_size();
+  if (inject_read_zeros) {
+    if (len >= block_size * 2) {
+      derr << __func__ << " injecting error, zeros at "
+	   << int(ndev) << ": 0x" << std::hex << (off + len / 2)
+	   << "~" << (block_size * 2) << std::dec << dendl;
+      //zero middle 8K
+      memset(buf + len / 2 - block_size, 0, block_size * 2);
+      inject_read_zeros--;
+    }
+  }
+  //make a check if there is a block with all 0
+  uint64_t to_check_len = len;
+  const char* data = buf;
+  uint64_t skip = p2nphase(off, block_size);
+  if (skip >= to_check_len) {
+    return r;
+  }
+  to_check_len -= skip;
+  data += skip;
+
+  bool all_zeros = false;
+  while (all_zeros == false && to_check_len >= block_size) {
+    if (mem_is_zero(data, block_size)) {
+      // at least one block is all zeros
+      all_zeros = true;
+      break;
+    }
+    data += block_size;
+    to_check_len -= block_size;
+  }
+  if (all_zeros) {
+    logger->inc(l_bluefs_read_zeros_candidate, 1);
+    std::unique_ptr<char[]> data_reread(new char[len]);
+    r = bdev[ndev]->read_random(off, len, &data_reread[0], buffered);
+    if (r != 0) {
+      return r;
+    }
+    // check if both read gave the same
+    if (memcmp(buf, &data_reread[0], len) != 0) {
+      derr << __func__ << " initial read of " << int(ndev)
+	   << ": 0x" << std::hex << off << "~" << len
+	   << std::dec << ": different then re-read " << dendl;
+      logger->inc(l_bluefs_read_zeros_errors, 1);
+      // second read is probably better
+      memcpy(buf, &data_reread[0], len);
+    }
+  }
+  return r;
 }
 
 int BlueFS::mount()
@@ -1562,8 +1714,14 @@ int BlueFS::_read_random(
       dout(20) << __func__ << " read random 0x"
 	       << std::hex << x_off << "~" << l << std::dec
 	       << " of " << *p << dendl;
-      int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
-					 cct->_conf->bluefs_buffered_io);
+      int r;
+      if (!cct->_conf->bluefs_check_for_zeros) {
+	r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
+				       cct->_conf->bluefs_buffered_io);
+      } else {
+	r = read_random(p->bdev, p->offset + x_off, l, out,
+			cct->_conf->bluefs_buffered_io);
+      }
       ceph_assert(r == 0);
       off += l;
       len -= l;
@@ -1676,8 +1834,14 @@ int BlueFS::_read(
         dout(20) << __func__ << " fetching 0x"
                  << std::hex << x_off << "~" << l << std::dec
                  << " of " << *p << dendl;
-        int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-				    cct->_conf->bluefs_buffered_io);
+	int r;
+	if (!cct->_conf->bluefs_check_for_zeros) {
+	  r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
+				  cct->_conf->bluefs_buffered_io);
+	} else {
+	  r = read(p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
+		   cct->_conf->bluefs_buffered_io);
+	}
         ceph_assert(r == 0);
       }
       u_lock.unlock();

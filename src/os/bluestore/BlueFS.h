@@ -49,6 +49,8 @@ enum {
   l_bluefs_read_bytes,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
+  l_bluefs_read_zeros_candidate,
+  l_bluefs_read_zeros_errors,
 
   l_bluefs_last,
 };
@@ -338,6 +340,8 @@ private:
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
+  // used to trigger zeros into read (debug / verify)
+  std::atomic<uint64_t> inject_read_zeros{0};
 
   void _init_logger();
   void _shutdown_logger();
@@ -603,6 +607,13 @@ public:
   const PerfCounters* get_perf_counters() const {
     return logger;
   }
+
+private:
+  // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
+  // They are used for checking if read values are all 0, and reread if so.
+  int read(uint8_t ndev, uint64_t off, uint64_t len,
+	   ceph::buffer::list *pbl, IOContext *ioc, bool buffered);
+  int read_random(uint8_t ndev, uint64_t off, uint64_t len, char *buf, bool buffered);
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {
