@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from threading import Event
 from collections import defaultdict
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, Option
 
 
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
@@ -74,81 +74,54 @@ class Module(MgrModule):
     ]
 
     MODULE_OPTIONS = [
-        {
-            'name': 'url',
-            'type': 'str',
-            'default': 'https://telemetry.ceph.com/report'
-        },
-        {
-            'name': 'device_url',
-            'type': 'str',
-            'default': 'https://telemetry.ceph.com/device'
-        },
-        {
-            'name': 'enabled',
-            'type': 'bool',
-            'default': False
-        },
-        {
-            'name': 'last_opt_revision',
-            'type': 'int',
-            'default': 1,
-        },
-        {
-            'name': 'leaderboard',
-            'type': 'bool',
-            'default': False
-        },
-        {
-            'name': 'description',
-            'type': 'str',
-            'default': None
-        },
-        {
-            'name': 'contact',
-            'type': 'str',
-            'default': None
-        },
-        {
-            'name': 'organization',
-            'type': 'str',
-            'default': None
-        },
-        {
-            'name': 'proxy',
-            'type': 'str',
-            'default': None
-        },
-        {
-            'name': 'interval',
-            'type': 'int',
-            'default': 24,
-            'min': 8
-        },
-        {
-            'name': 'channel_basic',
-            'type': 'bool',
-            'default': True,
-            'desc': 'Share basic cluster information (size, version)',
-        },
-        {
-            'name': 'channel_ident',
-            'type': 'bool',
-            'default': False,
-            'description': 'Share a user-provided description and/or contact email for the cluster',
-        },
-        {
-            'name': 'channel_crash',
-            'type': 'bool',
-            'default': True,
-            'description': 'Share metadata about Ceph daemon crashes (version, stack straces, etc)',
-        },
-        {
-            'name': 'channel_device',
-            'type': 'bool',
-            'default': True,
-            'description': 'Share device health metrics (e.g., SMART data, minus potentially identifying info like serial numbers)',
-        },
+        Option(name='url',
+               type='str',
+               default='https://telemetry.ceph.com/report'),
+        Option(name='device_url',
+               type='str',
+               default='https://telemetry.ceph.com/device'),
+        Option(name='enabled',
+               type='bool',
+               default=False),
+        Option(name='last_opt_revision',
+               type='int',
+               default=1),
+        Option(name='leaderboard',
+               type='bool',
+               default=False),
+        Option(name='description',
+               type='str',
+               default=None),
+        Option(name='contact',
+               type='str',
+               default=None),
+        Option(name='organization',
+               type='str',
+               default=None),
+        Option(name='proxy',
+               type='str',
+               default=None),
+        Option(name='interval',
+               type='int',
+               default=24,
+               min=8),
+        Option(name='channel_basic',
+               type='bool',
+               default=True,
+               desc='Share basic cluster information (size, version)'),
+        Option(name='channel_ident',
+               type='bool',
+               default=False,
+               desc='Share a user-provided description and/or contact email for the cluster'),
+        Option(name='channel_crash',
+               type='bool',
+               default=True,
+               desc='Share metadata about Ceph daemon crashes (version, stack straces, etc)'),
+        Option(name='channel_device',
+               type='bool',
+               default=True,
+               desc=('Share device health metrics '
+                     '(e.g., SMART data, minus potentially identifying info like serial numbers)')),
     ]
 
     COMMANDS = [
