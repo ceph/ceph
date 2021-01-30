@@ -513,7 +513,6 @@ class Module(MgrModule):
                 cast(List[Dict[str, Any]], report['pools']).append(
                     {
                         'pool': pool['pool'],
-                        'type': pool['type'],
                         'pg_num': pool['pg_num'],
                         'pgp_num': pool['pg_placement_num'],
                         'size': pool['size'],
