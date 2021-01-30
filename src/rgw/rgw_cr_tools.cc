@@ -159,7 +159,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     rgw_bucket bucket;
     bucket.tenant = user.tenant;
     bucket.name = bucket_name;
-    ret = zone_svc->select_bucket_placement(*user_info, zonegroup_id,
+    ret = zone_svc->select_bucket_placement(dpp, *user_info, zonegroup_id,
 					    placement_rule,
 					    &selected_placement_rule, nullptr, null_yield);
     if (selected_placement_rule != bucket_info.placement_rule) {

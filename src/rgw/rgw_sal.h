@@ -525,7 +525,7 @@ class RGWObject {
     virtual int omap_get_vals_by_keys(const std::string& oid,
 			      const std::set<std::string>& keys,
 			      RGWAttrs *vals) = 0;
-    virtual int omap_set_val_by_key(const std::string& key, bufferlist& val,
+    virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
 				    bool must_exist, optional_yield y) = 0;
 
     static bool empty(RGWObject* o) { return (!o || o->empty()); }

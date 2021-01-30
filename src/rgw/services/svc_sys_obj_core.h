@@ -86,7 +86,8 @@ protected:
                             std::map<string, bufferlist> *m,
                             bool *pmore,
                             optional_yield y);
-  virtual int omap_set(const rgw_raw_obj& obj, const std::string& key,
+  virtual int omap_set(const DoutPrefixProvider *dpp, 
+                       const rgw_raw_obj& obj, const std::string& key,
                        bufferlist& bl, bool must_exist,
                        optional_yield y);
   virtual int omap_set(const rgw_raw_obj& obj,

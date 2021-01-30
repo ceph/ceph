@@ -2218,7 +2218,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-    ret = svc.zone->select_bucket_placement(owner, zonegroup_id, placement_rule,
+    ret = svc.zone->select_bucket_placement(dpp, owner, zonegroup_id, placement_rule,
                                             &selected_placement_rule, &rule_info, y);
     if (ret < 0)
       return ret;

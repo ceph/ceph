@@ -435,7 +435,7 @@ int RGWMetadataHandlerPut_SObj::put_pre(const DoutPrefixProvider *dpp)
 
 int RGWMetadataHandlerPut_SObj::put(const DoutPrefixProvider *dpp)
 {
-  int ret = put_check();
+  int ret = put_check(dpp);
   if (ret != 0) {
     return ret;
   }

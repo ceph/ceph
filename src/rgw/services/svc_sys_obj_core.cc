@@ -424,18 +424,18 @@ int RGWSI_SysObj_Core::omap_get_all(const rgw_raw_obj& obj,
   return 0;
 }
 
-int RGWSI_SysObj_Core::omap_set(const rgw_raw_obj& obj, const std::string& key,
+int RGWSI_SysObj_Core::omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                                 bufferlist& bl, bool must_exist,
                                 optional_yield y)
 {
   RGWSI_RADOS::Obj rados_obj;
   int r = get_rados_obj(zone_svc, obj, &rados_obj);
   if (r < 0) {
-    ldout(cct, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
+    ldpp_dout(dpp, 20) << "get_rados_obj() on obj=" << obj << " returned " << r << dendl;
     return r;
   }
 
-  ldout(cct, 15) << "omap_set obj=" << obj << " key=" << key << dendl;
+  ldpp_dout(dpp, 15) << "omap_set obj=" << obj << " key=" << key << dendl;
 
   map<string, bufferlist> m;
   m[key] = bl;

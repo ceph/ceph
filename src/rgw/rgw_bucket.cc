@@ -2540,7 +2540,7 @@ public:
     obj->get_bucket_info().encode(*bl);
   }
 
-  int put_check() override;
+  int put_check(const DoutPrefixProvider *dpp) override;
   int put_checked(const DoutPrefixProvider *dpp) override;
   int put_post(const DoutPrefixProvider *dpp) override;
 };
@@ -2585,7 +2585,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   }
 }
 
-int RGWMetadataHandlerPut_BucketInstance::put_check()
+int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dpp)
 {
   int ret;
 
@@ -2624,9 +2624,9 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
     bci.info.bucket.tenant = tenant_name;
     // if the sync module never writes data, don't require the zone to specify all placement targets
     if (bihandler->svc.zone->sync_module_supports_writes()) {
-      ret = bihandler->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info, y);
+      ret = bihandler->svc.zone->select_bucket_location_by_rule(dpp, bci.info.placement_rule, &rule_info, y);
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
       }
     }

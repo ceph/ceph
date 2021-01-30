@@ -336,7 +336,7 @@ public:
   uint32_t get_perm(const DoutPrefixProvider* dpp,
                     const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
-  uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask) const;
+  uint32_t get_group_perm(const DoutPrefixProvider *dpp, ACLGroupTypeEnum group, uint32_t perm_mask) const;
   uint32_t get_referer_perm(uint32_t current_perm,
                             std::string http_referer,
                             uint32_t perm_mask);
@@ -502,7 +502,7 @@ public:
   }
 
   virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) { return false; }
-  bool is_public() const;
+  bool is_public(const DoutPrefixProvider *dpp) const;
 
   friend bool operator==(const RGWAccessControlPolicy& lhs, const RGWAccessControlPolicy& rhs);
   friend bool operator!=(const RGWAccessControlPolicy& lhs, const RGWAccessControlPolicy& rhs);

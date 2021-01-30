@@ -150,13 +150,13 @@ int RGWSI_SysObj::Obj::OmapOp::get_vals(const string& marker, uint64_t count,
   return svc->omap_get_vals(obj, marker, count, m, pmore, y);
 }
 
-int RGWSI_SysObj::Obj::OmapOp::set(const std::string& key, bufferlist& bl,
+int RGWSI_SysObj::Obj::OmapOp::set(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& bl,
                                    optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->omap_set(obj, key, bl, must_exist, y);
+  return svc->omap_set(dpp, obj, key, bl, must_exist, y);
 }
 
 int RGWSI_SysObj::Obj::OmapOp::set(const map<std::string, bufferlist>& m,

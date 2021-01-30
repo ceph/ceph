@@ -6326,7 +6326,7 @@ next:
       exit(1);
     }
 
-    int ret = store->svc()->zone->add_bucket_placement(pool, null_yield);
+    int ret = store->svc()->zone->add_bucket_placement(dpp(), pool, null_yield);
     if (ret < 0)
       cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
   }

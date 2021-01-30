@@ -998,7 +998,7 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
 }
 
 
-int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id,
+int RGWSI_Zone::select_new_bucket_location(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const string& zonegroup_id,
 					   const rgw_placement_rule& request_rule,
 					   rgw_placement_rule *pselected_rule_name, RGWZonePlacementInfo *rule_info,
 					   optional_yield y)
@@ -1007,7 +1007,7 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
   RGWZoneGroup zonegroup;
   int ret = get_zonegroup(zonegroup_id, zonegroup);
   if (ret < 0) {
-    ldout(cct, 0) << "could not find zonegroup " << zonegroup_id << " in current period" << dendl;
+    ldpp_dout(dpp, 0) << "could not find zonegroup " << zonegroup_id << " in current period" << dendl;
     return ret;
   }
 
@@ -1020,7 +1020,7 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
     used_rule = &request_rule;
     titer = zonegroup.placement_targets.find(request_rule.name);
     if (titer == zonegroup.placement_targets.end()) {
-      ldout(cct, 0) << "could not find requested placement id " << request_rule 
+      ldpp_dout(dpp, 0) << "could not find requested placement id " << request_rule 
                     << " within zonegroup " << dendl;
       return -ERR_INVALID_LOCATION_CONSTRAINT;
     }
@@ -1028,19 +1028,19 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
     used_rule = &user_info.default_placement;
     titer = zonegroup.placement_targets.find(user_info.default_placement.name);
     if (titer == zonegroup.placement_targets.end()) {
-      ldout(cct, 0) << "could not find user default placement id " << user_info.default_placement
+      ldpp_dout(dpp, 0) << "could not find user default placement id " << user_info.default_placement
                     << " within zonegroup " << dendl;
       return -ERR_INVALID_LOCATION_CONSTRAINT;
     }
   } else {
     if (zonegroup.default_placement.name.empty()) { // zonegroup default rule as fallback, it should not be empty.
-      ldout(cct, 0) << "misconfiguration, zonegroup default placement id should not be empty." << dendl;
+      ldpp_dout(dpp, 0) << "misconfiguration, zonegroup default placement id should not be empty." << dendl;
       return -ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION;
     } else {
       used_rule = &zonegroup.default_placement;
       titer = zonegroup.placement_targets.find(zonegroup.default_placement.name);
       if (titer == zonegroup.placement_targets.end()) {
-        ldout(cct, 0) << "could not find zonegroup default placement id " << zonegroup.default_placement
+        ldpp_dout(dpp, 0) << "could not find zonegroup default placement id " << zonegroup.default_placement
                       << " within zonegroup " << dendl;
         return -ERR_INVALID_LOCATION_CONSTRAINT;
       }
@@ -1050,7 +1050,7 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
   /* now check tag for the rule, whether user is permitted to use rule */
   const auto& target_rule = titer->second;
   if (!target_rule.user_permitted(user_info.placement_tags)) {
-    ldout(cct, 0) << "user not permitted to use placement rule " << titer->first  << dendl;
+    ldpp_dout(dpp, 0) << "user not permitted to use placement rule " << titer->first  << dendl;
     return -EPERM;
   }
 
@@ -1066,17 +1066,17 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
     *pselected_rule_name = rule;
   }
 
-  return select_bucket_location_by_rule(rule, rule_info, y);
+  return select_bucket_location_by_rule(dpp, rule, rule_info, y);
 }
 
-int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info, optional_yield y)
+int RGWSI_Zone::select_bucket_location_by_rule(const DoutPrefixProvider *dpp, const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info, optional_yield y)
 {
   if (location_rule.name.empty()) {
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
     if (rule_info) {
-      return select_legacy_bucket_placement(rule_info, y);
+      return select_legacy_bucket_placement(dpp, rule_info, y);
     }
 
     return 0;
@@ -1090,14 +1090,14 @@ int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& locatio
   auto piter = zone_params->placement_pools.find(location_rule.name);
   if (piter == zone_params->placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-    ldout(cct, 0) << "ERROR: This zone does not contain placement rule "
+    ldpp_dout(dpp, 0) << "ERROR: This zone does not contain placement rule "
                   << location_rule << " present in the zonegroup!" << dendl;
     return -EINVAL;
   }
 
   auto storage_class = location_rule.get_storage_class();
   if (!piter->second.storage_class_exists(storage_class)) {
-    ldout(cct, 5) << "requested storage class does not exist: " << storage_class << dendl;
+    ldpp_dout(dpp, 5) << "requested storage class does not exist: " << storage_class << dendl;
     return -EINVAL;
   }
 
@@ -1111,13 +1111,13 @@ int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& locatio
   return 0;
 }
 
-int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id,
+int RGWSI_Zone::select_bucket_placement(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const string& zonegroup_id,
                                         const rgw_placement_rule& placement_rule,
                                         rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info,
 					optional_yield y)
 {
   if (!zone_params->placement_pools.empty()) {
-    return select_new_bucket_location(user_info, zonegroup_id, placement_rule,
+    return select_new_bucket_location(dpp, user_info, zonegroup_id, placement_rule,
                                       pselected_rule, rule_info, y);
   }
 
@@ -1126,13 +1126,13 @@ int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const stri
   }
 
   if (rule_info) {
-    return select_legacy_bucket_placement(rule_info, y);
+    return select_legacy_bucket_placement(dpp, rule_info, y);
   }
 
   return 0;
 }
 
-int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info,
+int RGWSI_Zone::select_legacy_bucket_placement(const DoutPrefixProvider *dpp, RGWZonePlacementInfo *rule_info,
 					       optional_yield y)
 {
   bufferlist map_bl;
@@ -1154,7 +1154,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info,
     auto iter = map_bl.cbegin();
     decode(m, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: couldn't decode avail_pools" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: couldn't decode avail_pools" << dendl;
   }
 
 read_omap:
@@ -1173,7 +1173,7 @@ read_omap:
     ret = rados_svc->pool().create(pools, &retcodes);
     if (ret < 0)
       return ret;
-    ret = sysobj.omap().set(s, bl, y);
+    ret = sysobj.omap().set(dpp, s, bl, y);
     if (ret < 0)
       return ret;
     m[s] = bl;
@@ -1184,7 +1184,7 @@ read_omap:
     encode(m, new_bl);
     ret = sysobj.wop().write(new_bl, y);
     if (ret < 0) {
-      ldout(cct, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
     }
   }
 
@@ -1229,7 +1229,7 @@ int RGWSI_Zone::update_placement_map(optional_yield y)
   return ret;
 }
 
-int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool, optional_yield y)
+int RGWSI_Zone::add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& new_pool, optional_yield y)
 {
   int ret = rados_svc->pool(new_pool).lookup();
   if (ret < 0) { // DNE, or something
@@ -1241,7 +1241,7 @@ int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool, optional_yield y)
   auto sysobj = obj_ctx.get_obj(obj);
 
   bufferlist empty_bl;
-  ret = sysobj.omap().set(new_pool.to_str(), empty_bl, y);
+  ret = sysobj.omap().set(dpp, new_pool.to_str(), empty_bl, y);
 
   // don't care about return value
   update_placement_map(y);
