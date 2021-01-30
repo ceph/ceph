@@ -876,10 +876,6 @@ class Module(MgrModule):
             self.log.debug('Sleeping for %d seconds', sleep)
             self.event.wait(sleep)
 
-    def self_test(self):
-        self.compile_report()
-        return True
-
     @staticmethod
     def can_run() -> Tuple[bool, str]:
         return True, ''
