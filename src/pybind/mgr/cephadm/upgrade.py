@@ -51,7 +51,10 @@ class UpgradeState:
     @classmethod
     def from_json(cls, data: dict) -> Optional['UpgradeState']:
         if data:
-            return cls(**data)
+            c = {k: v for k, v in data.items()}
+            if 'repo_digest' in c:
+                c['target_digests'] = [c.pop('repo_digest')]
+            return cls(**c)
         else:
             return None
 
