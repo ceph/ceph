@@ -254,6 +254,7 @@ class CephMgrCommands(Directive):
                          'jsonpatch',
                          'rook.rook_client',
                          'rook.rook_client.ceph',
+                         'rook.rook_client._helper',
                          'cherrypy=3.2.3']
 
         # make restful happy
