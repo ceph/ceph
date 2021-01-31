@@ -104,7 +104,7 @@
 #define RADOS_OBJECT_EXTENSION_FORMAT ".%016llx"
 
 /// default object layout
-struct ceph_file_layout default_file_layout = {
+static const struct ceph_file_layout default_file_layout = {
   init_le32(1<<22),	// fl_stripe_unit
   init_le32(1),		// fl_stripe_count
   init_le32(1<<22),	// fl_object_size
