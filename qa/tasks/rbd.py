@@ -284,13 +284,7 @@ def dev_create(ctx, config):
 
         if encryption_format == 'none':
             device_path[role] = '/dev/rbd/rbd/{image}'.format(image=name)
-            device_specific_args = [
-                run.Raw('&&'),
-                # wait for the symlink to be created by udev
-                'while', 'test', '!', '-e', device_path, run.Raw(';'), 'do',
-                'sleep', '1', run.Raw(';'),
-                'done',
-                ]
+            device_specific_args = []
         else:
             remote.run(
                 args=[
@@ -339,15 +333,7 @@ def dev_create(ctx, config):
             (remote,) = ctx.cluster.only(role).remotes.keys()
 
             if encryption_format == 'none':
-                device_specific_args = [
-                    run.Raw('&&'),
-                    # wait for the symlink to be deleted by udev
-                    'while', 'test', '-e', device_path[role],
-                    run.Raw(';'),
-                    'do',
-                    'sleep', '1', run.Raw(';'),
-                    'done',
-                    ]
+                device_specific_args = []
             else:
                 device_specific_args = ['-t', 'nbd']
 
