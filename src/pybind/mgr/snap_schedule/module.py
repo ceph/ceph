@@ -6,7 +6,7 @@ LGPL2.1.  See file COPYING.
 import errno
 import json
 import sqlite3
-from typing import Sequence, Optional
+from typing import Any, Dict, Optional, Tuple
 from .fs.schedule_client import SnapSchedClient
 from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option
 from mgr_util import CephfsConnectionException
@@ -24,12 +24,12 @@ class Module(MgrModule):
         ),
     ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         self._initialized = Event()
         self.client = SnapSchedClient(self)
 
-    def resolve_subvolume_path(self, fs, subvol, path):
+    def resolve_subvolume_path(self, fs: str, subvol: Optional[str], path: str) -> str:
         if not subvol:
             return path
 
@@ -41,7 +41,7 @@ class Module(MgrModule):
         return subvol_path + path
 
     @property
-    def default_fs(self):
+    def default_fs(self) -> str:
         fs_map = self.get('fs_map')
         if fs_map['filesystems']:
             return fs_map['filesystems'][0]['mdsmap']['fs_name']
@@ -50,19 +50,19 @@ class Module(MgrModule):
             raise CephfsConnectionException(
                 -errno.ENOENT, "no filesystem found")
 
-    def serve(self):
+    def serve(self) -> None:
         self._initialized.set()
 
-    def handle_command(self, inbuf, cmd):
+    def handle_command(self, inbuf: str, cmd: Dict[str, str]) -> Tuple[int, str, str]:
         self._initialized.wait()
         return -errno.EINVAL, "", "Unknown command"
 
     @CLIReadCommand('fs snap-schedule status')
     def snap_schedule_get(self,
-                          path: Optional[str] = '/',
+                          path: str = '/',
                           subvol: Optional[str] = None,
                           fs: Optional[str] = None,
-                          format: Optional[str] = 'plain'):
+                          format: Optional[str] = 'plain') -> Tuple[int, str, str]:
         '''
         List current snapshot schedules
         '''
@@ -79,9 +79,9 @@ class Module(MgrModule):
     @CLIReadCommand('fs snap-schedule list')
     def snap_schedule_list(self, path: str,
                            subvol: Optional[str] = None,
-                           recursive: Optional[bool] = False,
+                           recursive: bool = False,
                            fs: Optional[str] = None,
-                           format: Optional[str] = 'plain'):
+                           format: Optional[str] = 'plain') -> Tuple[int, str, str]:
         '''
         Get current snapshot schedule for <path>
         '''
@@ -104,16 +104,16 @@ class Module(MgrModule):
     @CLIWriteCommand('fs snap-schedule add')
     def snap_schedule_add(self,
                           path: str,
-                          snap_schedule: Optional[str],
+                          snap_schedule: str,
                           start: Optional[str] = None,
                           fs: Optional[str] = None,
-                          subvol: Optional[str] = None):
+                          subvol: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Set a snapshot schedule for <path>
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.store_snap_schedule(use_fs,
                                             abs_path,
                                             (abs_path, snap_schedule,
@@ -137,13 +137,13 @@ class Module(MgrModule):
                          repeat: Optional[str] = None,
                          start: Optional[str] = None,
                          subvol: Optional[str] = None,
-                         fs: Optional[str] = None):
+                         fs: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Remove a snapshot schedule for <path>
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.rm_snap_schedule(use_fs, abs_path, repeat, start)
         except CephfsConnectionException as e:
             return e.to_tuple()
@@ -157,13 +157,13 @@ class Module(MgrModule):
                                     retention_spec_or_period: str,
                                     retention_count: Optional[str] = None,
                                     fs: Optional[str] = None,
-                                    subvol: Optional[str] = None):
+                                    subvol: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Set a retention specification for <path>
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.add_retention_spec(use_fs, abs_path,
                                           retention_spec_or_period,
                                           retention_count)
@@ -179,13 +179,13 @@ class Module(MgrModule):
                                    retention_spec_or_period: str,
                                    retention_count: Optional[str] = None,
                                    fs: Optional[str] = None,
-                                   subvol: Optional[str] = None):
+                                   subvol: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Remove a retention specification for <path>
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.rm_retention_spec(use_fs, abs_path,
                                           retention_spec_or_period,
                                           retention_count)
@@ -201,13 +201,13 @@ class Module(MgrModule):
                                repeat: Optional[str] = None,
                                start: Optional[str] = None,
                                subvol: Optional[str] = None,
-                               fs: Optional[str] = None):
+                               fs: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Activate a snapshot schedule for <path>
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.activate_snap_schedule(use_fs, abs_path, repeat, start)
         except CephfsConnectionException as e:
             return e.to_tuple()
@@ -221,13 +221,13 @@ class Module(MgrModule):
                                  repeat: Optional[str] = None,
                                  start: Optional[str] = None,
                                  subvol: Optional[str] = None,
-                                 fs: Optional[str] = None):
+                                 fs: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Deactivate a snapshot schedule for <path>
         '''
         try:
             use_fs = fs if fs else self.default_fs
-            abs_path = self.resolve_subvolume_path(fs, subvol, path)
+            abs_path = self.resolve_subvolume_path(use_fs, subvol, path)
             self.client.deactivate_snap_schedule(use_fs, abs_path, repeat, start)
         except CephfsConnectionException as e:
             return e.to_tuple()
