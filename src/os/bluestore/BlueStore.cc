@@ -8656,6 +8656,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
           omap_head != last_omap_head) {
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
             << "fsck error: found stray (per-pg) omap data on omap_head "
+	    << " key " << pretty_binary_string(it->key())
             << omap_head << " " << last_omap_head << " " << used_omap_head.count(omap_head) << fsck_dendl;
           ++errors;
           last_omap_head = omap_head;
