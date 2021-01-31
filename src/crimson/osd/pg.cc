@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #include "pg.h"
 
@@ -139,6 +139,28 @@ bool PG::try_flush_or_schedule_async() {
 	  PeeringState::IntervalFlush());
       });
   return false;
+}
+
+void PG::publish_stats_to_osd()
+{
+  if (!is_primary())
+    return;
+  if (auto new_pg_stats = peering_state.prepare_stats_for_publish(
+        pg_stats,
+        object_stat_collection_t());
+      new_pg_stats.has_value()) {
+    pg_stats = std::move(new_pg_stats);
+  }
+}
+
+void PG::clear_publish_stats()
+{
+  pg_stats.reset();
+}
+
+pg_stat_t PG::get_stats() const
+{
+  return pg_stats.value_or(pg_stat_t{});
 }
 
 void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
