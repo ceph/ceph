@@ -9,7 +9,9 @@ from collections import defaultdict
 from prettytable import PrettyTable
 import re
 from threading import Event, Lock
-from typing import Any, Callable, Dict, Optional, Tuple, TypeVar
+from typing import cast, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Tuple, TypeVar,\
+    Union, TYPE_CHECKING
+
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 OLD_DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
@@ -32,6 +34,9 @@ def with_crashes(func: FuncT) -> FuncT:
     return cast(FuncT, wrapper)
 
 
+CrashT = Dict[str, Union[str, List[str]]]
+
+
 class Module(MgrModule):
     MODULE_OPTIONS = [
         Option(
@@ -48,18 +53,21 @@ class Module(MgrModule):
             runtime=True),
     ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
-        self.crashes = None
+        self.crashes: Optional[Dict[str, CrashT]] = None
         self.crashes_lock = Lock()
         self.run = True
         self.event = Event()
+        if TYPE_CHECKING:
+            self.warn_recent_interval = 0.0
+            self.retain_interval = 0.0
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         self.run = False
         self.event.set()
 
-    def serve(self):
+    def serve(self) -> None:
         self.config_notify()
         while self.run:
             with self.crashes_lock:
@@ -69,7 +77,7 @@ class Module(MgrModule):
             self.event.wait(wait)
             self.event.clear()
 
-    def config_notify(self):
+    def config_notify(self) -> None:
         for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
@@ -77,21 +85,23 @@ class Module(MgrModule):
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))
 
-    def _load_crashes(self):
+    def _load_crashes(self) -> None:
         raw = self.get_store_prefix('crash/')
         self.crashes = {k[6:]: json.loads(m) for (k, m) in raw.items()}
 
-    def _refresh_health_checks(self):
+    def _refresh_health_checks(self) -> None:
         if not self.crashes:
             self._load_crashes()
+        assert self.crashes is not None
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(
             seconds=self.warn_recent_interval)
         recent = {
             crashid: crash for crashid, crash in self.crashes.items()
-            if self.time_from_string(crash['timestamp']) > cutoff and 'archived' not in crash
+            if (self.time_from_string(cast(str, crash['timestamp'])) > cutoff and
+                'archived' not in crash)
         }
         num = len(recent)
-        health_checks = {}
+        health_checks: Dict[str, Dict[str, Union[int, str, List[str]]]] = {}
         if recent:
             detail = [
                 '%s crashed on host %s at %s' % (
@@ -111,7 +121,7 @@ class Module(MgrModule):
             }
         self.set_health_checks(health_checks)
 
-    def time_from_string(self, timestr):
+    def time_from_string(self, timestr: str) -> datetime.datetime:
         # drop the 'Z' timezone indication, it's always UTC
         timestr = timestr.rstrip('Z')
         try:
@@ -119,31 +129,32 @@ class Module(MgrModule):
         except ValueError:
             return datetime.datetime.strptime(timestr, OLD_DATEFMT)
 
-    def validate_crash_metadata(self, inbuf):
+    def validate_crash_metadata(self, inbuf: str) -> Dict[str, Union[str, List[str]]]:
         # raise any exceptions to caller
         metadata = json.loads(inbuf)
         for f in ['crash_id', 'timestamp']:
             if f not in metadata:
                 raise AttributeError("missing '%s' field" % f)
-        time = self.time_from_string(metadata['timestamp'])
+        _ = self.time_from_string(metadata['timestamp'])
         return metadata
 
-    def timestamp_filter(self, f):
+    def timestamp_filter(self, f: Callable[[datetime.datetime], bool]) -> Iterable[Tuple[str, CrashT]]:
         """
         Filter crash reports by timestamp.
 
         :param f: f(time) return true to keep crash report
         :returns: crash reports for which f(time) returns true
         """
-        def inner(pair):
+        def inner(pair: Tuple[str, CrashT]) -> bool:
             _, crash = pair
-            time = self.time_from_string(crash["timestamp"])
+            time = self.time_from_string(cast(str, crash["timestamp"]))
             return f(time)
+        assert self.crashes is not None
         return filter(inner, self.crashes.items())
 
     # stack signature helpers
 
-    def sanitize_backtrace(self, bt):
+    def sanitize_backtrace(self, bt: List[str]) -> List[str]:
         ret = list()
         for func_record in bt:
             # split into two fields on last space, take the first one,
@@ -155,14 +166,16 @@ class Module(MgrModule):
 
     ASSERT_MATCHEXPR = re.compile(r'(?s)(.*) thread .* time .*(: .*)\n')
 
-    def sanitize_assert_msg(self, msg):
+    def sanitize_assert_msg(self, msg: str) -> str:
         # (?s) allows matching newline.  get everything up to "thread" and
         # then after-and-including the last colon-space.  This skips the
         # thread id, timestamp, and file:lineno, because file is already in
         # the beginning, and lineno may vary.
-        return ''.join(self.ASSERT_MATCHEXPR.match(msg).groups())
+        matched = self.ASSERT_MATCHEXPR.match(msg)
+        assert matched
+        return ''.join(matched.groups())
 
-    def calc_sig(self, bt, assert_msg):
+    def calc_sig(self, bt: List[str], assert_msg: Optional[str]) -> str:
         sig = hashlib.sha256()
         for func in self.sanitize_backtrace(bt):
             sig.update(func.encode())
@@ -179,6 +192,7 @@ class Module(MgrModule):
         show crash dump metadata
         """
         crashid = id
+        assert self.crashes is not None
         crash = self.crashes.get(crashid)
         if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
@@ -195,10 +209,11 @@ class Module(MgrModule):
         except Exception as e:
             return errno.EINVAL, '', 'malformed crash metadata: %s' % e
         if 'backtrace' in metadata:
-            metadata['stack_sig'] = self.calc_sig(
-                metadata.get('backtrace'), metadata.get('assert_msg'))
-        crashid = metadata['crash_id']
-
+            backtrace = cast(List[str], metadata.get('backtrace'))
+            assert_msg = cast(Optional[str], metadata.get('assert_msg'))
+            metadata['stack_sig'] = self.calc_sig(backtrace, assert_msg)
+        crashid = cast(str, metadata['crash_id'])
+        assert self.crashes is not None
         if crashid not in self.crashes:
             self.crashes[crashid] = metadata
             key = 'crash/%s' % crashid
@@ -206,13 +221,13 @@ class Module(MgrModule):
             self._refresh_health_checks()
         return 0, '', ''
 
-    def ls(self):
+    def ls(self) -> Tuple[int, str, str]:
         if not self.crashes:
             self._load_crashes()
         return self.do_ls_all('')
 
-    def _do_ls(self, t: Dict[str, str], format: Optional[str]) -> Tuple[int, str, str]:
-        r = sorted(t, key=lambda i: i.get('crash_id'))
+    def _do_ls(self, t: Iterable[CrashT], format: Optional[str]) -> Tuple[int, str, str]:
+        r = sorted(t, key=lambda i: i['crash_id'])
         if format in ('json', 'json-pretty'):
             return 0, json.dumps(r, indent=4, sort_keys=True), ''
         else:
@@ -234,6 +249,7 @@ class Module(MgrModule):
         """
         Show new and archived crash dumps
         """
+        assert self.crashes is not None
         return self._do_ls(self.crashes.values(), format)
 
     @CLIReadCommand('crash ls-new')
@@ -242,6 +258,7 @@ class Module(MgrModule):
         """
         Show new crash dumps
         """
+        assert self.crashes is not None
         t = [crash for crashid, crash in self.crashes.items()
              if 'archived' not in crash]
         return self._do_ls(t, format)
@@ -253,6 +270,7 @@ class Module(MgrModule):
         Remove a saved crash <id>
         """
         crashid = id
+        assert self.crashes is not None
         if crashid in self.crashes:
             del self.crashes[crashid]
             key = 'crash/%s' % crashid
@@ -269,12 +287,13 @@ class Module(MgrModule):
         self._prune(keep * 60*60*24)
         return 0, '', ''
 
-    def _prune(self, seconds):
+    def _prune(self, seconds: float) -> None:
         now = datetime.datetime.utcnow()
         cutoff = now - datetime.timedelta(seconds=seconds)
         removed_any = False
         # make a copy of the list, since we'll modify self.crashes below
         to_prune = list(self.timestamp_filter(lambda ts: ts <= cutoff))
+        assert self.crashes is not None
         for crashid, crash in to_prune:
             del self.crashes[crashid]
             key = 'crash/%s' % crashid
@@ -290,6 +309,7 @@ class Module(MgrModule):
         Acknowledge a crash and silence health warning(s)
         """
         crashid = id
+        assert self.crashes is not None
         crash = self.crashes.get(crashid)
         if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
@@ -307,6 +327,7 @@ class Module(MgrModule):
         """
         Acknowledge all new crashes and silence health warning(s)
         """
+        assert self.crashes is not None
         for crashid, crash in self.crashes.items():
             if not crash.get('archived'):
                 crash['archived'] = str(datetime.datetime.utcnow())
@@ -323,36 +344,41 @@ class Module(MgrModule):
         Summarize recorded crashes
         """
         # age in days for reporting, ordered smallest first
-        bins = [1, 3, 7]
+        AGE_IN_DAYS = [1, 3, 7]
         retlines = list()
 
-        def binstr(bindict):
+        BinnedStatsT = Dict[str, Union[int, datetime.datetime, List[str]]]
+
+        def binstr(bindict: BinnedStatsT) -> str:
             binlines = list()
-            count = len(bindict['idlist'])
+            id_list = cast(List[str], bindict['idlist'])
+            count = len(id_list)
             if count:
                 binlines.append(
                     '%d older than %s days old:' % (count, bindict['age'])
                 )
-                for crashid in bindict['idlist']:
+                for crashid in id_list:
                     binlines.append(crashid)
             return '\n'.join(binlines)
 
         total = 0
         now = datetime.datetime.utcnow()
-        for i, age in enumerate(bins):
+        bins: List[BinnedStatsT] = []
+        for age in AGE_IN_DAYS:
             agelimit = now - datetime.timedelta(days=age)
-            bins[i] = {
+            bins.append({
                 'age': age,
                 'agelimit': agelimit,
                 'idlist': list()
-            }
+            })
 
+        assert self.crashes is not None
         for crashid, crash in self.crashes.items():
             total += 1
-            stamp = self.time_from_string(crash['timestamp'])
-            for i, bindict in enumerate(bins):
-                if stamp <= bindict['agelimit']:
-                    bindict['idlist'].append(crashid)
+            stamp = self.time_from_string(cast(str, crash['timestamp']))
+            for bindict in bins:
+                if stamp <= cast(datetime.datetime, bindict['agelimit']):
+                    cast(List[str], bindict['idlist']).append(crashid)
                     # don't count this one again
                     continue
 
@@ -369,16 +395,17 @@ class Module(MgrModule):
         Crashes in the last <hours> hours
         """
         # Return a machine readable summary of recent crashes.
-        report = defaultdict(lambda: 0)
+        report: DefaultDict[str, int] = defaultdict(lambda: 0)
+        assert self.crashes is not None
         for crashid, crash in self.crashes.items():
-            pname = crash.get("process_name", "unknown")
+            pname = cast(str, crash.get("process_name", "unknown"))
             if not pname:
                 pname = "unknown"
             report[pname] += 1
 
         return 0, '', json.dumps(report, sort_keys=True)
 
-    def self_test(self):
+    def self_test(self) -> None:
         # test time conversion
         timestr = '2018-06-22T20:35:38.058818Z'
         old_timestr = '2018-06-22 20:35:38.058818Z'
