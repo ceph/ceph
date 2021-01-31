@@ -378,7 +378,10 @@ class CLICommand(object):
             kwargs[k] = CephArgtype.cast_to(tp, v)
         return kwargs
 
-    def call(self, mgr: Any, cmd_dict: Dict[str, Any], inbuf: Optional[str] = None) -> HandleCommandResult:
+    def call(self,
+             mgr: Any,
+             cmd_dict: Dict[str, Any],
+             inbuf: Optional[str] = None) -> HandleCommandResult:
         kwargs = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
             kwargs['inbuf'] = inbuf
@@ -786,6 +789,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
             return r
 
 
+HealthChecksT = Mapping[str, Mapping[str, Union[int, str, Sequence[str]]]]
+
+
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     COMMANDS = []  # type: List[Any]
     MODULE_OPTIONS: List[Option] = []
@@ -1135,7 +1141,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_counter(self,
                     svc_type: str,
                     svc_name: str,
-                    path: str) -> List[Tuple[float, int]]:
+                    path: str) -> Dict[str, List[Tuple[float, int]]]:
         """
         Called by the plugin to fetch the latest performance counter data for a
         particular counter on a particular service.
@@ -1144,8 +1150,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param str svc_name:
         :param str path: a period-separated concatenation of the subsystem and the
             counter name, for example "mds.inodes".
-        :return: A list of two-tuples of (timestamp, value) is returned.  This may be
-            empty if no data is available.
+        :return: A dict of counter names to their values. each value is a list of
+            of two-tuples of (timestamp, value).  This may be empty if no data is
+            available.
         """
         return self._ceph_get_counter(svc_type, svc_name, path)
 
@@ -1276,8 +1283,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         self._ceph_send_command(result, svc_type, svc_id, command, tag, inbuf)
 
-    def set_health_checks(self,
-                          checks: Mapping[str, Mapping[str, Union[int, str, Sequence[str]]]]) -> None:
+    def set_health_checks(self, checks: HealthChecksT) -> None:
         """
         Set the module's current map of health checks.  Argument is a
         dict of check names to info, in this form:
@@ -1612,7 +1618,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
-    def update_progress_event(self, evid: str, desc: str, progress: float, add_to_ceph_s: bool) -> None:
+    def update_progress_event(self,
+                              evid: str,
+                              desc: str,
+                              progress: float,
+                              add_to_ceph_s: bool) -> None:
         return self._ceph_update_progress_event(evid, desc, progress, add_to_ceph_s)
 
     def complete_progress_event(self, evid: str) -> None:
