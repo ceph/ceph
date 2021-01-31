@@ -5,7 +5,7 @@ A simple cluster health alerting module.
 
 from mgr_module import MgrModule, HandleCommandResult
 from threading import Event
-import errno
+from typing import Any, Optional, Dict, List, TYPE_CHECKING, Union
 import json
 import smtplib
 
@@ -18,7 +18,8 @@ class Alerts(MgrModule):
         },
     ]
 
-    MODULE_OPTIONS = [
+    # ´# type: ignore` due to the introduction of the Option type.
+    MODULE_OPTIONS: List[Dict[str, Any]] = [  # type: ignore
         {
             'name': 'interval',
             'type': 'secs',
@@ -80,10 +81,10 @@ class Alerts(MgrModule):
     ]
 
     # These are "native" Ceph options that this module cares about.
-    NATIVE_OPTIONS = [
+    NATIVE_OPTIONS: List[str] = [
     ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Alerts, self).__init__(*args, **kwargs)
 
         # set up some members to enable the serve() method and shutdown()
@@ -95,8 +96,18 @@ class Alerts(MgrModule):
 
         self.log.info("Init")
 
+        if TYPE_CHECKING:
+            self.interval = 60
+            self.smtp_host = ''
+            self.smtp_destination = ''
+            self.smtp_port = 0
+            self.smtp_ssl = True
+            self.smtp_user = ''
+            self.smtp_password = ''
+            self.smtp_sender = ''
+            self.smtp_from_name = ''
 
-    def config_notify(self):
+    def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
         """
@@ -116,7 +127,7 @@ class Alerts(MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
-    def handle_command(self, inbuf, cmd):
+    def handle_command(self, inbuf: Optional[str], cmd: Dict[str, Any]) -> HandleCommandResult:
         ret = 0
         out = ''
         err = ''
@@ -128,8 +139,8 @@ class Alerts(MgrModule):
             stdout=out,   # stdout
             stderr=err)
 
-    def _diff(self, last, new):
-        d = {}
+    def _diff(self, last: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
+        d: Dict[str, Any] = {}
         for code, alert in new.get('checks', {}).items():
             self.log.debug('new code %s alert %s' % (code, alert))
             if code not in last.get('checks', {}):
@@ -149,7 +160,7 @@ class Alerts(MgrModule):
                 d['cleared'][code] = alert
         return d
 
-    def _send_alert(self, status, diff):
+    def _send_alert(self, status: Dict[str, Any], diff: Dict[str, Any]) -> None:
         checks = {}
         if self.smtp_host:
             r = self._send_alert_smtp(status, diff)
@@ -160,13 +171,13 @@ class Alerts(MgrModule):
             self.log.warning('Alert is not sent because smtp_host is not configured')
         self.set_health_checks(checks)
 
-    def serve(self):
+    def serve(self) -> None:
         """
         This method is called by the mgr when the module starts and can be
         used for any background activity.
         """
         self.log.info("Starting")
-        last_status = {}
+        last_status: Dict[str, Any] = {}
         while self.run:
             # Do some useful background work here.
             new_status = json.loads(self.get('health')['json'])
@@ -180,11 +191,11 @@ class Alerts(MgrModule):
                     self._send_alert(new_status, diff)
                 last_status = new_status
 
-            self.log.debug('Sleeping for %d seconds', self.interval)
-            ret = self.event.wait(self.interval)
+            self.log.debug('Sleeping for %s seconds', self.interval)
+            ret = self.event.wait(self.interval or 60)
             self.event.clear()
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """
         This method is called by the mgr when the module needs to shut
         down (i.e., when the serve() function needs to exit).
@@ -194,7 +205,7 @@ class Alerts(MgrModule):
         self.event.set()
 
     # SMTP
-    def _smtp_format_alert(self, code, alert):
+    def _smtp_format_alert(self, code: str, alert: Dict[str, Any]) -> str:
         r = '[{sev}] {code}: {summary}\n'.format(
             code=code,
             sev=alert['severity'].split('_')[1],
@@ -204,7 +215,7 @@ class Alerts(MgrModule):
                 message=detail['message'])
         return r
 
-    def _send_alert_smtp(self, status, diff):
+    def _send_alert_smtp(self, status: Dict[str, Any], diff: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # message
         self.log.debug('_send_alert_smtp')
         message = ('From: {from_name} <{sender}>\n'
@@ -239,7 +250,7 @@ class Alerts(MgrModule):
         # send
         try:
             if self.smtp_ssl:
-                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
+                server: Union[smtplib.SMTP_SSL, smtplib.SMTP] = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
             else:
                 server = smtplib.SMTP(self.smtp_host, self.smtp_port)
             if self.smtp_password:
