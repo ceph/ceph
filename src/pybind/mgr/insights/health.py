@@ -3,11 +3,12 @@ from collections import defaultdict
 import datetime
 
 # freq to write cached state to disk
-PERSIST_PERIOD = datetime.timedelta(seconds = 10)
+PERSIST_PERIOD = datetime.timedelta(seconds=10)
 # on disk key prefix
 HEALTH_HISTORY_KEY_PREFIX = "health_history/"
 # apply on offset to "now": used for testing
 NOW_OFFSET = None
+
 
 class HealthEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -15,18 +16,20 @@ class HealthEncoder(json.JSONEncoder):
             return list(obj)
         return json.JSONEncoder.default(self, obj)
 
+
 class HealthCheckAccumulator(object):
     """
     Deuplicated storage of health checks.
     """
-    def __init__(self, init_checks = None):
+
+    def __init__(self, init_checks=None):
         # check : severity : { summary, detail }
         # summary and detail are deduplicated
         self._checks = defaultdict(lambda:
-            defaultdict(lambda: {
-                "summary": set(),
-                "detail": set()
-            }))
+                                   defaultdict(lambda: {
+                                       "summary": set(),
+                                       "detail": set()
+                                   }))
 
         if init_checks:
             self._update(init_checks)
@@ -88,6 +91,7 @@ class HealthCheckAccumulator(object):
 
         return changed
 
+
 class HealthHistorySlot(object):
     """
     Manage the life cycle of a health history time slot.
@@ -99,7 +103,8 @@ class HealthHistorySlot(object):
     need_flush returns true. Once the state has been flushed, reset the dirty
     bit by calling mark_flushed.
     """
-    def __init__(self, init_health = dict()):
+
+    def __init__(self, init_health=dict()):
         self._checks = HealthCheckAccumulator(init_health.get("checks"))
         self._slot = self._curr_slot()
         self._next_flush = None
@@ -109,7 +114,7 @@ class HealthHistorySlot(object):
             self.key(), self._next_flush, self._checks)
 
     def health(self):
-        return dict(checks = self._checks.checks())
+        return dict(checks=self._checks.checks())
 
     def key(self):
         """Identifier in the persist store"""
@@ -150,7 +155,7 @@ class HealthHistorySlot(object):
     def key_range(hours):
         """Return the time slot keys for the past N hours"""
         def inner(curr, hours):
-            slot = curr - datetime.timedelta(hours = hours)
+            slot = curr - datetime.timedelta(hours=hours)
             return HealthHistorySlot._key(slot)
         curr = HealthHistorySlot._curr_slot()
         return map(lambda i: inner(curr, i), range(hours))
@@ -184,7 +189,7 @@ class HealthHistorySlot(object):
         """Slot for the current UTC time"""
         dt = HealthHistorySlot._now()
         return datetime.datetime(
-            year  = dt.year,
-            month = dt.month,
-            day   = dt.day,
-            hour  = dt.hour)
+            year=dt.year,
+            month=dt.month,
+            day=dt.day,
+            hour=dt.hour)

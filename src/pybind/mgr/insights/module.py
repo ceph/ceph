@@ -95,7 +95,7 @@ class Module(MgrModule):
             # build store data entry
             slot = self._health_slot.health()
             assert "version" not in slot
-            slot.update(dict(version = ON_DISK_VERSION))
+            slot.update(dict(version=ON_DISK_VERSION))
             data = json.dumps(slot, cls=health_util.HealthEncoder)
 
             self.log.debug("Storing health key {} data {}".format(
@@ -113,7 +113,7 @@ class Module(MgrModule):
 
     def _health_prune_history(self, hours):
         """Prune old health entries"""
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours = hours)
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
         for key in self._health_filter(lambda ts: ts <= cutoff):
             self.log.info("Removing old health slot key {}".format(key))
             self.set_store(key, None)
@@ -139,8 +139,8 @@ class Module(MgrModule):
         collector.merge(self._health_slot)
 
         return dict(
-           current = json.loads(self.get("health")["json"]),
-           history = collector.health()
+            current=json.loads(self.get("health")["json"]),
+            history=collector.health()
         )
 
     def _version_parse(self, version):
@@ -209,7 +209,6 @@ class Module(MgrModule):
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 osd['stats'][s.split('.')[1]] = self.get_latest('osd', str(osd["osd"]), s)
 
-
     def _config_dump(self):
         """Report cluster configuration
 
@@ -217,7 +216,7 @@ class Module(MgrModule):
         configuration defaults; these can be inferred from the version number.
         """
         result = CommandResult("")
-        args = dict(prefix = "config dump", format = "json")
+        args = dict(prefix="config dump", format="json")
         self.send_command(result, "mon", "", json.dumps(args), "")
         ret, outb, outs = result.wait()
         if ret == 0:
@@ -236,8 +235,8 @@ class Module(MgrModule):
         report = {}
 
         report.update({
-            "version": dict(full = self.version,
-                **self._version_parse(self.version))
+            "version": dict(full=self.version,
+                            **self._version_parse(self.version))
         })
 
         # crash history
