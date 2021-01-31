@@ -6,6 +6,7 @@
 
 #include <boost/variant.hpp>
 #include "include/denc.h"
+#include "include/ceph_features.h"
 #include "mgr/OSDPerfMetricTypes.h"
 #include "mgr/MDSPerfMetricTypes.h"
 
@@ -102,6 +103,14 @@ struct MetricReportMessage {
 
   MetricReportMessage(const MetricPayload &payload = UnknownMetricPayload())
     : payload(payload) {
+  }
+
+  bool should_encode(uint64_t features) const {
+    if (!HAVE_FEATURE(features, SERVER_PACIFIC) &&
+	boost::get<MDSMetricPayload>(&payload)) {
+      return false;
+    }
+    return true;
   }
 
   void encode(ceph::buffer::list &bl) const {
@@ -227,6 +236,14 @@ struct MetricConfigMessage {
 
   MetricConfigMessage(const ConfigPayload &payload = UnknownConfigPayload())
     : payload(payload) {
+  }
+
+  bool should_encode(uint64_t features) const {
+    if (!HAVE_FEATURE(features, SERVER_PACIFIC) &&
+	boost::get<MDSConfigPayload>(&payload)) {
+      return false;
+    }
+    return true;
   }
 
   void encode(ceph::buffer::list &bl) const {
