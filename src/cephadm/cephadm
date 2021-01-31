@@ -84,8 +84,6 @@ from threading import Thread, RLock
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
-unicode = str
-
 cached_stdin = None
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
@@ -3174,7 +3172,7 @@ def wrap_ipv6(address):
     # it's already wrapped it'll not pass (like if it's a hostname) and trigger
     # the ValueError
     try:
-        if ipaddress.ip_address(unicode(address)).version == 6:
+        if ipaddress.ip_address(address).version == 6:
             return f"[{address}]"
     except ValueError:
         pass
@@ -3186,7 +3184,7 @@ def is_ipv6(address):
     # type: (str) -> bool
     address = unwrap_ipv6(address)
     try:
-        return ipaddress.ip_address(unicode(address)).version == 6
+        return ipaddress.ip_address(address).version == 6
     except ValueError:
         logger.warning("Address: {} isn't a valid IP address".format(address))
         return False
@@ -3246,8 +3244,8 @@ def prepare_mon_addresses(
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         for net, ips in list_networks(ctx).items():
-            if ipaddress.ip_address(unicode(unwrap_ipv6(base_ip))) in \
-                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
+            if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
+                    [ipaddress.ip_address(ip) for ip in ips]:
                 mon_network = net
                 logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
                                                                  mon_network))
@@ -4366,7 +4364,7 @@ def _parse_ipv6_route(routes, ips):
         ip = m[0][0]
         # find the network it belongs to
         net = [n for n in r.keys()
-               if ipaddress.ip_address(unicode(ip)) in ipaddress.ip_network(unicode(n))]
+               if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net:
             r[net[0]].append(ip)
 
