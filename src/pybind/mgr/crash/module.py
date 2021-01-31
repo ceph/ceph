@@ -1,5 +1,5 @@
 import hashlib
-from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule
+from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule, Option
 import datetime
 import errno
 import functools
@@ -27,27 +27,25 @@ def with_crashes(func: FuncT) -> FuncT:
         with self.crashes_lock:
             if not self.crashes:
                 self._load_crashes()
-            return func(*args, **kwargs)
+            return func(self, *args, **kwargs)
     wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return cast(FuncT, wrapper)
 
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {
-            'name': 'warn_recent_interval',
-            'type': 'secs',
-            'default': 60*60*24*14,
-            'desc': 'time interval in which to warn about recent crashes',
-            'runtime': True,
-        },
-        {
-            'name': 'retain_interval',
-            'type': 'secs',
-            'default': 60*60*24 * 365,
-            'desc': 'how long to retain crashes before pruning them',
-            'runtime': True,
-        },
+        Option(
+            name='warn_recent_interval',
+            type='secs',
+            default=60*60*24*14,
+            desc='time interval in which to warn about recent crashes',
+            runtime=True),
+        Option(
+            name='retain_interval',
+            type='secs',
+            default=60*60*24 * 365,
+            desc='how long to retain crashes before pruning them',
+            runtime=True),
     ]
 
     def __init__(self, *args, **kwargs):
