@@ -164,20 +164,15 @@ class Module(MgrModule):
         """
         Load crash history for the past N hours from the crash module.
         """
-        params = dict(
-            prefix="crash json_report",
-            hours=hours
-        )
-
         result = dict(
             summary={},
-            hours=params["hours"],
+            hours=hours,
         )
 
         health_check_details = []
 
         try:
-            _, _, crashes = self.remote("crash", "handle_command", "", params)
+            _, _, crashes = self.remote("crash", "do_json_report", hours)
             result["summary"] = json.loads(crashes)
         except Exception as e:
             errmsg = "failed to invoke crash module"
