@@ -192,8 +192,14 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   cfuse->iput(i1);
 }
 
+// fuse3 has changed forget function signature
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+static void fuse_ll_forget(fuse_req_t req, fuse_ino_t ino,
+			   uint64_t nlookup)
+#else
 static void fuse_ll_forget(fuse_req_t req, fuse_ino_t ino,
 			   long unsigned nlookup)
+#endif
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   cfuse->client->ll_forget(cfuse->iget(ino), nlookup+1);
