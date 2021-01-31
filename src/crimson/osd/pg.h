@@ -274,18 +274,6 @@ public:
   void clear_want_pg_temp() final {
     shard_services.remove_want_pg_temp(pgid.pgid);
   }
-  void publish_stats_to_osd() final {
-    if (!is_primary())
-      return;
-
-    (void) peering_state.prepare_stats_for_publish(
-      false,
-      pg_stat_t(),
-      object_stat_collection_t());
-  }
-  void clear_publish_stats() final {
-    // Not needed yet
-  }
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
   }
@@ -448,14 +436,6 @@ public:
   bool is_backfilling() const final {
     return peering_state.is_backfilling();
   }
-  pg_stat_t get_stats() {
-    auto stats = peering_state.prepare_stats_for_publish(
-      false,
-      pg_stat_t(),
-      object_stat_collection_t());
-    ceph_assert(stats);
-    return *stats;
-  }
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
   }
@@ -574,7 +554,6 @@ public:
     return shard_services;
   }
   seastar::future<> stop();
-
 private:
   std::unique_ptr<PGBackend> backend;
   std::unique_ptr<RecoveryBackend> recovery_backend;
@@ -582,6 +561,15 @@ private:
 
   PeeringState peering_state;
   eversion_t projected_last_update;
+
+public:
+  // PeeringListener
+  void publish_stats_to_osd() final;
+  void clear_publish_stats() final;
+  pg_stat_t get_stats() const;
+private:
+  std::optional<pg_stat_t> pg_stats;
+
 public:
   RecoveryBackend* get_recovery_backend() final {
     return recovery_backend.get();
