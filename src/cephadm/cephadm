@@ -76,28 +76,15 @@ from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, 
 import re
 import uuid
 
+from configparser import ConfigParser
 from functools import wraps
 from glob import glob
+from io import StringIO
 from threading import Thread, RLock
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
-if sys.version_info >= (3, 0):
-    from io import StringIO
-else:
-    from StringIO import StringIO
-
-if sys.version_info >= (3, 2):
-    from configparser import ConfigParser
-else:
-    from ConfigParser import SafeConfigParser
-
-if sys.version_info >= (3, 0):
-    from urllib.request import urlopen
-    from urllib.error import HTTPError
-else:
-    from urllib2 import urlopen, HTTPError
-
-if sys.version_info > (3, 0):
-    unicode = str
+unicode = str
 
 cached_stdin = None
 
@@ -1391,32 +1378,10 @@ def call_timeout(ctx, command, timeout):
         logger.debug(msg)
         raise TimeoutExpired(msg)
 
-    def call_timeout_py2(command, timeout):
-        # type: (List[str], int) -> int
-        proc = subprocess.Popen(command)
-        thread = Thread(target=proc.wait)
-        thread.start()
-        thread.join(timeout)
-        if thread.is_alive():
-            proc.kill()
-            thread.join()
-            raise_timeout(command, timeout)
-        return proc.returncode
-
-    def call_timeout_py3(command, timeout):
-        # type: (List[str], int) -> int
-        try:
-            return subprocess.call(command, timeout=timeout)
-        except subprocess.TimeoutExpired as e:
-            raise_timeout(command, timeout)
-
-    ret = 1
-    if sys.version_info >= (3, 3):
-        ret = call_timeout_py3(command, timeout)
-    else:
-        # py2 subprocess has no timeout arg
-        ret = call_timeout_py2(command, timeout)
-    return ret
+    try:
+        return subprocess.call(command, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise_timeout(command, timeout)
 
 ##################################
 
@@ -1450,24 +1415,9 @@ def is_available(ctx, what, func):
 
 def read_config(fn):
     # type: (Optional[str]) -> ConfigParser
-    # bend over backwards here because py2's ConfigParser doesn't like
-    # whitespace before config option names (e.g., '\n foo = bar\n').
-    # Yeesh!
-    if sys.version_info >= (3, 2):
-        cp = ConfigParser()
-    else:
-        cp = SafeConfigParser()
-
+    cp = ConfigParser()
     if fn:
-        with open(fn, 'r') as f:
-            raw_conf = f.read()
-        nice_conf = re.sub(r'\n(\s)+', r'\n', raw_conf)
-        s_io = StringIO(nice_conf)
-        if sys.version_info >= (3, 2):
-            cp.read_file(s_io)
-        else:
-            cp.readfp(s_io)
-
+        cp.read(fn)
     return cp
 
 
