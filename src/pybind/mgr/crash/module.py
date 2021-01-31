@@ -1,19 +1,36 @@
 import hashlib
-from mgr_module import MgrModule
+from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule
 import datetime
 import errno
+import functools
+import inspect
 import json
 from collections import defaultdict
 from prettytable import PrettyTable
 import re
 from threading import Event, Lock
-
+from typing import Any, Callable, Dict, Optional, Tuple, TypeVar
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 OLD_DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
 
 MAX_WAIT = 600
 MIN_WAIT = 60
+
+
+FuncT = TypeVar('FuncT', bound=Callable)
+
+
+def with_crashes(func: FuncT) -> FuncT:
+    @functools.wraps(func)
+    def wrapper(self: 'Module', *args: Any, **kwargs: Any) -> Tuple[int, str, str]:
+        with self.crashes_lock:
+            if not self.crashes:
+                self._load_crashes()
+            return func(*args, **kwargs)
+    wrapper.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+    return cast(FuncT, wrapper)
+
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
@@ -96,19 +113,6 @@ class Module(MgrModule):
             }
         self.set_health_checks(health_checks)
 
-    def handle_command(self, inbuf, command):
-        with self.crashes_lock:
-            if not self.crashes:
-                self._load_crashes()
-            for cmd in self.COMMANDS:
-                if cmd['cmd'].startswith(command['prefix']):
-                    handler = cmd['handler']
-                    break
-            if handler is None:
-                return errno.EINVAL, '', 'unknown command %s' % command['prefix']
-
-            return handler(self, command, inbuf)
-
     def time_from_string(self, timestr):
         # drop the 'Z' timezone indication, it's always UTC
         timestr = timestr.rstrip('Z')
@@ -170,15 +174,24 @@ class Module(MgrModule):
 
     # command handlers
 
-    def do_info(self, cmd, inbuf):
-        crashid = cmd['id']
+    @CLIReadCommand('crash info')
+    @with_crashes
+    def do_info(self, id: str) -> Tuple[int, str, str]:
+        """
+        show crash dump metadata
+        """
+        crashid = id
         crash = self.crashes.get(crashid)
         if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
         val = json.dumps(crash, indent=4, sort_keys=True)
         return 0, val, ''
 
-    def do_post(self, cmd, inbuf):
+    @CLICommand('crash post')
+    def do_post(self, inbuf: str) -> Tuple[int, str, str]:
+        """
+        Add a crash dump (use -i <jsonfile>)
+        """
         try:
             metadata = self.validate_crash_metadata(inbuf)
         except Exception as e:
@@ -198,16 +211,11 @@ class Module(MgrModule):
     def ls(self):
         if not self.crashes:
             self._load_crashes()
-        return self.do_ls({'prefix': 'crash ls'}, '')
+        return self.do_ls_all('')
 
-    def do_ls(self, cmd, inbuf):
-        if cmd['prefix'] == 'crash ls':
-            t = self.crashes.values()
-        else:
-            t = [crash for crashid, crash in self.crashes.items()
-                 if 'archived' not in crash]
+    def _do_ls(self, t: Dict[str, str], format: Optional[str]) -> Tuple[int, str, str]:
         r = sorted(t, key=lambda i: i.get('crash_id'))
-        if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
+        if format in ('json', 'json-pretty'):
             return 0, json.dumps(r, indent=4, sort_keys=True), ''
         else:
             table = PrettyTable(['ID', 'ENTITY', 'NEW'],
@@ -222,8 +230,31 @@ class Module(MgrModule):
                                '' if 'archived' in c else '*'])
             return 0, table.get_string(), ''
 
-    def do_rm(self, cmd, inbuf):
-        crashid = cmd['id']
+    @CLIReadCommand('crash ls')
+    @with_crashes
+    def do_ls_all(self, format: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Show new and archived crash dumps
+        """
+        return self._do_ls(self.crashes.values(), format)
+
+    @CLIReadCommand('crash ls-new')
+    @with_crashes
+    def do_ls_new(self, format: Optional[str] = None) -> Tuple[int, str, str]:
+        """
+        Show new crash dumps
+        """
+        t = [crash for crashid, crash in self.crashes.items()
+             if 'archived' not in crash]
+        return self._do_ls(t, format)
+
+    @CLICommand('crash rm')
+    @with_crashes
+    def do_rm(self, id: str) -> Tuple[int, str, str]:
+        """
+        Remove a saved crash <id>
+        """
+        crashid = id
         if crashid in self.crashes:
             del self.crashes[crashid]
             key = 'crash/%s' % crashid
@@ -231,13 +262,12 @@ class Module(MgrModule):
             self._refresh_health_checks()
         return 0, '', ''
 
-    def do_prune(self, cmd, inbuf):
-        keep = cmd['keep']
-        try:
-            keep = int(keep)
-        except ValueError:
-            return errno.EINVAL, '', 'keep argument must be integer'
-
+    @CLICommand('crash prune')
+    @with_crashes
+    def do_prune(self, keep: int) -> Tuple[int, str, str]:
+        """
+        Remove crashes older than <keep> days
+        """
         self._prune(keep * 60*60*24)
         return 0, '', ''
 
@@ -255,8 +285,13 @@ class Module(MgrModule):
         if removed_any:
             self._refresh_health_checks()
 
-    def do_archive(self, cmd, inbuf):
-        crashid = cmd['id']
+    @CLIWriteCommand('crash archive')
+    @with_crashes
+    def do_archive(self, id: str) -> Tuple[int, str, str]:
+        """
+        Acknowledge a crash and silence health warning(s)
+        """
+        crashid = id
         crash = self.crashes.get(crashid)
         if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
@@ -268,7 +303,12 @@ class Module(MgrModule):
             self._refresh_health_checks()
         return 0, '', ''
 
-    def do_archive_all(self, cmd, inbuf):
+    @CLIWriteCommand('crash archive-all')
+    @with_crashes
+    def do_archive_all(self) -> Tuple[int, str, str]:
+        """
+        Acknowledge all new crashes and silence health warning(s)
+        """
         for crashid, crash in self.crashes.items():
             if not crash.get('archived'):
                 crash['archived'] = str(datetime.datetime.utcnow())
@@ -278,7 +318,12 @@ class Module(MgrModule):
         self._refresh_health_checks()
         return 0, '', ''
 
-    def do_stat(self, cmd, inbuf):
+    @CLIReadCommand('crash stat')
+    @with_crashes
+    def do_stat(self) -> Tuple[int, str, str]:
+        """
+        Summarize recorded crashes
+        """
         # age in days for reporting, ordered smallest first
         bins = [1, 3, 7]
         retlines = list()
@@ -319,15 +364,13 @@ class Module(MgrModule):
             retlines.append(binstr(bindict))
         return 0, '\n'.join(retlines), ''
 
-    def do_json_report(self, cmd, inbuf):
+    @CLIReadCommand('crash json_report')
+    @with_crashes
+    def do_json_report(self, hours: int) -> Tuple[int, str, str]:
         """
-        Return a machine readable summary of recent crashes.
+        Crashes in the last <hours> hours
         """
-        try:
-            hours = int(cmd['hours'])
-        except ValueError:
-            return errno.EINVAL, '', '<hours> argument must be integer'
-
+        # Return a machine readable summary of recent crashes.
         report = defaultdict(lambda: 0)
         for crashid, crash in self.crashes.items():
             pname = crash.get("process_name", "unknown")
@@ -347,66 +390,3 @@ class Module(MgrModule):
         dt = self.time_from_string(old_timestr)
         if dt != datetime.datetime(2018, 6, 22, 20, 35, 38, 58818):
             raise RuntimeError('time_from_string() (old) failed')
-
-    COMMANDS = [
-        {
-            'cmd': 'crash info name=id,type=CephString',
-            'desc': 'show crash dump metadata',
-            'perm': 'r',
-            'handler': do_info,
-        },
-        {
-            'cmd': 'crash ls',
-            'desc': 'Show new and archived crash dumps',
-            'perm': 'r',
-            'handler': do_ls,
-        },
-        {
-            'cmd': 'crash ls-new',
-            'desc': 'Show new crash dumps',
-            'perm': 'r',
-            'handler': do_ls,
-        },
-        {
-            'cmd': 'crash post',
-            'desc': 'Add a crash dump (use -i <jsonfile>)',
-            'perm': 'rw',
-            'handler': do_post,
-        },
-        {
-            'cmd': 'crash prune name=keep,type=CephString',
-            'desc': 'Remove crashes older than <keep> days',
-            'perm': 'rw',
-            'handler': do_prune,
-        },
-        {
-            'cmd': 'crash rm name=id,type=CephString',
-            'desc': 'Remove a saved crash <id>',
-            'perm': 'rw',
-            'handler': do_rm,
-        },
-        {
-            'cmd': 'crash stat',
-            'desc': 'Summarize recorded crashes',
-            'perm': 'r',
-            'handler': do_stat,
-        },
-        {
-            'cmd': 'crash json_report name=hours,type=CephString',
-            'desc': 'Crashes in the last <hours> hours',
-            'perm': 'r',
-            'handler': do_json_report,
-        },
-        {
-            'cmd': 'crash archive name=id,type=CephString',
-            'desc': 'Acknowledge a crash and silence health warning(s)',
-            'perm': 'w',
-            'handler': do_archive,
-        },
-        {
-            'cmd': 'crash archive-all',
-            'desc': 'Acknowledge all new crashes and silence health warning(s)',
-            'perm': 'w',
-            'handler': do_archive_all,
-        },
-    ]
