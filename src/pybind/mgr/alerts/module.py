@@ -3,73 +3,64 @@
 A simple cluster health alerting module.
 """
 
-from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
+from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule, Option
 from threading import Event
 from typing import Any, Optional, Dict, List, TYPE_CHECKING, Union
 import json
 import smtplib
 
+
 class Alerts(MgrModule):
-    # ´# type: ignore` due to the introduction of the Option type.
-    MODULE_OPTIONS: List[Dict[str, Any]] = [  # type: ignore
-        {
-            'name': 'interval',
-            'type': 'secs',
-            'default': 60,
-            'desc': 'How frequently to reexamine health status',
-            'runtime': True,
-        },
+    MODULE_OPTIONS = [
+        Option(
+            name='interval',
+            type='secs',
+            default=60,
+            desc='How frequently to reexamine health status',
+            runtime=True),
         # smtp
-        {
-            'name': 'smtp_host',
-            'default': '',
-            'desc': 'SMTP server',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_destination',
-            'default': '',
-            'desc': 'Email address to send alerts to',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_port',
-            'type': 'int',
-            'default': 465,
-            'desc': 'SMTP port',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_ssl',
-            'type': 'bool',
-            'default': True,
-            'desc': 'Use SSL to connect to SMTP server',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_user',
-            'default': '',
-            'desc': 'User to authenticate as',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_password',
-            'default': '',
-            'desc': 'Password to authenticate with',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_sender',
-            'default': '',
-            'desc': 'SMTP envelope sender',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_from_name',
-            'default': 'Ceph',
-            'desc': 'Email From: name',
-            'runtime': True,
-        },
+        Option(
+            name='smtp_host',
+            default='',
+            desc='SMTP server',
+            runtime=True),
+        Option(
+            name='smtp_destination',
+            default='',
+            desc='Email address to send alerts to',
+            runtime=True),
+        Option(
+            name='smtp_port',
+            type='int',
+            default=465,
+            desc='SMTP port',
+            runtime=True),
+        Option(
+            name='smtp_ssl',
+            type='bool',
+            default=True,
+            desc='Use SSL to connect to SMTP server',
+            runtime=True),
+        Option(
+            name='smtp_user',
+            default='',
+            desc='User to authenticate as',
+            runtime=True),
+        Option(
+            name='smtp_password',
+            default='',
+            desc='Password to authenticate with',
+            runtime=True),
+        Option(
+            name='smtp_sender',
+            default='',
+            desc='SMTP envelope sender',
+            runtime=True),
+        Option(
+            name='smtp_from_name',
+            default='Ceph',
+            desc='Email From: name',
+            runtime=True)
     ]
 
     # These are "native" Ceph options that this module cares about.
