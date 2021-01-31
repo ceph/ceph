@@ -2326,7 +2326,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
 
     if daemon_type == HAproxy.daemon_type:
         assert daemon_id
-        data_dir = get_data_dir(fsid, daemon_type, daemon_type, daemon_id)
+        data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(HAproxy.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
@@ -2337,7 +2337,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
 
     if daemon_type == Keepalived.daemon_type:
         assert daemon_id
-        data_dir = get_data_dir(fsid, daemon_type, daemon_type, daemon_id)
+        data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(Keepalived.get_container_mounts(data_dir))
 
     if daemon_type == CustomContainer.daemon_type:
