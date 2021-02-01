@@ -2,7 +2,7 @@ import os
 import errno
 import logging
 
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceType
 
 import cephfs
 import orchestrator
@@ -36,7 +36,7 @@ def remove_filesystem(mgr, fs_name):
     return mgr.mon_command(command)
 
 def create_mds(mgr, fs_name, placement):
-    spec = ServiceSpec(service_type='mds',
+    spec = ServiceSpec(service_type=ServiceType.mds,
                                     service_id=fs_name,
                                     placement=PlacementSpec.from_string(placement))
     try:

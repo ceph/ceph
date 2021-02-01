@@ -12,7 +12,7 @@ from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import OrchestratorError, DaemonDescription, DaemonType
 from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
 from cephadm import utils
 from mgr_util import create_self_signed_cert, ServerConfigException, verify_tls
@@ -35,7 +35,7 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
                  extra_args: Optional[List[str]] = None,
                  ceph_conf: str = '',
                  extra_files: Optional[Dict[str, Any]] = None,
-                 daemon_type: Optional[str] = None,
+                 daemon_type: Optional[DaemonType] = None,
                  ports: Optional[List[int]] = None,):
         """
         Used for
@@ -46,9 +46,10 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
         """
         self.host: str = host
         self.daemon_id = daemon_id
+
         daemon_type = daemon_type or (spec.service_type if spec else None)
         assert daemon_type is not None
-        self.daemon_type: str = daemon_type
+        self.daemon_type: DaemonType = daemon_type  # type: ignore
 
         # would be great to have the spec always available:
         self.spec: Optional[ServiceSpecs] = spec
@@ -96,7 +97,7 @@ class CephadmService(metaclass=ABCMeta):
                          daemon_id: str,
                          netowrk: str,
                          spec: ServiceSpecs,
-                         daemon_type: Optional[str] = None,) -> CephadmDaemonSpec:
+                         daemon_type: Optional[DaemonType] = None,) -> CephadmDaemonSpec:
         return CephadmDaemonSpec(
             host=host,
             daemon_id=daemon_id,
@@ -315,7 +316,7 @@ class CephService(CephadmService):
             raise OrchestratorError("unknown daemon type")
 
     def get_config_and_keyring(self,
-                               daemon_type: str,
+                               daemon_type: DaemonType,
                                daemon_id: str,
                                host: str,
                                keyring: Optional[str] = None,

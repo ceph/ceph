@@ -6,9 +6,9 @@ from typing import cast, TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tup
 
 import orchestrator
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, ServiceType
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
-from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent
+from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, DaemonType
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -452,6 +452,10 @@ class HostCache():
                     result.append(d)
         return result
 
+    def get_daemons_by_service_type(self, service_type: ServiceType) -> List[orchestrator.DaemonDescription]:
+        # type save version of get_daemons_by_service()
+        return self.get_daemons_by_service(str(service_type))
+
     def get_daemons_by_type(self, service_type):
         # type: (str) -> List[orchestrator.DaemonDescription]
         assert service_type not in ['keepalived', 'haproxy']
@@ -463,7 +467,7 @@ class HostCache():
                     result.append(d)
         return result
 
-    def get_daemon_types(self, hostname: str) -> List[str]:
+    def get_daemon_types(self, hostname: str) -> List[DaemonType]:
         """Provide a list of the types of daemons on the host"""
         result = set()
         for _d, dm in self.daemons[hostname].items():

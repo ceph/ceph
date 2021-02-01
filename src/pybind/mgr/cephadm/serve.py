@@ -16,11 +16,11 @@ except ImportError:
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec, RGWSpec, \
-    HA_RGWSpec, CustomContainerSpec
+    HA_RGWSpec, CustomContainerSpec, ServiceType
 from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
-from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent
+from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, DaemonType
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
@@ -565,7 +565,8 @@ class CephadmServe:
             daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
             assert None not in daemon_ids
             # setting force flag retains previous behavior, should revisit later.
-            r = self.mgr.cephadm_services[service_type].ok_to_stop(cast(List[str], daemon_ids), force=True)
+            r = self.mgr.cephadm_services[service_type].ok_to_stop(
+                cast(List[str], daemon_ids), force=True)
             return not r.retval
 
         while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
@@ -585,7 +586,7 @@ class CephadmServe:
     def _check_daemons(self) -> None:
 
         daemons = self.mgr.cache.get_daemons()
-        daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
+        daemons_post: Dict[DaemonType, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
             # orphan?
             spec = self.mgr.spec_store.specs.get(dd.service_name(), None)
@@ -824,7 +825,8 @@ class CephadmServe:
         """
         Remove a daemon
         """
-        (daemon_type, daemon_id) = name.split('.', 1)
+        (daemon_type_s, daemon_id) = name.split('.', 1)
+        daemon_type = DaemonType(daemon_type_s)
         daemon = orchestrator.DaemonDescription(
             daemon_type=daemon_type,
             daemon_id=daemon_id,

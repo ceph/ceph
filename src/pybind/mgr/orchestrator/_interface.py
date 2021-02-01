@@ -17,6 +17,7 @@ import uuid
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 from functools import wraps
+from enum import Enum
 
 from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, \
     Sequence, Dict, cast
@@ -32,7 +33,7 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec
+    ServiceSpecValidationError, IscsiServiceSpec, HA_RGWSpec, ServiceType
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -886,23 +887,23 @@ class Orchestrator(object):
         """
         Applies any spec
         """
-        fns: Dict[str, function] = {
-            'alertmanager': self.apply_alertmanager,
-            'crash': self.apply_crash,
-            'grafana': self.apply_grafana,
-            'iscsi': self.apply_iscsi,
-            'mds': self.apply_mds,
-            'mgr': self.apply_mgr,
-            'mon': self.apply_mon,
-            'nfs': self.apply_nfs,
-            'node-exporter': self.apply_node_exporter,
-            'osd': lambda dg: self.apply_drivegroups([dg]),
-            'prometheus': self.apply_prometheus,
-            'rbd-mirror': self.apply_rbd_mirror,
-            'rgw': self.apply_rgw,
-            'ha-rgw': self.apply_ha_rgw,
+        fns: Dict[Union[ServiceType, str], function] = {
+            ServiceType.alertmanager: self.apply_alertmanager,
+            ServiceType.crash: self.apply_crash,
+            ServiceType.grafana: self.apply_grafana,
+            ServiceType.iscsi: self.apply_iscsi,
+            ServiceType.mds: self.apply_mds,
+            ServiceType.mgr: self.apply_mgr,
+            ServiceType.mon: self.apply_mon,
+            ServiceType.nfs: self.apply_nfs,
+            ServiceType.node_exporter: self.apply_node_exporter,
+            ServiceType.osd: lambda dg: self.apply_drivegroups([dg]),
+            ServiceType.prometheus: self.apply_prometheus,
+            ServiceType.rbd_mirror: self.apply_rbd_mirror,
+            ServiceType.rgw: self.apply_rgw,
+            ServiceType.ha_rgw: self.apply_ha_rgw,
             'host': self.add_host,
-            'cephadm-exporter': self.apply_cephadm_exporter,
+            ServiceType.cephadm_exporter: self.apply_cephadm_exporter,
         }
 
         def merge(ls: Union[List[T], T], r: Union[List[T], T]) -> List[T]:
@@ -1186,50 +1187,45 @@ def json_to_generic_spec(spec: dict) -> GenericSpec:
     else:
         return ServiceSpec.from_json(spec)
 
+class DaemonType(Enum):
+    alertmanager = 'alertmanager'
+    container = 'container'
+    crash = 'crash'
+    grafana = 'grafana'
+    iscsi = 'iscsi'
+    mds = 'mds'
+    mgr = 'mgr'
+    mon = 'mon'
+    node_exporter = 'node-exporter'
+    nfs = 'nfs'
+    osd = 'osd'
+    prometheus = 'prometheus'
+    rbd_mirror = 'rbd-mirror'
+    rgw = 'rgw'
+    cephadm_exporter = 'cephadm-exporter'
+    haproxy = 'haproxy'
+    keepalived = 'keepalived'
 
-def daemon_type_to_service(dtype: str) -> str:
+
+def daemon_type_to_service(dtype: DaemonType) -> ServiceType:
     mapping = {
-        'mon': 'mon',
-        'mgr': 'mgr',
-        'mds': 'mds',
-        'rgw': 'rgw',
-        'osd': 'osd',
-        'haproxy': 'ha-rgw',
-        'keepalived': 'ha-rgw',
-        'iscsi': 'iscsi',
-        'rbd-mirror': 'rbd-mirror',
-        'nfs': 'nfs',
-        'grafana': 'grafana',
-        'alertmanager': 'alertmanager',
-        'prometheus': 'prometheus',
-        'node-exporter': 'node-exporter',
-        'crash': 'crash',
-        'container': 'container',
-        'cephadm-exporter': 'cephadm-exporter',
+        DaemonType.haproxy: ServiceType.ha_rgw,
+        DaemonType.keepalived: ServiceType.ha_rgw,
     }
-    return mapping[dtype]
+    return mapping.get(dtype, ServiceType(dtype))
 
 
-def service_to_daemon_types(stype: str) -> List[str]:
+def service_to_daemon_types(stype: ServiceType) -> List[DaemonType]:
     mapping = {
-        'mon': ['mon'],
-        'mgr': ['mgr'],
-        'mds': ['mds'],
-        'rgw': ['rgw'],
-        'osd': ['osd'],
-        'ha-rgw': ['haproxy', 'keepalived'],
-        'iscsi': ['iscsi'],
-        'rbd-mirror': ['rbd-mirror'],
-        'nfs': ['nfs'],
-        'grafana': ['grafana'],
-        'alertmanager': ['alertmanager'],
-        'prometheus': ['prometheus'],
-        'node-exporter': ['node-exporter'],
-        'crash': ['crash'],
-        'container': ['container'],
-        'cephadm-exporter': ['cephadm-exporter'],
+        ServiceType.ha_rgw: [DaemonType.haproxy, DaemonType.keepalived],
     }
-    return mapping[stype]
+    return mapping.get(stype, [DaemonType(stype)])
+
+
+def daemon_type_to_name(dtype: DaemonType, daemon_id: str) -> str:
+    if daemon_id:
+        return f'{dtype}.{daemon_id}'
+    return str(dtype)
 
 
 class UpgradeStatusSpec(object):
@@ -1266,7 +1262,7 @@ class DaemonDescription(object):
     """
 
     def __init__(self,
-                 daemon_type: Optional[str] = None,
+                 daemon_type: Optional[DaemonType] = None,
                  daemon_id: Optional[str] = None,
                  hostname: Optional[str] = None,
                  container_id: Optional[str] = None,
@@ -1336,7 +1332,7 @@ class DaemonDescription(object):
         assert self.daemon_id is not None
         assert self.daemon_type is not None
         if service_name:
-            return (daemon_type_to_service(self.daemon_type) + '.' + self.daemon_id).startswith(service_name + '.')
+            return self.name().startswith(service_name + '.')
         return False
 
     def service_id(self) -> str:
@@ -1374,12 +1370,12 @@ class DaemonDescription(object):
                 return pre[:-1]
 
             # daemon_id == "service_id.random"
-            if self.daemon_type == 'rgw':
+            if self.daemon_type == DaemonType.rgw:
                 v = self.daemon_id.split('.')
                 if len(v) in [3, 4]:
                     return '.'.join(v[0:2])
 
-            if self.daemon_type == 'iscsi':
+            if self.daemon_type == DaemonType.iscsi:
                 v = self.daemon_id.split('.')
                 return '.'.join(v[0:-1])
 
@@ -1395,7 +1391,7 @@ class DaemonDescription(object):
         assert self.daemon_type is not None
         if daemon_type_to_service(self.daemon_type) in ServiceSpec.REQUIRES_SERVICE_ID:
             return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
-        return daemon_type_to_service(self.daemon_type)
+        return str(daemon_type_to_service(self.daemon_type))
 
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
@@ -1505,7 +1501,7 @@ class ServiceDescription(object):
 
         self.events: List[OrchestratorEvent] = events or []
 
-    def service_type(self) -> str:
+    def service_type(self) -> ServiceType:
         return self.spec.service_type
 
     def __repr__(self) -> str:

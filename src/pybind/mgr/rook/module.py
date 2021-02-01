@@ -5,7 +5,8 @@ import os
 import json
 
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec, \
+    ServiceType
 
 from typing import List, Dict, Optional, Callable, Any, TypeVar, Tuple
 
@@ -276,7 +277,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if service_type == 'mon' or service_type is None:
             spec['mon'] = orchestrator.ServiceDescription(
                     spec=ServiceSpec(
-                        'mon',
+                        ServiceType.mon,
                         placement=PlacementSpec(
                             count=cl['spec'].get('mon', {}).get('count', 1),
                             ),
@@ -288,7 +289,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if service_type == 'mgr' or service_type is None:
             spec['mgr'] = orchestrator.ServiceDescription(
                     spec=ServiceSpec(
-                        'mgr',
+                        ServiceType.mgr,
                         placement=PlacementSpec.from_string('count:1'),
                         ),
                     size=1,
@@ -298,7 +299,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         if not cl['spec'].get('crashCollector', {}).get('disable', False):
             spec['crash'] = orchestrator.ServiceDescription(
                 spec=ServiceSpec(
-                    'crash',
+                    ServiceType.crash,
                     placement=PlacementSpec.from_string('*'),
                 ),
                 size=num_nodes,
@@ -322,7 +323,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     total_mds = active * 2
                     spec[svc] = orchestrator.ServiceDescription(
                             spec=ServiceSpec(
-                                service_type='mds',
+                                service_type=ServiceType.mds,
                                 service_id=fs['metadata']['name'],
                                 placement=PlacementSpec(count=active),
                                 ),

@@ -13,7 +13,7 @@ from datetime import datetime
 import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.utils import forall_hosts
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonType
 from mgr_module import MonCommandFailed
 
 from cephadm.services.cephadmservice import CephadmDaemonSpec, CephService
@@ -106,7 +106,7 @@ class OSDService(CephService):
                 daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
                     daemon_id=osd_id,
                     host=host,
-                    daemon_type='osd',
+                    daemon_type=DaemonType.osd,
                 )
                 CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,

@@ -13,7 +13,7 @@ from ._interface import \
     Orchestrator, OrchestratorClientMixin, \
     OrchestratorValidationError, OrchestratorError, NoOrchestrator, \
     ServiceDescription, InventoryFilter, HostSpec, \
-    DaemonDescription, \
+    DaemonDescription, DaemonType, \
     OrchestratorEvent, set_exception_subject, \
     InventoryHost, DeviceLightLoc, \
     UpgradeStatusSpec, daemon_type_to_service, service_to_daemon_types

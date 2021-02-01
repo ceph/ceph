@@ -25,7 +25,7 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
-    HostPlacementSpec, HA_RGWSpec
+    HostPlacementSpec, HA_RGWSpec, ServiceType
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
@@ -35,7 +35,8 @@ from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
 import secrets
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, OrchestratorEvent, set_exception_subject, DaemonDescription
+    CLICommandMeta, OrchestratorEvent, set_exception_subject, DaemonDescription, \
+    DaemonType
 from orchestrator._interface import GenericSpec
 from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
 
@@ -429,27 +430,27 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.container_service = CustomContainerService(self)
         self.cephadm_exporter_service = CephadmExporter(self)
         self.cephadm_services = {
-            'mon': self.mon_service,
-            'mgr': self.mgr_service,
-            'osd': self.osd_service,
-            'mds': self.mds_service,
-            'rgw': self.rgw_service,
-            'rbd-mirror': self.rbd_mirror_service,
-            'nfs': self.nfs_service,
-            'grafana': self.grafana_service,
-            'alertmanager': self.alertmanager_service,
-            'prometheus': self.prometheus_service,
-            'node-exporter': self.node_exporter_service,
-            'crash': self.crash_service,
-            'iscsi': self.iscsi_service,
-            'ha-rgw': self.ha_rgw_service,
-            'container': self.container_service,
-            'cephadm-exporter': self.cephadm_exporter_service,
+            ServiceType.mon: self.mon_service,
+            ServiceType.mgr: self.mgr_service,
+            ServiceType.osd: self.osd_service,
+            ServiceType.mds: self.mds_service,
+            ServiceType.rgw: self.rgw_service,
+            ServiceType.rbd_mirror: self.rbd_mirror_service,
+            ServiceType.nfs: self.nfs_service,
+            ServiceType.grafana: self.grafana_service,
+            ServiceType.alertmanager: self.alertmanager_service,
+            ServiceType.prometheus: self.prometheus_service,
+            ServiceType.node_exporter: self.node_exporter_service,
+            ServiceType.crash: self.crash_service,
+            ServiceType.iscsi: self.iscsi_service,
+            ServiceType.ha_rgw:  self.ha_rgw_service,
+            ServiceType.container: self.container_service,
+            ServiceType.cephadm_exporter: self.cephadm_exporter_service,
         }
 
         self.template = TemplateMgr(self)
 
-        self.requires_post_actions: Set[str] = set()
+        self.requires_post_actions: Set[DaemonType] = set()
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
@@ -458,8 +459,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.run = False
         self.event.set()
 
-    def _get_cephadm_service(self, service_type: str) -> CephadmService:
-        assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES
+    def _get_cephadm_service(self, service_type: ServiceType) -> CephadmService:
+        assert service_type in ServiceType
         return self.cephadm_services[service_type]
 
     def _kick_serve_loop(self) -> None:
@@ -548,7 +549,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     def get_unique_name(self, daemon_type, host, existing, prefix=None,
                         forcename=None):
-        # type: (str, str, List[orchestrator.DaemonDescription], Optional[str], Optional[str]) -> str
+        # type: (DaemonType, str, List[orchestrator.DaemonDescription], Optional[str], Optional[str]) -> str
         """
         Generate a unique random service name
         """
@@ -1259,7 +1260,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _host_ok_to_stop(self, hostname: str, force: bool = False) -> Tuple[int, str]:
         self.log.debug("running host-ok-to-stop checks")
         daemons = self.cache.get_daemons()
-        daemon_map: Dict[str, List[str]] = defaultdict(lambda: [])
+        daemon_map: Dict[DaemonType, List[str]] = defaultdict(lambda: [])
         for dd in daemons:
             assert dd.hostname is not None
             assert dd.daemon_type is not None
@@ -1345,7 +1346,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             raise OrchestratorError(f"Host {hostname} is already in maintenance")
 
         host_daemons = self.cache.get_daemon_types(hostname)
-        self.log.debug("daemons on host {}".format(','.join(host_daemons)))
+        self.log.debug("daemons on host {}".format(','.join(map(str, host_daemons))))
         if host_daemons:
             # daemons on this host, so check the daemons can be stopped
             # and if so, place the host into maintenance by disabling the target
@@ -1589,7 +1590,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             for dd in dds
         ]
 
-    def _daemon_action(self, daemon_type: str, daemon_id: str, host: str, action: str, image: Optional[str] = None) -> str:
+    def _daemon_action(self, daemon_type: DaemonType, daemon_id: str, host: str, action: str, image: Optional[str] = None) -> str:
         daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
             host=host,
             daemon_id=daemon_id,
@@ -1625,7 +1626,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.events.for_daemon(name, 'INFO', msg)
         return msg
 
-    def _daemon_action_set_image(self, action: str, image: Optional[str], daemon_type: str, daemon_id: str) -> None:
+    def _daemon_action_set_image(self, action: str, image: Optional[str], daemon_type: DaemonType, daemon_id: str) -> None:
         if image is not None:
             if action != 'redeploy':
                 raise OrchestratorError(
@@ -1639,7 +1640,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'prefix': 'config set',
                 'name': 'container_image',
                 'value': image,
-                'who': utils.name_to_config_section(daemon_type + '.' + daemon_id),
+                'who': utils.name_to_config_section(f'{daemon_type}.{daemon_id}'),
             })
 
     @trivial_completion
@@ -1658,8 +1659,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.log.info(f'Schedule {action} daemon {daemon_name}')
         return self._schedule_daemon_action(daemon_name, action)
 
-    def daemon_is_self(self, daemon_type: str, daemon_id: str) -> bool:
-        return daemon_type == 'mgr' and daemon_id == self.get_mgr_id()
+    def daemon_is_self(self, daemon_type: DaemonType, daemon_id: str) -> bool:
+        return daemon_type == DaemonType.mgr and daemon_id == self.get_mgr_id()
 
     def _schedule_daemon_action(self, daemon_name: str, action: str) -> str:
         dd = self.cache.get_daemon(daemon_name)
@@ -1695,7 +1696,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         found = self.spec_store.rm(service_name)
         if found:
             self._kick_serve_loop()
-            service = self.cephadm_services.get(service_name, None)
+            service = self.cephadm_services.get(service_name, None)  # type: ignore
             if service:
                 service.purge()
             return 'Removed service %s' % service_name
@@ -1865,15 +1866,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             previews_for_specs.update({host: osd_reports})
         return previews_for_specs
 
-    def _calc_daemon_deps(self, daemon_type: str, daemon_id: str) -> List[str]:
+    def _calc_daemon_deps(self, daemon_type: DaemonType, daemon_id: str) -> List[str]:
         need = {
-            'prometheus': ['mgr', 'alertmanager', 'node-exporter'],
-            'grafana': ['prometheus'],
-            'alertmanager': ['mgr', 'alertmanager'],
+            DaemonType.prometheus: [DaemonType.mgr, DaemonType.alertmanager, DaemonType.node_exporter],
+            DaemonType.grafana: [DaemonType.prometheus],
+            DaemonType.alertmanager: [DaemonType.mgr, DaemonType.alertmanager],
         }
         deps = []
         for dep_type in need.get(daemon_type, []):
-            for dd in self.cache.get_daemons_by_service(dep_type):
+            for dd in self.cache.get_daemons_by_service_type(daemon_type_to_service(dep_type)):
                 deps.append(dd.name())
         return sorted(deps)
 
@@ -1888,7 +1889,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                     f'service {service_name}')
 
     def _add_daemon(self,
-                    daemon_type: str,
+                    daemon_type: DaemonType,
                     spec: ServiceSpec,
                     create_func: Callable[..., CephadmDaemonSpec],
                     config_func: Optional[Callable] = None) -> List[str]:
@@ -1906,7 +1907,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                     create_func, config_func)
 
     def _create_daemons(self,
-                        daemon_type: str,
+                        daemon_type: DaemonType,
                         spec: ServiceSpec,
                         daemons: List[DaemonDescription],
                         hosts: List[HostPlacementSpec],
@@ -1960,12 +1961,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_mon(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mon', spec, self.mon_service.prepare_create)
+        return self._add_daemon(DaemonType.mon, spec, self.mon_service.prepare_create)
 
     @trivial_completion
     def add_mgr(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('mgr', spec, self.mgr_service.prepare_create)
+        return self._add_daemon(DaemonType.mgr, spec, self.mgr_service.prepare_create)
 
     def _apply(self, spec: GenericSpec) -> str:
         if spec.service_type == 'host':
@@ -2018,21 +2019,21 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if spec.placement.is_empty():
             # fill in default placement
             defaults = {
-                'mon': PlacementSpec(count=5),
-                'mgr': PlacementSpec(count=2),
-                'mds': PlacementSpec(count=2),
-                'rgw': PlacementSpec(count=2),
-                'ha-rgw': PlacementSpec(count=2),
-                'iscsi': PlacementSpec(count=1),
-                'rbd-mirror': PlacementSpec(count=2),
-                'nfs': PlacementSpec(count=1),
-                'grafana': PlacementSpec(count=1),
-                'alertmanager': PlacementSpec(count=1),
-                'prometheus': PlacementSpec(count=1),
-                'node-exporter': PlacementSpec(host_pattern='*'),
-                'crash': PlacementSpec(host_pattern='*'),
-                'container': PlacementSpec(count=1),
-                'cephadm-exporter': PlacementSpec(host_pattern='*'),
+                ServiceType.mon: PlacementSpec(count=5),
+                ServiceType.mgr: PlacementSpec(count=2),
+                ServiceType.mds: PlacementSpec(count=2),
+                ServiceType.rgw: PlacementSpec(count=2),
+                ServiceType.ha_rgw: PlacementSpec(count=2),
+                ServiceType.iscsi: PlacementSpec(count=1),
+                ServiceType.rbd_mirror: PlacementSpec(count=2),
+                ServiceType.nfs: PlacementSpec(count=1),
+                ServiceType.grafana: PlacementSpec(count=1),
+                ServiceType.alertmanager: PlacementSpec(count=1),
+                ServiceType.prometheus: PlacementSpec(count=1),
+                ServiceType.node_exporter: PlacementSpec(host_pattern='*'),
+                ServiceType.crash: PlacementSpec(host_pattern='*'),
+                ServiceType.container: PlacementSpec(count=1),
+                ServiceType.cephadm_exporter: PlacementSpec(host_pattern='*'),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -2066,7 +2067,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_mds(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('mds', spec, self.mds_service.prepare_create, self.mds_service.config)
+        return self._add_daemon(DaemonType.mds, spec, self.mds_service.prepare_create, self.mds_service.config)
 
     @trivial_completion
     def apply_mds(self, spec: ServiceSpec) -> str:
@@ -2074,7 +2075,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_rgw(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('rgw', spec, self.rgw_service.prepare_create, self.rgw_service.config)
+        return self._add_daemon(DaemonType.rgw, spec, self.rgw_service.prepare_create, self.rgw_service.config)
 
     @trivial_completion
     def apply_rgw(self, spec: ServiceSpec) -> str:
@@ -2087,7 +2088,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_iscsi(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('iscsi', spec, self.iscsi_service.prepare_create, self.iscsi_service.config)
+        return self._add_daemon(DaemonType.iscsi, spec, self.iscsi_service.prepare_create, self.iscsi_service.config)
 
     @trivial_completion
     def apply_iscsi(self, spec: ServiceSpec) -> str:
@@ -2095,7 +2096,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_rbd_mirror(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('rbd-mirror', spec, self.rbd_mirror_service.prepare_create)
+        return self._add_daemon(DaemonType.rbd_mirror, spec, self.rbd_mirror_service.prepare_create)
 
     @trivial_completion
     def apply_rbd_mirror(self, spec: ServiceSpec) -> str:
@@ -2103,7 +2104,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_nfs(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('nfs', spec, self.nfs_service.prepare_create, self.nfs_service.config)
+        return self._add_daemon(DaemonType.nfs, spec, self.nfs_service.prepare_create, self.nfs_service.config)
 
     @trivial_completion
     def apply_nfs(self, spec: ServiceSpec) -> str:
@@ -2115,7 +2116,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_prometheus(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('prometheus', spec, self.prometheus_service.prepare_create)
+        return self._add_daemon(DaemonType.prometheus, spec, self.prometheus_service.prepare_create)
 
     @trivial_completion
     def apply_prometheus(self, spec: ServiceSpec) -> str:
@@ -2124,7 +2125,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_node_exporter(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('node-exporter', spec,
+        return self._add_daemon(DaemonType.node_exporter, spec,
                                 self.node_exporter_service.prepare_create)
 
     @trivial_completion
@@ -2134,7 +2135,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_crash(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('crash', spec,
+        return self._add_daemon(DaemonType.crash, spec,
                                 self.crash_service.prepare_create)
 
     @trivial_completion
@@ -2144,7 +2145,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_grafana(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('grafana', spec, self.grafana_service.prepare_create)
+        return self._add_daemon(DaemonType.grafana, spec, self.grafana_service.prepare_create)
 
     @trivial_completion
     def apply_grafana(self, spec: ServiceSpec) -> str:
@@ -2153,7 +2154,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_alertmanager(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('alertmanager', spec, self.alertmanager_service.prepare_create)
+        return self._add_daemon(DaemonType.alertmanager, spec, self.alertmanager_service.prepare_create)
 
     @trivial_completion
     def apply_alertmanager(self, spec: ServiceSpec) -> str:
@@ -2161,7 +2162,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_container(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('container', spec,
+        return self._add_daemon(DaemonType.container, spec,
                                 self.container_service.prepare_create)
 
     @trivial_completion
@@ -2171,7 +2172,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_cephadm_exporter(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('cephadm-exporter',
+        return self._add_daemon(DaemonType.cephadm_exporter,
                                 spec,
                                 self.cephadm_exporter_service.prepare_create)
 

@@ -186,7 +186,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             else:
                 raise AssertionError('Fail to determine daemon ID from {}'.format(p))
             daemon = orchestrator.DaemonDescription(
-                daemon_type=_daemon_type, daemon_id=daemon_id, hostname='localhost')
+                daemon_type=orchestrator.DaemonType(_daemon_type), daemon_id=daemon_id, hostname='localhost')
             daemons.append(daemon)
         return daemons
 

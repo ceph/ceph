@@ -10,7 +10,7 @@ from prettytable import PrettyTable
 
 from ceph.deployment.inventory import Device
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, ServiceType
 from ceph.utils import datetime_now
 
 from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
@@ -35,22 +35,6 @@ class Format(enum.Enum):
     json = 'json'
     json_pretty = 'json-pretty'
     yaml = 'yaml'
-
-
-class ServiceType(enum.Enum):
-    mon = 'mon'
-    mgr = 'mgr'
-    rbd_mirror = 'rbd-mirror'
-    crash = 'crash'
-    alertmanager = 'alertmanager'
-    grafana = 'grafana'
-    node_exporter = 'node-exporter'
-    prometheus = 'prometheus'
-    mds = 'mds'
-    rgw = 'rgw'
-    nfs = 'nfs'
-    iscsi = 'iscsi'
-    cephadm_exporter = 'cephadm-exporter'
 
 
 class ServiceAction(enum.Enum):
@@ -623,7 +607,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         def ukn(s: Optional[str]) -> str:
             return '<unknown>' if s is None else s
         # Sort the list for display
-        daemons.sort(key=lambda s: (ukn(s.daemon_type), ukn(s.hostname), ukn(s.daemon_id)))
+        daemons.sort(key=lambda s: (ukn(str(s.daemon_type)), ukn(s.hostname), ukn(s.daemon_id)))
 
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(daemons, format, many=True, cls=DaemonDescription))
@@ -931,7 +915,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = ServiceSpec(
-            service_type='mds',
+            service_type=ServiceType.mds,
             service_id=fs_name,
             placement=PlacementSpec.from_string(placement),
         )
@@ -1131,7 +1115,7 @@ Usage:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = ServiceSpec(
-            service_type='mds',
+            service_type=ServiceType.mds,
             service_id=fs_name,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,

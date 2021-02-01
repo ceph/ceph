@@ -4,6 +4,7 @@ import re
 from collections import namedtuple, OrderedDict
 from functools import wraps
 from typing import Optional, Dict, Any, List, Union, Callable, Iterable
+import enum
 
 import yaml
 
@@ -368,6 +369,25 @@ tPlacementSpec(hostname='host2', network='', name='')])
         return ps
 
 
+class ServiceType(enum.Enum):
+    alertmanager = 'alertmanager'
+    container = 'container'
+    crash = 'crash'
+    grafana = 'grafana'
+    iscsi = 'iscsi'
+    mds = 'mds'
+    mgr = 'mgr'
+    mon = 'mon'
+    node_exporter = 'node-exporter'
+    nfs = 'nfs'
+    osd = 'osd'
+    prometheus = 'prometheus'
+    rbd_mirror = 'rbd-mirror'
+    rgw = 'rgw'
+    cephadm_exporter = 'cephadm-exporter'
+    ha_rgw = 'ha-rgw'
+
+
 class ServiceSpec(object):
     """
     Details of service creation.
@@ -379,10 +399,15 @@ class ServiceSpec(object):
     start the services.
 
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw ' \
-                          'container cephadm-exporter ha-rgw'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs osd rgw container ha-rgw '.split()
+    REQUIRES_SERVICE_ID = [
+        ServiceType.iscsi,
+        ServiceType.mds,
+        ServiceType.nfs,
+        ServiceType.osd,
+        ServiceType.rgw,
+        ServiceType.container,
+        ServiceType.ha_rgw,
+    ]
 
     @classmethod
     def _cls(cls, service_type):
@@ -417,7 +442,7 @@ class ServiceSpec(object):
         return object.__new__(sub_cls)
 
     def __init__(self,
-                 service_type: str,
+                 service_type: ServiceType,
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  count: Optional[int] = None,
@@ -426,7 +451,7 @@ class ServiceSpec(object):
                  ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
-        assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES, service_type
+        assert service_type in ServiceType, service_type
         self.service_type = service_type
         self.service_id = None
         if self.service_type in self.REQUIRES_SERVICE_ID:
