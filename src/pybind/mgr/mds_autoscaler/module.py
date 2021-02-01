@@ -5,7 +5,7 @@ Automatically scale MDSs based on status of the file-system using the FSMap
 import logging
 from typing import Optional, List, Set
 from mgr_module import MgrModule
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, ServiceType
 import orchestrator
 import copy
 
@@ -22,7 +22,7 @@ class MDSAutoscaler(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def get_service(self, fs_name: str) -> List[orchestrator.ServiceDescription]:
         service = f"mds.{fs_name}"
-        completion = self.describe_service(service_type='mds',
+        completion = self.describe_service(service_type=ServiceType.mds,
                                            service_name=service,
                                            refresh=True)
         self._orchestrator_wait([completion])

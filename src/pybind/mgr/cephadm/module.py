@@ -1459,7 +1459,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
 
     @trivial_completion
-    def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None,
+    def describe_service(self, service_type: Optional[ServiceType] = None, service_name: Optional[str] = None,
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
         if refresh:
             self._invalidate_daemons_and_kick_serve()
@@ -1559,7 +1559,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def list_daemons(self,
                      service_name: Optional[str] = None,
-                     daemon_type: Optional[str] = None,
+                     daemon_type: Optional[DaemonType] = None,
                      daemon_id: Optional[str] = None,
                      host: Optional[str] = None,
                      refresh: bool = False) -> List[orchestrator.DaemonDescription]:

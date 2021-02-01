@@ -20,7 +20,8 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, HA_RGWSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec
+    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec, \
+    DaemonType
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -516,7 +517,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
     @_cli_read_command('orch ls')
     def _list_services(self,
-                       service_type: Optional[str] = None,
+                       service_type: Optional[ServiceType] = None,
                        service_name: Optional[str] = None,
                        export: bool = False,
                        format: Format = Format.plain,
@@ -588,7 +589,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _list_daemons(self,
                       hostname: Optional[str] = None,
                       service_name: Optional[str] = None,
-                      daemon_type: Optional[str] = None,
+                      daemon_type: Optional[DaemonType] = None,
                       daemon_id: Optional[str] = None,
                       format: Format = Format.plain,
                       refresh: bool = False) -> HandleCommandResult:
