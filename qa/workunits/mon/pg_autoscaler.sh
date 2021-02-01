@@ -30,6 +30,8 @@ function wait_for() {
     return 0
 }
 
+function power2() { echo "x=l($1)/l(2); scale=0; 2^((x+0.5)/1)" | bc -l;}
+
 # enable
 ceph config set mgr mgr/pg_autoscaler/sleep_interval 5
 ceph mgr module enable pg_autoscaler
@@ -40,8 +42,20 @@ ceph osd pool create b 16 --pg-num-min 2
 ceph osd pool set a pg_autoscale_mode on
 ceph osd pool set b pg_autoscale_mode on
 
-wait_for 120 "ceph osd pool get a pg_num | grep 4"
-wait_for 120 "ceph osd pool get b pg_num | grep 2"
+# get num pools again since we created more pools
+NUM_POOLS=$(ceph osd pool ls | wc -l)
+
+# get pool size
+POOL_SIZE_A=$(ceph osd pool get a size| grep -Eo '[0-9]{1,4}')
+POOL_SIZE_B=$(ceph osd pool get b size| grep -Eo '[0-9]{1,4}')
+
+# calculate target pg of each pools
+TARGET_PG_A=$(power2 $((($NUM_OSDS * 100)/($NUM_POOLS)/($POOL_SIZE_A))))
+TARGET_PG_B=$(power2 $((($NUM_OSDS * 100)/($NUM_POOLS)/($POOL_SIZE_B))))
+
+# evaluate target_pg against pg num of each pools
+wait_for 120 "ceph osd pool get a pg_num | grep $TARGET_PG_A"
+wait_for 120 "ceph osd pool get b pg_num | grep $TARGET_PG_B"
 
 # target ratio
 ceph osd pool set a target_size_ratio 5
