@@ -1,10 +1,10 @@
 import logging
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING, Iterator, Union
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from cephadm.schedule import HostAssignment
 
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -101,11 +101,15 @@ class Migrations:
             if len(placements) >= len(existing_daemons):
                 return
 
+            def to_hostname(d: DaemonDescription) -> HostPlacementSpec:
+                if d.hostname in old_hosts:
+                    return old_hosts[d.hostname]
+                else:
+                    assert d.hostname
+                    return HostPlacementSpec(d.hostname, '', '')
+
             old_hosts = {h.hostname: h for h in spec.placement.hosts}
-            new_hosts = [
-                old_hosts[d.hostname] if d.hostname in old_hosts else HostPlacementSpec(
-                    hostname=d.hostname, network='', name='')
-                for d in existing_daemons
+            new_hosts = [to_hostname(d) for d in existing_daemons
             ]
 
             new_placement = PlacementSpec(
