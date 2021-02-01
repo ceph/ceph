@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class NFSService(CephService):
     TYPE = 'nfs'
 
-    def config(self, spec: NFSServiceSpec) -> None:
+    def config(self, spec: NFSServiceSpec, daemon_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())

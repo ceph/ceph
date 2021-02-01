@@ -425,14 +425,8 @@ class CephadmServe:
 
         return r
 
-    def _config_fn(self, service_type: str) -> Optional[Callable[[ServiceSpec], None]]:
-        fn = {
-            'mds': self.mgr.mds_service.config,
-            'rgw': self.mgr.rgw_service.config,
-            'nfs': self.mgr.nfs_service.config,
-            'iscsi': self.mgr.iscsi_service.config,
-        }.get(service_type)
-        return cast(Callable[[ServiceSpec], None], fn)
+    def _config_fn(self, service_type: ServiceType) -> Optional[Callable[[ServiceSpec, str], None]]:
+        return cast(Callable[[ServiceSpec, str], None], self.mgr.cephadm_services[service_type].config)
 
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
@@ -535,11 +529,7 @@ class CephadmServe:
                                                      forcename=name)
 
                 if not did_config and config_func:
-                    if daemon_type == 'rgw':
-                        rgw_config_func = cast(Callable[[RGWSpec, str], None], config_func)
-                        rgw_config_func(cast(RGWSpec, spec), daemon_id)
-                    else:
-                        config_func(spec)
+                    config_func(spec, daemon_id)
                     did_config = True
 
                 daemon_spec = self.mgr.cephadm_services[service_type].make_daemon_spec(

@@ -111,6 +111,9 @@ class CephadmService(metaclass=ABCMeta):
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         raise NotImplementedError()
 
+    def config(self, spec: ServiceSpec, daemon_id: str) -> None:
+        raise NotImplementedError()
+
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """The post actions needed to be done after daemons are checked"""
         if self.mgr.config_dashboard:
@@ -525,7 +528,7 @@ class MgrService(CephService):
 class MdsService(CephService):
     TYPE = 'mds'
 
-    def config(self, spec: ServiceSpec) -> None:
+    def config(self, spec: ServiceSpec, daemon_id: str) -> None:
         assert self.TYPE == spec.service_type
         assert spec.service_id
 
@@ -572,7 +575,7 @@ class MdsService(CephService):
 class RgwService(CephService):
     TYPE = 'rgw'
 
-    def config(self, spec: RGWSpec, rgw_id: str) -> None:
+    def config(self, spec: RGWSpec, rgw_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
 
         # create realm, zonegroup, and zone if needed
