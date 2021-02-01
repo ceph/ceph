@@ -1110,17 +1110,19 @@ void md_config_t::early_expand_meta(
 bool md_config_t::finalize_reexpand_meta(ConfigValues& values,
 					 const ConfigTracker& tracker)
 {
-  for (auto& [name, value] : may_reexpand_meta) {
-    set_val(values, tracker, name, value);
+  std::vector<std::string> reexpands;
+  reexpands.swap(may_reexpand_meta);
+  for (auto& name : reexpands) {
+    // always refresh the options if they are in the may_reexpand_meta
+    // map, because the options may have already been expanded with old
+    // meta.
+    const auto &opt_iter = schema.find(name);
+    ceph_assert(opt_iter != schema.end());
+    const Option &opt = opt_iter->second;
+    _refresh(values, opt);
   }
-  
-  if (!may_reexpand_meta.empty()) {
-    // meta expands could have modified anything.  Copy it all out again.
-    update_legacy_vals(values);
-    return true;
-  } else {
-    return false;
-  }
+
+  return !may_reexpand_meta.empty();
 }
 
 Option::value_t md_config_t::_expand_meta(
@@ -1204,7 +1206,7 @@ Option::value_t md_config_t::_expand_meta(
       } else if (var == "pid") {
 	out += stringify(getpid());
         if (o) {
-          may_reexpand_meta[o->name] = *str;
+          may_reexpand_meta.push_back(o->name);
         }
       } else if (var == "cctid") {
 	out += stringify((unsigned long long)this);
