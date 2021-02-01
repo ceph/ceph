@@ -152,7 +152,7 @@ extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 extern int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_objs, const std::string& pool,
 			  const char *cls, const char *method, bufferlist& inbl);
 
-extern std::shared_ptr<std::map<std::string, bufferlist> > cls_cxx_get_gathered_data(cls_method_context_t hctx);
+extern int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results);
 
 /* These are also defined in rados.h and librados.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'

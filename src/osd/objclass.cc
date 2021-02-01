@@ -718,13 +718,14 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
     (*src_obj_buffs)[*it] = bufferlist();
   }
   (*pctx)->op_finishers[(*pctx)->current_osd_subop_num].reset(new GatherFinisher(src_obj_buffs));
-  return (*pctx)->pg->cls_gather(*pctx, src_obj_buffs, pool, cls, method, inbl);
+  return (*pctx)->pg->start_cls_gather(*pctx, src_obj_buffs, pool, cls, method, inbl);
 }
 
-std::shared_ptr<std::map<std::string, bufferlist> > cls_cxx_get_gathered_data(cls_method_context_t hctx)
+int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
   PrimaryLogPG::OpFinisher* op_finisher = nullptr;
+  int r = 0;
   {
     auto op_finisher_it = (*pctx)->op_finishers.find((*pctx)->current_osd_subop_num);
     if (op_finisher_it != (*pctx)->op_finishers.end()) {
@@ -732,9 +733,11 @@ std::shared_ptr<std::map<std::string, bufferlist> > cls_cxx_get_gathered_data(cl
     }
   }
   if (op_finisher == NULL) {
-    return std::shared_ptr<std::map<std::string, bufferlist> >(new std::map<std::string, bufferlist>);
+    results->clear();
   } else {
     GatherFinisher *gf = (GatherFinisher*)op_finisher;
-    return std::move(gf->src_obj_buffs);
+    *results = *gf->src_obj_buffs;
+    r = (*pctx)->pg->finish_cls_gather(*pctx);
   }
+  return r;
 }
