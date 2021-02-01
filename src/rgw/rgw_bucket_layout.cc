@@ -146,9 +146,7 @@ void decode(BucketLayout& l, bufferlist::const_iterator& bl)
     l.logs.clear();
     // initialize the log layout to match the current index layout
     if (l.current_index.layout.type == BucketIndexType::Normal) {
-      const auto gen = l.current_index.gen;
-      const auto& index = l.current_index.layout.normal;
-      l.logs.push_back(log_layout_from_index(gen, index));
+      l.logs.push_back(log_layout_from_index(0, l.current_index));
     }
   } else {
     decode(l.logs, bl);
