@@ -489,7 +489,7 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
   return 0;
 }
 
-std::shared_ptr<std::map<std::string, bufferlist> > cls_cxx_get_gathered_data(cls_method_context_t hctx)
+int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, bufferlist> *results)
 {
-  return std::shared_ptr<std::map<std::string, bufferlist> >(new std::map<std::string, bufferlist>);
+  return 0;
 }
