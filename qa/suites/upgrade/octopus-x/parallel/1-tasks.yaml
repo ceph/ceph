@@ -13,7 +13,13 @@ tasks:
         osd_class_default_list: "*"
 - print: "**** done end installing octopus cephadm ..."
 
-- print: "**** done start cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph fs volume create foo
+- ceph.healthy:
+
+- print: "**** done creating new fs"
+
 - cephadm.shell:
     mon.a:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
