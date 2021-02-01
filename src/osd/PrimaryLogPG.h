@@ -1405,6 +1405,7 @@ protected:
 
   // -- cls_gather --
   std::map<hobject_t, CLSGatherOp> cls_gather_ops;
+  void cls_gather_set_result(hobject_t oid, int r);
   void cancel_cls_gather(CLSGatherOp cgop, bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
@@ -1551,8 +1552,10 @@ public:
   int do_tmapup_slow(OpContext *ctx, ceph::buffer::list::const_iterator& bp, OSDOp& osd_op, ceph::buffer::list& bl);
 
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
-  int cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::string, bufferlist> > src_objs, const std::string& pool,
-		 const char *cls, const char *method, bufferlist& inbl);
+  int start_cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::string, bufferlist> > src_objs, const std::string& pool,
+		       const char *cls, const char *method, bufferlist& inbl);
+  int finish_cls_gather(OpContext *ctx);
+
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;

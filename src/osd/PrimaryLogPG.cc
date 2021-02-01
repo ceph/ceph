@@ -10093,14 +10093,14 @@ struct C_gather : public Context {
       pg->unlock();
       return;
     }
-    pg->cls_gather_ops.erase(oid);
+    pg->cls_gather_set_result(oid, r);
     pg->execute_ctx(ctx);
     pg->unlock();
   }
 };
 
-int PrimaryLogPG::cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs, const std::string& pool,
-			     const char *cls, const char *method, bufferlist& inbl)
+int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs, const std::string& pool,
+				   const char *cls, const char *method, bufferlist& inbl)
 {
   OpRequestRef op = ctx->op;
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
@@ -10135,6 +10135,18 @@ int PrimaryLogPG::cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::strin
   gather.activate();
 
   return -EINPROGRESS;
+}
+
+int PrimaryLogPG::finish_cls_gather(OpContext *ctx)
+{
+  ObjectState& obs = ctx->new_obs;
+  object_info_t& oi = obs.oi;
+  const hobject_t& soid = oi.soid;
+  map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = cls_gather_ops.find(soid);
+  ceph_assert(p != cls_gather_ops.end());
+  int r = p->second.rval;
+  cls_gather_ops.erase(soid);
+  return r;
 }
 
 // ========================================================================
@@ -10931,6 +10943,13 @@ bool PrimaryLogPG::is_present_clone(hobject_t coid)
 // ========================================================================
 // cls gather
 //
+
+void PrimaryLogPG::cls_gather_set_result(hobject_t oid, int r)
+{
+  map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = cls_gather_ops.find(oid);
+  ceph_assert(p != cls_gather_ops.end());
+  p->second.rval = r;
+}
 
 void PrimaryLogPG::cancel_cls_gather(CLSGatherOp cgop, bool requeue,
 				     vector<ceph_tid_t> *tids)
