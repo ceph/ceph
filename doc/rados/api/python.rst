@@ -89,18 +89,18 @@ information about the cluster.
 	import rados, sys
 
 	cluster = rados.Rados(conffile='ceph.conf')
-	print "\nlibrados version: " + str(cluster.version())
-	print "Will attempt to connect to: " + str(cluster.conf_get('mon host'))
+	print("\nlibrados version: {}".format(str(cluster.version())))
+	print("Will attempt to connect to: {}".format(str(cluster.conf_get('mon host'))))
 
 	cluster.connect()
-	print "\nCluster ID: " + cluster.get_fsid()
+	print("\nCluster ID: {}".format(cluster.get_fsid()))
 
-	print "\n\nCluster Statistics"
-	print "=================="
+	print("\n\nCluster Statistics")
+	print("==================")
 	cluster_stats = cluster.get_cluster_stats()
 
-	for key, value in cluster_stats.iteritems():
-		print key, value
+	for key, value in cluster_stats.items():
+		print(key, value)
 
 
 By default, Ceph authentication is ``on``. Your application will need to know
@@ -128,33 +128,32 @@ pool.
    :linenos:
    :emphasize-lines: 6, 13, 18, 25
 
-	print "\n\nPool Operations"
-	print "==============="
+	print("\n\nPool Operations")
+	print("===============")
 
-	print "\nAvailable Pools"
-	print "----------------"
+	print("\nAvailable Pools")
+	print("----------------")
 	pools = cluster.list_pools()
 
 	for pool in pools:
-		print pool
+		print(pool)
 
-	print "\nCreate 'test' Pool"
-	print "------------------"
+	print("\nCreate 'test' Pool")
+	print("------------------")
 	cluster.create_pool('test')
 
-	print "\nPool named 'test' exists: " + str(cluster.pool_exists('test'))
-	print "\nVerify 'test' Pool Exists"
-	print "-------------------------"
+	print("\nPool named 'test' exists: {}".format(str(cluster.pool_exists('test'))))
+	print("\nVerify 'test' Pool Exists")
+	print("-------------------------")
 	pools = cluster.list_pools()
 
 	for pool in pools:
-		print pool
+		print(pool)
 
-	print "\nDelete 'test' Pool"
-	print "------------------"
+	print("\nDelete 'test' Pool")
+	print("------------------")
 	cluster.delete_pool('test')
-	print "\nPool named 'test' exists: " + str(cluster.pool_exists('test'))
-
+	print("\nPool named 'test' exists: {}".format(str(cluster.pool_exists('test'))))
 
 
 Input/Output Context
@@ -186,7 +185,7 @@ that you close the connection. For example:
 .. code-block:: python
    :linenos:
 
-	print "\nClosing the connection."
+	print("\nClosing the connection.")
 	ioctx.close()
 
 
@@ -203,13 +202,13 @@ from the cluster. You may also remove objects from the cluster. For example:
 	:linenos:
 	:emphasize-lines: 2, 5, 8
 
-	print "\nWriting object 'hw' with contents 'Hello World!' to pool 'data'."
+	print("\nWriting object 'hw' with contents 'Hello World!' to pool 'data'.")
 	ioctx.write_full("hw", "Hello World!")
 
-	print "\n\nContents of object 'hw'\n------------------------\n"
-	print ioctx.read("hw")
+	print("\n\nContents of object 'hw'\n------------------------\n")
+	print(ioctx.read("hw"))
 
-	print "\nRemoving object 'hw'"
+	print("\nRemoving object 'hw'")
 	ioctx.remove_object("hw")
 
 
@@ -223,11 +222,11 @@ the object and read XATTRs from the object. For example:
 	:linenos:
 	:emphasize-lines: 2, 5
 
-	print "\n\nWriting XATTR 'lang' with value 'en_US' to object 'hw'"
+	print("\n\nWriting XATTR 'lang' with value 'en_US' to object 'hw'")
 	ioctx.set_xattr("hw", "lang", "en_US")
 
-	print "\n\nGetting XATTR 'lang' from object 'hw'\n"
-	print ioctx.get_xattr("hw", "lang")
+	print("\n\nGetting XATTR 'lang' from object 'hw'\n")
+	print(ioctx.get_xattr("hw", "lang"))
 
 
 Listing Objects
@@ -239,18 +238,21 @@ For example:
 
 .. code-block:: python
 	:linenos:
-	:emphasize-lines: 1, 6, 7
+	:emphasize-lines: 1, 6, 7, 13
 
 	object_iterator = ioctx.list_objects()
 
 	while True :
 
 		try :
-			rados_object = object_iterator.next()
-			print "Object contents = " + rados_object.read()
+			rados_object = object_iterator.__next__()
+			print("Object contents = {}".format(rados_object.read()))
 
 		except StopIteration :
 			break
+
+	# Or alternatively
+	[print("Object contents = {}".format(obj.read())) for obj in ioctx.list_objects()]
 
 The ``Object`` class provides a file-like interface to an object, allowing
 you to read and write content and extended attributes. Object operations using
