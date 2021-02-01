@@ -3759,15 +3759,15 @@ int main(int argc, const char **argv)
   }
 
   if (format ==  "xml")
-    formatter = make_unique<XMLFormatter>(new XMLFormatter(pretty_format));
+    formatter = make_unique<XMLFormatter>(pretty_format);
   else if (format == "json")
-    formatter = make_unique<JSONFormatter>(new JSONFormatter(pretty_format));
+    formatter = make_unique<JSONFormatter>(pretty_format);
   else {
     cerr << "unrecognized format: " << format << std::endl;
     exit(1);
   }
 
-  zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(new JSONFormatter_PrettyZone(pretty_format));
+  zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(pretty_format);
 
   realm_name = g_conf()->rgw_realm;
   zone_name = g_conf()->rgw_zone;
