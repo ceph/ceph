@@ -835,7 +835,7 @@ Or in YAML:
 
 To place a service on *all* hosts, use ``"*"``::
 
-    orch apply crash --placement='*'
+    orch apply node-exporter --placement='*'
 
 Or in YAML:
 
