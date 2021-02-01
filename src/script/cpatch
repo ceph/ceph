@@ -134,15 +134,15 @@ if [ $py -eq 1 ] || [ $all -eq 1 ]; then
     # Exclude node_modules because it's the huge sources in dashboard/frontend
     tar --exclude=node_modules --exclude=tests --exclude-backups -cf $TMP/python_common.tar *
     popd > /dev/null
-    dockerfile+=$'ADD python_common.tar /usr/lib/python3.6/site-packages\n'
+    dockerfile+=$'ADD python_common.tar /usr/lib/python3.8/site-packages\n'
 
     pushd lib/cython_modules/lib.3
-    CYTHONLIBS="*.cpython-36m*.so"
+    CYTHONLIBS="*.cpython-38*.so"
     mkdir -p $TMP/cythonlib
     for f in $CYTHONLIBS; do cp $f $TMP/cythonlib ; done
     [ $strip -eq 1 ] && strip $TMP/cythonlib/*
     popd > /dev/null
-    dockerfile+=$'ADD cythonlib /usr/lib64/python3.6/site-packages\n'
+    dockerfile+=$'ADD cythonlib /usr/lib64/python3.8/site-packages\n'
 
     # cephadm
     pushd ../src/cephadm > /dev/null
