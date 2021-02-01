@@ -512,6 +512,7 @@ static void encode_json(const char *name, const T& val, ceph::Formatter *f)
 
 class utime_t;
 
+void encode_json(const char *name, std::string_view val, ceph::Formatter *f);
 void encode_json(const char *name, const std::string& val, ceph::Formatter *f);
 void encode_json(const char *name, const char *val, ceph::Formatter *f);
 void encode_json(const char *name, bool val, ceph::Formatter *f);
