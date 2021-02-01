@@ -7732,6 +7732,7 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     auto too_old = now;
     too_old -= cct->_conf.get_val<double>("osd_op_complaint_time");
     int slow = 0;
+    int clog_warns = 0;
     TrackedOpRef oldest_op;
     auto count_slow_ops = [&](TrackedOp& op) {
       if (op.get_initiated() < too_old) {
@@ -7742,7 +7743,10 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
            << " currently "
            << op.state_string();
         lgeneric_subdout(cct,osd,20) << ss.str() << dendl;
-        clog->warn() << ss.str();
+        if (clog_warns < 3) {
+          clog->warn() << ss.str();
+          clog_warns++;
+        }
 	slow++;
 	if (!oldest_op || op.get_initiated() < oldest_op->get_initiated()) {
 	  oldest_op = &op;
@@ -7756,6 +7760,8 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
       if (slow) {
 	derr << __func__ << " reporting " << slow << " slow ops, oldest is "
 	     << oldest_op->get_desc() << dendl;
+	clog->warn() << "reporting " << slow << " slow ops, " << clog_warns
+             << " included above, oldest is " << oldest_op->get_desc();
       }
       metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
     } else {
