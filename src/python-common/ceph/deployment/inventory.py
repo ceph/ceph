@@ -15,7 +15,7 @@ class Devices(object):
         # type: (List[Device]) -> None
         self.devices = devices  # type: List[Device]
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return self.to_json() == other.to_json()
 
     def to_json(self):

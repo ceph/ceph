@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 
-try:
-    from typing import Tuple, Optional, Any
-except ImportError:
-    pass
+from typing import Tuple, Optional, Any, Union, Iterator
 
 from ceph.deployment.inventory import Device
 
@@ -53,7 +50,7 @@ class Matcher(object):
         # hence, make it a dict.
         disk = device.to_json()
 
-        def findkeys(node, key_val):
+        def findkeys(node: Union[list, dict], key_val: str) -> Iterator[str]:
             """ Find keys in non-flat dict recursively """
             if isinstance(node, list):
                 for i in node:
@@ -291,7 +288,7 @@ class SizeMatcher(Matcher):
         """
         return re.findall(r"\d+", data)[0], cls._parse_suffix(data)
 
-    def _parse_filter(self):
+    def _parse_filter(self) -> None:
         """ Identifies which type of 'size' filter is applied
 
         There are four different filtering modes:
