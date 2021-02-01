@@ -82,14 +82,12 @@ class Hello(MgrModule):
         """
         Say hello
         """
-        out = ''
         if person_name is None:
-            out = 'Hello, ' + cast(str, self.get_module_option('place'))
+            who = cast(str, self.get_module_option('place'))
         else:
-            out = f'Hello, {person_name}'
-        if self.get_module_option('emphatic'):
-            out += '!'
-        return HandleCommandResult(stdout=out)
+            who = person_name
+        fin = '!' if self.get_module_option('emphatic') else ''
+        return HandleCommandResult(stdout=f'Hello, {who}{fin}')
 
     @CLIReadCommand('count')
     def count(self, num: int) -> HandleCommandResult:
