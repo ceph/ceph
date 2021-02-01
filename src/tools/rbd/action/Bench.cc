@@ -9,6 +9,8 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "global/signal_handler.h"
+#include <atomic>
+#include <chrono>
 #include <iostream>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
