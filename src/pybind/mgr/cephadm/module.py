@@ -1944,10 +1944,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                              forcename=name)
 
             if not did_config and config_func:
-                if daemon_type == 'rgw':
-                    config_func(spec, daemon_id)
-                else:
-                    config_func(spec)
+                config_func(spec, daemon_id)
                 did_config = True
 
             daemon_spec = self.cephadm_services[daemon_type_to_service(daemon_type)].make_daemon_spec(
