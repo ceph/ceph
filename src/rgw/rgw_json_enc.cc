@@ -804,6 +804,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
   }
+  encode_json("layout", layout, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -847,6 +848,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   if (!sp.empty()) {
     set_sync_policy(std::move(sp));
   }
+  JSONDecoder::decode_json("layout", layout, obj);
 }
 
 void rgw_sync_directional_rule::dump(Formatter *f) const
