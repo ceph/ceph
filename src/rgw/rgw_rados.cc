@@ -1858,7 +1858,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
       rgw_obj_index_key index_key = entry.key;
       rgw_obj_key obj(index_key);
 
-      ldout(cct, 20) << "RGWRados::Bucket::List::" << __func__ <<
+      ldpp_dout(dpp, 20) << "RGWRados::Bucket::List::" << __func__ <<
 	" considering entry " << entry.key << dendl;
 
       /* note that parse_raw_oid() here will not set the correct
@@ -2594,7 +2594,7 @@ int RGWRados::fix_tail_obj_locator(const DoutPrefixProvider *dpp, const RGWBucke
       get_obj_bucket_and_oid_loc(loc, oid, locator);
       ref.pool.ioctx().locator_set_key(locator);
 
-      ldout(cct, 20) << __func__ << ": key=" << key << " oid=" << oid << " locator=" << locator << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ": key=" << key << " oid=" << oid << " locator=" << locator << dendl;
 
       r = ioctx.stat(oid, NULL, NULL);
       if (r != -ENOENT) {
@@ -2614,7 +2614,7 @@ int RGWRados::fix_tail_obj_locator(const DoutPrefixProvider *dpp, const RGWBucke
 	/* cannot find a broken part */
 	continue;
       }
-      ldout(cct, 20) << __func__ << ": found bad object part: " << loc << dendl;
+      ldpp_dout(dpp, 20) << __func__ << ": found bad object part: " << loc << dendl;
       if (need_fix) {
         *need_fix = true;
       }
@@ -2655,7 +2655,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
     ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
   }
-  ldout(store->ctx(), 20) << " bucket index object: " << bucket_obj.get_raw_obj() << dendl;
+  ldpp_dout(dpp, 20) << " bucket index object: " << bucket_obj.get_raw_obj() << dendl;
 
   return 0;
 }
@@ -2686,7 +2686,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
     ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
   }
-  ldout(store->ctx(), 20) << " bucket index oid: " << bucket_obj.get_raw_obj() << dendl;
+  ldpp_dout(dpp, 20) << " bucket index oid: " << bucket_obj.get_raw_obj() << dendl;
 
   return 0;
 }
@@ -3010,7 +3010,7 @@ int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   rgw_obj& obj = target->get_obj();
 
   if (obj.get_oid().empty()) {
-    ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): cannot write object with empty name" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): cannot write object with empty name" << dendl;
     return -EIO;
   }
 
@@ -4935,7 +4935,7 @@ int RGWRados::defer_gc(const DoutPrefixProvider *dpp, void *ctx, const RGWBucket
     return r;
 
   if (!state->is_atomic) {
-    ldout(cct, 20) << "state for obj=" << obj << " is not atomic, not deferring gc operation" << dendl;
+    ldpp_dout(dpp, 20) << "state for obj=" << obj << " is not atomic, not deferring gc operation" << dendl;
     return -EINVAL;
   }
 
@@ -4946,11 +4946,11 @@ int RGWRados::defer_gc(const DoutPrefixProvider *dpp, void *ctx, const RGWBucket
   } else if (state->obj_tag.length() > 0) {
     tag = state->obj_tag.c_str();
   } else {
-    ldout(cct, 20) << "state->obj_tag is empty, not deferring gc operation" << dendl;
+    ldpp_dout(dpp, 20) << "state->obj_tag is empty, not deferring gc operation" << dendl;
     return -EINVAL;
   }
 
-  ldout(cct, 0) << "defer chain tag=" << tag << dendl;
+  ldpp_dout(dpp, 0) << "defer chain tag=" << tag << dendl;
 
   cls_rgw_obj_chain chain;
   update_gc_chain(state->obj, *state->manifest, &chain);
@@ -5088,7 +5088,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       unmod.tv_nsec = 0;
     }
 
-    ldout(store->ctx(), 10) << "If-UnModified-Since: " << params.unmod_since << " Last-Modified: " << ctime << dendl;
+    ldpp_dout(dpp, 10) << "If-UnModified-Since: " << params.unmod_since << " Last-Modified: " << ctime << dendl;
     if (ctime > unmod) {
       return -ERR_PRECONDITION_FAILED;
     }
@@ -5111,7 +5111,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
         auto iter = bl.cbegin();
         decode(delete_at, iter);
       } catch (buffer::error& err) {
-        ldout(store->ctx(), 0) << "ERROR: couldn't decode RGW_ATTR_DELETE_AT" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: couldn't decode RGW_ATTR_DELETE_AT" << dendl;
 	return -EIO;
       }
 
@@ -5345,7 +5345,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       s->mtime = entry.mtime;
       s->zone_short_id = entry.zone_short_id;
       s->pg_ver = entry.pg_ver;
-      ldout(cct, 20) << __func__ << "(): found obj in tombstone cache: obj=" << obj
+      ldpp_dout(dpp, 20) << __func__ << "(): found obj in tombstone cache: obj=" << obj
           << " mtime=" << s->mtime << " pgv=" << s->pg_ver << dendl;
     } else {
       s->mtime = real_time();
@@ -5380,7 +5380,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       decode(info, p);
       s->accounted_size = info.orig_size; 
     } catch (buffer::error&) {
-      dout(0) << "ERROR: could not decode compression info for object: " << obj << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not decode compression info for object: " << obj << dendl;
       return -EIO;
     }
   }
@@ -5410,15 +5410,15 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       if (!compressed)
         s->accounted_size = s->size;
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
     }
-    ldout(cct, 10) << "manifest: total_size = " << s->manifest->get_obj_size() << dendl;
+    ldpp_dout(dpp, 10) << "manifest: total_size = " << s->manifest->get_obj_size() << dendl;
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>() && \
 	s->manifest->has_explicit_objs()) {
       RGWObjManifest::obj_iterator mi;
       for (mi = s->manifest->obj_begin(); mi != s->manifest->obj_end(); ++mi) {
-        ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(store) << dendl;
+        ldpp_dout(dpp, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(store) << dendl;
       }
     }
 
@@ -5439,7 +5439,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       try {
         decode(s->pg_ver, pgbl);
       } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: couldn't decode pg ver attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: couldn't decode pg ver attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
       }
     }
   }
@@ -5451,14 +5451,14 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
       try {
         decode(s->zone_short_id, zbl);
       } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: couldn't decode zone short id attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: couldn't decode zone short id attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
       }
     }
   }
   if (s->obj_tag.length())
-    ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
+    ldpp_dout(dpp, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
   else
-    ldout(cct, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
+    ldpp_dout(dpp, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
 
   /* an object might not be olh yet, but could have olh id tag, so we should set it anyway if
    * it exist, and not only if is_olh() returns true
@@ -5471,7 +5471,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *rc
   if (is_olh(s->attrset)) {
     s->is_olh = true;
 
-    ldout(cct, 20) << __func__ << ": setting s->olh_tag to " << string(s->olh_tag.c_str(), s->olh_tag.length()) << dendl;
+    ldpp_dout(dpp, 20) << __func__ << ": setting s->olh_tag to " << string(s->olh_tag.c_str(), s->olh_tag.length()) << dendl;
 
     if (need_follow_olh) {
       return get_olh_target_state(dpp, *rctx, bucket_info, obj, s, state, y);
@@ -5657,7 +5657,7 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
                      (!state->fake_tag);
 
   if (!state->is_atomic) {
-    ldout(store->ctx(), 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *)state << dendl;
+    ldpp_dout(dpp, 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *)state << dendl;
 
     if (reset_obj) {
       op.create(false);
@@ -5727,7 +5727,7 @@ int RGWRados::Object::prepare_atomic_modification(const DoutPrefixProvider *dpp,
   bufferlist bl;
   bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
 
-  ldout(store->ctx(), 10) << "setting object write_tag=" << state->write_tag << dendl;
+  ldpp_dout(dpp, 10) << "setting object write_tag=" << state->write_tag << dendl;
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
   if (modify_tail) {
@@ -5810,7 +5810,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
 
         obj_expirer->hint_add(ts, bucket.tenant, bucket.name, bucket.bucket_id, obj_key);
       } catch (buffer::error& err) {
-	ldout(cct, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT << " attr" << dendl;
+	ldpp_dout(dpp, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT << " attr" << dendl;
       }
     }
   }
@@ -6020,14 +6020,14 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
     int ret = get_bucket_shard(&bs, dpp);
     if (ret < 0) {
-      ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+      ldpp_dout(dpp, 5) << "failed to get BucketShard object: ret=" << ret << dendl;
       return ret;
     }
     r = call(bs);
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
-    ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
+    ldpp_dout(dpp, 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
     string new_bucket_id;
     r = store->block_while_resharding(bs, &new_bucket_id,
                                       target->bucket_info, null_yield, dpp);
@@ -6120,7 +6120,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   if (acl_bl && acl_bl->length()) {
     int ret = store->decode_policy(*acl_bl, &owner);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "WARNING: could not decode policy ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: could not decode policy ret=" << ret << dendl;
     }
   }
   ent.meta.owner = owner.get_id().to_str();
@@ -6720,7 +6720,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
     if (ret == -ENOENT) {
       return fetch_new_bucket_id("get_bucket_resharding_failed", new_bucket_id);
     } else if (ret < 0) {
-      ldout(cct, 0) << __func__ <<
+      ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR: failed to get bucket resharding : " << cpp_strerror(-ret) <<
 	dendl;
       return ret;
@@ -6731,7 +6731,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 				 new_bucket_id);
     }
 
-    ldout(cct, 20) << "NOTICE: reshard still in progress; " <<
+    ldpp_dout(dpp, 20) << "NOTICE: reshard still in progress; " <<
       (i < num_retries ? "retrying" : "too many retries") << dendl;
 
     if (i == num_retries) {
@@ -6752,22 +6752,22 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       RGWBucketReshardLock reshard_lock(this->store, bucket_info, true);
       ret = reshard_lock.lock();
       if (ret < 0) {
-	ldout(cct, 20) << __func__ <<
+	ldpp_dout(dpp, 20) << __func__ <<
 	  " INFO: failed to take reshard lock for bucket " <<
 	  bucket_id << "; expected if resharding underway" << dendl;
       } else {
-	ldout(cct, 10) << __func__ <<
+	ldpp_dout(dpp, 10) << __func__ <<
 	  " INFO: was able to take reshard lock for bucket " <<
 	  bucket_id << dendl;
 	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info);
 	if (ret < 0) {
 	  reshard_lock.unlock();
-	  ldout(cct, 0) << __func__ <<
+	  ldpp_dout(dpp, 0) << __func__ <<
 	    " ERROR: failed to clear resharding flags for bucket " <<
 	    bucket_id << dendl;
 	} else {
 	  reshard_lock.unlock();
-	  ldout(cct, 5) << __func__ <<
+	  ldpp_dout(dpp, 5) << __func__ <<
 	    " INFO: apparently successfully cleared resharding flags for "
 	    "bucket " << bucket_id << dendl;
 	  continue; // if we apparently succeed immediately test again
@@ -6777,13 +6777,13 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 
     ret = reshard_wait->wait(y);
     if (ret < 0) {
-      ldout(cct, 0) << __func__ <<
+      ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR: bucket is still resharding, please retry" << dendl;
       return ret;
     }
   } // for loop
 
-  ldout(cct, 0) << __func__ <<
+  ldpp_dout(dpp, 0) << __func__ <<
     " ERROR: bucket is still resharding, please retry" << dendl;
   return -ERR_BUSY_RESHARDING;
 }
@@ -7118,7 +7118,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx
     for (; viter != iter->second.end(); ++viter) {
       rgw_bucket_olh_log_entry& entry = *viter;
 
-      ldout(cct, 20) << "olh_log_entry: epoch=" << iter->first << " op=" << (int)entry.op
+      ldpp_dout(dpp, 20) << "olh_log_entry: epoch=" << iter->first << " op=" << (int)entry.op
                      << " key=" << entry.key.name << "[" << entry.key.instance << "] "
                      << (entry.delete_marker ? "(delete)" : "") << dendl;
       switch (entry.op) {
@@ -7129,14 +7129,14 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx
         // only overwrite a link of the same epoch if its key sorts before
         if (link_epoch < iter->first || key.instance.empty() ||
             key.instance > entry.key.instance) {
-          ldout(cct, 20) << "apply_olh_log applying key=" << entry.key << " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
+          ldpp_dout(dpp, 20) << "apply_olh_log applying key=" << entry.key << " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
               << " over current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
           need_to_link = true;
           need_to_remove = false;
           key = entry.key;
           delete_marker = entry.delete_marker;
         } else {
-          ldout(cct, 20) << "apply_olh skipping key=" << entry.key<< " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
+          ldpp_dout(dpp, 20) << "apply_olh skipping key=" << entry.key<< " epoch=" << iter->first << " delete_marker=" << entry.delete_marker
               << " before current=" << key << " epoch=" << link_epoch << " delete_marker=" << delete_marker << dendl;
         }
         break;
@@ -7145,7 +7145,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx
         need_to_link = false;
         break;
       default:
-        ldout(cct, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
         return -EIO;
       }
       string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
@@ -7495,7 +7495,7 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& buc
     }
   }
   if (!pending_entries.empty()) {
-    ldout(cct, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
 
     int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj);
     if (ret < 0) {
