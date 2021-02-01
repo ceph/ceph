@@ -1,4 +1,5 @@
 import fileinput
+import logging
 import os
 import shutil
 import sys
@@ -212,6 +213,10 @@ for c in pybinds:
     pybind = os.path.join(top_level, 'src', c)
     if pybind not in sys.path:
         sys.path.insert(0, pybind)
+
+# openapi
+openapi_logger = logging.getLogger('sphinxcontrib.openapi.openapi30')
+openapi_logger.setLevel(logging.WARNING)
 
 
 # handles edit-on-github and old version warning display
