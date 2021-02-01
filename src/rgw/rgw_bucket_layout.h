@@ -115,9 +115,9 @@ void decode(bucket_log_layout_generation& l, bufferlist::const_iterator& bl);
 
 // return a log layout that shares its layout with the index
 inline bucket_log_layout_generation log_layout_from_index(
-    uint64_t gen, const bucket_index_normal_layout& index)
+    uint64_t gen, const bucket_index_layout_generation& index)
 {
-  return {gen, {BucketLogType::InIndex, {gen, index}}};
+  return {gen, {BucketLogType::InIndex, {index.gen, index.layout.normal}}};
 }
 
 inline auto matches_gen(uint64_t gen)
