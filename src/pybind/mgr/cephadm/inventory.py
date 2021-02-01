@@ -9,7 +9,7 @@ import six
 import orchestrator
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec
-from cephadm.utils import str_to_datetime, datetime_to_str
+from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent
 
 if TYPE_CHECKING:
@@ -138,7 +138,7 @@ class SpecStore():
             self.spec_preview[spec.service_name()] = spec
             return None
         self.specs[spec.service_name()] = spec
-        self.spec_created[spec.service_name()] = datetime.datetime.utcnow()
+        self.spec_created[spec.service_name()] = datetime_now()
         self.mgr.set_store(
             SPEC_STORE_PREFIX + spec.service_name(),
             json.dumps({
@@ -280,7 +280,7 @@ class HostCache():
     def update_host_daemons(self, host, dm):
         # type: (str, Dict[str, orchestrator.DaemonDescription]) -> None
         self.daemons[host] = dm
-        self.last_daemon_update[host] = datetime.datetime.utcnow()
+        self.last_daemon_update[host] = datetime_now()
 
     def update_host_facts(self, host, facts):
         # type: (str, Dict[str, Dict[str, Any]]) -> None
@@ -291,7 +291,7 @@ class HostCache():
         # type: (str, List[inventory.Device], Dict[str,List[str]]) -> None
         self.devices[host] = dls
         self.networks[host] = nets
-        self.last_device_update[host] = datetime.datetime.utcnow()
+        self.last_device_update[host] = datetime_now()
 
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.daemon_config_deps[host][name] = {
@@ -301,7 +301,7 @@ class HostCache():
 
     def update_last_host_check(self, host):
         # type: (str) -> None
-        self.last_host_check[host] = datetime.datetime.utcnow()
+        self.last_host_check[host] = datetime_now()
 
     def prime_empty_host(self, host):
         # type: (str) -> None
@@ -474,7 +474,7 @@ class HostCache():
         if host in self.daemon_refresh_queue:
             self.daemon_refresh_queue.remove(host)
             return True
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+        cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.daemon_cache_timeout)
         if host not in self.last_daemon_update or self.last_daemon_update[host] < cutoff:
             return True
@@ -509,7 +509,7 @@ class HostCache():
         if host in self.device_refresh_queue:
             self.device_refresh_queue.remove(host)
             return True
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+        cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.device_cache_timeout)
         if host not in self.last_device_update or self.last_device_update[host] < cutoff:
             return True
@@ -528,7 +528,7 @@ class HostCache():
 
     def host_needs_check(self, host):
         # type: (str) -> bool
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+        cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.host_check_interval)
         return host not in self.last_host_check or self.last_host_check[host] < cutoff
 
@@ -553,7 +553,7 @@ class HostCache():
     def update_last_etc_ceph_ceph_conf(self, host: str) -> None:
         if not self.mgr.last_monmap:
             return
-        self.last_etc_ceph_ceph_conf[host] = datetime.datetime.utcnow()
+        self.last_etc_ceph_ceph_conf[host] = datetime_now()
 
     def host_needs_registry_login(self, host: str) -> bool:
         if host in self.mgr.offline_hosts:
@@ -634,14 +634,14 @@ class EventStore():
         self.events[event.kind_subject()] = self.events[event.kind_subject()][-5:]
 
     def for_service(self, spec: ServiceSpec, level: str, message: str) -> None:
-        e = OrchestratorEvent(datetime.datetime.utcnow(), 'service',
+        e = OrchestratorEvent(datetime_now(), 'service',
                               spec.service_name(), level, message)
         self.add(e)
 
     def from_orch_error(self, e: OrchestratorError) -> None:
         if e.event_subject is not None:
             self.add(OrchestratorEvent(
-                datetime.datetime.utcnow(),
+                datetime_now(),
                 e.event_subject[0],
                 e.event_subject[1],
                 "ERROR",
@@ -649,7 +649,7 @@ class EventStore():
             ))
 
     def for_daemon(self, daemon_name: str, level: str, message: str) -> None:
-        e = OrchestratorEvent(datetime.datetime.utcnow(), 'daemon', daemon_name, level, message)
+        e = OrchestratorEvent(datetime_now(), 'daemon', daemon_name, level, message)
         self.add(e)
 
     def for_daemon_from_exception(self, daemon_name: str, e: Exception) -> None:

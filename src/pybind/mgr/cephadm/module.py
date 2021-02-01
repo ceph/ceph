@@ -27,6 +27,7 @@ from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
     CustomContainerSpec, HostPlacementSpec
+from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
@@ -51,8 +52,7 @@ from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, EventStore
 from .upgrade import CEPH_UPGRADE_ORDER, CephadmUpgrade
 from .template import TemplateMgr
-from .utils import forall_hosts, CephadmNoImage, cephadmNoImage, \
-    str_to_datetime, datetime_to_str
+from .utils import forall_hosts, CephadmNoImage, cephadmNoImage
 
 try:
     import remoto
@@ -87,8 +87,6 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
-
-CEPH_DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 CEPH_TYPES = set(CEPH_UPGRADE_ORDER)
 
@@ -482,9 +480,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         if notify_type == "mon_map":
             # get monmap mtime so we can refresh configs when mons change
             monmap = self.get('mon_map')
-            self.last_monmap = datetime.datetime.strptime(
-                monmap['modified'], CEPH_DATEFMT)
-            if self.last_monmap and self.last_monmap > datetime.datetime.utcnow():
+            self.last_monmap = str_to_datetime(monmap['modified'])
+            if self.last_monmap and self.last_monmap > datetime_now():
                 self.last_monmap = None  # just in case clocks are skewed
             if getattr(self, 'manage_etc_ceph_ceph_conf', False):
                 # getattr, due to notify() being called before config_notify()
@@ -923,7 +920,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
 
         self.set_store("extra_ceph_conf", json.dumps({
             'conf': inbuf,
-            'last_modified': datetime_to_str(datetime.datetime.utcnow())
+            'last_modified': datetime_to_str(datetime_now())
         }))
         self.log.info('Set extra_ceph_conf')
         self._kick_serve_loop()
@@ -1716,7 +1713,7 @@ To check that the host is reachable:
         ).service_id(), overwrite=True):
 
             image = ''
-            start_time = datetime.datetime.utcnow()
+            start_time = datetime_now()
             ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
 
             if daemon_spec.daemon_type == 'container':
@@ -2225,7 +2222,7 @@ To check that the host is reachable:
                                                 force=force,
                                                 hostname=daemon.hostname,
                                                 fullname=daemon.name(),
-                                                process_started_at=datetime.datetime.utcnow(),
+                                                process_started_at=datetime_now(),
                                                 remove_util=self.to_remove_osds.rm_util))
             except NotFoundError:
                 return f"Unable to find OSDs: {osd_ids}"

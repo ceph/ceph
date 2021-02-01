@@ -7,10 +7,11 @@ from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import DriveSelection
 from ceph.deployment.inventory import Device
+from ceph.utils import datetime_to_str, str_to_datetime
 
 from datetime import datetime
 import orchestrator
-from cephadm.utils import forall_hosts, datetime_to_str, str_to_datetime
+from cephadm.utils import forall_hosts
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 

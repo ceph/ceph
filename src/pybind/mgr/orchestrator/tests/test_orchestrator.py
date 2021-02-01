@@ -1,6 +1,5 @@
 from __future__ import absolute_import
 
-import datetime
 import json
 
 import pytest
@@ -8,6 +7,7 @@ import yaml
 
 from ceph.deployment.service_spec import ServiceSpec
 from ceph.deployment import inventory
+from ceph.utils import datetime_now
 
 from test_orchestrator import TestOrchestrator as _TestOrchestrator
 from tests import mock
@@ -257,7 +257,7 @@ status: 1
 status_desc: starting
 is_active: false
 events:
-- 2020-06-10T10:08:22.933241 daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
+- 2020-06-10T10:08:22.933241Z daemon:crash.ubuntu [INFO] "Deployed crash.ubuntu on
   host 'ubuntu'"
 ---
 service_type: crash
@@ -267,12 +267,12 @@ placement:
 status:
   container_image_id: 74803e884bea289d2d2d3ebdf6d37cd560499e955595695b1390a89800f4e37a
   container_image_name: docker.io/ceph/daemon-base:latest-master-devel
-  created: '2020-06-10T10:37:31.051288'
-  last_refresh: '2020-06-10T10:57:40.715637'
+  created: '2020-06-10T10:37:31.051288Z'
+  last_refresh: '2020-06-10T10:57:40.715637Z'
   running: 1
   size: 1
 events:
-- 2020-06-10T10:37:31.139159 service:crash [INFO] "service was created"
+- 2020-06-10T10:37:31.139159Z service:crash [INFO] "service was created"
 """
     types = (DaemonDescription, ServiceDescription)
 
@@ -289,10 +289,10 @@ events:
 
 def test_event_multiline():
     from .._interface import OrchestratorEvent
-    e = OrchestratorEvent(datetime.datetime.utcnow(), 'service', 'subject', 'ERROR', 'message')
+    e = OrchestratorEvent(datetime_now(), 'service', 'subject', 'ERROR', 'message')
     assert OrchestratorEvent.from_json(e.to_json()) == e
 
-    e = OrchestratorEvent(datetime.datetime.utcnow(), 'service',
+    e = OrchestratorEvent(datetime_now(), 'service',
                           'subject', 'ERROR', 'multiline\nmessage')
     assert OrchestratorEvent.from_json(e.to_json()) == e
 
