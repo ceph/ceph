@@ -2292,9 +2292,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   }
 
   if (layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    layout.logs.push_back(log_layout_from_index(
-			    layout.current_index.gen,
-			    layout.current_index.layout.normal));
+    layout.logs.push_back(log_layout_from_index(0, layout.current_index));
   }
 }
 
