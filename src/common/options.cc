@@ -5519,6 +5519,11 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description("The maximum number concurrent IO operations, 0 for unlimited"),
 
+    Option("crimson_alien_op_num_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(16)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("The number of threads for serving alienized ObjectStore"),
+
     // ----------------------------
     // blk specific options
     Option("bdev_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
