@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 #include "include/encoding.h"
+#include "common/ceph_json.h"
 
 namespace rgw {
 
@@ -26,21 +27,24 @@ enum class BucketIndexType : uint8_t {
   Indexless, // no bucket index, so listing is unsupported
 };
 
+std::string_view to_string(const BucketIndexType& t);
+bool parse(std::string_view str, BucketIndexType& t);
+void encode_json_impl(const char *name, const BucketIndexType& t, ceph::Formatter *f);
+void decode_json_obj(BucketIndexType& t, JSONObj *obj);
+
+inline std::ostream& operator<<(std::ostream& out, const BucketIndexType& t)
+{
+  return out << to_string(t);
+}
+
 enum class BucketHashType : uint8_t {
   Mod, // rjenkins hash of object name, modulo num_shards
 };
 
-inline std::ostream& operator<<(std::ostream& out, const BucketIndexType &index_type)
-{
-  switch (index_type) {
-    case BucketIndexType::Normal:
-      return out << "Normal";
-    case BucketIndexType::Indexless:
-      return out << "Indexless";
-    default:
-      return out << "Unknown";
-  }
-}
+std::string_view to_string(const BucketHashType& t);
+bool parse(std::string_view str, BucketHashType& t);
+void encode_json_impl(const char *name, const BucketHashType& t, ceph::Formatter *f);
+void decode_json_obj(BucketHashType& t, JSONObj *obj);
 
 struct bucket_index_normal_layout {
   uint32_t num_shards = 1;
@@ -50,7 +54,8 @@ struct bucket_index_normal_layout {
 
 void encode(const bucket_index_normal_layout& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_index_normal_layout& l, bufferlist::const_iterator& bl);
-
+void encode_json_impl(const char *name, const bucket_index_normal_layout& l, ceph::Formatter *f);
+void decode_json_obj(bucket_index_normal_layout& l, JSONObj *obj);
 
 struct bucket_index_layout {
   BucketIndexType type = BucketIndexType::Normal;
@@ -61,6 +66,8 @@ struct bucket_index_layout {
 
 void encode(const bucket_index_layout& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_index_layout& l, bufferlist::const_iterator& bl);
+void encode_json_impl(const char *name, const bucket_index_layout& l, ceph::Formatter *f);
+void decode_json_obj(bucket_index_layout& l, JSONObj *obj);
 
 
 struct bucket_index_layout_generation {
@@ -70,12 +77,19 @@ struct bucket_index_layout_generation {
 
 void encode(const bucket_index_layout_generation& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_index_layout_generation& l, bufferlist::const_iterator& bl);
+void encode_json_impl(const char *name, const bucket_index_layout_generation& l, ceph::Formatter *f);
+void decode_json_obj(bucket_index_layout_generation& l, JSONObj *obj);
 
 
 enum class BucketLogType : uint8_t {
   // colocated with bucket index, so the log layout matches the index layout
   InIndex,
 };
+
+std::string_view to_string(const BucketLogType& t);
+bool parse(std::string_view str, BucketLogType& t);
+void encode_json_impl(const char *name, const BucketLogType& t, ceph::Formatter *f);
+void decode_json_obj(BucketLogType& t, JSONObj *obj);
 
 inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type)
 {
@@ -94,6 +108,8 @@ struct bucket_index_log_layout {
 
 void encode(const bucket_index_log_layout& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_index_log_layout& l, bufferlist::const_iterator& bl);
+void encode_json_impl(const char *name, const bucket_index_log_layout& l, ceph::Formatter *f);
+void decode_json_obj(bucket_index_log_layout& l, JSONObj *obj);
 
 struct bucket_log_layout {
   BucketLogType type = BucketLogType::InIndex;
@@ -103,6 +119,8 @@ struct bucket_log_layout {
 
 void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_log_layout& l, bufferlist::const_iterator& bl);
+void encode_json_impl(const char *name, const bucket_log_layout& l, ceph::Formatter *f);
+void decode_json_obj(bucket_log_layout& l, JSONObj *obj);
 
 
 struct bucket_log_layout_generation {
@@ -112,6 +130,8 @@ struct bucket_log_layout_generation {
 
 void encode(const bucket_log_layout_generation& l, bufferlist& bl, uint64_t f=0);
 void decode(bucket_log_layout_generation& l, bufferlist::const_iterator& bl);
+void encode_json_impl(const char *name, const bucket_log_layout_generation& l, ceph::Formatter *f);
+void decode_json_obj(bucket_log_layout_generation& l, JSONObj *obj);
 
 // return a log layout that shares its layout with the index
 inline bucket_log_layout_generation log_layout_from_index(
@@ -138,6 +158,10 @@ enum class BucketReshardState : uint8_t {
   None,
   InProgress,
 };
+std::string_view to_string(const BucketReshardState& s);
+bool parse(std::string_view str, BucketReshardState& s);
+void encode_json_impl(const char *name, const BucketReshardState& s, ceph::Formatter *f);
+void decode_json_obj(BucketReshardState& s, JSONObj *obj);
 
 // describes the layout of bucket index objects
 struct BucketLayout {
@@ -156,6 +180,8 @@ struct BucketLayout {
 
 void encode(const BucketLayout& l, bufferlist& bl, uint64_t f=0);
 void decode(BucketLayout& l, bufferlist::const_iterator& bl);
+void encode_json_impl(const char *name, const BucketLayout& l, ceph::Formatter *f);
+void decode_json_obj(BucketLayout& l, JSONObj *obj);
 
 
 inline uint32_t num_shards(const bucket_index_normal_layout& index) {
