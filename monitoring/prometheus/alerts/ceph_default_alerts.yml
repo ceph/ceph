@@ -215,8 +215,8 @@ groups:
       - alert: pool filling up
         expr: |
           (
-            predict_linear(ceph_pool_stored[2d], 3600 * 24 * 5) >=
-            ceph_pool_max_avail
+            predict_linear(ceph_pool_stored[2d], 3600 * 24 * 5)
+            >= ceph_pool_stored + ceph_pool_max_avail
           ) * on(pool_id) group_left(name) ceph_pool_metadata
         labels:
           severity: warning
