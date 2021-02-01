@@ -820,7 +820,8 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       ceph_assert(ls);
       session->info.prealloc_inos.subtract(inos_to_purge);
       ls->purging_inodes.insert(inos_to_purge);
-      mdcache->purge_inodes(inos_to_purge, ls);
+      if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping())
+	mdcache->purge_inodes(inos_to_purge, ls);
     }
 
     if (inos_to_free.size()) {
