@@ -108,7 +108,7 @@ class Module(MgrModule):
                     crash.get('entity_name', 'unidentified daemon'),
                     crash.get('utsname_hostname', '(unknown)'),
                     crash.get('timestamp', 'unknown time'))
-                    for (_, crash) in recent.items()]
+                for crash in recent.values()]
             if num > 30:
                 detail = detail[0:30]
                 detail.append('and %d more' % (num - 30))
@@ -239,7 +239,7 @@ class Module(MgrModule):
             table.align['ENTITY'] = 'l'
             for c in r:
                 table.add_row([c.get('crash_id'),
-                               c.get('entity_name','unknown'),
+                               c.get('entity_name', 'unknown'),
                                '' if 'archived' in c else '*'])
             return 0, table.get_string(), ''
 
