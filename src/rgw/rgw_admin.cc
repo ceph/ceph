@@ -2722,13 +2722,6 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
     return ret;
   }
 
-  if (bucket_info.layout.resharding != rgw::BucketReshardState::None) {
-    // if in_progress or done then we have an old BucketInfo
-    cerr << "ERROR: the bucket is currently undergoing resharding and "
-      "cannot be added to the reshard list at this time" << std::endl;
-    return -EBUSY;
-  }
-
   int num_source_shards = rgw::current_num_shards(bucket_info.layout);
 
   if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
