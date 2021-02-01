@@ -36,50 +36,6 @@ and:
 Also do the above if you ever get key-related errors ("invalid key", etc.)
 when trying to schedule suites.
 
-Getting ceph-workbench
-----------------------
-
-Since testing in the cloud is done using the ``ceph-workbench ceph-qa-suite``
-tool, you will need to install that first. It is designed
-to be installed via Docker, so if you don't have Docker running on your
-development machine, take care of that first. You can follow `the official
-tutorial <https://docs.docker.com/engine/installation/>`_ to install if
-you have not installed yet.
-
-Once Docker is up and running, install ``ceph-workbench`` by following the
-`Installation instructions in the ceph-workbench documentation
-<http://ceph-workbench.readthedocs.io/en/latest/#installation>`_.
-
-Linking ceph-workbench with your OpenStack tenant
--------------------------------------------------
-
-Before you can trigger your first teuthology suite, you will need to link
-``ceph-workbench`` with your OpenStack account.
-
-First, download a ``openrc.sh`` file by clicking on the "Download OpenStack
-RC File" button, which can be found in the "API Access" tab of the "Access
-& Security" dialog of the OpenStack Horizon dashboard.
-
-Second, create a ``~/.ceph-workbench`` directory, set its permissions to
-700, and move the ``openrc.sh`` file into it. Make sure that the filename
-is exactly ``~/.ceph-workbench/openrc.sh``.
-
-Third, edit the file so it does not ask for your OpenStack password
-interactively. Comment out the relevant lines and replace them with
-something like::
-
-.. prompt:: bash $
-
-    export OS_PASSWORD="aiVeth0aejee3eep8rogho3eep7Pha6ek"
-
-When ``ceph-workbench ceph-qa-suite`` connects to your OpenStack tenant for
-the first time, it will generate two keypairs: ``teuthology-myself`` and
-``teuthology``.
-
-.. If this is not the first time you have tried to use
-.. ``ceph-workbench ceph-qa-suite`` with this tenant, make sure to delete any
-.. stale keypairs with these names!
-
 Run the dummy suite
 -------------------
 
