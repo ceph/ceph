@@ -3,12 +3,15 @@ import fnmatch
 import re
 from collections import namedtuple, OrderedDict
 from functools import wraps
-from typing import Optional, Dict, Any, List, Union, Callable, Iterable
+from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast
 
 import yaml
 
 from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.utils import unwrap_ipv6
+
+ServiceSpecT = TypeVar('ServiceSpecT', bound='ServiceSpec')
+FuncT = TypeVar('FuncT', bound=Callable)
 
 
 class ServiceSpecValidationError(Exception):
@@ -35,7 +38,7 @@ def assert_valid_host(name):
         raise ServiceSpecValidationError(e)
 
 
-def handle_type_error(method):
+def handle_type_error(method: FuncT) -> FuncT:
     @wraps(method)
     def inner(cls, *args, **kwargs):
         try:
@@ -43,7 +46,7 @@ def handle_type_error(method):
         except (TypeError, AttributeError) as e:
             error_msg = '{}: {}'.format(cls.__name__, e)
             raise ServiceSpecValidationError(error_msg)
-    return inner
+    return cast(FuncT, inner)
 
 
 class HostPlacementSpec(namedtuple('HostPlacementSpec', ['hostname', 'network', 'name'])):
@@ -436,11 +439,7 @@ class ServiceSpec(object):
 
     @classmethod
     @handle_type_error
-    def from_json(cls, json_spec):
-        # type: (dict) -> Any
-        # Python 3:
-        # >>> ServiceSpecs = TypeVar('Base', bound=ServiceSpec)
-        # then, the real type is: (dict) -> ServiceSpecs
+    def from_json(cls: Type[ServiceSpecT], json_spec: Dict) -> ServiceSpecT:
         """
         Initialize 'ServiceSpec' object data from a json structure
 

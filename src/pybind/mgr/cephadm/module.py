@@ -12,7 +12,7 @@ from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, Iterator, NamedTuple
+    Any, Set, TYPE_CHECKING, cast, Iterator, NamedTuple, Sequence
 
 import datetime
 import os
@@ -2003,7 +2003,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         }
 
     @trivial_completion
-    def plan(self, specs: List[GenericSpec]) -> List:
+    def plan(self, specs: Sequence[GenericSpec]) -> List:
         results = [{'warning': 'WARNING! Dry-Runs are snapshots of a certain point in time and are bound \n'
                                'to the current inventory setup. If any on these conditions changes, the \n'
                                'preview will be invalid. Please make sure to have a minimal \n'
@@ -2054,7 +2054,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return "Scheduled %s update..." % spec.service_name()
 
     @trivial_completion
-    def apply(self, specs: List[GenericSpec]) -> List[str]:
+    def apply(self, specs: Sequence[GenericSpec]) -> List[str]:
         results = []
         for spec in specs:
             results.append(self._apply(spec))
