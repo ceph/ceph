@@ -11328,8 +11328,8 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   return r;
 }
 
-int Client::ll_lookup_inode(
-    struct inodeno_t ino,
+int Client::ll_lookup_vino(
+    vinodeno_t vino,
     const UserPerm& perms,
     Inode **inode)
 {
@@ -11339,11 +11339,45 @@ int Client::ll_lookup_inode(
     return -ENOTCONN;
 
   std::scoped_lock lock(client_lock);
-  ldout(cct, 3) << "ll_lookup_inode " << ino << dendl;
+  ldout(cct, 3) << __func__ << " " << vino << dendl;
 
-  // Num1: get inode and *inode
+  // Check the cache first
+  unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
+  if (p != inode_map.end()) {
+    *inode = p->second;
+    _ll_get(*inode);
+    return 0;
+  }
+
+  uint64_t snapid = vino.snapid;
+
+  // for snapdir, find the non-snapped dir inode
+  if (snapid == CEPH_SNAPDIR)
+    vino.snapid = CEPH_NOSNAP;
+
+  int r = _lookup_vino(vino, perms, inode);
+  if (r)
+    return r;
+  ceph_assert(*inode != NULL);
+
+  if (snapid == CEPH_SNAPDIR) {
+    Inode *tmp = *inode;
+
+    // open the snapdir and put the inode ref
+    *inode = open_snapdir(tmp);
+    _ll_forget(tmp, 1);
+    _ll_get(*inode);
+  }
+  return 0;
+}
+
+int Client::ll_lookup_inode(
+    struct inodeno_t ino,
+    const UserPerm& perms,
+    Inode **inode)
+{
   vinodeno_t vino(ino, CEPH_NOSNAP);
-  return _lookup_vino(vino, perms, inode);
+  return ll_lookup_vino(vino, perms, inode);
 }
 
 int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
