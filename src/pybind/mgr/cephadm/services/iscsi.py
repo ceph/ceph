@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class IscsiService(CephService):
     TYPE = 'iscsi'
 
-    def config(self, spec: IscsiServiceSpec) -> None:
+    def config(self, spec: IscsiServiceSpec, daemon_id: str) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
