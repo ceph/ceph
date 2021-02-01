@@ -452,6 +452,9 @@ static int commit_reshard(rgw::sal::RadosStore* store,
   layout.current_index = std::move(*layout.target_index);
   layout.target_index = std::nullopt;
   layout.resharding = rgw::BucketReshardState::None;
+  // add the in-index log layout
+  const auto next_log_gen = layout.logs.back().gen + 1;
+  layout.logs.push_back(log_layout_from_index(next_log_gen, layout.current_index));
 
   int ret = fault.check("commit_target_layout");
   if (ret == 0) { // no fault injected, write the bucket instance metadata
