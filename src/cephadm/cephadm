@@ -3308,22 +3308,26 @@ def prepare_mon_addresses(
             raise Error('Failed to infer CIDR network for mon ip %s; pass '
                         '--skip-mon-network to configure it later' % base_ip)
     
-    cluster_network = None
+    return (addr_arg, ipv6, mon_network)
+
+
+def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
+    cluster_network = ""
     ipv6_cluster_network = False
     # the cluster network may not exist on this node, so all we can do is 
     # validate that the address given is valid ipv4 or ipv6 subnet
-    if args.cluster_network:
-        rc, versions, err_msg = check_subnet(args.cluster_network)
+    if ctx.cluster_network:
+        rc, versions, err_msg = check_subnet(ctx.cluster_network)
         if rc:
             raise Error(f"Invalid --cluster-network parameter: {err_msg}")
-        cluster_network = args.cluster_network
+        cluster_network = ctx.cluster_network
         ipv6_cluster_network = True if 6 in versions else False
     else:
-        logger.warning("{}{}{}".format(termcolor.yellow,
-                                       "Internal network (--cluster-network) has not been provided",
-                                       termcolor.end))
+        logger.info("- internal network (--cluster-network) has not "
+                       "been provided, OSD replication will default to "
+                       "the public_network")
 
-    return (addr_arg, ipv6, mon_network)
+    return cluster_network, ipv6_cluster_network
 
 
 def create_initial_keys(
@@ -3684,7 +3688,8 @@ def finish_bootstrap_config(
     config: str,
     mon_id: str, mon_dir: str,
     mon_network: Optional[str], ipv6: bool,
-    cli: Callable
+    cli: Callable,
+    cluster_network: Optional[str], ipv6_cluster_network: bool
 
 ) -> None:
     if not ctx.no_minimize_config:
@@ -3717,7 +3722,7 @@ def finish_bootstrap_config(
         cli(['config', 'set', 'mon', 'public_network', mon_network])
     
     if cluster_network:
-        logger.info(f"Setting 'global' cluster_network to {cluster_network}")
+        logger.info(f"Setting cluster_network to {cluster_network}")
         cli(['config', 'set', 'global', 'cluster_network', cluster_network])
 
     if ipv6 or ipv6_cluster_network:
@@ -3781,6 +3786,8 @@ def command_bootstrap(ctx):
     l.acquire()
 
     (addr_arg, ipv6, mon_network) = prepare_mon_addresses(ctx)
+    cluster_network, ipv6_cluster_network = prepare_cluster_network(ctx)
+
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
 
     logger.info('Extracting ceph user uid/gid from container image...')
@@ -3830,7 +3837,8 @@ def command_bootstrap(ctx):
     wait_for_mon(ctx, mon_id, mon_dir, admin_keyring.name, tmp_config.name)
 
     finish_bootstrap_config(ctx, fsid, config, mon_id, mon_dir,
-                            mon_network, ipv6, cli)
+                            mon_network, ipv6, cli,
+                            cluster_network, ipv6_cluster_network)
 
     # output files
     with open(ctx.output_keyring, 'w') as f:
