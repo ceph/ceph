@@ -80,11 +80,12 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
 void RGWRealmReloader::reload()
 {
   CephContext *const cct = store->ctx();
-  ldout(cct, 1) << "Pausing frontends for realm update..." << dendl;
+  const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
+  ldpp_dout(&dp, 1) << "Pausing frontends for realm update..." << dendl;
 
   frontends->pause();
 
-  ldout(cct, 1) << "Frontends paused" << dendl;
+  ldpp_dout(&dp, 1) << "Frontends paused" << dendl;
 
   // TODO: make RGWRados responsible for rgw_log_usage lifetime
   rgw_log_usage_finalize();
@@ -93,7 +94,7 @@ void RGWRealmReloader::reload()
   RGWStoreManager::close_storage(store);
   store = nullptr;
 
-  ldout(cct, 1) << "Store closed" << dendl;
+  ldpp_dout(&dp, 1) << "Store closed" << dendl;
   {
     // allow a new notify to reschedule us. it's important that we do this
     // before we start loading the new realm, or we could miss some updates
@@ -101,7 +102,6 @@ void RGWRealmReloader::reload()
     reload_scheduled = nullptr;
   }
 
-  const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
 
   while (!store) {
     // recreate and initialize a new store
@@ -114,7 +114,7 @@ void RGWRealmReloader::reload()
 				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
 				   cct->_conf->rgw_cache_enabled);
 
-    ldout(cct, 1) << "Creating new store" << dendl;
+    ldpp_dout(&dp, 1) << "Creating new store" << dendl;
 
     rgw::sal::RGWRadosStore* store_cleanup = nullptr;
     {
@@ -125,7 +125,7 @@ void RGWRealmReloader::reload()
       // sleep until we get another notification, and retry until we get
       // a working configuration
       if (store == nullptr) {
-        lderr(cct) << "Failed to reinitialize RGWRados after a realm "
+        ldpp_dout(&dp, -1) << "Failed to reinitialize RGWRados after a realm "
             "configuration update. Waiting for a new update." << dendl;
 
         // sleep until another event is scheduled
@@ -146,7 +146,7 @@ void RGWRealmReloader::reload()
     }
 
     if (store_cleanup) {
-      ldout(cct, 4) << "Got another notification, restarting RGWRados "
+      ldpp_dout(&dp, 4) << "Got another notification, restarting RGWRados "
           "initialization." << dendl;
 
       RGWStoreManager::close_storage(store_cleanup);
@@ -155,19 +155,19 @@ void RGWRealmReloader::reload()
 
   int r = store->getRados()->register_to_service_map("rgw", service_map_meta);
   if (r < 0) {
-    lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+    ldpp_dout(&dp, -1) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
     /* ignore error */
   }
 
-  ldout(cct, 1) << "Finishing initialization of new store" << dendl;
+  ldpp_dout(&dp, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
-  ldout(cct, 1) << " - REST subsystem init" << dendl;
+  ldpp_dout(&dp, 1) << " - REST subsystem init" << dendl;
   rgw_rest_init(cct, store->svc()->zone->get_zonegroup());
-  ldout(cct, 1) << " - usage subsystem init" << dendl;
-  rgw_log_usage_init(cct, store->getRados());
+  ldpp_dout(&dp, 1) << " - usage subsystem init" << dendl;
+  rgw_log_usage_init(&dp, cct, store->getRados());
 
-  ldout(cct, 1) << "Resuming frontends with new realm configuration." << dendl;
+  ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 
   frontends->resume(store);
 }

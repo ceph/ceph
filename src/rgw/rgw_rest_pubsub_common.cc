@@ -54,7 +54,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   }
 
   ps.emplace(store, s->owner.get_id().tenant);
-  op_ret = ps->create_topic(topic_name, dest, topic_arn, opaque_data, y);
+  op_ret = ps->create_topic(this, topic_name, dest, topic_arn, opaque_data, y);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -104,12 +104,12 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     return;
   }
   ps.emplace(store, s->owner.get_id().tenant);
-  op_ret = ps->remove_topic(topic_name, y);
+  op_ret = ps->remove_topic(this, topic_name, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
 void RGWPSCreateSubOp::execute(optional_yield y) {
@@ -119,12 +119,12 @@ void RGWPSCreateSubOp::execute(optional_yield y) {
   }
   ps.emplace(store, s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
-  op_ret = sub->subscribe(topic_name, dest, y);
+  op_ret = sub->subscribe(this, topic_name, dest, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to create subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully created subscription '" << sub_name << "'" << dendl;
 }
 
 void RGWPSGetSubOp::execute(optional_yield y) {
@@ -154,12 +154,12 @@ void RGWPSDeleteSubOp::execute(optional_yield y) {
   }
   ps.emplace(store, s->owner.get_id().tenant);
   auto sub = ps->get_sub(sub_name);
-  op_ret = sub->unsubscribe(topic_name, y);
+  op_ret = sub->unsubscribe(this, topic_name, y);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to remove subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully removed subscription '" << sub_name << "'" << dendl;
 }
 
 void RGWPSAckSubEventOp::execute(optional_yield y) {

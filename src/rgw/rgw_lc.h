@@ -546,7 +546,8 @@ public:
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(rgw::sal::RGWRadosStore *store,
+int fix_lc_shard_entry(const DoutPrefixProvider *dpp, 
+                       rgw::sal::RGWRadosStore *store,
 		       rgw::sal::Lifecycle* sal_lc,
 		       const RGWBucketInfo& bucket_info,
 		       const map<std::string,bufferlist>& battrs);

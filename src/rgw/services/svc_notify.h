@@ -53,7 +53,7 @@ private:
 
   bool finalized{false};
 
-  int init_watch(optional_yield y);
+  int init_watch(const DoutPrefixProvider *dpp, optional_yield y);
   void finalize_watch();
 
   void init(RGWSI_Zone *_zone_svc,
@@ -77,7 +77,8 @@ private:
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
+  int robust_notify(const DoutPrefixProvider *dpp, 
+                    RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
                     optional_yield y);
 
   void schedule_context(Context *c);
@@ -95,7 +96,7 @@ public:
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const string& key, bufferlist& bl, optional_yield y);
+  int distribute(const DoutPrefixProvider *dpp, const string& key, bufferlist& bl, optional_yield y);
 
   void register_watch_cb(CB *cb);
 };

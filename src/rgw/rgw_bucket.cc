@@ -481,7 +481,7 @@ int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& buck
     return ret;
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(info.owner, info, y);
+  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y);
   if (ret < 0) {
      dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -1835,7 +1835,7 @@ static int fix_single_bucket_lc(rgw::sal::RGWRadosStore *store,
     return ret;
   }
 
-  return rgw::lc::fix_lc_shard_entry(store, store->get_rgwlc()->get_lc(), bucket_info,
+  return rgw::lc::fix_lc_shard_entry(dpp, store, store->get_rgwlc()->get_lc(), bucket_info,
 				     bucket_attrs);
 }
 
@@ -3084,7 +3084,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     }
   }
 
-  ret = ctl.user->add_bucket(user_id, bucket, creation_time, y);
+  ret = ctl.user->add_bucket(dpp, user_id, bucket, creation_time, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
 		  << " user=" << user_id
@@ -3130,7 +3130,7 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 				   optional_yield y,
                                    const DoutPrefixProvider *dpp)
 {
-  int ret = ctl.user->remove_bucket(user_id, bucket, y);
+  int ret = ctl.user->remove_bucket(dpp, user_id, bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3294,7 +3294,8 @@ int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
   });
 }
 
-int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
+int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp, 
+                                  const rgw_user& user_id,
                                   const RGWBucketInfo& bucket_info,
 				  optional_yield y,
                                   RGWBucketEnt* pent)
@@ -3305,11 +3306,11 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
   }
   int r = svc.bi->read_stats(bucket_info, pent, null_yield);
   if (r < 0) {
-    ldout(cct, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
     return r;
   }
 
-  return ctl.user->flush_bucket_stats(user_id, *pent, y);
+  return ctl.user->flush_bucket_stats(dpp, user_id, *pent, y);
 }
 
 int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,

@@ -55,6 +55,7 @@ class PurgePeriodLogsCR : public RGWCoroutine {
     RGWSI_Zone *zone;
     RGWSI_MDLog *mdlog;
   } svc;
+  const DoutPrefixProvider *dpp;
   rgw::sal::RGWRadosStore *const store;
   RGWMetadataManager *const metadata;
   RGWObjVersionTracker objv;
@@ -63,8 +64,8 @@ class PurgePeriodLogsCR : public RGWCoroutine {
   epoch_t *last_trim_epoch; //< update last trim on success
 
  public:
-  PurgePeriodLogsCR(rgw::sal::RGWRadosStore *store, epoch_t realm_epoch, epoch_t *last_trim)
-    : RGWCoroutine(store->ctx()), store(store), metadata(store->ctl()->meta.mgr),
+  PurgePeriodLogsCR(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, epoch_t realm_epoch, epoch_t *last_trim)
+    : RGWCoroutine(store->ctx()), dpp(dpp), store(store), metadata(store->ctl()->meta.mgr),
       realm_epoch(realm_epoch), last_trim_epoch(last_trim) {
     svc.zone = store->svc()->zone;
     svc.mdlog = store->svc()->mdlog;
@@ -77,17 +78,17 @@ int PurgePeriodLogsCR::operate()
 {
   reenter(this) {
     // read our current oldest log period
-    yield call(svc.mdlog->read_oldest_log_period_cr(&cursor, &objv));
+    yield call(svc.mdlog->read_oldest_log_period_cr(dpp, &cursor, &objv));
     if (retcode < 0) {
       return set_cr_error(retcode);
     }
     ceph_assert(cursor);
-    ldout(cct, 20) << "oldest log realm_epoch=" << cursor.get_epoch()
+    ldpp_dout(dpp, 20) << "oldest log realm_epoch=" << cursor.get_epoch()
         << " period=" << cursor.get_period().get_id() << dendl;
 
     // trim -up to- the given realm_epoch
     while (cursor.get_epoch() < realm_epoch) {
-      ldout(cct, 4) << "purging log shards for realm_epoch=" << cursor.get_epoch()
+      ldpp_dout(dpp, 4) << "purging log shards for realm_epoch=" << cursor.get_epoch()
           << " period=" << cursor.get_period().get_id() << dendl;
       yield {
         const auto mdlog = svc.mdlog->get_log(cursor.get_period().get_id());
@@ -96,23 +97,23 @@ int PurgePeriodLogsCR::operate()
         call(new PurgeLogShardsCR(store, mdlog, pool, num_shards));
       }
       if (retcode < 0) {
-        ldout(cct, 1) << "failed to remove log shards: "
+        ldpp_dout(dpp, 1) << "failed to remove log shards: "
             << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
       }
-      ldout(cct, 10) << "removed log shards for realm_epoch=" << cursor.get_epoch()
+      ldpp_dout(dpp, 10) << "removed log shards for realm_epoch=" << cursor.get_epoch()
           << " period=" << cursor.get_period().get_id() << dendl;
 
       // update our mdlog history
-      yield call(svc.mdlog->trim_log_period_cr(cursor, &objv));
+      yield call(svc.mdlog->trim_log_period_cr(dpp, cursor, &objv));
       if (retcode == -ENOENT) {
         // must have raced to update mdlog history. return success and allow the
         // winner to continue purging
-        ldout(cct, 10) << "already removed log shards for realm_epoch=" << cursor.get_epoch()
+        ldpp_dout(dpp, 10) << "already removed log shards for realm_epoch=" << cursor.get_epoch()
             << " period=" << cursor.get_period().get_id() << dendl;
         return set_cr_done();
       } else if (retcode < 0) {
-        ldout(cct, 1) << "failed to remove log shards for realm_epoch="
+        ldpp_dout(dpp, 1) << "failed to remove log shards for realm_epoch="
             << cursor.get_epoch() << " period=" << cursor.get_period().get_id()
             << " with: " << cpp_strerror(retcode) << dendl;
         return set_cr_error(retcode);
@@ -286,7 +287,7 @@ bool MetaMasterTrimShardCollectCR::spawn_next()
 
     if (stable <= last_trim) {
       // already trimmed
-      ldout(cct, 20) << "skipping log shard " << shard_id
+      ldpp_dout(env.dpp, 20) << "skipping log shard " << shard_id
           << " at marker=" << stable
           << " last_trim=" << last_trim
           << " realm_epoch=" << sync_status.sync_info.realm_epoch << dendl;
@@ -296,11 +297,11 @@ bool MetaMasterTrimShardCollectCR::spawn_next()
 
     mdlog->get_shard_oid(shard_id, oid);
 
-    ldout(cct, 10) << "trimming log shard " << shard_id
+    ldpp_dout(env.dpp, 10) << "trimming log shard " << shard_id
         << " at marker=" << stable
         << " last_trim=" << last_trim
         << " realm_epoch=" << sync_status.sync_info.realm_epoch << dendl;
-    spawn(new RGWSyncLogTrimCR(env.store, oid, stable, &last_trim), false);
+    spawn(new RGWSyncLogTrimCR(env.dpp, env.store, oid, stable, &last_trim), false);
     shard_id++;
     return true;
   }
@@ -359,7 +360,7 @@ int MetaMasterTrimCR::operate()
   reenter(this) {
     // TODO: detect this and fail before we spawn the trim thread?
     if (env.connections.empty()) {
-      ldout(cct, 4) << "no peers, exiting" << dendl;
+      ldpp_dout(env.dpp, 4) << "no peers, exiting" << dendl;
       return set_cr_done();
     }
 
@@ -369,7 +370,7 @@ int MetaMasterTrimCR::operate()
 
     // must get a successful reply from all peers to consider trimming
     if (ret < 0) {
-      ldout(cct, 4) << "failed to fetch sync status from all peers" << dendl;
+      ldpp_dout(env.dpp, 4) << "failed to fetch sync status from all peers" << dendl;
       return set_cr_error(ret);
     }
 
@@ -377,19 +378,19 @@ int MetaMasterTrimCR::operate()
     ret = take_min_status(env.store->ctx(), env.peer_status.begin(),
                           env.peer_status.end(), &min_status);
     if (ret < 0) {
-      ldout(cct, 4) << "failed to calculate min sync status from peers" << dendl;
+      ldpp_dout(env.dpp, 4) << "failed to calculate min sync status from peers" << dendl;
       return set_cr_error(ret);
     }
     yield {
       auto store = env.store;
       auto epoch = min_status.sync_info.realm_epoch;
-      ldout(cct, 4) << "realm epoch min=" << epoch
+      ldpp_dout(env.dpp, 4) << "realm epoch min=" << epoch
           << " current=" << env.current.get_epoch()<< dendl;
       if (epoch > env.last_trim_epoch + 1) {
         // delete any prior mdlog periods
-        spawn(new PurgePeriodLogsCR(store, epoch, &env.last_trim_epoch), true);
+        spawn(new PurgePeriodLogsCR(env.dpp, store, epoch, &env.last_trim_epoch), true);
       } else {
-        ldout(cct, 10) << "mdlogs already purged up to realm_epoch "
+        ldpp_dout(env.dpp, 10) << "mdlogs already purged up to realm_epoch "
             << env.last_trim_epoch << dendl;
       }
 
@@ -498,7 +499,7 @@ int MetaPeerTrimShardCR::operate()
     yield {
       std::string oid;
       mdlog->get_shard_oid(shard_id, oid);
-      call(new RGWRadosTimelogTrimCR(env.store, oid, real_time{}, stable, "", ""));
+      call(new RGWRadosTimelogTrimCR(env.dpp, env.store, oid, real_time{}, stable, "", ""));
     }
     if (retcode < 0 && retcode != -ENODATA) {
       ldpp_dout(env.dpp, 1) << "failed to trim mdlog shard " << shard_id
@@ -558,7 +559,7 @@ class MetaPeerTrimCR : public RGWCoroutine {
 int MetaPeerTrimCR::operate()
 {
   reenter(this) {
-    ldout(cct, 10) << "fetching master mdlog info" << dendl;
+    ldpp_dout(env.dpp, 10) << "fetching master mdlog info" << dendl;
     yield {
       // query mdlog_info from master for oldest_log_period
       rgw_http_param_pair params[] = {
@@ -571,7 +572,7 @@ int MetaPeerTrimCR::operate()
                          "/admin/log/", params, &mdlog_info));
     }
     if (retcode < 0) {
-      ldout(cct, 4) << "failed to read mdlog info from master" << dendl;
+      ldpp_dout(env.dpp, 4) << "failed to read mdlog info from master" << dendl;
       return set_cr_error(retcode);
     }
     // use master's shard count instead
@@ -579,10 +580,10 @@ int MetaPeerTrimCR::operate()
 
     if (mdlog_info.realm_epoch > env.last_trim_epoch + 1) {
       // delete any prior mdlog periods
-      yield call(new PurgePeriodLogsCR(env.store, mdlog_info.realm_epoch,
+      yield call(new PurgePeriodLogsCR(env.dpp, env.store, mdlog_info.realm_epoch,
                                        &env.last_trim_epoch));
     } else {
-      ldout(cct, 10) << "mdlogs already purged through realm_epoch "
+      ldpp_dout(env.dpp, 10) << "mdlogs already purged through realm_epoch "
           << env.last_trim_epoch << dendl;
     }
 

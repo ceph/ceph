@@ -238,7 +238,7 @@ class RGWRadosBucket : public RGWBucket {
 				 std::string *max_marker = nullptr,
 				 bool *syncstopped = nullptr) override;
     virtual int read_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int sync_user_stats(optional_yield y) override;
+    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int update_container_stats(const DoutPrefixProvider *dpp) override;
     virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
     virtual int link(const DoutPrefixProvider *dpp, RGWUser* new_user, optional_yield y) override;
@@ -307,7 +307,7 @@ class RGWRadosStore : public RGWStore {
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual RGWLC* get_rgwlc(void) { return rados->get_lc(); }
-    virtual int delete_raw_obj(const rgw_raw_obj& obj) override;
+    virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) override;
     virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) override;
     virtual int get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) override;
 
@@ -346,7 +346,7 @@ class MPRadosSerializer : public MPSerializer {
 public:
   MPRadosSerializer(RGWRadosStore* store, RGWRadosObject* obj, const std::string& lock_name);
 
-  virtual int try_lock(utime_t dur, optional_yield y) override;
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
   int unlock() {
     return lock.unlock(&ioctx, oid);
   }
@@ -360,7 +360,7 @@ class LCRadosSerializer : public LCSerializer {
 public:
   LCRadosSerializer(RGWRadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
 
-  virtual int try_lock(utime_t dur, optional_yield y) override;
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
   int unlock() {
     return lock.unlock(ioctx, oid);
   }

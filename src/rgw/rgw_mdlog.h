@@ -100,9 +100,9 @@ public:
     oid = prefix + buf;
   }
 
-  int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
+  int add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl);
   int get_shard_id(const string& hash_key, int *shard_id);
-  int store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
+  int store_entries_in_shard(const DoutPrefixProvider *dpp, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {
     int cur_shard;
@@ -121,14 +121,15 @@ public:
 			 const real_time& end_time, const string& marker,
 			 void **handle);
   void complete_list_entries(void *handle);
-  int list_entries(void *handle,
+  int list_entries(const DoutPrefixProvider *dpp, 
+                   void *handle,
                    int max_entries,
                    list<cls_log_entry>& entries,
 		   string *out_marker,
 		   bool *truncated);
 
-  int trim(int shard_id, const real_time& from_time, const real_time& end_time, const string& start_marker, const string& end_marker);
-  int get_info(int shard_id, RGWMetadataLogInfo *info);
+  int trim(const DoutPrefixProvider *dpp, int shard_id, const real_time& from_time, const real_time& end_time, const string& start_marker, const string& end_marker);
+  int get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info);
   int get_info_async(int shard_id, RGWMetadataLogInfoCompletion *completion);
   int lock_exclusive(int shard_id, timespan duration, string&zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);

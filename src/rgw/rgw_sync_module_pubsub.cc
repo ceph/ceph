@@ -769,7 +769,7 @@ class PSManager
     int operate() override {
       reenter(this) {
         if (owner.empty()) {
-          ldout(sync_env->cct, 1) << "ERROR: missing user info when getting subscription: " << sub_name << dendl;
+          ldpp_dout(sync_env->dpp, 1) << "ERROR: missing user info when getting subscription: " << sub_name << dendl;
             mgr->remove_get_sub(owner, sub_name);
             return set_cr_error(-EINVAL);
         } else {
@@ -779,7 +779,7 @@ class PSManager
             rgw_raw_obj obj;
             ps.get_sub_meta_obj(sub_name, &obj);
             bool empty_on_enoent = false;
-            call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
+            call(new ReadInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
                                 obj,
                                 &user_sub_conf, empty_on_enoent));
           }
@@ -793,7 +793,7 @@ class PSManager
 
         yield (*ref)->call_init_cr(this);
         if (retcode < 0) {
-          ldout(sync_env->cct, 1) << "ERROR: failed to init subscription when getting subscription: " << sub_name << dendl;
+          ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to init subscription when getting subscription: " << sub_name << dendl;
           mgr->remove_get_sub(owner, sub_name);
           return set_cr_error(retcode);
         }
@@ -970,7 +970,7 @@ public:
       using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_bucket_topics>;
       yield {
         bool empty_on_enoent = true;
-        call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
+        call(new ReadInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
                             bucket_obj,
                             &bucket_topics, empty_on_enoent));
       }
@@ -984,7 +984,7 @@ public:
 	using ReadUserTopicsInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_topics>;
 	yield {
 	  bool empty_on_enoent = true;
-	  call(new ReadUserTopicsInfoCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
+	  call(new ReadUserTopicsInfoCR(sync_env->dpp, sync_env->async_rados, sync_env->store->svc()->sysobj,
 					user_obj,
 					&user_topics, empty_on_enoent));
 	}

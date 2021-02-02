@@ -78,7 +78,7 @@ bool is_v2_upload_id(const string& upload_id)
          (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
-int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
+int list_multipart_parts(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
 			 CephContext *cct,
 			 const string& upload_id,
 			 const string& meta_oid, int num_parts,
@@ -111,10 +111,10 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = sysobj.omap().get_vals(p, num_parts + 1, &parts_map,
+    ret = sysobj.omap().get_vals(dpp, p, num_parts + 1, &parts_map,
                                  nullptr, null_yield);
   } else {
-    ret = sysobj.omap().get_all(&parts_map, null_yield);
+    ret = sysobj.omap().get_all(dpp, &parts_map, null_yield);
   }
   if (ret < 0) {
     return ret;
@@ -134,7 +134,7 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
     try {
       decode(info, bli);
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: could not part info, caught buffer::error" <<
+      ldpp_dout(dpp, 0) << "ERROR: could not part info, caught buffer::error" <<
 	dendl;
       return -EIO;
     }
@@ -146,7 +146,7 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
          * where one gateway doesn't support correctly sorted omap
          * keys for multipart upload just assume data is unsorted.
          */
-        return list_multipart_parts(store, bucket_info, cct, upload_id,
+        return list_multipart_parts(dpp, store, bucket_info, cct, upload_id,
 				    meta_oid, num_parts, marker, parts,
 				    next_marker, truncated, true);
       }
@@ -188,14 +188,15 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
   return 0;
 }
 
-int list_multipart_parts(rgw::sal::RGWRadosStore *store, struct req_state *s,
+int list_multipart_parts(const DoutPrefixProvider *dpp, 
+                         rgw::sal::RGWRadosStore *store, struct req_state *s,
 			 const string& upload_id,
 			 const string& meta_oid, int num_parts,
 			 int marker, map<uint32_t, RGWUploadPartInfo>& parts,
 			 int *next_marker, bool *truncated,
 			 bool assume_unsorted)
 {
-  return list_multipart_parts(store, s->bucket->get_info(), s->cct, upload_id,
+  return list_multipart_parts(dpp, store, s->bucket->get_info(), s->cct, upload_id,
 			      meta_oid, num_parts, marker, parts,
 			      next_marker, truncated, assume_unsorted);
 }
@@ -218,7 +219,7 @@ int abort_multipart_upload(const DoutPrefixProvider *dpp,
   uint64_t parts_accounted_size = 0;
 
   do {
-    ret = list_multipart_parts(store, bucket_info, cct,
+    ret = list_multipart_parts(dpp, store, bucket_info, cct,
 			       mp_obj.get_upload_id(), mp_obj.get_meta(),
 			       1000, marker, obj_parts, &marker, &truncated);
     if (ret < 0) {

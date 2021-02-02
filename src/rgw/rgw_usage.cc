@@ -139,13 +139,13 @@ int RGWUsage::show(RGWRados *store, const rgw_user& uid, const string& bucket_na
   return 0;
 }
 
-int RGWUsage::trim(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
+int RGWUsage::trim(const DoutPrefixProvider *dpp, RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
                    uint64_t end_epoch)
 {
-  return store->trim_usage(uid, bucket_name, start_epoch, end_epoch);
+  return store->trim_usage(dpp, uid, bucket_name, start_epoch, end_epoch);
 }
 
-int RGWUsage::clear(RGWRados *store)
+int RGWUsage::clear(const DoutPrefixProvider *dpp, RGWRados *store)
 {
-  return store->clear_usage();
+  return store->clear_usage(dpp);
 }

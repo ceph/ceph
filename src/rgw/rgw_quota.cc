@@ -624,7 +624,7 @@ int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& user,
 						optional_yield y,
                                                 const DoutPrefixProvider *dpp)
 {
-  int r = store->ctl()->user->read_stats(user, &stats, y);
+  int r = store->ctl()->user->read_stats(dpp, user, &stats, y);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get user stats for user=" << user << dendl;
     return r;
@@ -644,7 +644,7 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket, opt
   }
 
   RGWBucketEnt ent;
-  r = store->ctl()->bucket->sync_user_stats(user, bucket_info, y, &ent);
+  r = store->ctl()->bucket->sync_user_stats(dpp, user, bucket_info, y, &ent);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
@@ -660,7 +660,7 @@ int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& 
   ceph::real_time last_stats_sync;
   ceph::real_time last_stats_update;
 
-  int ret = store->ctl()->user->read_stats(rgw_user(user_str), &stats, y, &last_stats_sync, &last_stats_update);
+  int ret = store->ctl()->user->read_stats(dpp, rgw_user(user_str), &stats, y, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
     ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;

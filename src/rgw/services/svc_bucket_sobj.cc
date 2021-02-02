@@ -537,7 +537,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   int ret = svc.meta_be->put(ctx.get(), key, params, &info.objv_tracker, y, dpp);
 
   if (ret >= 0) {
-    int r = svc.bucket_sync->handle_bi_update(info,
+    int r = svc.bucket_sync->handle_bi_update(dpp, info,
                                               orig_info.value_or(nullptr),
                                               y);
     if (r < 0) {
@@ -570,14 +570,14 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                    const DoutPrefixProvider *dpp)
 {
   RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
+  int ret = svc.meta_be->remove_entry(dpp, ctx.get(), key, params, objv_tracker, y);
 
   if (ret < 0 &&
       ret != -ENOENT) {
     return ret;
   }
 
-  int r = svc.bucket_sync->handle_bi_removal(info, y);
+  int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
     /* returning success as index is just keeping hints, so will keep extra hints,

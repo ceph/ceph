@@ -358,7 +358,7 @@ int radosgw_Main(int argc, const char **argv)
   init_timer.shutdown();
   mutex.unlock();
 
-  rgw_log_usage_init(g_ceph_context, store->getRados());
+  rgw_log_usage_init(&dp, g_ceph_context, store->getRados());
 
   RGWREST rest;
 
@@ -417,7 +417,7 @@ int radosgw_Main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   std::string output;
-  r = rgw::lua::install_packages(store, null_yield, failed_packages, output);
+  r = rgw::lua::install_packages(&dp, store, null_yield, failed_packages, output);
   if (r < 0) {
     dout(1) << "ERROR: failed to install lua packages from allowlist" << dendl;
   }
@@ -625,7 +625,7 @@ int radosgw_Main(int argc, const char **argv)
 
 
   // add a watcher to respond to realm configuration changes
-  RGWPeriodPusher pusher(store, null_yield);
+  RGWPeriodPusher pusher(&dp, store, null_yield);
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
   auto reloader = std::make_unique<RGWRealmReloader>(store,
 						     service_map_meta, &pauser);

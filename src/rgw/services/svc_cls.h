@@ -63,16 +63,17 @@ public:
     }
 
     int check_mfa(const rgw_user& user, const string& otp_id, const string& pin, optional_yield y);
-    int create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+    int create_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, const rados::cls::otp::otp_info_t& config,
 		   RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime, optional_yield y);
-    int remove_mfa(const rgw_user& user, const string& id,
+    int remove_mfa(const DoutPrefixProvider *dpp, 
+                   const rgw_user& user, const string& id,
 		   RGWObjVersionTracker *objv_tracker,
 		   const ceph::real_time& mtime,
 		   optional_yield y);
     int get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result, optional_yield y);
     int list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result, optional_yield y);
     int otp_get_current_time(const rgw_user& user, ceph::real_time *result, optional_yield y);
-    int set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
+    int set_mfa(const DoutPrefixProvider *dpp, const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
 		bool reset_obj, RGWObjVersionTracker *objv_tracker,
 		const real_time& mtime, optional_yield y);
     int list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
@@ -89,18 +90,21 @@ public:
                        const string& section,
                        const string& key,
                        bufferlist& bl);
-    int add(const string& oid,
+    int add(const DoutPrefixProvider *dpp, 
+            const string& oid,
             const real_time& ut,
             const string& section,
             const string& key,
             bufferlist& bl,
             optional_yield y);
-    int add(const string& oid,
+    int add(const DoutPrefixProvider *dpp, 
+            const string& oid,
             std::list<cls_log_entry>& entries,
             librados::AioCompletion *completion,
             bool monotonic_inc,
             optional_yield y);
-    int list(const string& oid,
+    int list(const DoutPrefixProvider *dpp, 
+             const string& oid,
              const real_time& start_time,
              const real_time& end_time,
              int max_entries, list<cls_log_entry>& entries,
@@ -108,14 +112,16 @@ public:
              string *out_marker,
              bool *truncated,
              optional_yield y);
-    int info(const string& oid,
+    int info(const DoutPrefixProvider *dpp, 
+             const string& oid,
              cls_log_header *header,
              optional_yield y);
     int info_async(RGWSI_RADOS::Obj& obj,
                    const string& oid,
                    cls_log_header *header,
                    librados::AioCompletion *completion);
-    int trim(const string& oid,
+    int trim(const DoutPrefixProvider *dpp, 
+             const string& oid,
              const real_time& start_time,
              const real_time& end_time,
              const string& from_marker,

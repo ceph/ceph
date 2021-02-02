@@ -712,7 +712,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   }
 
   if (reshard_log) {
-    ret = reshard_log->update(bucket_info, new_bucket_info);
+    ret = reshard_log->update(dpp, bucket_info, new_bucket_info);
     if (ret < 0) {
       goto error_out;
     }
@@ -821,10 +821,10 @@ void RGWReshard::get_bucket_logshard_oid(const string& tenant, const string& buc
   get_logshard_oid(int(sid), oid);
 }
 
-int RGWReshard::add(cls_rgw_reshard_entry& entry)
+int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
 {
   if (!store->svc()->zone->can_reshard()) {
-    ldout(store->ctx(), 20) << __func__ << " Resharding is disabled"  << dendl;
+    ldpp_dout(dpp, 20) << __func__ << " Resharding is disabled"  << dendl;
     return 0;
   }
 
@@ -835,15 +835,15 @@ int RGWReshard::add(cls_rgw_reshard_entry& entry)
   librados::ObjectWriteOperation op;
   cls_rgw_reshard_add(op, entry);
 
-  int ret = rgw_rados_operate(store->getRados()->reshard_pool_ctx, logshard_oid, &op, null_yield);
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, &op, null_yield);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to add entry to reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to add entry to reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
     return ret;
   }
   return 0;
 }
 
-int RGWReshard::update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info)
+int RGWReshard::update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info)
 {
   cls_rgw_reshard_entry entry;
   entry.bucket_name = bucket_info.bucket.name;
@@ -857,9 +857,9 @@ int RGWReshard::update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& ne
 
   entry.new_instance_id = new_bucket_info.bucket.name + ":"  + new_bucket_info.bucket.bucket_id;
 
-  ret = add(entry);
+  ret = add(dpp, entry);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << __func__ << ":Error in updating entry bucket " << entry.bucket_name << ": " <<
+    ldpp_dout(dpp, 0) << __func__ << ":Error in updating entry bucket " << entry.bucket_name << ": " <<
       cpp_strerror(-ret) << dendl;
   }
 
@@ -910,7 +910,7 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
   return 0;
 }
 
-int RGWReshard::remove(cls_rgw_reshard_entry& entry)
+int RGWReshard::remove(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
 {
   string logshard_oid;
 
@@ -919,9 +919,9 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
   librados::ObjectWriteOperation op;
   cls_rgw_reshard_remove(op, entry);
 
-  int ret = rgw_rados_operate(store->getRados()->reshard_pool_ctx, logshard_oid, &op, null_yield);
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, &op, null_yield);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to remove entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
+    ldpp_dout(dpp, -1) << "ERROR: failed to remove entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
     return ret;
   }
 
@@ -990,7 +990,6 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   string marker;
   bool truncated = true;
 
-  CephContext *cct = store->ctx();
   constexpr uint32_t max_entries = 1000;
 
   string logshard_oid;
@@ -1049,7 +1048,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 	    ": removing reshard queue entry for a resharded or non-existent bucket" <<
 	    entry.bucket_name << dendl;
 
-	  ret = remove(entry);
+	  ret = remove(dpp, entry);
 	  if (ret < 0) {
 	    ldpp_dout(dpp, 0) << __func__ <<
 	      ": Error removing non-existent bucket " <<
@@ -1076,7 +1075,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 	  " removing reshard queue entry for bucket " << entry.bucket_name <<
 	  dendl;
 
-      	ret = remove(entry);
+      	ret = remove(dpp, entry);
 	if (ret < 0) {
 	  ldpp_dout(dpp, 0) << __func__ << ": Error removing bucket " <<
 	    entry.bucket_name << " from resharding queue: " <<

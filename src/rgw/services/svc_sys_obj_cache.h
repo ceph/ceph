@@ -36,12 +36,13 @@ protected:
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
+  int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                map<string, bufferlist> *attrs, bufferlist *first_chunk,
                RGWObjVersionTracker *objv_tracker,
                optional_yield y) override;
 
-  int read(RGWSysObjectCtxBase& obj_ctx,
+  int read(const DoutPrefixProvider *dpp, 
+           RGWSysObjectCtxBase& obj_ctx,
            RGWSI_SysObj_Obj_GetObjState& read_state,
            RGWObjVersionTracker *objv_tracker,
            const rgw_raw_obj& obj,
@@ -52,21 +53,24 @@ protected:
            boost::optional<obj_version>,
            optional_yield y) override;
 
-  int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest,
+  int get_attr(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const char *name, bufferlist *dest,
                optional_yield y) override;
 
-  int set_attrs(const rgw_raw_obj& obj, 
+  int set_attrs(const DoutPrefixProvider *dpp, 
+                const rgw_raw_obj& obj, 
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist> *rmattrs,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
 
-  int remove(RGWSysObjectCtxBase& obj_ctx,
+  int remove(const DoutPrefixProvider *dpp, 
+             RGWSysObjectCtxBase& obj_ctx,
              RGWObjVersionTracker *objv_tracker,
              const rgw_raw_obj& obj,
              optional_yield y) override;
 
-  int write(const rgw_raw_obj& obj,
+  int write(const DoutPrefixProvider *dpp, 
+            const rgw_raw_obj& obj,
             real_time *pmtime,
             map<std::string, bufferlist>& attrs,
             bool exclusive,
@@ -75,13 +79,14 @@ protected:
             real_time set_mtime,
             optional_yield y) override;
 
-  int write_data(const rgw_raw_obj& obj,
+  int write_data(const DoutPrefixProvider *dpp, 
+                 const rgw_raw_obj& obj,
                  const bufferlist& bl,
                  bool exclusive,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
 
-  int distribute_cache(const string& normal_name, const rgw_raw_obj& obj,
+  int distribute_cache(const DoutPrefixProvider *dpp, const string& normal_name, const rgw_raw_obj& obj,
                        ObjectCacheInfo& obj_info, int op,
                        optional_yield y);
 

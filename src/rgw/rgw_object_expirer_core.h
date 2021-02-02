@@ -46,13 +46,15 @@ public:
                                                                                       rados_svc(_rados_svc),
                                                                                       zone_svc(_zone_svc) {}
 
-  int objexp_hint_add(const ceph::real_time& delete_at,
+  int objexp_hint_add(const DoutPrefixProvider *dpp, 
+                      const ceph::real_time& delete_at,
                       const string& tenant_name,
                       const string& bucket_name,
                       const string& bucket_id,
                       const rgw_obj_index_key& obj_key);
 
-  int objexp_hint_list(const string& oid,
+  int objexp_hint_list(const DoutPrefixProvider *dpp, 
+                       const string& oid,
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
                        const int max_entries,
@@ -61,7 +63,8 @@ public:
                        string *out_marker,                 /* out */
                        bool *truncated);                   /* out */
 
-  int objexp_hint_trim(const string& oid,
+  int objexp_hint_trim(const DoutPrefixProvider *dpp, 
+                       const string& oid,
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
                        const string& from_marker,
@@ -112,12 +115,13 @@ public:
     stop_processor();
   }
 
-  int hint_add(const ceph::real_time& delete_at,
+  int hint_add(const DoutPrefixProvider *dpp, 
+               const ceph::real_time& delete_at,
                const string& tenant_name,
                const string& bucket_name,
                const string& bucket_id,
                const rgw_obj_index_key& obj_key) {
-    return exp_store.objexp_hint_add(delete_at, tenant_name, bucket_name,
+    return exp_store.objexp_hint_add(dpp, delete_at, tenant_name, bucket_name,
                                      bucket_id, obj_key);
   }
 
@@ -127,7 +131,8 @@ public:
                      std::list<cls_timeindex_entry>& entries, /* in  */
                      bool& need_trim);                        /* out */
 
-  void trim_chunk(const std::string& shard,
+  void trim_chunk(const DoutPrefixProvider *dpp, 
+                  const std::string& shard,
                   const utime_t& from,
                   const utime_t& to,
                   const string& from_marker,

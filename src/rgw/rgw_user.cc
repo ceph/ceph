@@ -76,7 +76,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosSto
         ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = bucket->sync_user_stats(y);
+      ret = bucket->sync_user_stats(dpp, y);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
@@ -88,7 +88,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosSto
     }
   } while (user_buckets.is_truncated());
 
-  ret = store->ctl()->user->complete_flush_stats(user.get_user(), y);
+  ret = store->ctl()->user->complete_flush_stats(dpp, user.get_user(), y);
   if (ret < 0) {
     cerr << "ERROR: failed to complete syncing user stats: ret=" << ret << std::endl;
     return ret;
@@ -2284,7 +2284,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
-    int ret = store->ctl()->user->read_stats(info.user_id, &stats, y);
+    int ret = store->ctl()->user->read_stats(dpp, info.user_id, &stats, y);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
@@ -2877,24 +2877,26 @@ int RGWUserCtl::remove_info(const DoutPrefixProvider *dpp,
   });
 }
 
-int RGWUserCtl::add_bucket(const rgw_user& user,
+int RGWUserCtl::add_bucket(const DoutPrefixProvider *dpp, 
+                           const rgw_user& user,
                            const rgw_bucket& bucket,
                            ceph::real_time creation_time,
 			   optional_yield y)
 
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->add_bucket(op->ctx(), user, bucket, creation_time, y);
+    return svc.user->add_bucket(dpp, op->ctx(), user, bucket, creation_time, y);
   });
 }
 
-int RGWUserCtl::remove_bucket(const rgw_user& user,
+int RGWUserCtl::remove_bucket(const DoutPrefixProvider *dpp, 
+                              const rgw_user& user,
                               const rgw_bucket& bucket,
 			      optional_yield y)
 
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->remove_bucket(op->ctx(), user, bucket, y);
+    return svc.user->remove_bucket(dpp, op->ctx(), user, bucket, y);
   });
 }
 
@@ -2914,7 +2916,7 @@ int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp,
   }
 
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    int ret = svc.user->list_buckets(op->ctx(), user, marker, end_marker,
+    int ret = svc.user->list_buckets(dpp, op->ctx(), user, marker, end_marker,
                                      max, buckets, is_truncated, y);
     if (ret < 0) {
       return ret;
@@ -2931,36 +2933,38 @@ int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp,
   });
 }
 
-int RGWUserCtl::flush_bucket_stats(const rgw_user& user,
+int RGWUserCtl::flush_bucket_stats(const DoutPrefixProvider *dpp, 
+                                   const rgw_user& user,
                                    const RGWBucketEnt& ent,
 				   optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->flush_bucket_stats(op->ctx(), user, ent, y);
+    return svc.user->flush_bucket_stats(dpp, op->ctx(), user, ent, y);
   });
 }
 
-int RGWUserCtl::complete_flush_stats(const rgw_user& user, optional_yield y)
+int RGWUserCtl::complete_flush_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->complete_flush_stats(op->ctx(), user, y);
+    return svc.user->complete_flush_stats(dpp, op->ctx(), user, y);
   });
 }
 
-int RGWUserCtl::reset_stats(const rgw_user& user, optional_yield y)
+int RGWUserCtl::reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->reset_bucket_stats(op->ctx(), user, y);
+    return svc.user->reset_bucket_stats(dpp, op->ctx(), user, y);
   });
 }
 
-int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats,
+int RGWUserCtl::read_stats(const DoutPrefixProvider *dpp, 
+                           const rgw_user& user, RGWStorageStats *stats,
 			   optional_yield y,
 			   ceph::real_time *last_stats_sync,
 			   ceph::real_time *last_stats_update)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->read_stats(op->ctx(), user, stats,
+    return svc.user->read_stats(dpp, op->ctx(), user, stats,
 				last_stats_sync, last_stats_update, y);
   });
 }

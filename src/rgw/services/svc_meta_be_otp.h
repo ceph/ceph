@@ -79,7 +79,8 @@ public:
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y,
                 const DoutPrefixProvider *dpp);
-  int put_entry(RGWSI_MetaBackend::Context *ctx,
+  int put_entry(const DoutPrefixProvider *dpp, 
+                RGWSI_MetaBackend::Context *ctx,
                 const string& key,
                 RGWSI_MetaBackend::PutParams& _params,
                 RGWObjVersionTracker *objv_tracker,

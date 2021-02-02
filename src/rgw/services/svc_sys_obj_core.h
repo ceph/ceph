@@ -33,12 +33,14 @@ protected:
   }
   int get_rados_obj(RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
 
-  virtual int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
+  virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t *psize, 
+                       real_time *pmtime, uint64_t *epoch,
                        map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker,
                        optional_yield y);
 
-  virtual int read(RGWSysObjectCtxBase& obj_ctx,
+  virtual int read(const DoutPrefixProvider *dpp, 
+                   RGWSysObjectCtxBase& obj_ctx,
                    RGWSI_SysObj_Obj_GetObjState& read_state,
                    RGWObjVersionTracker *objv_tracker,
                    const rgw_raw_obj& obj,
@@ -49,12 +51,14 @@ protected:
                    boost::optional<obj_version>,
                    optional_yield y);
 
-  virtual int remove(RGWSysObjectCtxBase& obj_ctx,
+  virtual int remove(const DoutPrefixProvider *dpp, 
+                     RGWSysObjectCtxBase& obj_ctx,
                      RGWObjVersionTracker *objv_tracker,
                      const rgw_raw_obj& obj,
                      optional_yield y);
 
-  virtual int write(const rgw_raw_obj& obj,
+  virtual int write(const DoutPrefixProvider *dpp, 
+                    const rgw_raw_obj& obj,
                     real_time *pmtime,
                     map<std::string, bufferlist>& attrs,
                     bool exclusive,
@@ -63,24 +67,27 @@ protected:
                     real_time set_mtime,
                     optional_yield y);
 
-  virtual int write_data(const rgw_raw_obj& obj,
+  virtual int write_data(const DoutPrefixProvider *dpp, 
+                         const rgw_raw_obj& obj,
                          const bufferlist& bl,
                          bool exclusive,
                          RGWObjVersionTracker *objv_tracker,
                          optional_yield y);
 
-  virtual int get_attr(const rgw_raw_obj& obj, const char *name, bufferlist *dest,
+  virtual int get_attr(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, 
+                       const char *name, bufferlist *dest,
                        optional_yield y);
 
-  virtual int set_attrs(const rgw_raw_obj& obj,
+  virtual int set_attrs(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist> *rmattrs,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y);
 
-  virtual int omap_get_all(const rgw_raw_obj& obj, std::map<string, bufferlist> *m,
+  virtual int omap_get_all(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, std::map<string, bufferlist> *m,
                            optional_yield y);
-  virtual int omap_get_vals(const rgw_raw_obj& obj,
+  virtual int omap_get_vals(const DoutPrefixProvider *dpp, 
+                            const rgw_raw_obj& obj,
                             const string& marker,
                             uint64_t count,
                             std::map<string, bufferlist> *m,
@@ -90,13 +97,14 @@ protected:
                        const rgw_raw_obj& obj, const std::string& key,
                        bufferlist& bl, bool must_exist,
                        optional_yield y);
-  virtual int omap_set(const rgw_raw_obj& obj,
+  virtual int omap_set(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                        const map<std::string, bufferlist>& m, bool must_exist,
                        optional_yield y);
-  virtual int omap_del(const rgw_raw_obj& obj, const std::string& key,
+  virtual int omap_del(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const std::string& key,
                        optional_yield y);
 
-  virtual int notify(const rgw_raw_obj& obj, bufferlist& bl,
+  virtual int notify(const DoutPrefixProvider *dpp, 
+                     const rgw_raw_obj& obj, bufferlist& bl,
                      uint64_t timeout_ms, bufferlist *pbl,
                      optional_yield y);
 

@@ -2420,7 +2420,7 @@ void RGWGetUsage::execute(optional_yield y)
     return;
   }
 
-  op_ret = store->ctl()->user->read_stats(s->user->get_id(), &stats, y);
+  op_ret = store->ctl()->user->read_stats(this, s->user->get_id(), &stats, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: can't read user header"  << dendl;
     return;
@@ -3297,7 +3297,7 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->sync_user_stats(y);
+  op_ret = s->bucket->sync_user_stats(this, y);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -3775,9 +3775,9 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
+  rgw::notify::reservation_t res(this, store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedPut;
-  op_ret = rgw::notify::publish_reserve(event_type, res, obj_tags.get());
+  op_ret = rgw::notify::publish_reserve(this, event_type, res, obj_tags.get());
   if (op_ret < 0) {
     return;
   }
@@ -4124,9 +4124,9 @@ void RGWPostObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
+  rgw::notify::reservation_t res(this, store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedPost;
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -4760,11 +4760,11 @@ void RGWDeleteObj::execute(optional_yield y)
     }
 
     // make reservation for notification if needed
-    rgw::notify::reservation_t res(store, s, s->object.get());
+    rgw::notify::reservation_t res(this, store, s, s->object.get());
     const auto versioned_object = s->bucket->versioning_enabled();
     const auto event_type = versioned_object && s->object->get_instance().empty() ? 
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+    op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
     if (op_ret < 0) {
       return;
     }
@@ -5082,9 +5082,9 @@ void RGWCopyObj::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
+  rgw::notify::reservation_t res(this, store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedCopy; 
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -5774,9 +5774,9 @@ void RGWInitMultipart::execute(optional_yield y)
   }
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
+  rgw::notify::reservation_t res(this, store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedPost;
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -5922,9 +5922,9 @@ void RGWCompleteMultipart::execute(optional_yield y)
   mp.init(s->object->get_name(), upload_id);
 
   // make reservation for notification if needed
-  rgw::notify::reservation_t res(store, s, s->object.get());
+  rgw::notify::reservation_t res(this, store, s, s->object.get());
   const auto event_type = rgw::notify::ObjectCreatedCompleteMultipartUpload;
-  op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+  op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -5959,7 +5959,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   utime_t dur(max_lock_secs_mp, 0);
 
   serializer = meta_obj->get_serializer("RGWCompleteMultipart");
-  op_ret = serializer->try_lock(dur, y);
+  op_ret = serializer->try_lock(this, dur, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "failed to acquire lock" << dendl;
     op_ret = -ERR_INTERNAL_ERROR;
@@ -5976,7 +5976,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   attrs = meta_obj->get_attrs();
 
   do {
-    op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
+    op_ret = list_multipart_parts(this, store, s, upload_id, meta_oid, max_parts,
 				  marker, obj_parts, &marker, &truncated);
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_UPLOAD;
@@ -6247,7 +6247,7 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
+  op_ret = list_multipart_parts(this, store, s, upload_id, meta_oid, max_parts,
 				marker, parts, NULL, &truncated);
 }
 
@@ -6504,10 +6504,10 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     }
     // make reservation for notification if needed
     const auto versioned_object = s->bucket->versioning_enabled();
-    rgw::notify::reservation_t res(store, s, obj.get());
+    rgw::notify::reservation_t res(this, store, s, obj.get());
     const auto event_type = versioned_object && obj->get_instance().empty() ? 
         rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete;
-    op_ret = rgw::notify::publish_reserve(event_type, res, nullptr);
+    op_ret = rgw::notify::publish_reserve(this, event_type, res, nullptr);
     if (op_ret < 0) {
       send_partial_response(*iter, false, "", op_ret);
       continue;

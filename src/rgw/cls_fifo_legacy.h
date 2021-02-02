@@ -51,7 +51,7 @@ void create_meta(lr::ObjectWriteOperation* op, std::string_view id,
 		 bool exclusive = false,
 		 std::uint64_t max_part_size = default_max_part_size,
 		 std::uint64_t max_entry_size = default_max_entry_size);
-int get_meta(lr::IoCtx& ioctx, const std::string& oid,
+int get_meta(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string& oid,
 	     std::optional<fifo::objv> objv, fifo::info* info,
 	     std::uint32_t* part_header_size,
 	     std::uint32_t* part_entry_overhead,
@@ -61,18 +61,18 @@ void update_meta(lr::ObjectWriteOperation* op, const fifo::objv& objv,
 		 const fifo::update& update);
 void part_init(lr::ObjectWriteOperation* op, std::string_view tag,
 	       fifo::data_params params);
-int push_part(lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
+int push_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string& oid, std::string_view tag,
 	      std::deque<cb::list> data_bufs, std::uint64_t tid, optional_yield y);
 void trim_part(lr::ObjectWriteOperation* op,
 	       std::optional<std::string_view> tag, std::uint64_t ofs,
 	       bool exclusive);
-int list_part(lr::IoCtx& ioctx, const std::string& oid,
+int list_part(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string& oid,
 	      std::optional<std::string_view> tag, std::uint64_t ofs,
 	      std::uint64_t max_entries,
 	      std::vector<fifo::part_list_entry>* entries,
 	      bool* more, bool* full_part, std::string* ptag,
 	      std::uint64_t tid, optional_yield y);
-int get_part_info(lr::IoCtx& ioctx, const std::string& oid,
+int get_part_info(const DoutPrefixProvider *dpp, lr::IoCtx& ioctx, const std::string& oid,
 		  fifo::part_header* header, std::uint64_t,
 		  optional_yield y);
 
@@ -141,22 +141,22 @@ class FIFO {
 		   const fifo::objv& objv,
 		   const fifo::update& update,
 		   std::uint64_t tid);
-  int _update_meta(const fifo::update& update,
+  int _update_meta(const DoutPrefixProvider *dpp, const fifo::update& update,
 		   fifo::objv version, bool* pcanceled,
 		   std::uint64_t tid, optional_yield y);
   int _update_meta(const fifo::update& update,
 		   fifo::objv version, bool* pcanceled,
 		   std::uint64_t tid, lr::AioCompletion* c);
-  int create_part(int64_t part_num, std::string_view tag, std::uint64_t tid,
+  int create_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
 		  optional_yield y);
-  int remove_part(int64_t part_num, std::string_view tag, std::uint64_t tid,
+  int remove_part(const DoutPrefixProvider *dpp, int64_t part_num, std::string_view tag, std::uint64_t tid,
 		  optional_yield y);
-  int process_journal(std::uint64_t tid, optional_yield y);
-  int _prepare_new_part(bool is_head, std::uint64_t tid, optional_yield y);
-  int _prepare_new_head(std::uint64_t tid, optional_yield y);
-  int push_entries(const std::deque<cb::list>& data_bufs,
+  int process_journal(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);
+  int _prepare_new_part(const DoutPrefixProvider *dpp, bool is_head, std::uint64_t tid, optional_yield y);
+  int _prepare_new_head(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);
+  int push_entries(const DoutPrefixProvider *dpp, const std::deque<cb::list>& data_bufs,
 		   std::uint64_t tid, optional_yield y);
-  int trim_part(int64_t part_num, uint64_t ofs,
+  int trim_part(const DoutPrefixProvider *dpp, int64_t part_num, uint64_t ofs,
 		std::optional<std::string_view> tag, bool exclusive,
 		std::uint64_t tid, optional_yield y);
   int trim_part(int64_t part_num, uint64_t ofs,
@@ -167,7 +167,7 @@ class FIFO {
   static void update_callback(lr::completion_t, void* arg);
   static void read_callback(lr::completion_t, void* arg);
   /// Force refresh of metadata, yielding/blocking style
-  int read_meta(std::uint64_t tid, optional_yield y);
+  int read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, optional_yield y);
   /// Force refresh of metadata, with a librados Completion
   int read_meta(std::uint64_t tid, lr::AioCompletion* c);
 
@@ -179,7 +179,7 @@ public:
   FIFO& operator =(FIFO&&) = delete;
 
   /// Open an existing FIFO.
-  static int open(lr::IoCtx ioctx, //< IO Context
+  static int open(const DoutPrefixProvider *dpp, lr::IoCtx ioctx, //< IO Context
 		  std::string oid, //< OID for metadata object
 		  std::unique_ptr<FIFO>* fifo, //< OUT: Pointer to FIFO object
 		  optional_yield y, //< Optional yield context
@@ -189,7 +189,7 @@ public:
 		  /// can't find it.
 		  bool probe = false);
   /// Create a new or open an existing FIFO.
-  static int create(lr::IoCtx ioctx, //< IO Context
+  static int create(const DoutPrefixProvider *dpp, lr::IoCtx ioctx, //< IO Context
 		    std::string oid, //< OID for metadata object
 		    std::unique_ptr<FIFO>* fifo, //< OUT: Pointer to FIFO object
 		    optional_yield y, //< Optional yield context
@@ -206,21 +206,23 @@ public:
 		    std::uint64_t max_entry_size = default_max_entry_size);
 
   /// Force refresh of metadata, yielding/blocking style
-  int read_meta(optional_yield y);
+  int read_meta(const DoutPrefixProvider *dpp, optional_yield y);
   /// Get currently known metadata
   const fifo::info& meta() const;
   /// Get partition header and entry overhead size
   std::pair<std::uint32_t, std::uint32_t> get_part_layout_info() const;
   /// Push an entry to the FIFO
-  int push(const cb::list& bl, //< Entry to push
+  int push(const DoutPrefixProvider *dpp, 
+           const cb::list& bl, //< Entry to push
 	   optional_yield y //< Optional yield
     );
   /// Push entres to the FIFO
-  int push(const std::vector<cb::list>& data_bufs, //< Entries to push
+  int push(const DoutPrefixProvider *dpp, 
+           const std::vector<cb::list>& data_bufs, //< Entries to push
 	   /// Optional yield
 	   optional_yield y);
   /// List entries
-  int list(int max_entries, /// Maximum entries to list
+  int list(const DoutPrefixProvider *dpp, int max_entries, /// Maximum entries to list
 	   /// Point after which to begin listing. Start at tail if null
 	   std::optional<std::string_view> markstr,
 	   std::vector<list_entry>* out, //< OUT: entries
@@ -229,7 +231,8 @@ public:
 	   optional_yield y //< Optional yield
     );
   /// Trim entries, coroutine/block style
-  int trim(std::string_view markstr, //< Position to which to trim, inclusive
+  int trim(const DoutPrefixProvider *dpp, 
+           std::string_view markstr, //< Position to which to trim, inclusive
 	   bool exclusive, //< If true, do not trim the target entry
 			   //< itself, just all those before it.
 	   optional_yield y //< Optional yield
@@ -241,7 +244,7 @@ public:
 	   lr::AioCompletion* c //< librados AIO Completion
     );
   /// Get part info
-  int get_part_info(int64_t part_num, /// Part number
+  int get_part_info(const DoutPrefixProvider *dpp, int64_t part_num, /// Part number
 		    fifo::part_header* header, //< OUT: Information
 		    optional_yield y //< Optional yield
     );

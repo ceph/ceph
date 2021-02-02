@@ -50,7 +50,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
     op.create(false);
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_deferred_entries = cct->_conf->rgw_gc_max_deferred;
     gc_log_init2(op, queue_size, num_deferred_entries);
-    store->gc_operate(obj_names[i], &op);
+    store->gc_operate(this, obj_names[i], &op);
   }
 }
 
@@ -76,13 +76,13 @@ int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag)
 
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
 
-  auto ret = store->gc_operate(obj_names[i], &op);
+  auto ret = store->gc_operate(this, obj_names[i], &op);
   if (ret != -ECANCELED && ret != -EPERM) {
     return ret;
   }
   ObjectWriteOperation set_entry_op;
   cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
-  return store->gc_operate(obj_names[i], &set_entry_op);
+  return store->gc_operate(this, obj_names[i], &set_entry_op);
 }
 
 struct defer_chain_state {
@@ -188,7 +188,7 @@ int RGWGC::remove(int index, int num_entries)
   ObjectWriteOperation op;
   cls_rgw_gc_queue_remove_entries(op, num_entries);
 
-  return store->gc_operate(obj_names[index], &op);
+  return store->gc_operate(this, obj_names[index], &op);
 }
 
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)

@@ -149,7 +149,7 @@ RadosWriter::~RadosWriter()
       continue;
     }
 
-    int r = store->delete_raw_obj(obj);
+    int r = store->delete_raw_obj(dpp, obj);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }

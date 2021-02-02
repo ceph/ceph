@@ -726,7 +726,8 @@ public:
                         const DoutPrefixProvider *dpp);
 
   /* quota related */
-  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info,
+  int sync_user_stats(const DoutPrefixProvider *dpp, 
+                      const rgw_user& user_id, const RGWBucketInfo& bucket_info,
 		      optional_yield y,
                       RGWBucketEnt* pent = nullptr);
 

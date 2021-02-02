@@ -97,7 +97,7 @@ void RGWSI_Cls::MFA::prepare_mfa_write(librados::ObjectWriteOperation *op,
   op->mtime2(&mtime_ts);
 }
 
-int RGWSI_Cls::MFA::create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+int RGWSI_Cls::MFA::create_mfa(const DoutPrefixProvider *dpp, const rgw_user& user, const rados::cls::otp::otp_info_t& config,
                          RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime, optional_yield y)
 {
   std::optional<RGWSI_RADOS::Obj> obj;
@@ -109,16 +109,17 @@ int RGWSI_Cls::MFA::create_mfa(const rgw_user& user, const rados::cls::otp::otp_
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::create(&op, config);
-  r = obj->operate(&op, y);
+  r = obj->operate(dpp, &op, y);
   if (r < 0) {
-    ldout(cct, 20) << "OTP create, otp_id=" << config.id << " result=" << (int)r << dendl;
+    ldpp_dout(dpp, 20) << "OTP create, otp_id=" << config.id << " result=" << (int)r << dendl;
     return r;
   }
 
   return 0;
 }
 
-int RGWSI_Cls::MFA::remove_mfa(const rgw_user& user, const string& id,
+int RGWSI_Cls::MFA::remove_mfa(const DoutPrefixProvider *dpp, 
+                         const rgw_user& user, const string& id,
                          RGWObjVersionTracker *objv_tracker,
                          const ceph::real_time& mtime,
                          optional_yield y)
@@ -132,7 +133,7 @@ int RGWSI_Cls::MFA::remove_mfa(const rgw_user& user, const string& id,
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::remove(&op, id);
-  r = obj->operate(&op, y);
+  r = obj->operate(dpp, &op, y);
   if (r < 0) {
     ldout(cct, 20) << "OTP remove, otp_id=" << id << " result=" << (int)r << dendl;
     return r;
@@ -195,7 +196,7 @@ int RGWSI_Cls::MFA::otp_get_current_time(const rgw_user& user, ceph::real_time *
   return 0;
 }
 
-int RGWSI_Cls::MFA::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
+int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
 			    bool reset_obj, RGWObjVersionTracker *objv_tracker,
 			    const real_time& mtime,
 			    optional_yield y)
@@ -204,7 +205,7 @@ int RGWSI_Cls::MFA::set_mfa(const string& oid, const list<rados::cls::otp::otp_i
   auto obj = rados_svc->obj(o);
   int r = obj.open();
   if (r < 0) {
-    ldout(cct, 4) << "failed to open rados context for " << o << dendl;
+    ldpp_dout(dpp, 4) << "failed to open rados context for " << o << dendl;
     return r;
   }
   librados::ObjectWriteOperation op;
@@ -215,9 +216,9 @@ int RGWSI_Cls::MFA::set_mfa(const string& oid, const list<rados::cls::otp::otp_i
   }
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::set(&op, entries);
-  r = obj.operate(&op, y);
+  r = obj.operate(dpp, &op, y);
   if (r < 0) {
-    ldout(cct, 20) << "OTP set entries.size()=" << entries.size() << " result=" << (int)r << dendl;
+    ldpp_dout(dpp, 20) << "OTP set entries.size()=" << entries.size() << " result=" << (int)r << dendl;
     return r;
   }
 
@@ -269,7 +270,8 @@ int RGWSI_Cls::TimeLog::init_obj(const string& oid, RGWSI_RADOS::Obj& obj)
   return obj.open();
 
 }
-int RGWSI_Cls::TimeLog::add(const string& oid,
+int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp, 
+                            const string& oid,
                             const real_time& ut,
                             const string& section,
                             const string& key,
@@ -287,10 +289,11 @@ int RGWSI_Cls::TimeLog::add(const string& oid,
   utime_t t(ut);
   cls_log_add(op, t, section, key, bl);
 
-  return obj.operate(&op, y);
+  return obj.operate(dpp, &op, y);
 }
 
-int RGWSI_Cls::TimeLog::add(const string& oid,
+int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp, 
+                            const string& oid,
                             std::list<cls_log_entry>& entries,
                             librados::AioCompletion *completion,
                             bool monotonic_inc,
@@ -307,14 +310,15 @@ int RGWSI_Cls::TimeLog::add(const string& oid,
   cls_log_add(op, entries, monotonic_inc);
 
   if (!completion) {
-    r = obj.operate(&op, y);
+    r = obj.operate(dpp, &op, y);
   } else {
     r = obj.aio_operate(completion, &op);
   }
   return r;
 }
 
-int RGWSI_Cls::TimeLog::list(const string& oid,
+int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp, 
+                             const string& oid,
                              const real_time& start_time,
                              const real_time& end_time,
                              int max_entries, std::list<cls_log_entry>& entries,
@@ -340,14 +344,15 @@ int RGWSI_Cls::TimeLog::list(const string& oid,
 
   bufferlist obl;
 
-  int ret = obj.operate(&op, &obl, y);
+  int ret = obj.operate(dpp, &op, &obl, y);
   if (ret < 0)
     return ret;
 
   return 0;
 }
 
-int RGWSI_Cls::TimeLog::info(const string& oid,
+int RGWSI_Cls::TimeLog::info(const DoutPrefixProvider *dpp, 
+                             const string& oid,
                              cls_log_header *header,
                              optional_yield y)
 {
@@ -364,7 +369,7 @@ int RGWSI_Cls::TimeLog::info(const string& oid,
 
   bufferlist obl;
 
-  int ret = obj.operate(&op, &obl, y);
+  int ret = obj.operate(dpp, &op, &obl, y);
   if (ret < 0)
     return ret;
 
@@ -392,7 +397,8 @@ int RGWSI_Cls::TimeLog::info_async(RGWSI_RADOS::Obj& obj,
   return 0;
 }
 
-int RGWSI_Cls::TimeLog::trim(const string& oid,
+int RGWSI_Cls::TimeLog::trim(const DoutPrefixProvider *dpp, 
+                             const string& oid,
                              const real_time& start_time,
                              const real_time& end_time,
                              const string& from_marker,
@@ -414,7 +420,7 @@ int RGWSI_Cls::TimeLog::trim(const string& oid,
   cls_log_trim(op, st, et, from_marker, to_marker);
 
   if (!completion) {
-    r = obj.operate(&op, y);
+    r = obj.operate(dpp, &op, y);
   } else {
     r = obj.aio_operate(completion, &op);
   }

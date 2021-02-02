@@ -279,7 +279,7 @@ void RGWModifyRole::execute(optional_yield y)
   }
 
   _role.update_trust_policy(trust_policy);
-  op_ret = _role.update(y);
+  op_ret = _role.update(this, y);
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -371,7 +371,7 @@ void RGWPutRolePolicy::execute(optional_yield y)
   }
 
   _role.set_perm_policy(policy_name, perm_policy);
-  op_ret = _role.update(y);
+  op_ret = _role.update(this, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("PutRolePolicyResponse");
@@ -479,7 +479,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
   }
 
   if (op_ret == 0) {
-    op_ret = _role.update(y);
+    op_ret = _role.update(this, y);
   }
 
   s->formatter->open_object_section("DeleteRolePoliciesResponse");

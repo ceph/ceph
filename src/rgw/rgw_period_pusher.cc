@@ -158,7 +158,7 @@ class RGWPeriodPusher::CRThread {
 };
 
 
-RGWPeriodPusher::RGWPeriodPusher(rgw::sal::RGWRadosStore* store,
+RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store,
 				 optional_yield y)
   : cct(store->ctx()), store(store)
 {
@@ -169,9 +169,9 @@ RGWPeriodPusher::RGWPeriodPusher(rgw::sal::RGWRadosStore* store,
 
   // always send out the current period on startup
   RGWPeriod period;
-  int r = period.init(cct, store->svc()->sysobj, realm_id, y, realm.get_name());
+  int r = period.init(dpp, cct, store->svc()->sysobj, realm_id, y, realm.get_name());
   if (r < 0) {
-    lderr(cct) << "failed to load period for realm " << realm_id << dendl;
+    ldpp_dout(dpp, -1) << "failed to load period for realm " << realm_id << dendl;
     return;
   }
 

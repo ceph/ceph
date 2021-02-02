@@ -104,7 +104,7 @@ class RGWStore {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
     virtual RGWLC* get_rgwlc(void) = 0;
-    virtual int delete_raw_obj(const rgw_raw_obj& obj) = 0;
+    virtual int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj) = 0;
     virtual void get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj) = 0;
     virtual int get_raw_chunk_size(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, uint64_t* chunk_size) = 0;
 
@@ -231,7 +231,7 @@ class RGWBucket {
 				 std::string *max_marker = nullptr,
 				 bool *syncstopped = nullptr) = 0;
     virtual int read_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-    virtual int sync_user_stats(optional_yield y) = 0;
+    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     virtual int update_container_stats(const DoutPrefixProvider *dpp) = 0;
     virtual int check_bucket_shards(const DoutPrefixProvider *dpp) = 0;
     virtual int link(const DoutPrefixProvider *dpp, RGWUser* new_user, optional_yield y) = 0;
@@ -562,7 +562,7 @@ struct Serializer {
   Serializer() = default;
   virtual ~Serializer() = default;
 
-  virtual int try_lock(utime_t dur, optional_yield y) = 0;
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) = 0;
   virtual int unlock()  = 0;
 };
 

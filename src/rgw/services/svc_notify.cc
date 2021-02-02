@@ -160,7 +160,7 @@ RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
   return notify_objs[i];
 }
 
-int RGWSI_Notify::init_watch(optional_yield y)
+int RGWSI_Notify::init_watch(const DoutPrefixProvider *dpp, optional_yield y)
 {
   num_watchers = cct->_conf->rgw_num_control_oids;
 
@@ -189,15 +189,15 @@ int RGWSI_Notify::init_watch(optional_yield y)
 
     int r = notify_obj.open();
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
       return r;
     }
 
     librados::ObjectWriteOperation op;
     op.create(false);
-    r = notify_obj.operate(&op, y);
+    r = notify_obj.operate(dpp, &op, y);
     if (r < 0 && r != -EEXIST) {
-      ldout(cct, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
       return r;
     }
 
@@ -206,7 +206,7 @@ int RGWSI_Notify::init_watch(optional_yield y)
 
     r = watcher->register_watch_async();
     if (r < 0) {
-      ldout(cct, 0) << "WARNING: register_watch_aio() returned " << r << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: register_watch_aio() returned " << r << dendl;
       error = r;
       continue;
     }
@@ -215,7 +215,7 @@ int RGWSI_Notify::init_watch(optional_yield y)
   for (int i = 0; i < num_watchers; ++i) {
     int r = watchers[i]->register_watch_finish();
     if (r < 0) {
-      ldout(cct, 0) << "WARNING: async watch returned " << r << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: async watch returned " << r << dendl;
       error = r;
     }
   }
@@ -258,7 +258,7 @@ int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   control_pool = zone_svc->get_zone_params().control_pool;
 
-  int ret = init_watch(y);
+  int ret = init_watch(dpp, y);
   if (ret < 0) {
     lderr(cct) << "ERROR: failed to initialize watch: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -358,7 +358,7 @@ void RGWSI_Notify::_set_enabled(bool status)
   }
 }
 
-int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
+int RGWSI_Notify::distribute(const DoutPrefixProvider *dpp, const string& key, bufferlist& bl,
                              optional_yield y)
 {
   /* The RGW uses the control pool to store the watch notify objects.
@@ -370,14 +370,15 @@ int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
   if (num_watchers > 0) {
     RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
 
-    ldout(cct, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
+    ldpp_dout(dpp, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
         << " bl.length()=" << bl.length() << dendl;
-    return robust_notify(notify_obj, bl, y);
+    return robust_notify(dpp, notify_obj, bl, y);
   }
   return 0;
 }
 
-int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
+int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp, 
+                                RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
                                 optional_yield y)
 {
   // The reply of every machine that acks goes in here.
@@ -385,11 +386,11 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
   bufferlist rbl;
 
   // First, try to send, without being fancy about it.
-  auto r = notify_obj.notify(bl, 0, &rbl, y);
+  auto r = notify_obj.notify(dpp, bl, 0, &rbl, y);
 
   // If that doesn't work, get serious.
   if (r < 0) {
-    ldout(cct, 1) << "robust_notify: If at first you don't succeed: "
+    ldpp_dout(dpp, 1) << "robust_notify: If at first you don't succeed: "
 		  << cpp_strerror(-r) << dendl;
 
 
@@ -403,13 +404,13 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	std::pair<uint64_t, uint64_t> id;
 	decode(id, p);
 	acks.insert(id);
-	ldout(cct, 20) << "robust_notify: acked by " << id << dendl;
+	ldpp_dout(dpp, 20) << "robust_notify: acked by " << id << dendl;
 	uint32_t blen;
 	decode(blen, p);
 	p += blen;
       }
     } catch (const buffer::error& e) {
-      ldout(cct, 0) << "robust_notify: notify response parse failed: "
+      ldpp_dout(dpp, 0) << "robust_notify: notify response parse failed: "
 		    << e.what() << dendl;
       acks.clear(); // Throw away junk on failed parse.
     }
@@ -425,9 +426,9 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
       rbl.clear();
       // Reset the timeouts, we're only concerned with new ones.
       timeouts.clear();
-      r = notify_obj.notify(bl, 0, &rbl, y);
+      r = notify_obj.notify(dpp, bl, 0, &rbl, y);
       if (r < 0) {
-	ldout(cct, 1) << "robust_notify: retry " << tries << " failed: "
+	ldpp_dout(dpp, 1) << "robust_notify: retry " << tries << " failed: "
 		      << cpp_strerror(-r) << dendl;
 	p = rbl.begin();
 	try {
@@ -441,7 +442,7 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	    decode(id, p);
 	    auto ir = acks.insert(id);
 	    if (ir.second) {
-	      ldout(cct, 20) << "robust_notify: acked by " << id << dendl;
+	      ldpp_dout(dpp, 20) << "robust_notify: acked by " << id << dendl;
 	    }
 	    uint32_t blen;
 	    decode(blen, p);
@@ -455,13 +456,13 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	    decode(id, p);
 	    // Only track timeouts from hosts that haven't acked previously.
 	    if (acks.find(id) != acks.cend()) {
-	      ldout(cct, 20) << "robust_notify: " << id << " timed out."
+	      ldpp_dout(dpp, 20) << "robust_notify: " << id << " timed out."
 			     << dendl;
 	      timeouts.insert(id);
 	    }
 	  }
 	} catch (const buffer::error& e) {
-	  ldout(cct, 0) << "robust_notify: notify response parse failed: "
+	  ldpp_dout(dpp, 0) << "robust_notify: notify response parse failed: "
 			<< e.what() << dendl;
 	  continue;
 	}
