@@ -111,8 +111,8 @@ class Inventory:
             hostname,
             addr=info.get('addr', hostname),
             labels=info.get('labels', []),
-            status='Offline' if hostname in self.mgr.offline_hosts else info.get('status', ''),
             maintenance=info.get('maintenance', False),
+            offline=hostname in self.mgr.offline_hosts
         )
 
     def all_specs(self) -> List[HostSpec]:
