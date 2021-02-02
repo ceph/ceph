@@ -64,7 +64,8 @@ enum TestOpType {
   TEST_OP_UNSET_REDIRECT,
   TEST_OP_CHUNK_READ,
   TEST_OP_TIER_PROMOTE,
-  TEST_OP_TIER_FLUSH
+  TEST_OP_TIER_FLUSH,
+  TEST_OP_SET_CHUNK
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -166,6 +167,7 @@ public:
   set<string> oid_not_flushing;
   set<string> oid_redirect_not_in_use;
   set<string> oid_redirect_in_use;
+  set<string> oid_set_chunk_tgt_pool;
   SharedPtrRegistry<int, int> snaps_in_use;
   int current_snap;
   string pool_name;
@@ -2375,6 +2377,7 @@ public:
     }
 
     if (++done == 1) {
+      context->oid_set_chunk_tgt_pool.insert(oid_tgt);
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
