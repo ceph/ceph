@@ -2295,14 +2295,14 @@ public:
   int r;
   uint64_t offset;
   uint32_t length;
-  uint64_t tgt_offset;
+  uint32_t tgt_offset;
   SetChunkOp(int n,
 	     RadosTestContext *context,
 	     const string &oid,
 	     uint64_t offset,
 	     uint32_t length,
 	     const string &oid_tgt,
-	     uint64_t tgt_offset,
+	     uint32_t tgt_offset,
 	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       oid(oid), oid_tgt(oid_tgt),
