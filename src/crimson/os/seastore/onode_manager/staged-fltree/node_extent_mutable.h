@@ -9,8 +9,6 @@
 
 namespace crimson::os::seastore::onode {
 
-class NodeExtent;
-
 /**
  * NodeExtentMutable
  *
@@ -21,8 +19,7 @@ class NodeExtent;
 class NodeExtentMutable {
  public:
   void copy_in_absolute(void* dst, const void* src, extent_len_t len) {
-    assert((char*)dst >= get_write());
-    assert((char*)dst + len <= buf_upper_bound());
+    assert(is_safe(dst, len));
     std::memcpy(dst, src, len);
   }
   template <typename T>
@@ -44,11 +41,9 @@ class NodeExtentMutable {
   }
 
   void shift_absolute(const void* src, extent_len_t len, int offset) {
-    assert((const char*)src >= get_write());
-    assert((const char*)src + len <= buf_upper_bound());
+    assert(is_safe(src, len));
     char* to = (char*)src + offset;
-    assert(to >= get_write());
-    assert(to + len <= buf_upper_bound());
+    assert(is_safe(to, len));
     if (len != 0) {
       std::memmove(to, src, len);
     }
@@ -57,22 +52,52 @@ class NodeExtentMutable {
     shift_absolute(get_write() + src_offset, len, offset);
   }
 
-  template <typename T>
-  void validate_inplace_update(const T& updated) {
-    assert((const char*)&updated >= get_write());
-    assert((const char*)&updated + sizeof(T) <= buf_upper_bound());
+  void set_absolute(void* dst, int value, extent_len_t len) {
+    assert(is_safe(dst, len));
+    std::memset(dst, value, len);
+  }
+  void set_relative(extent_len_t dst_offset, int value, extent_len_t len) {
+    auto dst = get_write() + dst_offset;
+    set_absolute(dst, value, len);
   }
 
-  const char* get_read() const;
-  char* get_write();
-  extent_len_t get_length() const;
-  laddr_t get_laddr() const;
+  template <typename T>
+  void validate_inplace_update(const T& updated) {
+    assert(is_safe(&updated, sizeof(T)));
+  }
+
+  const char* get_read() const { return p_start; }
+  char* get_write() { return p_start; }
+  extent_len_t get_length() const { return length; }
+  node_offset_t get_node_offset() const { return node_offset; }
+
+  NodeExtentMutable get_mutable_absolute(const void* dst, node_offset_t len) const {
+    assert(node_offset == 0);
+    assert(is_safe(dst, len));
+    assert((const char*)dst != get_read());
+    auto ret = *this;
+    node_offset_t offset = (const char*)dst - get_read();
+    ret.p_start += offset;
+    ret.length = len;
+    ret.node_offset = offset;
+    return ret;
+  }
+  NodeExtentMutable get_mutable_relative(
+      node_offset_t offset, node_offset_t len) const {
+    return get_mutable_absolute(get_read() + offset, len);
+  }
 
  private:
-  explicit NodeExtentMutable(NodeExtent&);
-  const char* buf_upper_bound() const;
+  NodeExtentMutable(char* p_start, extent_len_t length)
+    : p_start{p_start}, length{length} {}
+  bool is_safe(const void* src, extent_len_t len) const {
+    return ((const char*)src >= p_start) &&
+           ((const char*)src + len <= p_start + length);
+  }
 
-  NodeExtent& extent;
+  char* p_start;
+  extent_len_t length;
+  node_offset_t node_offset = 0;
 
   friend class NodeExtent;
 };

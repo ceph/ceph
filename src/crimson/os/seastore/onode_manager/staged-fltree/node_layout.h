@@ -47,6 +47,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   using marker_t = typename node_marker_type<NODE_TYPE>::type;
   using node_stage_t = typename extent_t::node_stage_t;
   using position_t = typename extent_t::position_t;
+  using value_input_t = typename extent_t::value_input_t;
   using value_t = typename extent_t::value_t;
   static constexpr auto FIELD_TYPE = extent_t::FIELD_TYPE;
   static constexpr auto KEY_TYPE = insert_key_type<NODE_TYPE>::type;
@@ -281,7 +282,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   const value_t* insert(
-      const full_key_t<KEY_TYPE>& key, const value_t& value,
+      const full_key_t<KEY_TYPE>& key, const value_input_t& value,
       search_position_t& insert_pos, match_stage_t& insert_stage,
       node_offset_t& insert_size) override {
     logger().debug("OTree::Layout::Insert: begin at "
@@ -309,7 +310,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 
   std::tuple<search_position_t, bool, const value_t*> split_insert(
       NodeExtentMutable& right_mut, NodeImpl& right_impl,
-      const full_key_t<KEY_TYPE>& key, const value_t& value,
+      const full_key_t<KEY_TYPE>& key, const value_input_t& value,
       search_position_t& _insert_pos, match_stage_t& insert_stage,
       node_offset_t& insert_size) override {
     logger().info("OTree::Layout::Split: begin at "
@@ -390,7 +391,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
        * - I > 2 + 2/S (S > 1)
        *
        * Now back to NODE_BLOCK_SIZE calculation, if we have limits of at most
-       * X KiB ns-oid string and Y KiB of onode_t to store in this BTree, then:
+       * X KiB ns-oid string and Y KiB of value to store in this BTree, then:
        * - largest_insert_size ~= X+Y KiB
        * - 1/S == X/(X+Y)
        * - I > (4X+2Y)/(X+Y)
@@ -536,17 +537,16 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const key_view_t& key, const laddr_t& value,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      auto packed_value = laddr_packed_t{value};
       auto& node_stage = extent.read();
       match_stage_t insert_stage;
       node_offset_t insert_size;
       if (unlikely(!node_stage.keys())) {
         assert(insert_pos.is_end());
         insert_stage = STAGE;
-        insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, packed_value);
+        insert_size = STAGE_T::template insert_size<KeyT::VIEW>(key, value);
       } else {
         std::tie(insert_stage, insert_size) = STAGE_T::evaluate_insert(
-            node_stage, key, packed_value, cast_down<STAGE>(insert_pos), false);
+            node_stage, key, value, cast_down<STAGE>(insert_pos), false);
       }
       return {insert_stage, insert_size};
     } else {
@@ -558,7 +558,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
    * LeafNodeImpl
    */
   void get_largest_slot(search_position_t& pos,
-                        key_view_t& index_key, const onode_t** pp_value) const override {
+                        key_view_t& index_key,
+                        const value_header_t** pp_value) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
       STAGE_T::template lookup_largest_slot<true, true, true>(
           extent.read(), &cast_down_fill_0<STAGE>(pos), &index_key, pp_value);
@@ -568,7 +569,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   }
 
   std::tuple<match_stage_t, node_offset_t> evaluate_insert(
-      const key_hobj_t& key, const onode_t& value,
+      const key_hobj_t& key, const value_config_t& value,
       const MatchHistory& history, match_stat_t mstat,
       search_position_t& insert_pos) const override {
     if constexpr (NODE_TYPE == node_type_t::LEAF) {
@@ -582,6 +583,11 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     } else {
       ceph_abort("impossible path");
     }
+  }
+
+  std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+  prepare_mutate_value_payload(context_t c) {
+    return extent.prepare_mutate_value_payload(c);
   }
 
  private:

@@ -114,12 +114,12 @@ class InternalNodeImpl : public NodeImpl {
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const laddr_packed_t* insert(
-      const key_view_t&, const laddr_packed_t&, search_position_t&, match_stage_t&, node_offset_t&) {
+      const key_view_t&, const laddr_t&, search_position_t&, match_stage_t&, node_offset_t&) {
     ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual std::tuple<search_position_t, bool, const laddr_packed_t*> split_insert(
-      NodeExtentMutable&, NodeImpl&, const key_view_t&, const laddr_packed_t&,
+      NodeExtentMutable&, NodeImpl&, const key_view_t&, const laddr_t&,
       search_position_t&, match_stage_t&, node_offset_t&) {
     ceph_abort("impossible path");
   }
@@ -153,7 +153,7 @@ class LeafNodeImpl : public NodeImpl {
   virtual ~LeafNodeImpl() = default;
 
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
-  virtual const onode_t* get_p_value(
+  virtual const value_header_t* get_p_value(
       const search_position_t&,
       key_view_t* = nullptr, leaf_marker_t={}) const {
     ceph_abort("impossible path");
@@ -165,22 +165,26 @@ class LeafNodeImpl : public NodeImpl {
     ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
-  virtual const onode_t* insert(
-      const key_hobj_t&, const onode_t&, search_position_t&, match_stage_t&, node_offset_t&) {
+  virtual const value_header_t* insert(
+      const key_hobj_t&, const value_config_t&, search_position_t&, match_stage_t&, node_offset_t&) {
     ceph_abort("impossible path");
   }
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
-  virtual std::tuple<search_position_t, bool, const onode_t*> split_insert(
-      NodeExtentMutable&, NodeImpl&, const key_hobj_t&, const onode_t&,
+  virtual std::tuple<search_position_t, bool, const value_header_t*> split_insert(
+      NodeExtentMutable&, NodeImpl&, const key_hobj_t&, const value_config_t&,
       search_position_t&, match_stage_t&, node_offset_t&) {
     ceph_abort("impossible path");
   }
 
   virtual void get_largest_slot(
-      search_position_t&, key_view_t&, const onode_t**) const = 0;
+      search_position_t&, key_view_t&, const value_header_t**) const = 0;
+
   virtual std::tuple<match_stage_t, node_offset_t> evaluate_insert(
-      const key_hobj_t&, const onode_t&,
+      const key_hobj_t&, const value_config_t&,
       const MatchHistory&, match_stat_t, search_position_t&) const = 0;
+
+  virtual std::pair<NodeExtentMutable&, ValueDeltaRecorder*>
+  prepare_mutate_value_payload(context_t) = 0;
 
   struct fresh_impl_t {
     LeafNodeImplURef impl;

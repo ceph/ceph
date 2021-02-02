@@ -9,7 +9,8 @@
 
 namespace crimson::os::seastore::onode {
 
-std::pair<node_type_t, field_type_t> NodeExtent::get_types() const {
+std::pair<node_type_t, field_type_t> NodeExtent::get_types() const
+{
   const auto header = reinterpret_cast<const node_header_t*>(get_read());
   auto node_type = header->get_node_type();
   auto field_type = header->get_field_type();
@@ -19,7 +20,8 @@ std::pair<node_type_t, field_type_t> NodeExtent::get_types() const {
   return {node_type, *field_type};
 }
 
-NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync) {
+NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync)
+{
   if (is_sync) {
     return NodeExtentManagerURef(new DummyNodeExtentManager<true>());
   } else {
@@ -28,7 +30,8 @@ NodeExtentManagerURef NodeExtentManager::create_dummy(bool is_sync) {
 }
 
 NodeExtentManagerURef NodeExtentManager::create_seastore(
-    TransactionManager& tm, laddr_t min_laddr) {
+    TransactionManager& tm, laddr_t min_laddr)
+{
   return NodeExtentManagerURef(new SeastoreNodeExtentManager(tm, min_laddr));
 }
 

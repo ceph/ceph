@@ -23,6 +23,7 @@ struct NodeLayoutReplayableT {
   using node_stage_t = node_extent_t<FieldType, NODE_TYPE>;
   using position_t = typename STAGE_T::position_t;
   using StagedIterator = typename STAGE_T::StagedIterator;
+  using value_input_t = value_input_type_t<NODE_TYPE>;
   using value_t = value_type_t<NODE_TYPE>;
   static constexpr auto FIELD_TYPE = FieldType::FIELD_TYPE;
 
@@ -31,7 +32,7 @@ struct NodeLayoutReplayableT {
       NodeExtentMutable& mut,
       const node_stage_t& node_stage,
       const full_key_t<KT>& key,
-      const value_t& value,
+      const value_input_t& value,
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
@@ -54,7 +55,7 @@ struct NodeLayoutReplayableT {
       const node_stage_t& node_stage,
       StagedIterator& split_at,
       const full_key_t<KT>& key,
-      const value_t& value,
+      const value_input_t& value,
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
