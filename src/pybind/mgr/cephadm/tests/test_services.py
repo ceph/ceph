@@ -117,8 +117,8 @@ class TestCephadmService:
         assert "client.crash.host" == \
             cephadm_services["crash"].get_auth_entity("id1", "host")
         with pytest.raises(OrchestratorError):
-            t = cephadm_services["crash"].get_auth_entity("id1", "")
-            t = cephadm_services["crash"].get_auth_entity("id1")
+            cephadm_services["crash"].get_auth_entity("id1", "")
+            cephadm_services["crash"].get_auth_entity("id1")
 
         assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "host")
         assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "")

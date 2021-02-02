@@ -905,7 +905,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                              error_ok=True, no_fsid=True)
             if code:
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
-        except OrchestratorError as e:
+        except OrchestratorError:
             self.log.exception(f"check-host failed for '{host}'")
             return 1, '', ('check-host failed:\n'
                            + f"Host '{host}' not found. Use 'ceph orch host ls' to see all managed hosts.")
