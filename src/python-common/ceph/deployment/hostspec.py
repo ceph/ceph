@@ -31,7 +31,7 @@ class HostSpec(object):
 
         self.offline = offline
 
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self, omit_offline: bool = False) -> Dict[str, Any]:
         ret: Dict[str, Any] = {
             'hostname': self.hostname,
             'addr': self.addr,
@@ -39,7 +39,7 @@ class HostSpec(object):
         }
         if self.maintenance:
             ret['maintenance'] = self.maintenance,
-        if self.offline:
+        if not omit_offline and self.offline:
             ret['offline'] = self.offline,
         return ret
 
