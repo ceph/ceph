@@ -245,26 +245,3 @@ class TrashPurgeScheduleHandler:
                     })
         return 0, json.dumps({'scheduled' : scheduled}, indent=4,
                              sort_keys=True), ""
-
-    def handle_command(self, inbuf, prefix, cmd):
-        level_spec_name = cmd.get('level_spec', "")
-
-        try:
-            level_spec = LevelSpec.from_name(self, level_spec_name,
-                                             allow_image_level=False)
-        except ValueError as e:
-            return -errno.EINVAL, '', "Invalid level spec {}: {}".format(
-                level_spec_name, e)
-
-        if prefix == 'add':
-            return self.add_schedule(level_spec, cmd['interval'],
-                                     cmd.get('start_time'))
-        elif prefix == 'remove':
-            return self.remove_schedule(level_spec, cmd.get('interval'),
-                                        cmd.get('start_time'))
-        elif prefix == 'list':
-            return self.list(level_spec)
-        elif prefix == 'status':
-            return self.status(level_spec)
-
-        raise NotImplementedError(cmd['prefix'])

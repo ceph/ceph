@@ -82,7 +82,7 @@ class LevelSpec:
         return LevelSpec(name, id, str(pool_id), namespace, None)
 
     @classmethod
-    def from_name(cls, handler, name, namespace_validator=None,
+    def from_name(cls, module, name, namespace_validator=None,
                   image_validator=None, allow_image_level=True):
         # parse names like:
         # '', 'rbd/', 'rbd/ns/', 'rbd//image', 'rbd/image', 'rbd/ns/image'
@@ -102,16 +102,16 @@ class LevelSpec:
         if match.group(1):
             pool_name = match.group(1)
             try:
-                pool_id = handler.module.rados.pool_lookup(pool_name)
+                pool_id = module.rados.pool_lookup(pool_name)
                 if pool_id is None:
                     raise ValueError("pool {} does not exist".format(pool_name))
-                if pool_id not in get_rbd_pools(handler.module):
+                if pool_id not in get_rbd_pools(module):
                     raise ValueError("{} is not an RBD pool".format(pool_name))
                 pool_id = str(pool_id)
                 id += pool_id
                 if match.group(2) is not None or match.group(3):
                     id += "/"
-                    with handler.module.rados.open_ioctx(pool_name) as ioctx:
+                    with module.rados.open_ioctx(pool_name) as ioctx:
                         namespace = match.group(2) or ""
                         if namespace:
                             namespaces = rbd.RBD().namespace_list(ioctx)
