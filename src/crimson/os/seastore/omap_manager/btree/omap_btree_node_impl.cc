@@ -38,10 +38,9 @@ std::ostream &OMapInnerNode::print_detail_l(std::ostream &out) const
 
 using dec_ref_ertr = OMapInnerNode::base_ertr;
 using dec_ref_ret = dec_ref_ertr::future<>;
-template <typename... T>
-dec_ref_ret dec_ref(omap_context_t oc, T&&... addr) {
-  return oc.tm.dec_ref(oc.t, std::forward<T>(addr)...
-  ).handle_error(
+template <typename T>
+dec_ref_ret dec_ref(omap_context_t oc, T&& addr) {
+  return oc.tm.dec_ref(oc.t, std::forward<T>(addr)).handle_error(
     dec_ref_ertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error in OMapInnerNode helper dec_ref"
