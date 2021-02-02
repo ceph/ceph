@@ -30,6 +30,7 @@ namespace ceph::os {
 
 namespace crimson::osd {
   class ShardServices;
+  class PG;
 }
 
 class PGBackend
@@ -207,6 +208,9 @@ protected:
   crimson::os::FuturizedStore* store;
   bool stopping = false;
   std::optional<peering_info_t> peering;
+  virtual seastar::future<> request_committed(
+    const osd_reqid_t& reqid,
+    const eversion_t& at_version) = 0;
 public:
   struct loaded_object_md_t {
     ObjectState os;
@@ -232,4 +236,5 @@ private:
 		      epoch_t min_epoch, epoch_t max_epoch,
 		      std::vector<pg_log_entry_t>&& log_entries) = 0;
   friend class ReplicatedRecoveryBackend;
+  friend class ::crimson::osd::PG;
 };

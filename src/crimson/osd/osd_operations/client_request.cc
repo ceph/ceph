@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #include <seastar/core/future.hh>
 
@@ -122,14 +122,26 @@ seastar::future<> ClientRequest::process_op(Ref<PG> &pg)
     [this, pg]() mutable {
     return do_recover_missing(pg);
   }).then([this, pg]() mutable {
-    return with_blocking_future(handle.enter(pp(*pg).get_obc));
-  }).then([this, pg]() mutable -> PG::load_obc_ertr::future<> {
-    op_info.set_from_op(&*m, *pg->get_osdmap());
-    return pg->with_locked_obc(m, op_info, this, [this, pg](auto obc) mutable {
-      return with_blocking_future(handle.enter(pp(*pg).process)).then(
-	[this, pg, obc]() mutable {
-        return do_process(pg, obc);
-      });
+    return pg->already_complete(m->get_reqid()).then_unpack(
+      [this, pg](bool completed, int ret) mutable
+      -> PG::load_obc_ertr::future<> {
+      if (completed) {
+        auto reply = make_message<MOSDOpReply>(
+          m.get(), ret, pg->get_osdmap_epoch(),
+          CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
+        return conn->send(std::move(reply));
+      } else {
+        return with_blocking_future(handle.enter(pp(*pg).get_obc)).then(
+          [this, pg]() mutable -> PG::load_obc_ertr::future<> {
+          op_info.set_from_op(&*m, *pg->get_osdmap());
+          return pg->with_locked_obc(m, op_info, this, [this, pg](auto obc) mutable {
+            return with_blocking_future(handle.enter(pp(*pg).process)).then(
+              [this, pg, obc]() mutable {
+              return do_process(pg, obc);
+            });
+          });
+        });
+      }
     });
   }).safe_then([pg=std::move(pg)] {
     return seastar::now();

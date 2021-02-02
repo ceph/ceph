@@ -1122,4 +1122,22 @@ bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
   return false;
 }
 
+seastar::future<std::tuple<bool, int>>
+PG::already_complete(const osd_reqid_t& reqid)
+{
+  eversion_t version;
+  version_t user_version;
+  int ret;
+  std::vector<pg_log_op_return_item_t> op_returns;
+
+  if (peering_state.get_pg_log().get_log().get_request(
+	reqid, &version, &user_version, &ret, &op_returns)) {
+    return backend->request_committed(reqid, version).then([ret] {
+      return seastar::make_ready_future<std::tuple<bool, int>>(true, ret);
+    });
+  } else {
+    return seastar::make_ready_future<std::tuple<bool, int>>(false, 0);
+  }
+}
+
 }
