@@ -218,6 +218,7 @@ class HostCache():
         self.osdspec_last_applied = {} # type: Dict[str, Dict[str, datetime.datetime]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
+        self.last_device_change = {}   # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
         self.osdspec_previews_refresh_queue = []  # type: List[str]
@@ -245,6 +246,8 @@ class HostCache():
                     self.last_device_update[host] = str_to_datetime(j['last_device_update'])
                 else:
                     self.device_refresh_queue.append(host)
+                if 'last_device_change' in j:
+                    self.last_device_change[host] = str_to_datetime(j['last_device_change'])
                 # for services, we ignore the persisted last_*_update
                 # and always trigger a new scrape on mgr restart.
                 self.daemon_refresh_queue.append(host)
@@ -297,11 +300,28 @@ class HostCache():
         self.facts[host] = facts
         self.last_facts_update[host] = datetime.datetime.utcnow()
 
+    def devices_changed(self, host: str, b: List[inventory.Device]) -> bool:
+        a = self.devices[host]
+        if len(a) != len(b):
+            return True
+        aj = {d.path: d.to_json() for d in a}
+        bj = {d.path: d.to_json() for d in b}
+        if aj != bj:
+            self.mgr.log.info("Detected new or changed devices on %s" % host)
+            return True
+        return False
+
     def update_host_devices_networks(self, host, dls, nets):
         # type: (str, List[inventory.Device], Dict[str,List[str]]) -> None
+        if (
+                host not in self.devices
+                or host not in self.last_device_change
+                or self.devices_changed(host, dls)
+        ):
+            self.last_device_change[host] = datetime_now()
+        self.last_device_update[host] = datetime_now()
         self.devices[host] = dls
         self.networks[host] = nets
-        self.last_device_update[host] = datetime_now()
 
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.daemon_config_deps[host][name] = {
@@ -362,6 +382,8 @@ class HostCache():
             j['last_daemon_update'] = datetime_to_str(self.last_daemon_update[host])
         if host in self.last_device_update:
             j['last_device_update'] = datetime_to_str(self.last_device_update[host])
+        if host in self.last_device_change:
+            j['last_device_change'] = datetime_to_str(self.last_device_change[host])
         if host in self.daemons:
             for name, dd in self.daemons[host].items():
                 j['daemons'][name] = dd.to_json()
@@ -414,6 +436,8 @@ class HostCache():
             del self.last_daemon_update[host]
         if host in self.last_device_update:
             del self.last_device_update[host]
+        if host in self.last_device_change:
+            del self.last_device_change[host]
         if host in self.daemon_config_deps:
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:
