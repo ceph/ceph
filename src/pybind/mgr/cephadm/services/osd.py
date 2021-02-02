@@ -13,6 +13,7 @@ from datetime import datetime
 import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.utils import forall_hosts
+from ceph.utils import datetime_now
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
@@ -36,6 +37,12 @@ class OSDService(CephService):
 
         @forall_hosts
         def create_from_spec_one(host: str, drive_selection: DriveSelection) -> Optional[str]:
+            # skip this host if there has been no change in inventory
+            if not self.mgr.cache.osdspec_needs_apply(host, drive_group):
+                self.mgr.log.debug("skipping apply of %s on %s (no change)" % (
+                    host, drive_group))
+                return None
+
             cmd = self.driveselection_to_ceph_volume(drive_selection,
                                                      osd_id_claims.get(host, []))
             if not cmd:
