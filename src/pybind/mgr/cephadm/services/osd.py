@@ -42,17 +42,28 @@ class OSDService(CephService):
                 logger.debug("No data_devices, skipping DriveGroup: {}".format(
                     drive_group.service_id))
                 return None
-            logger.info('Applying drive group %s on host %s...' % (drive_group.service_id, host))
+
+            logger.info('Applying drive group %s on host %s...' % (
+                drive_group.service_id, host
+            ))
+            start_ts = datetime_now()
             env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = self.create_single_host(
-                host, cmd, replace_osd_ids=osd_id_claims.get(host, []), env_vars=env_vars
+                drive_group, host, cmd,
+                replace_osd_ids=osd_id_claims.get(host, []), env_vars=env_vars
             )
+            self.mgr.cache.update_osdspec_last_applied(
+                host, drive_group.service_name(), start_ts
+            )
+            self.mgr.cache.save_host(host)
             return ret_msg
 
         ret = create_from_spec_one(self.prepare_drivegroup(drive_group))
         return ", ".join(filter(None, ret))
 
-    def create_single_host(self, host: str, cmd: str, replace_osd_ids: List[str],
+    def create_single_host(self,
+                           drive_group: DriveGroupSpec,
+                           host: str, cmd: str, replace_osd_ids: List[str],
                            env_vars: Optional[List[str]] = None) -> str:
         out, err, code = self._run_ceph_volume_command(host, cmd, env_vars=env_vars)
 
