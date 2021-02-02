@@ -73,7 +73,6 @@ class HA_RGWService(CephService):
 
     def haproxy_generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         daemon_id = daemon_spec.daemon_id
-        host = daemon_spec.host
 
         service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         # if no service spec, return empty config

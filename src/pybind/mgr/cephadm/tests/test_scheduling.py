@@ -561,9 +561,9 @@ def test_node_assignment3(service_type, placement, hosts,
     ])
 def test_bad_placements(placement):
     try:
-        s = PlacementSpec.from_string(placement.split(' '))
+        PlacementSpec.from_string(placement.split(' '))
         assert False
-    except ServiceSpecValidationError as e:
+    except ServiceSpecValidationError:
         pass
 
 

@@ -264,7 +264,6 @@ class CephadmService(metaclass=ABCMeta):
         def plural(count: int) -> str:
             return 'daemon' if count == 1 else 'daemons'
 
-        daemon_count = "only" if number_of_running_daemons == 1 else number_of_running_daemons
         left_count = "no" if num_daemons_left == 0 else num_daemons_left
 
         if alert:
@@ -388,7 +387,7 @@ class MonService(CephService):
         Create a new monitor on the given host.
         """
         assert self.TYPE == daemon_spec.daemon_type
-        name, host, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
+        name, _, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
 
         # get mon. key
         ret, keyring, err = self.mgr.check_mon_command({
@@ -439,7 +438,7 @@ class MonService(CephService):
         })
         try:
             j = json.loads(out)
-        except Exception as e:
+        except Exception:
             raise OrchestratorError('failed to parse quorum status')
 
         mons = [m['name'] for m in j['monmap']['mons']]
@@ -479,7 +478,7 @@ class MgrService(CephService):
         Create a new manager instance on a host.
         """
         assert self.TYPE == daemon_spec.daemon_type
-        mgr_id, host = daemon_spec.daemon_id, daemon_spec.host
+        mgr_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
@@ -497,7 +496,6 @@ class MgrService(CephService):
         # If this is the case then the dashboard port opened will be only the used
         # as default.
         ports = []
-        config_ports = ''
         ret, mgr_services, err = self.mgr.check_mon_command({
             'prefix': 'mgr services',
         })
@@ -583,7 +581,7 @@ class MdsService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        mds_id, host = daemon_spec.daemon_id, daemon_spec.host
+        mds_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
@@ -688,7 +686,7 @@ class RgwService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
+        rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         keyring = self.get_keyring(rgw_id)
 
@@ -730,7 +728,7 @@ class RgwService(CephService):
             try:
                 j = json.loads(out)
                 return j.get('realms', [])
-            except Exception as e:
+            except Exception:
                 raise OrchestratorError('failed to parse realm info')
 
         def create_realm() -> None:
@@ -740,7 +738,7 @@ class RgwService(CephService):
                    'realm', 'create',
                    '--rgw-realm=%s' % spec.rgw_realm,
                    '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
             self.mgr.log.info('created realm: %s' % spec.rgw_realm)
 
         def get_zonegroups() -> List[str]:
@@ -756,7 +754,7 @@ class RgwService(CephService):
             try:
                 j = json.loads(out)
                 return j.get('zonegroups', [])
-            except Exception as e:
+            except Exception:
                 raise OrchestratorError('failed to parse zonegroup info')
 
         def create_zonegroup() -> None:
@@ -766,7 +764,7 @@ class RgwService(CephService):
                    'zonegroup', 'create',
                    '--rgw-zonegroup=default',
                    '--master', '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
             self.mgr.log.info('created zonegroup: default')
 
         def create_zonegroup_if_required() -> None:
@@ -787,7 +785,7 @@ class RgwService(CephService):
             try:
                 j = json.loads(out)
                 return j.get('zones', [])
-            except Exception as e:
+            except Exception:
                 raise OrchestratorError('failed to parse zone info')
 
         def create_zone() -> None:
@@ -798,7 +796,7 @@ class RgwService(CephService):
                    '--rgw-zonegroup=default',
                    '--rgw-zone=%s' % spec.rgw_zone,
                    '--master', '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
             self.mgr.log.info('created zone: %s' % spec.rgw_zone)
 
         changes = False
@@ -821,7 +819,7 @@ class RgwService(CephService):
                    'period', 'update',
                    '--rgw-realm=%s' % spec.rgw_realm,
                    '--commit']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
             self.mgr.log.info('updated period')
 
 
@@ -830,7 +828,7 @@ class RbdMirrorService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
+        daemon_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',

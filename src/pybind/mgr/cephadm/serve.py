@@ -108,7 +108,7 @@ class CephadmServe:
             )
         )
         self.log.debug('Sleeping for %d seconds', sleep_interval)
-        ret = self.mgr.event.wait(sleep_interval)
+        self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
 
     def _update_paused_health(self) -> None:
