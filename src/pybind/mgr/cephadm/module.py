@@ -1897,7 +1897,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
         """
-        self.log.debug('_add_daemon %s spec %s' % (daemon_type, spec.placement))
+        self.log.debug('_add_daemon %s spec %s' % (daemon_type.value, spec.placement))
         if not spec.placement.hosts:
             raise OrchestratorError('must specify host(s) to deploy on')
         count = spec.placement.count or len(spec.placement.hosts)

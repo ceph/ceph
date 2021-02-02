@@ -1,7 +1,8 @@
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpecValidationError, ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpecValidationError, ServiceSpec, PlacementSpec, \
+    ServiceType
 
 try:
     from typing import Optional, List, Dict, Any, Union
@@ -162,13 +163,13 @@ class DriveGroupSpec(ServiceSpec):
                  block_db_size=None,  # type: Union[int, str, None]
                  block_wal_size=None,  # type: Union[int, str, None]
                  journal_size=None,  # type: Union[int, str, None]
-                 service_type=None,  # type: Optional[str]
+                 service_type=None,  # type: Optional[ServiceType]
                  unmanaged=False,  # type: bool
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
                  ):
-        assert service_type is None or service_type == 'osd'
-        super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
+        assert service_type is None or service_type == ServiceType.osd
+        super(DriveGroupSpec, self).__init__(ServiceType.osd, service_id=service_id,
                                              placement=placement,
                                              unmanaged=unmanaged,
                                              preview_only=preview_only)
@@ -244,7 +245,7 @@ class DriveGroupSpec(ServiceSpec):
         except KeyError:
             raise DriveGroupValidationError('OSD spec needs a `placement` key.')
 
-        args['service_type'] = json_drive_group.pop('service_type', 'osd')
+        args['service_type'] = ServiceType(json_drive_group.pop('service_type', 'osd'))
 
         # service_id was not required in early octopus.
         args['service_id'] = json_drive_group.pop('service_id', '')

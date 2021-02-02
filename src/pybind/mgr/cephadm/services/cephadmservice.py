@@ -70,7 +70,7 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
         self.ports:  List[int] = ports or []
 
     def name(self) -> str:
-        return '%s.%s' % (self.daemon_type, self.daemon_id)
+        return '%s.%s' % (self.daemon_type.value, self.daemon_id)
 
     def config_get_files(self) -> Dict[str, Any]:
         files = self.extra_files

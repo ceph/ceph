@@ -593,7 +593,7 @@ class CephadmServe:
             assert dd.hostname is not None
             assert dd.daemon_type is not None
             assert dd.daemon_id is not None
-            if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
+            if not spec and dd.daemon_type.value not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
@@ -604,7 +604,7 @@ class CephadmServe:
                 continue
 
             # These daemon types require additional configs after creation
-            if dd.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
+            if dd.daemon_type.value in ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'nfs']:
                 daemons_post[dd.daemon_type].append(dd)
 
             if self.mgr.cephadm_services[daemon_type_to_service(dd.daemon_type)].get_active_daemon(
@@ -631,11 +631,11 @@ class CephadmServe:
                 action = 'reconfig'
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
-                    dd.daemon_type in CEPH_TYPES:
+                    dd.daemon_type.value in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (monmap changed)...' % dd.name())
                 action = 'reconfig'
             elif self.mgr.extra_ceph_conf_is_newer(last_config) and \
-                    dd.daemon_type in CEPH_TYPES:
+                    dd.daemon_type.value in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
                 action = 'reconfig'
             if action:
@@ -719,7 +719,7 @@ class CephadmServe:
             start_time = datetime_now()
             ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
 
-            if daemon_spec.daemon_type == 'container':
+            if daemon_spec.daemon_type == DaemonType.container:
                 spec: Optional[CustomContainerSpec] = daemon_spec.spec
                 if spec is None:
                     # Exit here immediately because the required service
@@ -736,7 +736,7 @@ class CephadmServe:
                 if spec.ports:
                     ports.extend(spec.ports)
 
-            if daemon_spec.daemon_type == 'cephadm-exporter':
+            if daemon_spec.daemon_type == DaemonType.cephadm_exporter:
                 if not reconfig:
                     assert daemon_spec.host
                     deploy_ok = self._deploy_cephadm_binary(daemon_spec.host)
@@ -745,12 +745,12 @@ class CephadmServe:
                         self.log.warning(msg)
                         return msg
 
-            if daemon_spec.daemon_type == 'haproxy':
+            if daemon_spec.daemon_type == DaemonType.haproxy:
                 haspec = cast(HA_RGWSpec, daemon_spec.spec)
                 if haspec.haproxy_container_image:
                     image = haspec.haproxy_container_image
 
-            if daemon_spec.daemon_type == 'keepalived':
+            if daemon_spec.daemon_type == DaemonType.keepalived:
                 haspec = cast(HA_RGWSpec, daemon_spec.spec)
                 if haspec.keepalived_container_image:
                     image = haspec.keepalived_container_image
@@ -765,7 +765,7 @@ class CephadmServe:
                 ])
 
             # osd deployments needs an --osd-uuid arg
-            if daemon_spec.daemon_type == 'osd':
+            if daemon_spec.daemon_type == DaemonType.osd:
                 if not osd_uuid_map:
                     osd_uuid_map = self.mgr.get_osd_uuid_map()
                 osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
@@ -805,7 +805,7 @@ class CephadmServe:
                 sd.status = 1
                 sd.status_desc = 'starting'
                 self.mgr.cache.add_daemon(daemon_spec.host, sd)
-                if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
+                if daemon_spec.daemon_type.value in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
                     self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
             self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
             self.mgr.cache.update_daemon_config_deps(

@@ -1327,7 +1327,7 @@ class DaemonDescription(object):
         self.is_active = is_active
 
     def name(self) -> str:
-        return '%s.%s' % (self.daemon_type, self.daemon_id)
+        return '%s.%s' % (self.daemon_type.value, self.daemon_id)
 
     def matches_service(self, service_name: Optional[str]) -> bool:
         assert self.daemon_id is not None
@@ -1339,7 +1339,7 @@ class DaemonDescription(object):
     def service_id(self) -> str:
         assert self.daemon_id is not None
         assert self.daemon_type is not None
-        if self.daemon_type == 'osd' and self.osdspec_affinity:
+        if self.daemon_type == DaemonType.osd and self.osdspec_affinity:
             return self.osdspec_affinity
 
         def _match() -> str:
