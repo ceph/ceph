@@ -3,10 +3,54 @@
 
 #include "osd_operation.h"
 #include "common/Formatter.h"
+#include "crimson/common/log.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
 
 namespace crimson::osd {
 
-void Operation::dump(ceph::Formatter* f)
+void OperationRegistry::dump_client_requests(ceph::Formatter* f) const
+{
+  const auto& client_registry =
+    registries[static_cast<int>(OperationTypeCode::client_request)];
+  for (const auto& op : client_registry) {
+    op.dump(f);
+  }
+}
+
+void OperationRegistry::dump_historic_client_requests(ceph::Formatter* f) const
+{
+  const auto& historic_client_registry =
+    registries[static_cast<int>(OperationTypeCode::historic_client_request)];
+  f->open_object_section("op_history");
+  f->dump_int("size", historic_client_registry.size());
+  // TODO: f->dump_int("duration", history_duration.load());
+  {
+    f->open_array_section("ops");
+    for (const auto& op : historic_client_registry) {
+      op.dump(f);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+
+void dump_event_default(const char name[],
+                        const utime_t& timestamp,
+                        ceph::Formatter* f)
+{
+  f->open_object_section("event");
+  f->dump_string("name", name);
+  f->dump_stream("initiated_at") << timestamp;
+  f->close_section();
+}
+
+void Operation::dump(ceph::Formatter* f) const
 {
   f->open_object_section("operation");
   f->dump_string("type", get_type_name());
@@ -21,10 +65,15 @@ void Operation::dump(ceph::Formatter* f)
     blocker->dump(f);
   }
   f->close_section();
+  f->open_array_section("events");
+  for (auto &blocker : blockers) {
+    blocker->dump(f);
+  }
+  f->close_section();
   f->close_section();
 }
 
-void Operation::dump_brief(ceph::Formatter* f)
+void Operation::dump_brief(ceph::Formatter* f) const
 {
   f->open_object_section("operation");
   f->dump_string("type", get_type_name());

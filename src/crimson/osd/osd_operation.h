@@ -16,6 +16,8 @@
 #include <seastar/core/lowres_clock.hh>
 
 #include "include/ceph_assert.h"
+#include "include/utime.h"
+#include "common/Clock.h"
 #include "crimson/osd/scheduler/scheduler.h"
 
 namespace ceph {
@@ -33,6 +35,7 @@ enum class OperationTypeCode {
   replicated_request,
   background_recovery,
   background_recovery_sub,
+  historic_client_request,
   last_op
 };
 
@@ -45,6 +48,7 @@ static constexpr const char* const OP_NAMES[] = {
   "replicated_request",
   "background_recovery",
   "background_recovery_sub",
+  "historic_client_request",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -64,6 +68,10 @@ class Blocker;
  * Provides an abstraction for registering and unregistering a blocker
  * for the duration of a future becoming available.
  */
+// TODO: make blocking_future a thin wrapper over seastar::future but
+// ONLY in the debug builds; for production this be nothing more than
+// alias. The idea is to verify types but without paying the price in
+// no production.
 template <typename Fut>
 class blocking_future_detail {
   friend class Operation;
@@ -117,6 +125,7 @@ make_exception_blocking_future(Exception&& e) {
  * Provides an interface for dumping diagnostic information about
  * why a particular op is not making progress.
  */
+// TODO: replace with TimedBlocker.
 class Blocker {
 public:
   template <typename T>
@@ -200,8 +209,8 @@ class Operation : public boost::intrusive_ref_counter<
     });
   }
 
-  void dump(ceph::Formatter *f);
-  void dump_brief(ceph::Formatter *f);
+  void dump(ceph::Formatter *f) const;
+  void dump_brief(ceph::Formatter *f) const;
   virtual ~Operation() = default;
 
  private:
@@ -233,11 +242,14 @@ using OperationRef = boost::intrusive_ptr<Operation>;
 
 std::ostream &operator<<(std::ostream &, const Operation &op);
 
+
+
 template <typename T>
 class OperationT : public Operation {
 public:
   static constexpr const char *type_name = OP_NAMES[static_cast<int>(T::type)];
   using IRef = boost::intrusive_ptr<T>;
+  using ICRef = boost::intrusive_ptr<const T>;
 
   OperationTypeCode get_type() const final {
     return T::type;
@@ -258,6 +270,7 @@ private:
  */
 class OperationRegistry {
   friend class Operation;
+  friend class HistoricBackend;
   using op_list_member_option = boost::intrusive::member_hook<
     Operation,
     registry_hook_t,
@@ -303,6 +316,9 @@ public:
     shutdown_timer.arm_periodic(std::chrono::milliseconds(100/*TODO: use option instead*/));
     return shutdown.get_future();
   }
+
+  void dump_client_requests(ceph::Formatter* f) const;
+  void dump_historic_client_requests(ceph::Formatter* f) const;
 };
 
 /**
@@ -372,6 +388,90 @@ private:
   void release_throttle();
 };
 
+// the main template. by default an operation has no extenral
+// event handler (the empty tuple). specializing the template
+// allows to define backends on per-operation-type manner.
+// NOTE: basically this could be a function but C++ disallows
+// differentiating return type among specializations.
+template <class T>
+struct EventBackendRegistry {
+  template <typename...> static constexpr bool always_false = false;
+
+  static std::tuple<> get_backends() {
+    static_assert(always_false<T>, "Registry specializarion not found");
+    return {};
+  }
+};
+
+template <class T>
+constexpr static auto EVENT_NAMES = "UnknownEvent";
+
+void dump_event_default(const char name[],
+                        const utime_t& timestamp,
+                        ceph::Formatter* f);
+
+template <class T>
+struct Event {
+  // IDEA 0: should this be ExternalBackend? Or ExtraBackend?
+  struct Backend {
+    virtual void handle(T&, const Operation&) = 0;
+  };
+
+  struct InternalBackend final : Backend {
+    utime_t timestamp;
+    void handle(T&, const Operation&) override {
+      timestamp = ceph_clock_now();
+    }
+  } internal_backend;
+
+  // QUESTION: how to convey get_registered_backends() and glue it
+  // with particular Operation? The `events` are supposed to vary.
+  // QUESTION: do we need to handle any other Operation than Client
+  // Request when it comes to Historic?
+  template <class U>
+  void trigger(U& op) {
+    internal_backend.handle(static_cast<T&>(*this), op);
+
+    std::apply([&op, this] (auto... backend) {
+      (..., backend.handle(static_cast<T&>(*this), op));
+    }, EventBackendRegistry<U>::get_backends());
+  }
+
+  void dump(ceph::Formatter* f) const {
+    dump_event_default(EVENT_NAMES<T>, internal_backend.timestamp, f);
+  }
+};
+
+
+struct EnqueuedEvent : Event<EnqueuedEvent> {
+};
+template <> constexpr auto EVENT_NAMES<EnqueuedEvent> = "EnqueuedEvent";
+
+struct ResponseEvent : Event<ResponseEvent> {
+};
+template <> constexpr auto EVENT_NAMES<ResponseEvent> = "ResponseEvent";
+
+
+// TODO: replace Blocker with TimedBlocker
+template <class T>
+struct TimedBlocker {
+  struct TimedPtr : Event<typename T::TimedPtr> {
+    T* blocker = nullptr;
+  };
+
+  // having a dedicated `blocking_future` enforces type safety but imposes
+  // extra moving (mempcy + a bunch of conditionals). The idea here is to
+  // alias `blocking_future<T>` to `seastar::future<T>` but only in production
+  // builds.
+  template <typename U>
+  decltype(auto) make_blocking_future2(TimedPtr& handle,
+                                      seastar::future<U> &&f) {
+    handle.blocker = static_cast<T*>(this);
+    return std::move(f);
+  }
+};
+
+
 /**
  * Ensures that at most one op may consider itself in the phase at a time.
  * Ops will see enter() unblock in the order in which they tried to enter
@@ -409,6 +509,10 @@ public:
      */
     blocking_future<> enter(OrderedPipelinePhase &phase);
 
+    template <class NewPhaseT>
+    seastar::future<> enter(NewPhaseT &new_phase,
+                            typename NewPhaseT::TimedPtr& new_timedref);
+
     /**
      * Releases the current phase if there is one.  Called in ~Handle().
      */
@@ -423,5 +527,83 @@ private:
   const char * name;
   seastar::shared_mutex mutex;
 };
+
+
+// TODO: this will be dropped after migrating phases.
+template <class T>
+struct OrderedPipelinePhaseT : public OrderedPipelinePhase,
+                               public TimedBlocker<T> {
+  OrderedPipelinePhaseT() : OrderedPipelinePhase(T::name) {}
+};
+
+template <class T>
+// TODO: class BlockingPhasedOperationT : public OperationT<T> {
+class BlockingOperationT : public OperationT<T> {
+  T* that() {
+    return static_cast<T*>(this);
+  }
+  const T* that() const {
+    return static_cast<const T*>(this);
+  }
+
+  // TODO: drop thr `2` after transitioning to `with_blocker<T>()`.
+  friend class ClientRequest;
+  OrderedPipelinePhase::Handle handle2;
+
+public:
+  using OperationT<T>::OperationT;
+
+  template <class EventT, class... Args>
+  void track_event(Args&&... args) {
+    // the idea is to have a visitor-like interface that allows to double
+    // dispatch (backend, blocker type)
+    std::get<EventT>(that()->blockers).trigger(*that(),
+                                               std::forward<Args>(args)...);
+  }
+
+  template <class BlockerT, class Func>
+  auto with_blocker(Func&& f) {
+    using HandleT = typename BlockerT::TimedPtr;
+    HandleT new_timedref;
+    // each blocker is also an event, so let's trigger its trackers now.
+    track_event<HandleT>();
+    if (auto fut = std::forward<Func>(f)(new_timedref); fut.available()) {
+      return fut;
+    } else {
+      assert(new_timedref.blocker);
+      auto& blocker = std::get<HandleT>(that()->blockers).blocker;
+      blocker = new_timedref.blocker;
+      return std::move(fut).then_wrapped([&blocker] (auto&& arg) {
+        blocker = nullptr;
+        return std::move(arg);
+      });
+    }
+  }
+
+  template <class PhaseT>
+  seastar::future<> enter_phase(PhaseT& new_phase) {
+    // yes, every phase is a blocker
+    return with_blocker<PhaseT>([this, &new_phase] (auto& new_timedref) {
+      return handle2.enter(new_phase, new_timedref);
+    });
+  }
+
+  void dump_detail(ceph::Formatter* f) const override {
+    std::apply([f] (auto... event) {
+      (..., event.dump(f));
+    }, that()->blockers);
+  }
+};
+
+template <class NewPhaseT>
+inline seastar::future<> OrderedPipelinePhase::Handle::enter(
+  NewPhaseT &new_phase,
+  typename NewPhaseT::TimedPtr& new_timedref)
+{
+  auto fut = new_phase.mutex.lock();
+  exit();
+  phase = &new_phase;
+  return new_phase.make_blocking_future2(new_timedref, std::move(fut));
+}
 
 }

@@ -9,6 +9,7 @@
 #include "crimson/osd/osd.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/osd_operation_tracking.h"
 
 namespace {
   seastar::logger& logger() {
@@ -62,7 +63,10 @@ seastar::future<> RepRequest::start()
   IRef ref = this;
   return with_blocking_future(handle.enter(cp().await_map))
     .then([this]() {
-      return with_blocking_future(osd.osdmap_gate.wait_for_map(req->get_min_epoch()));
+      using OSDMapBlocker = OSDMapGate<OSDMapGateType::OSD>::OSDMapBlocker;
+      return with_blocker<OSDMapBlocker>([this] (auto& bhandle) {
+        return osd.osdmap_gate.wait_for_map(bhandle, req->get_min_epoch());
+      });
     }).then([this](epoch_t epoch) {
       return with_blocking_future(handle.enter(cp().get_pg));
     }).then([this] {

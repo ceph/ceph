@@ -206,7 +206,7 @@ private:
   seastar::future<> start_asok_admin();
 
 public:
-  OSDMapGate osdmap_gate;
+  OSDMapGate<OSDMapGateType::OSD> osdmap_gate;
 
   ShardServices &get_shard_services() {
     return shard_services;

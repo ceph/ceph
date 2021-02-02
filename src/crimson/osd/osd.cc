@@ -94,7 +94,7 @@ OSD::OSD(int id, uint32_t nonce,
       update_stats();
     }},
     asok{seastar::make_lw_shared<crimson::admin::AdminSocket>()},
-    osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
+    osdmap_gate(std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
@@ -444,7 +444,12 @@ seastar::future<> OSD::start_asok_admin()
       asok->register_command(make_asok_hook<SeastarMetricsHook>()),
       // PG commands
       asok->register_command(make_asok_hook<pg::QueryCommand>(*this)),
-      asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)));
+      asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this)),
+      // ops commands
+      asok->register_command(make_asok_hook<DumpInFlightOpsHook>(
+        std::as_const(get_shard_services().registry))),
+      asok->register_command(make_asok_hook<DumpHistoricOpsHook>(
+        std::as_const(get_shard_services().registry))));
   }).then_unpack([] {
     return seastar::now();
   });
