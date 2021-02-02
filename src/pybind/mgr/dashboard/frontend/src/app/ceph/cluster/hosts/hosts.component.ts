@@ -11,6 +11,7 @@ import { FormModalComponent } from '../../../shared/components/form-modal/form-m
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -20,7 +21,6 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { JoinPipe } from '../../../shared/pipes/join.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { DepCheckerService } from '../../../shared/services/dep-checker.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -54,7 +54,6 @@ export class HostsComponent extends ListWithDetails implements OnInit {
     private authStorageService: AuthStorageService,
     private hostService: HostService,
     private cephShortVersionPipe: CephShortVersionPipe,
-    private joinPipe: JoinPipe,
     private i18n: I18n,
     private urlBuilder: URLBuilderService,
     private actionLabels: ActionLabelsI18n,
@@ -127,7 +126,10 @@ export class HostsComponent extends ListWithDetails implements OnInit {
         name: this.i18n('Labels'),
         prop: 'labels',
         flexGrow: 1,
-        pipe: this.joinPipe
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          class: 'badge-dark'
+        }
       },
       {
         name: this.i18n('Version'),
