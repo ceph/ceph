@@ -174,6 +174,9 @@ class SpecStore():
             service_name, specs))
         return specs
 
+    def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
+        return self.spec_created.get(spec.service_name())
+
 
 class HostCache():
     """
@@ -608,6 +611,20 @@ class HostCache():
             return True
         # already up to date:
         return False
+
+    def osdspec_needs_apply(self, host: str, spec: ServiceSpec) -> bool:
+        if (
+            host not in self.devices
+            or host not in self.last_device_change
+            or host not in self.last_device_update
+            or host not in self.osdspec_last_applied
+            or spec.service_name() not in self.osdspec_last_applied[host]
+        ):
+            return True
+        created = self.mgr.spec_store.get_created(spec)
+        if created and created > self.last_device_change[host]:
+            return True
+        return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host];
 
     def update_last_etc_ceph_ceph_conf(self, host: str) -> None:
         if not self.mgr.last_monmap:
