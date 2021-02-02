@@ -71,7 +71,9 @@ AlienStore::AlienStore(const std::string& path, const ConfigValues& values)
     logger().error("{}: unable to get nproc: {}", __func__, errno);
     cpu_id = -1;
   }
-  tp = std::make_unique<crimson::os::ThreadPool>(1, 128, cpu_id);
+  const auto num_threads =
+    cct->_conf.get_val<uint64_t>("crimson_alien_op_num_threads");
+  tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_id);
 }
 
 seastar::future<> AlienStore::start()
