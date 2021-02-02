@@ -2287,12 +2287,10 @@ public:
 
 class SetChunkOp : public TestOp {
 public:
-  string oid, oid_tgt, tgt_pool_name;
+  string oid, oid_tgt;
   ObjectDesc src_value, tgt_value;
   librados::ObjectReadOperation op;
-  librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
-  std::shared_ptr<int> in_use;
   int done;
   int r;
   uint64_t offset;
@@ -2304,11 +2302,10 @@ public:
 	     uint64_t offset,
 	     uint32_t length,
 	     const string &oid_tgt,
-	     const string &tgt_pool_name,
 	     uint64_t tgt_offset,
 	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      oid(oid), oid_tgt(oid_tgt), tgt_pool_name(tgt_pool_name),
+      oid(oid), oid_tgt(oid_tgt),
       comp(NULL), done(0), 
       r(0), offset(offset), length(length), 
       tgt_offset(tgt_offset)
@@ -2319,8 +2316,6 @@ public:
     std::lock_guard l{context->state_lock};
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
-
-    if (tgt_pool_name.empty()) ceph_abort();
 
     context->find_object(oid, &src_value); 
     context->find_object(oid_tgt, &tgt_value);
