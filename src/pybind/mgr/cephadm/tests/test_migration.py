@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, \
+    ServiceType
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
 from cephadm.inventory import SPEC_STORE_PREFIX
@@ -20,7 +21,7 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
 
             # emulate the old scheduler:
             c = cephadm_module.apply_rgw(
-                ServiceSpec('rgw', 'r.z', placement=PlacementSpec(host_pattern='*', count=2))
+                ServiceSpec(ServiceType.rgw, 'r.z', placement=PlacementSpec(host_pattern='*', count=2))
             )
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
@@ -41,7 +42,7 @@ def test_migrate_scheduler(cephadm_module: CephadmOrchestrator):
             assert out == {'host1', 'host2'}
 
             c = cephadm_module.apply_rgw(
-                ServiceSpec('rgw', 'r.z', placement=PlacementSpec(host_pattern='host1', count=2))
+                ServiceSpec(ServiceType.rgw, 'r.z', placement=PlacementSpec(host_pattern='host1', count=2))
             )
             assert wait(cephadm_module, c) == 'Scheduled rgw.r.z update...'
 
@@ -86,7 +87,7 @@ def test_migrate_service_id_mon_one(cephadm_module: CephadmOrchestrator):
 
         assert len(cephadm_module.spec_store.specs) == 1
         assert cephadm_module.spec_store.specs['mon'] == ServiceSpec(
-            service_type='mon',
+            service_type=ServiceType.mon,
             unmanaged=True,
             placement=PlacementSpec(hosts=['host1'])
         )
@@ -129,7 +130,7 @@ def test_migrate_service_id_mon_two(cephadm_module: CephadmOrchestrator):
 
         assert len(cephadm_module.spec_store.specs) == 1
         assert cephadm_module.spec_store.specs['mon'] == ServiceSpec(
-            service_type='mon',
+            service_type=ServiceType.mon,
             unmanaged=True,
             placement=PlacementSpec(count=5)
         )
