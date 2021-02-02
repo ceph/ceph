@@ -91,7 +91,7 @@ def enforce_repo_state(repo_url, dest_path, branch, commit=None, remove_on_error
     repo_reset = os.path.join(dest_path, '.fetched_and_reset')
     try:
         if not os.path.isdir(dest_path):
-            clone_repo(repo_url, dest_path, branch)
+            clone_repo(repo_url, dest_path, branch, shallow=commit is None)
         elif not commit and not is_fresh(sentinel):
             set_remote(dest_path, repo_url)
             fetch_branch(dest_path, branch)
@@ -127,7 +127,7 @@ def clone_repo(repo_url, dest_path, branch, shallow=True):
     if branch.startswith('refs/'):
         clone_repo_ref(repo_url, dest_path, branch)
         return
-    args = ['git', 'clone']
+    args = ['git', 'clone', '--single-branch']
     if shallow:
         args.extend(['--depth', '1'])
     args.extend(['--branch', branch, repo_url, dest_path])

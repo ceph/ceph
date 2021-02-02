@@ -10,6 +10,7 @@ from teuthology import setup_log_file, install_except_hook
 from teuthology import beanstalk
 from teuthology import report
 from teuthology.config import config as teuth_config
+from teuthology.exceptions import SkipJob
 from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
 from teuthology.lock.ops import block_and_lock_machines
 from teuthology.dispatcher import supervisor
@@ -117,11 +118,14 @@ def main(args):
         if job_config.get('stop_worker'):
             keep_running = False
 
-        job_config, teuth_bin_path = prep_job(
-            job_config,
-            log_file_path,
-            archive_dir,
-        )
+        try:
+            job_config, teuth_bin_path = prep_job(
+                job_config,
+                log_file_path,
+                archive_dir,
+            )
+        except SkipJob:
+            continue
 
         # lock machines but do not reimage them
         if 'roles' in job_config:

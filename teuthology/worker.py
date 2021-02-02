@@ -14,7 +14,7 @@ from teuthology import report
 from teuthology import safepath
 from teuthology.config import config as teuth_config
 from teuthology.config import set_config_attr
-from teuthology.exceptions import BranchNotFoundError, SkipJob, MaxWhileTries
+from teuthology.exceptions import BranchNotFoundError, CommitNotFoundError, SkipJob, MaxWhileTries
 from teuthology.kill import kill_job
 from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology, ls_remote, build_git_url
 
@@ -181,8 +181,8 @@ def prep_job(job_config, log_file_path, archive_dir):
             fetch_qa_suite(suite_branch, suite_sha1),
             job_config.get('suite_relpath', ''),
         ))
-    except BranchNotFoundError as exc:
-        log.exception("Branch not found; marking job as dead")
+    except (BranchNotFoundError, CommitNotFoundError) as exc:
+        log.exception("Requested version not found; marking job as dead")
         report.try_push_job_info(
             job_config,
             dict(status='dead', failure_reason=str(exc))
