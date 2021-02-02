@@ -213,6 +213,7 @@ class HostCache():
         self.facts = {}                # type: Dict[str, Dict[str, Any]]
         self.last_facts_update = {}    # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
+        self.osdspec_last_applied = {} # type: Dict[str, Dict[str, datetime.datetime]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = []  # type: List[str]
@@ -247,6 +248,7 @@ class HostCache():
                 self.daemon_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.osdspec_previews[host] = []
+                self.osdspec_last_applied[host] = {}
                 self.devices[host] = []
                 self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
@@ -257,6 +259,8 @@ class HostCache():
                     self.devices[host].append(inventory.Device.from_json(d))
                 self.networks[host] = j.get('networks', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
+                for name, ts in j.get('osdspec_last_applied', {}).items():
+                    self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
@@ -307,6 +311,10 @@ class HostCache():
         # type: (str) -> None
         self.last_host_check[host] = datetime_now()
 
+    def update_osdspec_last_applied(self, host, service_name, ts):
+        # type: (str, str, datetime.datetime) -> None
+        self.osdspec_last_applied[host][service_name] = ts
+
     def prime_empty_host(self, host):
         # type: (str) -> None
         """
@@ -316,6 +324,7 @@ class HostCache():
         self.devices[host] = []
         self.networks[host] = {}
         self.osdspec_previews[host] = []
+        self.osdspec_last_applied[host] = {}
         self.daemon_config_deps[host] = {}
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
@@ -344,6 +353,7 @@ class HostCache():
             'daemons': {},
             'devices': [],
             'osdspec_previews': [],
+            'osdspec_last_applied': {},
             'daemon_config_deps': {},
         }
         if host in self.last_daemon_update:
@@ -366,6 +376,9 @@ class HostCache():
                 }
         if host in self.osdspec_previews and self.osdspec_previews[host]:
             j['osdspec_previews'] = self.osdspec_previews[host]
+        if host in self.osdspec_last_applied:
+            for name, ts in self.osdspec_last_applied[host].items():
+                j['osdspec_last_applied'][name] = datetime_to_str(ts)
 
         if host in self.last_host_check:
             j['last_host_check'] = datetime_to_str(self.last_host_check[host])
@@ -389,6 +402,8 @@ class HostCache():
             del self.last_facts_update[host]
         if host in self.osdspec_previews:
             del self.osdspec_previews[host]
+        if host in self.osdspec_last_applied:
+            del self.osdspec_last_applied[host]
         if host in self.loading_osdspec_preview:
             self.loading_osdspec_preview.remove(host)
         if host in self.networks:
