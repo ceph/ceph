@@ -265,9 +265,9 @@ def dev_create(ctx, config):
         "task dev_create only supports a list or dictionary for configuration"
 
     if isinstance(config, dict):
-        role_images = config.items()
+        images = config.items()
     else:
-        role_images = [(role, None) for role in config]
+        images = [(role, None) for role in config]
 
     log.info('Creating rbd block devices...')
 
@@ -275,7 +275,7 @@ def dev_create(ctx, config):
     passphrase_file = '{tdir}/passphrase'.format(tdir=testdir)
     device_path = {}
 
-    for role, properties in role_images:
+    for role, properties in images:
         if properties is None:
             properties = {}
         name = properties.get('image_name', default_image_name(role))
@@ -284,13 +284,7 @@ def dev_create(ctx, config):
 
         if encryption_format == 'none':
             device_path[role] = '/dev/rbd/rbd/{image}'.format(image=name)
-            device_specific_args = [
-                run.Raw('&&'),
-                # wait for the symlink to be created by udev
-                'while', 'test', '!', '-e', device_path, run.Raw(';'), 'do',
-                'sleep', '1', run.Raw(';'),
-                'done',
-                ]
+            device_specific_args = []
         else:
             remote.run(
                 args=[
@@ -329,7 +323,7 @@ def dev_create(ctx, config):
     finally:
         log.info('Unmapping rbd devices...')
         remote.run(args=['rm', '-f', passphrase_file])
-        for role, properties in role_images:
+        for role, properties in images:
             if not device_path.get(role):
                 continue
 
@@ -339,15 +333,7 @@ def dev_create(ctx, config):
             (remote,) = ctx.cluster.only(role).remotes.keys()
 
             if encryption_format == 'none':
-                device_specific_args = [
-                    run.Raw('&&'),
-                    # wait for the symlink to be deleted by udev
-                    'while', 'test', '-e', device_path[role],
-                    run.Raw(';'),
-                    'do',
-                    'sleep', '1', run.Raw(';'),
-                    'done',
-                    ]
+                device_specific_args = []
             else:
                 device_specific_args = ['-t', 'nbd']
 
@@ -683,7 +669,7 @@ def task(ctx, config):
         for role, properties in norm_config.items():
             if properties is None:
                 properties = {}
-            role_images[role] = {'image_name': properties.get('image_name')}
+            role_images[role] = properties.get('image_name')
     else:
         role_images = norm_config
 
@@ -692,7 +678,7 @@ def task(ctx, config):
     with contextutil.nested(
         lambda: create_image(ctx=ctx, config=norm_config),
         lambda: modprobe(ctx=ctx, config=norm_config),
-        lambda: dev_create(ctx=ctx, config=role_images),
+        lambda: dev_create(ctx=ctx, config=norm_config),
         lambda: generic_mkfs(ctx=ctx, config=norm_config,
                 devname_rtn=rbd_devname_rtn),
         lambda: generic_mount(ctx=ctx, config=role_images,
