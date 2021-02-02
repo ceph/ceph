@@ -68,7 +68,7 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
                 if self:
                     return f(self, *arg)
                 return f(*arg)
-            except Exception as e:
+            except Exception:
                 logger.exception(f'executing {f.__name__}({args}) failed.')
                 raise
 

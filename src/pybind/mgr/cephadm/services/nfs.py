@@ -110,7 +110,7 @@ class NFSService(CephService):
             exists = True
             try:
                 ioctx.stat(obj)
-            except rados.ObjectNotFound as e:
+            except rados.ObjectNotFound:
                 exists = False
 
             if exists and not clobber:
