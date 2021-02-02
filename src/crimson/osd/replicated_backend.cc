@@ -57,7 +57,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   const ceph_tid_t tid = next_txn_id++;
   auto req_id = osd_op_p.req->get_reqid();
   auto pending_txn =
-    pending_trans.emplace(tid, pg_shards.size()).first;
+    pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
@@ -93,7 +93,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 	peers->all_committed = {};
 	return seastar::now();
       }
-      return peers->all_committed.get_future();
+      return peers->all_committed.get_shared_future();
     }).then([pending_txn, this] {
       auto acked_peers = std::move(pending_txn->second.acked_peers);
       pending_trans.erase(pending_txn);
@@ -141,4 +141,35 @@ seastar::future<> ReplicatedBackend::stop()
   }
   pending_trans.clear();
   return seastar::now();
+}
+
+seastar::future<>
+ReplicatedBackend::request_committed(const osd_reqid_t& reqid,
+				    const eversion_t& at_version)
+{
+  if (std::empty(pending_trans)) {
+    return seastar::now();
+  }
+  auto iter = pending_trans.begin();
+  auto& pending_txn = iter->second;
+  if (pending_txn.at_version > at_version) {
+    return seastar::now();
+  }
+  for (; iter->second.at_version < at_version; ++iter);
+  // As for now, the previous client_request with the same reqid
+  // mustn't have finished, as that would mean later client_requests
+  // has finished before earlier ones.
+  //
+  // The following line of code should be "assert(pending_txn.at_version == at_version)",
+  // as there can be only one transaction at any time in pending_trans due to
+  // PG::client_request_pg_pipeline. But there's a high possibility that we will
+  // improve the parallelism here in the future, which means there may be multiple
+  // client requests in flight, so we loosed the restriction to as follows. Correct
+  // me if I'm wrong:-)
+  assert(iter != pending_trans.end() && iter->second.at_version == at_version);
+  if (iter->second.pending) {
+    return iter->second.all_committed.get_shared_future();
+  } else {
+    return seastar::now();
+  }
 }

@@ -624,6 +624,7 @@ public:
 	return &it->second;
     }
   }
+  seastar::future<std::tuple<bool, int>> already_complete(const osd_reqid_t& reqid);
   int get_recovery_op_priority() const {
     int64_t pri = 0;
     get_pool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
