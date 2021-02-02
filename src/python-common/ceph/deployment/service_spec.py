@@ -431,7 +431,7 @@ class ServiceSpec(object):
         Some Python foo to make sure, we don't have an object
         like `ServiceSpec('rgw')` of type `ServiceSpec`. Now we have:
 
-        >>> type(ServiceSpec('rgw')) == type(RGWSpec('rgw'))
+        >>> type(ServiceSpec(ServiceType.rgw)) == type(RGWSpec(ServiceType.rgw))
         True
 
         """
@@ -513,7 +513,13 @@ class ServiceSpec(object):
                 c['service_id'] = service_type_id[1]
             del c['service_name']
 
-        service_type = ServiceType(c.get('service_type', ''))
+        try:
+            service_type = ServiceType(c.get('service_type', ''))
+        except ValueError:
+            t = c.get('service_type', None)
+            if t is None:
+                raise ServiceSpecValidationError('No service_type specified')
+            raise ServiceSpecValidationError(f'Unknown service type "{t}"')
         c['service_type'] = service_type
         _cls = cls._cls(service_type)
 

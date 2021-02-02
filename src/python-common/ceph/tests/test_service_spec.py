@@ -5,7 +5,8 @@ import yaml
 import pytest
 
 from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, ServiceSpecValidationError, RGWSpec, NFSServiceSpec, IscsiServiceSpec
+    ServiceSpec, ServiceSpecValidationError, RGWSpec, NFSServiceSpec, IscsiServiceSpec, \
+    ServiceType
 from ceph.deployment.drive_group import DriveGroupSpec
 
 
@@ -190,19 +191,19 @@ spec:
                          [
                              (
                                      ServiceSpec(
-                                         service_type='mon'
+                                         service_type=ServiceType.mon
                                      ),
                                      ServiceSpec(
-                                         service_type='mon'
+                                         service_type=ServiceType.mon
                                      ),
                                      True
                              ),
                              (
                                      ServiceSpec(
-                                         service_type='mon'
+                                         service_type=ServiceType.mon
                                      ),
                                      ServiceSpec(
-                                         service_type='mon',
+                                         service_type=ServiceType.mon,
                                          service_id='foo'
                                      ),
                                      True
@@ -210,33 +211,33 @@ spec:
                              # Add service_type='mgr'
                              (
                                      ServiceSpec(
-                                         service_type='osd'
+                                         service_type=ServiceType.osd
                                      ),
                                      ServiceSpec(
-                                         service_type='osd',
+                                         service_type=ServiceType.osd,
                                      ),
                                      True
                              ),
                              (
                                      ServiceSpec(
-                                         service_type='osd'
+                                         service_type=ServiceType.osd
                                      ),
                                      DriveGroupSpec(),
                                      True
                              ),
                              (
                                      ServiceSpec(
-                                         service_type='osd'
+                                         service_type=ServiceType.osd
                                      ),
                                      ServiceSpec(
-                                         service_type='osd',
+                                         service_type=ServiceType.osd,
                                          service_id='foo',
                                      ),
                                      False
                              ),
                              (
                                      ServiceSpec(
-                                         service_type='rgw'
+                                         service_type=ServiceType.rgw
                                      ),
                                      RGWSpec(),
                                      True
