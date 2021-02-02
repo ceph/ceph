@@ -227,20 +227,8 @@ public:
 	/* make a chunk (random offset, random length --> 
 	 * target object's random offset)
 	 */
-	ObjectDesc contents, contents2;
-	context.find_object(oid.str(), &contents);
-	uint32_t max_len = contents.most_recent_gen()->get_length(contents.most_recent());
-	uint32_t rand_offset = rand() % max_len;
-	uint32_t rand_length = rand() % max_len;
-	rand_offset = rand_offset - (rand_offset % 512);
-	rand_length = rand_length - (rand_length % 512);
-
-	while (rand_offset + rand_length > max_len || rand_length == 0) {
-	  rand_offset = rand() % max_len;
-	  rand_length = rand() % max_len;
-	  rand_offset = rand_offset - (rand_offset % 512);
-	  rand_length = rand_length - (rand_length % 512);
-	}
+	uint32_t rand_offset = 0, rand_length = 0;
+	get_rand_off_len(context, oid.str(), rand_offset, rand_length);
 	uint32_t rand_tgt_offset = rand_offset;
 	cout << m_op << ": " << "set_chunk oid " << oid.str() << " offset: " << rand_offset 
 	     << " length: " << rand_length <<  " target oid " << oid2.str() 
@@ -272,6 +260,23 @@ public:
     } 
 
     return false;
+  }
+
+  void get_rand_off_len(RadosTestContext &context, string oid, uint32_t &rand_offset, uint32_t &rand_length) {
+    ObjectDesc contents;
+    context.find_object(oid, &contents);
+    uint32_t max_len = contents.most_recent_gen()->get_length(contents.most_recent());
+    rand_offset = rand() % max_len;
+    rand_length = rand() % max_len;
+    rand_offset = rand_offset - (rand_offset % 512);
+    rand_length = rand_length - (rand_length % 512);
+
+    while (rand_offset + rand_length > max_len || rand_length == 0) {
+      rand_offset = rand() % max_len;
+      rand_length = rand() % max_len;
+      rand_offset = rand_offset - (rand_offset % 512);
+      rand_length = rand_length - (rand_length % 512);
+    }
   }
 
 private:
@@ -440,6 +445,20 @@ private:
       cout << m_op << ": " << "unset_redirect oid " << oid << std::endl;
       return new UnsetRedirectOp(m_op, &context, oid, m_stats);
 
+    case TEST_OP_SET_CHUNK:
+      {
+	ceph_assert(m_enable_dedup);
+	oid = *(rand_choose(context.oid_not_in_use));
+	/* The intention here is to mark the source object as a manifest object */
+	oid2 = *(rand_choose(context.oid_set_chunk_tgt_pool));
+	uint32_t rand_offset = 0, rand_length = 0;
+	get_rand_off_len(context, oid, rand_offset, rand_length);
+	cout << m_op << ": " << "set_chunk oid " << oid << " offset: " << rand_offset 
+	     << " length: " << rand_length <<  " target oid " << oid2 
+	     << " tgt_offset: " << rand_offset << std::endl;
+	return new SetChunkOp(m_op, &context, oid, rand_offset, rand_length, oid2, rand_offset, m_stats);
+      }
+
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       ceph_abort();
@@ -505,6 +524,7 @@ int main(int argc, char **argv)
     { TEST_OP_CHUNK_READ, "chunk_read", true },
     { TEST_OP_TIER_PROMOTE, "tier_promote", true },
     { TEST_OP_TIER_FLUSH, "tier_flush", true },
+    { TEST_OP_SET_CHUNK, "set_chunk", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
