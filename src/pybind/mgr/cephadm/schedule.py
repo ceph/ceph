@@ -3,7 +3,8 @@ import random
 from typing import List, Optional, Callable, Iterable, TypeVar, Set
 
 import orchestrator
-from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec, ServiceSpec, \
+    ServiceType
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
 
@@ -123,13 +124,13 @@ class HostAssignment(object):
         if count is None:
             logger.debug('Provided hosts: %s' % candidates)
             # if asked to place even number of mons, deploy 1 less
-            if self.spec.service_type == 'mon' and (len(candidates) % 2) == 0:
+            if self.spec.service_type == ServiceType.mon and (len(candidates) % 2) == 0:
                 logger.info("deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
                     len(candidates) - 1, len(candidates)))
                 return candidates[0:len(candidates)-1]
 
             # do not deploy ha-rgw on hosts that don't support virtual ips
-            if self.spec.service_type == 'ha-rgw' and self.filter_new_host:
+            if self.spec.service_type == ServiceType.ha_rgw and self.filter_new_host:
                 old = candidates
                 candidates = [h for h in candidates if self.filter_new_host(h.hostname)]
                 for h in list(set(old) - set(candidates)):
@@ -139,7 +140,7 @@ class HostAssignment(object):
             return candidates
 
         # if asked to place even number of mons, deploy 1 less
-        if self.spec.service_type == 'mon':
+        if self.spec.service_type == ServiceType.mon:
             # if count >= number of candidates then number of candidates
             # is determining factor in how many mons will be placed
             if count >= len(candidates):
@@ -178,7 +179,7 @@ class HostAssignment(object):
                 old = others
                 others = [h for h in others if self.filter_new_host(h.hostname)]
                 for h in list(set(old) - set(others)):
-                    if self.spec.service_type == 'ha-rgw':
+                    if self.spec.service_type == ServiceType.ha_rgw:
                         logger.info(
                             f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
                 logger.info('filtered %s down to %s' % (old, others))

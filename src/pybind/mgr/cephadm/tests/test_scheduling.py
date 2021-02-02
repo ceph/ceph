@@ -432,7 +432,7 @@ def test_node_assignment(service_type, placement, hosts, daemons, expected):
     if service_type == 'rgw':
         service_id = 'realm.zone'
 
-    spec = ServiceSpec(service_type=service_type,
+    spec = ServiceSpec(service_type=ServiceType(service_type),
                        service_id=service_id,
                        placement=placement)
 
@@ -515,7 +515,7 @@ class NodeAssignmentTest2(NamedTuple):
 def test_node_assignment2(service_type, placement, hosts,
                           daemons, expected_len, in_set):
     hosts = HostAssignment(
-        spec=ServiceSpec(service_type, placement=placement),
+        spec=ServiceSpec(ServiceType(service_type), placement=placement),
         hosts=[HostSpec(h, labels=['foo']) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
     assert len(hosts) == expected_len
@@ -546,7 +546,7 @@ def test_node_assignment2(service_type, placement, hosts,
 def test_node_assignment3(service_type, placement, hosts,
                           daemons, expected_len, must_have):
     hosts = HostAssignment(
-        spec=ServiceSpec(service_type, placement=placement),
+        spec=ServiceSpec(ServiceType(service_type), placement=placement),
         hosts=[HostSpec(h) for h in hosts],
         get_daemons_func=lambda _: daemons).place()
     assert len(hosts) == expected_len
@@ -605,7 +605,7 @@ class NodeAssignmentTestBadSpec(NamedTuple):
 def test_bad_specs(service_type, placement, hosts, daemons, expected):
     with pytest.raises(OrchestratorValidationError) as e:
         hosts = HostAssignment(
-            spec=ServiceSpec(service_type, placement=placement),
+            spec=ServiceSpec(ServiceType(service_type), placement=placement),
             hosts=[HostSpec(h) for h in hosts],
             get_daemons_func=lambda _: daemons).place()
     assert str(e.value) == expected
@@ -749,7 +749,7 @@ class ActiveAssignmentTest(NamedTuple):
                          ])
 def test_active_assignment(service_type, placement, hosts, daemons, expected):
 
-    spec = ServiceSpec(service_type=service_type,
+    spec = ServiceSpec(service_type=ServiceType(service_type),
                        service_id=None,
                        placement=placement)
 
@@ -861,7 +861,7 @@ class OddMonsTest(NamedTuple):
                          ])
 def test_odd_mons(service_type, placement, hosts, daemons, expected_count):
 
-    spec = ServiceSpec(service_type=service_type,
+    spec = ServiceSpec(service_type=ServiceType(service_type),
                        service_id=None,
                        placement=placement)
 
