@@ -3283,7 +3283,9 @@ struct C_SetManifestRefCountDone : public Context {
       // raced with cancel_manifest_ops
       return;
     }
-    it->second->cb->complete(r);
+    if (it->second->cb) {
+      it->second->cb->complete(r);
+    }
     pg->manifest_ops.erase(it);
     mop.reset();
   }
@@ -3322,8 +3324,10 @@ void PrimaryLogPG::cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids)
       tids->push_back(mop->objecter_tid);
       mop->objecter_tid = 0;
     }
-    mop->cb->set_requeue(requeue);
-    mop->cb->complete(-ECANCELED);
+    if (mop->cb) {
+      mop->cb->set_requeue(requeue);
+      mop->cb->complete(-ECANCELED);
+    }
     manifest_ops.erase(p++);
   }
 }
