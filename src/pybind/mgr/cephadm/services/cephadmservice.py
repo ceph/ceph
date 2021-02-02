@@ -682,7 +682,10 @@ class RgwService(CephService):
                    'realm', 'create',
                    '--rgw-realm=%s' % spec.rgw_realm,
                    '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to create RGW realm "%s": %r' % (spec.rgw_realm, result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('created realm: %s' % spec.rgw_realm)
 
         def get_zonegroups() -> List[str]:
@@ -708,7 +711,10 @@ class RgwService(CephService):
                    'zonegroup', 'create',
                    '--rgw-zonegroup=default',
                    '--master', '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to create RGW zonegroup "%s": %r' % ('default', result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('created zonegroup: default')
 
         def create_zonegroup_if_required() -> None:
@@ -740,7 +746,10 @@ class RgwService(CephService):
                    '--rgw-zonegroup=default',
                    '--rgw-zone=%s' % spec.rgw_zone,
                    '--master', '--default']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to create RGW zone "%s": %r' % (spec.rgw_zone, result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('created zone: %s' % spec.rgw_zone)
 
         changes = False
@@ -763,7 +772,10 @@ class RgwService(CephService):
                    'period', 'update',
                    '--rgw-realm=%s' % spec.rgw_realm,
                    '--commit']
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # noqa: F841
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to update RGW period: %r' % (result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('updated period')
 
 
