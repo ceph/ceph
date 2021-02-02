@@ -13,7 +13,7 @@ from mgr_util import get_default_addr, profile_method
 from rbd import RBD
 from collections import namedtuple
 try:
-    from typing import DefaultDict, Optional, Dict, Any, List, Set, Tuple, Union, cast
+    from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List
 except ImportError:
     pass
 
@@ -68,7 +68,7 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
 DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
-           'compress_bytes_used', 'compress_under_bytes']
+           'compress_bytes_used', 'compress_under_bytes', 'bytes_used', 'percent_used']
 
 OSD_POOL_STATS = ('recovering_objects_per_sec', 'recovering_bytes_per_sec',
                   'recovering_keys_per_sec', 'num_objects_recovered',
@@ -101,7 +101,7 @@ OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
-POOL_METADATA = ('pool_id', 'name')
+POOL_METADATA = ('pool_id', 'name', 'type', 'description', 'compression_mode')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
@@ -125,7 +125,8 @@ class Metric(object):
         self.name = name
         self.desc = desc
         self.labelnames = labels    # tuple if present
-        self.value: Dict[Tuple[str, ...], Union[float, int]] = {}             # indexed by label values
+        self.value: Dict[Tuple[str, ...], Union[float, int]
+                         ] = {}             # indexed by label values
 
     def clear(self) -> None:
         self.value = {}
@@ -820,9 +821,42 @@ class Module(MgrModule):
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
                               "occupation record for this osd".format(id_))
 
+        ec_profiles = osd_map.get('erasure_code_profiles', {})
+
+        def _get_pool_info(pool: Dict[str, Any]) -> Tuple[str, str]:
+            pool_type = 'unknown'
+            description = 'unknown'
+
+            if pool['type'] == 1:
+                pool_type = "replicated"
+                description = f"replica:{pool['size']}"
+            elif pool['type'] == 3:
+                pool_type = "erasure"
+                name = pool.get('erasure_code_profile', '')
+                profile = ec_profiles.get(name, {})
+                if profile:
+                    description = f"ec:{profile['k']}+{profile['m']}"
+                else:
+                    description = "ec:unknown"
+
+            return pool_type, description
+
         for pool in osd_map['pools']:
+
+            compression_mode = 'none'
+            pool_type, pool_description = _get_pool_info(pool)
+
+            if 'options' in pool:
+                compression_mode = pool['options'].get('compression_mode', 'none')
+
             self.metrics['pool_metadata'].set(
-                1, (pool['pool'], pool['pool_name']))
+                1, (
+                    pool['pool'],
+                    pool['pool_name'],
+                    pool_type,
+                    pool_description,
+                    compression_mode)
+            )
 
         # Populate other servers metadata
         for key, value in servers.items():
