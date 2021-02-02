@@ -245,7 +245,7 @@ def create_fake_context(job_config, block=False):
         'owner': owner,
         'archive': job_config['archive_path'],
         'machine_type': job_config['machine_type'],
-        'os_type': job_config['os_type'],
+        'os_type': job_config.get('os_type', 'ubuntu'),
         'os_version': os_version,
         'name': job_config['name'],
     }
