@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, ServiceType
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import CephadmUpgrade
 from cephadm.serve import CephadmServe
@@ -37,7 +37,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
         cephadm_module.set_container_image('global', 'from_image')
         if use_repo_digest:
             cephadm_module.use_repo_digest = True
-        with with_service(cephadm_module, ServiceSpec('mgr'), CephadmOrchestrator.apply_mgr, 'test'):
+        with with_service(cephadm_module, ServiceSpec(ServiceType.mgr), CephadmOrchestrator.apply_mgr, 'test'):
             assert wait(cephadm_module, cephadm_module.upgrade_start(
                 'to_image', None)) == 'Initiating upgrade to to_image'
 
