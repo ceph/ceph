@@ -2346,9 +2346,10 @@ public:
 	  cout << num << ":  got expected ENOENT (src dne)" << std::endl;
 	} else if (r == -EOPNOTSUPP) {
 	  bool is_overlapped = false;
+	  interval_set<uint64_t> chunk;
+	  chunk.insert(offset, length);
 	  for (auto &p : src_value.chunk_info) {
-	    if ((p.first <= offset && p.first + p.second.length > offset) ||
-                (p.first > offset && p.first <= offset + length)) {
+	    if (chunk.intersects(p.first, p.second.length)) {
 	      cout << " range is overlapped  offset: " << offset << " length: " << length
 		    << " chunk_info offset: " << p.second.offset << " length " 
 		    << p.second.length << std::endl;
@@ -2367,10 +2368,7 @@ public:
 	  ceph_abort();
 	}
       } else {
-	ChunkDesc info;
-	info.offset = tgt_offset;
-	info.length = length;
-	info.oid = oid_tgt;
+	ChunkDesc info {tgt_offset, length, oid_tgt};
 	context->update_object_chunk_target(oid, offset, info);
 	context->update_object_version(oid, comp->get_version64());
       }
