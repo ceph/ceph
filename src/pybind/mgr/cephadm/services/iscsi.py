@@ -16,7 +16,7 @@ class IscsiService(CephService):
     TYPE = 'iscsi'
 
     def config(self, spec: IscsiServiceSpec, daemon_id: str) -> None:  # type: ignore
-        assert self.TYPE == spec.service_type
+        assert self.TYPE == spec.service_type.value
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
@@ -25,7 +25,7 @@ class IscsiService(CephService):
         self.mgr.spec_store.save(spec)
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         assert daemon_spec.spec
 
         spec = daemon_spec.spec

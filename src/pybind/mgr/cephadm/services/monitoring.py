@@ -18,11 +18,11 @@ class GrafanaService(CephadmService):
     DEFAULT_SERVICE_PORT = 3000
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         deps = []  # type: List[str]
 
         prom_services = []  # type: List[str]
@@ -95,12 +95,12 @@ class AlertmanagerService(CephadmService):
     DEFAULT_SERVICE_PORT = 9093
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         assert daemon_spec.spec
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec[AlertManagerSpec]) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         deps: List[str] = []
         default_webhook_urls: List[str] = []
 
@@ -186,11 +186,11 @@ class PrometheusService(CephadmService):
     DEFAULT_SERVICE_PORT = 9095
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         deps = []  # type: List[str]
 
         # scrape mgrs
@@ -289,11 +289,11 @@ class NodeExporterService(CephadmService):
     TYPE = 'node-exporter'
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         return {}, []
 
     def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
