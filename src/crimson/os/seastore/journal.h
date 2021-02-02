@@ -14,6 +14,7 @@
 #include "include/denc.h"
 
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/osd/exceptions.h"
 
@@ -170,7 +171,11 @@ public:
   using submit_record_ret = submit_record_ertr::future<
     std::pair<paddr_t, journal_seq_t>
     >;
-  submit_record_ret submit_record(record_t &&record) {
+  submit_record_ret submit_record(
+    record_t &&record,
+    OrderingHandle &handle
+  ) {
+    assert(write_pipeline);
     auto rsize = get_encoded_record_length(record);
     auto total = rsize.mdlength + rsize.dlength;
     if (total > max_record_length) {
@@ -180,12 +185,15 @@ public:
       ? roll_journal_segment().safe_then([](auto){})
       : roll_journal_segment_ertr::now();
     return roll.safe_then(
-      [this, rsize, record=std::move(record)]() mutable {
-	return write_record(rsize, std::move(record)
-	).safe_then([this, rsize](auto addr) {
+      [this, rsize, record=std::move(record), &handle]() mutable {
+	auto seq = next_journal_segment_seq - 1;
+	return write_record(
+	  rsize, std::move(record),
+	  handle
+	).safe_then([this, rsize, seq](auto addr) {
 	  return std::make_pair(
 	    addr.add_offset(rsize.mdlength),
-	    get_journal_seq(addr));
+	    journal_seq_t{seq, addr});
 	});
       });
   }
@@ -223,6 +231,9 @@ public:
     extent_len_t bytes_to_read
   );
 
+  void set_write_pipeline(WritePipeline *_write_pipeline) {
+    write_pipeline = _write_pipeline;
+  }
 
 private:
   const extent_len_t block_size;
@@ -238,9 +249,7 @@ private:
   segment_off_t written_to = 0;
   segment_off_t committed_to = 0;
 
-  journal_seq_t get_journal_seq(paddr_t addr) {
-    return journal_seq_t{next_journal_segment_seq-1, addr};
-  }
+  WritePipeline *write_pipeline = nullptr;
 
   /// prepare segment for writes, writes out segment header
   using initialize_segment_ertr = crimson::errorator<
@@ -289,7 +298,8 @@ private:
   using write_record_ret = write_record_ertr::future<paddr_t>;
   write_record_ret write_record(
     record_size_t rsize,
-    record_t &&record);
+    record_t &&record,
+    OrderingHandle &handle);
 
   /// close current segment and initialize next one
   using roll_journal_segment_ertr = crimson::errorator<

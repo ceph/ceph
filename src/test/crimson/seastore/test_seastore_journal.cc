@@ -64,6 +64,7 @@ struct record_validator_t {
 
 struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
+  WritePipeline pipeline;
   std::unique_ptr<Journal> journal;
 
   std::vector<record_validator_t> records;
@@ -91,6 +92,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   seastar::future<> set_up_fut() final {
     journal.reset(new Journal(*segment_manager));
     journal->set_segment_provider(this);
+    journal->set_write_pipeline(&pipeline);
     return segment_manager->init(
     ).safe_then([this] {
       return journal->open_for_write();
@@ -107,6 +109,7 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
     ).safe_then([this, f=std::move(f)]() mutable {
       journal.reset(new Journal(*segment_manager));
       journal->set_segment_provider(this);
+      journal->set_write_pipeline(&pipeline);
       return journal->replay(std::forward<T>(std::move(f)));
     }).safe_then([this] {
       return journal->open_for_write();
@@ -151,7 +154,10 @@ struct journal_test_t : seastar_test_suite_t, JournalSegmentProvider {
   auto submit_record(T&&... _record) {
     auto record{std::forward<T>(_record)...};
     records.push_back(record);
-    auto [addr, _] = journal->submit_record(std::move(record)).unsafe_get0();
+    OrderingHandle handle = get_dummy_ordering_handle();
+    auto [addr, _] = journal->submit_record(
+      std::move(record),
+      handle).unsafe_get0();
     records.back().record_final_offset = addr;
     return addr;
   }

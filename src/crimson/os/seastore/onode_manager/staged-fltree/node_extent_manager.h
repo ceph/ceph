@@ -64,7 +64,8 @@ class NodeExtentManager {
     crimson::ct_error::input_output_error,
     crimson::ct_error::invarg,
     crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
+    crimson::ct_error::erange,
+    crimson::ct_error::eagain>;
   template <class ValueT=void>
   using tm_future = tm_ertr::future<ValueT>;
 

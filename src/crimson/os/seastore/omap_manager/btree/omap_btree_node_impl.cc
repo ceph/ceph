@@ -36,6 +36,19 @@ std::ostream &OMapInnerNode::print_detail_l(std::ostream &out) const
 	     << ", depth=" << get_meta().depth;
 }
 
+using dec_ref_ertr = OMapInnerNode::base_ertr;
+using dec_ref_ret = dec_ref_ertr::future<>;
+template <typename... T>
+dec_ref_ret dec_ref(omap_context_t oc, T&&... addr) {
+  return oc.tm.dec_ref(oc.t, std::forward<T>(addr)...
+  ).handle_error(
+    dec_ref_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in OMapInnerNode helper dec_ref"
+    }
+  ).safe_then([](auto &&e) {});
+}
+
 /**
  * make_split_insert
  *
@@ -88,8 +101,8 @@ OMapInnerNode::handle_split(omap_context_t oc, internal_iterator_t iter,
   } else {
     return make_split_insert(oc, iter + 1, pivot, right->get_laddr())
       .safe_then([this, oc] (auto m_result) {
-       return oc.tm.dec_ref(oc.t, get_laddr())
-         .safe_then([m_result = std::move(m_result)] (auto ret) {
+       return dec_ref(oc, get_laddr())
+         .safe_then([m_result = std::move(m_result)] {
           return insert_ret(
                  insert_ertr::ready_future_marker{},
                  m_result);
@@ -249,8 +262,8 @@ OMapInnerNode::clear(omap_context_t oc)
       [oc] (auto &&extent) {
       return extent->clear(oc);
     }).safe_then([oc, laddr] {
-      return oc.tm.dec_ref(oc.t, laddr);
-    }).safe_then([ref = OMapNodeRef(this)] (auto ret){
+      return dec_ref(oc, laddr);
+    }).safe_then([ref = OMapNodeRef(this)] {
       return clear_ertr::now();
     });
   });
@@ -326,7 +339,7 @@ OMapInnerNode::merge_entry(omap_context_t oc, internal_iterator_t iter, OMapNode
         journal_inner_remove(riter, maybe_get_delta_buffer());
         //retire extent
         std::vector<laddr_t> dec_laddrs {l->get_laddr(), r->get_laddr()};
-        return oc.tm.dec_ref(oc.t, dec_laddrs).safe_then([this, oc] (auto &&ret) {
+        return dec_ref(oc, dec_laddrs).safe_then([this, oc] {
           if (extent_is_below_min()) {
             return merge_entry_ret(
                    merge_entry_ertr::ready_future_marker{},
@@ -350,7 +363,7 @@ OMapInnerNode::merge_entry(omap_context_t oc, internal_iterator_t iter, OMapNode
           journal_inner_replace(riter, replacement_r->get_laddr(),
                                 replacement_pivot, maybe_get_delta_buffer());
           std::vector<laddr_t> dec_laddrs{l->get_laddr(), r->get_laddr()};
-          return oc.tm.dec_ref(oc.t, dec_laddrs).safe_then([] (auto &&ret) {
+          return dec_ref(oc, dec_laddrs).safe_then([] {
             return merge_entry_ret(
                    merge_entry_ertr::ready_future_marker{},
                    mutation_result_t(mutation_status_t::SUCCESS, std::nullopt, std::nullopt));
@@ -363,8 +376,8 @@ OMapInnerNode::merge_entry(omap_context_t oc, internal_iterator_t iter, OMapNode
           return make_split_insert(oc, riter, replacement_pivot, replacement_r->get_laddr())
             .safe_then([this, oc, l = l, r = r] (auto mresult) {
             std::vector<laddr_t> dec_laddrs{l->get_laddr(), r->get_laddr(), get_laddr()};
-            return oc.tm.dec_ref(oc.t, dec_laddrs)
-              .safe_then([mresult = std::move(mresult)] (auto &&ret){
+            return dec_ref(oc, dec_laddrs)
+              .safe_then([mresult = std::move(mresult)] {
               return merge_entry_ret(
                      merge_entry_ertr::ready_future_marker{},
                      mresult);
@@ -456,8 +469,8 @@ OMapLeafNode::insert(omap_context_t oc, const std::string &key, const std::strin
           right->journal_leaf_insert(mut_iter, key, value, right->maybe_get_delta_buffer());
         }
       }
-      return oc.tm.dec_ref(oc.t, get_laddr())
-        .safe_then([tuple = std::move(tuple)] (auto ret) {
+      return dec_ref(oc, get_laddr())
+        .safe_then([tuple = std::move(tuple)] {
         return insert_ret(
                insert_ertr::ready_future_marker{},
                mutation_result_t(mutation_status_t::WAS_SPLIT, tuple, std::nullopt));
@@ -592,23 +605,31 @@ OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
 }
 
 
-TransactionManager::read_extent_ertr::future<OMapNodeRef>
+omap_load_extent_ertr::future<OMapNodeRef>
 omap_load_extent(omap_context_t oc, laddr_t laddr, depth_t depth)
 {
   ceph_assert(depth > 0);
   if (depth > 1) {
-    return oc.tm.read_extents<OMapInnerNode>(oc.t, laddr, OMAP_BLOCK_SIZE).safe_then(
+    return oc.tm.read_extents<OMapInnerNode>(oc.t, laddr, OMAP_BLOCK_SIZE
+    ).handle_error(
+      omap_load_extent_ertr::pass_further{},
+      crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
+    ).safe_then(
       [](auto&& extents) {
       assert(extents.size() == 1);
       [[maybe_unused]] auto [laddr, e] = extents.front();
-      return TransactionManager::read_extent_ertr::make_ready_future<OMapNodeRef>(std::move(e));
+      return seastar::make_ready_future<OMapNodeRef>(std::move(e));
     });
   } else {
-    return oc.tm.read_extents<OMapLeafNode>(oc.t, laddr, OMAP_BLOCK_SIZE).safe_then(
+    return oc.tm.read_extents<OMapLeafNode>(oc.t, laddr, OMAP_BLOCK_SIZE
+    ).handle_error(
+      omap_load_extent_ertr::pass_further{},
+      crimson::ct_error::assert_all{ "Invalid error in omap_load_extent" }
+    ).safe_then(
       [](auto&& extents) {
       assert(extents.size() == 1);
       [[maybe_unused]] auto [laddr, e] = extents.front();
-      return TransactionManager::read_extent_ertr::make_ready_future<OMapNodeRef>(std::move(e));
+      return seastar::make_ready_future<OMapNodeRef>(std::move(e));
     });
   }
 }

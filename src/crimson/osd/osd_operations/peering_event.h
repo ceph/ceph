@@ -26,10 +26,10 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
   class PGPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "PeeringEvent::PGPipeline::await_map"
     };
-    OrderedPipelinePhase process = {
+    OrderedExclusivePhase process = {
       "PeeringEvent::PGPipeline::process"
     };
     friend class PeeringEvent;
@@ -37,7 +37,7 @@ public:
   };
 
 protected:
-  OrderedPipelinePhase::Handle handle;
+  PipelineHandle handle;
   PGPipeline &pp(PG &pg);
 
   ShardServices &shard_services;
@@ -102,10 +102,10 @@ protected:
 
 public:
   class ConnectionPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "PeeringRequest::ConnectionPipeline::await_map"
     };
-    OrderedPipelinePhase get_pg = {
+    OrderedExclusivePhase get_pg = {
       "PeeringRequest::ConnectionPipeline::get_pg"
     };
     friend class RemotePeeringEvent;
