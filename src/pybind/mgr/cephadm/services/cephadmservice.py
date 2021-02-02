@@ -113,7 +113,7 @@ class CephadmService(metaclass=ABCMeta):
         raise NotImplementedError()
 
     def config(self, spec: ServiceSpec, daemon_id: str) -> None:
-        raise NotImplementedError()
+        assert spec.service_type.value == self.TYPE
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """The post actions needed to be done after daemons are checked"""
@@ -261,7 +261,7 @@ class CephadmService(metaclass=ABCMeta):
         Called before the daemon is removed.
         """
         assert daemon.daemon_type is not None
-        assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
+        assert self.TYPE == daemon_type_to_service(daemon.daemon_type).value
         logger.debug(f'Pre remove daemon {self.TYPE}.{daemon.daemon_id}')
 
     def post_remove(self, daemon: DaemonDescription) -> None:
@@ -269,7 +269,7 @@ class CephadmService(metaclass=ABCMeta):
         Called after the daemon is removed.
         """
         assert daemon.daemon_type is not None
-        assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
+        assert self.TYPE == daemon_type_to_service(daemon.daemon_type).value
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
     def purge(self) -> None:
@@ -366,7 +366,7 @@ class MonService(CephService):
         """
         Create a new monitor on the given host.
         """
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         name, host, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
 
         # get mon. key
@@ -455,7 +455,7 @@ class MgrService(CephService):
         """
         Create a new manager instance on a host.
         """
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         mgr_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
@@ -530,7 +530,7 @@ class MdsService(CephService):
     TYPE = 'mds'
 
     def config(self, spec: ServiceSpec, daemon_id: str) -> None:
-        assert self.TYPE == spec.service_type
+        assert self.TYPE == spec.service_type.value
         assert spec.service_id
 
         # ensure mds_join_fs is set for these daemons
@@ -542,7 +542,7 @@ class MdsService(CephService):
         })
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         mds_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
@@ -577,7 +577,7 @@ class RgwService(CephService):
     TYPE = 'rgw'
 
     def config(self, spec: RGWSpec, rgw_id: str) -> None:  # type: ignore
-        assert self.TYPE == spec.service_type
+        assert self.TYPE == spec.service_type.value
 
         # create realm, zonegroup, and zone if needed
         self.create_realm_zonegroup_zone(spec, rgw_id)
@@ -637,7 +637,7 @@ class RgwService(CephService):
         self.mgr.spec_store.save(spec)
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         keyring = self.get_keyring(rgw_id)
@@ -777,7 +777,7 @@ class RbdMirrorService(CephService):
     TYPE = 'rbd-mirror'
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
@@ -796,7 +796,7 @@ class CrashService(CephService):
     TYPE = 'crash'
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
@@ -895,7 +895,7 @@ class CephadmExporter(CephadmService):
     TYPE = 'cephadm-exporter'
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
 
         cfg = CephadmExporterConfig(self.mgr)
         cfg.load_from_store()
@@ -916,7 +916,7 @@ class CephadmExporter(CephadmService):
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         assert daemon_spec.spec
         deps: List[str] = []
 

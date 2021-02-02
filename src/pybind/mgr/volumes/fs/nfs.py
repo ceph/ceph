@@ -5,7 +5,7 @@ from typing import List
 import socket
 from os.path import isabs, normpath
 
-from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, ServiceType
 from rados import TimedOut
 
 import orchestrator
@@ -658,7 +658,7 @@ class NFSCluster:
         return f'userconf-nfs.{self.cluster_id}'
 
     def _call_orch_apply_nfs(self, placement):
-        spec = NFSServiceSpec(service_type='nfs', service_id=self.cluster_id,
+        spec = NFSServiceSpec(service_type=ServiceType.nfs, service_id=self.cluster_id,
                               pool=self.pool_name, namespace=self.pool_ns,
                               placement=PlacementSpec.from_string(placement))
         completion = self.mgr.apply_nfs(spec)

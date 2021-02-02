@@ -1212,14 +1212,14 @@ def daemon_type_to_service(dtype: DaemonType) -> ServiceType:
         DaemonType.haproxy: ServiceType.ha_rgw,
         DaemonType.keepalived: ServiceType.ha_rgw,
     }
-    return mapping.get(dtype, ServiceType(dtype))
+    return mapping.get(dtype, ServiceType(dtype.value))
 
 
 def service_to_daemon_types(stype: ServiceType) -> List[DaemonType]:
     mapping = {
         ServiceType.ha_rgw: [DaemonType.haproxy, DaemonType.keepalived],
     }
-    return mapping.get(stype, [DaemonType(stype)])
+    return mapping.get(stype, [DaemonType(stype.value)])
 
 
 def daemon_type_to_name(dtype: DaemonType, daemon_id: str) -> str:
@@ -1291,9 +1291,10 @@ class DaemonDescription(object):
         self.container_image_name = container_image_name  # image friendly name
 
         # The type of service (osd, mon, mgr, etc.)
-        self.daemon_type = daemon_type
+        self.daemon_type: Optional[DaemonType] = daemon_type
 
-        assert daemon_type not in ['HA_RGW', 'ha-rgw']
+        if daemon_type:
+            assert daemon_type.value not in ['HA_RGW', 'ha-rgw']
 
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
@@ -1390,16 +1391,17 @@ class DaemonDescription(object):
     def service_name(self) -> str:
         assert self.daemon_type is not None
         if daemon_type_to_service(self.daemon_type) in ServiceSpec.REQUIRES_SERVICE_ID:
-            return f'{daemon_type_to_service(self.daemon_type)}.{self.service_id()}'
-        return str(daemon_type_to_service(self.daemon_type))
+            return f'{daemon_type_to_service(self.daemon_type).value}.{self.service_id()}'
+        return daemon_type_to_service(self.daemon_type).value
 
     def __repr__(self) -> str:
-        return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
+        assert self.daemon_type
+        return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type.value,
                                                          id=self.daemon_id)
 
     def to_json(self) -> dict:
         out: Dict[str, Any] = OrderedDict()
-        out['daemon_type'] = self.daemon_type
+        out['daemon_type'] = self.daemon_type.value if self.daemon_type else None
         out['daemon_id'] = self.daemon_id
         out['hostname'] = self.hostname
         out['container_id'] = self.container_id
@@ -1408,7 +1410,7 @@ class DaemonDescription(object):
         out['version'] = self.version
         out['status'] = self.status
         out['status_desc'] = self.status_desc
-        if self.daemon_type == 'osd':
+        if self.daemon_type == DaemonType.osd:
             out['osdspec_affinity'] = self.osdspec_affinity
         out['is_active'] = self.is_active
 
@@ -1435,7 +1437,9 @@ class DaemonDescription(object):
             if k in c:
                 c[k] = str_to_datetime(c[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
-        return cls(events=events, **c)
+        daemon_type = c.pop('daemon_type', None)
+
+        return cls(events=events, daemon_type=DaemonType(daemon_type) if daemon_type else None, **c)
 
     def __copy__(self) -> 'DaemonDescription':
         # feel free to change this:

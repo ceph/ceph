@@ -21,7 +21,7 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, HA_RGWSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
     ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec, \
-    DaemonType
+    DaemonType, daemon_type_to_service
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -856,7 +856,7 @@ Usage:
 
     @_cli_write_command('orch daemon add')
     def _daemon_add_misc(self,
-                         daemon_type: Optional[ServiceType] = None,
+                         daemon_type: Optional[DaemonType] = None,
                          placement: Optional[str] = None,
                          inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add daemon(s)"""
@@ -868,35 +868,36 @@ Usage:
                 raise OrchestratorValidationError(usage)
             spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
         else:
-            spec = PlacementSpec.from_string(placement)
-            assert daemon_type
-            spec = ServiceSpec(daemon_type.value, placement=spec)
+            if not placement or not daemon_type:
+                raise OrchestratorValidationError(usage)
+            placement_spec = PlacementSpec.from_string(placement)
+            spec = ServiceSpec(daemon_type_to_service(daemon_type), placement=placement_spec)
 
-        if daemon_type == ServiceType.mon:
+        if daemon_type == DaemonType.mon:
             completion = self.add_mon(spec)
-        elif daemon_type == ServiceType.mgr:
+        elif daemon_type == DaemonType.mgr:
             completion = self.add_mgr(spec)
-        elif daemon_type == ServiceType.rbd_mirror:
+        elif daemon_type == DaemonType.rbd_mirror:
             completion = self.add_rbd_mirror(spec)
-        elif daemon_type == ServiceType.crash:
+        elif daemon_type == DaemonType.crash:
             completion = self.add_crash(spec)
-        elif daemon_type == ServiceType.alertmanager:
+        elif daemon_type == DaemonType.alertmanager:
             completion = self.add_alertmanager(spec)
-        elif daemon_type == ServiceType.grafana:
+        elif daemon_type == DaemonType.grafana:
             completion = self.add_grafana(spec)
-        elif daemon_type == ServiceType.node_exporter:
+        elif daemon_type == DaemonType.node_exporter:
             completion = self.add_node_exporter(spec)
-        elif daemon_type == ServiceType.prometheus:
+        elif daemon_type == DaemonType.prometheus:
             completion = self.add_prometheus(spec)
-        elif daemon_type == ServiceType.mds:
+        elif daemon_type == DaemonType.mds:
             completion = self.add_mds(spec)
-        elif daemon_type == ServiceType.rgw:
-            completion = self.add_rgw(spec)
-        elif daemon_type == ServiceType.nfs:
-            completion = self.add_nfs(spec)
-        elif daemon_type == ServiceType.iscsi:
-            completion = self.add_iscsi(spec)
-        elif daemon_type == ServiceType.cephadm_exporter:
+        elif daemon_type == DaemonType.rgw:
+            completion = self.add_rgw(cast(RGWSpec, spec))
+        elif daemon_type == DaemonType.nfs:
+            completion = self.add_nfs(cast(NFSServiceSpec, spec))
+        elif daemon_type == DaemonType.iscsi:
+            completion = self.add_iscsi(cast(IscsiServiceSpec, spec))
+        elif daemon_type == DaemonType.cephadm_exporter:
             completion = self.add_cephadm_exporter(spec)
         else:
             tp = type(daemon_type)

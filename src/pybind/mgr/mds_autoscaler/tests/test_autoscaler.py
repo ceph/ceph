@@ -2,7 +2,7 @@ import pytest
 from unittest import mock
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
-from orchestrator import DaemonDescription, Completion, ServiceDescription
+from orchestrator import DaemonDescription, Completion, ServiceDescription, DaemonType
 
 try:
     from typing import Any, List
@@ -32,12 +32,12 @@ class TestCephadm(object):
         daemons = Completion(value=[
             DaemonDescription(
                 hostname='myhost',
-                daemon_type='mds',
+                daemon_type=DaemonType.mds,
                 daemon_id='fs_name.myhost.a'
             ),
             DaemonDescription(
                 hostname='myhost',
-                daemon_type='mds',
+                daemon_type=DaemonType.mds,
                 daemon_id='fs_name.myhost.b'
             ),
         ])
@@ -47,7 +47,7 @@ class TestCephadm(object):
         services = Completion(value=[
             ServiceDescription(
                 spec=ServiceSpec(
-                    service_type='mds',
+                    service_type=DaemonType.mds,
                     service_id='fs_name',
                     placement=PlacementSpec(
                         count=2
@@ -87,7 +87,7 @@ class TestCephadm(object):
         mds_autoscaler_module.notify('fs_map', None)
 
         _apply_mds.assert_called_with(ServiceSpec(
-            service_type='mds',
+            service_type=DaemonType.mds,
             service_id='fs_name',
             placement=PlacementSpec(
                 count=3

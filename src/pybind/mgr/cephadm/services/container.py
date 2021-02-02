@@ -13,12 +13,12 @@ class CustomContainerService(CephadmService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[CustomContainerSpec]) \
             -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec[CustomContainerSpec]) \
             -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         assert daemon_spec.spec
         deps: List[str] = []
         spec: CustomContainerSpec = daemon_spec.spec

@@ -16,12 +16,13 @@ except ImportError:
 from execnet.gateway_bootstrap import HostNotFound
 
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec
+    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec, \
+    ServiceType
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
 from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
-    HostSpec, OrchestratorError
+    HostSpec, OrchestratorError, DaemonType
 from tests import mock
 from .fixtures import cephadm_module, wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, assert_rm_service, _deploy_cephadm_binary
@@ -74,11 +75,11 @@ class TestCephadm(object):
     def test_get_unique_name(self, cephadm_module):
         # type: (CephadmOrchestrator) -> None
         existing = [
-            DaemonDescription(daemon_type='mon', daemon_id='a')
+            DaemonDescription(daemon_type=DaemonType.mon, daemon_id='a')
         ]
-        new_mon = cephadm_module.get_unique_name('mon', 'myhost', existing)
+        new_mon = cephadm_module.get_unique_name(DaemonType.mon, 'myhost', existing)
         match_glob(new_mon, 'myhost')
-        new_mgr = cephadm_module.get_unique_name('mgr', 'myhost', existing)
+        new_mgr = cephadm_module.get_unique_name(DaemonType.mgr, 'myhost', existing)
         match_glob(new_mgr, 'myhost.*')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -107,7 +108,7 @@ class TestCephadm(object):
             c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
 
-            with with_daemon(cephadm_module, ServiceSpec('mds', 'name'), CephadmOrchestrator.add_mds, 'test'):
+            with with_daemon(cephadm_module, ServiceSpec(ServiceType.mds, 'name'), CephadmOrchestrator.add_mds, 'test'):
 
                 c = cephadm_module.list_daemons()
 
@@ -126,7 +127,7 @@ class TestCephadm(object):
                         'is_active': False}
                 ]
 
-                with with_service(cephadm_module, ServiceSpec('rgw', 'r.z'), CephadmOrchestrator.apply_rgw, 'test'):
+                with with_service(cephadm_module, ServiceSpec(ServiceType.rgw, 'r.z'), CephadmOrchestrator.apply_rgw, 'test'):
 
                     c = cephadm_module.describe_service()
                     out = [dict(o.to_json()) for o in wait(cephadm_module, c)]
@@ -246,7 +247,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check(self, cephadm_module: CephadmOrchestrator, action):
         with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test') as d_names:
+            with with_service(cephadm_module, ServiceSpec(ServiceType.grafana), CephadmOrchestrator.apply_grafana, 'test') as d_names:
                 [daemon_name] = d_names
 
                 cephadm_module._schedule_daemon_action(daemon_name, action)
@@ -282,7 +283,7 @@ class TestCephadm(object):
                 }
             )
 
-            with with_service(cephadm_module, ServiceSpec(service_type='mon'), CephadmOrchestrator.apply_mon, 'test') as d_names:
+            with with_service(cephadm_module, ServiceSpec(ServiceType.mon), CephadmOrchestrator.apply_mon, 'test') as d_names:
                 [daemon_name] = d_names
 
                 cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
@@ -297,7 +298,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_daemon_check_post(self, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
-            with with_service(cephadm_module, ServiceSpec(service_type='grafana'), CephadmOrchestrator.apply_grafana, 'test'):
+            with with_service(cephadm_module, ServiceSpec(ServiceType.grafana), CephadmOrchestrator.apply_grafana, 'test'):
 
                 # Make sure, _check_daemons does a redeploy due to monmap change:
                 cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
@@ -319,19 +320,19 @@ class TestCephadm(object):
     def test_mon_add(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
+            c = cephadm_module.add_mon(ServiceSpec(ServiceType.mon, placement=ps))
             assert wait(cephadm_module, c) == ["Deployed mon.a on host 'test'"]
 
             with pytest.raises(OrchestratorError, match="Must set public_network config option or specify a CIDR network,"):
                 ps = PlacementSpec(hosts=['test'], count=1)
-                c = cephadm_module.add_mon(ServiceSpec('mon', placement=ps))
+                c = cephadm_module.add_mon(ServiceSpec(ServiceType.mon, placement=ps))
                 wait(cephadm_module, c)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_mgr_update(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             ps = PlacementSpec(hosts=['test:0.0.0.0=a'], count=1)
-            r = CephadmServe(cephadm_module)._apply_service(ServiceSpec('mgr', placement=ps))
+            r = CephadmServe(cephadm_module)._apply_service(ServiceSpec(ServiceType.mgr, placement=ps))
             assert r
 
             assert_rm_daemon(cephadm_module, 'mgr.a', 'test')
@@ -565,15 +566,15 @@ class TestCephadm(object):
     @pytest.mark.parametrize(
         "spec, meth",
         [
-            (ServiceSpec('crash'), CephadmOrchestrator.add_crash),
-            (ServiceSpec('prometheus'), CephadmOrchestrator.add_prometheus),
-            (ServiceSpec('grafana'), CephadmOrchestrator.add_grafana),
-            (ServiceSpec('node-exporter'), CephadmOrchestrator.add_node_exporter),
-            (ServiceSpec('alertmanager'), CephadmOrchestrator.add_alertmanager),
-            (ServiceSpec('rbd-mirror'), CephadmOrchestrator.add_rbd_mirror),
-            (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.add_mds),
+            (ServiceSpec(ServiceType.crash), CephadmOrchestrator.add_crash),
+            (ServiceSpec(ServiceType.prometheus), CephadmOrchestrator.add_prometheus),
+            (ServiceSpec(ServiceType.grafana), CephadmOrchestrator.add_grafana),
+            (ServiceSpec(ServiceType.node_exporter), CephadmOrchestrator.add_node_exporter),
+            (ServiceSpec(ServiceType.alertmanager), CephadmOrchestrator.add_alertmanager),
+            (ServiceSpec(ServiceType.rbd_mirror), CephadmOrchestrator.add_rbd_mirror),
+            (ServiceSpec(ServiceType.mds, service_id='fsname'), CephadmOrchestrator.add_mds),
             (RGWSpec(rgw_realm='realm', rgw_zone='zone'), CephadmOrchestrator.add_rgw),
-            (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.add_cephadm_exporter),
+            (ServiceSpec(ServiceType.cephadm_exporter), CephadmOrchestrator.add_cephadm_exporter),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
@@ -678,16 +679,16 @@ class TestCephadm(object):
     @pytest.mark.parametrize(
         "spec, meth",
         [
-            (ServiceSpec('mgr'), CephadmOrchestrator.apply_mgr),
-            (ServiceSpec('crash'), CephadmOrchestrator.apply_crash),
-            (ServiceSpec('prometheus'), CephadmOrchestrator.apply_prometheus),
-            (ServiceSpec('grafana'), CephadmOrchestrator.apply_grafana),
-            (ServiceSpec('node-exporter'), CephadmOrchestrator.apply_node_exporter),
-            (ServiceSpec('alertmanager'), CephadmOrchestrator.apply_alertmanager),
-            (ServiceSpec('rbd-mirror'), CephadmOrchestrator.apply_rbd_mirror),
-            (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.apply_mds),
+            (ServiceSpec(ServiceType.mgr), CephadmOrchestrator.apply_mgr),
+            (ServiceSpec(ServiceType.crash), CephadmOrchestrator.apply_crash),
+            (ServiceSpec(ServiceType.prometheus), CephadmOrchestrator.apply_prometheus),
+            (ServiceSpec(ServiceType.grafana), CephadmOrchestrator.apply_grafana),
+            (ServiceSpec(ServiceType.node_exporter), CephadmOrchestrator.apply_node_exporter),
+            (ServiceSpec(ServiceType.alertmanager), CephadmOrchestrator.apply_alertmanager),
+            (ServiceSpec(ServiceType.rbd_mirror), CephadmOrchestrator.apply_rbd_mirror),
+            (ServiceSpec(ServiceType.mds, service_id='fsname'), CephadmOrchestrator.apply_mds),
             (ServiceSpec(
-                'mds', service_id='fsname',
+                ServiceType.mds, service_id='fsname',
                 placement=PlacementSpec(
                     hosts=[HostPlacementSpec(
                         hostname='test',
@@ -740,7 +741,7 @@ class TestCephadm(object):
                 envs=['SECRET=password'],
                 ports=[8080, 8443]
             ), CephadmOrchestrator.apply_container),
-            (ServiceSpec('cephadm-exporter'), CephadmOrchestrator.apply_cephadm_exporter),
+            (ServiceSpec(ServiceType.cephadm_exporter), CephadmOrchestrator.apply_cephadm_exporter),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._deploy_cephadm_binary", _deploy_cephadm_binary('test'))
@@ -755,7 +756,7 @@ class TestCephadm(object):
     @mock.patch("cephadm.services.cephadmservice.CephadmService.ok_to_stop")
     def test_daemon_ok_to_stop(self, ok_to_stop, cephadm_module: CephadmOrchestrator):
         spec = ServiceSpec(
-            'mds',
+            ServiceType.mds,
             service_id='fsname',
             placement=PlacementSpec(hosts=['host1', 'host2'])
         )

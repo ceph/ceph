@@ -10,9 +10,9 @@ import yaml
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
     IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec, CustomContainerSpec, \
-    HA_RGWSpec
+    HA_RGWSpec, ServiceType
 
-from orchestrator import DaemonDescription, OrchestratorError
+from orchestrator import DaemonDescription, OrchestratorError, DaemonType
 
 
 @pytest.mark.parametrize(
@@ -300,7 +300,7 @@ def test_dd_octopus(dd_json):
             subcluster='1',
         ),
         DaemonDescription(
-            daemon_type='rgw',
+            daemon_type=DaemonType.rgw,
             daemon_id="default-rgw-realm.eu-central-1.1.ceph-001.ytywjo",
             hostname="ceph-001",
         ),
@@ -313,7 +313,7 @@ def test_dd_octopus(dd_json):
             rgw_zone="eu-central-1",
         ),
         DaemonDescription(
-            daemon_type='rgw',
+            daemon_type=DaemonType.rgw,
             daemon_id="default-rgw-realm.eu-central-1.ceph-001.ytywjo",
             hostname="ceph-001",
         ),
@@ -327,7 +327,7 @@ def test_dd_octopus(dd_json):
             subcluster='1',
         ),
         DaemonDescription(
-            daemon_type='rgw',
+            daemon_type=DaemonType.rgw,
             daemon_id="default-rgw-realm.eu-central-1.1.host.domain.tld.ytywjo",
             hostname="host.domain.tld",
         ),
@@ -340,7 +340,7 @@ def test_dd_octopus(dd_json):
             rgw_zone="zone",
         ),
         DaemonDescription(
-            daemon_type='rgw',
+            daemon_type=DaemonType.rgw,
             daemon_id="realm.zone.a",
             hostname="smithi028",
         ),
@@ -349,13 +349,13 @@ def test_dd_octopus(dd_json):
     (
         # without host
         RGWSpec(
-            service_type='rgw',
+            service_type=ServiceType.rgw,
             rgw_realm="default-rgw-realm",
             rgw_zone="eu-central-1",
             subcluster='1',
         ),
         DaemonDescription(
-            daemon_type='rgw',
+            daemon_type=DaemonType.rgw,
             daemon_id="default-rgw-realm.eu-central-1.1.hostname.ytywjo",
             hostname=None,
         ),
@@ -370,7 +370,7 @@ def test_dd_octopus(dd_json):
             subcluster='1',
         ),
         DaemonDescription(
-            daemon_type='rgw',
+            daemon_type=DaemonType.rgw,
             daemon_id="default.rgw.realm.ceph.001.1.ceph.001.ytywjo",
             hostname="ceph.001",
         ),
@@ -380,11 +380,11 @@ def test_dd_octopus(dd_json):
     # https://tracker.ceph.com/issues/45293
     (
         ServiceSpec(
-            service_type='mds',
+            ServiceType.mds,
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='mds',
+            DaemonType.mds,
             daemon_id="a.host1.abc123",
             hostname="host1",
         ),
@@ -393,11 +393,11 @@ def test_dd_octopus(dd_json):
     (
         # '.' char in service_id
         ServiceSpec(
-            service_type='mds',
+            ServiceType.mds,
             service_id="a.b.c",
         ),
         DaemonDescription(
-            daemon_type='mds',
+            DaemonType.mds,
             daemon_id="a.b.c.host1.abc123",
             hostname="host1",
         ),
@@ -408,11 +408,11 @@ def test_dd_octopus(dd_json):
     (
         # daemon_id does not contain hostname
         ServiceSpec(
-            service_type='mds',
+            ServiceType.mds,
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='mds',
+            DaemonType.mds,
             daemon_id="a",
             hostname="host1",
         ),
@@ -421,11 +421,11 @@ def test_dd_octopus(dd_json):
     (
         # daemon_id only contains hostname
         ServiceSpec(
-            service_type='mds',
+            ServiceType.mds,
             service_id="host1",
         ),
         DaemonDescription(
-            daemon_type='mds',
+            DaemonType.mds,
             daemon_id="host1",
             hostname="host1",
         ),
@@ -436,11 +436,11 @@ def test_dd_octopus(dd_json):
     (
         # daemon_id only contains hostname
         ServiceSpec(
-            service_type='mds',
+            ServiceType.mds,
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='mds',
+            DaemonType.mds,
             daemon_id="a.host1.abc123",
             hostname="host1.site",
         ),
@@ -451,7 +451,7 @@ def test_dd_octopus(dd_json):
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='nfs',
+            DaemonType.nfs,
             daemon_id="a.host1",
             hostname="host1.site",
         ),
@@ -464,7 +464,7 @@ def test_dd_octopus(dd_json):
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='nfs',
+            DaemonType.nfs,
             daemon_id="a.host1",
             hostname="host1",
         ),
@@ -476,7 +476,7 @@ def test_dd_octopus(dd_json):
             service_id="a.b.c",
         ),
         DaemonDescription(
-            daemon_type='nfs',
+            DaemonType.nfs,
             daemon_id="a.b.c.host1",
             hostname="host1",
         ),
@@ -488,7 +488,7 @@ def test_dd_octopus(dd_json):
             service_id="a.b.c",
         ),
         DaemonDescription(
-            daemon_type='nfs',
+            DaemonType.nfs,
             daemon_id="a.b.c.host1.abc123",
             hostname="host1",
         ),
@@ -500,7 +500,7 @@ def test_dd_octopus(dd_json):
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='nfs',
+            DaemonType.nfs,
             daemon_id="a.host1abc123",
             hostname="host1",
         ),
@@ -512,7 +512,7 @@ def test_dd_octopus(dd_json):
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='nfs',
+            DaemonType.nfs,
             daemon_id="ahost1.abc123",
             hostname="host1",
         ),
@@ -522,11 +522,11 @@ def test_dd_octopus(dd_json):
     # https://tracker.ceph.com/issues/45293
     (
         IscsiServiceSpec(
-            service_type='iscsi',
+            ServiceType.iscsi,
             service_id="a",
         ),
         DaemonDescription(
-            daemon_type='iscsi',
+            DaemonType.iscsi,
             daemon_id="a.host1.abc123",
             hostname="host1",
         ),
@@ -535,11 +535,11 @@ def test_dd_octopus(dd_json):
     (
         # '.' char in service_id
         IscsiServiceSpec(
-            service_type='iscsi',
+            ServiceType.iscsi,
             service_id="a.b.c",
         ),
         DaemonDescription(
-            daemon_type='iscsi',
+            DaemonType.iscsi,
             daemon_id="a.b.c.host1.abc123",
             hostname="host1",
         ),
@@ -548,11 +548,11 @@ def test_dd_octopus(dd_json):
     (
         # fixed daemon id for teuthology.
         IscsiServiceSpec(
-            service_type='iscsi',
+            ServiceType.iscsi,
             service_id='iscsi',
         ),
         DaemonDescription(
-            daemon_type='iscsi',
+            DaemonType.iscsi,
             daemon_id="iscsi.a",
             hostname="host1",
         ),
@@ -561,12 +561,12 @@ def test_dd_octopus(dd_json):
 
     (
         CustomContainerSpec(
-            service_type='container',
+            ServiceType.container,
             service_id='hello-world',
             image='docker.io/library/hello-world:latest',
         ),
         DaemonDescription(
-            daemon_type='container',
+            DaemonType.container,
             daemon_id='hello-world.mgr0',
             hostname='mgr0',
         ),
@@ -576,10 +576,10 @@ def test_dd_octopus(dd_json):
     (
         # daemon_id only contains hostname
         ServiceSpec(
-            service_type='cephadm-exporter',
+            ServiceType.cephadm_exporter,
         ),
         DaemonDescription(
-            daemon_type='cephadm-exporter',
+            DaemonType.cephadm_exporter,
             daemon_id="testhost",
             hostname="testhost",
         ),

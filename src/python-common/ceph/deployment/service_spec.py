@@ -410,17 +410,17 @@ class ServiceSpec(object):
     ]
 
     @classmethod
-    def _cls(cls, service_type):
+    def _cls(cls, service_type: ServiceType):
         from ceph.deployment.drive_group import DriveGroupSpec
 
         ret = {
-            'rgw': RGWSpec,
-            'nfs': NFSServiceSpec,
-            'osd': DriveGroupSpec,
-            'iscsi': IscsiServiceSpec,
-            'alertmanager': AlertManagerSpec,
-            'ha-rgw': HA_RGWSpec,
-            'container': CustomContainerSpec,
+            ServiceType.rgw: RGWSpec,
+            ServiceType.nfs: NFSServiceSpec,
+            ServiceType.osd: DriveGroupSpec,
+            ServiceType.iscsi: IscsiServiceSpec,
+            ServiceType.alertmanager: AlertManagerSpec,
+            ServiceType.ha_rgw: HA_RGWSpec,
+            ServiceType.container: CustomContainerSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise ServiceSpecValidationError('Spec needs a "service_type" key.')
@@ -451,7 +451,7 @@ class ServiceSpec(object):
                  ):
         self.placement = PlacementSpec() if placement is None else placement  # type: PlacementSpec
 
-        assert service_type in ServiceType, service_type
+        assert service_type in list(ServiceType), f'{service_type} not in {list(ServiceType)}'
         self.service_type = service_type
         self.service_id = None
         if self.service_type in self.REQUIRES_SERVICE_ID:
@@ -513,7 +513,7 @@ class ServiceSpec(object):
                 c['service_id'] = service_type_id[1]
             del c['service_name']
 
-        service_type = c.get('service_type', '')
+        service_type = ServiceType(c.get('service_type', ''))
         _cls = cls._cls(service_type)
 
         if 'status' in c:
@@ -535,8 +535,8 @@ class ServiceSpec(object):
         _cls.validate()
         return _cls
 
-    def service_name(self):
-        n = self.service_type
+    def service_name(self) -> str:
+        n = self.service_type.value
         if self.service_id:
             n += '.' + self.service_id
         return n
@@ -544,7 +544,7 @@ class ServiceSpec(object):
     def to_json(self):
         # type: () -> OrderedDict[str, Any]
         ret: OrderedDict[str, Any] = OrderedDict()
-        ret['service_type'] = self.service_type
+        ret['service_type'] = self.service_type.value
         if self.service_id:
             ret['service_id'] = self.service_id
         ret['service_name'] = self.service_name()
@@ -599,7 +599,7 @@ yaml.add_representer(ServiceSpec, ServiceSpec.yaml_representer)
 
 class NFSServiceSpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'nfs',
+                 service_type: ServiceType = ServiceType.nfs,
                  service_id: Optional[str] = None,
                  pool: Optional[str] = None,
                  namespace: Optional[str] = None,
@@ -607,9 +607,9 @@ class NFSServiceSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False
                  ):
-        assert service_type == 'nfs'
+        assert service_type == ServiceType.nfs
         super(NFSServiceSpec, self).__init__(
-            'nfs', service_id=service_id,
+            ServiceType.nfs, service_id=service_id,
             placement=placement, unmanaged=unmanaged, preview_only=preview_only)
 
         #: RADOS pool where NFS client recovery data is stored.
@@ -649,7 +649,7 @@ class RGWSpec(ServiceSpec):
 
     """
     def __init__(self,
-                 service_type: str = 'rgw',
+                 service_type: ServiceType = ServiceType.rgw,
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  rgw_realm: Optional[str] = None,
@@ -662,7 +662,7 @@ class RGWSpec(ServiceSpec):
                  ssl: bool = False,
                  preview_only: bool = False,
                  ):
-        assert service_type == 'rgw', service_type
+        assert service_type == ServiceType.rgw, service_type
         if service_id:
             a = service_id.split('.', 2)
             rgw_realm = a[0]
@@ -676,7 +676,7 @@ class RGWSpec(ServiceSpec):
             else:
                 service_id = '%s.%s' % (rgw_realm, rgw_zone)
         super(RGWSpec, self).__init__(
-            'rgw', service_id=service_id,
+            ServiceType.rgw, service_id=service_id,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only)
 
@@ -722,7 +722,7 @@ yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
 class IscsiServiceSpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'iscsi',
+                 service_type: ServiceType = ServiceType.iscsi,
                  service_id: Optional[str] = None,
                  pool: Optional[str] = None,
                  trusted_ip_list: Optional[str] = None,
@@ -736,8 +736,8 @@ class IscsiServiceSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False
                  ):
-        assert service_type == 'iscsi'
-        super(IscsiServiceSpec, self).__init__('iscsi', service_id=service_id,
+        assert service_type == ServiceType.iscsi
+        super(IscsiServiceSpec, self).__init__(ServiceType.iscsi, service_id=service_id,
                                                placement=placement, unmanaged=unmanaged,
                                                preview_only=preview_only)
 
@@ -773,16 +773,16 @@ yaml.add_representer(IscsiServiceSpec, ServiceSpec.yaml_representer)
 
 class AlertManagerSpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'alertmanager',
+                 service_type: ServiceType = ServiceType.alertmanager,
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  user_data: Optional[Dict[str, Any]] = None,
                  ):
-        assert service_type == 'alertmanager'
+        assert service_type == ServiceType.alertmanager
         super(AlertManagerSpec, self).__init__(
-            'alertmanager', service_id=service_id,
+            ServiceType.alertmanager, service_id=service_id,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only)
 
@@ -808,7 +808,7 @@ yaml.add_representer(AlertManagerSpec, ServiceSpec.yaml_representer)
 
 class HA_RGWSpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'ha-rgw',
+                 service_type: ServiceType = ServiceType.ha_rgw,
                  service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  virtual_ip_interface: Optional[str] = None,
@@ -831,7 +831,7 @@ class HA_RGWSpec(ServiceSpec):
                  definitive_host_list: Optional[List[HostPlacementSpec]] = None
                  ):
         assert service_type == 'ha-rgw'
-        super(HA_RGWSpec, self).__init__('ha-rgw', service_id=service_id, placement=placement)
+        super(HA_RGWSpec, self).__init__(ServiceType.ha_rgw, service_id=service_id, placement=placement)
 
         self.virtual_ip_interface = virtual_ip_interface
         self.virtual_ip_address = virtual_ip_address
@@ -897,8 +897,8 @@ class HA_RGWSpec(ServiceSpec):
 
 class CustomContainerSpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'container',
-                 service_id: str = None,
+                 service_type: ServiceType = ServiceType.container,
+                 service_id: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -915,7 +915,7 @@ class CustomContainerSpec(ServiceSpec):
                  dirs: Optional[List[str]] = [],
                  files: Optional[Dict[str, Any]] = {},
                  ):
-        assert service_type == 'container'
+        assert service_type == ServiceType.container
         assert service_id is not None
         assert image is not None
 

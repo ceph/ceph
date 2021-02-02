@@ -252,7 +252,7 @@ class CephadmServe:
                 v = d.get(k, None)
                 if v:
                     setattr(sd, k, str_to_datetime(d[k]))
-            sd.daemon_type = d['name'].split('.')[0]
+            sd.daemon_type = DaemonType(d['name'].split('.')[0])
             sd.daemon_id = '.'.join(d['name'].split('.')[1:])
             sd.hostname = host
             sd.container_id = d.get('container_id')
@@ -544,7 +544,7 @@ class CephadmServe:
                     r = True
                 except (RuntimeError, OrchestratorError) as e:
                     self.mgr.events.for_service(spec, 'ERROR',
-                                                f"Failed while placing {daemon_type}.{daemon_id}"
+                                                f"Failed while placing {daemon_type.value}.{daemon_id}"
                                                 f"on {host}: {e}")
                     # only return "no change" if no one else has already succeeded.
                     # later successes will also change to True
