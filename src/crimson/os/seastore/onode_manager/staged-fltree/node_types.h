@@ -61,4 +61,12 @@ constexpr match_stat_t MSTAT_LT3 =  3; // key < index [pool/shard]
 constexpr match_stat_t MSTAT_MIN = MSTAT_END;
 constexpr match_stat_t MSTAT_MAX = MSTAT_LT3;
 
+enum class node_delta_op_t : uint8_t {
+  INSERT,
+  SPLIT,
+  SPLIT_INSERT,
+  UPDATE_CHILD_ADDR,
+  SUBOP_UPDATE_VALUE = 0xff,
+};
+
 }

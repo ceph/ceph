@@ -35,6 +35,7 @@ class NodeExtentMutable;
  */
 template <node_type_t NODE_TYPE>
 class item_iterator_t {
+  using value_input_t = value_input_type_t<NODE_TYPE>;
   using value_t = value_type_t<NODE_TYPE>;
  public:
   item_iterator_t(const memory_range_t& range)
@@ -120,7 +121,7 @@ class item_iterator_t {
 
   template <KeyT KT>
   static node_offset_t estimate_insert(
-      const full_key_t<KT>& key, const value_t&) {
+      const full_key_t<KT>& key, const value_input_t&) {
     return ns_oid_view_t::estimate_size<KT>(key) + sizeof(node_offset_t);
   }
 

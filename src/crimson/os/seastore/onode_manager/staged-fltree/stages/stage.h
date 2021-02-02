@@ -162,6 +162,7 @@ struct staged {
   using next_param_t = typename Params::next_param_t;
   using position_t = staged_position_t<Params::STAGE>;
   using result_t = staged_result_t<Params::NODE_TYPE, Params::STAGE>;
+  using value_input_t = value_input_type_t<Params::NODE_TYPE>;
   using value_t = value_type_t<Params::NODE_TYPE>;
   static constexpr auto CONTAINER_TYPE = container_t::CONTAINER_TYPE;
   static constexpr bool IS_BOTTOM = (Params::STAGE == STAGE_BOTTOM);
@@ -315,8 +316,11 @@ struct staged {
 
     template <KeyT KT, typename T = value_t>
     std::enable_if_t<IS_BOTTOM, const T*> insert(
-        NodeExtentMutable& mut, const full_key_t<KT>& key,
-        const value_t& value, node_offset_t insert_size, const char* p_left_bound) {
+        NodeExtentMutable& mut,
+        const full_key_t<KT>& key,
+        const value_input_t& value,
+        node_offset_t insert_size,
+        const char* p_left_bound) {
       return container_t::template insert_at<KT>(
           mut, container, key, value, _index, insert_size, p_left_bound);
     }
@@ -467,7 +471,7 @@ struct staged {
 
     template <KeyT KT>
     static node_offset_t estimate_insert(
-        const full_key_t<KT>& key, const value_t& value) {
+        const full_key_t<KT>& key, const value_input_t& value) {
       return container_t::template estimate_insert<KT>(key, value);
     }
 
@@ -783,7 +787,8 @@ struct staged {
     }
 
     template <KeyT KT>
-    static node_offset_t estimate_insert(const full_key_t<KT>& key, const value_t& value) {
+    static node_offset_t estimate_insert(const full_key_t<KT>& key,
+                                         const value_input_t& value) {
       return container_t::template estimate_insert<KT>(key, value);
     }
 
@@ -1044,7 +1049,8 @@ struct staged {
   }
 
   template <KeyT KT>
-  static node_offset_t insert_size(const full_key_t<KT>& key, const value_t& value) {
+  static node_offset_t insert_size(const full_key_t<KT>& key,
+                                   const value_input_t& value) {
     if constexpr (IS_BOTTOM) {
       return iterator_t::template estimate_insert<KT>(key, value);
     } else {
@@ -1055,8 +1061,9 @@ struct staged {
   }
 
   template <KeyT KT>
-  static node_offset_t insert_size_at(
-      match_stage_t stage, const full_key_t<KeyT::HOBJ>& key, const value_t& value) {
+  static node_offset_t insert_size_at(match_stage_t stage,
+                                      const full_key_t<KeyT::HOBJ>& key,
+                                      const value_input_t& value) {
     if (stage == STAGE) {
       return insert_size<KT>(key, value);
     } else {
@@ -1068,7 +1075,7 @@ struct staged {
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, T> evaluate_insert(
       const container_t& container, const full_key_t<KeyT::VIEW>& key,
-      const value_t& value, position_t& position, bool evaluate_last) {
+      const value_input_t& value, position_t& position, bool evaluate_last) {
     auto iter = iterator_t(container);
     auto& index = position.index;
     if (evaluate_last || index == INDEX_END) {
@@ -1167,7 +1174,7 @@ struct staged {
 
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::LEAF, T> evaluate_insert(
-      const full_key_t<KeyT::HOBJ>& key, const onode_t& value,
+      const full_key_t<KeyT::HOBJ>& key, const value_config_t& value,
       const MatchHistory& history, match_stat_t mstat, position_t& position) {
     match_stage_t insert_stage = STAGE_TOP;
     while (*history.get_by_stage(insert_stage) == MatchKindCMP::EQ) {
@@ -1212,7 +1219,7 @@ struct staged {
   template <KeyT KT>
   static const value_t* insert_new(
       NodeExtentMutable& mut, const memory_range_t& range,
-      const full_key_t<KT>& key, const value_t& value) {
+      const full_key_t<KT>& key, const value_input_t& value) {
     char* p_insert = const_cast<char*>(range.p_end);
     const value_t* p_value = nullptr;
     StagedAppender<KT> appender;
@@ -1226,7 +1233,7 @@ struct staged {
   template <KeyT KT, bool SPLIT>
   static const value_t* proceed_insert_recursively(
       NodeExtentMutable& mut, const container_t& container,
-      const full_key_t<KT>& key, const value_t& value,
+      const full_key_t<KT>& key, const value_input_t& value,
       position_t& position, match_stage_t& stage,
       node_offset_t& _insert_size, const char* p_left_bound) {
     // proceed insert from right to left
@@ -1295,7 +1302,7 @@ struct staged {
   template <KeyT KT, bool SPLIT>
   static const value_t* proceed_insert(
       NodeExtentMutable& mut, const container_t& container,
-      const full_key_t<KT>& key, const value_t& value,
+      const full_key_t<KT>& key, const value_input_t& value,
       position_t& position, match_stage_t& stage, node_offset_t& _insert_size) {
     auto p_left_bound = container.p_left_bound();
     if (unlikely(!container.keys())) {
@@ -1401,7 +1408,7 @@ struct staged {
         size_t kv_logical_size = index_key.size_logical();
         size_t value_size;
         if constexpr (NODE_TYPE == node_type_t::LEAF) {
-          value_size = iter.get_p_value()->size;
+          value_size = iter.get_p_value()->allocation_size();
         } else {
           value_size = sizeof(value_t);
         }
@@ -1796,7 +1803,7 @@ struct staged {
    *       -> std::tuple<NodeExtentMutable&, char*>
    *   wrap_nxt(char* p_append)
    * ELSE
-   *   append(const full_key_t& key, const value_t& value)
+   *   append(const full_key_t& key, const value_input_t& value)
    */
   template <KeyT KT>
   struct _BaseWithNxtAppender {
@@ -1839,7 +1846,7 @@ struct staged {
       }
     }
     void append(const full_key_t<KT>& key,
-                const value_t& value, const value_t*& p_value) {
+                const value_input_t& value, const value_t*& p_value) {
       assert(!require_wrap_nxt);
       if constexpr (!IS_BOTTOM) {
         auto& nxt = open_nxt(key);
@@ -1989,7 +1996,7 @@ struct staged {
 
   template <KeyT KT>
   static bool append_insert(
-      const full_key_t<KT>& key, const value_t& value,
+      const full_key_t<KT>& key, const value_input_t& value,
       StagedIterator& src_iter, StagedAppender<KT>& appender,
       bool is_front_insert, match_stage_t& stage, const value_t*& p_value) {
     assert(src_iter.valid());

@@ -10,8 +10,9 @@ namespace crimson::os::seastore::onode {
 template <KeyT KT>
 const laddr_packed_t* internal_sub_items_t::insert_at(
     NodeExtentMutable& mut, const internal_sub_items_t& sub_items,
-    const full_key_t<KT>& key, const laddr_packed_t& value,
-    index_t index, node_offset_t size, const char* p_left_bound) {
+    const full_key_t<KT>& key, const laddr_t& value,
+    index_t index, node_offset_t size, const char* p_left_bound)
+{
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
   const char* p_shift_start = p_left_bound;
@@ -20,19 +21,21 @@ const laddr_packed_t* internal_sub_items_t::insert_at(
   mut.shift_absolute(p_shift_start, p_shift_end - p_shift_start, -(int)size);
 
   auto p_insert = const_cast<char*>(p_shift_end) - size;
-  auto item = internal_sub_item_t{snap_gen_t::from_key<KT>(key), value};
+  auto item = internal_sub_item_t{
+    snap_gen_t::from_key<KT>(key), laddr_packed_t{value}};
   mut.copy_in_absolute(p_insert, item);
   return &reinterpret_cast<internal_sub_item_t*>(p_insert)->value;
 }
 #define IA_TEMPLATE(KT)                                                     \
   template const laddr_packed_t* internal_sub_items_t::insert_at<KT>(       \
     NodeExtentMutable&, const internal_sub_items_t&, const full_key_t<KT>&, \
-    const laddr_packed_t&, index_t, node_offset_t, const char*)
+    const laddr_t&, index_t, node_offset_t, const char*)
 IA_TEMPLATE(KeyT::VIEW);
 IA_TEMPLATE(KeyT::HOBJ);
 
 node_offset_t internal_sub_items_t::trim_until(
-    NodeExtentMutable&, internal_sub_items_t& items, index_t index) {
+    NodeExtentMutable&, internal_sub_items_t& items, index_t index)
+{
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
@@ -43,7 +46,8 @@ node_offset_t internal_sub_items_t::trim_until(
 
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
-    const internal_sub_items_t& src, index_t from, index_t items) {
+    const internal_sub_items_t& src, index_t from, index_t items)
+{
   assert(from <= src.keys());
   if (items == 0) {
     return;
@@ -57,19 +61,22 @@ void internal_sub_items_t::Appender<KT>::append(
 
 template <KeyT KT>
 void internal_sub_items_t::Appender<KT>::append(
-    const full_key_t<KT>& key, const laddr_packed_t& value,
-    const laddr_packed_t*& p_value) {
+    const full_key_t<KT>& key, const laddr_t& value,
+    const laddr_packed_t*& p_value)
+{
   p_append -= sizeof(internal_sub_item_t);
-  auto item = internal_sub_item_t{snap_gen_t::from_key<KT>(key), value};
+  auto item = internal_sub_item_t{
+    snap_gen_t::from_key<KT>(key), laddr_packed_t{value}};
   p_mut->copy_in_absolute(p_append, item);
   p_value = &reinterpret_cast<internal_sub_item_t*>(p_append)->value;
 }
 
 template <KeyT KT>
-const onode_t* leaf_sub_items_t::insert_at(
+const value_header_t* leaf_sub_items_t::insert_at(
     NodeExtentMutable& mut, const leaf_sub_items_t& sub_items,
-    const full_key_t<KT>& key, const onode_t& value,
-    index_t index, node_offset_t size, const char* p_left_bound) {
+    const full_key_t<KT>& key, const value_config_t& value,
+    index_t index, node_offset_t size, const char* p_left_bound)
+{
   assert(index <= sub_items.keys());
   assert(size == estimate_insert<KT>(key, value));
   // a. [... item(index)] << size
@@ -79,14 +86,14 @@ const onode_t* leaf_sub_items_t::insert_at(
 
   // b. insert item
   auto p_insert = const_cast<char*>(p_shift_end - size);
-  auto p_value = reinterpret_cast<const onode_t*>(p_insert);
-  mut.copy_in_absolute(p_insert, &value, value.size);
-  p_insert += value.size;
+  auto p_value = reinterpret_cast<value_header_t*>(p_insert);
+  p_value->initiate(mut, value);
+  p_insert += value.allocation_size();
   mut.copy_in_absolute(p_insert, snap_gen_t::template from_key<KT>(key));
   assert(p_insert + sizeof(snap_gen_t) + sizeof(node_offset_t) == p_shift_end);
 
   // c. compensate affected offsets
-  auto item_size = value.size + sizeof(snap_gen_t);
+  auto item_size = value.allocation_size() + sizeof(snap_gen_t);
   for (auto i = index; i < sub_items.keys(); ++i) {
     const node_offset_packed_t& offset_i = sub_items.get_offset(i);
     mut.copy_in_absolute((void*)&offset_i, node_offset_t(offset_i.value + item_size));
@@ -110,12 +117,13 @@ const onode_t* leaf_sub_items_t::insert_at(
 
   return p_value;
 }
-template const onode_t* leaf_sub_items_t::insert_at<KeyT::HOBJ>(
+template const value_header_t* leaf_sub_items_t::insert_at<KeyT::HOBJ>(
     NodeExtentMutable&, const leaf_sub_items_t&, const full_key_t<KeyT::HOBJ>&,
-    const onode_t&, index_t, node_offset_t, const char*);
+    const value_config_t&, index_t, node_offset_t, const char*);
 
 node_offset_t leaf_sub_items_t::trim_until(
-    NodeExtentMutable& mut, leaf_sub_items_t& items, index_t index) {
+    NodeExtentMutable& mut, leaf_sub_items_t& items, index_t index)
+{
   assert(index != 0);
   auto keys = items.keys();
   assert(index <= keys);
@@ -144,7 +152,8 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 template <KeyT KT>
-char* leaf_sub_items_t::Appender<KT>::wrap() {
+char* leaf_sub_items_t::Appender<KT>::wrap()
+{
   auto p_cur = p_append;
   num_keys_t num_keys = 0;
   for (auto i = 0u; i < cnt; ++i) {
@@ -173,7 +182,7 @@ char* leaf_sub_items_t::Appender<KT>::wrap() {
         last_offset = offset;
       },
       [&] (const kv_item_t& arg) {
-        last_offset += sizeof(snap_gen_t) + arg.p_value->size;
+        last_offset += sizeof(snap_gen_t) + arg.value_config.allocation_size();
         p_cur -= sizeof(node_offset_t);
         p_mut->copy_in_absolute(p_cur, last_offset);
       }
@@ -193,9 +202,10 @@ char* leaf_sub_items_t::Appender<KT>::wrap() {
         assert(pp_value);
         p_cur -= sizeof(snap_gen_t);
         p_mut->copy_in_absolute(p_cur, snap_gen_t::template from_key<KT>(*arg.p_key));
-        p_cur -= arg.p_value->size;
-        p_mut->copy_in_absolute(p_cur, arg.p_value, arg.p_value->size);
-        *pp_value = reinterpret_cast<const onode_t*>(p_cur);
+        p_cur -= arg.value_config.allocation_size();
+        auto p_value = reinterpret_cast<value_header_t*>(p_cur);
+        p_value->initiate(*p_mut, arg.value_config);
+        *pp_value = p_value;
       }
     }, a);
   }
