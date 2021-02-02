@@ -598,7 +598,7 @@ def test_daemon_description_service_name(spec: ServiceSpec,
 
 def test_alertmanager_spec_1():
     spec = AlertManagerSpec()
-    assert spec.service_type == 'alertmanager'
+    assert spec.service_type.value == 'alertmanager'
     assert isinstance(spec.user_data, dict)
     assert len(spec.user_data.keys()) == 0
 
@@ -632,7 +632,7 @@ def test_custom_container_spec():
                                    'foo.conf': 'foo\nbar',
                                    'bar.conf': ['foo', 'bar']
                                })
-    assert spec.service_type == 'container'
+    assert spec.service_type.value == 'container'
     assert spec.entrypoint == '/usr/bin/bash'
     assert spec.uid == 1000
     assert spec.gid == 2000
@@ -683,7 +683,7 @@ spec:
 """
     yaml_file = yaml.safe_load(yaml_str)
     spec = ServiceSpec.from_json(yaml_file)
-    assert spec.service_type == "ha-rgw"
+    assert spec.service_type.value == "ha-rgw"
     assert spec.service_id == "haproxy_for_rgw"
     assert spec.virtual_ip_interface == "eth0"
     assert spec.virtual_ip_address == "192.168.20.1/24"

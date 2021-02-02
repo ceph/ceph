@@ -19,7 +19,7 @@ class NFSService(CephService):
     TYPE = 'nfs'
 
     def config(self, spec: NFSServiceSpec, daemon_id: str) -> None:  # type: ignore
-        assert self.TYPE == spec.service_type
+        assert self.TYPE == spec.service_type.value
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
@@ -28,7 +28,7 @@ class NFSService(CephService):
         self.mgr.spec_store.save(spec)
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> CephadmDaemonSpec:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         assert daemon_spec.spec
 
         daemon_id = daemon_spec.daemon_id
@@ -40,7 +40,7 @@ class NFSService(CephService):
         return daemon_spec
 
     def generate_config(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
+        assert self.TYPE == daemon_spec.daemon_type.value
         assert daemon_spec.spec
 
         daemon_type = daemon_spec.daemon_type

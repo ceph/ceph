@@ -1327,6 +1327,7 @@ class DaemonDescription(object):
         self.is_active = is_active
 
     def name(self) -> str:
+        assert self.daemon_type
         return '%s.%s' % (self.daemon_type.value, self.daemon_id)
 
     def matches_service(self, service_name: Optional[str]) -> bool:

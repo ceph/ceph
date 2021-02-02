@@ -514,6 +514,7 @@ class ServiceSpec(object):
             del c['service_name']
 
         service_type = ServiceType(c.get('service_type', ''))
+        c['service_type'] = service_type
         _cls = cls._cls(service_type)
 
         if 'status' in c:
@@ -830,7 +831,7 @@ class HA_RGWSpec(ServiceSpec):
                  keepalived_container_image: Optional[str] = None,
                  definitive_host_list: Optional[List[HostPlacementSpec]] = None
                  ):
-        assert service_type == 'ha-rgw'
+        assert service_type == ServiceType.ha_rgw
         super(HA_RGWSpec, self).__init__(ServiceType.ha_rgw, service_id=service_id, placement=placement)
 
         self.virtual_ip_interface = virtual_ip_interface
