@@ -282,8 +282,7 @@ void PrimaryLogScrub::scrub_snapshot_metadata(ScrubMap& scrubmap,
       bufferlist bv;
       bv.push_back(p->second.attrs[OI_ATTR]);
       try {
-	oi = object_info_t();  // Initialize optional<> before decode into it
-	oi->decode(bv);
+	oi = object_info_t(bv);
       } catch (ceph::buffer::error& e) {
 	oi = std::nullopt;
 	m_osds->clog->error() << mode << " " << info.pgid << " " << soid

@@ -926,8 +926,7 @@ ReplicatedRecoveryBackend::prep_push_target(
   if (!complete || !recovery_info.object_exist) {
     t->remove(coll->get_cid(), target_oid);
     t->touch(coll->get_cid(), target_oid);
-    bufferlist bv = attrs.at(OI_ATTR);
-    object_info_t oi(bv);
+    object_info_t oi(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,
                       oi.expected_object_size,
                       oi.expected_write_size,
