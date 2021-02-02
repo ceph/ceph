@@ -298,7 +298,7 @@ class HostCache():
     def update_host_facts(self, host, facts):
         # type: (str, Dict[str, Dict[str, Any]]) -> None
         self.facts[host] = facts
-        self.last_facts_update[host] = datetime.datetime.utcnow()
+        self.last_facts_update[host] = datetime_now()
 
     def devices_changed(self, host: str, b: List[inventory.Device]) -> bool:
         a = self.devices[host]
@@ -544,7 +544,7 @@ class HostCache():
         if host in self.mgr.offline_hosts:
             logger.debug(f'Host "{host}" marked as offline. Skipping gather facts refresh')
             return False
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+        cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.facts_cache_timeout)
         if host not in self.last_facts_update or self.last_facts_update[host] < cutoff:
             return True
