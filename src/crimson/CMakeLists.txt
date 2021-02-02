@@ -18,6 +18,7 @@ set(crimson_common_srcs
   common/formatter.cc
   common/perf_counters_collection.cc
   common/log.cc
+  common/operation.cc
   common/throttle.cc
   common/tri_mutex.cc)
 

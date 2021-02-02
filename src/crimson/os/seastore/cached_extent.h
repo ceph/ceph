@@ -235,6 +235,11 @@ public:
     return state != extent_state_t::INVALID;
   }
 
+  /// Returns true if extent or prior_instance has been invalidated
+  bool has_been_invalidated() const {
+    return !is_valid() || (prior_instance && !prior_instance->is_valid());
+  }
+
   /**
    * get_dirty_from
    *
@@ -398,6 +403,7 @@ protected:
     if (!addr.is_relative()) {
       return addr;
     } else if (is_mutation_pending()) {
+      assert(addr.is_record_relative());
       return addr;
     } else {
       ceph_assert(is_initial_pending());
@@ -495,6 +501,7 @@ public:
   }
 
   void erase(CachedExtent &extent) {
+    assert(extent.parent_index);
     extent_index.erase(extent);
     extent.parent_index = nullptr;
   }
@@ -538,6 +545,8 @@ public:
       extent_index.erase(l);
     }
   }
+
+  ~ExtentIndex() { assert(extent_index.empty()); }
 };
 
 class LogicalCachedExtent;
@@ -551,6 +560,7 @@ public:
   virtual paddr_t get_paddr() const = 0;
   virtual laddr_t get_laddr() const = 0;
   virtual LBAPinRef duplicate() const = 0;
+  virtual bool has_been_invalidated() const = 0;
 
   virtual ~LBAPin() {}
 };

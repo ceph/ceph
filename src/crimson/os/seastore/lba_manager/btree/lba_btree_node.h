@@ -13,6 +13,8 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+using base_ertr = LBAManager::base_ertr;
+
 struct op_context_t {
   Cache &cache;
   btree_pin_set_t &pins;
@@ -65,8 +67,7 @@ struct LBANode : CachedExtent {
    * Returns the node at the specified depth responsible
    * for laddr
    */
-  using lookup_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
+  using lookup_ertr = base_ertr;
   using lookup_ret = lookup_ertr::future<LBANodeRef>;
   virtual lookup_ret lookup(
     op_context_t c,
@@ -91,9 +92,7 @@ struct LBANode : CachedExtent {
    *
    * Precondition: !at_max_capacity()
    */
-  using insert_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
+  using insert_ertr = base_ertr;
   using insert_ret = insert_ertr::future<LBAPinRef>;
   virtual insert_ret insert(
     op_context_t c,
@@ -107,8 +106,7 @@ struct LBANode : CachedExtent {
    *
    * @return addr of hole, L_ADDR_NULL if unfound
    */
-  using find_hole_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
+  using find_hole_ertr = base_ertr;
   using find_hole_ret = find_hole_ertr::future<laddr_t>;
   virtual find_hole_ret find_hole(
     op_context_t c,
@@ -148,9 +146,8 @@ struct LBANode : CachedExtent {
    *
    * Precondition: !at_min_capacity()
    */
-  using mutate_mapping_ertr = crimson::errorator<
-    crimson::ct_error::enoent,            ///< mapping does not exist
-    crimson::ct_error::input_output_error
+  using mutate_mapping_ertr = base_ertr::extend<
+    crimson::ct_error::enoent             ///< mapping does not exist
     >;
   using mutate_mapping_ret = mutate_mapping_ertr::future<
     lba_map_val_t>;
@@ -174,9 +171,8 @@ struct LBANode : CachedExtent {
    * updates the mapping to paddr.  Returns previous paddr
    * (for debugging purposes).
    */
-  using mutate_internal_address_ertr = crimson::errorator<
-    crimson::ct_error::enoent,            ///< mapping does not exist
-    crimson::ct_error::input_output_error
+  using mutate_internal_address_ertr = base_ertr::extend<
+    crimson::ct_error::enoent             ///< mapping does not exist
     >;
   using mutate_internal_address_ret = mutate_internal_address_ertr::future<
     paddr_t>;
@@ -258,8 +254,11 @@ using LBANodeRef = LBANode::LBANodeRef;
  *
  * Fetches node at depth of the appropriate type.
  */
-Cache::get_extent_ertr::future<LBANodeRef> get_lba_btree_extent(
+using get_lba_node_ertr = base_ertr;
+using get_lba_node_ret = get_lba_node_ertr::future<LBANodeRef>;
+get_lba_node_ret get_lba_btree_extent(
   op_context_t c, ///< [in] context structure
+  CachedExtentRef parent, ///< [in] paddr ref source
   depth_t depth,  ///< [in] depth of node to fetch
   paddr_t offset, ///< [in] physical addr of node
   paddr_t base    ///< [in] depending on user, block addr or record addr

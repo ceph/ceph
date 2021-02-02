@@ -86,7 +86,9 @@ Journal::initialize_segment(Segment &segment)
       return seq;
     },
     initialize_segment_ertr::pass_further{},
-    crimson::ct_error::assert_all{ "TODO" });
+    crimson::ct_error::assert_all{
+      "Invalid error in Journal::initialize_segment"
+    });
 }
 
 ceph::bufferlist Journal::encode_record(
@@ -176,7 +178,8 @@ Journal::read_validate_data_ret Journal::read_validate_data(
 
 Journal::write_record_ret Journal::write_record(
   record_size_t rsize,
-  record_t &&record)
+  record_t &&record,
+  OrderingHandle &handle)
 {
   ceph::bufferlist to_write = encode_record(
     rsize, std::move(record));
@@ -188,16 +191,38 @@ Journal::write_record_ret Journal::write_record(
     rsize.mdlength,
     rsize.dlength,
     target);
-  return current_journal_segment->write(target, to_write).handle_error(
-    write_record_ertr::pass_further{},
-    crimson::ct_error::assert_all{ "TODO" }).safe_then([this, target] {
+
+  auto segment_id = current_journal_segment->get_segment_id();
+
+  // Start write under the current exclusive stage, but wait for it
+  // in the device_submission concurrent stage to permit multiple
+  // overlapping writes.
+  auto write_fut = current_journal_segment->write(target, to_write);
+  return handle.enter(write_pipeline->device_submission
+  ).then([write_fut = std::move(write_fut)]() mutable {
+    return std::move(write_fut
+    ).handle_error(
+      write_record_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+	"Invalid error in Journal::write_record"
+      }
+    );
+  }).safe_then([this, &handle] {
+    return handle.enter(write_pipeline->finalize);
+  }).safe_then([this, target, segment_id] {
+    logger().debug(
+      "write_record: commit target {}",
+      target);
+    if (segment_id == current_journal_segment->get_segment_id()) {
+      assert(committed_to < target);
       committed_to = target;
-      return write_record_ret(
-	write_record_ertr::ready_future_marker{},
-	paddr_t{
-	  current_journal_segment->get_segment_id(),
-	  target});
-    });
+    }
+    return write_record_ret(
+      write_record_ertr::ready_future_marker{},
+      paddr_t{
+	segment_id,
+	target});
+  });
 }
 
 Journal::record_size_t Journal::get_encoded_record_length(
@@ -261,7 +286,9 @@ Journal::read_segment_header(segment_id_t segment)
   return segment_manager.read(paddr_t{segment, 0}, block_size
   ).handle_error(
     read_segment_header_ertr::pass_further{},
-    crimson::ct_error::assert_all{}
+    crimson::ct_error::assert_all{
+      "Invalid error in Journal::read_segment_header"
+    }
   ).safe_then([=](bufferptr bptr) -> read_segment_header_ret {
     logger().debug("segment {} bptr size {}", segment, bptr.length());
 
@@ -346,7 +373,9 @@ Journal::find_replay_segments_fut Journal::find_replay_segments()
 	      return find_replay_segments_ertr::now();
 	    }),
 	    find_replay_segments_ertr::pass_further{},
-	    crimson::ct_error::assert_all{}
+	    crimson::ct_error::assert_all{
+	      "Invalid error in Journal::find_replay_segments"
+            }
 	  );
 	}).safe_then([this, &segments]() mutable -> find_replay_segments_fut {
 	  logger().debug(
@@ -609,7 +638,9 @@ Journal::scan_extents_ret Journal::scan_extents(
   return read_segment_header(cursor.get_offset().segment
   ).handle_error(
     scan_extents_ertr::pass_further{},
-    crimson::ct_error::assert_all{}
+    crimson::ct_error::assert_all{
+      "Invalid error in Journal::scan_extents"
+    }
   ).safe_then([&](auto segment_header) {
     auto segment_nonce = segment_header.segment_nonce;
     return seastar::do_with(

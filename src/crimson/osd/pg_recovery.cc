@@ -36,7 +36,7 @@ void PGRecovery::start_pglogbased_recovery()
     pg->get_osdmap_epoch());
 }
 
-crimson::osd::blocking_future<bool>
+crimson::blocking_future<bool>
 PGRecovery::start_recovery_ops(size_t max_to_start)
 {
   assert(pg->is_primary());
@@ -51,13 +51,13 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
   assert(!pg->is_backfilling());
   assert(!pg->get_peering_state().is_deleting());
 
-  std::vector<crimson::osd::blocking_future<>> started;
+  std::vector<crimson::blocking_future<>> started;
   started.reserve(max_to_start);
   max_to_start -= start_primary_recovery_ops(max_to_start, &started);
   if (max_to_start > 0) {
     max_to_start -= start_replica_recovery_ops(max_to_start, &started);
   }
-  return crimson::osd::join_blocking_futures(std::move(started)).then(
+  return crimson::join_blocking_futures(std::move(started)).then(
     [this] {
     bool done = !pg->get_peering_state().needs_recovery();
     if (done) {
@@ -94,7 +94,7 @@ PGRecovery::start_recovery_ops(size_t max_to_start)
 
 size_t PGRecovery::start_primary_recovery_ops(
   size_t max_to_start,
-  std::vector<crimson::osd::blocking_future<>> *out)
+  std::vector<crimson::blocking_future<>> *out)
 {
   if (!pg->is_recovering()) {
     return 0;
@@ -169,7 +169,7 @@ size_t PGRecovery::start_primary_recovery_ops(
 
 size_t PGRecovery::start_replica_recovery_ops(
   size_t max_to_start,
-  std::vector<crimson::osd::blocking_future<>> *out)
+  std::vector<crimson::blocking_future<>> *out)
 {
   if (!pg->is_recovering()) {
     return 0;
@@ -254,7 +254,7 @@ size_t PGRecovery::start_replica_recovery_ops(
   return started;
 }
 
-crimson::osd::blocking_future<> PGRecovery::recover_missing(
+crimson::blocking_future<> PGRecovery::recover_missing(
   const hobject_t &soid, eversion_t need)
 {
   if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
@@ -274,7 +274,7 @@ crimson::osd::blocking_future<> PGRecovery::recover_missing(
 size_t PGRecovery::prep_object_replica_deletes(
   const hobject_t& soid,
   eversion_t need,
-  std::vector<crimson::osd::blocking_future<>> *in_progress)
+  std::vector<crimson::blocking_future<>> *in_progress)
 {
   in_progress->push_back(
     pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(
@@ -292,7 +292,7 @@ size_t PGRecovery::prep_object_replica_deletes(
 size_t PGRecovery::prep_object_replica_pushes(
   const hobject_t& soid,
   eversion_t need,
-  std::vector<crimson::osd::blocking_future<>> *in_progress)
+  std::vector<crimson::blocking_future<>> *in_progress)
 {
   in_progress->push_back(
     pg->get_recovery_backend()->add_recovering(soid).make_blocking_future(

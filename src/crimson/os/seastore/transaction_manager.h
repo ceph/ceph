@@ -38,6 +38,8 @@ class Journal;
  */
 class TransactionManager : public SegmentCleaner::ExtentCallbackInterface {
 public:
+  using base_ertr = Cache::base_ertr;
+
   TransactionManager(
     SegmentManager &segment_manager,
     SegmentCleaner &segment_cleaner,
@@ -76,7 +78,8 @@ public:
   /**
    * Read extents corresponding to specified lba range
    */
-  using read_extent_ertr = SegmentManager::read_ertr;
+  using read_extent_ertr = LBAManager::get_mapping_ertr::extend_ertr<
+    SegmentManager::read_ertr>;
   template <typename T>
   using read_extent_ret = read_extent_ertr::future<lextent_list_t<T>>;
   template <typename T>
@@ -110,10 +113,15 @@ public:
 	    t,
 	    pin->get_paddr(),
 	    pin->get_length()
-	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable {
+	  ).safe_then([this, &pin, &ret_ref](auto ref) mutable
+		      -> read_extent_ertr::future<> {
 	    if (!ref->has_pin()) {
-	      ref->set_pin(std::move(pin));
-	      lba_manager.add_pin(ref->get_pin());
+	      if (pin->has_been_invalidated() || ref->has_been_invalidated()) {
+		return crimson::ct_error::eagain::make();
+	      } else {
+		ref->set_pin(std::move(pin));
+		lba_manager.add_pin(ref->get_pin());
+	      }
 	    }
 	    ret_ref.push_back(std::make_pair(ref->get_laddr(), ref));
 	    crimson::get_logger(ceph_subsys_filestore).debug(
@@ -189,7 +197,7 @@ public:
    * Allocates a new block of type T with the minimum lba range of size len
    * greater than hint.
    */
-  using alloc_extent_ertr = SegmentManager::read_ertr;
+  using alloc_extent_ertr = LBAManager::alloc_extent_ertr;
   template <typename T>
   using alloc_extent_ret = alloc_extent_ertr::future<TCachedExtentRef<T>>;
   template <typename T>
@@ -295,9 +303,7 @@ public:
    *
    * Get onode-tree root logical address
    */
-  using read_onode_root_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error
-    >;
+  using read_onode_root_ertr = read_extent_ertr;
   using read_onode_root_ret = read_onode_root_ertr::future<laddr_t>;
   read_onode_root_ret read_onode_root(Transaction &t) {
     return cache.get_root(t).safe_then([](auto croot) {
@@ -326,6 +332,8 @@ private:
   Cache &cache;
   LBAManager &lba_manager;
   Journal &journal;
+
+  WritePipeline write_pipeline;
 };
 using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
