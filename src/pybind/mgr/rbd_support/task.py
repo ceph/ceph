@@ -808,24 +808,3 @@ class TaskHandler:
                     result.append(task.to_dict())
 
         return 0, json.dumps(result, indent=4, sort_keys=True), ""
-
-    def handle_command(self, inbuf, prefix, cmd):
-        with self.lock:
-            if prefix == 'add flatten':
-                return self.queue_flatten(cmd['image_spec'])
-            elif prefix == 'add remove':
-                return self.queue_remove(cmd['image_spec'])
-            elif prefix == 'add trash remove':
-                return self.queue_trash_remove(cmd['image_id_spec'])
-            elif prefix == 'add migration execute':
-                return self.queue_migration_execute(cmd['image_spec'])
-            elif prefix == 'add migration commit':
-                return self.queue_migration_commit(cmd['image_spec'])
-            elif prefix == 'add migration abort':
-                return self.queue_migration_abort(cmd['image_spec'])
-            elif prefix == 'cancel':
-                return self.task_cancel(cmd['task_id'])
-            elif prefix == 'list':
-                return self.task_list(cmd.get('task_id'))
-
-        raise NotImplementedError(cmd['prefix'])

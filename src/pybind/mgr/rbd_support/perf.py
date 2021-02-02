@@ -444,14 +444,3 @@ class PerfHandler:
     def get_perf_counters(self, pool_spec, sort_by):
         return self.get_perf_data(
             "counter", pool_spec, sort_by, self.extract_counter)
-
-    def handle_command(self, inbuf, prefix, cmd):
-        with self.lock:
-            if prefix == 'image stats':
-                return self.get_perf_stats(cmd.get('pool_spec', None),
-                                           cmd.get('sort_by', OSD_PERF_QUERY_COUNTERS[0]))
-            elif prefix == 'image counters':
-                return self.get_perf_counters(cmd.get('pool_spec', None),
-                                              cmd.get('sort_by', OSD_PERF_QUERY_COUNTERS[0]))
-
-        raise NotImplementedError(cmd['prefix'])
