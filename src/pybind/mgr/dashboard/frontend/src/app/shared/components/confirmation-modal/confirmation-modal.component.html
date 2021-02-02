@@ -1,5 +1,9 @@
 <cd-modal (hide)="cancel()">
-  <ng-container class="modal-title">{{ titleText }}</ng-container>
+  <ng-container class="modal-title">
+    <span class="text-warning"
+          *ngIf="warning">
+      <i class="fa fa-exclamation-triangle fa-1x"></i>
+    </span>{{ titleText }}</ng-container>
   <ng-container class="modal-content">
     <form name="confirmationForm"
           #formDir="ngForm"
@@ -15,7 +19,8 @@
         <cd-form-button-panel (submitActionEvent)="onSubmit(confirmationForm.value)"
                               (backActionEvent)="boundCancel()"
                               [form]="confirmationForm"
-                              [submitText]="buttonText"></cd-form-button-panel>
+                              [submitText]="buttonText"
+                              [showSubmit]="showSubmit"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>
