@@ -115,6 +115,8 @@ export class ActionLabelsI18n {
   UNSET: string;
   UPDATE: string;
   FLAGS: string;
+  ENTER_MAINTENANCE: string;
+  EXIT_MAINTENANCE: string;
 
   constructor() {
     /* Create a new item */
@@ -166,6 +168,8 @@ export class ActionLabelsI18n {
     this.UNPROTECT = $localize`Unprotect`;
     this.CHANGE = $localize`Change`;
     this.FLAGS = $localize`Flags`;
+    this.ENTER_MAINTENANCE = $localize`Enter Maintenance`;
+    this.EXIT_MAINTENANCE = $localize`Exit Maintenance`;
 
     /* Prometheus wording */
     this.RECREATE = $localize`Recreate`;
