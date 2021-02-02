@@ -447,7 +447,7 @@ class CephadmServe:
 
         config_func = self._config_fn(service_type)
 
-        if service_type == 'osd':
+        if service_type == ServiceType.osd:
             self.mgr.osd_service.create_from_spec(cast(DriveGroupSpec, spec))
             # TODO: return True would result in a busy loop
             # can't know if daemon count changed; create_from_spec doesn't
@@ -457,7 +457,7 @@ class CephadmServe:
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
 
         public_network = None
-        if service_type == 'mon':
+        if service_type == ServiceType.mon:
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config get',
                 'who': 'mon',

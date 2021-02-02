@@ -7,6 +7,7 @@ from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.drive_selection import DriveSelection
 from ceph.deployment.inventory import Device
+from ceph.deployment.service_spec import ServiceType
 from ceph.utils import datetime_to_str, str_to_datetime
 
 from datetime import datetime
@@ -238,7 +239,7 @@ class OSDService(CephService):
         self.mgr.log.debug(f"Finding OSDSpecs for host: <{host}>")
         if not specs:
             specs = [cast(DriveGroupSpec, spec) for (sn, spec) in self.mgr.spec_store.spec_preview.items()
-                     if spec.service_type == 'osd']
+                     if spec.service_type == ServiceType.osd]
         for spec in specs:
             if host in spec.placement.filter_matching_hostspecs(self.mgr.inventory.all_specs()):
                 self.mgr.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")

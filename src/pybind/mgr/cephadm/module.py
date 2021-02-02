@@ -553,7 +553,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         Generate a unique random service name
         """
-        suffix = daemon_type not in [
+        suffix = daemon_type.value not in [
             'mon', 'crash', 'nfs',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'cephadm-exporter',
@@ -561,7 +561,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
                 raise orchestrator.OrchestratorValidationError(
-                    f'name {daemon_type}.{forcename} already in use')
+                    f'name {daemon_type.value}.{forcename} already in use')
             return forcename
 
         if '.' in host:
@@ -578,7 +578,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if len([d for d in existing if d.daemon_id == name]):
                 if not suffix:
                     raise orchestrator.OrchestratorValidationError(
-                        f'name {daemon_type}.{name} already in use')
+                        f'name {daemon_type.value}.{name} already in use')
                 self.log.debug('name %s exists, trying again', name)
                 continue
             return name
