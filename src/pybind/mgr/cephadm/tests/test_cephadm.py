@@ -809,8 +809,9 @@ class TestCephadm(object):
             assert out == ''
             assert "Host 'test' not found" in err
 
-            out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
-            assert out == HostSpec('test', 'test', offline=True).to_json()
+            out = wait(cephadm_module, cephadm_module.get_hosts())[0]
+            assert out.to_json() == HostSpec('test', 'test', offline=True).to_json()
+            assert out.status == 'Offline'
 
             _get_connection.side_effect = None
             assert CephadmServe(cephadm_module)._check_host('test') is None

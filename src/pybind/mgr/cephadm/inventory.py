@@ -54,7 +54,7 @@ class Inventory:
             raise OrchestratorError('host %s does not exist' % host)
 
     def add_host(self, spec: HostSpec) -> None:
-        self._inventory[spec.hostname] = spec.to_json(omit_offline=True)
+        self._inventory[spec.hostname] = spec.to_json(omit_offline=True, omit_status=True)
         self.save()
 
     def rm_host(self, host: str) -> None:

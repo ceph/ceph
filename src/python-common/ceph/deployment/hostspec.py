@@ -24,19 +24,28 @@ class HostSpec(object):
         #: label(s), if any
         self.labels = labels or []  # type: List[str]
 
-        #: human readable status
-        self.status = status or ''  # type: str
-
         self.maintenance = maintenance
 
         self.offline = offline
 
-    def to_json(self, omit_offline: bool = False) -> Dict[str, Any]:
+    @property
+    def status(self) -> str:
+        """human readable status"""
+        r = []
+        if self.maintenance:
+            r.append(f'maintenance mode')
+        if self.offline:
+            r.append(f'offline')
+        return ' and '.join(r).capitalize()
+
+    def to_json(self, omit_offline: bool = False, omit_status: bool = False) -> Dict[str, Any]:
         ret: Dict[str, Any] = {
             'hostname': self.hostname,
             'addr': self.addr,
             'labels': self.labels,
         }
+        if not omit_status:
+            ret['status'] = self.status,
         if self.maintenance:
             ret['maintenance'] = self.maintenance,
         if not omit_offline and self.offline:
