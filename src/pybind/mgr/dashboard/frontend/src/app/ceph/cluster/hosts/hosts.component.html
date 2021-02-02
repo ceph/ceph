@@ -56,3 +56,13 @@
     <ng-container *ngIf="!isLast">, </ng-container>
   </span>
 </ng-template>
+
+<ng-template #maintenanceConfirmTpl>
+  <div *ngFor="let msg of errorMessage; let last=last">
+    <ul *ngIf="!last || errorMessage.length == '1'">
+      <li i18n>{{ msg }}</li>
+    </ul>
+  </div>
+  <ng-container i18n
+                *ngIf="showSubmit">Are you sure you want to continue?</ng-container>
+</ng-template>
