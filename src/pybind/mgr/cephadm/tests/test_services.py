@@ -3,15 +3,17 @@ import pytest
 from unittest.mock import MagicMock, call
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, AuthEntity, CephadmExporter
+    RbdMirrorService, CrashService, CephadmService, AuthEntity, CephadmExporter, CephadmDaemonSpec
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
 from cephadm.services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
-from ceph.deployment.service_spec import IscsiServiceSpec
+from ceph.deployment.service_spec import IscsiServiceSpec, ServiceType
 
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonType
+
+from .fixtures import cephadm_module
 
 
 class FakeMgr:
@@ -44,52 +46,20 @@ class TestCephadmService:
         service._set_service_url_on_dashboard('svc', 'get-cmd', 'set-cmd', service_url)
         mgr.check_mon_command.assert_called_once_with({'prefix': 'get-cmd'})
 
-    def _get_services(self, mgr):
-        # services:
-        osd_service = OSDService(mgr)
-        nfs_service = NFSService(mgr)
-        mon_service = MonService(mgr)
-        mgr_service = MgrService(mgr)
-        mds_service = MdsService(mgr)
-        rgw_service = RgwService(mgr)
-        rbd_mirror_service = RbdMirrorService(mgr)
-        grafana_service = GrafanaService(mgr)
-        alertmanager_service = AlertmanagerService(mgr)
-        prometheus_service = PrometheusService(mgr)
-        node_exporter_service = NodeExporterService(mgr)
-        crash_service = CrashService(mgr)
-        iscsi_service = IscsiService(mgr)
-        cephadm_exporter_service = CephadmExporter(mgr)
-        cephadm_services = {
-            'mon': mon_service,
-            'mgr': mgr_service,
-            'osd': osd_service,
-            'mds': mds_service,
-            'rgw': rgw_service,
-            'rbd-mirror': rbd_mirror_service,
-            'nfs': nfs_service,
-            'grafana': grafana_service,
-            'alertmanager': alertmanager_service,
-            'prometheus': prometheus_service,
-            'node-exporter': node_exporter_service,
-            'crash': crash_service,
-            'iscsi': iscsi_service,
-            'cephadm-exporter': cephadm_exporter_service,
-        }
-        return cephadm_services
+    def test_iscsi_client_caps(self, cephadm_module):
+        cephadm_module.check_mon_command = MagicMock()
+        cephadm_module.check_mon_command.return_value = 0, '', ''
+        iscsi_service = cephadm_module._get_cephadm_service(ServiceType.iscsi)
 
-    def test_iscsi_client_caps(self):
-        mgr = FakeMgr()
-        iscsi_service = self._get_services(mgr)['iscsi']
+        iscsi_spec = IscsiServiceSpec(service_type=ServiceType.iscsi, service_id="a")
+        daemon = CephadmDaemonSpec(
+            spec=iscsi_spec,
+            daemon_type=DaemonType.iscsi,
+            daemon_id='a',
+            host='host'
+        )
 
-        iscsi_spec = IscsiServiceSpec(service_type='iscsi', service_id="a")
-        iscsi_spec.daemon_type = "iscsi"
-        iscsi_spec.daemon_id = "a"
-        iscsi_spec.spec = MagicMock()
-        iscsi_spec.spec.daemon_type = "iscsi"
-        iscsi_spec.spec.ssl_cert = ''
-
-        iscsi_service.prepare_create(iscsi_spec)
+        iscsi_service.prepare_create(daemon)
 
         expected_caps = ['mon',
                          'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"',
@@ -100,45 +70,47 @@ class TestCephadmService:
                               'entity': 'client.iscsi.a',
                               'caps': expected_caps})
 
-        assert expected_call in mgr.check_mon_command.mock_calls
+        assert expected_call in cephadm_module.check_mon_command.mock_calls
 
-    def test_get_auth_entity(self):
-        mgr = FakeMgr()
-        cephadm_services = self._get_services(mgr)
+    def test_get_auth_entity(self, cephadm_module):
+        cephadm_services = cephadm_module.cephadm_services
 
-        for daemon_type in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
-            assert "client.%s.id1" % (daemon_type) == \
-                cephadm_services[daemon_type].get_auth_entity("id1", "host")
-            assert "client.%s.id1" % (daemon_type) == \
-                cephadm_services[daemon_type].get_auth_entity("id1", "")
-            assert "client.%s.id1" % (daemon_type) == \
-                cephadm_services[daemon_type].get_auth_entity("id1")
+        for daemon_type_s in ['rgw', 'rbd-mirror', 'nfs', "iscsi"]:
+            service_type = ServiceType(daemon_type_s)
+            assert "client.%s.id1" % (daemon_type_s) == \
+                cephadm_services[service_type].get_auth_entity("id1", "host")
+            assert "client.%s.id1" % (daemon_type_s) == \
+                cephadm_services[service_type].get_auth_entity("id1", "")
+            assert "client.%s.id1" % (daemon_type_s) == \
+                cephadm_services[service_type].get_auth_entity("id1")
 
         assert "client.crash.host" == \
-            cephadm_services["crash"].get_auth_entity("id1", "host")
+            cephadm_services[ServiceType.crash].get_auth_entity("id1", "host")
         with pytest.raises(OrchestratorError):
-            t = cephadm_services["crash"].get_auth_entity("id1", "")
-            t = cephadm_services["crash"].get_auth_entity("id1")
+            t = cephadm_services[ServiceType.crash].get_auth_entity("id1", "")
+            t = cephadm_services[ServiceType.crash].get_auth_entity("id1")
 
-        assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "host")
-        assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "")
-        assert "mon." == cephadm_services["mon"].get_auth_entity("id1")
+        assert "mon." == cephadm_services[ServiceType.mon].get_auth_entity("id1", "host")
+        assert "mon." == cephadm_services[ServiceType.mon].get_auth_entity("id1", "")
+        assert "mon." == cephadm_services[ServiceType.mon].get_auth_entity("id1")
 
-        assert "mgr.id1" == cephadm_services["mgr"].get_auth_entity("id1", "host")
-        assert "mgr.id1" == cephadm_services["mgr"].get_auth_entity("id1", "")
-        assert "mgr.id1" == cephadm_services["mgr"].get_auth_entity("id1")
+        assert "mgr.id1" == cephadm_services[ServiceType.mgr].get_auth_entity("id1", "host")
+        assert "mgr.id1" == cephadm_services[ServiceType.mgr].get_auth_entity("id1", "")
+        assert "mgr.id1" == cephadm_services[ServiceType.mgr].get_auth_entity("id1")
 
-        for daemon_type in ["osd", "mds"]:
-            assert "%s.id1" % daemon_type == \
-                cephadm_services[daemon_type].get_auth_entity("id1", "host")
-            assert "%s.id1" % daemon_type == \
-                cephadm_services[daemon_type].get_auth_entity("id1", "")
-            assert "%s.id1" % daemon_type == \
-                cephadm_services[daemon_type].get_auth_entity("id1")
+        for daemon_type_s in ["osd", "mds"]:
+            service_type = ServiceType(daemon_type_s)
+            assert "%s.id1" % daemon_type_s == \
+                cephadm_services[service_type].get_auth_entity("id1", "host")
+            assert "%s.id1" % daemon_type_s == \
+                cephadm_services[service_type].get_auth_entity("id1", "")
+            assert "%s.id1" % daemon_type_s == \
+                cephadm_services[service_type].get_auth_entity("id1")
 
         # services based on CephadmService shouldn't have get_auth_entity
         with pytest.raises(AttributeError):
-            for daemon_type in ['grafana', 'alertmanager', 'prometheus', 'node-exporter', 'cephadm-exporter']:
-                cephadm_services[daemon_type].get_auth_entity("id1", "host")
-                cephadm_services[daemon_type].get_auth_entity("id1", "")
-                cephadm_services[daemon_type].get_auth_entity("id1")
+            for daemon_type_s in ['grafana', 'alertmanager', 'prometheus', 'node-exporter', 'cephadm-exporter']:
+                service_type = ServiceType(daemon_type_s)
+                cephadm_services[service_type].get_auth_entity("id1", "host")
+                cephadm_services[service_type].get_auth_entity("id1", "")
+                cephadm_services[service_type].get_auth_entity("id1")
