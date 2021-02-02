@@ -542,6 +542,9 @@ status()
                     echo "image ${image} journal status"
                     rbd --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" journal status --image ${image}
                     echo
+                    echo "image ${image} snapshots"
+                    rbd --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" snap ls --all ${image}
+                    echo
                 done
 
                 echo "${cluster} ${image_pool} ${image_ns} rbd_mirroring omap vals"
@@ -902,7 +905,9 @@ create_image_and_enable_mirror()
     fi
 
     create_image ${cluster} ${pool} ${image} $@
-    enable_mirror ${cluster} ${pool} ${image} ${mode}
+    if [ "${MIRROR_POOL_MODE}" = "image" ] || [ "$pool" = "${PARENT_POOL}" ]; then
+        enable_mirror ${cluster} ${pool} ${image} ${mode}
+    fi
 }
 
 enable_journaling()
