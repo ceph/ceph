@@ -705,7 +705,8 @@ int DataLogBackends::list(int shard, int max_entries,
 			  std::optional<std::string_view> marker,
 			  std::string* out_marker, bool* truncated)
 {
-  auto [gen_id, cursor] = cursorgeno(marker);
+  const auto [start_id, start_cursor] = cursorgeno(marker);
+  auto gen_id = start_id;
   std::string out_cursor;
   while (max_entries > 0) {
     std::vector<rgw_data_change_log_entry> gentries;
@@ -713,7 +714,10 @@ int DataLogBackends::list(int shard, int max_entries,
     auto i = lower_bound(gen_id);
     if (i == end()) return 0;
     auto be = i->second;
-    auto r = be->list(shard, max_entries, gentries, cursor,
+    l.unlock();
+    gen_id = be->gen_id;
+    auto r = be->list(shard, max_entries, gentries,
+		      gen_id == start_id ? start_cursor : std::string{},
 		      &out_cursor, truncated);
     if (r < 0)
       return r;
@@ -724,10 +728,13 @@ int DataLogBackends::list(int shard, int max_entries,
     for (auto& g : gentries) {
       g.log_id = gencursor(gen_id, g.log_id);
     }
-    max_entries -= gentries.size();
+    if (gentries.size() > max_entries)
+      max_entries = 0;
+    else
+      max_entries -= gentries.size();
+
     std::move(gentries.begin(), gentries.end(),
 	      std::back_inserter(entries));
-    cursor = {};
     ++gen_id;
   }
   return 0;
