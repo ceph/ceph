@@ -1653,7 +1653,6 @@ private:
   std::atomic<int> global_op_flags{0}; // flags which are applied to each IO op
   bool keep_balanced_budget = false;
   bool honor_pool_full = true;
-  bool pool_full_try = false;
 
   // If this is true, accumulate a set of blocklisted entities
   // to be drained by consume_blocklist_events.
@@ -2614,9 +2613,6 @@ private:
 
   void set_honor_pool_full() { honor_pool_full = true; }
   void unset_honor_pool_full() { honor_pool_full = false; }
-
-  void set_pool_full_try() { pool_full_try = true; }
-  void unset_pool_full_try() { pool_full_try = false; }
 
   void _scan_requests(
     OSDSession *s,
