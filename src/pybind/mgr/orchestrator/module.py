@@ -1099,7 +1099,8 @@ Usage:
                 specs.append(spec)
         else:
             placementspec = PlacementSpec.from_string(placement)
-            assert service_type
+            if not service_type:
+                raise OrchestratorValidationError(usage)
             specs = [ServiceSpec(service_type.value, placement=placementspec,
                                  unmanaged=unmanaged, preview_only=dry_run)]
 
