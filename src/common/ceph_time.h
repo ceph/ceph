@@ -276,8 +276,20 @@ public:
   static time_point zero() {
     return time_point::min();
   }
-};
 
+  static void to_timespec(const time_point& t, struct timespec& ts) {
+    auto s = std::chrono::time_point_cast<std::chrono::seconds>(t);
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t - s);
+    ts = {static_cast<std::time_t>(s.time_since_epoch().count()),
+          static_cast<long>(ns.count())};
+  }
+
+  static struct timespec to_timespec(const time_point& t) {
+    struct timespec ts;
+    to_timespec(t, ts);
+    return ts;
+  }
+};
 // Low-resolution but, I would hope or there's no point, faster
 // monotonic clock
 class coarse_mono_clock {

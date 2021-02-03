@@ -565,7 +565,7 @@ int MonClient::authenticate(double timeout)
   if (!_opened())
     _reopen_session();
 
-  auto until = ceph::real_clock::now();
+  auto until = ceph::mono_clock::now();
   until += ceph::make_timespan(timeout);
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
