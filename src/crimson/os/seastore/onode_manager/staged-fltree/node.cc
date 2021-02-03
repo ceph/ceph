@@ -63,12 +63,14 @@ tree_cursor_t::~tree_cursor_t()
   }
 }
 
-node_future<> tree_cursor_t::extend_value(context_t c, value_size_t extend_size)
+tree_cursor_t::future<>
+tree_cursor_t::extend_value(context_t c, value_size_t extend_size)
 {
   return ref_leaf_node->extend_value(c, position, extend_size);
 }
 
-node_future<> tree_cursor_t::trim_value(context_t c, value_size_t trim_size)
+tree_cursor_t::future<>
+tree_cursor_t::trim_value(context_t c, value_size_t trim_size)
 {
   return ref_leaf_node->trim_value(c, position, trim_size);
 }
