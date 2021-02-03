@@ -30,7 +30,6 @@ struct ECSubWrite;
 struct ECSubWriteReply;
 struct ECSubRead;
 struct ECSubReadReply;
-//==================
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
 public:
