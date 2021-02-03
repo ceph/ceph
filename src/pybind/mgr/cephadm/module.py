@@ -72,11 +72,6 @@ except ImportError as e:
     remoto = None
     remoto_import_error = str(e)
 
-try:
-    from typing import List
-except ImportError:
-    pass
-
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
