@@ -1,17 +1,6 @@
-import sys
-import time
-
-
-try:
-    from typing import Any
-except ImportError:
-    pass
-
 import pytest
 
-
-from tests import mock
-from .fixtures import cephadm_module, wait
+from .fixtures import wait
 from ..module import trivial_completion, forall_hosts
 
 

@@ -1,8 +1,7 @@
 import json
 
-from cephadm.services.osd import RemoveUtil, OSDRemovalQueue, OSD
+from cephadm.services.osd import OSDRemovalQueue, OSD
 import pytest
-from .fixtures import rm_util, osd_obj, cephadm_module
 from tests import mock
 from datetime import datetime
 
