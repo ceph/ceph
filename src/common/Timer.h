@@ -36,7 +36,7 @@ class SafeTimer
   void timer_thread();
   void _shutdown();
 
-  using clock_t = ceph::real_clock;
+  using clock_t = ceph::mono_clock;
   using scheduled_map_t = std::multimap<clock_t::time_point, Context*>;
   scheduled_map_t schedule;
   using event_lookup_map_t = std::map<Context*, scheduled_map_t::iterator>;
