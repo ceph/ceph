@@ -786,7 +786,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
 
   if (r == -ENOENT) {
     // the object does not exist -- mark the missing extents
-    zero_initial_extent({}, true);
+    zero_initial_extent(true);
     list_from_parent();
     return;
   } else if (r < 0) {
@@ -804,6 +804,8 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   librados::snap_t start_snap_id = 0;
   librados::snap_t first_snap_id = *m_snap_ids.begin();
   librados::snap_t last_snap_id = *m_snap_ids.rbegin();
+
+  bool initial_extents_written = false;
 
   // loop through all expected snapshots and build interval sets for
   // data and zeroed ranges for each snapshot
@@ -895,8 +897,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
               interval.first, interval.second,
               SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
             if (maybe_whiteout_detected) {
-              initial_written_extents.union_insert(interval.first,
-                                                   interval.second);
+              initial_extents_written = true;
             }
           }
         } else {
@@ -915,8 +916,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
               interval.first, interval.second,
               SparseExtent(SPARSE_EXTENT_STATE_ZEROED, interval.second));
             if (maybe_whiteout_detected) {
-              initial_written_extents.union_insert(interval.first,
-                                                   interval.second);
+              initial_extents_written = true;
             }
           }
         }
@@ -929,7 +929,9 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   }
 
   bool snapshot_delta_empty = snapshot_delta.empty();
-  zero_initial_extent(initial_written_extents, false);
+  if (!initial_extents_written) {
+    zero_initial_extent(false);
+  }
   ldout(cct, 20) << "snapshot_delta=" << snapshot_delta << dendl;
 
   if (snapshot_delta_empty) {
@@ -1040,8 +1042,7 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
 }
 
 template <typename I>
-void ObjectListSnapsRequest<I>::zero_initial_extent(
-    const interval_set<uint64_t>& written_extents, bool dne) {
+void ObjectListSnapsRequest<I>::zero_initial_extent(bool dne) {
   I *image_ctx = this->m_ictx;
   auto cct = image_ctx->cct;
 
@@ -1058,10 +1059,6 @@ void ObjectListSnapsRequest<I>::zero_initial_extent(
       interval.insert(object_offset, object_length);
     }
 
-    interval_set<uint64_t> intersection;
-    intersection.intersection_of(interval, written_extents);
-
-    interval.subtract(intersection);
     for (auto [offset, length] : interval) {
       ldout(cct, 20) << "zeroing initial extent " << offset << "~" << length
                      << dendl;
