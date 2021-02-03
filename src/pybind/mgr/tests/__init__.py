@@ -99,7 +99,9 @@ if 'UNITTEST' in os.environ:
             return self.mock_store_get('_ceph_get', data_name, mock.MagicMock())
 
         def _ceph_send_command(self, res, svc_type, svc_id, command, tag, inbuf):
+
             cmd = json.loads(command)
+            getattr(self, '_mon_commands_sent', []).append(cmd)
 
             # Mocking the config store is handy sometimes:
             def config_get():
@@ -145,6 +147,9 @@ if 'UNITTEST' in os.environ:
 
             res.complete(0, outb, '')
 
+        def assert_issued_mon_command(self, command):
+            assert command in self._mon_commands_sent, self._mon_commands_sent
+
         @property
         def _logger(self):
             return logging.getLogger(__name__)
@@ -154,6 +159,7 @@ if 'UNITTEST' in os.environ:
             pass
 
         def __init__(self, *args):
+            self._mon_commands_sent = []
             if not hasattr(self, '_store'):
                 self._store = {}
 
