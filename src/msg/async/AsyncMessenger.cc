@@ -198,8 +198,7 @@ void Processor::accept()
 	  w, std::move(cli_socket),
 	  msgr->get_myaddrs().v[listen_socket.get_addr_slot()],
 	  addr);
-	accept_error_num = 0;
-	continue;
+	break;
       } else {
 	--w->references;
 	if (r == -EINTR) {
