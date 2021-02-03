@@ -422,7 +422,7 @@ BuildArch:      noarch
 Requires:       lvm2
 Requires:       python%{python3_pkgversion}
 %if 0%{?weak_deps}
-Recommends:     podman
+Recommends:     podman >= 2.0.2
 %endif
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed 

@@ -570,7 +570,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     found.append(osd_id)
                 else:
                     self.log.info("ignoring osd {0} {1}".format(
-                        osd_id, metadata['devices']
+                        osd_id, metadata['devices'] if metadata else 'DNE'
                     ))
 
             return found is not None

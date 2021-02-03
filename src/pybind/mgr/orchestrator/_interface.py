@@ -117,6 +117,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
 class InnerCliCommandCallable(Protocol):
     def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]: ...
 
+
 def _cli_command(perm: str) -> InnerCliCommandCallable:
     def inner_cli_command(prefix: str) -> Callable[[FuncT], FuncT]:
         return lambda func: handle_exception(prefix, perm, func)
@@ -667,6 +668,7 @@ def _hide_in_features(f: FuncT) -> FuncT:
     f._hide_in_features = True  # type: ignore
     return f
 
+
 class Orchestrator(object):
     """
     Calls in this class may do long running remote operations, with time
@@ -837,7 +839,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def enter_host_maintenance(self, hostname: str) -> Completion:
+    def enter_host_maintenance(self, hostname: str, force: bool = False) -> Completion:
         """
         Place a host in maintenance, stopping daemons and disabling it's systemd target
         """

@@ -72,6 +72,13 @@ Add and remove hosts::
     ceph orch host add <hostname> [<addr>] [<labels>...]
     ceph orch host rm <hostname>
 
+Place a host in and out of maintenance mode (stops all Ceph daemons on host)::
+
+    ceph orch host maintenance enter <hostname> [--force]
+    ceph orch host maintenace exit <hostname>
+
+Where the force flag when entering maintenance allows the user to bypass warnings (but not alerts)
+
 For cephadm, see also :ref:`cephadm-fqdn` and :ref:`cephadm-removing-hosts`.
 
 Host Specification
@@ -355,6 +362,7 @@ that is compatible to ``ceph orch apply -i``::
 
     ceph orch ls --export
 
+For examples about retrieving specs of single services see :ref:`orchestrator-cli-service-spec-retrieve`.
 
 Daemon Status
 =============
@@ -742,6 +750,22 @@ Many service specifications can be applied at once using
     data_devices:
       all: true
     EOF
+
+.. _orchestrator-cli-service-spec-retrieve:
+
+Retrieving the running Service Specification
+--------------------------------------------
+
+If the services have been started via ``ceph orch apply...``, then directly changing
+the Services Specification is complicated. Instead of attempting to directly change
+the Services Specification, we suggest exporting the running Service Specification by
+following these instructions::
+    
+    ceph orch ls --service-name rgw.<realm>.<zone> --export > rgw.<realm>.<zone>.yaml
+    ceph orch ls --service-type mgr --export > mgr.yaml
+    ceph orch ls --export > cluster.yaml
+
+The Specification can then be changed and re-applied as above.
 
 .. _orchestrator-cli-placement-spec:
 

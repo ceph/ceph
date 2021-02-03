@@ -367,6 +367,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         path = self.get_ceph_option('cephadm_path')
         try:
+            assert isinstance(path, str)
             with open(path, 'r') as f:
                 self._cephadm = f.read()
         except (IOError, TypeError) as e:
@@ -818,7 +819,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         Show user for SSHing to cluster hosts
         """
-        return 0, self.ssh_user, ''
+        if self.ssh_user is None:
+            return -errno.ENOENT, '', 'No cluster SSH user configured'
+        else:
+            return 0, self.ssh_user, ''
 
     @orchestrator._cli_read_command(
         'cephadm set-user')
@@ -938,7 +942,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Text that is appended to all daemon's ceph.conf.
         Mainly a workaround, till `config generate-minimal-conf` generates
         a complete ceph.conf.
-             
+
         Warning: this is a dangerous operation.
         """
         if inbuf:
@@ -1091,6 +1095,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 return conn, r
             else:
                 self._reset_con(host)
+        assert self.ssh_user
         n = self.ssh_user + '@' + host
         self.log.debug("Opening connection to {} with ssh options '{}'".format(
             n, self._ssh_options))
@@ -1125,6 +1130,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     def _get_container_image(self, daemon_name: str) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
+        image: Optional[str] = None
         if daemon_type in CEPH_TYPES or \
                 daemon_type == 'nfs' or \
                 daemon_type == 'iscsi':
@@ -1134,7 +1140,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'who': utils.name_to_config_section(daemon_name),
                 'key': 'container_image',
             })
-            image = image.strip()  # type: ignore
+            image = image.strip()
         elif daemon_type == 'prometheus':
             image = self.container_image_prometheus
         elif daemon_type == 'grafana':
@@ -1250,7 +1256,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.log.info('Removed label %s to host %s' % (label, host))
         return 'Removed label %s from host %s' % (label, host)
 
-    def _host_ok_to_stop(self, hostname: str) -> Tuple[int, str]:
+    def _host_ok_to_stop(self, hostname: str, force: bool = False) -> Tuple[int, str]:
         self.log.debug("running host-ok-to-stop checks")
         daemons = self.cache.get_daemons()
         daemon_map: Dict[str, List[str]] = defaultdict(lambda: [])
@@ -1261,12 +1267,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if dd.hostname == hostname:
                 daemon_map[dd.daemon_type].append(dd.daemon_id)
 
+        notifications: List[str] = []
+        error_notifications: List[str] = []
+        okay: bool = True
         for daemon_type, daemon_ids in daemon_map.items():
-            r = self.cephadm_services[daemon_type_to_service(daemon_type)].ok_to_stop(daemon_ids)
+            r = self.cephadm_services[daemon_type_to_service(
+                daemon_type)].ok_to_stop(daemon_ids, force)
             if r.retval:
-                self.log.error(f'It is NOT safe to stop host {hostname}')
-                return r.retval, r.stderr
+                okay = False
+                # collect error notifications so user can see every daemon causing host
+                # to not be okay to stop
+                error_notifications.append(r.stderr)
+            if r.stdout:
+                # if extra notifications to print for user, add them to notifications list
+                notifications.append(r.stdout)
 
+        if not okay:
+            # at least one daemon is not okay to stop
+            return 1, '\n'.join(error_notifications)
+
+        if notifications:
+            return 0, (f'It is presumed safe to stop host {hostname}. ' +
+                       'Note the following:\n\n' + '\n'.join(notifications))
         return 0, f'It is presumed safe to stop host {hostname}'
 
     @trivial_completion
@@ -1298,7 +1320,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     @host_exists()
-    def enter_host_maintenance(self, hostname: str) -> str:
+    def enter_host_maintenance(self, hostname: str, force: bool = False) -> str:
         """ Attempt to place a cluster host in maintenance
 
         Placing a host into maintenance disables the cluster's ceph target in systemd
@@ -1327,15 +1349,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if host_daemons:
             # daemons on this host, so check the daemons can be stopped
             # and if so, place the host into maintenance by disabling the target
-            rc, msg = self._host_ok_to_stop(hostname)
+            rc, msg = self._host_ok_to_stop(hostname, force)
             if rc:
-                raise OrchestratorError(msg, errno=rc)
+                raise OrchestratorError(
+                    msg + '\nNote: Warnings can be bypassed with the --force flag', errno=rc)
 
             # call the host-maintenance function
-            out, _err, _code = CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, "host-maintenance",
-                                                               ["enter"],
-                                                               error_ok=True)
-            if out:
+            _out, _err, _code = CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, "host-maintenance",
+                                                                ["enter"],
+                                                                error_ok=True)
+            if _out:
                 raise OrchestratorError(
                     f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
 
@@ -1383,10 +1406,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if tgt_host['status'] != "maintenance":
             raise OrchestratorError(f"Host {hostname} is not in maintenance mode")
 
-        out, _err, _code = CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, 'host-maintenance',
-                                                           ['exit'],
-                                                           error_ok=True)
-        if out:
+        outs, errs, _code = CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, 'host-maintenance',
+                                                            ['exit'],
+                                                            error_ok=True)
+        if outs:
             raise OrchestratorError(
                 f"Failed to exit maintenance state for host {hostname}, cluster {self._cluster_fsid}")
 

@@ -499,12 +499,9 @@ int PyModule::load_commands()
     command.perm = PyUnicode_AsUTF8(pPerm);
 
     command.polling = false;
-    PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
-    if (pPoll) {
-      std::string polling = PyUnicode_AsUTF8(pPoll);
-      if (boost::iequals(polling, "true")) {
-        command.polling = true;
-      }
+    if (PyObject *pPoll = PyDict_GetItemString(pCommand, "poll");
+	pPoll && PyObject_IsTrue(pPoll)) {
+      command.polling = true;
     }
 
     command.module_name = module_name;
