@@ -784,9 +784,14 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   m_snapshot_delta->clear();
   auto& snapshot_delta = *m_snapshot_delta;
 
+  ceph_assert(!m_snap_ids.empty());
+  librados::snap_t start_snap_id = 0;
+  librados::snap_t first_snap_id = *m_snap_ids.begin();
+  librados::snap_t last_snap_id = *m_snap_ids.rbegin();
+
   if (r == -ENOENT) {
     // the object does not exist -- mark the missing extents
-    zero_initial_extent(true);
+    zero_extent(first_snap_id, true);
     list_from_parent();
     return;
   } else if (r < 0) {
@@ -799,11 +804,6 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   // helper function requires the librados legacy data structure
   librados::snap_set_t snap_set;
   convert_snap_set(m_snap_set, &snap_set);
-
-  ceph_assert(!m_snap_ids.empty());
-  librados::snap_t start_snap_id = 0;
-  librados::snap_t first_snap_id = *m_snap_ids.begin();
-  librados::snap_t last_snap_id = *m_snap_ids.rbegin();
 
   bool initial_extents_written = false;
 
@@ -924,7 +924,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
 
   bool snapshot_delta_empty = snapshot_delta.empty();
   if (!initial_extents_written) {
-    zero_initial_extent(false);
+    zero_extent(first_snap_id, first_snap_id > 0);
   }
   ldout(cct, 20) << "snapshot_delta=" << snapshot_delta << dendl;
 
@@ -1003,8 +1003,7 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
                  << "parent_snapshot_delta=" << m_parent_snapshot_delta
                  << dendl;
 
-  // ignore special-case of fully empty dataset
-  m_parent_snapshot_delta.erase(INITIAL_WRITE_READ_SNAP_IDS);
+  // ignore special-case of fully empty dataset (we ignore zeroes)
   if (m_parent_snapshot_delta.empty()) {
     this->finish(0);
     return;
@@ -1036,27 +1035,24 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
 }
 
 template <typename I>
-void ObjectListSnapsRequest<I>::zero_initial_extent(bool dne) {
+void ObjectListSnapsRequest<I>::zero_extent(uint64_t snap_id, bool dne) {
   I *image_ctx = this->m_ictx;
   auto cct = image_ctx->cct;
-
-  ceph_assert(!m_snap_ids.empty());
-  librados::snap_t snap_id_start = *m_snap_ids.begin();
 
   // the object does not exist or is (partially) under whiteout -- mark the
   // missing extents which would be any portion of the object that does not
   // have data in the initial snapshot set
-  if ((snap_id_start == 0) &&
-       ((m_list_snaps_flags & LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0)) {
+  if ((m_list_snaps_flags & LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0) {
     interval_set<uint64_t> interval;
     for (auto [object_offset, object_length] : m_object_extents) {
       interval.insert(object_offset, object_length);
     }
 
     for (auto [offset, length] : interval) {
-      ldout(cct, 20) << "zeroing initial extent " << offset << "~" << length
-                     << dendl;
-      (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS].insert(
+      ldout(cct, 20) << "snapshot " << snap_id << ": "
+                     << (dne ? "DNE" : "zeroed") << " extent "
+                     << offset << "~" << length << dendl;
+      (*m_snapshot_delta)[{snap_id, snap_id}].insert(
         offset, length,
         SparseExtent(
           (dne ? SPARSE_EXTENT_STATE_DNE : SPARSE_EXTENT_STATE_ZEROED),

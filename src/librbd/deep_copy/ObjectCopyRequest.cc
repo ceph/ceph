@@ -465,7 +465,7 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     io::WriteReadSnapIds write_read_snap_ids{key};
 
     // advance the src write snap id to the first valid snap id
-    if (write_read_snap_ids != io::INITIAL_WRITE_READ_SNAP_IDS) {
+    if (write_read_snap_ids.first > m_src_snap_id_start) {
       // don't attempt to read from snapshots that shouldn't exist in
       // case the OSD fails to give a correct snap list
       auto snap_map_it = m_snap_map.find(write_read_snap_ids.first);
@@ -485,10 +485,10 @@ void ObjectCopyRequest<I>::compute_read_ops() {
       auto state = image_interval.get_val().state;
       switch (state) {
       case io::SPARSE_EXTENT_STATE_DNE:
-        ceph_assert(write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS);
-        if (read_from_parent) {
-          // special-case for DNE object-extents since when flattening we need
-          // to read data from the parent images extents
+        if (write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS &&
+            read_from_parent) {
+          // special-case for DNE initial object-extents since when flattening
+          // we need to read data from the parent images extents
           ldout(m_cct, 20) << "DNE extent: "
                            << image_interval.get_off() << "~"
                            << image_interval.get_len() << dendl;
@@ -626,14 +626,15 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
       auto state = image_interval.get_val().state;
       switch (state) {
       case io::SPARSE_EXTENT_STATE_ZEROED:
-        if (write_read_snap_ids != io::WriteReadSnapIds{0, 0}) {
+        if (write_read_snap_ids.first > m_src_snap_id_start) {
           ldout(m_cct, 20) << "zeroed extent: "
                            << "src_snap_seq=" << src_snap_seq << " "
                            << image_interval.get_off() << "~"
                            << image_interval.get_len() << dendl;
           m_dst_zero_interval[src_snap_seq].union_insert(
             image_interval.get_off(), image_interval.get_len());
-        } else if (hide_parent) {
+        } else if (write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS &&
+                   hide_parent) {
           auto first_src_snap_id = m_snap_map.begin()->first;
           ldout(m_cct, 20) << "zeroed (hide parent) extent: "
                            << "src_snap_seq=" << first_src_snap_id << "  "
