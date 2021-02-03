@@ -1019,6 +1019,11 @@ std::vector<Option> get_global_options() {
     .set_default(100_M)
     .set_description("Limit messages that are read off the network but still being processed"),
 
+    Option("ms_dispatch_throttle_log_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_min(0)
+    .set_description("Interval in seconds for high verbosity debug log message when the dispatch throttle limit are hit"),
+
     Option("ms_bind_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Bind servers to IPv4 address(es)")

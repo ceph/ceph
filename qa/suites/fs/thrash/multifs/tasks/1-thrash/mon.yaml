@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - Throttler Limit has been hit. Some message processing may be significantly delayed.
 tasks:
 - mon_thrash:
     check_mds_failover: True
