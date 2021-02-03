@@ -1172,7 +1172,8 @@ protected:
   string data_type;
   SIProvider::StageType stage_type;
 
-  std::unique_ptr<SIProviderCRMgr_REST> sip;
+  std::unique_ptr<SIProviderCRMgr_REST> sip_mgr;
+  std::unique_ptr<SIProviderCRMgrInstance_REST> sip;
 
   SIProvider::Info info;
   SIProvider::stage_id_t sid;
@@ -1236,7 +1237,7 @@ protected:
   class FetchCR : public RGWCoroutine {
     RGWSyncInfoCRHandler_SIP *handler;
 
-    SIProviderCRMgr_REST *provider;
+    SIProviderCRMgrInstance_REST *provider;
     SIProvider::stage_id_t sid;
     int shard_id;
     string marker;
@@ -1246,7 +1247,7 @@ protected:
     vector<SIProvider::Entry>::iterator iter;
   public:
     FetchCR(RGWSyncInfoCRHandler_SIP *_handler,
-            SIProviderCRMgr_REST *_provider,
+            SIProviderCRMgrInstance_REST *_provider,
             const SIProvider::stage_id_t& _sid,
             int _shard_id,
             const string& _marker,
@@ -1291,7 +1292,10 @@ protected:
 
   virtual int handle_fetched_entry(const SIProvider::stage_id_t& sid, SIProvider::Entry& fetched_entry, typename T::entry *pe) = 0;
 
-  void sip_init(std::unique_ptr<SIProviderCRMgr_REST>&& _sip) {
+  void sip_mgr_init(std::unique_ptr<SIProviderCRMgr_REST>&& _sip_mgr) {
+    sip_mgr = std::move(_sip_mgr);
+  }
+  void sip_init(std::unique_ptr<SIProviderCRMgrInstance_REST>&& _sip) {
     sip = std::move(_sip);
     type_handler = sip->get_type_handler();
   }
@@ -1371,13 +1375,13 @@ public:
                                                                                                   _stage_type),
                                                                          RGWDataSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_data_info> >();
-    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->dpp,
-                                                    _sc->conns.sip,
-                                                    _sc->env->http_manager,
-                                                    data_type,
-                                                    stage_type,
-                                                    type_provider.get(),
-                                                    nullopt));
+    sip_mgr_init(std::make_unique<SIProviderCRMgr_REST>(_sc->dpp,
+                                                        _sc->conns.sip,
+                                                        _sc->env->http_manager));
+    sip_init(std::unique_ptr<SIProviderCRMgrInstance_REST>(sip_mgr->alloc_instance(data_type,
+                                                                                   stage_type,
+                                                                                   type_provider.get(),
+                                                                                   nullopt)));
   }
 
   /* create a clone object with new data sync ctx,
@@ -3680,13 +3684,13 @@ public:
                                                                                                     _stage_type),
                                                                            RGWBucketPipeSyncInfoCRHandler(_sc) {
     type_provider = std::make_shared<SITypeHandlerProvider_Default<siprovider_bucket_entry_info> >();
-    sip_init(std::make_unique<SIProviderCRMgr_REST>(_sc->dpp,
-                                                    _sc->conns.sip,
-                                                    _sc->env->http_manager,
-                                                    data_type,
-                                                    stage_type,
-                                                    type_provider.get(),
-                                                    source_bucket.get_key()));
+    sip_mgr_init(std::make_unique<SIProviderCRMgr_REST>(_sc->dpp,
+                                                        _sc->conns.sip,
+                                                        _sc->env->http_manager));
+    sip_init(std::unique_ptr<SIProviderCRMgrInstance_REST>(sip_mgr->alloc_instance(data_type,
+                                                                                   stage_type,
+                                                                                   type_provider.get(),
+                                                                                   source_bucket.get_key())));
   }
 };
 

@@ -6,6 +6,7 @@ class RGWCoroutinesManager;
 class RGWRESTConn;
 class RGWHTTPManager;
 class SIProviderCRMgr_REST;
+class SIProviderCRMgrInstance_REST;
 
 class SIProvider_REST : public SIProviderCommon
 {
@@ -18,8 +19,9 @@ class SIProvider_REST : public SIProviderCommon
   std::optional<std::string> instance;
 
   std::unique_ptr<SIProviderCRMgr_REST> sip_cr_mgr;
+  std::unique_ptr<SIProviderCRMgrInstance_REST> sip_cr_mgri;
 
-  /* this is needed so that we can initialize sip_cr_mgr with type
+  /* this is needed so that we can initialize sip_cr_mgri with type
    * provider at constructor.
    */
   class TypeProvider : public SIProvider::TypeHandlerProvider {

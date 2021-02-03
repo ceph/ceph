@@ -18,9 +18,9 @@ SIProvider_REST::SIProvider_REST(const DoutPrefixProvider *_dpp,
                                                                     remote_provider_name(_remote_provider_name),
                                                                     instance(_instance),
                                                                     proxy_type_provider(this) {
-  sip_cr_mgr.reset(new SIProviderCRMgr_REST(_dpp, conn, http_manager,
-                                            _remote_provider_name,
-                                            &proxy_type_provider, instance));
+  sip_cr_mgr.reset(new SIProviderCRMgr_REST(_dpp, conn, http_manager));
+  sip_cr_mgri.reset(sip_cr_mgr->alloc_instance(_remote_provider_name,
+                                               &proxy_type_provider, instance));
 }
 
 SIProvider_REST::SIProvider_REST(const DoutPrefixProvider *_dpp,
@@ -39,15 +39,15 @@ SIProvider_REST::SIProvider_REST(const DoutPrefixProvider *_dpp,
                                                                     stage_type(_stage_type),
                                                                     instance(_instance),
                                                                     proxy_type_provider(this) {
-  sip_cr_mgr.reset(new SIProviderCRMgr_REST(_dpp, conn, http_manager,
-                                            _data_type,
-                                            _stage_type,
-                                            &proxy_type_provider, instance));
+  sip_cr_mgr.reset(new SIProviderCRMgr_REST(_dpp, conn, http_manager));
+  sip_cr_mgri.reset(sip_cr_mgr->alloc_instance(_data_type,
+                                               _stage_type,
+                                               &proxy_type_provider, instance));
 }
 
 int SIProvider_REST::init(const DoutPrefixProvider *dpp)
 {
-  return cr_mgr->run(sip_cr_mgr->init_cr());
+  return cr_mgr->run(sip_cr_mgri->init_cr());
 }
 
 SIProvider_REST::~SIProvider_REST() {
@@ -74,7 +74,7 @@ SIProvider::stage_id_t SIProvider_REST::get_last_stage(const DoutPrefixProvider 
 int SIProvider_REST::get_next_stage(const DoutPrefixProvider *dpp,
                                     const SIProvider::stage_id_t& sid, SIProvider::stage_id_t *next_sid)
 {
-  int r = cr_mgr->run(sip_cr_mgr->get_next_stage_cr(sid, next_sid));
+  int r = cr_mgr->run(sip_cr_mgri->get_next_stage_cr(sid, next_sid));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch data from remote sip: r=" << r << dendl;
     return r;
@@ -85,7 +85,7 @@ int SIProvider_REST::get_next_stage(const DoutPrefixProvider *dpp,
 std::vector<SIProvider::stage_id_t> SIProvider_REST::get_stages(const DoutPrefixProvider *dpp)
 {
   std::vector<SIProvider::stage_id_t> stages;
-  int r = cr_mgr->run(sip_cr_mgr->get_stages_cr(&stages));
+  int r = cr_mgr->run(sip_cr_mgri->get_stages_cr(&stages));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch stages from remote sip: r=" << r << dendl;
     /* continue -- no stages */
@@ -97,7 +97,7 @@ std::vector<SIProvider::stage_id_t> SIProvider_REST::get_stages(const DoutPrefix
 int SIProvider_REST::get_stage_info(const DoutPrefixProvider *dpp,
                                     const SIProvider::stage_id_t& sid, SIProvider::StageInfo *sinfo)
 {
-  int r = cr_mgr->run(sip_cr_mgr->get_stage_info_cr(sid, sinfo));
+  int r = cr_mgr->run(sip_cr_mgri->get_stage_info_cr(sid, sinfo));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
     return r;
@@ -108,7 +108,7 @@ int SIProvider_REST::get_stage_info(const DoutPrefixProvider *dpp,
 int SIProvider_REST::fetch(const DoutPrefixProvider *dpp,
                            const SIProvider::stage_id_t& sid, int shard_id, std::string marker, int max, fetch_result *result)
 {
-  int r = cr_mgr->run(sip_cr_mgr->fetch_cr(sid, shard_id, marker, max, result));
+  int r = cr_mgr->run(sip_cr_mgri->fetch_cr(sid, shard_id, marker, max, result));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch data from remote sip: r=" << r << dendl;
     return r;
@@ -120,7 +120,7 @@ int SIProvider_REST::get_start_marker(const DoutPrefixProvider *dpp,
                                       const SIProvider::stage_id_t& sid, int shard_id, std::string *marker, ceph::real_time *timestamp)
 {
   rgw_sip_pos pos;
-  int r = cr_mgr->run(sip_cr_mgr->get_start_marker_cr(sid, shard_id, &pos));
+  int r = cr_mgr->run(sip_cr_mgri->get_start_marker_cr(sid, shard_id, &pos));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
     return r;
@@ -139,7 +139,7 @@ int SIProvider_REST::get_cur_state(const DoutPrefixProvider *dpp,
                                    bool *disabled, optional_yield y)
 {
   rgw_sip_pos pos;
-  int r = cr_mgr->run(sip_cr_mgr->get_cur_state_cr(sid, shard_id, &pos, disabled));
+  int r = cr_mgr->run(sip_cr_mgri->get_cur_state_cr(sid, shard_id, &pos, disabled));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
     return r;
@@ -156,7 +156,7 @@ int SIProvider_REST::get_cur_state(const DoutPrefixProvider *dpp,
 int SIProvider_REST::trim(const DoutPrefixProvider *dpp,
                           const SIProvider::stage_id_t& sid, int shard_id, const std::string& marker)
 {
-  int r = cr_mgr->run(sip_cr_mgr->trim_cr(sid, shard_id, marker));
+  int r = cr_mgr->run(sip_cr_mgri->trim_cr(sid, shard_id, marker));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to fetch stages: r=" << r << dendl;
     return r;

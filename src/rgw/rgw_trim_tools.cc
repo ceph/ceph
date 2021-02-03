@@ -28,7 +28,8 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
   SIProvider::StageInfo stage_info;
   RGWSI_SIP_Marker::HandlerRef marker_handler;
 
-  std::optional<SIProviderCRMgr_Local> sip_cr;
+  std::optional<SIProviderCRMgr_Local> sip_cr_mgr;
+  std::unique_ptr<SIProviderCRMgrInstance_Local> sip_cr;
 
   class InitCR : public RGWCoroutine {
     const DoutPrefixProvider *dpp;
@@ -47,10 +48,10 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
         if (!mgr->sip) {
           return set_cr_error(-ENOENT);
         }
-        mgr->sip_cr.emplace(dpp,
-                            store->svc()->sip_marker,
-                            store->svc()->rados->get_async_processor(),
-                            mgr->sip);
+        mgr->sip_cr_mgr.emplace(dpp,
+                                store->svc()->sip_marker,
+                                store->svc()->rados->get_async_processor());
+        mgr->sip_cr.reset(mgr->sip_cr_mgr->alloc_instance(mgr->sip));
 
         mgr->sid = mgr->sip->get_first_stage(dpp);
 
