@@ -9,7 +9,7 @@ from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
 
 from cephadm.module import HostAssignment
-from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError, HostSpec
+from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError
 
 
 def wrapper(func):
