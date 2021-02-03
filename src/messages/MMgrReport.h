@@ -18,9 +18,11 @@
 #include <boost/optional.hpp>
 
 #include "msg/Message.h"
+#include "mgr/MetricTypes.h"
 #include "mgr/OSDPerfMetricTypes.h"
 
 #include "common/perf_counters.h"
+#include "include/common_fwd.h"
 #include "mgr/DaemonHealthMetric.h"
 
 class PerfCounterType
@@ -59,12 +61,16 @@ public:
     decode(path, p);
     decode(description, p);
     decode(nick, p);
-    decode((uint8_t&)type, p);
+    uint8_t raw_type;
+    decode(raw_type, p);
+    type = (enum perfcounter_type_d)raw_type;
     if (struct_v >= 2) {
       decode(priority, p);
     }
     if (struct_v >= 3) {
-      decode((uint8_t&)unit, p);
+      uint8_t raw_unit;
+      decode(raw_unit, p);
+      unit = (enum unit_t)raw_unit;
     }
     DECODE_FINISH(p);
   }
@@ -73,7 +79,7 @@ WRITE_CLASS_ENCODER(PerfCounterType)
 
 class MMgrReport : public Message {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -107,6 +113,8 @@ public:
 
   std::map<OSDPerfMetricQuery, OSDPerfMetricReport>  osd_perf_metric_reports;
 
+  boost::optional<MetricReportMessage> metric_report_message;
+
   void decode_payload() override
   {
     using ceph::decode;
@@ -132,6 +140,9 @@ public:
     if (header.version >= 8) {
       decode(task_status, p);
     }
+    if (header.version >= 9) {
+      decode(metric_report_message, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -146,6 +157,12 @@ public:
     encode(config_bl, payload);
     encode(osd_perf_metric_reports, payload);
     encode(task_status, payload);
+    if (metric_report_message && metric_report_message->should_encode(features)) {
+      encode(metric_report_message, payload);
+    } else {
+      boost::optional<MetricReportMessage> empty;
+      encode(empty, payload);
+    }
   }
 
   std::string_view get_type_name() const override { return "mgrreport"; }

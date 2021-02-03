@@ -578,6 +578,44 @@ TRACEPOINT_EVENT(librados, rados_mgr_command_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_mgr_command_target_enter,
+    TP_ARGS(
+        rados_t, cluster,
+	const char *, name,
+        size_t, cmdlen,
+        const char*, inbuf,
+        size_t, inbuflen),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+	ctf_string(name, name)
+        ctf_integer(size_t, cmdlen, cmdlen)
+        ceph_ctf_sequence(unsigned char, inbuf, inbuf, size_t, inbuflen)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_target_cmd,
+    TP_ARGS(
+        const char*, cmd),
+    TP_FIELDS(
+        ctf_string(cmd, cmd)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_mgr_command_target_exit,
+    TP_ARGS(
+        int, retval,
+        char**, outbuf,
+        size_t*, outbuflen,
+        char**, outs,
+        size_t*, outslen),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ceph_ctf_stringp(outs, outs)
+        ceph_ctf_sequencep(unsigned char, outbuf, outbuf, size_t, outbuflen)
+        ceph_ctf_integerp(size_t, outslen, outslen)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_pg_command_enter,
     TP_ARGS(
         rados_t, cluster,
@@ -1944,6 +1982,26 @@ TRACEPOINT_EVENT(librados, rados_aio_create_completion_enter,
 )
 
 TRACEPOINT_EVENT(librados, rados_aio_create_completion_exit,
+    TP_ARGS(
+        int, retval,
+        rados_completion_t, completion),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_completion_t, completion, completion)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_create_completion2_enter,
+    TP_ARGS(
+        void*, cb_arg,
+        rados_callback_t, cb_complete),
+    TP_FIELDS(
+        ctf_integer_hex(void*, cb_arg, cb_arg)
+        ctf_integer_hex(rados_callback_t, cb_complete, cb_complete)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_aio_create_completion2_exit,
     TP_ARGS(
         int, retval,
         rados_completion_t, completion),

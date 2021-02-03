@@ -16,6 +16,16 @@ else()
 endif()
 install(TARGETS rados DESTINATION bin)
 
+if(NOT WIN32)
+  set(neorados_srcs
+      neorados.cc)
+  add_executable(neorados ${neorados_srcs})
+  target_include_directories(neorados PRIVATE
+    $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+  target_link_libraries(neorados libneorados spawn ${CMAKE_DL_LIBS})
+  #install(TARGETS neorados DESTINATION bin)
+endif()
+
 if(WITH_TESTS)
 add_executable(ceph_scratchtool scratchtool.c)
 target_link_libraries(ceph_scratchtool librados global)
@@ -50,7 +60,7 @@ add_executable(ceph-objectstore-tool
   RadosDump.cc)
 target_link_libraries(ceph-objectstore-tool osd os global Boost::program_options ${CMAKE_DL_LIBS})
 if(WITH_FUSE)
-  target_link_libraries(ceph-objectstore-tool ${FUSE_LIBRARIES})
+  target_link_libraries(ceph-objectstore-tool FUSE::FUSE)
 endif(WITH_FUSE)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
@@ -88,6 +98,13 @@ add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
+set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
+add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})
+set_target_properties(ceph-diff-sorted PROPERTIES
+  SKIP_RPATH TRUE
+  INSTALL_RPATH "")
+install(TARGETS ceph-diff-sorted DESTINATION bin)
+
 if(WITH_TESTS)
 set(ceph_psim_srcs psim.cc)
 add_executable(ceph_psim ${ceph_psim_srcs})
@@ -103,12 +120,17 @@ install(TARGETS ceph-authtool DESTINATION bin)
 if(WITH_TESTS)
 set(ceph_dedup_tool_srcs ceph_dedup_tool.cc)
 add_executable(ceph-dedup-tool ${ceph_dedup_tool_srcs})
-target_link_libraries(ceph-dedup-tool librados global cls_cas_client)
+target_link_libraries(ceph-dedup-tool
+  librados
+  global
+  cls_cas_client
+  cls_cas_internal)
 install(TARGETS ceph-dedup-tool DESTINATION bin)
 endif(WITH_TESTS)
 
 if(WITH_CEPHFS)
   add_subdirectory(cephfs)
+  add_subdirectory(cephfs_mirror)
 endif(WITH_CEPHFS)
 
 if(WITH_RBD)
@@ -117,10 +139,18 @@ if(WITH_RBD)
   if(LINUX)
     add_subdirectory(rbd_nbd)
   endif()
+  if(WIN32)
+    add_subdirectory(rbd_wnbd)
+  endif()
   if(FREEBSD)
     add_subdirectory(rbd_ggate)
   endif()
 endif(WITH_RBD)
 
+if(WITH_SEASTAR)
+  add_subdirectory(crimson)
+endif()
+
 add_subdirectory(immutable_object_cache)
 add_subdirectory(ceph-dencoder)
+add_subdirectory(erasure-code)

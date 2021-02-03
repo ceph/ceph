@@ -33,6 +33,21 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostringstream;
+using std::set;
+using std::pair;
+using std::string;
+using std::unique_ptr;
+using std::vector;
+
+using ceph::bufferhash;
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+
 namespace {
 class PG_SendMessageOnConn: public Context {
   PGBackend::Listener *pg;
@@ -44,7 +59,7 @@ class PG_SendMessageOnConn: public Context {
     Message *reply,
     ConnectionRef conn) : pg(pg), reply(reply), conn(conn) {}
   void finish(int) override {
-    pg->send_message_osd_cluster(reply, conn.get());
+    pg->send_message_osd_cluster(MessageRef(reply, false), conn.get());
   }
 };
 
@@ -75,8 +90,7 @@ static void log_subop_stats(
   PerfCounters *logger,
   OpRequestRef op, int subop)
 {
-  utime_t now = ceph_clock_now();
-  utime_t latency = now;
+  utime_t latency = ceph_clock_now();
   latency -= op->get_req()->get_recv_stamp();
 
 
@@ -257,14 +271,14 @@ int ReplicatedBackend::objects_read_sync(
 
 int ReplicatedBackend::objects_readv_sync(
   const hobject_t &hoid,
-  map<uint64_t, uint64_t>& m,
+  map<uint64_t, uint64_t>&& m,
   uint32_t op_flags,
   bufferlist *bl)
 {
-  interval_set<uint64_t> im(m);
+  interval_set<uint64_t> im(std::move(m));
   auto r = store->readv(ch, ghobject_t(hoid), im, *bl, op_flags);
   if (r >= 0) {
-    im.move_into(m);
+    m = std::move(im).detach();
   }
   return r;
 }
@@ -420,7 +434,8 @@ void generate_transaction(
 	      goid,
 	      extent.get_off(),
 	      extent.get_len(),
-	      op.buffer);
+	      op.buffer,
+	      op.fadvise_flags);
 	  },
 	  [&](const BufferUpdate::Zero &op) {
 	    t->zero(
@@ -449,8 +464,8 @@ void ReplicatedBackend::submit_transaction(
   const eversion_t &at_version,
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
-  const eversion_t &roll_forward_to,
-  const vector<pg_log_entry_t> &_log_entries,
+  const eversion_t &min_last_complete_ondisk,
+  vector<pg_log_entry_t>&& _log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
   ceph_tid_t tid,
@@ -487,6 +502,9 @@ void ReplicatedBackend::submit_transaction(
   ceph_assert(insert_res.second);
   InProgressOp &op = *insert_res.first->second;
 
+#ifdef HAVE_JAEGER
+  auto rep_sub_trans = jaeger_tracing::child_span("ReplicatedBackend::submit_transaction", orig_op->osd_parent_span);
+#endif
   op.waiting_for_commit.insert(
     parent->get_acting_recovery_backfill_shards().begin(),
     parent->get_acting_recovery_backfill_shards().end());
@@ -497,7 +515,7 @@ void ReplicatedBackend::submit_transaction(
     tid,
     reqid,
     trim_to,
-    at_version,
+    min_last_complete_ondisk,
     added.size() ? *(added.begin()) : hobject_t(),
     removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
@@ -509,10 +527,11 @@ void ReplicatedBackend::submit_transaction(
   clear_temp_objs(removed);
 
   parent->log_operation(
-    log_entries,
+    std::move(log_entries),
     hset_history,
     trim_to,
     at_version,
+    min_last_complete_ondisk,
     true,
     op_t);
   
@@ -865,7 +884,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     reply->pgid = get_info().pgid;
     reply->map_epoch = m->map_epoch;
     reply->min_epoch = m->min_epoch;
-    reply->set_pulls(&replies);
+    reply->set_pulls(std::move(replies));
     reply->compute_cost(cct);
 
     t.register_on_complete(
@@ -883,9 +902,7 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
   pg_shard_t from = m->from;
 
   map<pg_shard_t, vector<PushOp> > replies;
-  vector<PullOp> pulls;
-  m->take_pulls(&pulls);
-  for (auto& i : pulls) {
+  for (auto& i : m->take_pulls()) {
     replies[from].push_back(PushOp());
     handle_pull(from, i, &(replies[from].back()));
   }
@@ -919,7 +936,7 @@ Message * ReplicatedBackend::generate_subop(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t pg_roll_forward_to,
+  eversion_t min_last_complete_ondisk,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const bufferlist &log_entries,
@@ -955,7 +972,14 @@ Message * ReplicatedBackend::generate_subop(
     wr->pg_stats = get_info().stats;
 
   wr->pg_trim_to = pg_trim_to;
-  wr->pg_roll_forward_to = pg_roll_forward_to;
+
+  if (HAVE_FEATURE(parent->min_peer_features(), OSD_REPOP_MLCOD)) {
+    wr->min_last_complete_ondisk = min_last_complete_ondisk;
+  } else {
+    /* Some replicas need this field to be at_version.  New replicas
+     * will ignore it */
+    wr->set_rollback_to(at_version);
+  }
 
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
@@ -969,7 +993,7 @@ void ReplicatedBackend::issue_op(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t pg_roll_forward_to,
+  eversion_t min_last_complete_ondisk,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const vector<pg_log_entry_t> &log_entries,
@@ -1002,7 +1026,7 @@ void ReplicatedBackend::issue_op(
 	  tid,
 	  reqid,
 	  pg_trim_to,
-	  pg_roll_forward_to,
+	  min_last_complete_ondisk,
 	  new_temp_oid,
 	  discard_temp_oid,
 	  logs,
@@ -1033,6 +1057,10 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
 	   << " " << m->logbl.length()
 	   << dendl;
+
+#ifdef HAVE_JAEGER
+  auto do_repop_span = jaeger_tracing::child_span(__func__, op->osd_parent_span);
+#endif
 
   // sanity checks
   ceph_assert(m->map_epoch >= get_info().history.same_interval_since);
@@ -1099,10 +1127,11 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   parent->update_stats(m->pg_stats);
   parent->log_operation(
-    log,
+    std::move(log),
     m->updated_hit_set_history,
     m->pg_trim_to,
-    m->pg_roll_forward_to,
+    m->version, /* Replicated PGs don't have rollback info */
+    m->min_last_complete_ondisk,
     update_snaps,
     rm->localt,
     async);
@@ -1212,7 +1241,7 @@ void ReplicatedBackend::calc_head_subsets(
     return;
   }
 
-  if (cloning.num_intervals() > cct->_conf->osd_recover_clone_overlap_limit) {
+  if (cloning.num_intervals() > g_conf().get_val<uint64_t>("osd_recover_clone_overlap_limit")) {
     dout(10) << "skipping clone, too many holes" << dendl;
     get_parent()->release_locks(manager);
     clone_subsets.clear();
@@ -1302,7 +1331,7 @@ void ReplicatedBackend::calc_clone_subsets(
 	     << " overlap " << next << dendl;
   }
 
-  if (cloning.num_intervals() > cct->_conf->osd_recover_clone_overlap_limit) {
+  if (cloning.num_intervals() > g_conf().get_val<uint64_t>("osd_recover_clone_overlap_limit")) {
     dout(10) << "skipping clone, too many holes" << dendl;
     get_parent()->release_locks(manager);
     clone_subsets.clear();
@@ -1350,8 +1379,8 @@ void ReplicatedBackend::prepare_pull(
     // probably because user feed a wrong pullee
     p = q->second.begin();
     std::advance(p,
-                 util::generate_random_number<int>(0,
-                                                   q->second.size() - 1));
+                 ceph::util::generate_random_number<int>(0,
+							 q->second.size() - 1));
   }
   ceph_assert(get_osdmap()->is_up(p->osd));
   pg_shard_t fromshard = *p;
@@ -1822,7 +1851,7 @@ bool ReplicatedBackend::handle_pull_response(
 		   &usable_intervals,
 		   &usable_data);
   data_included = usable_intervals;
-  data.claim(usable_data);
+  data = std::move(usable_data);
 
 
   pi.recovery_progress = pop.after_progress;
@@ -1833,7 +1862,7 @@ bool ReplicatedBackend::handle_pull_response(
   interval_set<uint64_t> data_zeros;
   uint64_t z_offset = pop.before_progress.data_recovered_to;
   uint64_t z_length = pop.after_progress.data_recovered_to - pop.before_progress.data_recovered_to;
-  if(z_length)
+  if (z_length)
     data_zeros.insert(z_offset, z_length);
   bool complete = pi.is_complete();
   bool clear_omap = !pop.before_progress.omap_complete;
@@ -1892,7 +1921,7 @@ void ReplicatedBackend::handle_push(
   interval_set<uint64_t> data_zeros;
   uint64_t z_offset = pop.before_progress.data_recovered_to;
   uint64_t z_length = pop.after_progress.data_recovered_to - pop.before_progress.data_recovered_to;
-  if(z_length)
+  if (z_length)
     data_zeros.insert(z_offset, z_length);
   response->soid = pop.recovery_info.soid;
 
@@ -1979,7 +2008,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
     msg->pgid = get_parent()->primary_spg_t();
     msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
-    msg->set_pulls(&i->second);
+    msg->set_pulls(std::move(i->second));
     msg->compute_cost(cct);
     get_parent()->send_message_osd_cluster(msg, con);
   }
@@ -2008,12 +2037,12 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   object_info_t oi;
   if (progress.first) {
     int r = store->omap_get_header(ch, ghobject_t(recovery_info.soid), &out_op->omap_header);
-    if(r < 0) {
-      dout(1) << __func__ << " get omap header failed: " << cpp_strerror(-r) << dendl; 
+    if (r < 0) {
+      dout(1) << __func__ << " get omap header failed: " << cpp_strerror(-r) << dendl;
       return r;
     }
     r = store->getattrs(ch, ghobject_t(recovery_info.soid), out_op->attrset);
-    if(r < 0) {
+    if (r < 0) {
       dout(1) << __func__ << " getattrs failed: " << cpp_strerror(-r) << dendl;
       return r;
     }
@@ -2080,7 +2109,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       int r = store->fiemap(ch, ghobject_t(recovery_info.soid), 0,
                             copy_subset.range_end(), m);
       if (r >= 0)  {
-        interval_set<uint64_t> fiemap_included(m);
+        interval_set<uint64_t> fiemap_included(std::move(m));
         copy_subset.intersection_of(fiemap_included);
       } else {
         // intersection of copy_subset and empty interval_set would be empty anyway
@@ -2089,7 +2118,9 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
       out_op->data_included.span_of(copy_subset, progress.data_recovered_to,
                                     available);
-      if (out_op->data_included.empty()) // zero filled section, skip to end!
+      // zero filled section, skip to end!
+      if (out_op->data_included.empty() ||
+          out_op->data_included.range_end() == copy_subset.range_end())
         new_progress.data_recovered_to = recovery_info.copy_subset.range_end();
       else
         new_progress.data_recovered_to = out_op->data_included.range_end();

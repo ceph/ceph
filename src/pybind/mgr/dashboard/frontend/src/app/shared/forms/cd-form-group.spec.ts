@@ -39,7 +39,7 @@ describe('CdFormGroup', () => {
   });
 
   describe('CdFormGroup tests', () => {
-    let x, nested, a, c;
+    let x: CdFormGroup, nested: CdFormGroup, a: FormControl, c: FormGroup;
 
     beforeEach(() => {
       a = new FormControl('a');

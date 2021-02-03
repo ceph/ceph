@@ -1,7 +1,7 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { MonitorService } from './monitor.service';
 
 describe('MonitorService', () => {
@@ -14,8 +14,8 @@ describe('MonitorService', () => {
   });
 
   beforeEach(() => {
-    service = TestBed.get(MonitorService);
-    httpTesting = TestBed.get(HttpTestingController);
+    service = TestBed.inject(MonitorService);
+    httpTesting = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {

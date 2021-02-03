@@ -7,8 +7,9 @@
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
 
-namespace ceph {
-namespace logging {
+using std::cerr;
+
+namespace ceph::logging {
 
 Graylog::Graylog(const SubsystemMap * const s, const std::string &logger)
     : m_subs(s),
@@ -166,5 +167,4 @@ void Graylog::log_log_entry(LogEntry const * const e)
   }
 }
 
-} // ceph::logging::
-} // ceph::
+} // name ceph::logging

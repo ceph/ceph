@@ -40,6 +40,11 @@ void OpenImageRequest<I>::send_open_image() {
 
   *m_image_ctx = I::create("", m_image_id, nullptr, m_io_ctx, m_read_only);
 
+  if (!m_read_only) {
+    // ensure non-primary images can be modified
+    (*m_image_ctx)->read_only_mask = ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  }
+
   Context *ctx = create_context_callback<
     OpenImageRequest<I>, &OpenImageRequest<I>::handle_open_image>(
       this);
@@ -53,7 +58,6 @@ void OpenImageRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << ": failed to open image '" << m_image_id << "': "
          << cpp_strerror(r) << dendl;
-    (*m_image_ctx)->destroy();
     *m_image_ctx = nullptr;
   }
 

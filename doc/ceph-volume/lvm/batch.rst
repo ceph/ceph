@@ -2,142 +2,177 @@
 
 ``batch``
 ===========
-This subcommand allows for multiple OSDs to be created at the same time given
-an input of devices. Depending on the device type (spinning drive, or solid
-state), the internal engine will decide the best approach to create the OSDs.
+The subcommand allows to create multiple OSDs at the same time given
+an input of devices. The ``batch`` subcommand is closely related to
+drive-groups. One individual drive group specification translates to a single
+``batch`` invocation.
 
-This decision abstracts away the many nuances when creating an OSD: how large
-should a ``block.db`` be? How can one mix a solid state device with spinning
-devices in an efficient way?
-
-The process is similar to :ref:`ceph-volume-lvm-create`, and will do the
-preparation and activation at once, following the same workflow for each OSD.
-However, If the ``--prepare`` flag is passed then only the prepare step is taken
-and the OSDs are not activated.
+The subcommand is based to :ref:`ceph-volume-lvm-create`, and will use the very
+same code path. All ``batch`` does is to calculate the appropriate sizes of all
+volumes and skip over already created volumes.
 
 All the features that ``ceph-volume lvm create`` supports, like ``dmcrypt``,
 avoiding ``systemd`` units from starting, defining bluestore or filestore,
-are supported. Any fine-grained option that may affect a single OSD is not
-supported, for example: specifying where journals should be placed.
+are supported.
 
 
+.. _ceph-volume-lvm-batch_auto:
 
-
-.. _ceph-volume-lvm-batch_bluestore:
-
-``bluestore``
--------------
-The :term:`bluestore` objectstore (the default) is used when creating multiple OSDs
-with the ``batch`` sub-command. It allows a few different scenarios depending
-on the input of devices:
+Automatic sorting of disks
+--------------------------
+If ``batch`` receives only a single list of data devices and other options are
+passed , ``ceph-volume`` will auto-sort disks by its rotational
+property and use non-rotating disks for ``block.db`` or ``journal`` depending
+on the objectstore used. If all devices are to be used for standalone OSDs,
+no matter if rotating or solid state, pass ``--no-auto``.
+For example assuming :term:`bluestore` is used and ``--no-auto`` is not passed,
+the deprecated behavior would deploy the following, depending on the devices
+passed:
 
 #. Devices are all spinning HDDs: 1 OSD is created per device
 #. Devices are all SSDs: 2 OSDs are created per device
 #. Devices are a mix of HDDs and SSDs: data is placed on the spinning device,
    the ``block.db`` is created on the SSD, as large as possible.
 
-
 .. note:: Although operations in ``ceph-volume lvm create`` allow usage of
-          ``block.wal`` it isn't supported with the ``batch`` sub-command
+          ``block.wal`` it isn't supported with the ``auto`` behavior.
 
+This default auto-sorting behavior is now DEPRECATED and will be changed in future releases.
+Instead devices are not automatically sorted unless the ``--auto`` option is passed
 
-.. _ceph-volume-lvm-batch_filestore:
+It is recommended to make use of the explicit device lists for ``block.db``,
+   ``block.wal`` and ``journal``.
 
-``filestore``
--------------
-The :term:`filestore` objectstore can be used when creating multiple OSDs
-with the ``batch`` sub-command. It allows two different scenarios depending
-on the input of devices:
-
-#. Devices are all the same type (for example all spinning HDD or all SSDs):
-   1 OSD is created per device, collocating the journal in the same HDD.
-#. Devices are a mix of HDDs and SSDs: data is placed on the spinning device,
-   while the journal is created on the SSD using the sizing options from
-   ceph.conf and falling back to the default journal size of 5GB.
-
-
-When a mix of solid and spinning devices are used, ``ceph-volume`` will try to
-detect existing volume groups on the solid devices. If a VG is found, it will
-try to create the logical volume from there, otherwise raising an error if
-space is insufficient.
-
-If a raw solid device is used along with a device that has a volume group in
-addition to some spinning devices, ``ceph-volume`` will try to extend the
-existing volume group and then create a logical volume.
-
-.. _ceph-volume-lvm-batch_report:
+.. _ceph-volume-lvm-batch_bluestore:
 
 Reporting
 =========
-When a call is received to create OSDs, the tool will prompt the user to
-continue if the pre-computed output is acceptable. This output is useful to
-understand the outcome of the received devices. Once confirmation is accepted,
-the process continues.
+By default ``batch`` will print a report of the computed OSD layout and ask the
+user to confirm. This can be overridden by passing ``--yes``.
 
-Although prompts are good to understand outcomes, it is incredibly useful to
-try different inputs to find the best product possible. With the ``--report``
-flag, one can prevent any actual operations and just verify outcomes from
-inputs.
+If one wants to try out several invocations with being asked to deploy
+``--report`` can be passed. ``ceph-volume`` will exit after printing the report.
+
+Consider the following invocation::
+
+    $ ceph-volume lvm batch --report /dev/sdb /dev/sdc /dev/sdd --db-devices /dev/nvme0n1
+
+This will deploy three OSDs with external ``db`` and ``wal`` volumes on
+an NVME device.
 
 **pretty reporting**
-For two spinning devices, this is how the ``pretty`` report (the default) would
-look::
+The ``pretty`` report format (the default) would
+look like this::
 
-    $ ceph-volume lvm batch --report /dev/sdb /dev/sdc
+    $ ceph-volume lvm batch --report /dev/sdb /dev/sdc /dev/sdd --db-devices /dev/nvme0n1
+    --> passed data devices: 3 physical, 0 LVM
+    --> relative data size: 1.0
+    --> passed block_db devices: 1 physical, 0 LVM
 
-    Total OSDs: 2
+    Total OSDs: 3
 
-      Type            Path                      LV Size         % of device
-    --------------------------------------------------------------------------------
-      [data]          /dev/sdb                  10.74 GB        100%
-    --------------------------------------------------------------------------------
-      [data]          /dev/sdc                  10.74 GB        100%
+      Type            Path                                                    LV Size         % of device
+    ----------------------------------------------------------------------------------------------------
+      data            /dev/sdb                                              300.00 GB         100.00%
+      block_db        /dev/nvme0n1                                           66.67 GB         33.33%
+    ----------------------------------------------------------------------------------------------------
+      data            /dev/sdc                                              300.00 GB         100.00%
+      block_db        /dev/nvme0n1                                           66.67 GB         33.33%
+    ----------------------------------------------------------------------------------------------------
+      data            /dev/sdd                                              300.00 GB         100.00%
+      block_db        /dev/nvme0n1                                           66.67 GB         33.33%
+
+
 
 
 
 **JSON reporting**
-Reporting can produce a richer output with ``JSON``, which gives a few more
-hints on sizing. This feature might be better for other tooling to consume
-information that will need to be transformed.
+Reporting can produce a structured output with ``--format json`` or
+``--format json-pretty``::
 
-For two spinning devices, this is how the ``JSON`` report would look::
+    $ ceph-volume lvm batch --report --format json-pretty /dev/sdb /dev/sdc /dev/sdd --db-devices /dev/nvme0n1
+    --> passed data devices: 3 physical, 0 LVM
+    --> relative data size: 1.0
+    --> passed block_db devices: 1 physical, 0 LVM
+    [
+        {
+            "block_db": "/dev/nvme0n1",
+            "block_db_size": "66.67 GB",
+            "data": "/dev/sdb",
+            "data_size": "300.00 GB",
+            "encryption": "None"
+        },
+        {
+            "block_db": "/dev/nvme0n1",
+            "block_db_size": "66.67 GB",
+            "data": "/dev/sdc",
+            "data_size": "300.00 GB",
+            "encryption": "None"
+        },
+        {
+            "block_db": "/dev/nvme0n1",
+            "block_db_size": "66.67 GB",
+            "data": "/dev/sdd",
+            "data_size": "300.00 GB",
+            "encryption": "None"
+        }
+    ]
 
-    $ ceph-volume lvm batch --report --format=json /dev/sdb /dev/sdc
-    {
-        "osds": [
-            {
-                "block.db": {},
-                "data": {
-                    "human_readable_size": "10.74 GB",
-                    "parts": 1,
-                    "path": "/dev/sdb",
-                    "percentage": 100,
-                    "size": 11534336000.0
-                }
-            },
-            {
-                "block.db": {},
-                "data": {
-                    "human_readable_size": "10.74 GB",
-                    "parts": 1,
-                    "path": "/dev/sdc",
-                    "percentage": 100,
-                    "size": 11534336000.0
-                }
-            }
-        ],
-        "vgs": [
-            {
-                "devices": [
-                    "/dev/sdb"
-                ],
-                "parts": 1
-            },
-            {
-                "devices": [
-                    "/dev/sdc"
-                ],
-                "parts": 1
-            }
-        ]
-    }
+Sizing
+======
+When no sizing arguments are passed, `ceph-volume` will derive the sizing from
+the passed device lists (or the sorted lists when using the automatic sorting).
+`ceph-volume batch` will attempt to fully utilize a device's available capacity.
+Relying on automatic sizing is recommended.
+
+If one requires a different sizing policy for wal, db or journal devices,
+`ceph-volume` offers implicit and explicit sizing rules.
+
+Implicit sizing
+---------------
+Scenarios in which either devices are under-comitted or not all data devices are
+currently ready for use (due to a broken disk for example), one can still rely
+on `ceph-volume` automatic sizing.
+Users can provide hints to `ceph-volume` as to how many data devices should have
+their external volumes on a set of fast devices. These options are:
+
+* ``--block-db-slots``
+* ``--block-wal-slots``
+* ``--journal-slots``
+
+For example, consider an OSD host that is supposed to contain 5 data devices and
+one device for wal/db volumes. However, one data device is currently broken and
+is being replaced. Instead of calculating the explicit sizes for the wal/db
+volume, one can simply call::
+
+    $ ceph-volume lvm batch --report /dev/sdb /dev/sdc /dev/sdd /dev/sde --db-devices /dev/nvme0n1 --block-db-slots 5
+
+Explicit sizing
+---------------
+It is also possible to provide explicit sizes to `ceph-volume` via the arguments
+
+* ``--block-db-size``
+* ``--block-wal-size``
+* ``--journal-size``
+
+`ceph-volume` will try to satisfy the requested sizes given the passed disks. If
+this is not possible, no OSDs will be deployed.
+
+
+Idempotency and disk replacements
+=================================
+`ceph-volume lvm batch` intends to be idempotent, i.e. calling the same command
+repeatedly must result in the same outcome. For example calling::
+
+    $ ceph-volume lvm batch --report /dev/sdb /dev/sdc /dev/sdd --db-devices /dev/nvme0n1
+
+will result in three deployed OSDs (if all disks were available). Calling this
+command again, you will still end up with three OSDs and ceph-volume will exit
+with return code 0.
+
+Suppose /dev/sdc goes bad and needs to be replaced. After destroying the OSD and
+replacing the hardware, you can again call the same command and `ceph-volume`
+will detect that only two out of the three wanted OSDs are setup and re-create
+the missing OSD.
+
+This idempotency notion is tightly coupled to and extensively used by :ref:`drivegroups`.

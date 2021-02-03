@@ -291,11 +291,6 @@ static Messenger *create_messenger(struct ceph_msgr_options *o)
   std::string lname = o->is_receiver ?
     "receiver" : "sender";
 
-  /* Does anybody really uses those flags in messenger? Seems not. */
-  unsigned flags = o->is_receiver ?
-    Messenger::HAS_HEAVY_TRAFFIC |
-    Messenger::HAS_MANY_CONNECTIONS : 0;
-
   std::string ms_type = o->ms_type != CEPH_MSGR_TYPE_UNDEF ?
     ceph_msgr_types[o->ms_type] :
     g_ceph_context->_conf.get_val<std::string>("ms_type");
@@ -303,7 +298,7 @@ static Messenger *create_messenger(struct ceph_msgr_options *o)
   /* o->td__>pid doesn't set value, so use getpid() instead*/
   auto nonce = o->is_receiver ? 0 : (getpid() + o->td__->thread_number);
   Messenger *msgr = Messenger::create(g_ceph_context, ms_type.c_str(),
-				      ename, lname, nonce, flags);
+				      ename, lname, nonce);
   if (o->is_receiver) {
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     msgr->bind(hostname_to_addr(o));

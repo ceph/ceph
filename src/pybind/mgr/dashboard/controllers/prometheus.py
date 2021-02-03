@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from datetime import datetime
 import json
+from datetime import datetime
+
 import requests
 
-from . import Controller, ApiController, BaseController, RESTController, Endpoint
+from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
-from ..exceptions import DashboardException
+from . import ApiController, BaseController, Controller, ControllerDoc, Endpoint, RESTController
 
 
 @Controller('/api/prometheus_receiver', secure=False)
 class PrometheusReceiver(BaseController):
-    ''' The receiver is needed in order to receive alert notifications (reports) '''
+    """
+    The receiver is needed in order to receive alert notifications (reports)
+    """
     notifications = []
 
     @Endpoint('POST', path='/')
@@ -25,22 +28,30 @@ class PrometheusReceiver(BaseController):
 
 class PrometheusRESTController(RESTController):
     def prometheus_proxy(self, method, path, params=None, payload=None):
+        # type (str, str, dict, dict)
         return self._proxy(self._get_api_url(Settings.PROMETHEUS_API_HOST),
-                           method, path, params, payload)
+                           method, path, 'Prometheus', params, payload,
+                           verify=Settings.PROMETHEUS_API_SSL_VERIFY)
 
     def alert_proxy(self, method, path, params=None, payload=None):
+        # type (str, str, dict, dict)
         return self._proxy(self._get_api_url(Settings.ALERTMANAGER_API_HOST),
-                           method, path, params, payload)
+                           method, path, 'Alertmanager', params, payload,
+                           verify=Settings.ALERTMANAGER_API_SSL_VERIFY)
 
     def _get_api_url(self, host):
         return host.rstrip('/') + '/api/v1'
 
-    def _proxy(self, base_url, method, path, params=None, payload=None):
+    def _proxy(self, base_url, method, path, api_name, params=None, payload=None, verify=True):
+        # type (str, str, str, str, dict, dict, bool)
         try:
-            response = requests.request(method, base_url + path, params=params, json=payload)
+            response = requests.request(method, base_url + path, params=params,
+                                        json=payload, verify=verify)
         except Exception:
-            raise DashboardException('Could not reach external API', http_status_code=404,
-                                     component='prometheus')
+            raise DashboardException(
+                "Could not reach {}'s API on {}".format(api_name, base_url),
+                http_status_code=404,
+                component='prometheus')
         content = json.loads(response.content)
         if content['status'] == 'success':
             if 'data' in content:
@@ -50,18 +61,14 @@ class PrometheusRESTController(RESTController):
 
 
 @ApiController('/prometheus', Scope.PROMETHEUS)
+@ControllerDoc("Prometheus Management API", "Prometheus")
 class Prometheus(PrometheusRESTController):
     def list(self, **params):
         return self.alert_proxy('GET', '/alerts', params)
 
     @RESTController.Collection(method='GET')
     def rules(self, **params):
-        data = self.prometheus_proxy('GET', '/rules', params)
-        configs = data['groups']
-        rules = []
-        for config in configs:
-            rules += config['rules']
-        return rules
+        return self.prometheus_proxy('GET', '/rules', params)
 
     @RESTController.Collection(method='GET', path='/silences')
     def get_silences(self, **params):
@@ -77,6 +84,7 @@ class Prometheus(PrometheusRESTController):
 
 
 @ApiController('/prometheus/notifications', Scope.PROMETHEUS)
+@ControllerDoc("Prometheus Notifications Management API", "PrometheusNotifications")
 class PrometheusNotifications(RESTController):
 
     def list(self, **params):

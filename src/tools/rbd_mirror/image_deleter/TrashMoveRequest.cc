@@ -6,13 +6,16 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/journal/ResetRequest.h"
+#include "librbd/mirror/GetInfoRequest.h"
 #include "librbd/trash/MoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 
@@ -69,39 +72,45 @@ void TrashMoveRequest<I>::handle_get_mirror_image_id(int r) {
     return;
   }
 
-  get_tag_owner();
+  get_mirror_info();
 }
 
 template <typename I>
-void TrashMoveRequest<I>::get_tag_owner() {
+void TrashMoveRequest<I>::get_mirror_info() {
   dout(10) << dendl;
 
   auto ctx = create_context_callback<
-    TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_get_tag_owner>(this);
-  librbd::Journal<I>::get_tag_owner(m_io_ctx, m_image_id, &m_mirror_uuid,
-                                    m_op_work_queue, ctx);
+    TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_get_mirror_info>(this);
+  auto req = librbd::mirror::GetInfoRequest<I>::create(
+    m_io_ctx, m_op_work_queue, m_image_id, &m_mirror_image, &m_promotion_state,
+    &m_primary_mirror_uuid, ctx);
+  req->send();
 }
 
 template <typename I>
-void TrashMoveRequest<I>::handle_get_tag_owner(int r) {
+void TrashMoveRequest<I>::handle_get_mirror_info(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r < 0 && r != -ENOENT) {
+  if (r == -ENOENT) {
+    dout(5) << "image " << m_global_image_id << " is not mirrored" << dendl;
+    finish(r);
+    return;
+  } else if (r < 0) {
     derr << "error retrieving image primary info for image "
          << m_global_image_id << ": " << cpp_strerror(r) << dendl;
     finish(r);
     return;
-  } else if (r != -ENOENT) {
-    if (m_mirror_uuid == librbd::Journal<>::LOCAL_MIRROR_UUID) {
-      dout(10) << "image " << m_global_image_id << " is local primary" << dendl;
-      finish(-EPERM);
-      return;
-    } else if (m_mirror_uuid == librbd::Journal<>::ORPHAN_MIRROR_UUID &&
-               !m_resync) {
-      dout(10) << "image " << m_global_image_id << " is orphaned" << dendl;
-      finish(-EPERM);
-      return;
-    }
+  }
+
+  if (m_promotion_state == librbd::mirror::PROMOTION_STATE_PRIMARY) {
+    dout(10) << "image " << m_global_image_id << " is local primary" << dendl;
+    finish(-EPERM);
+    return;
+  } else if (m_promotion_state == librbd::mirror::PROMOTION_STATE_ORPHAN &&
+             !m_resync) {
+    dout(10) << "image " << m_global_image_id << " is orphaned" << dendl;
+    finish(-EPERM);
+    return;
   }
 
   disable_mirror_image();
@@ -111,12 +120,10 @@ template <typename I>
 void TrashMoveRequest<I>::disable_mirror_image() {
   dout(10) << dendl;
 
-  cls::rbd::MirrorImage mirror_image;
-  mirror_image.global_image_id = m_global_image_id;
-  mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
+  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
 
   librados::ObjectWriteOperation op;
-  librbd::cls_client::mirror_image_set(&op, m_image_id, mirror_image);
+  librbd::cls_client::mirror_image_set(&op, m_image_id, m_mirror_image);
 
   auto aio_comp = create_rados_callback<
     TrashMoveRequest<I>,
@@ -147,32 +154,6 @@ void TrashMoveRequest<I>::handle_disable_mirror_image(int r) {
     return;
   }
 
-  reset_journal();
-}
-
-template <typename I>
-void TrashMoveRequest<I>::reset_journal() {
-  dout(10) << dendl;
-
-  // ensure that if the image is recovered any peers will split-brain
-  auto ctx = create_context_callback<
-    TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_reset_journal>(this);
-  auto req = librbd::journal::ResetRequest<I>::create(
-    m_io_ctx, m_image_id, librbd::Journal<>::IMAGE_CLIENT_ID,
-    librbd::Journal<>::LOCAL_MIRROR_UUID, m_op_work_queue, ctx);
-  req->send();
-}
-
-template <typename I>
-void TrashMoveRequest<I>::handle_reset_journal(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  if (r < 0 && r != -ENOENT) {
-    derr << "failed to reset journal: " << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
   open_image();
 }
 
@@ -181,6 +162,9 @@ void TrashMoveRequest<I>::open_image() {
   dout(10) << dendl;
 
   m_image_ctx = I::create("", m_image_id, nullptr, m_io_ctx, false);
+
+  // ensure non-primary images can be modified
+  m_image_ctx->read_only_mask &= ~librbd::IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
 
   {
     // don't attempt to open the journal
@@ -199,7 +183,6 @@ void TrashMoveRequest<I>::handle_open_image(int r) {
 
   if (r < 0) {
     derr << "failed to open image: " << cpp_strerror(r) << dendl;
-    m_image_ctx->destroy();
     m_image_ctx = nullptr;
     finish(r);
     return;
@@ -212,6 +195,44 @@ void TrashMoveRequest<I>::handle_open_image(int r) {
     return;
   }
 
+  reset_journal();
+}
+
+template <typename I>
+void TrashMoveRequest<I>::reset_journal() {
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    // snapshot-based mirroring doesn't require journal feature
+    acquire_lock();
+    return;
+  }
+
+  dout(10) << dendl;
+
+  // TODO use Journal thread pool for journal ops until converted to ASIO
+  ContextWQ* context_wq;
+  librbd::Journal<>::get_work_queue(
+    reinterpret_cast<CephContext*>(m_io_ctx.cct()), &context_wq);
+
+  // ensure that if the image is recovered any peers will split-brain
+  auto ctx = create_context_callback<
+    TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_reset_journal>(this);
+  auto req = librbd::journal::ResetRequest<I>::create(
+    m_io_ctx, m_image_id, librbd::Journal<>::IMAGE_CLIENT_ID,
+    librbd::Journal<>::LOCAL_MIRROR_UUID, context_wq, ctx);
+  req->send();
+}
+
+template <typename I>
+void TrashMoveRequest<I>::handle_reset_journal(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to reset journal: " << cpp_strerror(r) << dendl;
+    m_ret_val = r;
+    close_image();
+    return;
+  }
+
   acquire_lock();
 }
 
@@ -219,10 +240,16 @@ template <typename I>
 void TrashMoveRequest<I>::acquire_lock() {
   m_image_ctx->owner_lock.lock_shared();
   if (m_image_ctx->exclusive_lock == nullptr) {
-    derr << "exclusive lock feature not enabled" << dendl;
     m_image_ctx->owner_lock.unlock_shared();
-    m_ret_val = -EINVAL;
-    close_image();
+
+    if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+      // snapshot-based mirroring doesn't require exclusive-lock
+      trash_move();
+    } else {
+      derr << "exclusive lock feature not enabled" << dendl;
+      m_ret_val = -EINVAL;
+      close_image();
+    }
     return;
   }
 
@@ -327,7 +354,6 @@ template <typename I>
 void TrashMoveRequest<I>::handle_close_image(int r) {
   dout(10) << "r=" << r << dendl;
 
-  m_image_ctx->destroy();
   m_image_ctx = nullptr;
 
   if (r < 0) {

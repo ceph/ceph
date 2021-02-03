@@ -7,9 +7,9 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string_view>
 
 #include <boost/container/small_vector.hpp>
-#include <boost/utility/string_view.hpp>
 
 struct ltstr_nocase
 {
@@ -98,12 +98,12 @@ static inline int stringtoul(const std::string& s, uint32_t *val)
   return 0;
 }
 
-/* A converter between boost::string_view and null-terminated C-strings.
+/* A converter between std::string_view and null-terminated C-strings.
  * It copies memory while trying to utilize the local memory instead of
  * issuing dynamic allocations. */
 template<std::size_t N = 128>
 static inline boost::container::small_vector<char, N>
-sview2cstr(const boost::string_view& sv)
+sview2cstr(const std::string_view& sv)
 {
   boost::container::small_vector<char, N> cstr;
   cstr.reserve(sv.size() + sizeof('\0'));
@@ -157,27 +157,27 @@ struct string_traits<char[N]> : string_traits<const char[N]> {};
 // helpers for string_cat_reserve()
 static inline void append_to(std::string& s) {}
 template <typename... Args>
-void append_to(std::string& s, const boost::string_view& v, const Args&... args)
+void append_to(std::string& s, const std::string_view& v, const Args&... args)
 {
   s.append(v.begin(), v.end());
   append_to(s, args...);
 }
 
 // helpers for string_join_reserve()
-static inline void join_next(std::string& s, const boost::string_view& d) {}
+static inline void join_next(std::string& s, const std::string_view& d) {}
 template <typename... Args>
-void join_next(std::string& s, const boost::string_view& d,
-               const boost::string_view& v, const Args&... args)
+void join_next(std::string& s, const std::string_view& d,
+               const std::string_view& v, const Args&... args)
 {
   s.append(d.begin(), d.end());
   s.append(v.begin(), v.end());
   join_next(s, d, args...);
 }
 
-static inline void join(std::string& s, const boost::string_view& d) {}
+static inline void join(std::string& s, const std::string_view& d) {}
 template <typename... Args>
-void join(std::string& s, const boost::string_view& d,
-          const boost::string_view& v, const Args&... args)
+void join(std::string& s, const std::string_view& d,
+          const std::string_view& v, const Args&... args)
 {
   s.append(v.begin(), v.end());
   join_next(s, d, args...);
@@ -207,7 +207,7 @@ std::string string_cat_reserve(const Args&... args)
 /// joins the given string arguments with a delimiter, returning as a
 /// std::string that gets preallocated with reserve()
 template <typename... Args>
-std::string string_join_reserve(const boost::string_view& delim,
+std::string string_join_reserve(const std::string_view& delim,
                                 const Args&... args)
 {
   size_t delim_size = delim.size() * std::max<ssize_t>(0, sizeof...(args) - 1);
@@ -220,7 +220,7 @@ std::string string_join_reserve(const boost::string_view& delim,
 template <typename... Args>
 std::string string_join_reserve(char delim, const Args&... args)
 {
-  return string_join_reserve(boost::string_view{&delim, 1}, args...);
+  return string_join_reserve(std::string_view{&delim, 1}, args...);
 }
 
 
@@ -229,8 +229,8 @@ static constexpr uint32_t MATCH_CASE_INSENSITIVE = 0x01;
 
 /// attempt to match the given input string with the pattern, which may contain
 /// the wildcard characters * and ?
-extern bool match_wildcards(boost::string_view pattern,
-                            boost::string_view input,
+extern bool match_wildcards(std::string_view pattern,
+                            std::string_view input,
                             uint32_t flags = 0);
 
 #endif

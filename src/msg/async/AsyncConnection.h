@@ -56,7 +56,7 @@ class AsyncConnection : public Connection {
   ssize_t read_until(unsigned needed, char *p);
   ssize_t read_bulk(char *buf, unsigned len);
 
-  ssize_t write(bufferlist &bl, std::function<void(ssize_t)> callback,
+  ssize_t write(ceph::buffer::list &bl, std::function<void(ssize_t)> callback,
                 bool more=false);
   ssize_t _try_send(bool more=false);
 
@@ -110,10 +110,11 @@ private:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
 		  Worker *w, bool is_msgr2, bool local);
   ~AsyncConnection() override;
+  bool unregistered = false;
 public:
   void maybe_start_delay_thread();
 
-  ostream& _conn_prefix(std::ostream *_dout);
+  std::ostream& _conn_prefix(std::ostream *_dout);
 
   bool is_connected() override;
 
@@ -138,6 +139,14 @@ public:
   }
 
   int get_con_mode() const override;
+
+  bool is_unregistered() const {
+    return unregistered;
+  }
+
+  void unregister() {
+    unregistered = true;
+  }
 
  private:
   enum {
@@ -166,12 +175,14 @@ public:
   int state;
   ConnectedSocket cs;
   int port;
+public:
   Messenger::Policy policy;
+private:
 
   DispatchQueue *dispatch_queue;
 
   // lockfree, only used in own thread
-  bufferlist outcoming_bl;
+  ceph::buffer::list outgoing_bl;
   bool open_write = false;
 
   std::mutex write_lock;
@@ -186,7 +197,7 @@ public:
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
   uint32_t recv_end;
-  set<uint64_t> register_time_events; // need to delete it if stop
+  std::set<uint64_t> register_time_events; // need to delete it if stop
   ceph::coarse_mono_clock::time_point last_connect_started;
   ceph::coarse_mono_clock::time_point last_active;
   ceph::mono_clock::time_point recv_start_time;
@@ -222,7 +233,6 @@ public:
   void process();
   void wakeup_from(uint64_t id);
   void tick(uint64_t id);
-  void local_deliver();
   void stop(bool queue_reset);
   void cleanup();
   PerfCounters *get_perf_counter() {

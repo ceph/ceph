@@ -381,7 +381,7 @@ TEST_F(CReadOpsTest, Checksum) {
 
   {
     rados_read_op_t op = rados_create_read_op();
-    uint64_t init_value = -1;
+    ceph_le64 init_value = init_le64(-1);
     rados_read_op_checksum(op, LIBRADOS_CHECKSUM_TYPE_XXHASH64,
 			   reinterpret_cast<char *>(&init_value),
 			   sizeof(init_value), 0, len, 0, NULL, 0, NULL);
@@ -390,8 +390,8 @@ TEST_F(CReadOpsTest, Checksum) {
   }
 
   {
-    uint32_t init_value = -1;
-    uint32_t crc[2];
+    ceph_le32 init_value = init_le32(-1);
+    ceph_le32 crc[2];
     rados_read_op_t op = rados_create_read_op();
     rados_read_op_checksum(op, LIBRADOS_CHECKSUM_TYPE_CRC32C,
 			   reinterpret_cast<char *>(&init_value),
@@ -407,7 +407,7 @@ TEST_F(CReadOpsTest, Checksum) {
   }
 
   {
-    uint32_t init_value = -1;
+    ceph_le32 init_value = init_le32(-1);
     int rval;
     rados_read_op_t op = rados_create_read_op();
     rados_read_op_checksum(op, LIBRADOS_CHECKSUM_TYPE_XXHASH32,
@@ -419,8 +419,8 @@ TEST_F(CReadOpsTest, Checksum) {
   }
 
   {
-    uint32_t init_value = -1;
-    uint32_t crc[3];
+    ceph_le32 init_value = init_le32(-1);
+    ceph_le32 crc[3];
     int rval;
     rados_read_op_t op = rados_create_read_op();
     rados_read_op_checksum(op, LIBRADOS_CHECKSUM_TYPE_CRC32C,

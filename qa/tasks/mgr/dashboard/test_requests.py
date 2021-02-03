@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+from . import DEFAULT_VERSION
 from .helper import DashboardTestCase
 
 
@@ -10,7 +11,7 @@ class RequestsTest(DashboardTestCase):
         self._get('/api/summary')
         self.assertHeaders({
             'Content-Encoding': 'gzip',
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION)
         })
 
     def test_force_no_gzip(self):
@@ -19,5 +20,12 @@ class RequestsTest(DashboardTestCase):
         ))
         self.assertNotIn('Content-Encoding', self._resp.headers)
         self.assertHeaders({
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json'
+        })
+
+    def test_server(self):
+        self._get('/api/summary')
+        self.assertHeaders({
+            'server': 'Ceph-Dashboard',
+            'Content-Type': 'application/vnd.ceph.api.v{}+json'.format(DEFAULT_VERSION)
         })

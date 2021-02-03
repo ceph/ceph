@@ -1,0 +1,31 @@
+#!/bin/sh
+
+echo "$0 $@" >&2
+
+if [ $# -lt 2 ]; then
+    echo "usage: $0 <dev> <cmd>" >&2
+    exit 1
+fi
+
+dev=$1
+cmd=$2
+
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+findmnt -S "${dev}" -fno TARGET |
+while read mnt; do
+    case "${cmd}" in
+        quiesce)
+            echo "freezing ${mnt}" >&2
+            fsfreeze -f "${mnt}"
+            ;;
+        unquiesce)
+            echo "unfreezing ${mnt}" >&2
+            fsfreeze -u "${mnt}"
+            ;;
+        *)
+            echo "unknown command ${cmd}" >&2
+            exit 1
+            ;;
+    esac
+done

@@ -52,7 +52,7 @@ struct RemoveRequest<librbd::MockTestImageCtx> {
 
   static RemoveRequest *create(librados::IoCtx &io_ctx,
                                const std::string &image_id,
-                               ContextWQ *work_queue,
+                               librbd::asio::ContextWQ *work_queue,
                                bool force,
                                librbd::ProgressContext &progress_ctx,
                                Context *on_finish) {
@@ -134,7 +134,7 @@ public:
     using ceph::encode;
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(StrEq(RBD_TRASH), _, StrEq("rbd"),
-                     StrEq("trash_get"), _, _, _))
+                     StrEq("trash_get"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([trash_spec, r](bufferlist* bl) {
                              encode(trash_spec, *bl);
                              return r;
@@ -150,7 +150,7 @@ public:
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(StrEq(RBD_TRASH), _, StrEq("rbd"),
                      StrEq("trash_state_set"),
-                     ContentsEqual(in_bl), _, _))
+                     ContentsEqual(in_bl), _, _, _))
       .WillOnce(Return(r));
   }
 
@@ -161,7 +161,7 @@ public:
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(librbd::util::header_name(image_id), _, StrEq("rbd"),
-                     StrEq("get_snapcontext"), _, _, _))
+                     StrEq("get_snapcontext"), _, _, _, _))
       .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
                                           *out_bl = bl;
                                         })),

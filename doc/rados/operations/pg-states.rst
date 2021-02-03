@@ -22,6 +22,12 @@ map is ``active + clean``.
 *down*
   A replica with necessary data is down, so the placement group is offline.
 
+*laggy*
+  A replica is not acknowledging new leases from the primary in a timely fashion; IO is temporarily paused.
+
+*wait*
+  The set of OSDs for this PG has just changed and IO is temporarily paused until the previous interval's leases expire.
+
 *scrubbing*
   Ceph is checking the placement group metadata for inconsistencies.
 

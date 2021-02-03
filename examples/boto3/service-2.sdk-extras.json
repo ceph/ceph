@@ -1,0 +1,215 @@
+{
+"version": 1.0,
+"merge": {
+    "operations":{
+        "DeleteBucketNotificationConfiguration":{
+            "name":"DeleteBucketNotificationConfiguration",
+            "http":{
+                "method":"DELETE",
+                "requestUri":"/{Bucket}?notification",
+                "responseCode":204
+            },
+            "input":{"shape":"DeleteBucketNotificationConfigurationRequest"},
+            "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#delete-notification",
+            "documentation":"<p>Deletes the notification configuration from the bucket.</p>"
+        },
+        "GetUsageStats":{
+            "name":"GetUsageStats",
+            "http":{
+                "method":"GET",
+                "requestUri":"/?usage",
+                "responseCode":200
+            },
+            "output": {"shape": "GetUsageStatsOutput"},
+            "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/serviceops#get-usage-stats",
+            "documentation":"<p>Get usage stats for the user</p>"
+        }
+    },
+    "shapes": {
+        "ListObjectsRequest": {
+            "members": {
+                "AllowUnordered": {
+                    "shape":"AllowUnordered",
+                    "documentation":"<p>Allow the listing results to be returned in unsorted order. This may be faster when listing very large buckets.</p>",
+                    "location":"querystring",
+                    "locationName":"allow-unordered"
+                }
+            }
+        },
+        "AllowUnordered":{"type":"boolean"},
+        "PutObjectRequest": {
+            "members": {
+                "AppendPosition": {
+                    "shape":"AppendPosition",
+                    "documentation": "<p>Position to allow appending</p>",
+                    "location": "querystring",
+                    "locationName": "position"
+                },
+                "Append": {
+                    "shape":"Append",
+                    "documentation":"<p>Append Object</p>",
+                    "location": "querystring",
+                    "locationName": "append"
+                }
+            }
+        },
+        "Append": {"type":"boolean"},
+        "AppendPosition":{"type":"integer"},
+        "PutObjectOutput": {
+            "members": {
+                "AppendPosition": {
+                    "shape":"AppendPosition",
+                    "documentation": "<p>Position to allow appending</p>",
+                    "location": "header",
+                    "locationName": "x-rgw-next-append-position",
+                    "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/objectops/#append-object"
+                }
+            }
+        },
+        "GetBucketNotificationConfigurationRequest":{
+            "type":"structure",
+            "required":["Bucket"],
+            "members":{
+                "Bucket":{
+                    "shape":"BucketName",
+                    "documentation":"<p>Name of the bucket to get the notifications configuration for.</p>",
+                    "location":"uri",
+                    "locationName":"Bucket"
+                },
+                "Notification":{
+                    "shape":"NotificationId",
+                    "documentation":"<p>Id of the specific notification on the bucket for which the configuration should be retrieved.</p>",
+                    "location":"querystring",
+                    "locationName":"notification-id"
+                }
+            }
+        },
+        "DeleteBucketNotificationConfigurationRequest":{
+            "type":"structure",
+            "required":["Bucket"],
+            "members":{
+                "Bucket":{
+                    "shape":"BucketName",
+                    "documentation":"<p>Name of the bucket to delete the notifications configuration from.</p>",
+                    "location":"uri",
+                    "locationName":"Bucket"
+                },
+                "Notification":{
+                    "shape":"NotificationId",
+                    "documentation":"<p>Id of the specific notification on the bucket to be deleted.</p>",
+                    "location":"querystring",
+                    "locationName":"notification-id"
+                }
+            }
+        },
+        "FilterRule":{
+            "type":"structure",
+            "members":{
+                "Name":{
+                    "shape":"FilterRuleName",
+                    "documentation":"<p>The object key name prefix, suffix or regex identifying one or more objects to which the filtering rule applies. The maximum length is 1,024 characters. Overlapping prefixes and suffixes are supported.</p>"
+                },
+                "Value":{
+                    "shape":"FilterRuleValue",
+                    "documentation":"<p>The value that the filter searches for in object key names.</p>"
+                }
+            },
+            "documentation":"<p>Specifies the Amazon S3 object key name to filter on and whether to filter on the suffix, prefix or regex of the key name.</p>"
+        },
+        "FilterRuleName":{
+            "type":"string",
+            "enum":[
+                "prefix",
+                "suffix",
+                "regex"
+            ]
+        },
+        "NotificationConfigurationFilter":{
+            "type":"structure",
+            "members":{
+                "Key":{
+                    "shape":"S3KeyFilter",
+                    "documentation":"<p/>",
+                    "locationName":"S3Key"
+                },
+                "Metadata":{
+                    "shape":"S3MetadataFilter",
+                    "documentation":"<p/>",
+                    "locationName":"S3Metadata"
+                },
+                "Tags":{
+                    "shape":"S3TagsFilter",
+                    "documentation":"<p/>",
+                    "locationName":"S3Tags"
+                }
+
+            },
+            "documentation":"<p>Specifies object key name filtering rules. For information about key name filtering, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html\">Configuring Event Notifications</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>"
+        },
+        "S3KeyFilter":{
+            "type":"structure",
+            "members":{
+                "FilterRules":{
+                    "shape":"FilterRuleList",
+                    "documentation":"<p/>",
+                    "locationName":"FilterRule"
+                }
+            },
+            "documentation":"<p>A container for object key name prefix, suffix and regex filtering rules.</p>"
+        },
+        "S3MetadataFilter":{
+            "type":"structure",
+            "members":{
+                "FilterRules":{
+                    "shape":"FilterRuleList",
+                    "documentation":"<p/>",
+                    "locationName":"FilterRule"
+                }
+            },
+            "documentation":"<p>A container for metadata filtering rules.</p>"
+        },
+        "S3TagsFilter":{
+            "type":"structure",
+            "members":{
+                "FilterRules":{
+                    "shape":"FilterRuleList",
+                    "documentation":"<p/>",
+                    "locationName":"FilterRule"
+                }
+            },
+            "documentation":"<p>A container for object tags filtering rules.</p>"
+        },
+        "GetUsageStatsOutput": {
+            "type": "structure",
+            "members": {
+                "Summary": {
+                    "shape":"UsageStatsSummary",
+                    "documentation": "<p/>"
+                }
+            }
+        },
+        "UsageStatsSummary": {
+            "type": "structure",
+            "members": {
+		        "QuotaMaxBytes":{"shape":"QuotaMaxBytes"},
+		        "QuotaMaxBuckets":{"shape": "QuotaMaxBuckets"},
+		        "QuotaMaxObjCount":{"shape":"QuotaMaxObjCount"},
+		        "QuotaMaxBytesPerBucket":{"shape":"QuotaMaxBytesPerBucket"},
+                "QuotaMaxObjCountPerBucket":{"shape":"QuotaMaxObjCountPerBucket"},
+		        "TotalBytes":{"shape":"TotalBytes"},
+                "TotalBytesRounded":{"shape":"TotalBytesRounded"},
+                "TotalEntries":{"shape":"TotalEntries"}
+            }
+        },
+        "QuotaMaxBytes":{"type":"integer"},
+	    "QuotaMaxBuckets":{"type": "integer"},
+	    "QuotaMaxObjCount":{"type":"integer"},
+	    "QuotaMaxBytesPerBucket":{"type":"integer"},
+	    "QuotaMaxObjCountPerBucket":{"type":"integer"},
+	    "TotalBytesRounded":{"type":"integer"},
+        "TotalBytes":{"type":"integer"},
+        "TotalEntries":{"type":"integer"}
+    },
+    "documentation":"<p/>"
+}
+}

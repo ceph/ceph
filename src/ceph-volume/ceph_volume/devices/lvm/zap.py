@@ -7,7 +7,7 @@ from textwrap import dedent
 
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
-from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int
+from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int, merge_dict
 from ceph_volume.util.device import Device
 from ceph_volume.systemd import systemctl
 
@@ -66,6 +66,7 @@ def zap_data(path):
         'of={path}'.format(path=path),
         'bs=1M',
         'count=10',
+        'conv=fsync'
     ])
 
 
@@ -80,17 +81,17 @@ def find_associated_devices(osd_id=None, osd_fsid=None):
         lv_tags['ceph.osd_id'] = osd_id
     if osd_fsid:
         lv_tags['ceph.osd_fsid'] = osd_fsid
-    lvs = api.Volumes()
-    lvs.filter(lv_tags=lv_tags)
+
+    lvs = api.get_lvs(tags=lv_tags)
     if not lvs:
-        raise RuntimeError('Unable to find any LV for zapping OSD: %s' % osd_id or osd_fsid)
+        raise RuntimeError('Unable to find any LV for zapping OSD: '
+                           '%s' % osd_id or osd_fsid)
 
-    devices_to_zap = ensure_associated_lvs(lvs)
-
+    devices_to_zap = ensure_associated_lvs(lvs, lv_tags)
     return [Device(path) for path in set(devices_to_zap) if path]
 
 
-def ensure_associated_lvs(lvs):
+def ensure_associated_lvs(lvs, lv_tags={}):
     """
     Go through each LV and ensure if backing devices (journal, wal, block)
     are LVs or partitions, so that they can be accurately reported.
@@ -99,14 +100,12 @@ def ensure_associated_lvs(lvs):
     # receive a filtering for osd.1, and have multiple failed deployments
     # leaving many journals with osd.1 - usually, only a single LV will be
     # returned
-    journal_lvs = lvs._filter(lv_tags={'ceph.type': 'journal'})
-    db_lvs = lvs._filter(lv_tags={'ceph.type': 'db'})
-    wal_lvs = lvs._filter(lv_tags={'ceph.type': 'wal'})
-    backing_devices = [
-        (journal_lvs, 'journal'),
-        (db_lvs, 'db'),
-        (wal_lvs, 'wal')
-    ]
+
+    journal_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'journal'}))
+    db_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'db'}))
+    wal_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'wal'}))
+    backing_devices = [(journal_lvs, 'journal'), (db_lvs, 'db'),
+                       (wal_lvs, 'wal')]
 
     verified_devices = []
 
@@ -167,21 +166,27 @@ class Zap(object):
         Device examples: vg-name/lv-name, /dev/vg-name/lv-name
         Requirements: Must be a logical volume (LV)
         """
-        lv = api.get_lv(lv_name=device.lv_name, vg_name=device.vg_name)
+        lv = api.get_first_lv(filters={'lv_name': device.lv_name, 'vg_name':
+                                       device.vg_name})
         self.unmount_lv(lv)
 
         wipefs(device.abspath)
         zap_data(device.abspath)
 
         if self.args.destroy:
-            lvs = api.Volumes()
-            lvs.filter(vg_name=device.vg_name)
-            if len(lvs) <= 1:
-                mlogger.info('Only 1 LV left in VG, will proceed to destroy volume group %s', device.vg_name)
+            lvs = api.get_lvs(filters={'vg_name': device.vg_name})
+            if lvs == []:
+                mlogger.info('No LVs left, exiting', device.vg_name)
+                return
+            elif len(lvs) <= 1:
+                mlogger.info('Only 1 LV left in VG, will proceed to destroy '
+                             'volume group %s', device.vg_name)
                 api.remove_vg(device.vg_name)
             else:
-                mlogger.info('More than 1 LV left in VG, will proceed to destroy LV only')
-                mlogger.info('Removing LV because --destroy was given: %s', device.abspath)
+                mlogger.info('More than 1 LV left in VG, will proceed to '
+                             'destroy LV only')
+                mlogger.info('Removing LV because --destroy was given: %s',
+                             device.abspath)
                 api.remove_lv(device.abspath)
         elif lv:
             # just remove all lvm metadata, leaving the LV around
@@ -222,7 +227,15 @@ class Zap(object):
         Requirements: An LV or VG present in the device, making it an LVM member
         """
         for lv in device.lvs:
-            self.zap_lv(Device(lv.lv_path))
+            if lv.lv_name:
+                mlogger.info('Zapping lvm member {}. lv_path is {}'.format(device.abspath, lv.lv_path))
+                self.zap_lv(Device(lv.lv_path))
+            else:
+                vg = api.get_first_vg(filters={'vg_name': lv.vg_name})
+                if vg:
+                    mlogger.info('Found empty VG {}, removing'.format(vg.vg_name))
+                    api.remove_vg(vg.vg_name)
+
 
 
     def zap_raw_device(self, device):
@@ -277,7 +290,7 @@ class Zap(object):
 
     @decorators.needs_root
     def zap_osd(self):
-        if self.args.osd_id:
+        if self.args.osd_id and not self.args.no_systemd:
             osd_is_running = systemctl.osd_is_active(self.args.osd_id)
             if osd_is_running:
                 mlogger.error("OSD ID %s is running, stop it with:" % self.args.osd_id)
@@ -369,6 +382,13 @@ class Zap(object):
         parser.add_argument(
             '--osd-fsid',
             help='Specify an OSD FSID to detect associated devices for zapping',
+        )
+
+        parser.add_argument(
+            '--no-systemd',
+            dest='no_systemd',
+            action='store_true',
+            help='Skip systemd unit checks',
         )
 
         if len(self.argv) == 0:

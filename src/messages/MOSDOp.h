@@ -30,9 +30,11 @@
  *
  */
 
-class OSD;
+class MOSDOpReply;
 
-class MOSDOp : public MOSDFastDispatchOp {
+namespace _mosdop {
+template<typename V>
+class MOSDOp final : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 3;
@@ -54,7 +56,7 @@ private:
   std::atomic<bool> final_decode_needed;
   //
 public:
-  std::vector<OSDOp> ops;
+  V ops;
 private:
   snapid_t snap_seq;
   std::vector<snapid_t> snaps;
@@ -64,7 +66,7 @@ private:
   osd_reqid_t reqid; // reqid explicitly set by sender
 
 public:
-  friend class MOSDOpReply;
+  friend MOSDOpReply;
 
   ceph_tid_t get_client_tid() { return header.tid; }
   void set_snapid(const snapid_t& s) {
@@ -191,7 +193,7 @@ public:
     reqid.inc = inc;
   }
 private:
-  ~MOSDOp() override {}
+  ~MOSDOp() final {}
 
 public:
   void set_mtime(utime_t mt) { mtime = mt; }
@@ -209,12 +211,12 @@ public:
   }
   void write(uint64_t off, uint64_t len, ceph::buffer::list& bl) {
     add_simple_op(CEPH_OSD_OP_WRITE, off, len);
-    data.claim(bl);
+    data = std::move(bl);
     header.data_off = off;
   }
   void writefull(ceph::buffer::list& bl) {
     add_simple_op(CEPH_OSD_OP_WRITEFULL, 0, bl.length());
-    data.claim(bl);
+    data = std::move(bl);
     header.data_off = 0;
   }
   void zero(uint64_t off, uint64_t len) {
@@ -257,22 +259,22 @@ public:
       // here is the old structure we are encoding to: //
 #if 0
 struct ceph_osd_request_head {
-	__le32 client_inc;                 /* client incarnation */
+	ceph_le32 client_inc;              /* client incarnation */
 	struct ceph_object_layout layout;  /* pgid */
-	__le32 osdmap_epoch;               /* client's osdmap epoch */
+	ceph_le32 osdmap_epoch;            /* client's osdmap epoch */
 
-	__le32 flags;
+	ceph_le32 flags;
 
 	struct ceph_timespec mtime;        /* for mutations only */
 	struct ceph_eversion reassert_version; /* if we are replaying op */
 
-	__le32 object_len;     /* length of object name */
+	ceph_le32 object_len;     /* length of object name */
 
-	__le64 snapid;         /* snapid to read */
-	__le64 snap_seq;       /* writer's snap context */
-	__le32 num_snaps;
+	ceph_le64 snapid;         /* snapid to read */
+	ceph_le64 snap_seq;       /* writer's snap context */
+	ceph_le32 num_snaps;
 
-	__le16 num_ops;
+	ceph_le16 num_ops;
 	struct ceph_osd_op ops[];  /* followed by ops[], obj, ticket, snaps */
 } __attribute__ ((packed));
 #endif
@@ -598,6 +600,9 @@ private:
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
+}
+
+using MOSDOp = _mosdop::MOSDOp<std::vector<OSDOp>>;
 
 
 #endif

@@ -5,10 +5,10 @@
 #define CEPH_RBD_MIRROR_POOL_REPLAYER_H
 
 #include "common/Cond.h"
-#include "common/WorkQueue.h"
 #include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/NamespaceReplayer.h"
@@ -31,8 +31,13 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+template <typename> class RemotePoolPoller;
+namespace remote_pool_poller { struct Listener; }
+
+struct PoolMetaCache;
 template <typename> class ServiceDaemon;
 template <typename> struct Threads;
+
 
 /**
  * Controls mirroring for a single remote cluster.
@@ -43,27 +48,29 @@ public:
   PoolReplayer(Threads<ImageCtxT> *threads,
                ServiceDaemon<ImageCtxT> *service_daemon,
                journal::CacheManagerHandler *cache_manager_handler,
+               PoolMetaCache* pool_meta_cache,
 	       int64_t local_pool_id, const PeerSpec &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
   PoolReplayer(const PoolReplayer&) = delete;
   PoolReplayer& operator=(const PoolReplayer&) = delete;
 
-  bool is_blacklisted() const;
+  bool is_blocklisted() const;
   bool is_leader() const;
   bool is_running() const;
 
-  void init();
+  void init(const std::string& site_name);
   void shut_down();
 
   void run();
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
   void start();
   void stop(bool manual);
   void restart();
   void flush();
   void release_leader();
+  void reopen_logs();
 
 private:
   /**
@@ -89,6 +96,8 @@ private:
    *
    * @endverbatim
    */
+
+  struct RemotePoolPollerListener;
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
@@ -181,18 +190,22 @@ private:
     m_threads->work_queue->queue(on_lock);
   }
 
+  void handle_remote_pool_meta_updated(const RemotePoolMeta& remote_pool_meta);
+
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
   int64_t m_local_pool_id = -1;
   PeerSpec m_peer;
   std::vector<const char*> m_args;
 
   mutable ceph::mutex m_lock;
   ceph::condition_variable m_cond;
+  std::string m_site_name;
   bool m_stopping = false;
   bool m_manual_stop = false;
-  bool m_blacklisted = false;
+  bool m_blocklisted = false;
 
   RadosRef m_local_rados;
   RadosRef m_remote_rados;
@@ -201,6 +214,10 @@ private:
   librados::IoCtx m_remote_io_ctx;
 
   std::string m_local_mirror_uuid;
+
+  RemotePoolMeta m_remote_pool_meta;
+  std::unique_ptr<remote_pool_poller::Listener> m_remote_pool_poller_listener;
+  std::unique_ptr<RemotePoolPoller<ImageCtxT>> m_remote_pool_poller;
 
   std::unique_ptr<NamespaceReplayer<ImageCtxT>> m_default_namespace_replayer;
   std::map<std::string, NamespaceReplayer<ImageCtxT> *> m_namespace_replayers;

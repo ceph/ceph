@@ -91,16 +91,13 @@ def pool_update_commands(pool_name, args):
 def crush_rule_osds(node_buckets, rule):
     nodes_by_id = dict((b['id'], b) for b in node_buckets)
 
-    def _gather_leaf_ids(node):
-        if node['id'] >= 0:
-            return set([node['id']])
+    def _gather_leaf_ids(node_id):
+        if node_id >= 0:
+            return set([node_id])
 
         result = set()
-        for item in node['items']:
-            if item['id'] >= 0:
-                result.add(item['id'])
-            else:
-                result |= _gather_leaf_ids(nodes_by_id[item['id']])
+        for item in nodes_by_id[node_id]['items']:
+            result |= _gather_leaf_ids(item['id'])
 
         return result
 
@@ -132,8 +129,7 @@ def crush_rule_osds(node_buckets, rule):
                 if node_id >= 0:
                     osds.add(node_id)
                 else:
-                    for desc_node in nodes_by_id[node_id]:
-                        osds |= _gather_osds(desc_node, steps[1:])
+                    osds |= _gather_osds(nodes_by_id[node_id], steps[1:])
         elif step['op'] == 'chooseleaf_firstn':
             # Choose all descendents of the current node of type 'type',
             # and select all leaves beneath those
@@ -146,7 +142,7 @@ def crush_rule_osds(node_buckets, rule):
                         # Short circuit another iteration to find the emit
                         # and assume anything we've done a chooseleaf on
                         # is going to be part of the selected set of osds
-                        osds |= _gather_leaf_ids(desc_node)
+                        osds |= _gather_leaf_ids(desc_node['id'])
         elif step['op'] == 'emit':
             if root['id'] >= 0:
                 osds |= root['id']

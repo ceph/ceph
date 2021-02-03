@@ -20,7 +20,7 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 if [ `uname` = FreeBSD ]; then
     # erasure coding overwrites are only tested on Bluestore
     # erasure coding on filestore is unsafe
-    # http://docs.ceph.com/docs/master/rados/operations/erasure-code/#erasure-coding-with-overwrites
+    # http://docs.ceph.com/en/latest/rados/operations/erasure-code/#erasure-coding-with-overwrites
     use_ec_overwrite=false
 else
     use_ec_overwrite=true
@@ -45,7 +45,7 @@ walk(if type == "object" then del(.mtime) else . end)
 | walk(if type == "object" then del(.version) else . end)
 | walk(if type == "object" then del(.prior_version) else . end)'
 
-sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print(json.dumps(ud, sort_keys=True, indent=2))'
 
 function run() {
     local dir=$1
@@ -360,8 +360,8 @@ function TEST_auto_repair_bluestore_basic() {
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_deep_scrub $pgid
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid deep_scrub
+    ceph tell $pgid scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -409,7 +409,7 @@ function TEST_auto_repair_bluestore_scrub() {
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid scrub
 
     # Wait for scrub -> auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -470,8 +470,8 @@ function TEST_auto_repair_bluestore_failed() {
     local pgid=$(get_pg $poolname obj1)
     local primary=$(get_primary $poolname obj1)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_deep_scrub $pgid
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid deep_scrub
+    ceph tell $pgid scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -480,7 +480,7 @@ function TEST_auto_repair_bluestore_failed() {
     grep scrub_finish $dir/osd.${primary}.log
     grep -q "scrub_finish.*still present after re-scrub" $dir/osd.${primary}.log || return 1
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).*+failed_repair" || return 1
+    ceph pg dump pgs | grep -q "^${pgid}.*+failed_repair" || return 1
 
     # Verify - obj1 should be back
     # Restarted osd get $ceph_osd_args passed
@@ -494,8 +494,9 @@ function TEST_auto_repair_bluestore_failed() {
     repair $pgid
     sleep 2
 
+    flush_pg_stats
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).* active+clean " || return 1
+    ceph pg dump pgs | grep -q -e "^${pgid}.* active+clean " -e "^${pgid}.* active+clean+wait " || return 1
     grep scrub_finish $dir/osd.${primary}.log
 
     # Tear down
@@ -541,8 +542,8 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     local pgid=$(get_pg $poolname obj1)
     local primary=$(get_primary $poolname obj1)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_deep_scrub $pgid
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid deep_scrub
+    ceph tell $pgid scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -550,7 +551,7 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     flush_pg_stats
     grep -q "scrub_finish.*present with no repair possible" $dir/osd.${primary}.log || return 1
     ceph pg dump pgs
-    ceph pg dump pgs | grep -q "^$(pgid).*+failed_repair" || return 1
+    ceph pg dump pgs | grep -q "^${pgid}.*+failed_repair" || return 1
 
     # Tear down
     teardown $dir || return 1
@@ -600,13 +601,14 @@ function TEST_repair_stats() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'
@@ -673,13 +675,14 @@ function TEST_repair_stats_ec() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd $dir $primary $ceph_osd_args || return 1
-    run_osd $dir $other $ceph_osd_args || return 1
+    activate_osd $dir $primary $ceph_osd_args || return 1
+    activate_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
+    flush_pg_stats
 
     # This should have caused 1 object to be repaired
     ceph pg $pgid query | jq '.info.stats.stat_sum'
@@ -1114,7 +1117,7 @@ function TEST_corrupt_scrub_replicated() {
     err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ffdb2004:::ROBJ9:head : candidate size 1 info size 7 mismatch"
     err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 1 soid 3:ffdb2004:::ROBJ9:head : object info inconsistent "
     err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head : no '_' attr"
-    err_strings[17]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: .* no longer understand old encoding version 3 < 97"
+    err_strings[17]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr .* no longer understand old encoding version 3 < 97: Malformed input"
     err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub : stat mismatch, got 19/19 objects, 0/0 clones, 18/19 dirty, 18/19 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 1049713/1049720 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 1 missing, 8 inconsistent objects"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 18 errors"
@@ -1139,7 +1142,7 @@ function TEST_corrupt_scrub_replicated() {
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -2020,7 +2023,7 @@ function TEST_corrupt_scrub_replicated() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -2093,7 +2096,7 @@ EOF
     err_strings[32]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0 soid 3:ffdb2004:::ROBJ9:head : candidate size 3 info size 7 mismatch"
     err_strings[33]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 shard 0 soid 3:ffdb2004:::ROBJ9:head : object info inconsistent "
     err_strings[34]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:c0c86b1d:::ROBJ14:head : no '_' attr"
-    err_strings[35]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr buffer::malformed_input: .* no longer understand old encoding version 3 < 97"
+    err_strings[35]="log_channel[(]cluster[)] log [[]ERR[]] : deep-scrub [0-9]*[.]0 3:5c7b2c47:::ROBJ16:head : can't decode 'snapset' attr .* no longer understand old encoding version 3 < 97: Malformed input"
     err_strings[36]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub : stat mismatch, got 19/19 objects, 0/0 clones, 18/19 dirty, 18/19 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 1049715/1049716 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
     err_strings[37]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 1 missing, 11 inconsistent objects"
     err_strings[38]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 deep-scrub 35 errors"
@@ -2117,7 +2120,7 @@ EOF
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -3496,7 +3499,7 @@ EOF
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -3634,7 +3637,7 @@ function corrupt_scrub_erasure() {
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -4254,7 +4257,7 @@ function corrupt_scrub_erasure() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -4280,7 +4283,7 @@ EOF
 
     if [ "$allow_overwrites" = "true" ]
     then
-      jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+      jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -4935,7 +4938,7 @@ EOF
 
     else
 
-      jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+      jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -5668,7 +5671,7 @@ EOF
 
     fi
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -5745,8 +5748,7 @@ function TEST_periodic_scrub_replicated() {
     flush_pg_stats
     local last_scrub=$(get_last_scrub_stamp $pg)
     # Fake a schedule scrub
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub $pg || return 1
+    ceph tell $pg scrub || return 1
     # Wait for schedule regular scrub
     wait_for_scrub $pg "$last_scrub"
 
@@ -5759,12 +5761,12 @@ function TEST_periodic_scrub_replicated() {
     # Can't upgrade with this set
     ceph osd set nodeep-scrub
     # Let map change propagate to OSDs
+    ceph tell osd.0 get_latest_osdmap
     flush_pg_stats
     sleep 5
 
     # Fake a schedule scrub
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub $pg || return 1
+    ceph tell $pg scrub || return 1
     # Wait for schedule regular scrub
     # to notice scrub and skip it
     local found=false
@@ -5802,7 +5804,7 @@ function TEST_scrub_warning() {
     local pool_overdue_seconds=$(calc $i14_days + $i1_day + \( $i14_days \* $overdue \) )
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x --mon_warn_pg_not_scrubbed_ratio=${overdue} --mon_warn_pg_not_deep_scrubbed_ratio=${overdue} || return 1
     run_osd $dir 0 $ceph_osd_args --osd_scrub_backoff_ratio=0 || return 1
 
@@ -5839,8 +5841,7 @@ function TEST_scrub_warning() {
       else
         overdue_seconds=$conf_overdue_seconds
       fi
-      CEPH_ARGS='' ceph daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub ${i}.0 $(expr ${overdue_seconds} + ${i}00) || return 1
+      ceph tell ${i}.0 scrub $(expr ${overdue_seconds} + ${i}00) || return 1
     done
     # Fake schedule deep scrubs
     for i in $(seq $(expr $scrubs + 1) $(expr $scrubs + $deep_scrubs))
@@ -5851,8 +5852,7 @@ function TEST_scrub_warning() {
       else
         overdue_seconds=$conf_overdue_seconds
       fi
-      CEPH_ARGS='' ceph daemon $(get_asok_path osd.${primary}) \
-             trigger_deep_scrub ${i}.0 $(expr ${overdue_seconds} + ${i}00) || return 1
+      ceph tell ${i}.0 deep_scrub $(expr ${overdue_seconds} + ${i}00) || return 1
     done
     flush_pg_stats
 
@@ -5938,7 +5938,7 @@ function TEST_corrupt_snapset_scrub_rep() {
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
 
-    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
 {
   "epoch": 34,
   "inconsistents": [
@@ -6104,7 +6104,7 @@ function TEST_corrupt_snapset_scrub_rep() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
     multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -6152,7 +6152,7 @@ function TEST_request_scrub_priority() {
     local PGS=8
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
     ceph_osd_args+="--osd_scrub_backoff_ratio=0"
@@ -6177,8 +6177,7 @@ function TEST_request_scrub_priority() {
         otherpgs="${otherpgs}${opg} "
         local other_last_scrub=$(get_last_scrub_stamp $pg)
         # Fake a schedule scrub
-        CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub $opg || return 1
+        ceph tell $opg scrub $opg || return 1
     done
 
     sleep 15

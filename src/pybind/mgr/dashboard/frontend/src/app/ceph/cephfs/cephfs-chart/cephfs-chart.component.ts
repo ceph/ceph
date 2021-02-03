@@ -1,10 +1,10 @@
 import { Component, ElementRef, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
 import { ChartDataSets, ChartOptions, ChartPoint, ChartType } from 'chart.js';
-import * as _ from 'lodash';
-import * as moment from 'moment';
+import _ from 'lodash';
+import moment from 'moment';
 
-import { ChartTooltip } from '../../../shared/models/chart-tooltip';
+import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
 
 @Component({
   selector: 'cd-cephfs-chart',
@@ -102,8 +102,6 @@ export class CephfsChartComponent implements OnChanges, OnInit {
     chartType: 'line'
   };
 
-  constructor() {}
-
   ngOnInit() {
     if (_.isUndefined(this.mdsCounter)) {
       return;
@@ -123,8 +121,8 @@ export class CephfsChartComponent implements OnChanges, OnInit {
     const chartTooltip = new ChartTooltip(
       this.chartCanvas,
       this.chartTooltip,
-      (tooltip) => tooltip.caretX + 'px',
-      (tooltip) => tooltip.caretY - tooltip.height - 15 + 'px'
+      (tooltip: any) => tooltip.caretX + 'px',
+      (tooltip: any) => tooltip.caretY - tooltip.height - 23 + 'px'
     );
     chartTooltip.getTitle = (ts) => moment(ts, 'x').format('LTS');
     chartTooltip.checkOffset = true;
@@ -160,30 +158,35 @@ export class CephfsChartComponent implements OnChanges, OnInit {
    * can handle (list of objects with millisecs-since-epoch
    * timestamps)
    */
-  private convertTimeSeries(sourceSeries) {
-    const data = [];
+  private convertTimeSeries(sourceSeries: any) {
+    const data: any[] = [];
     _.each(sourceSeries, (dp) => {
       data.push({
         x: dp[0] * 1000,
         y: dp[1]
       });
     });
+
+    /**
+     * MDS performance counters chart is expecting the same number of items
+     * from each data series. Since in deltaTimeSeries we are ignoring the first
+     * element, we will do the same here.
+     */
+    data.shift();
+
     return data;
   }
 
-  private deltaTimeSeries(sourceSeries) {
+  private deltaTimeSeries(sourceSeries: any) {
     let i;
     let prev = sourceSeries[0];
     const result = [];
     for (i = 1; i < sourceSeries.length; i++) {
       const cur = sourceSeries[i];
-      const tdelta = cur[0] - prev[0];
-      const vdelta = cur[1] - prev[1];
-      const rate = vdelta / tdelta;
 
       result.push({
         x: cur[0] * 1000,
-        y: rate
+        y: cur[1] - prev[1]
       });
 
       prev = cur;

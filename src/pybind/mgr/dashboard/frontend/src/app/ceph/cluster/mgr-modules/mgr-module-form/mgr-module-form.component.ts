@@ -2,67 +2,63 @@ import { Component, OnInit } from '@angular/core';
 import { ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
-import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
-import { NotificationType } from '../../../../shared/enum/notification-type.enum';
-import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../../shared/forms/cd-validators';
-import { NotificationService } from '../../../../shared/services/notification.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-mgr-module-form',
   templateUrl: './mgr-module-form.component.html',
   styleUrls: ['./mgr-module-form.component.scss']
 })
-export class MgrModuleFormComponent implements OnInit {
+export class MgrModuleFormComponent extends CdForm implements OnInit {
   mgrModuleForm: CdFormGroup;
-  error = false;
-  loading = false;
   moduleName = '';
-  moduleOptions = [];
+  moduleOptions: any[] = [];
 
   constructor(
+    public actionLabels: ActionLabelsI18n,
     private route: ActivatedRoute,
     private router: Router,
     private formBuilder: CdFormBuilder,
     private mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService,
-    private i18n: I18n
-  ) {}
-
-  ngOnInit() {
-    this.route.params.subscribe(
-      (params: { name: string }) => {
-        this.moduleName = decodeURIComponent(params.name);
-        this.loading = true;
-        const observables = [];
-        observables.push(this.mgrModuleService.getOptions(this.moduleName));
-        observables.push(this.mgrModuleService.getConfig(this.moduleName));
-        observableForkJoin(observables).subscribe(
-          (resp: object) => {
-            this.loading = false;
-            this.moduleOptions = resp[0];
-            // Create the form dynamically.
-            this.createForm();
-            // Set the form field values.
-            this.mgrModuleForm.setValue(resp[1]);
-          },
-          (error) => {
-            this.error = error;
-          }
-        );
-      },
-      (error) => {
-        this.error = error;
-      }
-    );
+    private notificationService: NotificationService
+  ) {
+    super();
   }
 
-  getValidators(moduleOption): ValidatorFn[] {
+  ngOnInit() {
+    this.route.params.subscribe((params: { name: string }) => {
+      this.moduleName = decodeURIComponent(params.name);
+      const observables = [
+        this.mgrModuleService.getOptions(this.moduleName),
+        this.mgrModuleService.getConfig(this.moduleName)
+      ];
+      observableForkJoin(observables).subscribe(
+        (resp: object) => {
+          this.moduleOptions = resp[0];
+          // Create the form dynamically.
+          this.createForm();
+          // Set the form field values.
+          this.mgrModuleForm.setValue(resp[1]);
+          this.loadingReady();
+        },
+        (_error) => {
+          this.loadingError();
+        }
+      );
+    });
+  }
+
+  getValidators(moduleOption: any): ValidatorFn[] {
     const result = [];
     switch (moduleOption.type) {
       case 'addr':
@@ -133,7 +129,7 @@ export class MgrModuleFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Updated options for module "{{name}}".', { name: this.moduleName })
+          $localize`Updated options for module '${this.moduleName}'.`
         );
         this.goToListView();
       },

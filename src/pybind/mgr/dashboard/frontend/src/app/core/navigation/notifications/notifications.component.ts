@@ -1,13 +1,11 @@
-import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 
-import * as _ from 'lodash';
+import { Subscription } from 'rxjs';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdNotification } from '../../../shared/models/cd-notification';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { PrometheusAlertService } from '../../../shared/services/prometheus-alert.service';
-import { PrometheusNotificationService } from '../../../shared/services/prometheus-notification.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdNotification } from '~/app/shared/models/cd-notification';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { SummaryService } from '~/app/shared/services/summary.service';
 
 @Component({
   selector: 'cd-notifications',
@@ -15,46 +13,35 @@ import { PrometheusNotificationService } from '../../../shared/services/promethe
   styleUrls: ['./notifications.component.scss']
 })
 export class NotificationsComponent implements OnInit, OnDestroy {
-  notifications: CdNotification[];
-  private interval: number;
   icons = Icons;
+  hasRunningTasks = false;
+  hasNotifications = false;
+  private subs = new Subscription();
 
   constructor(
     public notificationService: NotificationService,
-    private prometheusNotificationService: PrometheusNotificationService,
-    private authStorageService: AuthStorageService,
-    private prometheusAlertService: PrometheusAlertService,
-    private ngZone: NgZone
-  ) {
-    this.notifications = [];
-  }
-
-  ngOnDestroy() {
-    window.clearInterval(this.interval);
-  }
+    private summaryService: SummaryService
+  ) {}
 
   ngOnInit() {
-    if (this.authStorageService.getPermissions().prometheus.read) {
-      this.triggerPrometheusAlerts();
-      this.ngZone.runOutsideAngular(() => {
-        this.interval = window.setInterval(() => {
-          this.ngZone.run(() => {
-            this.triggerPrometheusAlerts();
-          });
-        }, 5000);
-      });
-    }
-    this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
-      this.notifications = _.orderBy(notifications, ['timestamp'], ['desc']);
-    });
+    this.subs.add(
+      this.summaryService.subscribe((summary) => {
+        this.hasRunningTasks = summary.executing_tasks.length > 0;
+      })
+    );
+
+    this.subs.add(
+      this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
+        this.hasNotifications = notifications.length > 0;
+      })
+    );
   }
 
-  private triggerPrometheusAlerts() {
-    this.prometheusAlertService.refresh();
-    this.prometheusNotificationService.refresh();
+  ngOnDestroy(): void {
+    this.subs.unsubscribe();
   }
 
-  removeAll() {
-    this.notificationService.removeAll();
+  toggleSidebar() {
+    this.notificationService.toggleSidebar();
   }
 }

@@ -14,9 +14,11 @@ struct SnapRealmInfo {
   std::vector<snapid_t> prior_parent_snaps;  // before parent_since
 
   SnapRealmInfo() {
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(&h, 0, sizeof(h));
   }
   SnapRealmInfo(inodeno_t ino_, snapid_t created_, snapid_t seq_, snapid_t current_parent_since_) {
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(&h, 0, sizeof(h));
     h.ino = ino_;
     h.created = created_;
@@ -51,7 +53,7 @@ struct SnapContext {
     seq = 0;
     snaps.clear();
   }
-  bool empty() { return seq == 0; }
+  bool empty() const { return seq == 0; }
 
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;

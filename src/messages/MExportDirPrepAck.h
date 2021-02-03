@@ -15,13 +15,13 @@
 #ifndef CEPH_MEXPORTDIRPREPACK_H
 #define CEPH_MEXPORTDIRPREPACK_H
 
-#include "msg/Message.h"
 #include "include/types.h"
+#include "messages/MMDSOp.h"
 
-class MExportDirPrepAck : public Message {
+class MExportDirPrepAck final : public MMDSOp {
 private:
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   dirfrag_t dirfrag;
   bool success = false;
@@ -31,17 +31,17 @@ private:
 
 protected:
   MExportDirPrepAck() :
-    Message{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION} {}
+    MMDSOp{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
-    Message{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), success(s) {
+    MMDSOp{MSG_MDS_EXPORTDIRPREPACK, HEAD_VERSION, COMPAT_VERSION}, dirfrag(df), success(s) {
     set_tid(tid);
   }
-  ~MExportDirPrepAck() override {}
+  ~MExportDirPrepAck() final {}
 
 public:  
   bool is_success() const { return success; }
   std::string_view get_type_name() const override { return "ExPAck"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "export_prep_ack(" << dirfrag << (success ? " success)" : " fail)");
   }
 

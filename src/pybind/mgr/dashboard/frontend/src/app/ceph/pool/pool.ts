@@ -1,4 +1,4 @@
-import { ExecutingTask } from '../../shared/models/executing-task';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { PoolStats } from './pool-stat';
 
 export class Pool {
@@ -67,7 +67,7 @@ export class Pool {
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];
 
-  constructor(name) {
+  constructor(name: string) {
     this.pool_name = name;
   }
 }

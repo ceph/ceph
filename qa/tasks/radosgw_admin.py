@@ -10,28 +10,23 @@ Rgw admin testing against a running instance
 #	python qa/tasks/radosgw_admin.py [USER] HOSTNAME
 #
 
-import copy
 import json
 import logging
 import time
 import datetime
-import Queue
-import bunch
-
 import sys
 
-from cStringIO import StringIO
+from io import BytesIO
+from queue import Queue
 
 import boto.exception
 import boto.s3.connection
 import boto.s3.acl
-from boto.utils import RequestHook
 
 import httplib2
 
-import util.rgw as rgw_utils
 
-from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
+from tasks.util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
 
@@ -101,7 +96,7 @@ class usage_acc:
     def update(self, c, cat, user, out, b_in, err):
         x = self.c2x(c, cat)
         usage_acc_update2(x, out, b_in, err)
-        if not err and cat == 'create_bucket' and not x.has_key('owner'):
+        if not err and cat == 'create_bucket' and 'owner' not in x:
             x['owner'] = user
     def make_entry(self, cat, bucket, user, out, b_in, err):
         if cat == 'create_bucket' and err:
@@ -119,7 +114,7 @@ class usage_acc:
     def get_usage(self):
         return self.results
     def compare_results(self, results):
-        if not results.has_key('entries') or not results.has_key('summary'):
+        if 'entries' not in results or 'summary' not in results:
             return ['Missing entries or summary']
         r = []
         for e in self.results['entries']:
@@ -135,7 +130,7 @@ class usage_acc:
             for b in e['buckets']:
                 c = b['categories']
                 if b['bucket'] == 'nosuchbucket':
-                    print "got here"
+                    print("got here")
                 try:
                     b2 = self.e2b(e2, b['bucket'], False)
                     if b2 != None:
@@ -190,7 +185,7 @@ class usage_acc:
                 x2 = s2['total']
             except Exception as ex:
                 r.append("malformed summary looking for totals for user "
-		    + e['user'] + " " + str(ex))
+                         + e['user'] + " " + str(ex))
                 break
             usage_acc_validate_fields(r, x, x2, "summary: totals for user" + e['user'])
         return r
@@ -199,32 +194,33 @@ def ignore_this_entry(cat, bucket, user, out, b_in, err):
     pass
 class requestlog_queue():
     def __init__(self, add):
-        self.q = Queue.Queue(1000)
+        self.q = Queue(1000)
         self.adder = add
     def handle_request_data(self, request, response, error=False):
         now = datetime.datetime.now()
-	if error:
-	    pass
-	elif response.status < 200 or response.status >= 400:
-	    error = True
-        self.q.put(bunch.Bunch({'t': now, 'o': request, 'i': response, 'e': error}))
+        if error:
+            pass
+        elif response.status < 200 or response.status >= 400:
+            error = True
+        self.q.put({'t': now, 'o': request, 'i': response, 'e': error})
     def clear(self):
         with self.q.mutex:
             self.q.queue.clear()
     def log_and_clear(self, cat, bucket, user, add_entry = None):
         while not self.q.empty():
             j = self.q.get()
-	    bytes_out = 0
-            if 'Content-Length' in j.o.headers:
-		bytes_out = int(j.o.headers['Content-Length'])
+            bytes_out = 0
+            if 'Content-Length' in j['o'].headers:
+                bytes_out = int(j['o'].headers['Content-Length'])
             bytes_in = 0
-            if 'content-length' in j.i.msg.dict:
-		bytes_in = int(j.i.msg.dict['content-length'])
+            msg = j['i'].msg
+            if 'content-length'in msg:
+                bytes_in = int(msg['content-length'])
             log.info('RL: %s %s %s bytes_out=%d bytes_in=%d failed=%r'
-		% (cat, bucket, user, bytes_out, bytes_in, j.e))
-	    if add_entry == None:
-		add_entry = self.adder
-	    add_entry(cat, bucket, user, bytes_out, bytes_in, j.e)
+                     % (cat, bucket, user, bytes_out, bytes_in, j['e']))
+            if add_entry == None:
+                add_entry = self.adder
+            add_entry(cat, bucket, user, bytes_out, bytes_in, j['e'])
 
 def create_presigned_url(conn, method, bucket_name, key_name, expiration):
     return conn.generate_url(expires_in=expiration,
@@ -236,7 +232,7 @@ def create_presigned_url(conn, method, bucket_name, key_name, expiration):
 
 def send_raw_http_request(conn, method, bucket_name, key_name, follow_redirects = False):
     url = create_presigned_url(conn, method, bucket_name, key_name, 3600)
-    print url
+    print(url)
     h = httplib2.Http()
     h.follow_redirects = follow_redirects
     return h.request(url, method)
@@ -247,7 +243,7 @@ def get_acl(key):
     Helper function to get the xml acl from a key, ensuring that the xml
     version tag is removed from the acl response
     """
-    raw_acl = key.get_xml_acl()
+    raw_acl = key.get_xml_acl().decode()
 
     def remove_version(string):
         return string.split(
@@ -275,7 +271,7 @@ def task(ctx, config):
     clients_from_config = config.keys()
 
     # choose first client as default
-    client = clients_from_config[0]
+    client = next(iter(clients_from_config))
 
     # once the client is chosen, pull the host name and  assigned port out of
     # the role_endpoints that were assigned by the rgw task
@@ -292,7 +288,6 @@ def task(ctx, config):
     display_name2='Fud'
     display_name3='Bar'
     email='foo@foo.com'
-    email2='bar@bar.com'
     access_key='9te6NH5mcdcq0Tc5i8i1'
     secret_key='Ny4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXu'
     access_key2='p5YnriCv1nAtykxBrupQ'
@@ -553,6 +548,12 @@ def task(ctx, config):
     assert out['usage']['rgw.main']['num_objects'] == 1
     assert out['usage']['rgw.main']['size_kb'] > 0
 
+    #validate we have a positive user stats now
+    (err, out) = rgwadmin(ctx, client,
+                          ['user', 'stats','--uid', user1, '--sync-stats'],
+                          check_status=True)
+    assert out['stats']['size'] > 0
+
     # reclaim it
     key.delete()
     rl.log_and_clear("delete_obj", bucket_name, user1)
@@ -661,7 +662,7 @@ def task(ctx, config):
     rl.log_and_clear("put_obj", bucket_name, user1)
 
     # fetch it too (for usage stats presently)
-    s = key.get_contents_as_string()
+    s = key.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name, user1)
     assert s == object_name
     # list bucket too (for usage stats presently)
@@ -797,7 +798,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key],
+        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
         check_status=True, format='xml')
 
     acl = get_acl(key)
@@ -810,7 +811,7 @@ def task(ctx, config):
     rl.log_and_clear("put_acls", bucket_name, user1)
 
     (err, out) = rgwadmin(ctx, client,
-        ['policy', '--bucket', bucket.name, '--object', key.key],
+        ['policy', '--bucket', bucket.name, '--object', key.key.decode()],
         check_status=True, format='xml')
 
     acl = get_acl(key)
@@ -940,7 +941,7 @@ def task(ctx, config):
 
     # get bucket and object to test if user keys are preserved
     bucket = connection3.get_bucket(bucket_name + '6')
-    s = key1.get_contents_as_string()
+    s = key1.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name + '6', user4)
     assert s == object_name1
 
@@ -972,12 +973,12 @@ def task(ctx, config):
 
     # test if user 2 and user4 can still access their bucket and objects after rename fails
     bucket = connection3.get_bucket(bucket_name + '6')
-    s = key1.get_contents_as_string()
+    s = key1.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name + '6', user4)
     assert s == object_name1
 
     bucket = connection2.get_bucket(bucket_name + '7')
-    s = key2.get_contents_as_string()
+    s = key2.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name + '7', user2)
     assert s == object_name2
 
@@ -1037,7 +1038,7 @@ def task(ctx, config):
     out['placement_pools'].append(rule)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'set'],
-        stdin=StringIO(json.dumps(out)),
+        stdin=BytesIO(json.dumps(out).encode()),
         check_status=True)
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
@@ -1045,43 +1046,40 @@ def task(ctx, config):
     assert len(out['placement_pools']) == orig_placement_pools + 1
 
     zonecmd = ['zone', 'placement', 'rm',
-	'--rgw-zone', 'default',
-	'--placement-id', 'new-placement']
+               '--rgw-zone', 'default',
+               '--placement-id', 'new-placement']
 
     (err, out) = rgwadmin(ctx, client, zonecmd, check_status=True)
 
     # TESTCASE 'zonegroup-info', 'zonegroup', 'get', 'get zonegroup info', 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
 
-import sys
-from tasks.radosgw_admin import task
 from teuthology.config import config
 from teuthology.orchestra import cluster, remote
 import argparse;
 
 def main():
     if len(sys.argv) == 3:
-	user = sys.argv[1] + "@"
-	host = sys.argv[2]
+        user = sys.argv[1] + "@"
+        host = sys.argv[2]
     elif len(sys.argv) == 2:
         user = ""
-	host = sys.argv[1]
+        host = sys.argv[1]
     else:
         sys.stderr.write("usage: radosgw_admin.py [user] host\n")
-	exit(1)
+        exit(1)
     client0 = remote.Remote(user + host)
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,
-     [ 'ceph.client.rgw.%s' % (host),  ]),])
-
+        [ 'ceph.client.rgw.%s' % (host),  ]),])
     ctx.rgw = argparse.Namespace()
     endpoints = {}
     endpoints['ceph.client.rgw.%s' % host] = (host, 80)
     ctx.rgw.role_endpoints = endpoints
     ctx.rgw.realm = None
     ctx.rgw.regions = {'region0': { 'api name': 'api1',
-	    'is master': True, 'master zone': 'r0z0',
-	    'zones': ['r0z0', 'r0z1'] }}
+        'is master': True, 'master zone': 'r0z0',
+        'zones': ['r0z0', 'r0z1'] }}
     ctx.rgw.config = {'ceph.client.rgw.%s' % host: {'system user': {'name': '%s-system-user' % host}}}
     task(config, None)
     exit()

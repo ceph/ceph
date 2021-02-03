@@ -6,15 +6,15 @@
 #include <memory>
 #include <stdexcept>
 #include "include/buffer_fwd.h"
+#include "include/common_fwd.h"
 #include "common/async/yield_context.h"
 
 // TODO the env should be used as a template parameter to differentiate the source that triggers the pushes
 class RGWDataSyncEnv;
 class RGWCoroutine;
 class RGWHTTPArgs;
-class CephContext;
 struct rgw_pubsub_event;
-struct rgw_pubsub_s3_record;
+struct rgw_pubsub_s3_event;
 
 // endpoint base class all endpoint  - types should derive from it
 class RGWPubSubEndpoint {
@@ -37,11 +37,11 @@ public:
 
   // this method is used in order to send notification (S3 compliant) and wait for completion 
   // in async manner via a coroutine when invoked in the data sync environment
-  virtual RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) = 0;
+  virtual RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) = 0;
 
   // this method is used in order to send notification (S3 compliant) and wait for completion 
   // in async manner via a coroutine when invoked in the frontend environment
-  virtual int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_record& record, optional_yield y) = 0;
+  virtual int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) = 0;
 
   // present as string
   virtual std::string to_str() const { return ""; }

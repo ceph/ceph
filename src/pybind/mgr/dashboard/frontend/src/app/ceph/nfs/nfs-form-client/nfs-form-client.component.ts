@@ -1,36 +1,45 @@
-import { Component, Input } from '@angular/core';
-import { FormArray, FormControl, Validators } from '@angular/forms';
+import { Component, Input, OnInit } from '@angular/core';
+import { FormArray, FormControl, NgForm, Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
+import _ from 'lodash';
 
-import { NfsService } from '../../../shared/api/nfs.service';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { NfsService } from '~/app/shared/api/nfs.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-nfs-form-client',
   templateUrl: './nfs-form-client.component.html',
   styleUrls: ['./nfs-form-client.component.scss']
 })
-export class NfsFormClientComponent {
+export class NfsFormClientComponent implements OnInit {
   @Input()
   form: CdFormGroup;
+
+  @Input()
+  clients: any[];
 
   nfsSquash: any[] = this.nfsService.nfsSquash;
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
   icons = Icons;
 
-  constructor(private nfsService: NfsService, private i18n: I18n) {}
+  constructor(private nfsService: NfsService) {}
+
+  ngOnInit() {
+    _.forEach(this.clients, (client) => {
+      const fg = this.addClient();
+      fg.patchValue(client);
+    });
+  }
 
   getNoAccessTypeDescr() {
     if (this.form.getValue('access_type')) {
-      return `${this.form.getValue('access_type')} ${this.i18n('(inherited from global config)')}`;
+      return `${this.form.getValue('access_type')} ${$localize`(inherited from global config)`}`;
     }
-    return this.i18n('-- Select the access type --');
+    return $localize`-- Select the access type --`;
   }
 
-  getAccessTypeHelp(index) {
+  getAccessTypeHelp(index: number) {
     const accessTypeItem = this.nfsAccessType.find((currentAccessTypeItem) => {
       return this.getValue(index, 'access_type') === currentAccessTypeItem.value;
     });
@@ -39,9 +48,9 @@ export class NfsFormClientComponent {
 
   getNoSquashDescr() {
     if (this.form.getValue('squash')) {
-      return `${this.form.getValue('squash')} (${this.i18n('inherited from global config')})`;
+      return `${this.form.getValue('squash')} (${$localize`inherited from global config`})`;
     }
-    return this.i18n('-- Select what kind of user id squashing is performed --');
+    return $localize`-- Select what kind of user id squashing is performed --`;
   }
 
   addClient() {
@@ -62,29 +71,22 @@ export class NfsFormClientComponent {
     return fg;
   }
 
-  removeClient(index) {
+  removeClient(index: number) {
     const clients = this.form.get('clients') as FormArray;
     clients.removeAt(index);
   }
 
-  showError(index, control, formDir, x) {
+  showError(index: number, control: string, formDir: NgForm, x: string) {
     return (<any>this.form.controls.clients).controls[index].showError(control, formDir, x);
   }
 
-  getValue(index, control) {
+  getValue(index: number, control: string) {
     const clients = this.form.get('clients') as FormArray;
     const client = clients.at(index) as CdFormGroup;
     return client.getValue(control);
   }
 
-  resolveModel(clients: any[]) {
-    _.forEach(clients, (client) => {
-      const fg = this.addClient();
-      fg.patchValue(client);
-    });
-  }
-
-  trackByFn(index) {
+  trackByFn(index: number) {
     return index;
   }
 }

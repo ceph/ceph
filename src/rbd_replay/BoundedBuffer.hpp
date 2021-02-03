@@ -4,7 +4,7 @@
 #ifndef _INCLUDED_BOUNDED_BUFFER_HPP
 #define _INCLUDED_BOUNDED_BUFFER_HPP
 
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/thread/condition.hpp>
 #include <boost/thread/mutex.hpp>

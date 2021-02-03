@@ -115,10 +115,12 @@ TEST(AdminSocket, SendTooLongRequest) {
 }
 
 class MyTest : public AdminSocketHook {
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& result) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::vector<std::string> args;
-    cmd_getval(g_ceph_context, cmdmap, "args", args);
+    TOPNSPC::common::cmd_getval(cmdmap, "args", args);
     result.append(command);
     result.append("|");
     string resultstr;
@@ -129,7 +131,7 @@ class MyTest : public AdminSocketHook {
       resultstr += *it;
     }
     result.append(resultstr);
-    return true;
+    return 0;
   }
 };
 
@@ -140,7 +142,7 @@ TEST(AdminSocket, RegisterCommand) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", my_test_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", my_test_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -148,10 +150,12 @@ TEST(AdminSocket, RegisterCommand) {
 }
 
 class MyTest2 : public AdminSocketHook {
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& result) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::vector<std::string> args;
-    cmd_getval(g_ceph_context, cmdmap, "args", args);
+    TOPNSPC::common::cmd_getval(cmdmap, "args", args);
     result.append(command);
     result.append("|");
     string resultstr;
@@ -162,7 +166,8 @@ class MyTest2 : public AdminSocketHook {
       resultstr += *it;
     }
     result.append(resultstr);
-    return true;
+    ss << "error stream";
+    return 0;
   }
 };
 
@@ -174,8 +179,8 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test name=args,type=CephString,n=N", my_test_asok.get(), ""));
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", "test command name=args,type=CephString,n=N", my_test2_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test name=args,type=CephString,n=N", my_test_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test command name=args,type=CephString,n=N", my_test2_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -202,11 +207,13 @@ public:
 
   BlockingHook() = default;
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& result) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::unique_lock l{_lock};
     _cond.wait(l);
-    return true;
+    return 0;
   }
 };
 
@@ -218,20 +225,29 @@ TEST(AdminSocketClient, Ping) {
   {
     bool ok;
     std::string result = client.ping(&ok);
+#ifndef _WIN32
+// TODO: convert WSA errors.
     EXPECT_NE(std::string::npos, result.find("No such file or directory"));
+#endif
     ASSERT_FALSE(ok);
   }
   // file exists but does not allow connections (no process, wrong type...)
-  ASSERT_TRUE(::creat(path.c_str(), 0777));
+  int fd = ::creat(path.c_str(), 0777);
+  ASSERT_TRUE(fd);
+  // On Windows, we won't be able to remove the file unless we close it
+  // first.
+  ASSERT_FALSE(::close(fd));
   {
     bool ok;
     std::string result = client.ping(&ok);
+#ifndef _WIN32
 #if defined(__APPLE__) || defined(__FreeBSD__)
     const char* errmsg = "Socket operation on non-socket";
 #else
     const char* errmsg = "Connection refused";
 #endif
     EXPECT_NE(std::string::npos, result.find(errmsg));
+#endif /* _WIN32 */
     ASSERT_FALSE(ok);
   }
   // a daemon is connected to the socket
@@ -248,11 +264,13 @@ TEST(AdminSocketClient, Ping) {
   {
     AdminSocketTest asoct(asokc.get());
     BlockingHook *blocking = new BlockingHook();
-    ASSERT_EQ(0, asoct.m_asokc->register_command("0", "0", blocking, ""));
+    ASSERT_EQ(0, asoct.m_asokc->register_command("0", blocking, ""));
     ASSERT_TRUE(asoct.init(path));
     bool ok;
     std::string result = client.ping(&ok);
+    #ifndef _WIN32
     EXPECT_NE(std::string::npos, result.find("Resource temporarily unavailable"));
+    #endif
     ASSERT_FALSE(ok);
     {
       std::lock_guard l{blocking->_lock};
@@ -275,18 +293,22 @@ TEST(AdminSocket, bind_and_listen) {
     message = asoct.bind_and_listen(path, &fd);
     ASSERT_NE(0, fd);
     ASSERT_EQ("", message);
-    ASSERT_EQ(0, ::close(fd));
+    ASSERT_EQ(0, ::compat_closesocket(fd));
     ASSERT_EQ(0, ::unlink(path.c_str()));
   }
   // silently discard an existing file
   {
     int fd = 0;
     string message;
-    ASSERT_TRUE(::creat(path.c_str(), 0777));
+    int fd2 = ::creat(path.c_str(), 0777);
+    ASSERT_TRUE(fd2);
+    // On Windows, we won't be able to remove the file unless we close it
+    // first.
+    ASSERT_FALSE(::close(fd2));
     message = asoct.bind_and_listen(path, &fd);
     ASSERT_NE(0, fd);
     ASSERT_EQ("", message);
-    ASSERT_EQ(0, ::close(fd));
+    ASSERT_EQ(0, ::compat_closesocket(fd));
     ASSERT_EQ(0, ::unlink(path.c_str()));
   }
   // do not take over a live socket

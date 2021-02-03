@@ -17,30 +17,21 @@
 
 #define BOOST_SPIRIT_THREADSAFE  // uncomment for multithreaded use, requires linking to boost.thread
 
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/function.hpp>
 #include <boost/version.hpp>
-
-#if BOOST_VERSION >= 103800
-    #include <boost/spirit/include/classic_core.hpp>
-    #include <boost/spirit/include/classic_confix.hpp>
-    #include <boost/spirit/include/classic_escape_char.hpp>
-    #include <boost/spirit/include/classic_multi_pass.hpp>
-    #include <boost/spirit/include/classic_position_iterator.hpp>
-    #define spirit_namespace boost::spirit::classic
-#else
-    #include <boost/spirit/core.hpp>
-    #include <boost/spirit/utility/confix.hpp>
-    #include <boost/spirit/utility/escape_char.hpp>
-    #include <boost/spirit/iterator/multi_pass.hpp>
-    #include <boost/spirit/iterator/position_iterator.hpp>
-    #define spirit_namespace boost::spirit
-#endif
+#include <boost/spirit/include/classic_core.hpp>
+#include <boost/spirit/include/classic_confix.hpp>
+#include <boost/spirit/include/classic_escape_char.hpp>
+#include <boost/spirit/include/classic_multi_pass.hpp>
+#include <boost/spirit/include/classic_position_iterator.hpp>
 
 #include "include/ceph_assert.h"
 
 namespace json_spirit
 {
+    namespace spirit_namespace = boost::spirit::classic;
+
     const spirit_namespace::int_parser < boost::int64_t >  int64_p  = spirit_namespace::int_parser < boost::int64_t  >();
     const spirit_namespace::uint_parser< boost::uint64_t > uint64_p = spirit_namespace::uint_parser< boost::uint64_t >();
 
@@ -210,6 +201,8 @@ namespace json_spirit
 
         return get_str( tmp.begin(), tmp.end() );
     }
+
+    using namespace boost::placeholders;
 
     // this class's methods get called by the spirit parse resulting
     // in the creation of a JSON object or array

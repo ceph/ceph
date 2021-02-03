@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-ignorelist:
+    - \(PG_AVAILABILITY\)
     wait-for-scrub: false
 
 tasks:

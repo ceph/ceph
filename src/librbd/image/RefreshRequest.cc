@@ -1,7 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"
 
 #include "librbd/image/RefreshRequest.h"
@@ -16,10 +15,11 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/Utils.h"
+#include "librbd/image/GetMetadataRequest.h"
 #include "librbd/image/RefreshParentRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/journal/Policy.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -28,12 +28,6 @@
 
 namespace librbd {
 namespace image {
-
-namespace {
-
-const uint64_t MAX_METADATA_ITEMS = 128;
-
-}
 
 using util::create_rados_callback;
 using util::create_async_context_callback;
@@ -119,7 +113,7 @@ Context *RefreshRequest<I>::handle_get_migration_header(int *result) {
 
   switch(m_migration_spec.header_type) {
   case cls::rbd::MIGRATION_HEADER_TYPE_SRC:
-    if (!m_image_ctx.read_only) {
+    if (!m_read_only) {
       lderr(cct) << "image being migrated" << dendl;
       *result = -EROFS;
       return m_on_finish;
@@ -130,13 +124,29 @@ Context *RefreshRequest<I>::handle_get_migration_header(int *result) {
   case cls::rbd::MIGRATION_HEADER_TYPE_DST:
     ldout(cct, 1) << this << " " << __func__ << ": migrating from: "
                   << m_migration_spec << dendl;
-    if (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
-        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING &&
-        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTED) {
+    switch (m_migration_spec.state) {
+    case cls::rbd::MIGRATION_STATE_PREPARING:
       ldout(cct, 5) << this << " " << __func__ << ": current migration state: "
                     << m_migration_spec.state << ", retrying" << dendl;
       send();
       return nullptr;
+    case cls::rbd::MIGRATION_STATE_PREPARED:
+    case cls::rbd::MIGRATION_STATE_EXECUTING:
+    case cls::rbd::MIGRATION_STATE_EXECUTED:
+      break;
+    case cls::rbd::MIGRATION_STATE_ABORTING:
+      if (!m_read_only) {
+        lderr(cct) << this << " " << __func__ << ": migration is being aborted"
+                   << dendl;
+        *result = -EROFS;
+        return m_on_finish;
+      }
+      break;
+    default:
+      lderr(cct) << this << " " << __func__ << ": migration is in an "
+                 << "unexpected state" << dendl;
+      *result = -EINVAL;
+      return m_on_finish;
     }
     break;
   default:
@@ -197,6 +207,12 @@ Context *RefreshRequest<I>::handle_v1_read_header(int *result) {
       *result = -ENXIO;
       return m_on_finish;
     }
+  }
+
+  {
+    std::shared_lock image_locker{m_image_ctx.image_lock};
+    m_read_only = m_image_ctx.read_only;
+    m_read_only_flags = m_image_ctx.read_only_flags;
   }
 
   memcpy(&v1_header, m_out_bl.c_str(), sizeof(v1_header));
@@ -295,7 +311,7 @@ Context *RefreshRequest<I>::handle_v1_get_locks(int *result) {
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
     if (*result == 0) {
-      m_exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
+      m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
   if (*result < 0) {
@@ -338,9 +354,14 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
   {
     std::shared_lock image_locker{m_image_ctx.image_lock};
     snap_id = m_image_ctx.snap_id;
+    m_read_only = m_image_ctx.read_only;
+    m_read_only_flags = m_image_ctx.read_only_flags;
   }
 
-  bool read_only = m_image_ctx.read_only || snap_id != CEPH_NOSNAP;
+  // mask out the non-primary read-only flag since its state can change
+  bool read_only = (
+    ((m_read_only_flags & ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY) != 0) ||
+    (snap_id != CEPH_NOSNAP));
   librados::ObjectReadOperation op;
   cls_client::get_size_start(&op, CEPH_NOSNAP);
   cls_client::get_features_start(&op, read_only);
@@ -384,11 +405,11 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
   }
 
   if (*result >= 0) {
-    ClsLockType lock_type = LOCK_NONE;
+    ClsLockType lock_type = ClsLockType::NONE;
     *result = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                      &lock_type, &m_lock_tag);
     if (*result == 0) {
-      m_exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
+      m_exclusive_locked = (lock_type == ClsLockType::EXCLUSIVE);
     }
   }
 
@@ -416,6 +437,21 @@ Context *RefreshRequest<I>::handle_v2_get_mutable_metadata(int *result) {
     m_features |= RBD_FEATURE_EXCLUSIVE_LOCK;
     m_incomplete_update = true;
   }
+
+  if (((m_incompatible_features & RBD_FEATURE_NON_PRIMARY) != 0U) &&
+      ((m_read_only_flags & IMAGE_READ_ONLY_FLAG_NON_PRIMARY) == 0U) &&
+      ((m_image_ctx.read_only_mask & IMAGE_READ_ONLY_FLAG_NON_PRIMARY) != 0U)) {
+    // implies we opened a non-primary image in R/W mode
+    ldout(cct, 5) << "adding non-primary read-only image flag" << dendl;
+    m_read_only_flags |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  } else if ((((m_incompatible_features & RBD_FEATURE_NON_PRIMARY) == 0U) ||
+              ((m_image_ctx.read_only_mask &
+                  IMAGE_READ_ONLY_FLAG_NON_PRIMARY) == 0U)) &&
+             ((m_read_only_flags & IMAGE_READ_ONLY_FLAG_NON_PRIMARY) != 0U)) {
+    ldout(cct, 5) << "removing non-primary read-only image flag" << dendl;
+    m_read_only_flags &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
+  }
+  m_read_only = (m_read_only_flags != 0U);
 
   send_v2_get_parent();
   return nullptr;
@@ -495,19 +531,15 @@ Context *RefreshRequest<I>::handle_v2_get_parent(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_get_metadata() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "start_key=" << m_last_metadata_key << dendl;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, MAX_METADATA_ITEMS);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v2_get_metadata>(this);
-  m_out_bl.clear();
-  m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
-                                  &m_out_bl);
-  comp->release();
+  auto ctx = create_context_callback<
+    RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_metadata>(this);
+  auto req = GetMetadataRequest<I>::create(
+    m_image_ctx.md_ctx, m_image_ctx.header_oid, true,
+    ImageCtx::METADATA_CONF_PREFIX, ImageCtx::METADATA_CONF_PREFIX, 0U,
+    &m_metadata, ctx);
+  req->send();
 }
 
 template <typename I>
@@ -515,29 +547,12 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  std::map<std::string, bufferlist> metadata;
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
   if (*result < 0) {
     lderr(cct) << "failed to retrieve metadata: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
   }
 
-  if (!metadata.empty()) {
-    m_metadata.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = metadata.rbegin()->first;
-    if (boost::starts_with(m_last_metadata_key,
-                           ImageCtx::METADATA_CONF_PREFIX)) {
-      send_v2_get_metadata();
-      return nullptr;
-    }
-  }
-
-  m_last_metadata_key.clear();
   send_v2_get_pool_metadata();
   return nullptr;
 }
@@ -545,18 +560,14 @@ Context *RefreshRequest<I>::handle_v2_get_metadata(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_get_pool_metadata() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "start_key=" << m_last_metadata_key << dendl;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, m_last_metadata_key, MAX_METADATA_ITEMS);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v2_get_pool_metadata>(this);
-  m_out_bl.clear();
-  m_pool_metadata_io_ctx.aio_operate(RBD_INFO, comp, &op, &m_out_bl);
-  comp->release();
+  auto ctx = create_context_callback<
+    RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_pool_metadata>(this);
+  auto req = GetMetadataRequest<I>::create(
+    m_pool_metadata_io_ctx, RBD_INFO, true, ImageCtx::METADATA_CONF_PREFIX,
+    ImageCtx::METADATA_CONF_PREFIX, 0U, &m_metadata, ctx);
+  req->send();
 }
 
 template <typename I>
@@ -564,28 +575,10 @@ Context *RefreshRequest<I>::handle_v2_get_pool_metadata(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  std::map<std::string, bufferlist> metadata;
-  if (*result == 0) {
-    auto it = m_out_bl.cbegin();
-    *result = cls_client::metadata_list_finish(&it, &metadata);
-  }
-
-  if (*result == -EOPNOTSUPP || *result == -ENOENT) {
-    ldout(cct, 10) << "pool metadata not supported by OSD" << dendl;
-  } else if (*result < 0) {
+  if (*result < 0) {
     lderr(cct) << "failed to retrieve pool metadata: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
-  }
-
-  if (!metadata.empty()) {
-    m_metadata.insert(metadata.begin(), metadata.end());
-    m_last_metadata_key = metadata.rbegin()->first;
-    if (boost::starts_with(m_last_metadata_key,
-                           ImageCtx::METADATA_CONF_PREFIX)) {
-      send_v2_get_pool_metadata();
-      return nullptr;
-    }
   }
 
   bool thread_safe = m_image_ctx.image_watcher->is_unregistered();
@@ -666,7 +659,7 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
     auto it = m_out_bl.cbegin();
     cls_client::image_group_get_finish(&it, &m_group_spec);
   }
-  if (*result < 0) {
+  if (*result < 0 && *result != -EOPNOTSUPP) {
     lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
@@ -693,11 +686,13 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
 
   librados::ObjectReadOperation op;
   for (auto snap_id : m_snapc.snaps) {
-    if (m_legacy_snapshot) {
+    if (m_legacy_snapshot != LEGACY_SNAPSHOT_DISABLED) {
       /// NOTE: remove after Luminous is retired
       cls_client::get_snapshot_name_start(&op, snap_id);
       cls_client::get_size_start(&op, snap_id);
-      cls_client::get_snapshot_timestamp_start(&op, snap_id);
+      if (m_legacy_snapshot != LEGACY_SNAPSHOT_ENABLED_NO_TIMESTAMP) {
+        cls_client::get_snapshot_timestamp_start(&op, snap_id);
+      }
     } else {
       cls_client::snapshot_get_start(&op, snap_id);
     }
@@ -729,7 +724,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
 
   auto it = m_out_bl.cbegin();
   for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
-    if (m_legacy_snapshot) {
+    if (m_legacy_snapshot != LEGACY_SNAPSHOT_DISABLED) {
       /// NOTE: remove after Luminous is retired
       std::string snap_name;
       if (*result >= 0) {
@@ -743,7 +738,9 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
       }
 
       utime_t snap_timestamp;
-      if (*result >= 0) {
+      if (*result >= 0 &&
+          m_legacy_snapshot != LEGACY_SNAPSHOT_ENABLED_NO_TIMESTAMP) {
+        /// NOTE: remove after Jewel is retired
         *result = cls_client::get_snapshot_timestamp_finish(&it,
                                                             &snap_timestamp);
       }
@@ -789,9 +786,16 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
     ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
     send_v2_get_mutable_metadata();
     return nullptr;
-  } else if (!m_legacy_snapshot && *result == -EOPNOTSUPP) {
+  } else if (m_legacy_snapshot == LEGACY_SNAPSHOT_DISABLED &&
+             *result == -EOPNOTSUPP) {
     ldout(cct, 10) << "retrying using legacy snapshot methods" << dendl;
-    m_legacy_snapshot = true;
+    m_legacy_snapshot = LEGACY_SNAPSHOT_ENABLED;
+    send_v2_get_snapshots();
+    return nullptr;
+  } else if (m_legacy_snapshot == LEGACY_SNAPSHOT_ENABLED &&
+             *result == -EOPNOTSUPP) {
+    ldout(cct, 10) << "retrying using legacy snapshot methods (jewel)" << dendl;
+    m_legacy_snapshot = LEGACY_SNAPSHOT_ENABLED_NO_TIMESTAMP;
     send_v2_get_snapshots();
     return nullptr;
   } else if (*result < 0) {
@@ -853,7 +857,7 @@ Context *RefreshRequest<I>::handle_v2_refresh_parent(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_init_exclusive_lock() {
   if ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0 ||
-      m_image_ctx.read_only || !m_image_ctx.snap_name.empty() ||
+      m_read_only || !m_image_ctx.snap_name.empty() ||
       m_image_ctx.exclusive_lock != nullptr) {
     send_v2_open_object_map();
     return;
@@ -895,7 +899,7 @@ template <typename I>
 void RefreshRequest<I>::send_v2_open_journal() {
   bool journal_disabled = (
     (m_features & RBD_FEATURE_JOURNALING) == 0 ||
-     m_image_ctx.read_only ||
+     m_read_only ||
      !m_image_ctx.snap_name.empty() ||
      m_image_ctx.journal != nullptr ||
      m_image_ctx.exclusive_lock == nullptr ||
@@ -914,9 +918,14 @@ void RefreshRequest<I>::send_v2_open_journal() {
         !journal_disabled_by_policy &&
         m_image_ctx.exclusive_lock != nullptr &&
         m_image_ctx.journal == nullptr) {
-      m_image_ctx.io_work_queue->set_require_lock(librbd::io::DIRECTION_BOTH,
-                                                  true);
+      auto ctx = new LambdaContext([this](int) {
+          send_v2_block_writes();
+        });
+      m_image_ctx.exclusive_lock->set_require_lock(
+        true, librbd::io::DIRECTION_BOTH, ctx);
+      return;
     }
+
     send_v2_block_writes();
     return;
   }
@@ -975,7 +984,7 @@ void RefreshRequest<I>::send_v2_block_writes() {
     RefreshRequest<I>, &RefreshRequest<I>::handle_v2_block_writes>(this);
 
   std::shared_lock owner_locker{m_image_ctx.owner_lock};
-  m_image_ctx.io_work_queue->block_writes(ctx);
+  m_image_ctx.io_image_dispatcher->block_writes(ctx);
 }
 
 template <typename I>
@@ -997,7 +1006,7 @@ void RefreshRequest<I>::send_v2_open_object_map() {
   if ((m_features & RBD_FEATURE_OBJECT_MAP) == 0 ||
       m_image_ctx.object_map != nullptr ||
       (m_image_ctx.snap_name.empty() &&
-       (m_image_ctx.read_only ||
+       (m_read_only ||
         m_image_ctx.exclusive_lock == nullptr ||
         !m_image_ctx.exclusive_lock->is_lock_owner()))) {
     send_v2_open_journal();
@@ -1043,7 +1052,7 @@ Context *RefreshRequest<I>::handle_v2_open_object_map(int *result) {
   if (*result < 0) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(*result)
                << dendl;
-    delete m_object_map;
+    m_object_map->put();
     m_object_map = nullptr;
 
     if (*result != -EFBIG) {
@@ -1140,7 +1149,7 @@ Context *RefreshRequest<I>::handle_v2_shut_down_exclusive_lock(int *result) {
   }
 
   ceph_assert(m_exclusive_lock != nullptr);
-  delete m_exclusive_lock;
+  m_exclusive_lock->put();
   m_exclusive_lock = nullptr;
 
   return send_v2_close_journal();
@@ -1175,13 +1184,13 @@ Context *RefreshRequest<I>::handle_v2_close_journal(int *result) {
   }
 
   ceph_assert(m_journal != nullptr);
-  delete m_journal;
+  m_journal->put();
   m_journal = nullptr;
 
   ceph_assert(m_blocked_writes);
   m_blocked_writes = false;
 
-  m_image_ctx.io_work_queue->unblock_writes();
+  m_image_ctx.io_image_dispatcher->unblock_writes();
   return send_v2_close_object_map();
 }
 
@@ -1213,7 +1222,8 @@ Context *RefreshRequest<I>::handle_v2_close_object_map(int *result) {
   }
 
   ceph_assert(m_object_map != nullptr);
-  delete m_object_map;
+
+  m_object_map->put();
   m_object_map = nullptr;
 
   return send_flush_aio();
@@ -1235,10 +1245,10 @@ Context *RefreshRequest<I>::send_flush_aio() {
       RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
     auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
-    auto req = io::ImageDispatchSpec<I>::create_flush_request(
-      m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    auto req = io::ImageDispatchSpec::create_flush(
+      m_image_ctx, io::IMAGE_DISPATCH_LAYER_REFRESH, aio_comp,
+      io::FLUSH_SOURCE_REFRESH, {});
     req->send();
-    delete req;
     return nullptr;
   } else if (m_error_result < 0) {
     // propagate saved error back to caller
@@ -1282,6 +1292,8 @@ void RefreshRequest<I>::apply() {
 
   std::scoped_lock locker{m_image_ctx.owner_lock, m_image_ctx.image_lock};
 
+  m_image_ctx.read_only_flags = m_read_only_flags;
+  m_image_ctx.read_only = m_read_only;
   m_image_ctx.size = m_size;
   m_image_ctx.lockers = m_lockers;
   m_image_ctx.lock_tag = m_lock_tag;
@@ -1310,8 +1322,14 @@ void RefreshRequest<I>::apply() {
     m_image_ctx.operations_disabled = (
       (m_op_features & ~RBD_OPERATION_FEATURES_ALL) != 0ULL);
     m_image_ctx.group_spec = m_group_spec;
-    if (get_migration_info(&m_image_ctx.parent_md,
-                           &m_image_ctx.migration_info)) {
+
+    bool migration_info_valid;
+    int r = get_migration_info(&m_image_ctx.parent_md,
+                               &m_image_ctx.migration_info,
+                               &migration_info_valid);
+    ceph_assert(r == 0); // validated in refresh parent step
+
+    if (migration_info_valid) {
       for (auto it : m_image_ctx.migration_info.snap_map) {
         migration_reverse_snap_seq[it.second.front()] = it.first;
       }
@@ -1322,7 +1340,7 @@ void RefreshRequest<I>::apply() {
 
     librados::Rados rados(m_image_ctx.md_ctx);
     int8_t require_osd_release;
-    int r = rados.get_min_compatible_osd(&require_osd_release);
+    r = rados.get_min_compatible_osd(&require_osd_release);
     if (r == 0 && require_osd_release >= CEPH_RELEASE_OCTOPUS) {
       m_image_ctx.enable_sparse_copyup = true;
     }
@@ -1389,6 +1407,7 @@ void RefreshRequest<I>::apply() {
   if (m_image_ctx.data_ctx.is_valid()) {
     m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
                                                         m_image_ctx.snaps);
+    m_image_ctx.rebuild_data_io_context();
   }
 
   // handle dynamically enabled / disabled features
@@ -1407,8 +1426,7 @@ void RefreshRequest<I>::apply() {
     if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
                                    m_image_ctx.image_lock)) {
       if (!m_image_ctx.clone_copy_on_read && m_image_ctx.journal != nullptr) {
-        m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_READ,
-                                                    false);
+        m_image_ctx.exclusive_lock->unset_require_lock(io::DIRECTION_READ);
       }
       std::swap(m_journal, m_image_ctx.journal);
     } else if (m_journal != nullptr) {
@@ -1426,7 +1444,13 @@ template <typename I>
 int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
                                        ParentImageInfo *parent_md,
                                        MigrationInfo *migration_info) {
-  if (get_migration_info(parent_md, migration_info)) {
+  bool migration_info_valid;
+  int r = get_migration_info(parent_md, migration_info, &migration_info_valid);
+  if (r < 0) {
+    return r;
+  }
+
+  if (migration_info_valid) {
     return 0;
   } else if (snap_id == CEPH_NOSNAP) {
     *parent_md = m_parent_md;
@@ -1445,22 +1469,37 @@ int RefreshRequest<I>::get_parent_info(uint64_t snap_id,
 }
 
 template <typename I>
-bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
-                                           MigrationInfo *migration_info) {
+int RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
+                                          MigrationInfo *migration_info,
+                                          bool* migration_info_valid) {
+  CephContext *cct = m_image_ctx.cct;
   if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_DST ||
       (m_migration_spec.state != cls::rbd::MIGRATION_STATE_PREPARED &&
-       m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING)) {
-    ceph_assert(m_migration_spec.header_type ==
-                    cls::rbd::MIGRATION_HEADER_TYPE_SRC ||
-                m_migration_spec.pool_id == -1 ||
-                m_migration_spec.state == cls::rbd::MIGRATION_STATE_EXECUTED);
+       m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTING &&
+       m_migration_spec.state != cls::rbd::MIGRATION_STATE_ABORTING)) {
+    if (m_migration_spec.header_type != cls::rbd::MIGRATION_HEADER_TYPE_SRC &&
+        m_migration_spec.pool_id != -1 &&
+        m_migration_spec.state != cls::rbd::MIGRATION_STATE_EXECUTED) {
+      lderr(cct) << this << " " << __func__ << ": invalid migration spec"
+                 << dendl;
+      return -EINVAL;
+    }
 
-    return false;
+    *migration_info_valid = false;
+    return 0;
   }
 
-  parent_md->spec.pool_id = m_migration_spec.pool_id;
-  parent_md->spec.pool_namespace = m_migration_spec.pool_namespace;
-  parent_md->spec.image_id = m_migration_spec.image_id;
+  if (!m_migration_spec.source_spec.empty()) {
+    // use special pool id just to indicate a parent (migration source image)
+    // exists
+    parent_md->spec.pool_id = std::numeric_limits<int64_t>::max();
+    parent_md->spec.pool_namespace = "";
+    parent_md->spec.image_id = "";
+  } else {
+    parent_md->spec.pool_id = m_migration_spec.pool_id;
+    parent_md->spec.pool_namespace = m_migration_spec.pool_namespace;
+    parent_md->spec.image_id = m_migration_spec.image_id;
+  }
   parent_md->spec.snap_id = CEPH_NOSNAP;
   parent_md->overlap = std::min(m_size, m_migration_spec.overlap);
 
@@ -1490,12 +1529,14 @@ bool RefreshRequest<I>::get_migration_info(ParentImageInfo *parent_md,
   }
 
   *migration_info = {m_migration_spec.pool_id, m_migration_spec.pool_namespace,
-                     m_migration_spec.image_name, m_migration_spec.image_id, {},
-                     overlap, m_migration_spec.flatten};
+                     m_migration_spec.image_name, m_migration_spec.image_id,
+                     m_migration_spec.source_spec, {}, overlap,
+                     m_migration_spec.flatten};
+  *migration_info_valid = true;
 
-  deep_copy::util::compute_snap_map(0, CEPH_NOSNAP, snap_seqs,
-                                    &migration_info->snap_map);
-  return true;
+  deep_copy::util::compute_snap_map(m_image_ctx.cct, 0, CEPH_NOSNAP, {},
+                                    snap_seqs, &migration_info->snap_map);
+  return 0;
 }
 
 } // namespace image

@@ -20,6 +20,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
+#include "include/btree_map.h"
 #include "include/mempool.h"
 
 void check_usage(mempool::pool_index_t ix)
@@ -364,6 +365,71 @@ TEST(mempool, bufferlist_reassign)
   ASSERT_EQ(items_before, mempool::osd::allocated_items());
   ASSERT_EQ(bytes_before, mempool::osd::allocated_bytes());
 }
+
+TEST(mempool, bufferlist_c_str)
+{
+  bufferlist bl;
+  int len = 1048576;
+  size_t before = mempool::osd::allocated_bytes();
+  bl.append(buffer::create_aligned(len, 4096));
+  bl.append(buffer::create_aligned(len, 4096));
+  bl.reassign_to_mempool(mempool::mempool_osd);
+  size_t after = mempool::osd::allocated_bytes();
+  ASSERT_GE(after, before + len * 2);
+  bl.c_str();
+  size_t after_c_str = mempool::osd::allocated_bytes();
+  ASSERT_EQ(after, after_c_str);
+}
+
+TEST(mempool, btree_map_test)
+{
+  typedef mempool::pool_allocator<mempool::mempool_osd,
+    pair<const uint64_t,uint64_t>> allocator_t;
+  typedef btree::btree_map<uint64_t,uint64_t,std::less<uint64_t>,allocator_t> btree_t;
+
+  {
+    btree_t btree;
+    ASSERT_EQ(0, mempool::osd::allocated_items());
+    ASSERT_EQ(0, mempool::osd::allocated_bytes());
+    for (size_t i = 0; i < 1000; ++i) {
+      btree[rand()] = rand();
+    }
+    ASSERT_LT(0, mempool::osd::allocated_items());
+    ASSERT_LT(0, mempool::osd::allocated_bytes());
+  }
+
+  ASSERT_EQ(0, mempool::osd::allocated_items());
+  ASSERT_EQ(0, mempool::osd::allocated_bytes());
+}
+
+TEST(mempool, check_shard_select)
+{
+  const size_t samples = 100;
+  std::atomic_int shards[mempool::num_shards] = {0};
+  std::vector<std::thread> workers;
+  for (size_t i = 0; i < samples; i++) {
+    workers.push_back(
+      std::thread([&](){
+          size_t i = mempool::pool_t::pick_a_shard_int();
+          shards[i]++;
+        }));
+  }
+  for (auto& t:workers) {
+    t.join();
+  }
+  workers.clear();
+
+  double EX = (double)samples / (double)mempool::num_shards;
+  double VarX = 0;
+  for (size_t i = 0; i < mempool::num_shards; i++) {
+    VarX += (EX - shards[i]) * (EX - shards[i]);
+  }
+  //random gives VarX below 200
+  //when half slots are 0, we get ~300
+  //when all samples go into one slot, we get ~9000
+  EXPECT_LT(VarX, 200);
+}
+
 
 int main(int argc, char **argv)
 {

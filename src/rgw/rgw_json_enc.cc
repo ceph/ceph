@@ -2,19 +2,21 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_cache.h"
 #include "rgw_bucket.h"
+#include "rgw_datalog.h"
 #include "rgw_keystone.h"
 #include "rgw_basic_types.h"
 #include "rgw_op.h"
 #include "rgw_data_sync.h"
 #include "rgw_sync.h"
 #include "rgw_orphan.h"
+#include "rgw_bucket_sync.h"
+#include "rgw_tools.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -356,7 +358,8 @@ static struct rgw_flags_desc rgw_perms[] = {
  { 0, NULL }
 };
 
-static void mask_to_str(rgw_flags_desc *mask_list, uint32_t mask, char *buf, int len)
+template <class T>
+static void mask_to_str(T *mask_list, uint32_t mask, char *buf, int len)
 {
   const char *sep = "";
   int pos = 0;
@@ -367,7 +370,7 @@ static void mask_to_str(rgw_flags_desc *mask_list, uint32_t mask, char *buf, int
   while (mask) {
     uint32_t orig_mask = mask;
     for (int i = 0; mask_list[i].mask; i++) {
-      struct rgw_flags_desc *desc = &mask_list[i];
+      T *desc = &mask_list[i];
       if ((mask & desc->mask) == desc->mask) {
         pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
         if (pos == len)
@@ -777,8 +780,8 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
-  encode_json("num_shards", num_shards, f);
-  encode_json("bi_shard_hash_type", (uint32_t)bucket_index_shard_hash_type, f);
+  encode_json("num_shards", layout.current_index.layout.normal.num_shards, f);
+  encode_json("bi_shard_hash_type", (uint32_t)layout.current_index.layout.normal.hash_type, f);
   encode_json("requester_pays", requester_pays, f);
   encode_json("has_website", has_website, f);
   if (has_website) {
@@ -786,10 +789,13 @@ void RGWBucketInfo::dump(Formatter *f) const
   }
   encode_json("swift_versioning", swift_versioning, f);
   encode_json("swift_ver_location", swift_ver_location, f);
-  encode_json("index_type", (uint32_t)index_type, f);
+  encode_json("index_type", (uint32_t)layout.current_index.layout.type, f);
   encode_json("mdsearch_config", mdsearch_config, f);
   encode_json("reshard_status", (int)reshard_status, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
+  if (!empty_sync_policy()) {
+    encode_json("sync_policy", *sync_policy, f);
+  }
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -809,10 +815,10 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   placement_rule.from_str(pr);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
-  JSONDecoder::decode_json("num_shards", num_shards, obj);
+  JSONDecoder::decode_json("num_shards", layout.current_index.layout.normal.num_shards, obj);
   uint32_t hash_type;
   JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
-  bucket_index_shard_hash_type = (uint8_t)hash_type;
+  layout.current_index.layout.normal.hash_type = static_cast<rgw::BucketHashType>(hash_type);
   JSONDecoder::decode_json("requester_pays", requester_pays, obj);
   JSONDecoder::decode_json("has_website", has_website, obj);
   if (has_website) {
@@ -822,11 +828,296 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("swift_ver_location", swift_ver_location, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
-  index_type = (RGWBucketIndexType)it;
+  layout.current_index.layout.type = (rgw::BucketIndexType)it;
   JSONDecoder::decode_json("mdsearch_config", mdsearch_config, obj);
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
+
+  rgw_sync_policy_info sp;
+  JSONDecoder::decode_json("sync_policy", sp, obj);
+  if (!sp.empty()) {
+    set_sync_policy(std::move(sp));
+  }
+}
+
+void rgw_sync_directional_rule::dump(Formatter *f) const
+{
+  encode_json("source_zone", source_zone, f);
+  encode_json("dest_zone", dest_zone, f);
+}
+
+void rgw_sync_directional_rule::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("source_zone", source_zone, obj);
+  JSONDecoder::decode_json("dest_zone", dest_zone, obj);
+}
+
+void rgw_sync_symmetric_group::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("zones", zones, f);
+}
+
+void rgw_sync_symmetric_group::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("zones", zones, obj);
+}
+
+void rgw_sync_bucket_entity::dump(Formatter *f) const
+{
+  encode_json("zone", zone, f);
+  encode_json("bucket", bucket_key(), f);
+}
+
+void rgw_sync_bucket_entity::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("zone", zone, obj);
+  string s;
+  if (JSONDecoder::decode_json("bucket", s, obj)) {
+    rgw_bucket b;
+    int ret = rgw_bucket_parse_bucket_key(nullptr, s, &b, nullptr);
+    if (ret >= 0) {
+      bucket = b;
+    } else {
+      bucket.reset();
+    }
+  }
+}
+
+void rgw_sync_pipe_filter_tag::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("value", value, f);
+}
+
+void rgw_sync_pipe_filter_tag::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("value", value, obj);
+}
+
+void rgw_sync_pipe_filter::dump(Formatter *f) const
+{
+  encode_json("prefix", prefix, f);
+  encode_json("tags", tags, f);
+}
+
+void rgw_sync_pipe_filter::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("prefix", prefix, obj);
+  JSONDecoder::decode_json("tags", tags, obj);
+}
+
+void rgw_sync_pipe_acl_translation::dump(Formatter *f) const
+{
+  encode_json("owner", owner, f);
+}
+
+void rgw_sync_pipe_acl_translation::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("owner", owner, obj);
+}
+
+void rgw_sync_pipe_source_params::dump(Formatter *f) const
+{
+  encode_json("filter", filter, f);
+}
+
+void rgw_sync_pipe_source_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("filter", filter, obj);
+}
+
+void rgw_sync_pipe_dest_params::dump(Formatter *f) const
+{
+  encode_json("acl_translation", acl_translation, f);
+  encode_json("storage_class", storage_class, f);
+}
+
+void rgw_sync_pipe_dest_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("acl_translation", acl_translation, obj);
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
+}
+
+void rgw_sync_pipe_params::dump(Formatter *f) const
+{
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
+  encode_json("priority", priority, f);
+  string s;
+  switch (mode) {
+    case MODE_SYSTEM:
+      s = "system";
+      break;
+    default:
+      s = "user";
+  }
+  encode_json("mode", s, f);
+  encode_json("user", user, f);
+}
+
+void rgw_sync_pipe_params::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("priority", priority, obj);
+  string s;
+  JSONDecoder::decode_json("mode", s, obj);
+  if (s == "system") {
+    mode = MODE_SYSTEM;
+  } else {
+    mode = MODE_USER;
+  }
+  JSONDecoder::decode_json("user", user, obj);
+}
+
+
+void rgw_sync_bucket_entities::dump(Formatter *f) const
+{
+  encode_json("bucket", rgw_sync_bucket_entities::bucket_key(bucket), f);
+  if (zones) {
+    encode_json("zones", zones, f);
+  } else if (all_zones) {
+    set<string> z = { "*" };
+    encode_json("zones", z, f);
+  }
+}
+
+void rgw_sync_bucket_entities::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("bucket", s, obj);
+  if (s == "*") {
+    bucket.reset();
+  } else {
+    rgw_bucket b;
+    int ret = rgw_bucket_parse_bucket_key(nullptr, s, &b, nullptr);
+    if (ret < 0) {
+      bucket.reset();
+    } else {
+      if (b.tenant == "*") {
+        b.tenant.clear();
+      }
+      if (b.name == "*") {
+        b.name.clear();
+      }
+      if (b.bucket_id == "*") {
+        b.bucket_id.clear();
+      }
+      bucket = b;
+    }
+  }
+  JSONDecoder::decode_json("zones", zones, obj);
+  if (zones && zones->size() == 1) {
+    auto iter = zones->begin();
+    if (*iter == "*") {
+      zones.reset();
+      all_zones = true;
+    }
+  }
+}
+
+void rgw_sync_bucket_pipe::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
+  encode_json("params", params, f);
+}
+
+void rgw_sync_bucket_pipe::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("params", params, obj);
+}
+
+void rgw_sync_bucket_pipes::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("source", source, f);
+  encode_json("dest", dest, f);
+  encode_json("params", params, f);
+}
+
+void rgw_sync_bucket_pipes::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("dest", dest, obj);
+  JSONDecoder::decode_json("params", params, obj);
+}
+
+void rgw_sync_data_flow_group::dump(Formatter *f) const
+{
+  if (!symmetrical.empty()) {
+    encode_json("symmetrical", symmetrical, f);
+  }
+
+  if (!directional.empty()) {
+    encode_json("directional", directional, f);
+  }
+}
+
+void rgw_sync_data_flow_group::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("symmetrical", symmetrical, obj);
+  JSONDecoder::decode_json("directional", directional, obj);
+}
+
+void rgw_sync_policy_group::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("data_flow", data_flow, f);
+  encode_json("pipes", pipes, f);
+  string s;
+  switch (status) {
+    case  rgw_sync_policy_group::Status::FORBIDDEN:
+      s = "forbidden";
+      break;
+    case  rgw_sync_policy_group::Status::ALLOWED:
+      s = "allowed";
+      break;
+    case  rgw_sync_policy_group::Status::ENABLED:
+      s = "enabled";
+      break;
+    default:
+      s = "unknown";
+  }
+  encode_json("status", s, f);
+}
+
+void rgw_sync_policy_group::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("data_flow", data_flow, obj);
+  JSONDecoder::decode_json("pipes", pipes, obj);
+  string s;
+  JSONDecoder::decode_json("status", s, obj);
+  set_status(s);
+}
+
+void rgw_sync_policy_info::dump(Formatter *f) const
+{
+  Formatter::ArraySection section(*f, "groups");
+  for (auto& group : groups ) {
+    encode_json("group", group.second, f);
+  }
+}
+
+void rgw_sync_policy_info::decode_json(JSONObj *obj)
+{
+  vector<rgw_sync_policy_group> groups_vec;
+
+  JSONDecoder::decode_json("groups", groups_vec, obj);
+
+  for (auto& group : groups_vec) {
+    groups.emplace(std::make_pair(group.id, std::move(group)));
+  }
 }
 
 void rgw_obj_key::dump(Formatter *f) const
@@ -969,6 +1260,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("placement_pools", placement_pools, f);
   encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
+  encode_json("notif_pool", notif_pool, f);
 }
 
 void RGWZoneStorageClass::dump(Formatter *f) const
@@ -1026,7 +1318,7 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
-  index_type = (RGWBucketIndexType)it;
+  index_type = (rgw::BucketIndexType)it;
 
   /* backward compatibility, these are now defined in storage_classes */
   string standard_compression_type;
@@ -1065,6 +1357,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("notif_pool", notif_pool, obj);
 
 }
 
@@ -1131,9 +1424,10 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json_map("placement_targets", placement_targets, f); /* more friendly representation */
   encode_json("default_placement", default_placement, f);
   encode_json("realm_id", realm_id, f);
+  encode_json("sync_policy", sync_policy, f);
 }
 
-static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
+static void decode_zones(map<rgw_zone_id, RGWZone>& zones, JSONObj *o)
 {
   RGWZone z;
   z.decode_json(o);
@@ -1167,6 +1461,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("default_placement", default_placement.name, obj);
   JSONDecoder::decode_json("default_storage_class", default_placement.storage_class, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("sync_policy", sync_policy, obj);
 }
 
 
@@ -1475,11 +1770,13 @@ void rgw_bucket_shard_full_sync_marker::dump(Formatter *f) const
 void rgw_bucket_shard_inc_sync_marker::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("position", position, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
 }
 
 void rgw_bucket_shard_inc_sync_marker::dump(Formatter *f) const
 {
   encode_json("position", position, f);
+  encode_json("timestamp", timestamp, f);
 }
 
 void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
@@ -1490,6 +1787,8 @@ void rgw_bucket_shard_sync_info::decode_json(JSONObj *obj)
     state = StateFullSync;
   } else if (s == "incremental-sync") {
     state = StateIncrementalSync;
+  } else if (s == "stopped") {
+    state = StateStopped;
   } else {
     state = StateInit;
   }
@@ -1510,6 +1809,9 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
   case StateIncrementalSync:
     s = "incremental-sync";
     break;
+  case StateStopped:
+    s = "stopped";
+    break;
   default:
     s = "unknown";
     break;
@@ -1523,7 +1825,7 @@ void rgw_bucket_shard_sync_info::dump(Formatter *f) const
  * provided by string_ref since Boost 1.54 as it's defined outside of the std
  * namespace. I hope we'll remove it soon - just after merging the Matt's PR
  * for bundled Boost. It would allow us to forget that CentOS 7 has Boost 1.53. */
-static inline std::string to_string(const boost::string_ref& s)
+static inline std::string to_string(const std::string_view& s)
 {
   return std::string(s.data(), s.length());
 }
@@ -1694,6 +1996,17 @@ void lc_op::dump(Formatter *f) const
   if (obj_tags) {
     f->dump_object("obj_tags", *obj_tags);
   }
+  f->open_object_section("transitions");  
+  for(auto& [storage_class, transition] : transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
+
+  f->open_object_section("noncur_transitions");  
+  for (auto& [storage_class, transition] : noncur_transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
 }
 
 void LCFilter::dump(Formatter *f) const
@@ -1717,6 +2030,17 @@ void LCRule::dump(Formatter *f) const
   f->dump_object("noncur_expiration", noncur_expiration);
   f->dump_object("mp_expiration", mp_expiration);
   f->dump_object("filter", filter);
+  f->open_object_section("transitions");  
+  for (auto& [storage_class, transition] : transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
+
+  f->open_object_section("noncur_transitions");  
+  for (auto& [storage_class, transition] : noncur_transitions) {
+    f->dump_object(storage_class, transition);
+  }
+  f->close_section();
   f->dump_bool("dm_expiration", dm_expiration);
 }
 
@@ -1751,6 +2075,9 @@ void RGWCompressionInfo::dump(Formatter *f) const
 {
   f->dump_string("compression_type", compression_type);
   f->dump_unsigned("orig_size", orig_size);
+  if (compressor_message) {
+    f->dump_int("compressor_message", *compressor_message);
+  }
   ::encode_json("blocks", blocks, f);
 }
 

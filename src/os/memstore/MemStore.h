@@ -32,43 +32,41 @@ public:
   struct Object : public RefCountedObject {
     ceph::mutex xattr_mutex{ceph::make_mutex("MemStore::Object::xattr_mutex")};
     ceph::mutex omap_mutex{ceph::make_mutex("MemStore::Object::omap_mutex")};
-    map<string,bufferptr> xattr;
-    bufferlist omap_header;
-    map<string,bufferlist> omap;
+    std::map<std::string,ceph::buffer::ptr> xattr;
+    ceph::buffer::list omap_header;
+    std::map<std::string,ceph::buffer::list> omap;
 
     using Ref = ceph::ref_t<Object>;
 
     // interface for object data
     virtual size_t get_size() const = 0;
-    virtual int read(uint64_t offset, uint64_t len, bufferlist &bl) = 0;
-    virtual int write(uint64_t offset, const bufferlist &bl) = 0;
+    virtual int read(uint64_t offset, uint64_t len, ceph::buffer::list &bl) = 0;
+    virtual int write(uint64_t offset, const ceph::buffer::list &bl) = 0;
     virtual int clone(Object *src, uint64_t srcoff, uint64_t len,
                       uint64_t dstoff) = 0;
     virtual int truncate(uint64_t offset) = 0;
-    virtual void encode(bufferlist& bl) const = 0;
-    virtual void decode(bufferlist::const_iterator& p) = 0;
+    virtual void encode(ceph::buffer::list& bl) const = 0;
+    virtual void decode(ceph::buffer::list::const_iterator& p) = 0;
 
-    void encode_base(bufferlist& bl) const {
+    void encode_base(ceph::buffer::list& bl) const {
       using ceph::encode;
       encode(xattr, bl);
       encode(omap_header, bl);
       encode(omap, bl);
     }
-    void decode_base(bufferlist::const_iterator& p) {
+    void decode_base(ceph::buffer::list::const_iterator& p) {
       using ceph::decode;
       decode(xattr, p);
       decode(omap_header, p);
       decode(omap, p);
     }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->dump_int("data_len", get_size());
       f->dump_int("omap_header_len", omap_header.length());
 
       f->open_array_section("xattrs");
-      for (map<string,bufferptr>::const_iterator p = xattr.begin();
-	   p != xattr.end();
-	   ++p) {
+      for (auto p = xattr.begin(); p != xattr.end(); ++p) {
 	f->open_object_section("xattr");
 	f->dump_string("name", p->first);
 	f->dump_int("length", p->second.length());
@@ -77,9 +75,7 @@ public:
       f->close_section();
 
       f->open_array_section("omap");
-      for (map<string,bufferlist>::const_iterator p = omap.begin();
-	   p != omap.end();
-	   ++p) {
+      for (auto p = omap.begin(); p != omap.end(); ++p) {
 	f->open_object_section("pair");
 	f->dump_string("key", p->first);
 	f->dump_int("length", p->second.length());
@@ -98,8 +94,8 @@ public:
     CephContext *cct;
     bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
-    map<ghobject_t, ObjectRef> object_map;        ///< for iteration
-    map<string,bufferptr> xattr;
+    std::map<ghobject_t, ObjectRef> object_map;        ///< for iteration
+    std::map<std::string,ceph::buffer::ptr> xattr;
     /// for object_{map,hash}
     ceph::shared_mutex lock{
       ceph::make_shared_mutex("MemStore::Collection::lock", true, false)};
@@ -133,21 +129,19 @@ public:
       return result.first->second;
     }
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       ENCODE_START(1, 1, bl);
       encode(xattr, bl);
       encode(use_page_set, bl);
       uint32_t s = object_map.size();
       encode(s, bl);
-      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
-	   p != object_map.end();
-	   ++p) {
+      for (auto p = object_map.begin(); p != object_map.end(); ++p) {
 	encode(p->first, bl);
 	p->second->encode(bl);
       }
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::const_iterator& p) {
+    void decode(ceph::buffer::list::const_iterator& p) {
       DECODE_START(1, p);
       decode(xattr, p);
       decode(use_page_set, p);
@@ -158,17 +152,15 @@ public:
 	decode(k, p);
 	auto o = create_object();
 	o->decode(p);
-	object_map.insert(make_pair(k, o));
-	object_hash.insert(make_pair(k, o));
+	object_map.insert(std::make_pair(k, o));
+	object_hash.insert(std::make_pair(k, o));
       }
       DECODE_FINISH(p);
     }
 
     uint64_t used_bytes() const {
       uint64_t result = 0;
-      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
-	   p != object_map.end();
-	   ++p) {
+      for (auto p = object_map.begin(); p != object_map.end(); ++p) {
         result += p->second->get_size();
       }
 
@@ -198,7 +190,7 @@ private:
   /// rwlock to protect coll_map
   ceph::shared_mutex coll_lock{
     ceph::make_shared_mutex("MemStore::coll_lock")};
-  map<coll_t,CollectionRef> new_coll_map;
+  std::map<coll_t,CollectionRef> new_coll_map;
 
   CollectionRef get_collection(const coll_t& cid);
 
@@ -210,11 +202,11 @@ private:
 
   int _touch(const coll_t& cid, const ghobject_t& oid);
   int _write(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
-	      const bufferlist& bl, uint32_t fadvise_flags = 0);
+	      const ceph::buffer::list& bl, uint32_t fadvise_flags = 0);
   int _zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len);
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _remove(const coll_t& cid, const ghobject_t& oid);
-  int _setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset);
+  int _setattrs(const coll_t& cid, const ghobject_t& oid, std::map<std::string,ceph::buffer::ptr>& aset);
   int _rmattr(const coll_t& cid, const ghobject_t& oid, const char *name);
   int _rmattrs(const coll_t& cid, const ghobject_t& oid);
   int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid);
@@ -222,11 +214,11 @@ private:
 		   const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _omap_clear(const coll_t& cid, const ghobject_t &oid);
-  int _omap_setkeys(const coll_t& cid, const ghobject_t &oid, bufferlist& aset_bl);
-  int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, bufferlist& keys_bl);
+  int _omap_setkeys(const coll_t& cid, const ghobject_t &oid, ceph::buffer::list& aset_bl);
+  int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, ceph::buffer::list& keys_bl);
   int _omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
-		       const string& first, const string& last);
-  int _omap_setheader(const coll_t& cid, const ghobject_t &oid, const bufferlist &bl);
+		       const std::string& first, const std::string& last);
+  int _omap_setheader(const coll_t& cid, const ghobject_t &oid, const ceph::buffer::list &bl);
 
   int _collection_hint_expected_num_objs(const coll_t& cid, uint32_t pg_num,
       uint64_t num_objs) const { return 0; }
@@ -241,17 +233,17 @@ private:
   int _save();
   int _load();
 
-  void dump(Formatter *f);
+  void dump(ceph::Formatter *f);
   void dump_all();
 
 public:
-  MemStore(CephContext *cct, const string& path)
+  MemStore(CephContext *cct, const std::string& path)
     : ObjectStore(cct, path),
       finisher(cct),
       used_bytes(0) {}
   ~MemStore() override { }
 
-  string get_type() override {
+  std::string get_type() override {
     return "memstore";
   }
 
@@ -287,7 +279,7 @@ public:
     return false;
   }
 
-  int get_devices(set<string> *ls) override {
+  int get_devices(std::set<std::string> *ls) override {
     // no devices for us!
     return 0;
   }
@@ -308,19 +300,19 @@ public:
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
+    ceph::buffer::list& bl,
     uint32_t op_flags = 0) override;
   using ObjectStore::fiemap;
   int fiemap(CollectionHandle& c, const ghobject_t& oid,
-	     uint64_t offset, size_t len, bufferlist& bl) override;
+	     uint64_t offset, size_t len, ceph::buffer::list& bl) override;
   int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset,
-	     size_t len, map<uint64_t, uint64_t>& destmap) override;
+	     size_t len, std::map<uint64_t, uint64_t>& destmap) override;
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
-	      bufferptr& value) override;
+	      ceph::buffer::ptr& value) override;
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       map<string,bufferptr>& aset) override;
+	       std::map<std::string,ceph::buffer::ptr>& aset) override;
 
-  int list_collections(vector<coll_t>& ls) override;
+  int list_collections(std::vector<coll_t>& ls) override;
 
   CollectionHandle open_collection(const coll_t& c) override {
     return get_collection(c);
@@ -336,14 +328,14 @@ public:
   int collection_bits(CollectionHandle& c) override;
   int collection_list(CollectionHandle& cid,
 		      const ghobject_t& start, const ghobject_t& end, int max,
-		      vector<ghobject_t> *ls, ghobject_t *next) override;
+		      std::vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
   int omap_get(
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
     ) override;
 
   using ObjectStore::omap_get_header;
@@ -351,7 +343,7 @@ public:
   int omap_get_header(
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
+    ceph::buffer::list *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
     ) override;
 
@@ -360,7 +352,7 @@ public:
   int omap_get_keys(
     CollectionHandle& c,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
+    std::set<std::string> *keys      ///< [out] Keys defined on oid
     ) override;
 
   using ObjectStore::omap_get_values;
@@ -368,8 +360,8 @@ public:
   int omap_get_values(
     CollectionHandle& c,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    const std::set<std::string> &keys,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
 
   using ObjectStore::omap_check_keys;
@@ -377,8 +369,8 @@ public:
   int omap_check_keys(
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) override;
 
   using ObjectStore::get_omap_iterator;
@@ -403,7 +395,7 @@ public:
 
   int queue_transactions(
     CollectionHandle& ch,
-    vector<Transaction>& tls,
+    std::vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 };

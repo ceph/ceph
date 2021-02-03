@@ -124,7 +124,7 @@ def repair_test_2(ctx, manager, config, chooser):
         log.info("starting repair test type 2")
         victim_osd = chooser(manager, pool, 0)
         first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
         # create object
         log.info("doing put and setomapval")
@@ -251,7 +251,7 @@ def task(ctx, config):
 
     The config should be as follows:
 
-      Must include the log-whitelist below
+      Must include the log-ignorelist below
       Must enable filestore_debug_inject_read_err config
 
     example:
@@ -260,7 +260,7 @@ def task(ctx, config):
     - chef:
     - install:
     - ceph:
-        log-whitelist:
+        log-ignorelist:
           - 'candidate had a stat error'
           - 'candidate had a read error'
           - 'deep-scrub 0 missing, 1 inconsistent objects'

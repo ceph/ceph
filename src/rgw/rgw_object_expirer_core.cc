@@ -23,7 +23,6 @@
 
 #include "rgw_user.h"
 #include "rgw_bucket.h"
-#include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_log.h"
@@ -31,6 +30,7 @@
 #include "rgw_usage.h"
 #include "rgw_object_expirer_core.h"
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"
@@ -147,6 +147,27 @@ int RGWObjExpStore::objexp_hint_list(const string& oid,
   return 0;
 }
 
+static int cls_timeindex_trim_repeat(rgw_rados_ref ref,
+                                const string& oid,
+                                const utime_t& from_time,
+                                const utime_t& to_time,
+                                const string& from_marker,
+                                const string& to_marker)
+{
+  bool done = false;
+  do {
+    librados::ObjectWriteOperation op;
+    cls_timeindex_trim(op, from_time, to_time, from_marker, to_marker);
+    int r = rgw_rados_operate(ref.pool.ioctx(), oid, &op, null_yield);
+    if (r == -ENODATA)
+      done = true;
+    else if (r < 0)
+      return r;
+  } while (!done);
+
+  return 0;
+}
+
 int RGWObjExpStore::objexp_hint_trim(const string& oid,
                                const ceph::real_time& start_time,
                                const ceph::real_time& end_time,
@@ -160,7 +181,7 @@ int RGWObjExpStore::objexp_hint_trim(const string& oid,
     return r;
   }
   auto& ref = obj.get_ref();
-  int ret = cls_timeindex_trim(ref.pool.ioctx(), ref.obj.oid, utime_t(start_time), utime_t(end_time),
+  int ret = cls_timeindex_trim_repeat(ref, oid, utime_t(start_time), utime_t(end_time),
           from_marker, to_marker);
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
@@ -174,8 +195,6 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
                                        const string& bucket_id,
                                        RGWBucketInfo& bucket_info)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-
   /*
    * XXX Here's where it gets tricky. We went to all the trouble of
    * punching the tenant through the objexp_hint_entry, but now we
@@ -186,12 +205,12 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
    * are ephemeral, good call encoding tenant info!
    */
 
-  return store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name,
+  return store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name,
 				bucket_info, nullptr, null_yield, nullptr);
 
 }
 
-int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
+int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
 
@@ -216,13 +235,14 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
 
   rgw_obj obj(bucket_info.bucket, key);
   store->getRados()->set_atomic(&rctx, obj);
-  ret = store->getRados()->delete_obj(rctx, bucket_info, obj,
+  ret = store->getRados()->delete_obj(dpp, rctx, bucket_info, obj,
           bucket_info.versioning_status(), 0, hint.exp_time);
 
   return ret;
 }
 
-void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /* in  */
+void RGWObjectExpirer::garbage_chunk(const DoutPrefixProvider *dpp, 
+                                  list<cls_timeindex_entry>& entries,      /* in  */
                                   bool& need_trim)                         /* out */
 {
   need_trim = false;
@@ -243,7 +263,7 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
 
     /* PRECOND_FAILED simply means that our hint is not valid.
      * We can silently ignore that and move forward. */
-    ret = garbage_single_object(hint);
+    ret = garbage_single_object(dpp, hint);
     if (ret == -ERR_PRECONDITION_FAILED) {
       ldout(store->ctx(), 15) << "not actual hint for object: " << hint.obj_key << dendl;
     } else if (ret < 0) {
@@ -277,7 +297,8 @@ void RGWObjectExpirer::trim_chunk(const string& shard,
   return;
 }
 
-bool RGWObjectExpirer::process_single_shard(const string& shard,
+bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp, 
+                                            const string& shard,
                                             const utime_t& last_run,
                                             const utime_t& round_start)
 {
@@ -319,7 +340,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     }
 
     bool need_trim;
-    garbage_chunk(entries, need_trim);
+    garbage_chunk(dpp, entries, need_trim);
 
     if (need_trim) {
       trim_chunk(shard, last_run, round_start, marker, out_marker);
@@ -339,7 +360,8 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
 }
 
 /* Returns true if all shards have been processed successfully. */
-bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
+bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp, 
+                                          const utime_t& last_run,
                                           const utime_t& round_start)
 {
   CephContext * const cct = store->ctx();
@@ -352,7 +374,7 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
 
     ldout(store->ctx(), 20) << "processing shard = " << shard << dendl;
 
-    if (! process_single_shard(shard, last_run, round_start)) {
+    if (! process_single_shard(dpp, shard, last_run, round_start)) {
       all_done = false;
     }
   }
@@ -387,7 +409,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     ldout(cct, 2) << "object expiration: start" << dendl;
-    if (oe->inspect_all_shards(last_run, start)) {
+    if (oe->inspect_all_shards(this, last_run, start)) {
       /* All shards have been processed properly. Next time we can start
        * from this moment. */
       last_run = start;
@@ -420,3 +442,17 @@ void RGWObjectExpirer::OEWorker::stop()
   cond.notify_all();
 }
 
+CephContext *RGWObjectExpirer::OEWorker::get_cct() const 
+{ 
+  return cct; 
+}
+
+unsigned RGWObjectExpirer::OEWorker::get_subsys() const 
+{
+    return dout_subsys;
+}
+
+std::ostream& RGWObjectExpirer::OEWorker::gen_prefix(std::ostream& out) const 
+{ 
+  return out << "rgw object expirer Worker thread: "; 
+}

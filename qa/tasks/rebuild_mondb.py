@@ -8,7 +8,7 @@ import os.path
 import shutil
 import tempfile
 
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def _push_directory(path, remote, remote_dir):
 def _nuke_mons(manager, mons, mon_id):
     assert mons
     is_mon = teuthology.is_type('mon')
-    for remote, roles in mons.remotes.iteritems():
+    for remote, roles in mons.remotes.items():
         for role in roles:
             if not is_mon(role):
                 continue
@@ -77,7 +77,7 @@ def _rebuild_db(ctx, manager, cluster_name, mon, mon_id, keyring_path):
     is_osd = teuthology.is_type('osd')
     osds = ctx.cluster.only(is_osd)
     assert osds
-    for osd, roles in osds.remotes.iteritems():
+    for osd, roles in osds.remotes.items():
         for role in roles:
             if not is_osd(role):
                 continue
@@ -142,7 +142,7 @@ def _revive_mons(manager, mons, recovered, keyring_path):
     # the initial monmap is in the ceph.conf, so we are good.
     n_mons = 0
     is_mon = teuthology.is_type('mon')
-    for remote, roles in mons.remotes.iteritems():
+    for remote, roles in mons.remotes.items():
         for role in roles:
             if not is_mon(role):
                 continue
@@ -169,7 +169,7 @@ def _revive_mons(manager, mons, recovered, keyring_path):
 def _revive_mgrs(ctx, manager):
     is_mgr = teuthology.is_type('mgr')
     mgrs = ctx.cluster.only(is_mgr)
-    for _, roles in mgrs.remotes.iteritems():
+    for _, roles in mgrs.remotes.items():
         for role in roles:
             if not is_mgr(role):
                 continue
@@ -181,7 +181,7 @@ def _revive_mgrs(ctx, manager):
 def _revive_osds(ctx, manager):
     is_osd = teuthology.is_type('osd')
     osds = ctx.cluster.only(is_osd)
-    for _, roles in osds.remotes.iteritems():
+    for _, roles in osds.remotes.items():
         for role in roles:
             if not is_osd(role):
                 continue
@@ -200,7 +200,7 @@ def task(ctx, config):
         'task only accepts a dict for configuration'
 
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     # stash a monmap for later
     mon.run(args=['ceph', 'mon', 'getmap', '-o', '/tmp/monmap'])

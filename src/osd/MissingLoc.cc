@@ -8,10 +8,13 @@
 #define dout_prefix (gen_prefix(*_dout))
 #define dout_subsys ceph_subsys_osd
 
+using std::set;
+
 bool MissingLoc::readable_with_acting(
   const hobject_t &hoid,
-  const set<pg_shard_t> &acting) const {
-  if (!needs_recovery(hoid))
+  const set<pg_shard_t> &acting,
+  eversion_t* v) const {
+  if (!needs_recovery(hoid, v))
     return true;
   if (is_deleted(hoid))
     return false;
@@ -21,9 +24,7 @@ bool MissingLoc::readable_with_acting(
   const set<pg_shard_t> &locs = missing_loc_entry->second;
   ldout(cct, 10) << __func__ << ": locs:" << locs << dendl;
   set<pg_shard_t> have_acting;
-  for (set<pg_shard_t>::const_iterator i = locs.begin();
-       i != locs.end();
-       ++i) {
+  for (auto i = locs.begin(); i != locs.end(); ++i) {
     if (acting.count(*i))
       have_acting.insert(*i);
   }
@@ -38,7 +39,7 @@ void MissingLoc::add_batch_sources_info(
 		     << sources.size() << dendl;
   unsigned loop = 0;
   bool sources_updated = false;
-  for (map<hobject_t, pg_missing_item>::const_iterator i = needs_recovery_map.begin();
+  for (auto i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
     if (handle && ++loop >= cct->_conf->osd_loop_before_reset_tphandle) {
@@ -74,7 +75,7 @@ bool MissingLoc::add_source_info(
   unsigned loop = 0;
   bool sources_updated = false;
   // found items?
-  for (map<hobject_t,pg_missing_item>::const_iterator p = needs_recovery_map.begin();
+  for (auto p = needs_recovery_map.begin();
        p != needs_recovery_map.end();
        ++p) {
     const hobject_t &soid(p->first);
@@ -139,7 +140,7 @@ bool MissingLoc::add_source_info(
 void MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
 {
   set<pg_shard_t> now_down;
-  for (set<pg_shard_t>::iterator p = missing_loc_sources.begin();
+  for (auto p = missing_loc_sources.begin();
        p != missing_loc_sources.end();
        ) {
     if (osdmap->is_up(p->osd)) {
@@ -158,9 +159,9 @@ void MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
 		       << missing_loc_sources << dendl;
 
     // filter missing_loc
-    map<hobject_t, set<pg_shard_t>>::iterator p = missing_loc.begin();
+    auto p = missing_loc.begin();
     while (p != missing_loc.end()) {
-      set<pg_shard_t>::iterator q = p->second.begin();
+      auto q = p->second.begin();
       bool changed = false;
       while (q != p->second.end()) {
 	if (now_down.count(*q)) {
@@ -189,9 +190,9 @@ void MissingLoc::remove_stray_recovery_sources(pg_shard_t stray)
 {
   ldout(cct, 10) << __func__ << " remove osd " << stray << " from missing_loc" << dendl;
   // filter missing_loc
-  map<hobject_t, set<pg_shard_t>>::iterator p = missing_loc.begin();
+  auto p = missing_loc.begin();
   while (p != missing_loc.end()) {
-    set<pg_shard_t>::iterator q = p->second.begin();
+    auto q = p->second.begin();
     bool changed = false;
     while (q != p->second.end()) {
       if (*q == stray) {
@@ -214,9 +215,7 @@ void MissingLoc::remove_stray_recovery_sources(pg_shard_t stray)
     }
   }
   // filter missing_loc_sources
-  for (set<pg_shard_t>::iterator p = missing_loc_sources.begin();
-       p != missing_loc_sources.end();
-       ) {
+  for (auto p = missing_loc_sources.begin(); p != missing_loc_sources.end();) {
     if (*p != stray) {
       ++p;
       continue;

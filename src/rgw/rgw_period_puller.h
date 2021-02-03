@@ -5,8 +5,9 @@
 #define CEPH_RGW_PERIOD_PULLER_H
 
 #include "rgw_period_history.h"
+#include "include/common_fwd.h"
+#include "rgw/services/svc_sys_obj.h"
 
-class CephContext;
 class RGWPeriod;
 
 class RGWPeriodPuller : public RGWPeriodHistory::Puller {
@@ -20,7 +21,7 @@ class RGWPeriodPuller : public RGWPeriodHistory::Puller {
  public:
   explicit RGWPeriodPuller(RGWSI_Zone *zone_svc, RGWSI_SysObj *sysobj_svc);
 
-  int pull(const std::string& period_id, RGWPeriod& period) override;
+  int pull(const std::string& period_id, RGWPeriod& period, optional_yield y) override;
 };
 
 #endif // CEPH_RGW_PERIOD_PULLER_H

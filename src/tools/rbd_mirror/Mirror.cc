@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <signal.h>
+
 #include <boost/range/adaptor/map.hpp>
 
 #include "common/Formatter.h"
@@ -12,6 +14,7 @@
 #include "librbd/ImageCtx.h"
 #include "perfglue/heap_profiler.h"
 #include "Mirror.h"
+#include "PoolMetaCache.h"
 #include "ServiceDaemon.h"
 #include "Threads.h"
 
@@ -37,16 +40,16 @@ namespace {
 class MirrorAdminSocketCommand {
 public:
   virtual ~MirrorAdminSocketCommand() {}
-  virtual bool call(Formatter *f, stringstream *ss) = 0;
+  virtual int call(Formatter *f) = 0;
 };
 
 class StatusCommand : public MirrorAdminSocketCommand {
 public:
   explicit StatusCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
-    mirror->print_status(f, ss);
-    return true;
+  int call(Formatter *f) override {
+    mirror->print_status(f);
+    return 0;
   }
 
 private:
@@ -57,9 +60,9 @@ class StartCommand : public MirrorAdminSocketCommand {
 public:
   explicit StartCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->start();
-    return true;
+    return 0;
   }
 
 private:
@@ -70,9 +73,9 @@ class StopCommand : public MirrorAdminSocketCommand {
 public:
   explicit StopCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->stop();
-    return true;
+    return 0;
   }
 
 private:
@@ -83,9 +86,9 @@ class RestartCommand : public MirrorAdminSocketCommand {
 public:
   explicit RestartCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->restart();
-    return true;
+    return 0;
   }
 
 private:
@@ -96,9 +99,9 @@ class FlushCommand : public MirrorAdminSocketCommand {
 public:
   explicit FlushCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->flush();
-    return true;
+    return 0;
   }
 
 private:
@@ -109,9 +112,9 @@ class LeaderReleaseCommand : public MirrorAdminSocketCommand {
 public:
   explicit LeaderReleaseCommand(Mirror *mirror) : mirror(mirror) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
+  int call(Formatter *f) override {
     mirror->release_leader();
-    return true;
+    return 0;
   }
 
 private:
@@ -271,42 +274,42 @@ public:
     int r;
 
     command = "rbd mirror status";
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "get status for rbd mirror");
     if (r == 0) {
       commands[command] = new StatusCommand(mirror);
     }
 
     command = "rbd mirror start";
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "start rbd mirror");
     if (r == 0) {
       commands[command] = new StartCommand(mirror);
     }
 
     command = "rbd mirror stop";
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "stop rbd mirror");
     if (r == 0) {
       commands[command] = new StopCommand(mirror);
     }
 
     command = "rbd mirror restart";
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "restart rbd mirror");
     if (r == 0) {
       commands[command] = new RestartCommand(mirror);
     }
 
     command = "rbd mirror flush";
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "flush rbd mirror");
     if (r == 0) {
       commands[command] = new FlushCommand(mirror);
     }
 
     command = "rbd mirror leader release";
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "release rbd mirror leader");
     if (r == 0) {
       commands[command] = new LeaderReleaseCommand(mirror);
@@ -314,23 +317,20 @@ public:
   }
 
   ~MirrorAdminSocketHook() override {
+    (void)admin_socket->unregister_commands(this);
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
-      (void)admin_socket->unregister_command(i->first);
       delete i->second;
     }
   }
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     ceph_assert(i != commands.end());
-    Formatter *f = Formatter::create(format);
-    stringstream ss;
-    bool r = i->second->call(f, &ss);
-    delete f;
-    out.append(ss);
-    return r;
+    return i->second->call(f);
   }
 
 private:
@@ -486,12 +486,8 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_args(args),
   m_local(new librados::Rados()),
   m_cache_manager_handler(new CacheManagerHandler(cct)),
-  m_asok_hook(new MirrorAdminSocketHook(cct, this))
-{
-  m_threads =
-    &(cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx>>(
-	"rbd_mirror::threads", false, cct));
-  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
+  m_pool_meta_cache(new PoolMetaCache(cct)),
+  m_asok_hook(new MirrorAdminSocketHook(cct, this)) {
 }
 
 Mirror::~Mirror()
@@ -501,10 +497,26 @@ Mirror::~Mirror()
 
 void Mirror::handle_signal(int signum)
 {
-  m_stopping = true;
-  {
-    std::lock_guard l{m_lock};
+  dout(20) << signum << dendl;
+
+  std::lock_guard l{m_lock};
+
+  switch (signum) {
+  case SIGHUP:
+    for (auto &it : m_pool_replayers) {
+      it.second->reopen_logs();
+    }
+    g_ceph_context->reopen_logs();
+    break;
+
+  case SIGINT:
+  case SIGTERM:
+    m_stopping = true;
     m_cond.notify_all();
+    break;
+
+  default:
+    ceph_abort_msgf("unexpected signal %d", signum);
   }
 }
 
@@ -521,6 +533,10 @@ int Mirror::init()
     derr << "error connecting to local cluster" << dendl;
     return r;
   }
+
+  m_threads = &(m_cct->lookup_or_create_singleton_object<
+    Threads<librbd::ImageCtx>>("rbd_mirror::threads", false, m_local));
+  m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
 
   r = m_service_daemon->init();
   if (r < 0) {
@@ -551,7 +567,8 @@ void Mirror::run()
     std::unique_lock l{m_lock};
     if (!m_manual_stop) {
       if (refresh_pools) {
-        update_pool_replayers(m_local_cluster_watcher->get_pool_peers());
+        update_pool_replayers(m_local_cluster_watcher->get_pool_peers(),
+                              m_local_cluster_watcher->get_site_name());
       }
       m_cache_manager_handler->run_cache_manager();
     }
@@ -566,7 +583,7 @@ void Mirror::run()
   dout(20) << "return" << dendl;
 }
 
-void Mirror::print_status(Formatter *f, stringstream *ss)
+void Mirror::print_status(Formatter *f)
 {
   dout(20) << "enter" << dendl;
 
@@ -576,18 +593,13 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
     return;
   }
 
-  if (f) {
-    f->open_object_section("mirror_status");
-    f->open_array_section("pool_replayers");
-  };
-
+  f->open_object_section("mirror_status");
+  f->open_array_section("pool_replayers");
   for (auto &pool_replayer : m_pool_replayers) {
-    pool_replayer.second->print_status(f, ss);
+    pool_replayer.second->print_status(f);
   }
-
-  if (f) {
-    f->close_section();
-  }
+  f->close_section();
+  f->close_section();
 }
 
 void Mirror::start()
@@ -666,7 +678,8 @@ void Mirror::release_leader()
   }
 }
 
-void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
+void Mirror::update_pool_replayers(const PoolPeers &pool_peers,
+                                   const std::string& site_name)
 {
   dout(20) << "enter" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
@@ -693,32 +706,42 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
       auto pool_replayers_it = m_pool_replayers.find(pool_peer);
       if (pool_replayers_it != m_pool_replayers.end()) {
         auto& pool_replayer = pool_replayers_it->second;
-        if (pool_replayer->is_blacklisted()) {
-          derr << "restarting blacklisted pool replayer for " << peer << dendl;
+        if (!m_site_name.empty() && !site_name.empty() &&
+            m_site_name != site_name) {
+          dout(0) << "restarting pool replayer for " << peer << " due to "
+                  << "updated site name" << dendl;
           // TODO: make async
           pool_replayer->shut_down();
-          pool_replayer->init();
+          pool_replayer->init(site_name);
+        } else if (pool_replayer->is_blocklisted()) {
+          derr << "restarting blocklisted pool replayer for " << peer << dendl;
+          // TODO: make async
+          pool_replayer->shut_down();
+          pool_replayer->init(site_name);
         } else if (!pool_replayer->is_running()) {
           derr << "restarting failed pool replayer for " << peer << dendl;
           // TODO: make async
           pool_replayer->shut_down();
-          pool_replayer->init();
+          pool_replayer->init(site_name);
         }
       } else {
         dout(20) << "starting pool replayer for " << peer << dendl;
         unique_ptr<PoolReplayer<>> pool_replayer(
             new PoolReplayer<>(m_threads, m_service_daemon.get(),
-                               m_cache_manager_handler.get(), kv.first, peer,
+                               m_cache_manager_handler.get(),
+                               m_pool_meta_cache.get(), kv.first, peer,
                                m_args));
 
         // TODO: make async
-        pool_replayer->init();
+        pool_replayer->init(site_name);
         m_pool_replayers.emplace(pool_peer, std::move(pool_replayer));
       }
     }
 
     // TODO currently only support a single peer
   }
+
+  m_site_name = site_name;
 }
 
 } // namespace mirror

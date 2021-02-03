@@ -4,7 +4,7 @@ Cram tests
 import logging
 import os
 
-from util.workunit import get_refspec_after_overrides
+from tasks.util.workunit import get_refspec_after_overrides
 
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
@@ -16,7 +16,8 @@ log = logging.getLogger(__name__)
 def task(ctx, config):
     """
     Run all cram tests from the specified paths on the specified
-    clients. Each client runs tests in parallel.
+    clients. Each client runs tests in parallel as default, and
+    you can also disable it by adding "parallel: False" option.
 
     Limitations:
     Tests must have a .t suffix. Tests with duplicate names will
@@ -33,6 +34,7 @@ def task(ctx, config):
               - qa/test2.t]
               client.1: [qa/test.t]
             branch: foo
+            parallel: False
 
     You can also run a list of cram tests on all clients::
 
@@ -56,12 +58,14 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     refspec = get_refspec_after_overrides(config, overrides)
 
+    _parallel = config.get('parallel', True)
+
     git_url = teuth_config.get_ceph_qa_suite_git_url()
     log.info('Pulling tests from %s ref %s', git_url, refspec)
 
     try:
-        for client, tests in clients.iteritems():
-            (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        for client, tests in clients.items():
+            (remote,) = (ctx.cluster.only(client).remotes.keys())
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             remote.run(
                 args=[
@@ -84,12 +88,16 @@ def task(ctx, config):
                         ],
                     )
 
-        with parallel() as p:
-            for role in clients.iterkeys():
-                p.spawn(_run_tests, ctx, role)
+        if _parallel:
+            with parallel() as p:
+                for role in clients.keys():
+                    p.spawn(_run_tests, ctx, role)
+        else:
+            for role in clients.keys():
+                _run_tests(ctx, role)
     finally:
-        for client, tests in clients.iteritems():
-            (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        for client, tests in clients.items():
+            (remote,) = (ctx.cluster.only(client).remotes.keys())
             client_dir = '{tdir}/archive/cram.{role}'.format(tdir=testdir, role=client)
             test_files = set([test.rsplit('/', 1)[1] for test in tests])
 
@@ -107,6 +115,7 @@ def task(ctx, config):
             # ignore failure since more than one client may
             # be run on a host, and the client dir should be
             # non-empty if the test failed
+            clone_dir = '{tdir}/clone.{role}'.format(tdir=testdir, role=client)
             remote.run(
                 args=[
                     'rm', '-rf', '--',
@@ -124,11 +133,13 @@ def _run_tests(ctx, role):
     :param ctx: Context
     :param role: Roles
     """
-    assert isinstance(role, basestring)
+    assert isinstance(role, str)
     PREFIX = 'client.'
-    assert role.startswith(PREFIX)
-    id_ = role[len(PREFIX):]
-    (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+    if role.startswith(PREFIX):
+        id_ = role[len(PREFIX):]
+    else:
+        id_ = role
+    (remote,) = (ctx.cluster.only(role).remotes.keys())
     ceph_ref = ctx.summary.get('ceph-sha1', 'master')
 
     testdir = teuthology.get_testdir(ctx)

@@ -2,7 +2,7 @@
  Configuration
 ===============
 
-Each Ceph process, daemon or utility draws its configuration from
+Each Ceph process, daemon, or utility draws its configuration from
 several sources on startup, include a local configuration, the
 monitors, the command line, or environment variables.  Configuration
 options may be set globally such that they apply to all daemons, to

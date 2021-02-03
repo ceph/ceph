@@ -1,20 +1,20 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-cephfs-clients',
@@ -25,19 +25,28 @@ export class CephfsClientsComponent implements OnInit {
   @Input()
   id: number;
 
+  @Input()
+  clients: {
+    data: any[];
+    status: TableStatusViewCache;
+  };
+
+  @Output()
+  triggerApiUpdate = new EventEmitter();
+
+  columns: CdTableColumn[];
+
   permission: Permission;
   tableActions: CdTableAction[];
-  modalRef: BsModalRef;
-  clients: any;
-  viewCacheStatus: ViewCacheStatus;
+  modalRef: NgbModalRef;
+
   selection = new CdTableSelection();
 
   constructor(
     private cephfsService: CephfsService,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
-    private i18n: I18n,
     private actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().cephfs;
@@ -51,35 +60,14 @@ export class CephfsClientsComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.clients = {
-      columns: [
-        { prop: 'id', name: this.i18n('id') },
-        { prop: 'type', name: this.i18n('type') },
-        { prop: 'state', name: this.i18n('state') },
-        { prop: 'version', name: this.i18n('version') },
-        { prop: 'hostname', name: this.i18n('Host') },
-        { prop: 'root', name: this.i18n('root') }
-      ],
-      data: []
-    };
-
-    this.clients.data = [];
-    this.viewCacheStatus = ViewCacheStatus.ValueNone;
-  }
-
-  refresh(context?: CdTableFetchDataContext) {
-    this.cephfsService.getClients(this.id).subscribe(
-      (data: any) => {
-        this.viewCacheStatus = data.status;
-        this.clients.data = data.data;
-      },
-      () => {
-        this.viewCacheStatus = ViewCacheStatus.ValueException;
-        if (context) {
-          context.error();
-        }
-      }
-    );
+    this.columns = [
+      { prop: 'id', name: $localize`id` },
+      { prop: 'type', name: $localize`type` },
+      { prop: 'state', name: $localize`state` },
+      { prop: 'version', name: $localize`version` },
+      { prop: 'hostname', name: $localize`Host` },
+      { prop: 'root', name: $localize`root` }
+    ];
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -89,15 +77,15 @@ export class CephfsClientsComponent implements OnInit {
   evictClient(clientId: number) {
     this.cephfsService.evictClient(this.id, clientId).subscribe(
       () => {
-        this.refresh();
-        this.modalRef.hide();
+        this.triggerApiUpdate.emit();
+        this.modalRef.close();
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Evicted client "{{clientId}}"', { clientId: clientId })
+          $localize`Evicted client '${clientId}'`
         );
       },
       () => {
-        this.modalRef.content.stopLoadingSpinner();
+        this.modalRef.componentInstance.stopLoadingSpinner();
       }
     );
   }
@@ -105,11 +93,10 @@ export class CephfsClientsComponent implements OnInit {
   evictClientModal() {
     const clientId = this.selection.first().id;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'client',
-        actionDescription: 'evict',
-        submitAction: () => this.evictClient(clientId)
-      }
+      itemDescription: 'client',
+      itemNames: [clientId],
+      actionDescription: 'evict',
+      submitAction: () => this.evictClient(clientId)
     });
   }
 }

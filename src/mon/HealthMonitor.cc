@@ -16,8 +16,11 @@
 #include <limits.h>
 #include <sstream>
 #include <regex>
+#include <time.h>
+#include <iterator>
 
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 #include "include/stringify.h"
 
 #include "mon/Monitor.h"
@@ -30,13 +33,43 @@
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)
-static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
+using namespace TOPNSPC::common;
+
+using namespace std::literals;
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::parse_timespan;
+using ceph::timespan_str;
+static ostream& _prefix(std::ostream *_dout, const Monitor &mon,
                         const HealthMonitor *hmon) {
-  return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< "(" << mon->get_state_name() << ").health ";
+  return *_dout << "mon." << mon.name << "@" << mon.rank
+		<< "(" << mon.get_state_name() << ").health ";
 }
 
-HealthMonitor::HealthMonitor(Monitor *m, Paxos *p, const string& service_name)
+HealthMonitor::HealthMonitor(Monitor &m, Paxos &p, const string& service_name)
   : PaxosService(m, p, service_name) {
 }
 
@@ -57,7 +90,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   load_health();
 
   bufferlist qbl;
-  mon->store->get(service_name, "quorum", qbl);
+  mon.store->get(service_name, "quorum", qbl);
   if (qbl.length()) {
     auto p = qbl.cbegin();
     decode(quorum_checks, p);
@@ -66,7 +99,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   bufferlist lbl;
-  mon->store->get(service_name, "leader", lbl);
+  mon.store->get(service_name, "leader", lbl);
   if (lbl.length()) {
     auto p = lbl.cbegin();
     decode(leader_checks, p);
@@ -76,7 +109,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
 
   {
     bufferlist bl;
-    mon->store->get(service_name, "mutes", bl);
+    mon.store->get(service_name, "mutes", bl);
     if (bl.length()) {
       auto p = bl.cbegin();
       decode(mutes, p);
@@ -130,7 +163,7 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   map<string,set<string>> names; // code -> <mon names>
   for (auto p : quorum_checks) {
     for (auto q : p.second.checks) {
-      names[q.first].insert(mon->monmap->get_name(p.first));
+      names[q.first].insert(mon.monmap->get_name(p.first));
     }
     pending_health.merge(p.second);
   }
@@ -174,7 +207,7 @@ bool HealthMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_HEALTH_CHECKS:
     return false;
   default:
-    mon->no_reply(op);
+    mon.no_reply(op);
     derr << "Unhandled message type " << m->get_type() << dendl;
     return true;
   }
@@ -204,24 +237,24 @@ bool HealthMonitor::preprocess_command(MonOpRequestRef op)
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
   MonSession *session = op->get_session();
   if (!session) {
-    mon->reply_command(op, -EACCES, "access denied", rdata,
+    mon.reply_command(op, -EACCES, "access denied", rdata,
 		       get_last_committed());
     return true;
   }
   // more sanity checks
   try {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval(cmdmap, "format", format);
     string prefix;
-    cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+    cmd_getval(cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
-    mon->reply_command(op, -EINVAL, e.what(), rdata, get_last_committed());
+    mon.reply_command(op, -EINVAL, e.what(), rdata, get_last_committed());
     return true;
   }
   return false;
@@ -237,38 +270,38 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
   MonSession *session = op->get_session();
   if (!session) {
-    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
+    mon.reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   int r = 0;
 
   if (prefix == "health mute") {
     string code;
     bool sticky = false;
-    if (!cmd_getval(g_ceph_context, cmdmap, "code", code) ||
+    if (!cmd_getval(cmdmap, "code", code) ||
 	code == "") {
       r = -EINVAL;
       ss << "must specify an alert code to mute";
       goto out;
     }
-    cmd_getval(g_ceph_context, cmdmap, "sticky", sticky);
+    cmd_getval(cmdmap, "sticky", sticky);
     string ttl_str;
     utime_t ttl;
-    if (cmd_getval(g_ceph_context, cmdmap, "ttl", ttl_str)) {
+    if (cmd_getval(cmdmap, "ttl", ttl_str)) {
       auto secs = parse_timespan(ttl_str);
       if (secs == 0s) {
 	r = -EINVAL;
@@ -300,7 +333,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     m.count = count;
   } else if (prefix == "health unmute") {
     string code;
-    if (cmd_getval(g_ceph_context, cmdmap, "code", code)) {
+    if (cmd_getval(cmdmap, "code", code)) {
       pending_mutes.erase(code);
     } else {
       pending_mutes.clear();
@@ -323,7 +356,7 @@ out:
     return true;
   } else {
     // reply immediately
-    mon->reply_command(op, r, rs, rdata, get_last_committed());
+    mon.reply_command(op, r, rs, rdata, get_last_committed());
     return false;
   }
 }
@@ -346,7 +379,7 @@ void HealthMonitor::tick()
   if (check_member_health()) {
     changed = true;
   }
-  if (!mon->is_leader()) {
+  if (!mon.is_leader()) {
     return;
   }
   if (check_leader_health()) {
@@ -370,7 +403,7 @@ bool HealthMonitor::check_mutes()
   while (p != pending_mutes.end()) {
     if (p->second.ttl != utime_t() &&
 	p->second.ttl <= now) {
-      mon->clog->info() << "Health alert mute " << p->first
+      mon.clog->info() << "Health alert mute " << p->first
 			<< " cleared (passed TTL " << p->second.ttl << ")";
       p = pending_mutes.erase(p);
       changed = true;
@@ -379,7 +412,7 @@ bool HealthMonitor::check_mutes()
     if (!p->second.sticky) {
       auto q = all.checks.find(p->first);
       if (q == all.checks.end()) {
-	mon->clog->info() << "Health alert mute " << p->first
+	mon.clog->info() << "Health alert mute " << p->first
 			  << " cleared (health alert cleared)";
 	p = pending_mutes.erase(p);
 	changed = true;
@@ -388,7 +421,7 @@ bool HealthMonitor::check_mutes()
       if (p->second.count) {
 	// count-based mute
 	if (q->second.count > p->second.count) {
-	  mon->clog->info() << "Health alert mute " << p->first
+	  mon.clog->info() << "Health alert mute " << p->first
 			    << " cleared (count increased from " << p->second.count
 			    << " to " << q->second.count << ")";
 	  p = pending_mutes.erase(p);
@@ -406,7 +439,7 @@ bool HealthMonitor::check_mutes()
       } else {
 	// summary-based mute
 	if (p->second.summary != q->second.summary) {
-	  mon->clog->info() << "Health alert mute " << p->first
+	  mon.clog->info() << "Health alert mute " << p->first
 			    << " cleared (summary changed)";
 	  p = pending_mutes.erase(p);
 	  changed = true;
@@ -421,7 +454,7 @@ bool HealthMonitor::check_mutes()
 
 void HealthMonitor::gather_all_health_checks(health_check_map_t *all)
 {
-  for (auto& svc : mon->paxos_service) {
+  for (auto& svc : mon.paxos_service) {
     all->merge(svc->get_health_checks());
   }
 }
@@ -543,7 +576,7 @@ bool HealthMonitor::check_member_health()
   DataStats stats;
   get_fs_stats(stats.fs_stats, g_conf()->mon_data.c_str());
   map<string,uint64_t> extra;
-  uint64_t store_size = mon->store->get_estimated_size(extra);
+  uint64_t store_size = mon.store->get_estimated_size(extra);
   ceph_assert(store_size > 0);
   stats.store_stats.bytes_total = store_size;
   stats.store_stats.bytes_sst = extra["sst"];
@@ -561,14 +594,14 @@ bool HealthMonitor::check_member_health()
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% very low on available space";
     auto& d = next.add("MON_DISK_CRIT", HEALTH_ERR, ss.str(), 1);
-    ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
+    ss2 << "mon." << mon.name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
   } else if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% low on available space";
     auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str(), 1);
-    ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
+    ss2 << "mon." << mon.name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
   }
@@ -576,7 +609,7 @@ bool HealthMonitor::check_member_health()
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% using a lot of disk space";
     auto& d = next.add("MON_DISK_BIG", HEALTH_WARN, ss.str(), 1);
-    ss2 << "mon." << mon->name << " is "
+    ss2 << "mon." << mon.name << " is "
 	<< byte_u_t(stats.store_stats.bytes_total)
 	<< " >= mon_data_size_warn ("
 	<< byte_u_t(g_conf()->mon_data_size_warn) << ")";
@@ -602,12 +635,12 @@ bool HealthMonitor::check_member_health()
       ostringstream ss, ds;
       ss << "mon%plurals% %names% %hasorhave% mon_osd_down_out_interval set to 0";
       auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str(), 1);
-      ds << "mon." << mon->name << " has mon_osd_down_out_interval set to 0";
+      ds << "mon." << mon.name << " has mon_osd_down_out_interval set to 0";
       d.detail.push_back(ds.str());
     }
   }
 
-  auto p = quorum_checks.find(mon->rank);
+  auto p = quorum_checks.find(mon.rank);
   if (p == quorum_checks.end()) {
     if (next.empty()) {
       return false;
@@ -618,13 +651,13 @@ bool HealthMonitor::check_member_health()
     }
   }
 
-  if (mon->is_leader()) {
+  if (mon.is_leader()) {
     // prepare to propose
-    quorum_checks[mon->rank] = next;
+    quorum_checks[mon.rank] = next;
     changed = true;
   } else {
     // tell the leader
-    mon->send_mon_message(new MMonHealthChecks(next), mon->get_leader());
+    mon.send_mon_message(new MMonHealthChecks(next), mon.get_leader());
   }
 
   return changed;
@@ -637,7 +670,7 @@ bool HealthMonitor::check_leader_health()
 
   // prune quorum_health
   {
-    auto& qset = mon->get_quorum();
+    auto& qset = mon.get_quorum();
     auto p = quorum_checks.begin();
     while (p != quorum_checks.end()) {
       if (qset.count(p->first) == 0) {
@@ -651,38 +684,110 @@ bool HealthMonitor::check_leader_health()
 
   health_check_map_t next;
 
+ // DAEMON_OLD_VERSION
+  if (g_conf().get_val<bool>("mon_warn_on_older_version")) {
+    check_for_older_version(&next);
+  }
   // MON_DOWN
-  {
-    int max = mon->monmap->size();
-    int actual = mon->get_quorum().size();
-    if (actual < max) {
+  check_for_mon_down(&next);
+  // MON_CLOCK_SKEW
+  check_for_clock_skew(&next);
+  // MON_MSGR2_NOT_ENABLED
+  if (g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled")) {
+    check_if_msgr2_enabled(&next);
+  }
+
+  if (next != leader_checks) {
+    changed = true;
+    leader_checks = next;
+  }
+  return changed;
+}
+
+void HealthMonitor::check_for_older_version(health_check_map_t *checks)
+{
+  static ceph::coarse_mono_time old_version_first_time =
+    ceph::coarse_mono_clock::zero();
+
+  auto now = ceph::coarse_mono_clock::now();
+  if (ceph::coarse_mono_clock::is_zero(old_version_first_time)) {
+    old_version_first_time = now;
+  }
+  const auto warn_delay = g_conf().get_val<std::chrono::seconds>("mon_warn_older_version_delay");
+  if (now - old_version_first_time > warn_delay) {
+    std::map<string, std::list<string> > all_versions;
+    mon.get_all_versions(all_versions);
+    if (all_versions.size() > 1) {
+      dout(20) << __func__ << " all_versions=" << all_versions << dendl;
+      // The last entry has the largest version
+      dout(20) << __func__ << " highest version daemon count "
+	       << all_versions.rbegin()->second.size() << dendl;
+      // Erase last element (the highest version running)
+      all_versions.erase(all_versions.rbegin()->first);
+      ceph_assert(all_versions.size() > 0);
       ostringstream ss;
-      ss << (max-actual) << "/" << max << " mons down, quorum "
-	 << mon->get_quorum_names();
-      auto& d = next.add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
-      set<int> q = mon->get_quorum();
-      for (int i=0; i<max; i++) {
-	if (q.count(i) == 0) {
-	  ostringstream ss;
-	  ss << "mon." << mon->monmap->get_name(i) << " (rank " << i
-	     << ") addr " << mon->monmap->get_addrs(i)
-	     << " is down (out of quorum)";
-	  d.detail.push_back(ss.str());
+      unsigned daemon_count = 0;
+      for (auto& g : all_versions) {
+	daemon_count += g.second.size();
+      }
+      int ver_count = all_versions.size();
+      ceph_assert(!(daemon_count == 1 && ver_count != 1));
+      ss << "There " << (daemon_count == 1 ? "is a daemon" : "are daemons")
+	 << " running " << (ver_count > 1 ? "multiple old versions" : "an older version")  << " of ceph";
+      health_status_t status;
+      if (ver_count > 1)
+	status = HEALTH_ERR;
+      else
+	status = HEALTH_WARN;
+      auto& d = checks->add("DAEMON_OLD_VERSION", status, ss.str(), all_versions.size());
+      for (auto& g : all_versions) {
+	ostringstream ds;
+	for (auto& i : g.second) { // Daemon list
+	  ds << i << " ";
 	}
+	ds << (g.second.size() == 1 ? "is" : "are")
+	   << " running an older version of ceph: " << g.first;
+	d.detail.push_back(ds.str());
+      }
+    } else {
+      old_version_first_time = ceph::coarse_mono_clock::zero();
+    }
+  }
+}
+
+void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
+{
+  int max = mon.monmap->size();
+  int actual = mon.get_quorum().size();
+  if (actual < max) {
+    ostringstream ss;
+    ss << (max-actual) << "/" << max << " mons down, quorum "
+       << mon.get_quorum_names();
+    auto& d = checks->add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
+    set<int> q = mon.get_quorum();
+    for (int i=0; i<max; i++) {
+      if (q.count(i) == 0) {
+	ostringstream ss;
+	ss << "mon." << mon.monmap->get_name(i) << " (rank " << i
+	   << ") addr " << mon.monmap->get_addrs(i)
+	   << " is down (out of quorum)";
+	d.detail.push_back(ss.str());
       }
     }
   }
+}
 
-  // MON_CLOCK_SKEW
-  if (!mon->timecheck_skews.empty()) {
+void HealthMonitor::check_for_clock_skew(health_check_map_t *checks)
+{
+  if (!mon.timecheck_skews.empty()) {
     list<string> warns;
     list<string> details;
-    for (auto& i : mon->timecheck_skews) {
+    for (auto& i : mon.timecheck_skews) {
       double skew = i.second;
-      double latency = mon->timecheck_latencies[i.first];
-      string name = mon->monmap->get_name(i.first);
+      double latency = mon.timecheck_latencies[i.first];
+      string name = mon.monmap->get_name(i.first);
       ostringstream tcss;
-      health_status_t tcstatus = mon->timecheck_status(tcss, skew, latency);
+      health_status_t tcstatus = mon.timecheck_status(tcss, skew, latency);
       if (tcstatus != HEALTH_OK) {
 	warns.push_back(name);
 	ostringstream tmp_ss;
@@ -700,18 +805,19 @@ bool HealthMonitor::check_leader_health()
 	if (!warns.empty())
 	  ss << ",";
       }
-      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str(), details.size());
+      auto& d = checks->add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str(), details.size());
       d.detail.swap(details);
     }
   }
+}
 
-  // MON_MSGR2_NOT_ENABLED
+void HealthMonitor::check_if_msgr2_enabled(health_check_map_t *checks)
+{
   if (g_conf().get_val<bool>("ms_bind_msgr2") &&
-      g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled") &&
-      mon->monmap->get_required_features().contains_all(
+      mon.monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_NAUTILUS)) {
     list<string> details;
-    for (auto& i : mon->monmap->mon_info) {
+    for (auto& i : mon.monmap->mon_info) {
       if (!i.second.public_addrs.has_msgr2()) {
 	ostringstream ds;
 	ds << "mon." << i.first << " is not bound to a msgr2 port, only "
@@ -722,15 +828,9 @@ bool HealthMonitor::check_leader_health()
     if (!details.empty()) {
       ostringstream ss;
       ss << details.size() << " monitors have not enabled msgr2";
-      auto& d = next.add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str(),
-			 details.size());
+      auto &d = checks->add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str(),
+			    details.size());
       d.detail.swap(details);
     }
   }
-
-  if (next != leader_checks) {
-    changed = true;
-    leader_checks = next;
-  }
-  return changed;
 }

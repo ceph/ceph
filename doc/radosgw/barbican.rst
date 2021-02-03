@@ -39,6 +39,8 @@ Create a key in Barbican
 See Barbican documentation for `How to Create a Secret`_. Requests to
 Barbican must include a valid Keystone token in the ``X-Auth-Token`` header.
 
+.. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
+
 Example request::
 
    POST /v1/secrets HTTP/1.1
@@ -94,9 +96,10 @@ Response::
 Configure the Ceph Object Gateway
 =================================
 
-Edit the Ceph configuration file to add information about the Barbican server
-and Keystone user::
+Edit the Ceph configuration file to enable Barbican as a KMS and add information
+about the Barbican server and Keystone user::
 
+   rgw crypt s3 kms backend = barbican
    rgw barbican url = http://barbican.example.com:9311
    rgw keystone barbican user = rgwcrypt-user
    rgw keystone barbican password = rgwcrypt-password

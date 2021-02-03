@@ -21,11 +21,18 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx keyserverdata: "
 
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+
+using ceph::bufferptr;
+using ceph::bufferlist;
+using ceph::Formatter;
+
 bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 			    ExpiringCryptoKey& secret, uint64_t& secret_id) const
 {
-  map<uint32_t, RotatingSecrets>::const_iterator iter =
-	rotating_secrets.find(service_id);
+  auto iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end()) { 
     ldout(cct, 10) << "get_service_secret service " << ceph_entity_type_name(service_id) << " not found " << dendl;
     return false;
@@ -34,8 +41,7 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   const RotatingSecrets& secrets = iter->second;
 
   // second to oldest, unless it's expired
-  map<uint64_t, ExpiringCryptoKey>::const_iterator riter =
-	secrets.secrets.begin();
+  auto riter = secrets.secrets.begin();
   if (secrets.secrets.size() > 1)
     ++riter;
 
@@ -64,23 +70,20 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 				uint64_t secret_id, CryptoKey& secret) const
 {
-  map<uint32_t, RotatingSecrets>::const_iterator iter =
-      rotating_secrets.find(service_id);
+  auto iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end())
     return false;
 
   const RotatingSecrets& secrets = iter->second;
-  map<uint64_t, ExpiringCryptoKey>::const_iterator riter = 
-      secrets.secrets.find(secret_id);
+  auto riter = secrets.secrets.find(secret_id);
 
   if (riter == secrets.secrets.end()) {
     ldout(cct, 10) << "get_service_secret service " << ceph_entity_type_name(service_id)
 	     << " secret " << secret_id << " not found" << dendl;
     ldout(cct, 30) << " I have:" << dendl;
-    for (map<uint64_t, ExpiringCryptoKey>::const_iterator iter =
-	     secrets.secrets.begin();
-        iter != secrets.secrets.end();
-        ++iter)
+    for (auto iter = secrets.secrets.begin();
+	 iter != secrets.secrets.end();
+	 ++iter)
       ldout(cct, 30) << " id " << iter->first << " " << iter->second << dendl;
     return false;
   }
@@ -90,7 +93,7 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
   return true;
 }
 bool KeyServerData::get_auth(const EntityName& name, EntityAuth& auth) const {
-  map<EntityName, EntityAuth>::const_iterator iter = secrets.find(name);
+  auto iter = secrets.find(name);
   if (iter != secrets.end()) {
     auth = iter->second;
     return true;
@@ -99,7 +102,7 @@ bool KeyServerData::get_auth(const EntityName& name, EntityAuth& auth) const {
 }
 
 bool KeyServerData::get_secret(const EntityName& name, CryptoKey& secret) const {
-  map<EntityName, EntityAuth>::const_iterator iter = secrets.find(name);
+  auto iter = secrets.find(name);
   if (iter != secrets.end()) {
     secret = iter->second.key;
     return true;
@@ -113,10 +116,10 @@ bool KeyServerData::get_caps(CephContext *cct, const EntityName& name,
   caps_info.allow_all = false;
 
   ldout(cct, 10) << "get_caps: name=" << name.to_str() << dendl;
-  map<EntityName, EntityAuth>::const_iterator iter = secrets.find(name);
+  auto iter = secrets.find(name);
   if (iter != secrets.end()) {
     ldout(cct, 10) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
-    map<string, bufferlist>::const_iterator capsiter = iter->second.caps.find(type);
+    auto capsiter = iter->second.caps.find(type);
     if (capsiter != iter->second.caps.end()) {
       caps_info.caps = capsiter->second;
     }
@@ -172,11 +175,11 @@ bool KeyServer::_check_rotating_secrets()
 void KeyServer::_dump_rotating_secrets()
 {
   ldout(cct, 30) << "_dump_rotating_secrets" << dendl;
-  for (map<uint32_t, RotatingSecrets>::iterator iter = data.rotating_secrets.begin();
+  for (auto iter = data.rotating_secrets.begin();
        iter != data.rotating_secrets.end();
        ++iter) {
     RotatingSecrets& key = iter->second;
-    for (map<uint64_t, ExpiringCryptoKey>::iterator mapiter = key.secrets.begin();
+    for (auto mapiter = key.secrets.begin();
 	 mapiter != key.secrets.end();
 	 ++mapiter)
       ldout(cct, 30) << "service " << ceph_entity_type_name(iter->first)
@@ -289,7 +292,7 @@ bool KeyServer::contains(const EntityName& name) const
 int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
 {
   std::scoped_lock l{lock};
-  map<EntityName, EntityAuth>::const_iterator mapiter = data.secrets_begin();
+  auto mapiter = data.secrets_begin();
 
   if (mapiter == data.secrets_end())
     return -ENOENT;
@@ -310,8 +313,7 @@ int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
       f->open_object_section("caps");
     }
 
-    map<string, bufferlist>::const_iterator capsiter =
-        mapiter->second.caps.begin();
+    auto capsiter = mapiter->second.caps.begin();
     for (; capsiter != mapiter->second.caps.end(); ++capsiter) {
       // FIXME: need a const_iterator for bufferlist, but it doesn't exist yet.
       bufferlist *bl = const_cast<bufferlist*>(&capsiter->second);
@@ -374,14 +376,13 @@ bool KeyServer::get_rotating_encrypted(const EntityName& name,
 {
   std::scoped_lock l{lock};
 
-  map<EntityName, EntityAuth>::const_iterator mapiter = data.find_name(name);
+  auto mapiter = data.find_name(name);
   if (mapiter == data.secrets_end())
     return false;
 
   const CryptoKey& specific_key = mapiter->second.key;
 
-  map<uint32_t, RotatingSecrets>::const_iterator rotate_iter =
-    data.rotating_secrets.find(name.get_type());
+  auto rotate_iter = data.rotating_secrets.find(name.get_type());
   if (rotate_iter == data.rotating_secrets.end())
     return false;
 
@@ -436,7 +437,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id,
 				       CephXSessionAuthInfo& info)
 {
   if (!get_service_secret(service_id, info.service_secret, info.secret_id)) {
-    return -EPERM;
+    return -EACCES;
   }
 
   std::scoped_lock l{lock};

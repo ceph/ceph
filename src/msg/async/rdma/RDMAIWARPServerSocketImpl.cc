@@ -8,8 +8,8 @@
 #define dout_prefix *_dout << " RDMAIWARPServerSocketImpl "
 
 RDMAIWARPServerSocketImpl::RDMAIWARPServerSocketImpl(
-  CephContext *cct, shared_ptr<Infiniband>& ib,
-  shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w,
+  CephContext *cct, std::shared_ptr<Infiniband>& ib,
+  std::shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w,
   entity_addr_t& a, unsigned addr_slot)
   : RDMAServerSocketImpl(cct, ib, rdma_dispatcher, w, a, addr_slot)
 {
@@ -37,6 +37,10 @@ int RDMAIWARPServerSocketImpl::listen(entity_addr_t &sa,
     goto err;
   }
   server_setup_socket = cm_channel->fd;
+  rc = net.set_nonblock(server_setup_socket);
+  if (rc < 0) {
+    goto err;
+  }
   ldout(cct, 20) << __func__ << " fd of cm_channel is " << server_setup_socket << dendl;
   return 0;
 
@@ -56,6 +60,7 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
   struct pollfd pfd = {
     .fd = cm_channel->fd,
     .events = POLLIN,
+    .revents = 0,
   };
   int ret = poll(&pfd, 1, 0);
   ceph_assert(ret >= 0);
@@ -69,20 +74,27 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
   struct rdma_cm_id *event_cm_id = cm_event->id;
   struct rdma_event_channel *event_channel = rdma_create_event_channel();
 
+  if (net.set_nonblock(event_channel->fd) < 0) {
+      lderr(cct) << __func__ << " failed to switch event channel to non-block, close event channel " << dendl;
+      rdma_destroy_event_channel(event_channel);
+      rdma_ack_cm_event(cm_event);
+      return -errno;
+  }
+
   rdma_migrate_id(event_cm_id, event_channel);
 
-  struct rdma_cm_id *new_cm_id = event_cm_id;
   struct rdma_conn_param *remote_conn_param = &cm_event->param.conn;
   struct rdma_conn_param local_conn_param;
 
-  RDMACMInfo info(new_cm_id, event_channel, remote_conn_param->qp_num);
+  RDMACMInfo info(event_cm_id, event_channel, remote_conn_param->qp_num);
   RDMAIWARPConnectedSocketImpl* server =
     new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w), &info);
 
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&local_conn_param, 0, sizeof(local_conn_param));
   local_conn_param.qp_num = server->get_local_qpn();
 
-  if (rdma_accept(new_cm_id, &local_conn_param)) {
+  if (rdma_accept(event_cm_id, &local_conn_param)) {
     return -EAGAIN;
   }
   server->activate();
@@ -92,7 +104,7 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
 
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
   *sock = ConnectedSocket(std::move(csi));
-  struct sockaddr *addr = &new_cm_id->route.addr.dst_addr;
+  struct sockaddr *addr = &event_cm_id->route.addr.dst_addr;
   out->set_sockaddr(addr);
 
   return 0;

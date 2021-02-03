@@ -360,6 +360,10 @@ namespace ceph {
       f->dump_int("size", queue.request_count());
       f->close_section();
     } // dump
+
+    void print(std::ostream &os) const final {
+      os << "mClockPriorityQueue";
+    }
   };
 
 } // namespace ceph

@@ -1,20 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_STS_H
-#define CEPH_RGW_REST_STS_H
+#pragma once
 
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
+#include "rgw_rest.h"
 #include "rgw_sts.h"
 #include "rgw_web_idp.h"
+#include "jwt-cpp/jwt.h"
+#include "rgw_oidc_provider.h"
 
-namespace rgw {
-namespace auth {
-namespace sts   {
+namespace rgw::auth::sts {
 
 class WebTokenEngine : public rgw::auth::Engine {
   CephContext* const cct;
+  RGWCtl* const ctl;
 
   using result_t = rgw::auth::Engine::result_t;
   using token_t = rgw::web_idp::WebTokenClaims;
@@ -24,18 +25,30 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_applicable(const std::string& token) const noexcept;
 
-  boost::optional<token_t>
-  get_from_idp(const DoutPrefixProvider* dpp, const std::string& token) const;
+  bool is_client_id_valid(vector<string>& client_ids, const string& client_id) const;
+
+  bool is_cert_valid(const vector<string>& thumbprints, const string& cert) const;
+
+  boost::optional<RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const;
+
+  std::string get_role_tenant(const string& role_arn) const;
+
+  boost::optional<WebTokenEngine::token_t>
+  get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
+
+  void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
-                        const req_state* s) const;
+                        const req_state* s, optional_yield y) const;
 
 public:
   WebTokenEngine(CephContext* const cct,
+                    RGWCtl* const ctl,
                     const rgw::auth::TokenExtractor* const extractor,
                     const rgw::auth::WebIdentityApplier::Factory* const apl_factory)
     : cct(cct),
+      ctl(ctl),
       extractor(extractor),
       apl_factory(apl_factory) {
   }
@@ -44,8 +57,8 @@ public:
     return "rgw::auth::sts::WebTokenEngine";
   }
 
-  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
-    return authenticate(dpp, extractor->get_token(s), s);
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s, optional_yield y) const override {
+    return authenticate(dpp, extractor->get_token(s), s, y);
   }
 }; /* class WebTokenEngine */
 
@@ -67,9 +80,11 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
+                                    const string& role_session,
+                                    const string& role_tenant,
                                     const rgw::web_idp::WebTokenClaims& token) const override {
     auto apl = rgw::auth::add_sysreq(cct, ctl, s,
-      rgw::auth::WebIdentityApplier(cct, ctl, token));
+      rgw::auth::WebIdentityApplier(cct, ctl, role_session, role_tenant, token));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -79,7 +94,7 @@ public:
                   RGWCtl* const ctl)
     : ctl(ctl),
       implicit_tenant_context(implicit_tenant_context),
-      web_token_engine(cct,
+      web_token_engine(cct, ctl,
                         static_cast<rgw::auth::TokenExtractor*>(this),
                         static_cast<rgw::auth::WebIdentityApplier::Factory*>(this)) {
     /* When the constructor's body is being executed, all member engines
@@ -93,16 +108,14 @@ public:
   }
 };
 
-}; /* namespace sts */
-}; /* namespace auth */
-};
+} // namespace rgw::auth::sts
 
 class RGWREST_STS : public RGWRESTOp {
 protected:
   STS::STSService sts;
 public:
   RGWREST_STS() = default;
-  int verify_permission() override;
+  int verify_permission(optional_yield y) override;
   void send_response() override;
 };
 
@@ -118,7 +131,7 @@ protected:
   string iss;
 public:
   RGWSTSAssumeRoleWithWebIdentity() = default;
-  void execute() override;
+  void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "assume_role_web_identity"; }
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE_WEB_IDENTITY; }
@@ -135,7 +148,7 @@ protected:
   string tokenCode;
 public:
   RGWSTSAssumeRole() = default;
-  void execute() override;
+  void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "assume_role"; }
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE; }
@@ -148,8 +161,8 @@ protected:
   string tokenCode;
 public:
   RGWSTSGetSessionToken() = default;
-  void execute() override;
-  int verify_permission() override;
+  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
   int get_params();
   const char* name() const override { return "get_session_token"; }
   RGWOpType get_type() override { return RGW_STS_GET_SESSION_TOKEN; }
@@ -160,7 +173,7 @@ public:
   static int authorize(const DoutPrefixProvider *dpp,
                        rgw::sal::RGWRadosStore *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
-                       struct req_state *s);
+                       struct req_state *s, optional_yield y);
 };
 
 class RGWHandler_REST_STS : public RGWHandler_REST {
@@ -181,8 +194,8 @@ public:
   int init(rgw::sal::RGWRadosStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
-  int authorize(const DoutPrefixProvider* dpp) override;
-  int postauth_init() override { return 0; }
+  int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
+  int postauth_init(optional_yield y) override { return 0; }
 };
 
 class RGWRESTMgr_STS : public RGWRESTMgr {
@@ -196,10 +209,8 @@ public:
     return this;
   }
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *store,
+			       struct req_state*,
                                const rgw::auth::StrategyRegistry&,
                                const std::string&) override;
 };
-
-#endif /* CEPH_RGW_REST_STS_H */
-

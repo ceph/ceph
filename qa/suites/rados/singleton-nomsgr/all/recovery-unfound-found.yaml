@@ -12,12 +12,14 @@ openstack:
 tasks:
 - install:
 - ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
     fs: xfs
     conf:
       osd:
         osd recovery sleep: .1
         osd objectstore: filestore
-    log-whitelist:
+    log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
       - \(OSDMAP_FLAGS\)
       - \(OSD_

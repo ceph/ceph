@@ -15,13 +15,17 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <sys/xattr.h>
 #include <sys/uio.h>
 #include <libgen.h>
 #include <stdlib.h>
 
 #ifdef __linux__
+#include <sys/xattr.h>
 #include <limits.h>
+#endif
+
+#ifdef __FreeBSD__
+#include <sys/wait.h>
 #endif
 
 

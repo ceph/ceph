@@ -1,4 +1,5 @@
-<div class="col-sm-12 col-lg-6">
+<div class="cd-col-form"
+     *cdFormLoading="loading">
   <form name="userForm"
         #formDir="ngForm"
         [formGroup]="userForm"
@@ -10,32 +11,40 @@
 
         <!-- Username -->
         <div class="form-group row">
-          <label class="col-form-label col-sm-3"
-                 for="username">
-            <ng-container i18n>Username</ng-container>
-            <span class="required"
-                  *ngIf="mode !== userFormMode.editing"></span>
-          </label>
-          <div class="col-sm-9">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': mode !== userFormMode.editing}"
+                 for="username"
+                 i18n>Username</label>
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    placeholder="Username..."
                    id="username"
                    name="username"
                    formControlName="username"
+                   autocomplete="off"
                    autofocus>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('username', formDir, 'required')"
                   i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('username', formDir, 'notUnique')"
+                  i18n>The username already exists.</span>
           </div>
         </div>
 
         <!-- Password -->
-        <div class="form-group row">
-          <label i18n
-                 class="col-form-label col-sm-3"
-                 for="password">Password</label>
-          <div class="col-sm-9">
+        <div class="form-group row"
+             *ngIf="!authStorageService.isSSO()">
+          <label class="cd-col-form-label"
+                 for="password">
+            <ng-container i18n>Password</ng-container>
+            <cd-helper *ngIf="passwordPolicyHelpText.length > 0"
+                       class="text-pre-wrap"
+                       html="{{ passwordPolicyHelpText }}">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
             <div class="input-group">
               <input class="form-control"
                      type="password"
@@ -51,24 +60,36 @@
                 </button>
               </span>
             </div>
+            <div class="password-strength-level">
+              <div class="{{ passwordStrengthLevelClass }}"
+                   data-toggle="tooltip"
+                   title="{{ passwordValuation }}">
+              </div>
+            </div>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('password', formDir, 'required')"
                   i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('password', formDir, 'passwordPolicy')">
+              {{ passwordValuation }}
+            </span>
           </div>
         </div>
 
         <!-- Confirm password -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="!authStorageService.isSSO()">
           <label i18n
-                 class="col-form-label col-sm-3"
+                 class="cd-col-form-label"
                  for="confirmpassword">Confirm password</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <div class="input-group">
               <input class="form-control"
                      type="password"
                      placeholder="Confirm password..."
                      id="confirmpassword"
                      name="confirmpassword"
+                     autocomplete="new-password"
                      formControlName="confirmpassword">
               <span class="input-group-append">
                 <button type="button"
@@ -76,22 +97,71 @@
                         cdPasswordButton="confirmpassword">
                 </button>
               </span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
+                    i18n>Password confirmation doesn't match the password.</span>
             </div>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
                   i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
-                  i18n>Password confirmation doesn't match the password.</span>
+          </div>
+        </div>
+
+        <!-- Password expiration date -->
+        <div class="form-group row"
+             *ngIf="!authStorageService.isSSO()">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': pwdExpirationSettings.pwdExpirationSpan > 0}"
+                 for="pwdExpirationDate">
+            <ng-container i18n>Password expiration date</ng-container>
+            <cd-helper class="text-pre-wrap"
+                       *ngIf="pwdExpirationSettings.pwdExpirationSpan == 0">
+              <p>
+                The Dashboard setting defining the expiration interval of
+                passwords is currently set to <strong>0</strong>. This means
+                if a date is set, the user password will only expire once.
+              </p>
+              <p>
+                Consider configuring the Dashboard setting
+                <a routerLink="/mgr-modules/edit/dashboard"
+                   class="alert-link">USER_PWD_EXPIRATION_SPAN</a>
+                in order to let passwords expire periodically.
+              </p>
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input class="form-control"
+                     i18n-placeholder
+                     placeholder="Password expiration date..."
+                     id="pwdExpirationDate"
+                     name="pwdExpirationDate"
+                     formControlName="pwdExpirationDate"
+                     [ngbPopover]="popContent"
+                     triggers="manual"
+                     #p="ngbPopover"
+                     (click)="p.open()"
+                     (keypress)="p.close()">
+              <span class="input-group-append">
+                <button type="button"
+                        class="btn btn-light"
+                        (click)="clearExpirationDate()">
+                  <i class="icon-prepend {{ icons.destroy }}"></i>
+                </button>
+              </span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('pwdExpirationDate', formDir, 'required')"
+                    i18n>This field is required.</span>
+            </div>
           </div>
         </div>
 
         <!-- Name -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3"
+                 class="cd-col-form-label"
                  for="name">Full name</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
                    placeholder="Full name..."
@@ -104,9 +174,9 @@
         <!-- Email -->
         <div class="form-group row">
           <label i18n
-                 class="col-form-label col-sm-3"
+                 class="cd-col-form-label"
                  for="email">Email</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <input class="form-control"
                    type="email"
                    placeholder="Email..."
@@ -122,9 +192,9 @@
 
         <!-- Roles -->
         <div class="form-group row">
-          <label class="col-sm-3 col-form-label"
+          <label class="cd-col-form-label"
                  i18n>Roles</label>
-          <div class="col-sm-9">
+          <div class="cd-col-form-input">
             <span class="no-border full-height"
                   *ngIf="allRoles">
               <cd-select-badges [data]="userForm.controls.roles.value"
@@ -135,8 +205,9 @@
         </div>
 
         <!-- Enabled -->
-        <div class="form-group row" *ngIf="!isCurrentUser()">
-          <div class="offset-sm-3 col-sm-9">
+        <div class="form-group row"
+             *ngIf="!isCurrentUser()">
+          <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"
@@ -150,14 +221,29 @@
           </div>
         </div>
 
+        <!-- Force change password -->
+        <div class="form-group row"
+             *ngIf="!isCurrentUser() && !authStorageService.isSSO()">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="pwdUpdateRequired"
+                     name="pwdUpdateRequired"
+                     formControlName="pwdUpdateRequired">
+              <label class="custom-control-label"
+                     for="pwdUpdateRequired"
+                     i18n>User must change password at next logon</label>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="card-footer">
-        <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submit()"
-                            i18n="form action button|Example: Create Pool@@formActionButton"
-                            [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
-          <cd-back-button></cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="userForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>
   </form>
@@ -169,4 +255,9 @@
   <p i18n>If you continue, you will no longer be able to add or remove roles from any user.</p>
 
   <ng-container i18n>Are you sure you want to continue?</ng-container>
+</ng-template>
+
+<ng-template #popContent>
+  <cd-date-time-picker [control]="userForm.get('pwdExpirationDate')"
+                       [hasTime]="false"></cd-date-time-picker>
 </ng-template>

@@ -14,6 +14,7 @@
 #include <atomic>
 
 #include "include/ceph_assert.h"
+#include "include/common_fwd.h"
 
 #include "PGLog.h"
 #include "PGStateUtils.h"
@@ -26,33 +27,42 @@
 #include "common/ostream_temp.h"
 
 struct PGPool {
-  CephContext* cct;
   epoch_t cached_epoch;
   int64_t id;
-  string name;
+  std::string name;
 
   pg_pool_t info;
   SnapContext snapc;   // the default pool snapc, ready to go.
 
-  PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
-	 const string& name)
-    : cct(cct),
-      cached_epoch(map->get_epoch()),
+  PGPool(OSDMapRef map, int64_t i, const pg_pool_t& info,
+	 const std::string& name)
+    : cached_epoch(map->get_epoch()),
       id(i),
       name(name),
       info(info) {
     snapc = info.get_snap_context();
   }
 
-  void update(CephContext *cct, OSDMapRef map);
+  void update(OSDMapRef map);
+
+  ceph::timespan get_readable_interval(ConfigProxy &conf) const {
+    double v = 0;
+    if (info.opts.get(pool_opts_t::READ_LEASE_INTERVAL, &v)) {
+      return ceph::make_timespan(v);
+    } else {
+      auto hbi = conf->osd_heartbeat_grace;
+      auto fac = conf->osd_pool_default_read_lease_ratio;
+      return ceph::make_timespan(hbi * fac);
+    }
+  }
 };
 
-class PeeringCtx;
+struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
   ceph_release_t require_osd_release;
-  map<int, vector<MessageRef>> message_map;
+  std::map<int, std::vector<MessageRef>> message_map;
 
   BufferedRecoveryMessages(ceph_release_t r)
     : require_osd_release(r) {
@@ -70,14 +80,16 @@ struct BufferedRecoveryMessages {
     }
   }
 
-  void send_osd_message(int target, Message *m) {
-    message_map[target].push_back(m);
+  void send_osd_message(int target, MessageRef m) {
+    message_map[target].push_back(std::move(m));
   }
   void send_notify(int to, const pg_notify_t &n);
   void send_query(int to, spg_t spgid, const pg_query_t &q);
   void send_info(int to, spg_t to_spgid,
 		 epoch_t min_epoch, epoch_t cur_epoch,
-		 const pg_info_t &info);
+		 const pg_info_t &info,
+		 std::optional<pg_lease_t> lease = {},
+		 std::optional<pg_lease_ack_t> lease_ack = {});
 };
 
 struct HeartbeatStamps : public RefCountedObject {
@@ -109,7 +121,7 @@ struct HeartbeatStamps : public RefCountedObject {
   /// highest up_from we've seen from this rank
   epoch_t up_from = 0;
 
-  void print(ostream& out) const {
+  void print(std::ostream& out) const {
     std::lock_guard l(lock);
     out << "hbstamp(osd." << osd << " up_from " << up_from
 	<< " peer_clock_delta [";
@@ -167,7 +179,7 @@ private:
 };
 using HeartbeatStampsRef = ceph::ref_t<HeartbeatStamps>;
 
-inline ostream& operator<<(ostream& out, const HeartbeatStamps& hb)
+inline std::ostream& operator<<(std::ostream& out, const HeartbeatStamps& hb)
 {
   hb.print(out);
   return out;
@@ -214,8 +226,8 @@ struct PeeringCtxWrapper {
 
   PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
-  void send_osd_message(int target, Message *m) {
-    msgs.send_osd_message(target, m);
+  void send_osd_message(int target, MessageRef m) {
+    msgs.send_osd_message(target, std::move(m));
   }
   void send_notify(int to, const pg_notify_t &n) {
     msgs.send_notify(to, n);
@@ -225,12 +237,15 @@ struct PeeringCtxWrapper {
   }
   void send_info(int to, spg_t to_spgid,
 		 epoch_t min_epoch, epoch_t cur_epoch,
-		 const pg_info_t &info) {
-    msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info);
+		 const pg_info_t &info,
+		 std::optional<pg_lease_t> lease = {},
+		 std::optional<pg_lease_ack_t> lease_ack = {}) {
+    msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info,
+		   lease, lease_ack);
   }
 };
 
-  /* Encapsulates PG recovery process */
+/* Encapsulates PG recovery process */
 class PeeringState : public MissingLoc::MappingInfo {
 public:
   struct PeeringListener : public EpochSource {
@@ -248,19 +263,24 @@ public:
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
     /// Notify that a scrub has been requested
-    virtual void scrub_requested(bool deep, bool repair, bool need_auto = false) = 0;
+    virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 
     /// Return current snap_trimq size
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
     virtual void send_cluster_message(
-      int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
+      int osd, MessageRef m, epoch_t epoch, bool share_map_update=false) = 0;
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
     virtual ceph::signedspan get_mnow() = 0;
     virtual HeartbeatStampsRef get_hb_stamps(int peer) = 0;
+    virtual void schedule_renew_lease(epoch_t plr, ceph::timespan delay) = 0;
+    virtual void queue_check_readable(epoch_t lpr, ceph::timespan delay) = 0;
+    virtual void recheck_readable() = 0;
+
+    virtual unsigned get_target_pg_log_entries() const = 0;
 
     // ============ Flush state ==================
     /**
@@ -290,8 +310,8 @@ public:
      */
     virtual void request_local_background_io_reservation(
       unsigned priority,
-      PGPeeringEventRef on_grant,
-      PGPeeringEventRef on_preempt) = 0;
+      PGPeeringEventURef on_grant,
+      PGPeeringEventURef on_preempt) = 0;
     /// Modify pending local background reservation request priority
     virtual void update_local_background_io_priority(
       unsigned priority) = 0;
@@ -306,8 +326,8 @@ public:
      */
     virtual void request_remote_recovery_reservation(
       unsigned priority,
-      PGPeeringEventRef on_grant,
-      PGPeeringEventRef on_preempt) = 0;
+      PGPeeringEventURef on_grant,
+      PGPeeringEventURef on_preempt) = 0;
     /// Cancel pending remote background reservation request
     virtual void cancel_remote_recovery_reservation() = 0;
 
@@ -318,15 +338,15 @@ public:
 
     //============================ HB =============================
     /// Update hb set to peers
-    virtual void update_heartbeat_peers(set<int> peers) = 0;
+    virtual void update_heartbeat_peers(std::set<int> peers) = 0;
 
-    /// Set targets being probed in this interval
-    virtual void set_probe_targets(const set<pg_shard_t> &probe_set) = 0;
+    /// Std::set targets being probed in this interval
+    virtual void set_probe_targets(const std::set<pg_shard_t> &probe_set) = 0;
     /// Clear targets being probed in this interval
     virtual void clear_probe_targets() = 0;
 
     /// Queue for a pg_temp of wanted
-    virtual void queue_want_pg_temp(const vector<int> &wanted) = 0;
+    virtual void queue_want_pg_temp(const std::vector<int> &wanted) = 0;
     /// Clear queue for a pg_temp of wanted
     virtual void clear_want_pg_temp() = 0;
 
@@ -337,8 +357,8 @@ public:
 
     /// Notification to check outstanding operation targets
     virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
-    /// Notification to check outstanding blacklist
-    virtual void check_blacklisted_watchers() = 0;
+    /// Notification to check outstanding blocklist
+    virtual void check_blocklisted_watchers() = 0;
     /// Notification to clear state associated with primary
     virtual void clear_primary_state() = 0;
 
@@ -357,7 +377,8 @@ public:
     /// Notification of removal complete, t must be populated to complete removal
     virtual void on_removal(ObjectStore::Transaction &t) = 0;
     /// Perform incremental removal work
-    virtual void do_delete_work(ObjectStore::Transaction &t) = 0;
+    virtual std::pair<ghobject_t, bool> do_delete_work(
+      ObjectStore::Transaction &t, ghobject_t _next) = 0;
 
     // ======================= PG Merge =========================
     virtual void clear_ready_to_merge() = 0;
@@ -366,7 +387,7 @@ public:
     virtual void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) = 0;
     virtual void set_ready_to_merge_source(eversion_t lu) = 0;
 
-    // ==================== Map notifications ===================
+    // ==================== Std::map notifications ===================
     virtual void on_active_actmap() = 0;
     virtual void on_active_advmap(const OSDMapRef &osdmap) = 0;
     virtual epoch_t oldest_stored_osdmap() = 0;
@@ -396,7 +417,7 @@ public:
     virtual void log_state_exit(
       const char *state_name, utime_t enter_time,
       uint64_t events, utime_t event_dur) = 0;
-    virtual void dump_recovery_info(Formatter *f) const = 0;
+    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
 
     virtual OstreamTemp get_clog_info() = 0;
     virtual OstreamTemp get_clog_error() = 0;
@@ -406,22 +427,30 @@ public:
   };
 
   struct QueryState : boost::statechart::event< QueryState > {
-    Formatter *f;
-    explicit QueryState(Formatter *f) : f(f) {}
+    ceph::Formatter *f;
+    explicit QueryState(ceph::Formatter *f) : f(f) {}
     void print(std::ostream *out) const {
       *out << "Query";
+    }
+  };
+
+  struct QueryUnfound : boost::statechart::event< QueryUnfound > {
+    ceph::Formatter *f;
+    explicit QueryUnfound(ceph::Formatter *f) : f(f) {}
+    void print(std::ostream *out) const {
+      *out << "QueryUnfound";
     }
   };
 
   struct AdvMap : boost::statechart::event< AdvMap > {
     OSDMapRef osdmap;
     OSDMapRef lastmap;
-    vector<int> newup, newacting;
+    std::vector<int> newup, newacting;
     int up_primary, acting_primary;
     AdvMap(
       OSDMapRef osdmap, OSDMapRef lastmap,
-      vector<int>& newup, int up_primary,
-      vector<int>& newacting, int acting_primary):
+      std::vector<int>& newup, int up_primary,
+      std::vector<int>& newacting, int acting_primary):
       osdmap(osdmap), lastmap(lastmap),
       newup(newup),
       newacting(newacting),
@@ -473,12 +502,12 @@ public:
   };
 
   struct RequestScrub : boost::statechart::event<RequestScrub> {
-    bool deep;
-    bool repair;
-    explicit RequestScrub(bool d, bool r) : deep(d), repair(r) {}
+    scrub_level_t deep;
+    scrub_type_t repair;
+    explicit RequestScrub(bool d, bool r) : deep(scrub_level_t(d)), repair(scrub_type_t(r)) {}
     void print(std::ostream *out) const {
-      *out << "RequestScrub(" << (deep ? "deep" : "shallow")
-	   << (repair ? " repair" : "");
+      *out << "RequestScrub(" << ((deep==scrub_level_t::deep) ? "deep" : "shallow")
+	   << ((repair==scrub_type_t::do_repair) ? " repair)" : ")");
     }
   };
 
@@ -521,6 +550,8 @@ public:
 
   TrivialEvent(DeleteReserved)
   TrivialEvent(DeleteInterrupted)
+
+  TrivialEvent(CheckReadable)
 
   void start_handle(PeeringCtx *new_ctx);
   void end_handle();
@@ -653,6 +684,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< NullEvt >,
@@ -660,6 +692,7 @@ public:
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const ActMap&);
     boost::statechart::result react(const IntervalFlush&);
@@ -676,6 +709,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< IntervalFlush >,
       // ignored
@@ -685,10 +719,12 @@ public:
       boost::statechart::custom_reaction<SetForceBackfill>,
       boost::statechart::custom_reaction<UnsetForceBackfill>,
       boost::statechart::custom_reaction<RequestScrub>,
+      boost::statechart::custom_reaction<CheckReadable>,
       // crash
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const IntervalFlush&);
     boost::statechart::result react(const boost::statechart::event_base&) {
@@ -721,7 +757,6 @@ public:
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< MNotifyRec >,
-      boost::statechart::transition< NeedActingChange, WaitActingChange >,
       boost::statechart::custom_reaction<SetForceRecovery>,
       boost::statechart::custom_reaction<UnsetForceRecovery>,
       boost::statechart::custom_reaction<SetForceBackfill>,
@@ -741,6 +776,7 @@ public:
 		      NamedState {
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::custom_reaction< MInfoRec >,
@@ -748,6 +784,7 @@ public:
       > reactions;
     explicit WaitActingChange(my_context ctx);
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const MLogRec&);
     boost::statechart::result react(const MInfoRec&);
@@ -767,10 +804,12 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< Activate, Active >,
       boost::statechart::custom_reaction< AdvMap >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const AdvMap &advmap);
   };
 
@@ -780,12 +819,13 @@ public:
     explicit Active(my_context ctx);
     void exit();
 
-    const set<pg_shard_t> remote_shards_to_reserve_recovery;
-    const set<pg_shard_t> remote_shards_to_reserve_backfill;
+    const std::set<pg_shard_t> remote_shards_to_reserve_recovery;
+    const std::set<pg_shard_t> remote_shards_to_reserve_backfill;
     bool all_replicas_activated;
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< MInfoRec >,
@@ -801,9 +841,13 @@ public:
       boost::statechart::custom_reaction< UnfoundBackfill >,
       boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
       boost::statechart::custom_reaction< RemoteReservationRevoked>,
-      boost::statechart::custom_reaction< DoRecovery>
+      boost::statechart::custom_reaction< DoRecovery>,
+      boost::statechart::custom_reaction< RenewLease>,
+      boost::statechart::custom_reaction< MLeaseAck>,
+      boost::statechart::custom_reaction< CheckReadable>
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const ActMap&);
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const MInfoRec& infoevt);
@@ -815,6 +859,8 @@ public:
     }
     boost::statechart::result react(const ActivateCommitted&);
     boost::statechart::result react(const AllReplicasActivated&);
+    boost::statechart::result react(const RenewLease&);
+    boost::statechart::result react(const MLeaseAck&);
     boost::statechart::result react(const DeferRecovery& evt) {
       return discard_event();
     }
@@ -836,6 +882,7 @@ public:
     boost::statechart::result react(const DoRecovery&) {
       return discard_event();
     }
+    boost::statechart::result react(const CheckReadable&);
     void all_activated_and_committed();
   };
 
@@ -898,7 +945,7 @@ public:
       boost::statechart::custom_reaction< RemoteReservationRevoked >,
       boost::statechart::transition< AllBackfillsReserved, Backfilling >
       > reactions;
-    set<pg_shard_t>::const_iterator backfill_osd_it;
+    std::set<pg_shard_t>::const_iterator backfill_osd_it;
     explicit WaitRemoteBackfillReserved(my_context ctx);
     void retry();
     void exit();
@@ -909,31 +956,40 @@ public:
 
   struct WaitLocalBackfillReserved : boost::statechart::state< WaitLocalBackfillReserved, Active >, NamedState {
     typedef boost::mpl::list<
-      boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >
+      boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >,
+      boost::statechart::custom_reaction< RemoteBackfillReserved >
       > reactions;
     explicit WaitLocalBackfillReserved(my_context ctx);
+    boost::statechart::result react(const RemoteBackfillReserved& evt) {
+      /* no-op */
+      return discard_event();
+    }
     void exit();
   };
 
   struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
     typedef boost::mpl::list<
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >
       > reactions;
     explicit NotBackfilling(my_context ctx);
     void exit();
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const RemoteBackfillReserved& evt);
     boost::statechart::result react(const RemoteReservationRejectedTooFull& evt);
   };
 
   struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
     typedef boost::mpl::list<
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
       boost::statechart::custom_reaction< DeferRecovery >,
       boost::statechart::custom_reaction< UnfoundRecovery >
       > reactions;
     explicit NotRecovering(my_context ctx);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const DeferRecovery& evt) {
       /* no-op */
       return discard_event();
@@ -953,6 +1009,7 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< MQuery >,
       boost::statechart::custom_reaction< MInfoRec >,
@@ -967,9 +1024,11 @@ public:
       boost::statechart::custom_reaction< RemoteBackfillPreempted >,
       boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
       boost::statechart::custom_reaction< RecoveryDone >,
-      boost::statechart::transition<DeleteStart, ToDelete>
+      boost::statechart::transition<DeleteStart, ToDelete>,
+      boost::statechart::custom_reaction< MLease >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MInfoRec& infoevt);
     boost::statechart::result react(const MLogRec& logevt);
     boost::statechart::result react(const MTrim& trimevt);
@@ -977,6 +1036,7 @@ public:
     boost::statechart::result react(const MQuery&);
     boost::statechart::result react(const Activate&);
     boost::statechart::result react(const ActivateCommitted&);
+    boost::statechart::result react(const MLease&);
     boost::statechart::result react(const RecoveryDone&) {
       return discard_event();
     }
@@ -1097,7 +1157,7 @@ public:
       boost::statechart::custom_reaction< RemoteRecoveryReserved >,
       boost::statechart::transition< AllRemotesReserved, Recovering >
       > reactions;
-    set<pg_shard_t>::const_iterator remote_recovery_reservation_it;
+    std::set<pg_shard_t>::const_iterator remote_recovery_reservation_it;
     explicit WaitRemoteRecoveryReserved(my_context ctx);
     boost::statechart::result react(const RemoteRecoveryReserved &evt);
     void exit();
@@ -1183,6 +1243,7 @@ public:
       boost::statechart::custom_reaction< DeleteSome >,
       boost::statechart::transition<DeleteInterrupted, WaitDeleteReserved>
       > reactions;
+    ghobject_t next;
     explicit Deleting(my_context ctx);
     boost::statechart::result react(const DeleteSome &evt);
     void exit();
@@ -1191,7 +1252,7 @@ public:
   struct GetLog;
 
   struct GetInfo : boost::statechart::state< GetInfo, Peering >, NamedState {
-    set<pg_shard_t> peer_info_requested;
+    std::set<pg_shard_t> peer_info_requested;
 
     explicit GetInfo(my_context ctx);
     void exit();
@@ -1199,11 +1260,13 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::transition< GotInfo, GetLog >,
       boost::statechart::custom_reaction< MNotifyRec >,
       boost::statechart::transition< IsDown, Down >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MNotifyRec& infoevt);
   };
 
@@ -1220,13 +1283,16 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::custom_reaction< GotLog >,
       boost::statechart::custom_reaction< AdvMap >,
+      boost::statechart::transition< NeedActingChange, WaitActingChange >,
       boost::statechart::transition< IsIncomplete, Incomplete >
       > reactions;
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MLogRec& logevt);
     boost::statechart::result react(const GotLog&);
   };
@@ -1234,17 +1300,19 @@ public:
   struct WaitUpThru;
 
   struct GetMissing : boost::statechart::state< GetMissing, Peering >, NamedState {
-    set<pg_shard_t> peer_missing_requested;
+    std::set<pg_shard_t> peer_missing_requested;
 
     explicit GetMissing(my_context ctx);
     void exit();
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::transition< NeedUpThru, WaitUpThru >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MLogRec& logevt);
   };
 
@@ -1254,10 +1322,12 @@ public:
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< MLogRec >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const ActMap& am);
     boost::statechart::result react(const MLogRec& logrec);
   };
@@ -1266,9 +1336,11 @@ public:
     explicit Down(my_context ctx);
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< MNotifyRec >
       > reactions;
     boost::statechart::result react(const QueryState& q);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const MNotifyRec& infoevt);
     void exit();
   };
@@ -1277,11 +1349,13 @@ public:
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< MNotifyRec >,
+      boost::statechart::custom_reaction< QueryUnfound >,
       boost::statechart::custom_reaction< QueryState >
       > reactions;
     explicit Incomplete(my_context ctx);
     boost::statechart::result react(const AdvMap &advmap);
     boost::statechart::result react(const MNotifyRec& infoevt);
+    boost::statechart::result react(const QueryUnfound& q);
     boost::statechart::result react(const QueryState& q);
     void exit();
   };
@@ -1322,15 +1396,38 @@ public:
   pg_shard_t primary;        ///< id/shard of primary
   pg_shard_t pg_whoami;      ///< my id/shard
   pg_shard_t up_primary;     ///< id/shard of primary of up set
-  vector<int> up;            ///< crush mapping without temp pgs
-  set<pg_shard_t> upset;     ///< up in set form
-  vector<int> acting;        ///< actual acting set for the current interval
-  set<pg_shard_t> actingset; ///< acting in set form
+  std::vector<int> up;            ///< crush mapping without temp pgs
+  std::set<pg_shard_t> upset;     ///< up in set form
+  std::vector<int> acting;        ///< actual acting set for the current interval
+  std::set<pg_shard_t> actingset; ///< acting in set form
 
   /// union of acting, recovery, and backfill targets
-  set<pg_shard_t> acting_recovery_backfill;
+  std::set<pg_shard_t> acting_recovery_backfill;
 
-  vector<HeartbeatStampsRef> hb_stamps;
+  std::vector<HeartbeatStampsRef> hb_stamps;
+
+  ceph::signedspan readable_interval = ceph::signedspan::zero();
+
+  /// how long we can service reads in this interval
+  ceph::signedspan readable_until = ceph::signedspan::zero();
+
+  /// upper bound on any acting OSDs' readable_until in this interval
+  ceph::signedspan readable_until_ub = ceph::signedspan::zero();
+
+  /// upper bound from prior interval(s)
+  ceph::signedspan prior_readable_until_ub = ceph::signedspan::zero();
+
+  /// pg instances from prior interval(s) that may still be readable
+  std::set<int> prior_readable_down_osds;
+
+  /// [replica] upper bound we got from the primary (primary's clock)
+  ceph::signedspan readable_until_ub_from_primary = ceph::signedspan::zero();
+
+  /// [primary] last upper bound shared by primary to replicas
+  ceph::signedspan readable_until_ub_sent = ceph::signedspan::zero();
+
+  /// [primary] readable ub acked by acting set members
+  std::vector<ceph::signedspan> acting_readable_until_ub;
 
   bool send_notify = false; ///< True if a notify needs to be sent to the primary
 
@@ -1357,13 +1454,13 @@ public:
   /**
    * Primary state
    */
-  set<pg_shard_t>    stray_set; ///< non-acting osds that have PG data.
-  map<pg_shard_t, pg_info_t>    peer_info; ///< info from peers (stray or prior)
-  map<pg_shard_t, int64_t>    peer_bytes; ///< Peer's num_bytes from peer_info
-  set<pg_shard_t> peer_purged; ///< peers purged
-  map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
-  set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
-  set<pg_shard_t> peer_missing_requested; ///< missing sets requested
+  std::set<pg_shard_t>    stray_set; ///< non-acting osds that have PG data.
+  std::map<pg_shard_t, pg_info_t>    peer_info; ///< info from peers (stray or prior)
+  std::map<pg_shard_t, int64_t>    peer_bytes; ///< Peer's num_bytes from peer_info
+  std::set<pg_shard_t> peer_purged; ///< peers purged
+  std::map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
+  std::set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
+  std::set<pg_shard_t> peer_missing_requested; ///< missing sets requested
 
   /// features supported by all peers
   uint64_t peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -1375,32 +1472,32 @@ public:
   /// most recently consumed osdmap's require_osd_version
   ceph_release_t last_require_osd_release = ceph_release_t::unknown;
 
-  vector<int> want_acting; ///< non-empty while peering needs a new acting set
+  std::vector<int> want_acting; ///< non-empty while peering needs a new acting set
 
   // acting_recovery_backfill contains shards that are acting,
   // async recovery targets, or backfill targets.
-  map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
+  std::map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
 
   /// up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  min_last_complete_ondisk;
   /// point to which the log should be trimmed
   eversion_t  pg_trim_to;
 
-  set<int> blocked_by; ///< osds we are blocked by (for pg stats)
+  std::set<int> blocked_by; ///< osds we are blocked by (for pg stats)
 
   bool need_up_thru = false; ///< true if osdmap with updated up_thru needed
 
   /// I deleted these strays; ignore racing PGInfo from them
-  set<pg_shard_t> peer_activated;
+  std::set<pg_shard_t> peer_activated;
 
-  set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
-  set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
+  std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
+  std::set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
 
   /// osds which might have objects on them which are unfound on the primary
-  set<pg_shard_t> might_have_unfound;
+  std::set<pg_shard_t> might_have_unfound;
 
   bool deleting = false;  /// true while in removing or OSD is shutting down
-  atomic<bool> deleted = {false}; /// true once deletion complete
+  std::atomic<bool> deleted = {false}; /// true once deletion complete
 
   MissingLoc missing_loc; ///< information about missing objects
 
@@ -1414,6 +1511,7 @@ public:
   }
 
   void update_heartbeat_peers();
+  void query_unfound(Formatter *f, string state);
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
   void remove_down_peer_info(const OSDMapRef &osdmap);
@@ -1423,14 +1521,14 @@ public:
   bool should_restart_peering(
     int newupprimary,
     int newactingprimary,
-    const vector<int>& newup,
-    const vector<int>& newacting,
+    const std::vector<int>& newup,
+    const std::vector<int>& newacting,
     OSDMapRef lastmap,
     OSDMapRef osdmap);
   void start_peering_interval(
     const OSDMapRef lastmap,
-    const vector<int>& newup, int up_primary,
-    const vector<int>& newacting, int acting_primary,
+    const std::vector<int>& newup, int up_primary,
+    const std::vector<int>& newacting, int acting_primary,
     ObjectStore::Transaction &t);
   void on_new_interval();
   void clear_recovery_state();
@@ -1448,58 +1546,90 @@ public:
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
+  bool check_prior_readable_down_osds(const OSDMapRef& map);
+
   bool adjust_need_up_thru(const OSDMapRef osdmap);
   PastIntervals::PriorSet build_prior();
 
   void reject_reservation();
 
-  // acting set
-  map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
-    const map<pg_shard_t, pg_info_t> &infos,
+  // acting std::set
+  std::map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
+    const std::map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,
     bool *history_les_bound) const;
+
   static void calc_ec_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     unsigned size,
-    const vector<int> &acting,
-    const vector<int> &up,
-    const map<pg_shard_t, pg_info_t> &all_info,
+    const std::vector<int> &acting,
+    const std::vector<int> &up,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
     bool restrict_to_up_acting,
-    vector<int> *want,
-    set<pg_shard_t> *backfill,
-    set<pg_shard_t> *acting_backfill,
-    ostream &ss);
-  static void calc_replicated_acting(
+    std::vector<int> *want,
+    std::set<pg_shard_t> *backfill,
+    std::set<pg_shard_t> *acting_backfill,
+    std::ostream &ss);
+
+  static std::pair<map<pg_shard_t, pg_info_t>::const_iterator, eversion_t>
+  select_replicated_primary(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     uint64_t force_auth_primary_missing_objects,
-    unsigned size,
-    const vector<int> &acting,
-    const vector<int> &up,
+    const std::vector<int> &up,
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
-    bool restrict_to_up_acting,
-    vector<int> *want,
-    set<pg_shard_t> *backfill,
-    set<pg_shard_t> *acting_backfill,
     const OSDMapRef osdmap,
     ostream &ss);
+
+  static void calc_replicated_acting(
+    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    eversion_t oldest_auth_log_entry,
+    unsigned size,
+    const std::vector<int> &acting,
+    const std::vector<int> &up,
+    pg_shard_t up_primary,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
+    bool restrict_to_up_acting,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *backfill,
+    std::set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
+    const PGPool& pool,
+    std::ostream &ss);
+  static void calc_replicated_acting_stretch(
+    map<pg_shard_t, pg_info_t>::const_iterator primary_shard,
+    eversion_t oldest_auth_log_entry,
+    unsigned size,
+    const std::vector<int> &acting,
+    const std::vector<int> &up,
+    pg_shard_t up_primary,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
+    bool restrict_to_up_acting,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *backfill,
+    std::set<pg_shard_t> *acting_backfill,
+    const OSDMapRef osdmap,
+    const PGPool& pool,
+    std::ostream &ss);
+
   void choose_async_recovery_ec(
-    const map<pg_shard_t, pg_info_t> &all_info,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
     const pg_info_t &auth_info,
-    vector<int> *want,
-    set<pg_shard_t> *async_recovery,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *async_recovery,
     const OSDMapRef osdmap) const;
   void choose_async_recovery_replicated(
-    const map<pg_shard_t, pg_info_t> &all_info,
+    const std::map<pg_shard_t, pg_info_t> &all_info,
     const pg_info_t &auth_info,
-    vector<int> *want,
-    set<pg_shard_t> *async_recovery,
+    std::vector<int> *want,
+    std::set<pg_shard_t> *async_recovery,
     const OSDMapRef osdmap) const;
 
-  bool recoverable(const vector<int> &want) const;
+  bool recoverable(const std::vector<int> &want) const;
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
-		     bool *history_les_bound);
+		     bool *history_les_bound,
+		     bool request_pg_temp_change_only = false);
 
   bool search_for_missing(
     const pg_info_t &oinfo, const pg_missing_t &omissing,
@@ -1515,19 +1645,19 @@ public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
   void merge_log(
     ObjectStore::Transaction& t, pg_info_t &oinfo,
-    pg_log_t &olog, pg_shard_t from);
+    pg_log_t&& olog, pg_shard_t from);
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo,
-		       pg_log_t &olog, pg_missing_t& omissing,
+		       pg_log_t&& olog, pg_missing_t&& omissing,
 		       pg_shard_t from);
   void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
-			pg_missing_t& omissing, pg_shard_t from);
+			pg_missing_t&& omissing, pg_shard_t from);
 
   void calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
     ceph_assert(!acting_recovery_backfill.empty());
-    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
+    for (std::set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
 	 i != acting_recovery_backfill.end();
 	 ++i) {
       if (*i == get_primary()) continue;
@@ -1545,7 +1675,7 @@ public:
 
   void fulfill_info(
     pg_shard_t from, const pg_query_t &query,
-    pair<pg_shard_t, pg_info_t> &notify_info);
+    std::pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(
     pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
   void fulfill_query(const MQuery& q, PeeringCtxWrapper &rctx);
@@ -1589,8 +1719,8 @@ public:
   /// Init fresh instance of PG
   void init(
     int role,
-    const vector<int>& newup, int new_up_primary,
-    const vector<int>& newacting, int new_acting_primary,
+    const std::vector<int>& newup, int new_up_primary,
+    const std::vector<int>& newacting, int new_acting_primary,
     const pg_history_t& history,
     const PastIntervals& pi,
     bool backfill,
@@ -1610,20 +1740,20 @@ public:
     return ret;
   }
 
-  /// Set initial primary/acting
+  /// Std::set initial primary/acting
   void init_primary_up_acting(
-    const vector<int> &newup,
-    const vector<int> &newacting,
+    const std::vector<int> &newup,
+    const std::vector<int> &newacting,
     int new_up_primary,
     int new_acting_primary);
   void init_hb_stamps();
 
-  /// Set initial role
+  /// Std::set initial role
   void set_role(int r) {
     role = r;
   }
 
-  /// Set predicates used for determining readable and recoverable
+  /// Std::set predicates used for determining readable and recoverable
   void set_backend_predicates(
     IsPGReadablePredicate *is_readable,
     IsPGRecoverablePredicate *is_recoverable) {
@@ -1635,7 +1765,7 @@ public:
 
   /// Get stats for child pgs
   void start_split_stats(
-    const set<spg_t>& childpgs, vector<object_stat_sum_t> *out);
+    const std::set<spg_t>& childpgs, std::vector<object_stat_sum_t> *out);
 
   /// Update new child with stats
   void finish_split_stats(
@@ -1647,7 +1777,7 @@ public:
 
   /// Merge state from sources
   void merge_from(
-    map<spg_t,PeeringState *>& sources,
+    std::map<spg_t,PeeringState *>& sources,
     PeeringCtx &rctx,
     unsigned split_bits,
     const pg_merge_meta_t& last_pg_merge_meta);
@@ -1677,6 +1807,9 @@ public:
   /// Updates info.hit_set to hset_history, does not dirty
   void update_hset(const pg_hit_set_history_t &hset_history);
 
+  /// Get all pg_shards that needs recovery
+  std::vector<pg_shard_t> get_replica_recovery_order() const;
+
   /**
    * update_history
    *
@@ -1692,10 +1825,15 @@ public:
    *
    * Returns updated pg_stat_t if stats have changed since
    * pg_stats_publish adding in unstable_stats.
+   *
+   * @param pg_stats_publish the latest pg_stat possessed by caller
+   * @param unstable_stats additional stats which should be included in the
+   *        returned stats
+   * @return the up to date stats if it is different from the specfied
+   *         @c pg_stats_publish
    */
   std::optional<pg_stat_t> prepare_stats_for_publish(
-    bool pg_stats_publish_valid,
-    const pg_stat_t &pg_stats_publish,
+    const std::optional<pg_stat_t> &pg_stats_publish,
     const object_stat_collection_t &unstable_stats);
 
   /**
@@ -1708,16 +1846,34 @@ public:
     std::optional<eversion_t> trim_to,
     std::optional<eversion_t> roll_forward_to);
 
+  void append_log_with_trim_to_updated(
+    std::vector<pg_log_entry_t>&& log_entries,
+    eversion_t roll_forward_to,
+    ObjectStore::Transaction &t,
+    bool transaction_applied,
+    bool async) {
+    update_trim_to();
+    append_log(std::move(log_entries), pg_trim_to, roll_forward_to,
+	min_last_complete_ondisk, t, transaction_applied, async);
+  }
+
   /**
    * Updates local log to reflect new write from primary.
    */
   void append_log(
-    const vector<pg_log_entry_t>& logv,
+    std::vector<pg_log_entry_t>&& logv,
     eversion_t trim_to,
     eversion_t roll_forward_to,
+    eversion_t min_last_complete_ondisk,
     ObjectStore::Transaction &t,
     bool transaction_applied,
     bool async);
+
+  /**
+   * retrieve the min last_backfill among backfill targets
+   */
+  hobject_t earliest_backfill() const;
+
 
   /**
    * Updates local log/missing to reflect new oob log update from primary
@@ -1745,7 +1901,7 @@ public:
   /// Pre-process pending update on hoid represented by logv
   void pre_submit_op(
     const hobject_t &hoid,
-    const vector<pg_log_entry_t>& logv,
+    const std::vector<pg_log_entry_t>& logv,
     eversion_t at_version);
 
   /// Signal that oid has been locally recovered to version v
@@ -1804,16 +1960,16 @@ public:
    *
    * Force oid on peer to be missing at version.  If the object does not
    * currently need recovery, either candidates if provided or the remainder
-   * of the acting set will be deemed to have the object.
+   * of the acting std::set will be deemed to have the object.
    */
   void force_object_missing(
     const pg_shard_t &peer,
     const hobject_t &oid,
     eversion_t version) {
-    force_object_missing(set<pg_shard_t>{peer}, oid, version);
+    force_object_missing(std::set<pg_shard_t>{peer}, oid, version);
   }
   void force_object_missing(
-    const set<pg_shard_t> &peer,
+    const std::set<pg_shard_t> &peer,
     const hobject_t &oid,
     eversion_t version);
 
@@ -1821,12 +1977,12 @@ public:
   void prepare_backfill_for_missing(
     const hobject_t &soid,
     const eversion_t &version,
-    const vector<pg_shard_t> &targets);
+    const std::vector<pg_shard_t> &targets);
 
-  /// Set targets with the right version for revert (see recover_primary)
+  /// Std::set targets with the right version for revert (see recover_primary)
   void set_revert_with_targets(
     const hobject_t &soid,
-    const set<pg_shard_t> &good_peers);
+    const std::set<pg_shard_t> &good_peers);
 
   /// Update lcod for fromosd
   void update_peer_last_complete_ondisk(
@@ -1869,9 +2025,9 @@ public:
   void advance_map(
     OSDMapRef osdmap,       ///< [in] new osdmap
     OSDMapRef lastmap,      ///< [in] prev osdmap
-    vector<int>& newup,     ///< [in] new up set
+    std::vector<int>& newup,     ///< [in] new up set
     int up_primary,         ///< [in] new up primary
-    vector<int>& newacting, ///< [in] new acting
+    std::vector<int>& newacting, ///< [in] new acting
     int acting_primary,     ///< [in] new acting primary
     PeeringCtx &rctx        ///< [out] recovery context
     );
@@ -1904,6 +2060,53 @@ public:
     dirty_big_info = true;
     write_if_dirty(t);
   }
+
+  /// Get current interval's readable_until
+  ceph::signedspan get_readable_until() const {
+    return readable_until;
+  }
+
+  /// Get prior intervals' readable_until upper bound
+  ceph::signedspan get_prior_readable_until_ub() const {
+    return prior_readable_until_ub;
+  }
+
+  /// Get prior intervals' readable_until down OSDs of note
+  const std::set<int>& get_prior_readable_down_osds() const {
+    return prior_readable_down_osds;
+  }
+
+  /// Reset prior intervals' readable_until upper bound (e.g., bc it passed)
+  void clear_prior_readable_until_ub() {
+    prior_readable_until_ub = ceph::signedspan::zero();
+    prior_readable_down_osds.clear();
+  }
+
+  void renew_lease(ceph::signedspan now) {
+    bool was_min = (readable_until_ub == readable_until);
+    readable_until_ub_sent = now + readable_interval;
+    if (was_min) {
+      recalc_readable_until();
+    }
+  }
+
+  void send_lease();
+  void schedule_renew_lease();
+
+  pg_lease_t get_lease() {
+    return pg_lease_t(readable_until, readable_until_ub_sent, readable_interval);
+  }
+
+  void proc_lease(const pg_lease_t& l);
+  void proc_lease_ack(int from, const pg_lease_ack_t& la);
+  void proc_renew_lease();
+
+  pg_lease_ack_t get_lease_ack() {
+    return pg_lease_ack_t(readable_until_ub_from_primary);
+  }
+
+  /// [primary] recalc readable_until[_ub] for the current interval
+  void recalc_readable_until();
 
   //============================ const helpers ================================
   const char *get_current_state() const {
@@ -1941,7 +2144,7 @@ public:
   bool is_deleted() const {
     return deleted;
   }
-  const set<pg_shard_t> &get_upset() const override {
+  const std::set<pg_shard_t> &get_upset() const override {
     return upset;
   }
   bool is_acting_recovery_backfill(pg_shard_t osd) const {
@@ -1953,7 +2156,7 @@ public:
   bool is_up(pg_shard_t osd) const {
     return has_shard(pool.info.is_erasure(), up, osd);
   }
-  static bool has_shard(bool ec, const vector<int>& v, pg_shard_t osd) {
+  static bool has_shard(bool ec, const std::vector<int>& v, pg_shard_t osd) {
     if (ec) {
       return v.size() > (unsigned)osd.shard && v[osd.shard] == osd.osd;
     } else {
@@ -1963,9 +2166,11 @@ public:
   const PastIntervals& get_past_intervals() const {
     return past_intervals;
   }
-  bool is_replica() const {
-    return role > 0;
+  /// acting osd that is not the primary
+  bool is_nonprimary() const {
+    return role >= 0 && pg_whoami != primary;
   }
+  /// primary osd
   bool is_primary() const {
     return pg_whoami == primary;
   }
@@ -1976,10 +2181,10 @@ public:
   int get_role() const {
     return role;
   }
-  const vector<int> &get_acting() const {
+  const std::vector<int> &get_acting() const {
     return acting;
   }
-  const set<pg_shard_t> &get_actingset() const {
+  const std::set<pg_shard_t> &get_actingset() const {
     return actingset;
   }
   int get_acting_primary() const {
@@ -1988,7 +2193,7 @@ public:
   pg_shard_t get_primary() const {
     return primary;
   }
-  const vector<int> &get_up() const {
+  const std::vector<int> &get_up() const {
     return up;
   }
   int get_up_primary() const {
@@ -1998,16 +2203,16 @@ public:
   bool is_backfill_target(pg_shard_t osd) const {
     return backfill_targets.count(osd);
   }
-  const set<pg_shard_t> &get_backfill_targets() const {
+  const std::set<pg_shard_t> &get_backfill_targets() const {
     return backfill_targets;
   }
   bool is_async_recovery_target(pg_shard_t peer) const {
     return async_recovery_targets.count(peer);
   }
-  const set<pg_shard_t> &get_async_recovery_targets() const {
+  const std::set<pg_shard_t> &get_async_recovery_targets() const {
     return async_recovery_targets;
   }
-  const set<pg_shard_t> &get_acting_recovery_backfill() const {
+  const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return acting_recovery_backfill;
   }
 
@@ -2022,13 +2227,16 @@ public:
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
-  int get_state() const { return state; }
+  uint64_t get_state() const { return state; }
   bool is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool is_peering() const { return state_test(PG_STATE_PEERING); }
   bool is_down() const { return state_test(PG_STATE_DOWN); }
   bool is_recovery_unfound() const {
     return state_test(PG_STATE_RECOVERY_UNFOUND);
+  }
+  bool is_backfilling() const {
+    return state_test(PG_STATE_BACKFILLING);
   }
   bool is_backfill_unfound() const {
     return state_test(PG_STATE_BACKFILL_UNFOUND);
@@ -2096,6 +2304,15 @@ public:
   bool needs_backfill() const;
 
   /**
+   * Returns whether a particular object can be safely read on this replica
+   */
+  bool can_serve_replica_read(const hobject_t &hoid) {
+    ceph_assert(!is_primary());
+    return !pg_log.get_log().has_write_since(
+      hoid, get_min_last_complete_ondisk());
+  }
+
+  /**
    * Returns whether all peers which might have unfound objects have been
    * queried or marked lost.
    */
@@ -2126,8 +2343,8 @@ public:
   bool have_missing() const {
     return pg_log.get_missing().num_missing() > 0;
   }
-  bool get_num_missing() const {
-    return pg_log.get_missing().num_missing() > 0;
+  unsigned int get_num_missing() const {
+    return pg_log.get_missing().num_missing();
   }
 
   const MissingLoc &get_missing_loc() const {
@@ -2150,6 +2367,10 @@ public:
     return last_update_applied;
   }
 
+  eversion_t get_last_update_ondisk() const {
+    return last_update_ondisk;
+  }
+
   bool debug_has_dirty_state() const {
     return dirty_info || dirty_big_info;
   }
@@ -2159,17 +2380,17 @@ public:
   }
 
   /// Dump representation of past_intervals to out
-  void print_past_intervals(ostream &out) const {
+  void print_past_intervals(std::ostream &out) const {
     out << "[" << past_intervals.get_bounds()
 	<< ")/" << past_intervals.size();
   }
 
-  void dump_history(Formatter *f) const {
+  void dump_history(ceph::Formatter *f) const {
     state_history.dump(f);
   }
 
   /// Dump formatted peering status
-  void dump_peering_state(Formatter *f);
+  void dump_peering_state(ceph::Formatter *f);
 
 private:
   /// Mask feature vector with feature set from new peer
@@ -2209,7 +2430,7 @@ public:
   /// Must be called once per start_flush
   void complete_flush();
 
-  friend ostream &operator<<(ostream &out, const PeeringState &ps);
+  friend std::ostream &operator<<(std::ostream &out, const PeeringState &ps);
 };
 
-ostream &operator<<(ostream &out, const PeeringState &ps);
+std::ostream &operator<<(std::ostream &out, const PeeringState &ps);

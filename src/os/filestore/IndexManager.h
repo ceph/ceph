@@ -83,7 +83,7 @@ public:
    * @param [out] index Index for c
    * @return error code
    */
-  int get_index(coll_t c, const string& baseDir, Index *index);
+  int get_index(coll_t c, const std::string& baseDir, Index *index);
 
   /**
    * Initialize index for collection c at path

@@ -11,7 +11,11 @@
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
 
-namespace ceph::osd {
+namespace ceph {
+  class Formatter;
+}
+
+namespace crimson::osd {
 
 class OSD;
 class ShardServices;
@@ -22,10 +26,10 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
   class PGPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "PeeringEvent::PGPipeline::await_map"
     };
-    OrderedPipelinePhase process = {
+    OrderedExclusivePhase process = {
       "PeeringEvent::PGPipeline::process"
     };
     friend class PeeringEvent;
@@ -33,13 +37,14 @@ public:
   };
 
 protected:
-  OrderedPipelinePhase::Handle handle;
+  PipelineHandle handle;
   PGPipeline &pp(PG &pg);
 
   ShardServices &shard_services;
   PeeringCtx ctx;
   pg_shard_t from;
   spg_t pgid;
+  float delay = 0;
   PGPeeringEvent evt;
 
   const pg_shard_t get_from() const {
@@ -69,17 +74,27 @@ public:
     pgid(pgid),
     evt(std::forward<Args>(args)...)
   {}
-
+  template <typename... Args>
+  PeeringEvent(
+    ShardServices &shard_services, const pg_shard_t &from, const spg_t &pgid,
+    float delay, Args&&... args) :
+    shard_services(shard_services),
+    ctx{ceph_release_t::octopus},
+    from(from),
+    pgid(pgid),
+    delay(delay),
+    evt(std::forward<Args>(args)...)
+  {}
 
   void print(std::ostream &) const final;
-  void dump_detail(Formatter *f) const final;
+  void dump_detail(ceph::Formatter* f) const final;
   seastar::future<> start();
 };
 
 class RemotePeeringEvent : public PeeringEvent {
 protected:
   OSD &osd;
-  ceph::net::ConnectionRef conn;
+  crimson::net::ConnectionRef conn;
 
   void on_pg_absent() final;
   seastar::future<> complete_rctx(Ref<PG> pg) override;
@@ -87,17 +102,17 @@ protected:
 
 public:
   class ConnectionPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "PeeringRequest::ConnectionPipeline::await_map"
     };
-    OrderedPipelinePhase get_pg = {
+    OrderedExclusivePhase get_pg = {
       "PeeringRequest::ConnectionPipeline::get_pg"
     };
     friend class RemotePeeringEvent;
   };
 
   template <typename... Args>
-  RemotePeeringEvent(OSD &osd, ceph::net::ConnectionRef conn, Args&&... args) :
+  RemotePeeringEvent(OSD &osd, crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
     osd(osd),
     conn(conn)

@@ -31,7 +31,7 @@ struct state {
 
   state(Aio* aio, AioResult& r)
     : aio(aio),
-      c(librados::Rados::aio_create_completion(&r, nullptr, &cb)) {}
+      c(librados::Rados::aio_create_completion(&r, &cb)) {}
 };
 
 void cb(librados::completion_t, void* arg) {
@@ -61,7 +61,6 @@ Aio::OpFunc aio_abstract(Op&& op) {
     };
 }
 
-#ifdef HAVE_BOOST_CONTEXT
 struct Handler {
   Aio* throttle = nullptr;
   AioResult& r;
@@ -80,12 +79,12 @@ struct Handler {
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
-                         boost::asio::yield_context yield) {
+                         spawn::yield_context yield) {
   return [op = std::move(op), &context, yield] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       using namespace boost::asio;
-      async_completion<yield_context, void()> init(yield);
+      async_completion<spawn::yield_context, void()> init(yield);
       auto ex = get_associated_executor(init.completion_handler);
 
       auto& ref = r.obj.get_ref();
@@ -93,19 +92,16 @@ Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
                               bind_executor(ex, Handler{aio, r}));
     };
 }
-#endif // HAVE_BOOST_CONTEXT
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, optional_yield y) {
   static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
   static_assert(!std::is_lvalue_reference_v<Op>);
   static_assert(!std::is_const_v<Op>);
-#ifdef HAVE_BOOST_CONTEXT
   if (y) {
     return aio_abstract(std::forward<Op>(op), y.get_io_context(),
                         y.get_yield_context());
   }
-#endif
   return aio_abstract(std::forward<Op>(op));
 }
 

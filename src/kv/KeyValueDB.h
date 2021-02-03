@@ -14,8 +14,6 @@
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 
-using std::string;
-using std::vector;
 /**
  * Defines virtual interface to be implemented by key value store
  *
@@ -23,18 +21,6 @@ using std::vector;
  */
 class KeyValueDB {
 public:
-  /*
-   *  See RocksDB's definition of a column family(CF) and how to use it.
-   *  The interfaces of KeyValueDB is extended, when a column family is created.
-   *  Prefix will be the name of column family to use.
-   */
-  struct ColumnFamily {
-    string name;      //< name of this individual column family
-    string option;    //< configure option string for this CF
-    ColumnFamily(const string &name, const string &option)
-      : name(name), option(option) {}
-  };
-
   class TransactionImpl {
   public:
     /// Set Keys
@@ -56,7 +42,7 @@ public:
       uint32_t num;
       decode(num, p);
       while (num--) {
-	string key;
+	std::string key;
 	ceph::buffer::list value;
 	decode(key, p);
 	decode(value, p);
@@ -75,7 +61,7 @@ public:
       const char *k,
       size_t keylen,
       const ceph::buffer::list& bl) {
-      set(prefix, string(k, keylen), bl);
+      set(prefix, std::string(k, keylen), bl);
     }
 
     /// Removes Keys (via encoded ceph::buffer::list)
@@ -88,7 +74,7 @@ public:
       uint32_t num;
       decode(num, p);
       while (num--) {
-	string key;
+	std::string key;
 	decode(key, p);
 	rmkey(prefix, key);
       }
@@ -113,7 +99,7 @@ public:
       const char *k,	      ///< [in] Key to remove
       size_t keylen
       ) {
-      rmkey(prefix, string(k, keylen));
+      rmkey(prefix, std::string(k, keylen));
     }
 
     /// Remove Single Key which exists and was not overwritten.
@@ -132,9 +118,9 @@ public:
       ) = 0;
 
     virtual void rm_range_keys(
-      const string &prefix,    ///< [in] Prefix by which to remove keys
-      const string &start,     ///< [in] The start bound of remove keys
-      const string &end        ///< [in] The start bound of remove keys
+      const std::string &prefix,    ///< [in] Prefix by which to remove keys
+      const std::string &start,     ///< [in] The start bound of remove keys
+      const std::string &end        ///< [in] The start bound of remove keys
       ) = 0;
 
     /// Merge value into key
@@ -156,13 +142,12 @@ public:
 
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
-  virtual int init(string option_str="") = 0;
-  virtual int open(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) = 0;
+  virtual int init(std::string option_str="") = 0;
+  virtual int open(std::ostream &out, const std::string& cfs="") = 0;
   // std::vector cfs contains column families to be created when db is created.
-  virtual int create_and_open(std::ostream &out,
-			      const std::vector<ColumnFamily>& cfs = {}) = 0;
+  virtual int create_and_open(std::ostream &out, const std::string& cfs="") = 0;
 
-  virtual int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) {
+  virtual int open_read_only(std::ostream &out, const std::string& cfs="") {
     return -ENOTSUP;
   }
 
@@ -198,10 +183,10 @@ public:
     }
     return r;
   }
-  virtual int get(const string &prefix,
+  virtual int get(const std::string &prefix,
 		  const char *key, size_t keylen,
 		  ceph::buffer::list *value) {
-    return get(prefix, string(key, keylen), value);
+    return get(prefix, std::string(key, keylen), value);
   }
 
   // This superclass is used both by kv iterators *and* by the ObjectMap
@@ -327,20 +312,13 @@ private:
     }
   };
 public:
-
-  virtual WholeSpaceIterator get_wholespace_iterator() = 0;
-  virtual Iterator get_iterator(const std::string &prefix) {
+  typedef uint32_t IteratorOpts;
+  static const uint32_t ITERATOR_NOCACHE = 1;
+  virtual WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) = 0;
+  virtual Iterator get_iterator(const std::string &prefix, IteratorOpts opts = 0) {
     return std::make_shared<PrefixIteratorImpl>(
       prefix,
-      get_wholespace_iterator());
-  }
-
-  void add_column_family(const std::string& cf_name, void *handle) {
-    cf_handles.insert(std::make_pair(cf_name, handle));
-  }
-
-  bool is_column_family(const std::string& prefix) {
-    return cf_handles.count(prefix);
+      get_wholespace_iterator(opts));
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -360,15 +338,25 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual int64_t get_cache_usage(std::string prefix) const {
+    return -EOPNOTSUPP;
+  }
+
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
     return nullptr;
   }
 
+  virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache(std::string prefix) const {
+    return nullptr;
+  }
+
+
+
   virtual ~KeyValueDB() {}
 
   /// estimate space utilization for a prefix (in bytes)
-  virtual int64_t estimate_prefix_size(const string& prefix,
-				       const string& key_prefix) {
+  virtual int64_t estimate_prefix_size(const std::string& prefix,
+				       const std::string& key_prefix) {
     return 0;
   }
 
@@ -424,13 +412,22 @@ public:
   virtual PerfCounters *get_perf_counters() {
     return nullptr;
   }
+
+  /**
+   * Access implementation specific integral property corresponding
+   * to passed property and prefic.
+   * Return value is true if property is valid for prefix, populates out.
+   */
+  virtual bool get_property(
+    const std::string &property,
+    uint64_t *out) {
+    return false;
+  }
 protected:
   /// List of matching prefixes/ColumnFamilies and merge operators
   std::vector<std::pair<std::string,
 			std::shared_ptr<MergeOperator> > > merge_ops;
 
-  /// column families in use, name->handle
-  std::unordered_map<std::string, void *> cf_handles;
 };
 
 #endif

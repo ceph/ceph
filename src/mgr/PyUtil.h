@@ -5,7 +5,8 @@
 
 #include <string>
 
-#include "Python.h"
+#include <Python.h>
+
 #include "common/options.h"
 
 PyObject *get_python_typed_option_value(

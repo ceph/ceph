@@ -104,7 +104,7 @@ int Dumper::dump(const char *dump_file)
 
   cout << "journal is " << start << "~" << len << std::endl;
 
-  int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0644);
   if (fd >= 0) {
     // include an informative header
     uuid_d fsid = monc->get_fsid();
@@ -213,7 +213,7 @@ int Dumper::undump(const char *dump_file, bool force)
     derr << "recover_journal failed, try to get header from dump file " << dendl;
   }
 
-  int fd = ::open(dump_file, O_RDONLY);
+  int fd = ::open(dump_file, O_RDONLY|O_BINARY);
   if (fd < 0) {
     r = errno;
     derr << "couldn't open " << dump_file << ": " << cpp_strerror(r) << dendl;

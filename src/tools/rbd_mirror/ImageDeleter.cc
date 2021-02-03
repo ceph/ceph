@@ -18,13 +18,12 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Timer.h"
-#include "common/WorkQueue.h"
 #include "global/global_context.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "librbd/Journal.h"
 #include "librbd/Operations.h"
+#include "librbd/asio/ContextWQ.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
@@ -59,7 +58,7 @@ namespace {
 class ImageDeleterAdminSocketCommand {
 public:
   virtual ~ImageDeleterAdminSocketCommand() {}
-  virtual bool call(Formatter *f, stringstream *ss) = 0;
+  virtual int call(Formatter *f) = 0;
 };
 
 template <typename I>
@@ -67,9 +66,9 @@ class StatusCommand : public ImageDeleterAdminSocketCommand {
 public:
   explicit StatusCommand(ImageDeleter<I> *image_del) : image_del(image_del) {}
 
-  bool call(Formatter *f, stringstream *ss) override {
-    image_del->print_status(f, ss);
-    return true;
+  int call(Formatter *f) override {
+    image_del->print_status(f);
+    return 0;
   }
 
 private:
@@ -89,7 +88,7 @@ public:
     int r;
 
     command = "rbd mirror deletion status " + pool_name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "get status for image deleter");
     if (r == 0) {
       commands[command] = new StatusCommand<I>(image_del);
@@ -98,23 +97,20 @@ public:
   }
 
   ~ImageDeleterAdminSocketHook() override {
+    (void)admin_socket->unregister_commands(this);
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
-      (void)admin_socket->unregister_command(i->first);
       delete i->second;
     }
   }
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     ceph_assert(i != commands.end());
-    Formatter *f = Formatter::create(format);
-    stringstream ss;
-    bool r = i->second->call(f, &ss);
-    delete f;
-    out.append(ss);
-    return r;
+    return i->second->call(f);
   }
 
 private:
@@ -145,7 +141,8 @@ template <typename I>
 void ImageDeleter<I>::trash_move(librados::IoCtx& local_io_ctx,
                                  const std::string& global_image_id,
                                  bool resync,
-                                 ContextWQ* work_queue, Context* on_finish) {
+                                 librbd::asio::ContextWQ* work_queue,
+                                 Context* on_finish) {
   dout(10) << "global_image_id=" << global_image_id << ", "
            << "resync=" << resync << dendl;
 
@@ -265,9 +262,9 @@ void ImageDeleter<I>::enqueue_failed_delete(DeleteInfoRef* delete_info,
                                             int error_code,
                                             double retry_delay) {
   dout(20) << "info=" << *delete_info << ", r=" << error_code << dendl;
-  if (error_code == -EBLACKLISTED) {
+  if (error_code == -EBLOCKLISTED) {
     std::lock_guard locker{m_lock};
-    derr << "blacklisted while deleting local image" << dendl;
+    derr << "blocklisted while deleting local image" << dendl;
     complete_active_delete(delete_info, error_code);
     return;
   }
@@ -306,33 +303,25 @@ ImageDeleter<I>::find_delete_info(const std::string &image_id) {
 }
 
 template <typename I>
-void ImageDeleter<I>::print_status(Formatter *f, stringstream *ss) {
+void ImageDeleter<I>::print_status(Formatter *f) {
   dout(20) << dendl;
 
-  if (f) {
-    f->open_object_section("image_deleter_status");
-    f->open_array_section("delete_images_queue");
-  }
+  f->open_object_section("image_deleter_status");
+  f->open_array_section("delete_images_queue");
 
   std::lock_guard l{m_lock};
   for (const auto& image : m_delete_queue) {
-    image->print_status(f, ss);
+    image->print_status(f);
   }
 
-  if (f) {
-    f->close_section();
-    f->open_array_section("failed_deletes_queue");
-  }
-
+  f->close_section();
+  f->open_array_section("failed_deletes_queue");
   for (const auto& image : m_retry_delete_queue) {
-    image->print_status(f, ss, true);
+    image->print_status(f, true);
   }
 
-  if (f) {
-    f->close_section();
-    f->close_section();
-    f->flush(*ss);
-  }
+  f->close_section();
+  f->close_section();
 }
 
 template <typename I>
@@ -542,20 +531,15 @@ void ImageDeleter<I>::notify_on_delete(const std::string& image_id,
 }
 
 template <typename I>
-void ImageDeleter<I>::DeleteInfo::print_status(Formatter *f, stringstream *ss,
+void ImageDeleter<I>::DeleteInfo::print_status(Formatter *f,
                                                bool print_failure_info) {
-  if (f) {
-    f->open_object_section("delete_info");
-    f->dump_string("image_id", image_id);
-    if (print_failure_info) {
-      f->dump_string("error_code", cpp_strerror(error_code));
-      f->dump_int("retries", retries);
-    }
-    f->close_section();
-    f->flush(*ss);
-  } else {
-    *ss << *this;
+  f->open_object_section("delete_info");
+  f->dump_string("image_id", image_id);
+  if (print_failure_info) {
+    f->dump_string("error_code", cpp_strerror(error_code));
+    f->dump_int("retries", retries);
   }
+  f->close_section();
 }
 
 } // namespace mirror

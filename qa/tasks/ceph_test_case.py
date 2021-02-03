@@ -1,4 +1,3 @@
-
 import unittest
 import time
 import logging
@@ -7,6 +6,8 @@ from teuthology.orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+class TestTimeoutError(RuntimeError):
+    pass
 
 class CephTestCase(unittest.TestCase):
     """
@@ -19,6 +20,7 @@ class CephTestCase(unittest.TestCase):
     mounts = None
     fs = None
     recovery_fs = None
+    backup_fs = None
     ceph_cluster = None
     mds_cluster = None
     mgr_cluster = None
@@ -31,6 +33,8 @@ class CephTestCase(unittest.TestCase):
     REQUIRE_MEMSTORE = False
 
     def setUp(self):
+        self._mon_configs_set = set()
+
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
             "Starting test {0}".format(self.id()))
 
@@ -42,11 +46,41 @@ class CephTestCase(unittest.TestCase):
                 raise self.skipTest("Require `memstore` OSD backend (test " \
                         "would take too long on full sized OSDs")
 
-
-
     def tearDown(self):
+        self.config_clear()
+
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
             "Ended test {0}".format(self.id()))
+
+    def config_clear(self):
+        for section, key in self._mon_configs_set:
+            self.config_rm(section, key)
+        self._mon_configs_set.clear()
+
+    def _fix_key(self, key):
+        return str(key).replace(' ', '_')
+
+    def config_get(self, section, key):
+       key = self._fix_key(key)
+       return self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "get", section, key).strip()
+
+    def config_show(self, entity, key):
+       key = self._fix_key(key)
+       return self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "show", entity, key).strip()
+
+    def config_minimal(self):
+       return self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "generate-minimal-conf").strip()
+
+    def config_rm(self, section, key):
+       key = self._fix_key(key)
+       self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "rm", section, key)
+       # simplification: skip removing from _mon_configs_set;
+       # let tearDown clear everything again
+
+    def config_set(self, section, key, value):
+       key = self._fix_key(key)
+       self._mon_configs_set.add((section, key))
+       self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "set", section, key, str(value))
 
     def assert_cluster_log(self, expected_pattern, invert_match=False,
                            timeout=10, watch_channel=None):
@@ -104,7 +138,7 @@ class CephTestCase(unittest.TestCase):
         def seen_health_warning():
             health = self.ceph_cluster.mon_manager.get_mon_health()
             codes = [s for s in health['checks']]
-            summary_strings = [s[1]['summary']['message'] for s in health['checks'].iteritems()]
+            summary_strings = [s[1]['summary']['message'] for s in health['checks'].items()]
             if len(summary_strings) == 0:
                 log.debug("Not expected number of summary strings ({0})".format(summary_strings))
                 return False
@@ -130,8 +164,7 @@ class CephTestCase(unittest.TestCase):
 
         self.wait_until_true(is_clear, timeout)
 
-    def wait_until_equal(self, get_fn, expect_val, timeout, reject_fn=None):
-        period = 5
+    def wait_until_equal(self, get_fn, expect_val, timeout, reject_fn=None, period=5):
         elapsed = 0
         while True:
             val = get_fn()
@@ -141,11 +174,11 @@ class CephTestCase(unittest.TestCase):
                 raise RuntimeError("wait_until_equal: forbidden value {0} seen".format(val))
             else:
                 if elapsed >= timeout:
-                    raise RuntimeError("Timed out after {0} seconds waiting for {1} (currently {2})".format(
+                    raise TestTimeoutError("Timed out after {0} seconds waiting for {1} (currently {2})".format(
                         elapsed, expect_val, val
                     ))
                 else:
-                    log.debug("wait_until_equal: {0} != {1}, waiting...".format(val, expect_val))
+                    log.debug("wait_until_equal: {0} != {1}, waiting (timeout={2})...".format(val, expect_val, timeout))
                 time.sleep(period)
                 elapsed += period
 
@@ -160,10 +193,8 @@ class CephTestCase(unittest.TestCase):
                 return
             else:
                 if elapsed >= timeout:
-                    raise RuntimeError("Timed out after {0}s".format(elapsed))
+                    raise TestTimeoutError("Timed out after {0}s".format(elapsed))
                 else:
-                    log.debug("wait_until_true: waiting...")
+                    log.debug("wait_until_true: waiting (timeout={0})...".format(timeout))
                 time.sleep(period)
                 elapsed += period
-
-

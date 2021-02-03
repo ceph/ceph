@@ -238,7 +238,7 @@ void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
       auto sg = make_scope_guard([&] { completion->release(); });
       ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
 				     librados::OPERATION_IGNORE_CACHE));
-      completion->wait_for_safe();
+      completion->wait_for_complete();
       if (completion->get_return_value() == -ENOENT) {
 	++got_enoent;
 	std::cout << " got ENOENT removing " << it->get_oid()

@@ -16,6 +16,7 @@
 #include "debug.h"
 #include "errno.h"
 
+#ifndef _WIN32
 void dump_open_fds(CephContext *cct)
 {
 #ifdef __APPLE__
@@ -51,3 +52,8 @@ void dump_open_fds(CephContext *cct)
 
   closedir(d);
 }
+#else
+void dump_open_fds(CephContext *cct)
+{
+}
+#endif

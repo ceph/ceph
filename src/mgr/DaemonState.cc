@@ -13,6 +13,8 @@
 
 #include "DaemonState.h"
 
+#include <experimental/iterator>
+
 #include "MgrSession.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
@@ -94,16 +96,17 @@ void DeviceState::dump(Formatter *f) const
 {
   f->dump_string("devid", devid);
   f->open_array_section("location");
-  for (auto& i : devnames) {
+  for (auto& i : attachments) {
     f->open_object_section("attachment");
-    f->dump_string("host", i.first);
-    f->dump_string("dev", i.second);
+    f->dump_string("host", std::get<0>(i));
+    f->dump_string("dev", std::get<1>(i));
+    f->dump_string("path", std::get<2>(i));
     f->close_section();
   }
   f->close_section();
   f->open_array_section("daemons");
   for (auto& i : daemons) {
-    f->dump_string("daemon", to_string(i));
+    f->dump_stream("daemon") << i;
   }
   f->close_section();
   if (life_expectancy.first != utime_t()) {
@@ -117,14 +120,14 @@ void DeviceState::dump(Formatter *f) const
 void DeviceState::print(ostream& out) const
 {
   out << "device " << devid << "\n";
-  for (auto& i : devnames) {
-    out << "attachment " << i.first << ":" << i.second << "\n";
+  for (auto& i : attachments) {
+    out << "attachment " << std::get<0>(i) << " " << std::get<1>(i) << " "
+	<< std::get<2>(i) << "\n";
+    out << "\n";
   }
-  set<string> d;
-  for (auto& j : daemons) {
-    d.insert(to_string(j));
-  }
-  out << "daemons " << d << "\n";
+  std::copy(std::begin(daemons), std::end(daemons),
+            std::experimental::make_ostream_joiner(out, ","));
+  out << '\n';
   if (life_expectancy.first != utime_t()) {
     out << "life_expectancy " << life_expectancy.first << " to "
 	<< life_expectancy.second
@@ -150,7 +153,13 @@ void DaemonStateIndex::_insert(DaemonStatePtr dm)
   for (auto& i : dm->devices) {
     auto d = _get_or_create_device(i.first);
     d->daemons.insert(dm->key);
-    d->devnames.insert(make_pair(dm->hostname, i.second));
+    auto p = dm->devices_bypath.find(i.first);
+    if (p != dm->devices_bypath.end()) {
+      d->attachments.insert(std::make_tuple(dm->hostname, i.second, p->second));
+    } else {
+      d->attachments.insert(std::make_tuple(dm->hostname, i.second,
+					    std::string()));
+    }
   }
 }
 
@@ -166,7 +175,12 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
     auto d = _get_or_create_device(i.first);
     ceph_assert(d->daemons.count(dmk));
     d->daemons.erase(dmk);
-    d->devnames.erase(make_pair(dm->hostname, i.second));
+    auto p = dm->devices_bypath.find(i.first);
+    if (p != dm->devices_bypath.end()) {
+      d->attachments.erase(make_tuple(dm->hostname, i.second, p->second));
+    } else {
+      d->attachments.erase(make_tuple(dm->hostname, i.second, std::string()));
+    }
     if (d->empty()) {
       _erase_device(d);
     }
@@ -188,9 +202,9 @@ DaemonStateCollection DaemonStateIndex::get_by_service(
 
   DaemonStateCollection result;
 
-  for (const auto &i : all) {
-    if (i.first.first == svc) {
-      result[i.first] = i.second;
+  for (const auto& [key, state] : all) {
+    if (key.type == svc) {
+      result[key] = state;
     }
   }
 
@@ -202,8 +216,8 @@ DaemonStateCollection DaemonStateIndex::get_by_server(
 {
   std::shared_lock l{lock};
 
-  if (by_server.count(hostname)) {
-    return by_server.at(hostname);
+  if (auto found = by_server.find(hostname); found != by_server.end()) {
+    return found->second;
   } else {
     return {};
   }
@@ -251,16 +265,36 @@ void DaemonStateIndex::cull(const std::string& svc_name,
   auto end = all.end();
   for (auto &i = begin; i != end; ++i) {
     const auto& daemon_key = i->first;
-    if (daemon_key.first != svc_name)
+    if (daemon_key.type != svc_name)
       break;
-    if (names_exist.count(daemon_key.second) == 0) {
-      victims.push_back(daemon_key.second);
+    if (names_exist.count(daemon_key.name) == 0) {
+      victims.push_back(daemon_key.name);
+    }
+  }
+
+  for (auto &i : victims) {
+    DaemonKey daemon_key{svc_name, i};
+    dout(4) << "Removing data for " << daemon_key << dendl;
+    _erase(daemon_key);
+  }
+}
+
+void DaemonStateIndex::cull_services(const std::set<std::string>& types_exist)
+{
+  std::set<DaemonKey> victims;
+
+  std::unique_lock l{lock};
+  for (auto it = all.begin(); it != all.end(); ++it) {
+    const auto& daemon_key = it->first;
+    if (it->second->service_daemon &&
+        types_exist.count(daemon_key.type) == 0) {
+      victims.insert(daemon_key);
     }
   }
 
   for (auto &i : victims) {
     dout(4) << "Removing data for " << i << dendl;
-    _erase({svc_name, i});
+    _erase(i);
   }
 }
 

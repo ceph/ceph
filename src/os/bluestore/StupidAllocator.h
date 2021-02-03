@@ -18,12 +18,13 @@ class StupidAllocator : public Allocator {
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
   int64_t num_free;     ///< total bytes in freelist
-  int64_t block_size;
+  uint64_t bdev_block_size;
 
-  typedef mempool::bluestore_alloc::pool_allocator<
-    pair<const uint64_t,uint64_t>> allocator_t;
-  typedef btree::btree_map<uint64_t,uint64_t,std::less<uint64_t>,allocator_t> interval_set_map_t;
-  typedef interval_set<uint64_t,interval_set_map_t> interval_set_t;
+  template <typename K, typename V> using allocator_t =
+    mempool::bluestore_alloc::pool_allocator<std::pair<const K, V>>;
+  template <typename K, typename V> using btree_map_t =
+    btree::btree_map<K, V, std::less<K>, allocator_t<K, V>>;
+  using interval_set_t = interval_set<uint64_t, btree_map_t>;
   std::vector<interval_set_t> free;  ///< leading-edge copy
 
   uint64_t last_alloc = 0;
@@ -36,8 +37,15 @@ class StupidAllocator : public Allocator {
     uint64_t alloc_unit);
 
 public:
-  StupidAllocator(CephContext* cct, const std::string& name, int64_t block_size);
+  StupidAllocator(CephContext* cct,
+                  const std::string& name,
+                  int64_t size,
+                  int64_t block_size);
   ~StupidAllocator() override;
+  const char* get_type() const override
+  {
+    return "stupid";
+  }
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,

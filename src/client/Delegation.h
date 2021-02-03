@@ -5,8 +5,7 @@
 
 #include "common/Clock.h"
 #include "common/Timer.h"
-
-class Fh;
+#include "include/cephfs/ceph_ll_client.h"
 
 /* Commands for manipulating delegation state */
 #ifndef CEPH_DELEGATION_NONE
@@ -14,9 +13,6 @@ class Fh;
 # define CEPH_DELEGATION_RD	1
 # define CEPH_DELEGATION_WR	2
 #endif
-
-/* Callback for delegation recalls */
-typedef void (*ceph_deleg_cb_t)(Fh *fh, void *priv);
 
 /* Converts CEPH_DELEGATION_* to cap mask */
 int ceph_deleg_caps_for_type(unsigned type);

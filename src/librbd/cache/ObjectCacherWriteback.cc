@@ -7,9 +7,9 @@
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/ceph_mutex.h"
-#include "common/WorkQueue.h"
 #include "osdc/Striper.h"
 #include "include/Context.h"
+#include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
@@ -19,10 +19,12 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 
 #include "include/ceph_assert.h"
 
@@ -134,11 +136,20 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
   aio_comp->set_request_count(1);
 
   auto req_comp = new io::ReadResult::C_ObjectReadRequest(
-    aio_comp, off, len, {{0, len}});
+    aio_comp, {{off, len, {{0, len}}}});
+
+  auto io_context = m_ictx->duplicate_data_io_context();
+  if (snapid != CEPH_NOSNAP) {
+    io_context->read_snap(snapid);
+  }
+
+  // extract the embedded RBD read flags from the op_flags
+  int read_flags = (op_flags & READ_FLAGS_MASK) >> READ_FLAGS_SHIFT;
+  op_flags &= ~READ_FLAGS_MASK;
 
   auto req = io::ObjectDispatchSpec::create_read(
-    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, off, len, snapid,
-    op_flags, trace, &req_comp->bl, &req_comp->extent_map, req_comp);
+    m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, &req_comp->extents,
+    io_context, op_flags, read_flags, trace, nullptr, req_comp);
   req->send();
 }
 
@@ -157,8 +168,8 @@ bool ObjectCacherWriteback::may_copy_on_write(const object_t& oid,
 
   // reverse map this object extent onto the parent
   vector<pair<uint64_t,uint64_t> > objectx;
-  Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-                          object_no, 0, m_ictx->layout.object_size, objectx);
+  io::util::extent_to_file(
+          m_ictx, object_no, 0, m_ictx->layout.object_size, objectx);
   uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
   bool may = object_overlap > 0;
   ldout(m_ictx->cct, 10) << "may_copy_on_write " << oid << " " << read_off
@@ -195,9 +206,15 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
   Context *ctx = new C_OrderedWrite(m_ictx->cct, result, trace, this);
   ctx = util::create_async_context_callback(*m_ictx, ctx);
 
+  auto io_context = m_ictx->duplicate_data_io_context();
+  if (!snapc.empty()) {
+    io_context->write_snap_context(
+      {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
+  }
+
   auto req = io::ObjectDispatchSpec::create_write(
     m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, off, std::move(bl_copy),
-    snapc, 0, journal_tid, trace, ctx);
+    io_context, 0, 0, std::nullopt, journal_tid, trace, ctx);
   req->object_dispatch_flags = (
     io::OBJECT_DISPATCH_FLAG_FLUSH |
     io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR);
@@ -224,8 +241,7 @@ void ObjectCacherWriteback::overwrite_extent(const object_t& oid, uint64_t off,
   ceph_assert(original_journal_tid != 0 && m_ictx->journal != NULL);
 
   Extents file_extents;
-  Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, object_no, off,
-                          len, file_extents);
+  io::util::extent_to_file(m_ictx, object_no, off, len, file_extents);
   for (Extents::iterator it = file_extents.begin();
        it != file_extents.end(); ++it) {
     if (new_journal_tid != 0) {

@@ -1,17 +1,28 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import PLUGIN_MANAGER as PM, Interface  # pylint: disable=cyclic-import
+from . import PLUGIN_MANAGER as PM  # pylint: disable=cyclic-import
+from . import Interface, Mixin
 
 
-class CanMgr(Interface):
+class CanMgr(Mixin):
     from .. import mgr
-    mgr = mgr
+    mgr = mgr  # type: ignore
 
 
-class CanLog(Interface):
-    from .. import logger
-    log = logger
+class CanCherrypy(Mixin):
+    import cherrypy
+    request = cherrypy.request
+    response = cherrypy.response
+
+
+@PM.add_interface
+class Initializable(Interface):
+    @PM.add_abcspec
+    def init(self):
+        """
+        Placeholder for module scope initialization
+        """
 
 
 @PM.add_interface
@@ -20,7 +31,7 @@ class Setupable(Interface):
     def setup(self):
         """
         Placeholder for plugin setup, right after server start.
-        CanMgr.mgr and CanLog.log are initialized by then.
+        CanMgr.mgr is initialized by then.
         """
 
 
@@ -45,9 +56,26 @@ class HasControllers(Interface):
         pass
 
 
+@PM.add_interface
+class ConfiguresCherryPy(Interface):
+    @PM.add_abcspec
+    def configure_cherrypy(self, config):
+        pass
+
+
 class FilterRequest(object):
     @PM.add_interface
     class BeforeHandler(Interface):
         @PM.add_abcspec
         def filter_request_before_handler(self, request):
             pass
+
+
+@PM.add_interface
+class ConfigNotify(Interface):
+    @PM.add_abcspec
+    def config_notify(self):
+        """
+        This method is called whenever a option of this mgr module has
+        been modified.
+        """

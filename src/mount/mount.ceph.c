@@ -19,6 +19,7 @@
 
 bool verboseflag = false;
 bool skip_mtab_flag = false;
+bool v2_addrs = false;
 static const char * const EMPTY_STRING = "";
 
 /* TODO duplicates logic from kernel */
@@ -155,7 +156,7 @@ static int fetch_config_info(struct ceph_mount_info *cmi)
 		ret = drop_capabilities();
 		if (ret)
 			exit(1);
-		mount_ceph_get_config_info(cmi->cmi_conf, cmi->cmi_name, cci);
+		mount_ceph_get_config_info(cmi->cmi_conf, cmi->cmi_name, v2_addrs, cci);
 		exit(0);
 	} else {
 		/* parent */
@@ -208,6 +209,9 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 	int name_len = 0;
 	int name_pos = 0;
 
+	if (data == EMPTY_STRING)
+		goto out;
+
 	mount_ceph_debug("parsing options: %s\n", data);
 
 	do {
@@ -218,7 +222,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 		if(*data == 0)
 			break;
 		next_keyword = strchr(data,',');
-	
+
 		/* temporarily null terminate end of keyword=value pair */
 		if(next_keyword)
 			*next_keyword++ = 0;
@@ -229,46 +233,53 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			value++;
 		}
 
-		if (strncmp(data, "ro", 2) == 0) {
+		if (strcmp(data, "ro") == 0) {
 			cmi->cmi_flags |= MS_RDONLY;
-		} else if (strncmp(data, "rw", 2) == 0) {
+		} else if (strcmp(data, "rw") == 0) {
 			cmi->cmi_flags &= ~MS_RDONLY;
-		} else if (strncmp(data, "nosuid", 6) == 0) {
+		} else if (strcmp(data, "nosuid") == 0) {
 			cmi->cmi_flags |= MS_NOSUID;
-		} else if (strncmp(data, "suid", 4) == 0) {
+		} else if (strcmp(data, "suid") == 0) {
 			cmi->cmi_flags &= ~MS_NOSUID;
-		} else if (strncmp(data, "dev", 3) == 0) {
+		} else if (strcmp(data, "dev") == 0) {
 			cmi->cmi_flags &= ~MS_NODEV;
-		} else if (strncmp(data, "nodev", 5) == 0) {
+		} else if (strcmp(data, "nodev") == 0) {
 			cmi->cmi_flags |= MS_NODEV;
-		} else if (strncmp(data, "noexec", 6) == 0) {
+		} else if (strcmp(data, "noexec") == 0) {
 			cmi->cmi_flags |= MS_NOEXEC;
-		} else if (strncmp(data, "exec", 4) == 0) {
+		} else if (strcmp(data, "exec") == 0) {
 			cmi->cmi_flags &= ~MS_NOEXEC;
-                } else if (strncmp(data, "sync", 4) == 0) {
+                } else if (strcmp(data, "sync") == 0) {
                         cmi->cmi_flags |= MS_SYNCHRONOUS;
-                } else if (strncmp(data, "remount", 7) == 0) {
+                } else if (strcmp(data, "remount") == 0) {
                         cmi->cmi_flags |= MS_REMOUNT;
-                } else if (strncmp(data, "mandlock", 8) == 0) {
+                } else if (strcmp(data, "mandlock") == 0) {
                         cmi->cmi_flags |= MS_MANDLOCK;
-		} else if ((strncmp(data, "nobrl", 5) == 0) || 
-			   (strncmp(data, "nolock", 6) == 0)) {
+		} else if ((strcmp(data, "nobrl") == 0) ||
+			   (strcmp(data, "nolock") == 0)) {
 			cmi->cmi_flags &= ~MS_MANDLOCK;
-		} else if (strncmp(data, "noatime", 7) == 0) {
+		} else if (strcmp(data, "noatime") == 0) {
 			cmi->cmi_flags |= MS_NOATIME;
-		} else if (strncmp(data, "nodiratime", 10) == 0) {
+		} else if (strcmp(data, "nodiratime") == 0) {
 			cmi->cmi_flags |= MS_NODIRATIME;
-		} else if (strncmp(data, "relatime", 8) == 0) {
+		} else if (strcmp(data, "relatime") == 0) {
 			cmi->cmi_flags |= MS_RELATIME;
-		} else if (strncmp(data, "strictatime", 11) == 0) {
+		} else if (strcmp(data, "strictatime") == 0) {
 			cmi->cmi_flags |= MS_STRICTATIME;
-		} else if (strncmp(data, "noauto", 6) == 0) {
+		} else if (strcmp(data, "noauto") == 0) {
 			/* ignore */
-		} else if (strncmp(data, "_netdev", 7) == 0) {
+		} else if (strcmp(data, "_netdev") == 0) {
 			/* ignore */
-		} else if (strncmp(data, "nofail", 6) == 0) {
+		} else if (strcmp(data, "nofail") == 0) {
 			/* ignore */
-		} else if (strncmp(data, "secretfile", 10) == 0) {
+		} else if (strcmp(data, "fs") == 0) {
+			if (!value || !*value) {
+				fprintf(stderr, "mount option fs requires a value.\n");
+				return -EINVAL;
+			}
+			data = "mds_namespace";
+			skip = false;
+		} else if (strcmp(data, "secretfile") == 0) {
 			int ret;
 
 			if (!value || !*value) {
@@ -280,7 +291,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 				fprintf(stderr, "error reading secret file: %d\n", ret);
 				return ret;
 			}
-		} else if (strncmp(data, "secret", 6) == 0) {
+		} else if (strcmp(data, "secret") == 0) {
 			size_t len;
 
 			if (!value || !*value) {
@@ -291,7 +302,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			len = strnlen(value, sizeof(cmi->cmi_secret)) + 1;
 			if (len <= sizeof(cmi->cmi_secret))
 				memcpy(cmi->cmi_secret, value, len);
-		} else if (strncmp(data, "conf", 4) == 0) {
+		} else if (strcmp(data, "conf") == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option conf requires a value.\n");
 				return -EINVAL;
@@ -300,7 +311,7 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			cmi->cmi_conf = strdup(value);
 			if (!cmi->cmi_conf)
 				return -ENOMEM;
-		} else if (strncmp(data, "name", 4) == 0) {
+		} else if (strcmp(data, "name") == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option name requires a value.\n");
 				return -EINVAL;
@@ -308,10 +319,17 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			/* keep pointer to value */
 			name = value;
 			skip = false;
-		} else {
+		} else if (strcmp(data, "ms_mode") == 0) {
+			if (!value || !*value) {
+				fprintf(stderr, "mount option ms_mode requires a value.\n");
+				return -EINVAL;
+			}
+			/* Only legacy ms_mode needs v1 addrs */
+			v2_addrs = strcmp(value, "legacy");
 			skip = false;
-			mount_ceph_debug("mount.ceph: unrecognized mount option \"%s\", passing to kernel.\n",
-					data);
+		} else {
+			/* unrecognized mount options, passing to kernel */
+			skip = false;
 		}
 
 		/* Copy (possibly modified) option to out */
@@ -326,14 +344,18 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			} else {
 				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, data);
 			}
-			
 		}
 		data = next_keyword;
 	} while (data);
 
+out:
 	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos, "client.");
 	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos,
 			    name ? name : CEPH_AUTH_NAME_DEFAULT);
+
+	if (cmi->cmi_opts)
+		mount_ceph_debug("mount.ceph: options \"%s\" will pass to kernel.\n",
+						 cmi->cmi_opts);
 
 	if (!cmi->cmi_opts) {
 		cmi->cmi_opts = strdup(EMPTY_STRING);
@@ -425,24 +447,39 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 	free(cmi->cmi_conf);
 }
 
-static int finalize_options(struct ceph_mount_info *cmi)
+static int append_key_or_secret_option(struct ceph_mount_info *cmi)
 {
-	int pos;
+	int pos = strlen(cmi->cmi_opts);
 
-	if (cmi->cmi_secret[0] || is_kernel_secret(cmi->cmi_name)) {
-		int ret;
-		char secret_option[SECRET_OPTION_BUFSIZE];
+	if (!cmi->cmi_secret[0] && !is_kernel_secret(cmi->cmi_name))
+		return 0;
 
-		ret = get_secret_option(cmi->cmi_secret, cmi->cmi_name,
-					secret_option, sizeof(secret_option));
-		if (ret < 0)
+	if (pos)
+		pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
+
+	/* when parsing kernel options (-o remount) we get '<hidden>' as the secret */
+	if (cmi->cmi_secret[0] && (strcmp(cmi->cmi_secret, "<hidden>") != 0)) {
+		int ret = set_kernel_secret(cmi->cmi_secret, cmi->cmi_name);
+		if (ret < 0) {
+			if (ret == -ENODEV || ret == -ENOSYS) {
+				/* old kernel; fall back to secret= in options */
+				pos = safe_cat(&cmi->cmi_opts,
+					       &cmi->cmi_opts_len, pos,
+					       "secret=");
+				pos = safe_cat(&cmi->cmi_opts,
+					       &cmi->cmi_opts_len, pos,
+					       cmi->cmi_secret);
+				return 0;
+			}
+			fprintf(stderr, "adding ceph secret key to kernel failed: %s\n",
+				strerror(-ret));
 			return ret;
-
-		pos = strlen(cmi->cmi_opts);
-		if (pos)
-			pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
-		pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, secret_option);
+		}
 	}
+
+	pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, "key=");
+	pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, cmi->cmi_name);
+
 	return 0;
 }
 
@@ -493,9 +530,9 @@ int main(int argc, char *argv[])
 	/* Ensure the ceph key_type is available */
 	modprobe();
 
-	retval = finalize_options(&cmi);
+	retval = append_key_or_secret_option(&cmi);
 	if (retval) {
-		fprintf(stderr, "couldn't finalize options: %d\n", retval);
+		fprintf(stderr, "couldn't append secret option: %d\n", retval);
 		retval = EX_USAGE;
 		goto out;
 	}
@@ -507,6 +544,9 @@ int main(int argc, char *argv[])
 		switch (errno) {
 		case ENODEV:
 			fprintf(stderr, "mount error: ceph filesystem not supported by the system\n");
+			break;
+		case EHOSTUNREACH:
+			fprintf(stderr, "mount error: no mds server is up or the cluster is laggy\n");
 			break;
 		default:
 			fprintf(stderr, "mount error %d = %s\n",errno,strerror(errno));

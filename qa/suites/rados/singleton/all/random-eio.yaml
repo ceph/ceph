@@ -15,13 +15,16 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    log-ignorelist:
     - missing primary copy of
     - objects unfound and apparently lost
     - had a read error
     - overall HEALTH_
     - \(POOL_APP_NOT_ENABLED\)
     - \(PG_DEGRADED\)
+    - \(OSD_TOO_MANY_REPAIRS\)
 - full_sequential:
   - exec:
       client.0:

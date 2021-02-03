@@ -140,7 +140,8 @@ int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
                                       const string& key,
                                       GetParams& _params,
                                       RGWObjVersionTracker *objv_tracker,
-                                      optional_yield y)
+                                      optional_yield y,
+                                      const DoutPrefixProvider *dpp)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   RGWSI_MBSObj_GetParams& params = static_cast<RGWSI_MBSObj_GetParams&>(_params);
@@ -151,7 +152,7 @@ int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
 
   return rgw_get_system_obj(*ctx->obj_ctx, pool, oid, *params.pbl,
                             objv_tracker, params.pmtime,
-                            y,
+                            y, dpp,
                             params.pattrs, params.cache_info,
                             params.refresh_version);
 }

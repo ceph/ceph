@@ -7,10 +7,43 @@
 #include "include/rados/librados_fwd.hpp"
 #include "tools/rbd/ArgumentTypes.h"
 
-#include <string>
+#include <iosfwd>
+#include <list>
 #include <map>
+#include <string>
 
 namespace rbd {
+
+enum MirrorHealth {
+  MIRROR_HEALTH_OK      = 0,
+  MIRROR_HEALTH_UNKNOWN = 1,
+  MIRROR_HEALTH_WARNING = 2,
+  MIRROR_HEALTH_ERROR   = 3
+};
+
+std::ostream& operator<<(std::ostream& os, MirrorHealth mirror_health);
+
+struct MirrorService {
+  MirrorService() {}
+  explicit MirrorService(const std::string& service_id)
+    : service_id(service_id) {
+  }
+
+  std::string service_id;
+  std::string instance_id;
+  bool leader = false;
+  std::string client_id;
+  std::string ceph_version;
+  std::string hostname;
+  std::list<std::string> callouts;
+
+  MirrorHealth health = MIRROR_HEALTH_UNKNOWN;
+
+  std::string get_image_description() const;
+  void dump_image(argument_types::Format::Formatter formatter) const;
+};
+
+typedef std::list<MirrorService> MirrorServices;
 
 class MirrorDaemonServiceInfo {
 public:
@@ -19,14 +52,25 @@ public:
 
   int init();
 
-  std::string get_description(const std::string &instance_id) const;
-  void dump(const std::string &instance_id,
-            argument_types::Format::Formatter formatter) const;
+  const MirrorService* get_by_service_id(const std::string& service_id) const;
+  const MirrorService* get_by_instance_id(const std::string& instance_id) const;
+
+  MirrorServices get_mirror_services() const;
+  MirrorHealth get_daemon_health() const {
+    return m_daemon_health;
+  }
 
 private:
   librados::IoCtx &m_io_ctx;
-  std::map<std::string, std::string> m_instance_id_to_service_id;
-  std::map<std::string, std::map<std::string, std::string>> m_daemons_metadata;
+
+  std::map<std::string, MirrorService> m_mirror_services;
+  std::map<std::string, std::string> m_instance_to_service_ids;
+
+  MirrorHealth m_daemon_health = MIRROR_HEALTH_UNKNOWN;
+
+  int get_mirror_service_dump();
+  int get_mirror_service_status();
+
 };
 
 } // namespace rbd

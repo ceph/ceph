@@ -14,10 +14,13 @@ set(rbd_mirror_internal
   Instances.cc
   LeaderWatcher.cc
   Mirror.cc
+  MirrorStatusUpdater.cc
   MirrorStatusWatcher.cc
   NamespaceReplayer.cc
+  PoolMetaCache.cc
   PoolReplayer.cc
   PoolWatcher.cc
+  RemotePoolPoller.cc
   ServiceDaemon.cc
   Threads.cc
   Throttler.cc
@@ -34,17 +37,30 @@ set(rbd_mirror_internal
   image_replayer/BootstrapRequest.cc
   image_replayer/CloseImageRequest.cc
   image_replayer/CreateImageRequest.cc
-  image_replayer/EventPreprocessor.cc
   image_replayer/GetMirrorImageIdRequest.cc
-  image_replayer/IsPrimaryRequest.cc
   image_replayer/OpenImageRequest.cc
   image_replayer/OpenLocalImageRequest.cc
   image_replayer/PrepareLocalImageRequest.cc
   image_replayer/PrepareRemoteImageRequest.cc
-  image_replayer/ReplayStatusFormatter.cc
+  image_replayer/StateBuilder.cc
+  image_replayer/TimeRollingMean.cc
   image_replayer/Utils.cc
+  image_replayer/journal/CreateLocalImageRequest.cc
+  image_replayer/journal/EventPreprocessor.cc
+  image_replayer/journal/PrepareReplayRequest.cc
+  image_replayer/journal/Replayer.cc
+  image_replayer/journal/ReplayStatusFormatter.cc
+  image_replayer/journal/StateBuilder.cc
+  image_replayer/journal/SyncPointHandler.cc
+  image_replayer/snapshot/ApplyImageStateRequest.cc
+  image_replayer/snapshot/CreateLocalImageRequest.cc
+  image_replayer/snapshot/PrepareReplayRequest.cc
+  image_replayer/snapshot/Replayer.cc
+  image_replayer/snapshot/StateBuilder.cc
+  image_replayer/snapshot/Utils.cc
   image_sync/SyncPointCreateRequest.cc
   image_sync/SyncPointPruneRequest.cc
+  image_sync/Utils.cc
   pool_watcher/RefreshImagesRequest.cc
   service_daemon/Types.cc)
 
@@ -61,6 +77,7 @@ target_link_libraries(rbd-mirror
   rbd_internal
   rbd_types
   journal
+  libneorados
   librados
   osdc
   cls_rbd_client
@@ -68,5 +85,6 @@ target_link_libraries(rbd-mirror
   cls_journal_client
   global
   heap_profiler
-  ${ALLOC_LIBS})
+  ${ALLOC_LIBS}
+  OpenSSL::SSL)
 install(TARGETS rbd-mirror DESTINATION bin)

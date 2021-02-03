@@ -9,6 +9,7 @@ if(${WITH_CEPHFS})
     acl.cc
     main.cc
     deleg.cc
+    monconfig.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
@@ -30,6 +31,19 @@ if(${WITH_CEPHFS})
     ${CMAKE_DL_LIBS}
     )
   install(TARGETS ceph_test_libcephfs_reclaim
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  add_executable(ceph_test_libcephfs_lazyio
+    lazyio.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_lazyio
+    cephfs
+    librados
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )   
+  install(TARGETS ceph_test_libcephfs_lazyio
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   add_executable(ceph_test_libcephfs_access

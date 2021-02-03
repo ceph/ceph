@@ -2,9 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/journal/StandardPolicy.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
+#include "librbd/asio/ContextWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

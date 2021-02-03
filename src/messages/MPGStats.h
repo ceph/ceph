@@ -18,7 +18,7 @@
 #include "osd/osd_types.h"
 #include "messages/PaxosServiceMessage.h"
 
-class MPGStats : public PaxosServiceMessage {
+class MPGStats final : public PaxosServiceMessage {
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -37,12 +37,12 @@ public:
   {}
 
 private:
-  ~MPGStats() override {}
+  ~MPGStats() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_stats"; }
   void print(std::ostream& out) const override {
-    out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
+    out << "pg_stats(" << pg_stat.size() << " pgs seq " << osd_stat.seq << " v " << version << ")";
   }
 
   void encode_payload(uint64_t features) override {

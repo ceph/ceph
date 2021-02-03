@@ -1,8 +1,8 @@
-<cd-view-cache [status]="viewCacheStatus"></cd-view-cache>
-
 <cd-table [data]="clients.data"
-          [columns]="clients.columns"
-          (fetchData)="refresh($event)"
+          [columns]="columns"
+          [status]="clients.status"
+          [autoReload]="-1"
+          (fetchData)="triggerApiUpdate.emit()"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
   <cd-table-actions class="table-actions"

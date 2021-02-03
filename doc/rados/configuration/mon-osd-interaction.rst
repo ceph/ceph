@@ -34,7 +34,8 @@ and ``[osd]`` or ``[global]`` section of your Ceph configuration file,
 or by setting the value at runtime.
 
 
-.. ditaa:: +---------+          +---------+
+.. ditaa::
+           +---------+          +---------+
            |  OSD 1  |          |  OSD 2  |
            +---------+          +---------+
                 |                    |
@@ -89,7 +90,9 @@ and ``mon osd reporter subtree level`` settings  under the ``[mon]`` section of
 your Ceph configuration file, or by setting the value at runtime.
 
 
-.. ditaa:: +---------+     +---------+      +---------+
+.. ditaa::
+
+           +---------+     +---------+      +---------+
            |  OSD 1  |     |  OSD 2  |      | Monitor |
            +---------+     +---------+      +---------+
                 |               |                |
@@ -118,7 +121,9 @@ Ceph Monitor heartbeat interval by adding an ``osd mon heartbeat interval``
 setting under the ``[osd]`` section of your Ceph configuration file, or by
 setting the value at runtime.
 
-.. ditaa:: +---------+     +---------+     +-------+     +---------+
+.. ditaa::
+
+           +---------+     +---------+     +-------+     +---------+
            |  OSD 1  |     |  OSD 2  |     | OSD 3 |     | Monitor |
            +---------+     +---------+     +-------+     +---------+
                 |               |              |              |
@@ -161,7 +166,9 @@ interval max`` setting under the ``[osd]`` section of your Ceph configuration
 file, or by setting the value at runtime.
 
 
-.. ditaa:: +---------+          +---------+
+.. ditaa::
+
+           +---------+          +---------+
            |  OSD 1  |          | Monitor |
            +---------+          +---------+
                 |                    |
@@ -330,11 +337,11 @@ Monitor Settings
 :Default: ``2``
 
 
-``mon osd reporter subtree level``
+``mon_osd_reporter_subtree_level``
 
 :Description: In which level of parent bucket the reporters are counted. The OSDs
-              send failure reports to monitor if they find its peer is not responsive.
-              And monitor mark the reported OSD out and then down after a grace period.
+              send failure reports to monitors if they find a peer that is not responsive.
+              Monitors mark the reported ``OSD`` out and then ``down`` after a grace period.
 :Type: String
 :Default: ``host``
 
@@ -344,31 +351,24 @@ Monitor Settings
 OSD Settings
 ------------
 
-``osd heartbeat address``
-
-:Description: An Ceph OSD Daemon's network address for heartbeats.
-:Type: Address
-:Default: The host address.
-
-
-``osd heartbeat interval``
+``osd_heartbeat_interval``
 
 :Description: How often an Ceph OSD Daemon pings its peers (in seconds).
 :Type: 32-bit Integer
 :Default: ``6``
 
 
-``osd heartbeat grace``
+``osd_heartbeat_grace``
 
 :Description: The elapsed time when a Ceph OSD Daemon hasn't shown a heartbeat
               that the Ceph Storage Cluster considers it ``down``.
-              This setting has to be set in both the [mon] and [osd] or [global]
-              section so that it is read by both the MON and OSD daemons.
+              This setting must be set in both the [mon] and [osd] or [global]
+              sections so that it is read by both monitor and OSD daemons.
 :Type: 32-bit Integer
 :Default: ``20``
 
 
-``osd mon heartbeat interval``
+``osd_mon_heartbeat_interval``
 
 :Description: How often the Ceph OSD Daemon pings a Ceph Monitor if it has no
               Ceph OSD Daemon peers.
@@ -377,7 +377,7 @@ OSD Settings
 :Default: ``30``
 
 
-``osd mon heartbeat stat stale``
+``osd_mon_heartbeat_stat_stale``
 
 :Description: Stop reporting on heartbeat ping times which haven't been updated for
               this many seconds.  Set to zero to disable this action.
@@ -386,7 +386,7 @@ OSD Settings
 :Default: ``3600``
 
 
-``osd mon report interval``
+``osd_mon_report_interval``
 
 :Description: The number of seconds a Ceph OSD Daemon may wait
               from startup or another reportable event before reporting
@@ -394,12 +394,3 @@ OSD Settings
 
 :Type: 32-bit Integer
 :Default: ``5``
-
-
-``osd mon ack timeout``
-
-:Description: The number of seconds to wait for a Ceph Monitor to acknowledge a
-              request for statistics.
-
-:Type: 32-bit Integer
-:Default: ``30``

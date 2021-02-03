@@ -13,8 +13,8 @@
 
 #include "common/ceph_mutex.h"
 #include "common/config_obs.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class Context;
 
 namespace ceph { class Formatter; }
@@ -46,7 +46,7 @@ public:
   void finish_op(const std::string &ns, const std::string &id);
   void drain(const std::string &ns, int r);
 
-  void print_status(ceph::Formatter *f, std::stringstream *ss);
+  void print_status(ceph::Formatter *f);
 
 private:
   typedef std::pair<std::string, std::string> Id;

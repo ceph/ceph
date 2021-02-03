@@ -11,7 +11,7 @@
 #include "common/Formatter.h"
 #include "common/TextTable.h"
 #include <iostream>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <boost/program_options.hpp>
 #include "global/global_context.h"
 
@@ -22,6 +22,7 @@ namespace list {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+using namespace boost::placeholders;
 
 enum WorkerState {
   STATE_IDLE = 0,
@@ -168,23 +169,24 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
 }
 
 int do_list(const std::string &pool_name, const std::string& namespace_name,
-            bool lflag, int threads, Formatter *f) {
+            bool lflag, Formatter *f) {
   std::vector<WorkerEntry*> workers;
   std::vector<librbd::image_spec_t> images;
   librados::Rados rados;
   librbd::RBD rbd;
   librados::IoCtx ioctx;
 
+  int r = utils::init(pool_name, namespace_name, &rados, &ioctx);
+  if (r < 0) {
+    return r;
+  }
+
+  int threads = g_conf().get_val<uint64_t>("rbd_concurrent_management_ops");
   if (threads < 1) {
     threads = 1;
   }
   if (threads > 32) {
     threads = 32;
-  }
-
-  int r = utils::init(pool_name, namespace_name, &rados, &ioctx);
-  if (r < 0) {
-    return r;
   }
 
   utils::disable_cache();
@@ -325,7 +327,6 @@ int execute(const po::variables_map &vm,
   }
 
   r = do_list(pool_name, namespace_name, vm["long"].as<bool>(),
-              g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
               formatter.get());
   if (r < 0) {
     std::cerr << "rbd: listing images failed: " << cpp_strerror(r)

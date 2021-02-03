@@ -1,11 +1,10 @@
 import { Component, Input, OnChanges } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 
-import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-rgw-daemon-details',
@@ -18,7 +17,7 @@ export class RgwDaemonDetailsComponent implements OnChanges {
   grafanaPermission: Permission;
 
   @Input()
-  selection: CdTableSelection;
+  selection: any;
 
   constructor(
     private rgwDaemonService: RgwDaemonService,
@@ -29,8 +28,8 @@ export class RgwDaemonDetailsComponent implements OnChanges {
 
   ngOnChanges() {
     // Get the service id of the first selected row.
-    if (this.selection.hasSelection) {
-      this.serviceId = this.selection.first().id;
+    if (this.selection) {
+      this.serviceId = this.selection.id;
     }
   }
 
@@ -38,7 +37,7 @@ export class RgwDaemonDetailsComponent implements OnChanges {
     if (_.isEmpty(this.serviceId)) {
       return;
     }
-    this.rgwDaemonService.get(this.serviceId).subscribe((resp) => {
+    this.rgwDaemonService.get(this.serviceId).subscribe((resp: any) => {
       this.metadata = resp['rgw_metadata'];
     });
   }

@@ -7,13 +7,5 @@ import { Router } from '@angular/router';
   styleUrls: ['./prometheus-tabs.component.scss']
 })
 export class PrometheusTabsComponent {
-  url: string;
-
-  constructor(private router: Router) {
-    this.url = this.router.url;
-  }
-
-  navigateTo(url) {
-    this.router.navigate([url]);
-  }
+  constructor(public router: Router) {}
 }

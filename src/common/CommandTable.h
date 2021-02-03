@@ -34,13 +34,13 @@ class CommandOp
 			 bool mgr=false) const
   {
     if (mgr) {
-      auto m = make_message<MMgrCommand>(fsid);
+      auto m = ceph::make_message<MMgrCommand>(fsid);
       m->cmd = cmd;
       m->set_data(inbl);
       m->set_tid(tid);
       return m;
     } else {
-      auto m = make_message<MCommand>(fsid);
+      auto m = ceph::make_message<MCommand>(fsid);
       m->cmd = cmd;
       m->set_data(inbl);
       m->set_tid(tid);

@@ -19,6 +19,8 @@ namespace libradosstriper
   class RadosStriper;
 }
 
+namespace neorados { class RADOS; }
+
 namespace librados {
 
 using ceph::bufferlist;
@@ -191,16 +193,18 @@ inline namespace v14_2_0 {
 
   struct CEPH_RADOS_API AioCompletion {
     AioCompletion(AioCompletionImpl *pc_) : pc(pc_) {}
+    ~AioCompletion();
     int set_complete_callback(void *cb_arg, callback_t cb);
-    int set_safe_callback(void *cb_arg, callback_t cb);
+    int set_safe_callback(void *cb_arg, callback_t cb)
+      __attribute__ ((deprecated));
     int wait_for_complete();
-    int wait_for_safe();
+    int wait_for_safe() __attribute__ ((deprecated));
     int wait_for_complete_and_cb();
-    int wait_for_safe_and_cb();
+    int wait_for_safe_and_cb() __attribute__ ((deprecated));
     bool is_complete();
-    bool is_safe();
+    bool is_safe() __attribute__ ((deprecated));
     bool is_complete_and_cb();
-    bool is_safe_and_cb();
+    bool is_safe_and_cb() __attribute__ ((deprecated));
     int get_return_value();
     int get_version() __attribute__ ((deprecated));
     uint64_t get_version64();
@@ -210,6 +214,7 @@ inline namespace v14_2_0 {
 
   struct CEPH_RADOS_API PoolAsyncCompletion {
     PoolAsyncCompletion(PoolAsyncCompletionImpl *pc_) : pc(pc_) {}
+    ~PoolAsyncCompletion();
     int set_callback(void *cb_arg, callback_t cb);
     int wait();
     bool is_complete();
@@ -270,10 +275,12 @@ inline namespace v14_2_0 {
     // marked full; ops will either succeed (e.g., delete) or return
     // EDQUOT or ENOSPC
     OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,
-    //mainly for delete
+    // mainly for delete
     OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
     OPERATION_IGNORE_REDIRECT	 = LIBRADOS_OPERATION_IGNORE_REDIRECT,
     OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,
+    // enable/allow return value and per-op return code/buffers
+    OPERATION_RETURNVEC          = LIBRADOS_OPERATION_RETURNVEC,
   };
 
   /*
@@ -455,6 +462,26 @@ inline namespace v14_2_0 {
 		   uint64_t src_version, uint32_t src_fadvise_flags);
 
     /**
+     * Copy an object
+     *
+     * Copies an object from another location.  The operation is atomic in that
+     * the copy either succeeds in its entirety or fails (e.g., because the
+     * source object was modified while the copy was in progress).  Instead of
+     * copying truncate_seq and truncate_size from the source object it receives
+     * these values as parameters.
+     *
+     * @param src source object name
+     * @param src_ioctx ioctx for the source object
+     * @param src_version current version of the source object
+     * @param truncate_seq truncate sequence for the destination object
+     * @param truncate_size truncate size for the destination object
+     * @param src_fadvise_flags the fadvise flags for source object
+     */
+    void copy_from2(const std::string& src, const IoCtx& src_ioctx,
+		    uint64_t src_version, uint32_t truncate_seq,
+		    uint64_t truncate_size, uint32_t src_fadvise_flags);
+
+    /**
      * undirty an object
      *
      * Clear an objects dirty flag
@@ -489,12 +516,8 @@ inline namespace v14_2_0 {
      */
     void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
 		      uint64_t tgt_version, int flag = 0);
-    void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
-                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
-    void tier_flush();
-
 
     friend class IoCtx;
   };
@@ -708,6 +731,33 @@ inline namespace v14_2_0 {
      * triggering a promote on the OSD (that is then evicted).
      */
     void cache_evict();
+
+    /**
+     * Extensible tier
+     *
+     * set_chunk: make a chunk pointing a part of the source object at the target 
+     * 		  object
+     *
+     * @param src_offset [in] source offset to indicate the start position of 
+     * 				a chunk in the source object
+     * @param src_length [in] source length to set the length of the chunk
+     * @param tgt_oid    [in] target object's id to set a chunk
+     * @param tgt_offset [in] the start position of the target object
+     * @param flag       [in] flag for the source object
+     *
+     */
+    void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
+                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
+    /**
+     * flush a manifest tier object to backing tier; will block racing
+     * updates.
+     */
+    void tier_flush();
+    /**
+     * evict a manifest tier object to backing tier; will block racing
+     * updates.
+     */
+    void tier_evict();
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
@@ -1106,7 +1156,9 @@ inline namespace v14_2_0 {
 
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
+    int operate(const std::string& oid, ObjectWriteOperation *op, int flags);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
+    int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl, int flags);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
     /**
@@ -1190,6 +1242,12 @@ inline namespace v14_2_0 {
                    bufferlist& bl,         ///< optional broadcast payload
                    uint64_t timeout_ms,    ///< timeout (in ms)
                    bufferlist *pbl);       ///< reply buffer
+   /*
+    * Decode a notify response into acks and timeout vectors.
+    */
+    void decode_notify_response(bufferlist &bl,
+                                std::vector<librados::notify_ack_t> *acks,
+                                std::vector<librados::notify_timeout_t> *timeouts);
 
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     int list_snaps(const std::string& o, snap_set_t *out_snaps);
@@ -1276,8 +1334,13 @@ inline namespace v14_2_0 {
 
     config_t cct();
 
-    void set_osdmap_full_try();
-    void unset_osdmap_full_try();
+    void set_osdmap_full_try()
+      __attribute__ ((deprecated));
+    void unset_osdmap_full_try()
+      __attribute__ ((deprecated));
+
+    void set_pool_full_try();
+    void unset_pool_full_try();
 
     int application_enable(const std::string& app_name, bool force);
     int application_enable_async(const std::string& app_name,
@@ -1301,6 +1364,7 @@ inline namespace v14_2_0 {
     friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
     friend class libradosstriper::RadosStriper; // Striper needs to see our IoCtxImpl
     friend class ObjectWriteOperation;  // copy_from needs to see our IoCtxImpl
+    friend class ObjectReadOperation;  // set_chunk needs to see our IoCtxImpl
 
     IoCtxImpl *io_ctx_impl;
   };
@@ -1323,6 +1387,7 @@ inline namespace v14_2_0 {
     Rados();
     explicit Rados(IoCtx& ioctx);
     ~Rados();
+    static void from_rados_t(rados_t cluster, Rados &rados);
 
     int init(const char * const id);
     int init2(const char * const name, const char * const clustername,
@@ -1385,7 +1450,7 @@ inline namespace v14_2_0 {
     int ioctx_create2(int64_t pool_id, IoCtx &pioctx);
 
     // Features useful for test cases
-    void test_blacklist_self(bool set);
+    void test_blocklist_self(bool set);
 
     /* pool info */
     int pool_list(std::list<std::string>& v);
@@ -1453,8 +1518,10 @@ inline namespace v14_2_0 {
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
 
-    int blacklist_add(const std::string& client_address,
+    int blocklist_add(const std::string& client_address,
                       uint32_t expire_seconds);
+
+    std::string get_addrs() const;
 
     /*
      * pool aio
@@ -1467,10 +1534,14 @@ inline namespace v14_2_0 {
    // -- aio --
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
-						callback_t cb_safe);
-    
+						callback_t cb_safe)
+      __attribute__ ((deprecated));
+    static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
+
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
+    friend class neorados::RADOS;
+
     // We don't allow assignment or copying
     Rados(const Rados& rhs);
     const Rados& operator=(const Rados& rhs);

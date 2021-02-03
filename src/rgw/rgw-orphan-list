@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+
+# version 2020-10-20
+
+# IMPORTANT: affects order produced by 'sort' and 'ceph-diff-sorted'
+# relies on this ordering
+export LANG=C
+
+out_dir="."
+temp_file=/tmp/temp.$$
+timestamp=$(date -u +%Y%m%d%H%M%S)
+lspools_err="${out_dir}/lspools-${timestamp}.error"
+rados_out="${out_dir}/rados-${timestamp}.intermediate"
+rados_odd="${out_dir}/rados-${timestamp}.issues"
+rados_err="${out_dir}/rados-${timestamp}.error"
+rgwadmin_out="${out_dir}/radosgw-admin-${timestamp}.intermediate"
+rgwadmin_err="${out_dir}/radosgw-admin-${timestamp}.error"
+delta_out="${out_dir}/orphan-list-${timestamp}.out"
+
+error_out() {
+    echo "An error was encountered while running '$1'. Aborting."
+    if [ $# -gt 2 ] ;then
+	echo "Error: $3"
+    fi
+    if [ $# -gt 1 ] ;then
+	echo "Review file '$2' for details."
+    fi
+    echo "***"
+    echo "*** WARNING: The results are incomplete. Do not use! ***"
+    echo "***"
+    exit 1
+}
+
+prompt_pool() {
+    # note: all prompts go to stderr so stdout contains just the result
+    >&2 echo "Available pools:"
+    rados lspools >"$temp_file" 2>"$lspools_err"
+    if [ "$?" -ne 0 ] ;then
+	error_out "rados lspools" "$lspools_err"
+    fi
+    >&2 sed 's/^/    /' "$temp_file" # list pools and indent
+    >&2 printf "Which pool do you want to search for orphans? "
+    local mypool
+    read mypool
+    echo $mypool
+}
+
+if [ $# -eq 0 ] ;then
+    pool="$(prompt_pool)"
+elif [ $# -eq 1 ] ;then
+    pool="$1"
+else
+    error_out "Usage: $0 [pool]"
+fi
+
+echo "Pool is \"$pool\"."
+
+echo "Note: output files produced will be tagged with the current timestamp -- ${timestamp}."
+
+echo "running 'rados ls' at $(date)"
+# since --format is not specified, plain should be used
+rados ls --pool="$pool" --all >"$rados_out" 2>"$rados_err"
+if [ "$?" -ne 0 ] ;then
+    error_out "rados ls" "$rados_err"
+fi
+
+# NOTE: Each entry (line of output) of `rados ls --all` should be in
+# one of four formats depending on whether or not an entry has a
+# namespace and/or locator:
+#
+#   <TAB>oid
+#   <TAB>oid<TAB>locator
+#   namespace<TAB>oid
+#   namespace<TAB>oid<TAB>locator
+#
+# Any occurrences of the 2nd, 3rd, or 4th (i.e., existence of
+# namespace and/or locator) should cause the create of the "odd" file
+# and an explanation in the output, and those entries will not be
+# retained, and therefore they will not be called out as orphans. They
+# will need special handling by the end-user as we do not expect
+# namespaces or locators.
+
+# check for namespaces -- any line that does not begin with a tab
+# indicates a namespace; add those to "odd" file and set flag; note:
+# this also picks up entries with namespace and locator
+grep $'^[^\t]' "$rados_out" >"$rados_odd"
+if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
+    namespace_found=1
+fi
+
+# check for locators (w/o namespace); we idenitfy them by skipping
+# past the empty namespace (i.e., one TAB), skipping past the oid,
+# then looking for a TAB; note we use egrep to get the '+' character
+# and the $ in front of the ' allows the \t to be interpreted as a TAB
+egrep $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
+if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
+    locator_found=1
+fi
+
+# extract the entries that are just oids (i.e., no namespace or
+# locator) for further processing; only look at lines that begin with
+# a TAB and do not contain a second TAB, and then grab everything
+# after the initial TAB
+grep $'^\t' "$rados_out" | grep -v $'^\t.*\t' | sed -E 's/^\t//' >"$temp_file"
+mv -f "$temp_file" "$rados_out"
+
+sort -u "$rados_out" >"$temp_file"
+mv -f "$temp_file" "$rados_out"
+
+echo "running 'radosgw-admin bucket radoslist' at $(date)"
+radosgw-admin bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
+if [ "$?" -ne 0 ] ;then
+    error_out "radosgw-admin radoslist" "$rgwadmin_err"
+fi
+sort -u "$rgwadmin_out" >"$temp_file"
+mv -f "$temp_file" "$rgwadmin_out"
+
+echo "computing delta at $(date)"
+ceph-diff-sorted "$rados_out" "$rgwadmin_out" | grep "^<" | sed 's/^< *//' >"$delta_out"
+# use PIPESTATUS to get at exit status of first process in above pipe;
+# 0 means same, 1 means different, >1 means error
+if [ "${PIPESTATUS[0]}" -gt 1 ] ;then
+    error_out "ceph-diff-sorted"
+fi
+
+found=$(wc -l < "$delta_out")
+possible=$(wc -l < "$rados_out")
+percentage=0
+if [ $possible -ne 0 ] ;then
+    percentage=$(expr 100 \* $found / $possible)
+fi
+
+echo "$found potential orphans found out of a possible $possible (${percentage}%)."
+echo "The results can be found in '${delta_out}'."
+echo "    Intermediate files are '${rados_out}' and '${rgwadmin_out}'."
+if [ -n "$namespace_found" -o -n "$locator_found" ] ;then
+    echo "    Note: 'rados ls' found entries that might be in a namespace or might"
+    echo "          have a locator; see '${rados_odd}' for those entries."
+fi
+echo "***"
+echo "*** WARNING: This is EXPERIMENTAL code and the results should be used"
+echo "***          only with CAUTION!"
+echo "***"
+echo "Done at $(date)."

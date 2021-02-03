@@ -11,13 +11,13 @@
 // future this message could be generalized to other state bits, but
 // for now name it for its sole application.
 
-class MOSDFull : public PaxosServiceMessage {
+class MOSDFull final : public PaxosServiceMessage {
 public:
   epoch_t map_epoch = 0;
   uint32_t state = 0;
 
 private:
-  ~MOSDFull() {}
+  ~MOSDFull() final {}
 
 public:
   MOSDFull(epoch_t e, unsigned s)
@@ -33,6 +33,7 @@ public:
     encode(state, payload);
   }
   void decode_payload() {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(map_epoch, p);
@@ -40,8 +41,8 @@ public:
   }
 
   std::string_view get_type_name() const { return "osd_full"; }
-  void print(ostream &out) const {
-    set<string> states;
+  void print(std::ostream &out) const {
+    std::set<std::string> states;
     OSDMap::calc_state_set(state, states);
     out << "osd_full(e" << map_epoch << " " << states << " v" << version << ")";
   }

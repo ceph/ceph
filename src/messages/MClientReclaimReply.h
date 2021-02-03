@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientReclaimReply: public Message {
+class MClientReclaimReply final : public SafeMessage {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -31,7 +31,7 @@ public:
   void set_addrs(const entity_addrvec_t& _addrs)  { addrs = _addrs; }
 
   std::string_view get_type_name() const override { return "client_reclaim_reply"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "client_reclaim_reply(" << result << " e " << epoch << ")";
   }
 
@@ -55,11 +55,11 @@ protected:
     MClientReclaimReply{0, 0}
   {}
   MClientReclaimReply(int r, epoch_t e=0) :
-    Message{CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION},
+    SafeMessage{CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION},
     result(r), epoch(e) {}
 
 private:
-  ~MClientReclaimReply() override {}
+  ~MClientReclaimReply() final {}
 
   int32_t result;
   epoch_t epoch;

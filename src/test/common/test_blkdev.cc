@@ -78,14 +78,6 @@ TEST_F(BlockDevTest, discard)
   EXPECT_TRUE(sdb.support_discard());
 }
 
-TEST_F(BlockDevTest, is_nvme)
-{
-  // It would be nice to have a positive NVME test too, but I don't have any
-  // examples for the canned data.
-  EXPECT_FALSE(sda.is_nvme());
-  EXPECT_FALSE(sdb.is_nvme());
-}
-
 TEST_F(BlockDevTest, is_rotational)
 {
   EXPECT_FALSE(sda.is_rotational());

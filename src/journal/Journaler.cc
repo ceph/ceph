@@ -47,7 +47,9 @@ Journaler::Threads::Threads(CephContext *cct) {
   thread_pool = new ThreadPool(cct, "Journaler::thread_pool", "tp_journal", 1);
   thread_pool->start();
 
-  work_queue = new ContextWQ("Journaler::work_queue", 60, thread_pool);
+  work_queue = new ContextWQ("Journaler::work_queue",
+                             ceph::make_timespan(60),
+                             thread_pool);
 
   timer = new SafeTimer(cct, timer_lock, true);
   timer->init();
@@ -128,7 +130,7 @@ void Journaler::exists(Context *on_finish) const {
   op.stat(nullptr, nullptr, nullptr);
 
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(on_finish, nullptr, rados_ctx_callback);
+    librados::Rados::aio_create_completion(on_finish, rados_ctx_callback);
   int r = m_header_ioctx.aio_operate(m_header_oid, comp, &op, nullptr);
   ceph_assert(r == 0);
   comp->release();
@@ -228,7 +230,7 @@ void Journaler::create(uint8_t order, uint8_t splay_width,
   client::create(&op, order, splay_width, pool_id);
 
   librados::AioCompletion *comp =
-    librados::Rados::aio_create_completion(on_finish, nullptr, rados_ctx_callback);
+    librados::Rados::aio_create_completion(on_finish, rados_ctx_callback);
   int r = m_header_ioctx.aio_operate(m_header_oid, comp, &op);
   ceph_assert(r == 0);
   comp->release();
@@ -238,7 +240,7 @@ void Journaler::remove(bool force, Context *on_finish) {
   // chain journal removal (reverse order)
   on_finish = new LambdaContext([this, on_finish](int r) {
       librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-        on_finish, nullptr, utils::rados_ctx_callback);
+        on_finish, utils::rados_ctx_callback);
       r = m_header_ioctx.aio_remove(m_header_oid, comp);
       ceph_assert(r == 0);
       comp->release();

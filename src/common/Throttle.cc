@@ -16,8 +16,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "throttle(" << name << " " << (void*)this << ") "
 
+using std::list;
+using std::ostream;
+using std::string;
+
 using ceph::mono_clock;
 using ceph::mono_time;
+using ceph::timespan;
 
 enum {
   l_throttle_first = 532430,
@@ -136,10 +141,7 @@ int64_t Throttle::take(int64_t c)
   }
   ceph_assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
-  {
-    std::lock_guard l(lock);
-    count += c;
-  }
+  count += c;
   if (logger) {
     logger->inc(l_throttle_take);
     logger->inc(l_throttle_take_sum, c);
@@ -151,6 +153,7 @@ int64_t Throttle::take(int64_t c)
 bool Throttle::get(int64_t c, int64_t m)
 {
   if (0 == max && 0 == m) {
+    count += c;
     return false;
   }
 
@@ -183,54 +186,67 @@ bool Throttle::get(int64_t c, int64_t m)
 bool Throttle::get_or_fail(int64_t c)
 {
   if (0 == max) {
+    count += c;
     return true;
   }
 
   assert (c >= 0);
-  std::lock_guard l(lock);
-  if (_should_wait(c) || !conds.empty()) {
-    ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
-    if (logger) {
-      logger->inc(l_throttle_get_or_fail_fail);
+  bool result = false;
+  {
+    std::lock_guard l(lock);
+    if (_should_wait(c) || !conds.empty()) {
+      ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
+      result = false;
+    } else {
+      ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
+	<< " -> " << (count.load() + c) << ")" << dendl;
+      count += c;
+      result = true;
     }
-    return false;
-  } else {
-    ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
-		   << " -> " << (count.load() + c) << ")" << dendl;
-    count += c;
-    if (logger) {
+  }
+
+  if (logger) {
+    if (result) {
       logger->inc(l_throttle_get_or_fail_success);
       logger->inc(l_throttle_get);
       logger->inc(l_throttle_get_sum, c);
       logger->set(l_throttle_val, count);
+    } else {
+      logger->inc(l_throttle_get_or_fail_fail);
     }
-    return true;
   }
+  return result;
 }
 
 int64_t Throttle::put(int64_t c)
 {
   if (0 == max) {
+    count -= c;
     return 0;
   }
 
   ceph_assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.load() << " -> "
 		 << (count.load()-c) << ")" << dendl;
-  std::lock_guard l(lock);
-  if (c) {
-    if (!conds.empty())
-      conds.front().notify_one();
-    // if count goes negative, we failed somewhere!
-    ceph_assert(count >= c);
-    count -= c;
-    if (logger) {
-      logger->inc(l_throttle_put);
-      logger->inc(l_throttle_put_sum, c);
-      logger->set(l_throttle_val, count);
+  int64_t new_count;
+  {
+    std::lock_guard l(lock);
+    new_count = count;
+    if (c) {
+      if (!conds.empty())
+	conds.front().notify_one();
+      // if count goes negative, we failed somewhere!
+      ceph_assert(count >= c);
+      new_count = count -= c;
     }
   }
-  return count;
+  if (logger) {
+    logger->inc(l_throttle_put);
+    logger->inc(l_throttle_put_sum, c);
+    logger->set(l_throttle_val, count);
+  }
+
+  return new_count;
 }
 
 void Throttle::reset()
@@ -666,52 +682,76 @@ uint64_t TokenBucketThrottle::Bucket::get(uint64_t c) {
   }
 
   uint64_t got = 0;
-  if (remain >= c) {
+  if (available >= c) {
     // There is enough token in bucket, take c.
     got = c;
+    available -= c;
     remain -= c;
   } else {
-    // There is not enough, take all remain.
-    got = remain;
-    remain = 0;
+    // There is not enough, take all available.
+    got = available;
+    remain -= available;
+    available = 0;
   }
   return got;
 }
 
-uint64_t TokenBucketThrottle::Bucket::put(uint64_t c) {
+uint64_t TokenBucketThrottle::Bucket::put(uint64_t tokens, double burst_ratio) {
   if (0 == max) {
     return 0;
   }
 
-  if (c) {
-    // put c tokens into bucket
+  if (tokens) {
+    // put tokens into bucket
     uint64_t current = remain;
-    if ((current + c) <= max) {
-      remain += c;
+    if ((current + tokens) <= capacity) {
+      remain += tokens;
     } else {
-      remain = max;
+      remain = capacity;
     }
+
+    // available tokens increase at burst speed
+    uint64_t available_inc = tokens;
+    if (burst_ratio > 1) {
+      available_inc = (uint64_t)(tokens * burst_ratio);
+    }
+    uint64_t inc_upper_limit = remain > max ? max : remain;
+    if ((available + available_inc) <= inc_upper_limit ){
+      available += available_inc;
+    }else{
+      available = inc_upper_limit;
+    }
+    
   }
   return remain;
 }
 
-void TokenBucketThrottle::Bucket::set_max(uint64_t m) {
-  if (remain > m || 0 == m) {
-    remain = m;
+void TokenBucketThrottle::Bucket::set_max(uint64_t max, uint64_t burst_seconds) {
+  // the capacity of bucket should not be less than max
+  if (burst_seconds < 1){
+    burst_seconds = 1;
   }
-  max = m;
+  uint64_t new_capacity = max*burst_seconds;
+  if (capacity != new_capacity){
+    capacity = new_capacity;
+    remain = capacity;
+  }
+  if (available > max || 0 == max) {
+    available = max;
+  }
+  this->max = max;
 }
 
 TokenBucketThrottle::TokenBucketThrottle(
     CephContext *cct,
     const std::string &name,
-    uint64_t capacity,
+    uint64_t burst,
     uint64_t avg,
     SafeTimer *timer,
     ceph::mutex *timer_lock)
   : m_cct(cct), m_name(name),
-    m_throttle(m_cct, name + "_bucket", capacity),
-    m_avg(avg), m_timer(timer), m_timer_lock(timer_lock),
+    m_throttle(m_cct, name + "_bucket", burst),
+    m_burst(burst), m_avg(avg), m_timer(timer), m_timer_lock(timer_lock),
     m_lock(ceph::make_mutex(name + "_lock"))
 {}
 
@@ -733,7 +773,7 @@ TokenBucketThrottle::~TokenBucketThrottle() {
   }
 }
 
-int TokenBucketThrottle::set_limit(uint64_t average, uint64_t burst) {
+int TokenBucketThrottle::set_limit(uint64_t average, uint64_t burst, uint64_t burst_seconds) {
   {
     std::lock_guard lock{m_lock};
 
@@ -761,7 +801,7 @@ int TokenBucketThrottle::set_limit(uint64_t average, uint64_t burst) {
       m_current_tick = 0;
 
       // for the default configuration of burst.
-      m_throttle.set_max(0 == burst ? average : burst);
+      m_throttle.set_max(0 == burst ? average : burst, burst_seconds);
     }
     // turn millisecond to second
     m_schedule_tick = m_tick / 1000.0;
@@ -804,7 +844,11 @@ void TokenBucketThrottle::add_tokens() {
   {
     std::lock_guard lock(m_lock);
     // put tokens into bucket.
-    m_throttle.put(tokens_this_tick());
+    double burst_ratio = 1.0;
+    if (m_throttle.max > m_avg && m_avg > 0){
+      burst_ratio = (double)m_throttle.max/m_avg;
+    }
+    m_throttle.put(tokens_this_tick(), burst_ratio);
     if (0 == m_avg || 0 == m_throttle.max)
       tmp_blockers.swap(m_blockers);
     // check the m_blockers from head to tail, if blocker can get

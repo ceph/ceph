@@ -43,8 +43,8 @@ def bash(cmd, **kwargs):
     check_retcode = kwargs.pop('check_retcode', True)
     kwargs['stdout'] = subprocess.PIPE
     process = subprocess.Popen(cmd, **kwargs)
-    s = process.communicate()[0]
-    log.debug('command returned status=%d stdout=%s', process.returncode, s.decode('utf-8'))
+    s = process.communicate()[0].decode('utf-8')
+    log.debug('command returned status=%d stdout=%s', process.returncode, s)
     if check_retcode:
         assert(process.returncode == 0)
     return (s, process.returncode)
@@ -61,10 +61,10 @@ class Cluster(multisite.Cluster):
         cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', self.cluster_id]
         if args:
             cmd += args
-        cmd += ['--debug-rgw', str(kwargs.pop('debug_rgw', 0))]
-        cmd += ['--debug-ms', str(kwargs.pop('debug_ms', 0))]
+        cmd += ['--debug-rgw=' + str(kwargs.pop('debug_rgw', 0))]
+        cmd += ['--debug-ms=' + str(kwargs.pop('debug_ms', 0))]
         if kwargs.pop('read_only', False):
-            cmd += ['--rgw-cache-enabled', 'false']
+            cmd += ['--rgw-cache-enabled=false']
         return bash(cmd, **kwargs)
 
     def start(self):
@@ -97,7 +97,7 @@ class Gateway(multisite.Gateway):
         # e.g. RGW_FRONTEND=civetweb
         # to run test under valgrind memcheck, set RGW_VALGRIND to 'yes'
         # e.g. RGW_VALGRIND=yes
-        cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port)]
+        cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port), str(self.ssl_port)]
         if self.id:
             cmd += ['-i', self.id]
         cmd += ['--debug-rgw=20', '--debug-ms=1']
@@ -108,7 +108,7 @@ class Gateway(multisite.Gateway):
     def stop(self):
         """ stop the gateway """
         assert(self.cluster)
-        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', self.id]
+        cmd = [mstart_path + 'mstop.sh', self.cluster.cluster_id, 'radosgw', str(self.port)]
         bash(cmd)
 
 def gen_access_key():
@@ -183,6 +183,7 @@ def init(parse_args):
                                          'checkpoint_retries': 60,
                                          'checkpoint_delay': 5,
                                          'reconfigure_delay': 5,
+                                         'use_ssl': 'false',
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
@@ -213,6 +214,7 @@ def init(parse_args):
     parser.add_argument('--checkpoint-delay', type=int, default=cfg.getint(section, 'checkpoint_delay'))
     parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
     parser.add_argument('--num-ps-zones', type=int, default=cfg.getint(section, 'num_ps_zones'))
+    parser.add_argument('--use-ssl', type=bool, default=cfg.getboolean(section, 'use_ssl'))
 
 
     es_cfg = []
@@ -269,9 +271,29 @@ def init(parse_args):
     num_az_zones = cfg.getint(section, 'num_az_zones')
 
     num_ps_zones = args.num_ps_zones if num_ps_zones_from_conf == 0 else num_ps_zones_from_conf 
-    print 'num_ps_zones = ' + str(num_ps_zones)
 
     num_zones = args.num_zones + num_es_zones + num_cloud_zones + num_ps_zones + num_az_zones
+
+    use_ssl = cfg.getboolean(section, 'use_ssl')
+
+    if use_ssl and bootstrap:
+        cmd = ['openssl', 'req', 
+                '-x509', 
+                '-newkey', 'rsa:4096', 
+                '-sha256', 
+                '-nodes', 
+                '-keyout', 'key.pem', 
+                '-out', 'cert.pem', 
+                '-subj', '/CN=localhost', 
+                '-days', '3650']
+        bash(cmd)
+        # append key to cert
+        fkey = open('./key.pem', 'r')
+        if fkey.mode == 'r':
+            fcert = open('./cert.pem', 'a')
+            fcert.write(fkey.read())
+            fcert.close()
+        fkey.close()
 
     for zg in range(0, args.num_zonegroups):
         zonegroup = multisite.ZoneGroup(zonegroup_name(zg), period)
@@ -362,11 +384,13 @@ def init(parse_args):
             if bootstrap:
                 period.update(zone, commit=True)
 
+            ssl_port_offset = 1000
             # start the gateways
             for g in range(0, args.gateways_per_zone):
                 port = gateway_port(zg, g + z * args.gateways_per_zone)
                 client_id = gateway_name(zg, z, g)
-                gateway = Gateway(client_id, 'localhost', port, cluster, zone)
+                gateway = Gateway(client_id, 'localhost', port, cluster, zone, 
+                        ssl_port = port+ssl_port_offset if use_ssl else 0)
                 if bootstrap:
                     gateway.start()
                 zone.gateways.append(gateway)

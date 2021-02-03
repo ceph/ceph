@@ -257,7 +257,6 @@ struct CompatSet {
 };
 WRITE_CLASS_ENCODER(CompatSet)
 
-using ceph::operator <<;
 inline std::ostream& operator<<(std::ostream& out, const CompatSet::FeatureSet& fs)
 {
   return out << fs.names;

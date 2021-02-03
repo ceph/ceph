@@ -1,16 +1,8 @@
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { RouterTestingModule } from '@angular/router/testing';
 
-import * as _ from 'lodash';
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
-
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { SharedModule } from '../../../shared/shared.module';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
 @Component({ selector: 'cd-cephfs-chart', template: '' })
@@ -19,50 +11,45 @@ class CephfsChartStubComponent {
   mdsCounter: any;
 }
 
-@Component({ selector: 'cd-cephfs-clients', template: '' })
-class CephfsClientsStubComponent {
-  @Input()
-  mdsCounter: any;
-}
-
 describe('CephfsDetailComponent', () => {
   let component: CephfsDetailComponent;
   let fixture: ComponentFixture<CephfsDetailComponent>;
 
+  const updateDetails = (
+    standbys: string,
+    pools: any[],
+    ranks: any[],
+    mdsCounters: object,
+    name: string
+  ) => {
+    component.data = {
+      standbys,
+      pools,
+      ranks,
+      mdsCounters,
+      name
+    };
+    fixture.detectChanges();
+  };
+
   configureTestBed({
-    imports: [
-      SharedModule,
-      RouterTestingModule,
-      BsDropdownModule.forRoot(),
-      ProgressbarModule.forRoot(),
-      TabsModule.forRoot(),
-      HttpClientTestingModule
-    ],
-    declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
-    providers: i18nProviders
+    imports: [SharedModule],
+    declarations: [CephfsDetailComponent, CephfsChartStubComponent]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(CephfsDetailComponent);
     component = fixture.componentInstance;
+    updateDetails('b', [], [], { a: { name: 'a', x: [0], y: [0, 1] } }, 'someFs');
     fixture.detectChanges();
+    component.ngOnChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should resist invalid mds info', () => {
-    component.selection = new CdTableSelection();
-    component.selection.selected = [
-      {
-        mdsmap: {
-          info: {}
-        }
-      }
-    ];
-    component.selection.update();
-    component.ngOnChanges();
-    expect(_.isUndefined(component.grafanaId)).toBeTruthy();
+  it('prepares standby on change', () => {
+    expect(component.standbys).toEqual([{ key: 'Standby daemons', value: 'b' }]);
   });
 });

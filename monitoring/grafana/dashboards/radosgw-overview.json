@@ -83,14 +83,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "avg(rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s]))",
+          "expr": "rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "GET AVG",
           "refId": "A"
         },
         {
-          "expr": "avg(rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s]))",
+          "expr": "rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "PUT AVG",

@@ -39,6 +39,7 @@
 #include "mon/MonClient.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
+#include "common/async/context_pool.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -82,6 +83,7 @@ class TestStub : public Dispatcher
 {
  protected:
   MessengerRef messenger;
+  ceph::async::io_context_pool poolctx;
   MonClient monc;
 
   ceph::mutex lock;
@@ -163,6 +165,7 @@ class TestStub : public Dispatcher
     monc.shutdown();
     timer.shutdown();
     messenger->shutdown();
+    poolctx.finish();
     return 0;
   }
 
@@ -177,7 +180,7 @@ class TestStub : public Dispatcher
 
   TestStub(CephContext *cct, string who)
     : Dispatcher(cct),
-      monc(cct),
+      monc(cct, poolctx),
       lock(ceph::make_mutex(who.append("::lock"))),
       timer(cct, lock),
       do_shutdown(false),
@@ -244,6 +247,7 @@ class ClientStub : public TestStub
 
   int init() override {
     int err;
+    poolctx.start(1);
     err = monc.build_initial_monmap();
     if (err < 0) {
       derr << "ClientStub::" << __func__ << " ERROR: build initial monmap: "
@@ -259,7 +263,7 @@ class ClientStub : public TestStub
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
 	    << messenger->get_myaddrs() << dendl;
 
-    objecter.reset(new Objecter(cct, messenger.get(), &monc, NULL, 0, 0));
+    objecter.reset(new Objecter(cct, messenger.get(), &monc, poolctx));
     ceph_assert(objecter.get() != NULL);
     objecter->set_balanced_budget();
 
@@ -358,7 +362,7 @@ class OSDStub : public TestStub
     ss << "client-osd" << whoami;
     std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     messenger.reset(Messenger::create(cct, public_msgr_type, entity_name_t::OSD(whoami),
-				      ss.str().c_str(), getpid(), 0));
+				      ss.str().c_str(), getpid()));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
 	g_conf()->osd_client_message_size_cap);

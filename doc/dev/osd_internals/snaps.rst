@@ -27,7 +27,7 @@ See OSD::make_writeable
 
 Ondisk Structures
 -----------------
-Each object has in the pg collection a *head* object (or *snapdir*, which we
+Each object has in the PG collection a *head* object (or *snapdir*, which we
 will come to shortly) and possibly a set of *clone* objects.
 Each hobject_t has a snap field.  For the *head* (the only writeable version
 of an object), the snap field is set to CEPH_NOSNAP.  For the *clones*, the
@@ -68,7 +68,7 @@ removal, we maintain a mapping from snap to *hobject_t* using the
 See PrimaryLogPG::SnapTrimmer, SnapMapper
 
 This trimming is performed asynchronously by the snap_trim_wq while the
-pg is clean and not scrubbing.
+PG is clean and not scrubbing.
 
   #. The next snap in PG::snap_trimq is selected for trimming
   #. We determine the next object for trimming out of PG::snap_mapper.
@@ -90,7 +90,7 @@ pg is clean and not scrubbing.
 Recovery
 --------
 Because the trim operations are implemented using repops and log entries,
-normal pg peering and recovery maintain the snap trimmer operations with
+normal PG peering and recovery maintain the snap trimmer operations with
 the caveat that push and removal operations need to update the local
 *SnapMapper* instance.  If the purged_snaps update is lost, we merely
 retrim a now empty snap.
@@ -117,12 +117,12 @@ is constant length.  These keys have a bufferlist encoding
 pair<snapid, hobject_t> as a value.  Thus, creating or trimming a single
 object does not involve reading all objects for any snap.  Additionally,
 upon construction, the *SnapMapper* is provided with a mask for filtering
-the objects in the single SnapMapper keyspace belonging to that pg.
+the objects in the single SnapMapper keyspace belonging to that PG.
 
 Split
 -----
-The snapid_t -> hobject_t key entries are arranged such that for any pg,
+The snapid_t -> hobject_t key entries are arranged such that for any PG,
 up to 8 prefixes need to be checked to determine all hobjects in a particular
-snap for a particular pg.  Upon split, the prefixes to check on the parent
-are adjusted such that only the objects remaining in the pg will be visible.
+snap for a particular PG.  Upon split, the prefixes to check on the parent
+are adjusted such that only the objects remaining in the PG will be visible.
 The children will immediately have the correct mapping.

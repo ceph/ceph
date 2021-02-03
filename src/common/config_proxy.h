@@ -11,12 +11,8 @@
 // @c ConfigProxy is a facade of multiple config related classes. it exposes
 // the legacy settings with arrow operator, and the new-style config with its
 // member methods.
+namespace ceph::common {
 class ConfigProxy {
-  static ConfigValues get_config_values(const ConfigProxy &config_proxy) {
-    std::lock_guard locker(config_proxy.lock);
-    return config_proxy.values;
-  }
-
   /**
    * The current values of all settings described by the schema
    */
@@ -114,7 +110,7 @@ public:
     : config{values, obs_mgr, is_daemon}
   {}
   explicit ConfigProxy(const ConfigProxy &config_proxy)
-    : values(get_config_values(config_proxy)),
+    : values(config_proxy.get_config_values()),
       config{values, obs_mgr, config_proxy.config.is_daemon}
   {}
   const ConfigValues* operator->() const noexcept {
@@ -122,6 +118,16 @@ public:
   }
   ConfigValues* operator->() noexcept {
     return &values;
+  }
+  ConfigValues get_config_values() const {
+    std::lock_guard l{lock};
+    return values;
+  }
+  void set_config_values(const ConfigValues& val) {
+#ifndef WITH_SEASTAR
+    std::lock_guard l{lock};
+#endif
+    values = val;
   }
   int get_val(const std::string_view key, char** buf, int len) const {
     std::lock_guard l{lock};
@@ -164,9 +170,9 @@ public:
     std::lock_guard l{lock};
     return config.diff(values, f, name);
   }
-  void get_my_sections(std::vector <std::string> &sections) const {
+  std::vector<std::string> get_my_sections() const {
     std::lock_guard l{lock};
-    config.get_my_sections(values, sections);
+    return config.get_my_sections(values);
   }
   int get_all_sections(std::vector<std::string>& sections) const {
     std::lock_guard l{lock};
@@ -193,7 +199,6 @@ public:
     rev_obs_map_t rev_obs;
     if (config.finalize_reexpand_meta(values, obs_mgr)) {
       _gather_changes(values.changed, &rev_obs, nullptr);
-      values.changed.clear();
     }
 
     call_observers(locker, rev_obs);
@@ -250,7 +255,6 @@ public:
     if (!values.cluster.empty()) {
       // meta expands could have modified anything.  Copy it all out again.
       _gather_changes(values.changed, &rev_obs, oss);
-      values.changed.clear();
     }
 
     call_observers(locker, rev_obs);
@@ -262,6 +266,7 @@ public:
       [this, rev_obs](md_config_obs_t *obs, const std::string &key) {
         map_observer_changes(obs, key, rev_obs);
       }, oss);
+      changes.clear();
   }
   int set_val(const std::string_view key, const std::string& s,
               std::stringstream* err_ss=nullptr) {
@@ -284,7 +289,6 @@ public:
 
     rev_obs_map_t rev_obs;
     _gather_changes(values.changed, &rev_obs, nullptr);
-    values.changed.clear();
 
     call_observers(locker, rev_obs);
     return ret;
@@ -295,7 +299,6 @@ public:
 
     rev_obs_map_t rev_obs;
     _gather_changes(values.changed, &rev_obs, oss);
-    values.changed.clear();
 
     call_observers(locker, rev_obs);
     return ret;
@@ -318,6 +321,9 @@ public:
   bool has_parse_error() const {
     return !config.parse_error.empty();
   }
+  std::string get_parse_error() {
+    return config.parse_error;
+  }
   void complain_about_parse_error(CephContext *cct) {
     return config.complain_about_parse_error(cct);
   }
@@ -336,3 +342,5 @@ public:
     config.get_defaults_bl(values, bl);
   }
 };
+
+}

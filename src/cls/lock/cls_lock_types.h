@@ -13,23 +13,23 @@
 #define LOCK_FLAG_MAY_RENEW 0x1    /* idempotent lock acquire */
 #define LOCK_FLAG_MUST_RENEW 0x2   /* lock must already be acquired */
 
-enum ClsLockType {
-  LOCK_NONE                = 0,
-  LOCK_EXCLUSIVE           = 1,
-  LOCK_SHARED              = 2,
-  LOCK_EXCLUSIVE_EPHEMERAL = 3, /* lock object is removed @ unlock */
+enum class ClsLockType {
+  NONE                = 0,
+  EXCLUSIVE           = 1,
+  SHARED              = 2,
+  EXCLUSIVE_EPHEMERAL = 3, /* lock object is removed @ unlock */
 };
 
 inline const char *cls_lock_type_str(ClsLockType type)
 {
     switch (type) {
-      case LOCK_NONE:
+      case ClsLockType::NONE:
 	return "none";
-      case LOCK_EXCLUSIVE:
+      case ClsLockType::EXCLUSIVE:
 	return "exclusive";
-      case LOCK_SHARED:
+      case ClsLockType::SHARED:
 	return "shared";
-      case LOCK_EXCLUSIVE_EPHEMERAL:
+      case ClsLockType::EXCLUSIVE_EPHEMERAL:
 	return "exclusive-ephemeral";
       default:
 	return "<unknown>";
@@ -37,17 +37,17 @@ inline const char *cls_lock_type_str(ClsLockType type)
 }
 
 inline bool cls_lock_is_exclusive(ClsLockType type) {
-  return LOCK_EXCLUSIVE == type || LOCK_EXCLUSIVE_EPHEMERAL == type;
+  return ClsLockType::EXCLUSIVE == type || ClsLockType::EXCLUSIVE_EPHEMERAL == type;
 }
 
 inline bool cls_lock_is_ephemeral(ClsLockType type) {
-  return LOCK_EXCLUSIVE_EPHEMERAL == type;
+  return ClsLockType::EXCLUSIVE_EPHEMERAL == type;
 }
 
 inline bool cls_lock_is_valid(ClsLockType type) {
-  return LOCK_SHARED == type ||
-    LOCK_EXCLUSIVE == type ||
-    LOCK_EXCLUSIVE_EPHEMERAL == type;
+  return ClsLockType::SHARED == type ||
+    ClsLockType::EXCLUSIVE == type ||
+    ClsLockType::EXCLUSIVE_EPHEMERAL == type;
 }
 
 namespace rados {
@@ -84,13 +84,13 @@ namespace rados {
             return true;
           return false;
         }
-        void dump(Formatter *f) const;
+        void dump(ceph::Formatter *f) const;
 	friend std::ostream& operator<<(std::ostream& out,
 					const locker_id_t& data) {
 	  out << data.locker;
 	  return out;
 	}
-        static void generate_test_instances(list<locker_id_t*>& o);
+        static void generate_test_instances(std::list<locker_id_t*>& o);
       };
       WRITE_CLASS_ENCODER(locker_id_t)
 
@@ -118,9 +118,10 @@ namespace rados {
           decode(description, bl);
           DECODE_FINISH(bl);
         }
-        void dump(Formatter *f) const;
+        void dump(ceph::Formatter *f) const;
 	friend std::ostream& operator<<(std::ostream& out,
 					const locker_info_t& data) {
+	  using ceph::operator <<;
 	  out << "{addr:" << data.addr << ", exp:";
 
 	  const auto& exp = data.expiration;
@@ -132,12 +133,12 @@ namespace rados {
 
 	  return out;
 	}
-        static void generate_test_instances(list<locker_info_t *>& o);
+        static void generate_test_instances(std::list<locker_info_t *>& o);
       };
       WRITE_CLASS_ENCODER_FEATURES(locker_info_t)
 
       struct lock_info_t {
-        map<locker_id_t, locker_info_t> lockers; // map of lockers
+	std::map<locker_id_t, locker_info_t> lockers; // map of lockers
         ClsLockType lock_type;                   // lock type (exclusive / shared)
 	std::string tag;                              // tag: operations on lock can only succeed with this tag
                                                  //      as long as set of non expired lockers
@@ -160,9 +161,10 @@ namespace rados {
           decode(tag, bl);
           DECODE_FINISH(bl);
         }
-        lock_info_t() : lock_type(LOCK_NONE) {}
-        void dump(Formatter *f) const;
-        static void generate_test_instances(list<lock_info_t *>& o);
+
+        lock_info_t() : lock_type(ClsLockType::NONE) {}
+        void dump(ceph::Formatter *f) const;
+        static void generate_test_instances(std::list<lock_info_t *>& o);
       };
       WRITE_CLASS_ENCODER_FEATURES(lock_info_t);
     }

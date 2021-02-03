@@ -118,7 +118,7 @@ public:
 
   int get_params();
   void init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store);
-  int get_torrent_file(RGWRados::Object::Read &read_op,
+  int get_torrent_file(rgw::sal::RGWObject* object,
                        uint64_t &total_len,
                        ceph::bufferlist &bl_data,
                        rgw_obj &obj);
@@ -129,7 +129,7 @@ public:
   void set_create_date(ceph::real_time& value);
   void set_info_name(const string& value);
   void update(bufferlist &bl);
-  int complete();
+  int complete(optional_yield y);
 
 private:
   void do_encode ();
@@ -137,6 +137,6 @@ private:
   void set_exist(bool exist);
   void set_info_pieces(char *buff);
   void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
-  int save_torrent_file();
+  int save_torrent_file(optional_yield y);
 };
 #endif /* CEPH_RGW_TORRENT_H */

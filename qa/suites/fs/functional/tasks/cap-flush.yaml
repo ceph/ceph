@@ -1,0 +1,8 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - Replacing daemon mds.a
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_cap_flush

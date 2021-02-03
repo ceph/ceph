@@ -1,11 +1,12 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { AbstractControl, FormControl } from '@angular/forms';
 
-import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-iscsi-target-image-settings-modal',
@@ -15,44 +16,48 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 export class IscsiTargetImageSettingsModalComponent implements OnInit {
   image: string;
   imagesSettings: any;
+  api_version: number;
   disk_default_controls: any;
   disk_controls_limits: any;
   backstores: any;
+  control: AbstractControl;
 
   settingsForm: CdFormGroup;
-  helpText: any;
 
-  constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
+  constructor(
+    public activeModal: NgbActiveModal,
+    public iscsiService: IscsiService,
+    public actionLabels: ActionLabelsI18n
+  ) {}
 
   ngOnInit() {
-    this.helpText = this.iscsiService.imageAdvancedSettings;
-
-    const fg = {
-      backstore: new FormControl(this.imagesSettings[this.image]['backstore'])
+    const fg: Record<string, FormControl> = {
+      backstore: new FormControl(this.imagesSettings[this.image]['backstore']),
+      lun: new FormControl(this.imagesSettings[this.image]['lun']),
+      wwn: new FormControl(this.imagesSettings[this.image]['wwn'])
     };
     _.forEach(this.backstores, (backstore) => {
       const model = this.imagesSettings[this.image][backstore] || {};
       _.forIn(this.disk_default_controls[backstore], (_value, key) => {
-        const validators = [];
-        if (this.disk_controls_limits && key in this.disk_controls_limits[backstore]) {
-          if ('min' in this.disk_controls_limits[backstore][key]) {
-            validators.push(Validators.min(this.disk_controls_limits[backstore][key]['min']));
-          }
-          if ('max' in this.disk_controls_limits[backstore][key]) {
-            validators.push(Validators.max(this.disk_controls_limits[backstore][key]['max']));
-          }
-        }
-        fg[key] = new FormControl(model[key], {
-          validators: validators
-        });
+        fg[key] = new FormControl(model[key]);
       });
     });
 
     this.settingsForm = new CdFormGroup(fg);
   }
 
+  getDiskControlLimits(backstore: string, setting: string) {
+    if (this.disk_controls_limits) {
+      return this.disk_controls_limits[backstore][setting];
+    }
+    // backward compatibility
+    return { type: 'int' };
+  }
+
   save() {
     const backstore = this.settingsForm.controls['backstore'].value;
+    const lun = this.settingsForm.controls['lun'].value;
+    const wwn = this.settingsForm.controls['wwn'].value;
     const settings = {};
     _.forIn(this.settingsForm.controls, (control, key) => {
       if (
@@ -72,8 +77,11 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
       }
     });
     this.imagesSettings[this.image]['backstore'] = backstore;
+    this.imagesSettings[this.image]['lun'] = lun;
+    this.imagesSettings[this.image]['wwn'] = wwn;
     this.imagesSettings[this.image][backstore] = settings;
     this.imagesSettings = { ...this.imagesSettings };
-    this.modalRef.hide();
+    this.control.updateValueAndValidity({ emitEvent: false });
+    this.activeModal.close();
   }
 }

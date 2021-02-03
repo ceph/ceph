@@ -1,17 +1,29 @@
+from mgr_util import get_most_recent_rate
+
 from dashboard.services.ceph_service import CephService
+
 from .. import mgr
+
+try:
+    from typing import Dict
+except ImportError:
+    pass  # Just for type checking
+
 
 SERVICE_TYPE = 'tcmu-runner'
 
 
 class TcmuService(object):
     # pylint: disable=too-many-nested-blocks
+    # pylint: disable=too-many-branches
     @staticmethod
     def get_iscsi_info():
-        daemons = {}
-        images = {}
+        daemons = {}  # type: Dict[str, dict]
+        images = {}  # type: Dict[str, dict]
         for service in CephService.get_service_list(SERVICE_TYPE):
             metadata = service['metadata']
+            if metadata is None:
+                continue
             status = service['status']
             hostname = service['hostname']
 
@@ -48,9 +60,13 @@ class TcmuService(object):
                     pool=metadata['pool_name'],
                     name=metadata['image_name'])
                 perf_key = "{}lock_acquired_time".format(perf_key_prefix)
-                lock_acquired_time = (mgr.get_counter(
-                    'tcmu-runner', service_id, perf_key)[perf_key]
-                                      or [[0, 0]])[-1][1] / 1000000000
+                perf_value = mgr.get_counter('tcmu-runner',
+                                             service_id,
+                                             perf_key)[perf_key]
+                if perf_value:
+                    lock_acquired_time = perf_value[-1][1] / 1000000000
+                else:
+                    lock_acquired_time = 0
                 if lock_acquired_time > image.get('optimized_since', 0):
                     image['optimized_daemon'] = hostname
                     image['optimized_since'] = lock_acquired_time
@@ -58,10 +74,9 @@ class TcmuService(object):
                     image['stats_history'] = {}
                     for s in ['rd', 'wr', 'rd_bytes', 'wr_bytes']:
                         perf_key = "{}{}".format(perf_key_prefix, s)
-                        image['stats'][s] = CephService.get_rate(
-                            'tcmu-runner', service_id, perf_key)
-                        image['stats_history'][s] = CephService.get_rates(
-                            'tcmu-runner', service_id, perf_key)
+                        rates = CephService.get_rates('tcmu-runner', service_id, perf_key)
+                        image['stats'][s] = get_most_recent_rate(rates)
+                        image['stats_history'][s] = rates
             else:
                 daemon['non_optimized_paths'] += 1
                 image['non_optimized_paths'].append(hostname)

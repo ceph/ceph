@@ -1,6 +1,7 @@
 =======
  Pools
 =======
+Pools are logical partitions for storing objects.
 
 When you first deploy a cluster without creating a pool, Ceph uses the default
 pools for storing data. A pool provides you with:
@@ -58,10 +59,10 @@ For example::
 
 To create a pool, execute::
 
-	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated] \
+	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
              [crush-rule-name] [expected-num-objects]
-	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
-             [erasure-code-profile] [crush-rule-name] [expected_num_objects]
+	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]]   erasure \
+             [erasure-code-profile] [crush-rule-name] [expected_num_objects] [--autoscale-mode=<on,off,warn>]
 
 Where:
 
@@ -131,15 +132,15 @@ Where:
 :Type: String
 :Required: No.
 
-When you create a pool, set the number of placement groups to a reasonable value
-(e.g., ``100``). Consider the total number of placement groups per OSD too.
-Placement groups are computationally expensive, so performance will degrade when
-you have many pools with many placement groups (e.g., 50 pools with 100
-placement groups each). The point of diminishing returns depends upon the power
-of the OSD host.
+``--autoscale-mode=<on,off,warn>``
 
-See `Placement Groups`_ for details on calculating an appropriate number of
-placement groups for your pool.
+:Description: Autoscale mode
+
+:Type: String
+:Required: No.
+:Default:  The default behavior is controlled by the ``osd pool default pg autoscale mode`` option.
+
+If you set the autoscale mode to ``on`` or ``warn``, you can let the system autotune or recommend changes to the number of placement groups in your pool based on actual usage.  If you leave it off, then you should refer to `Placement Groups`_ for more information.
 
 .. _Placement Groups: ../placement-groups
 
@@ -275,21 +276,21 @@ You may set values for the following keys:
 
 ``compression_algorithm``
 
-:Description: Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression algorithm``.
+:Description: Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the `global setting <https://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#inline-compression>`__ of ``bluestore compression algorithm``.
 
 :Type: String
 :Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
 
 ``compression_mode``
 
-:Description: Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression mode``.
+:Description: Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#inline-compression>`__ of ``bluestore compression mode``.
 
 :Type: String
 :Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
 
 ``compression_min_blob_size``
 
-:Description: Chunks smaller than this are never compressed. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression min blob *``.
+:Description: Chunks smaller than this are never compressed. This setting overrides the `global setting <http://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#inline-compression>`__ of ``bluestore compression min blob *``.
 
 :Type: Unsigned Integer
 
@@ -316,7 +317,11 @@ You may set values for the following keys:
 
 :Description: Sets the minimum number of replicas required for I/O.
               See `Set the Number of Object Replicas`_ for further details.
-              Replicated pools only.
+              In the case of Erasure Coded pools this should be set to a value
+              greater than 'k' since if we allow IO at the value 'k' there is no
+              redundancy and data will be lost in the event of a permanent OSD
+              failure. For more information see `Erasure Code
+              <../erasure-code>`_
 
 :Type: Integer
 :Version: ``0.54`` and above
@@ -832,4 +837,3 @@ a size of 3).
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
 .. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites
 .. _Block Device Commands: ../../../rbd/rados-rbd-cmds/#create-a-block-device-pool
-

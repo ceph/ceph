@@ -25,6 +25,18 @@ Definitions
 Monitor
 -------
 
+DAEMON_OLD_VERSION
+__________________
+
+Warn if old version(s) of Ceph are running on any daemons.
+It will generate a health error if multiple versions are detected.
+This condition must exist for over mon_warn_older_version_delay (set to 1 week by default) in order for the
+health condition to be triggered.  This allows most upgrades to proceed
+without falsely seeing the warning.  If upgrade is paused for an extended
+time period, health mute can be used like this
+"ceph health mute DAEMON_OLD_VERSION --sticky".  In this case after
+upgrade has finished use "ceph health unmute DAEMON_OLD_VERSION".
+
 MON_DOWN
 ________
 
@@ -209,15 +221,15 @@ The OSD can be removed from the CRUSH hierarchy with::
 OSD_OUT_OF_ORDER_FULL
 _____________________
 
-The utilization thresholds for `backfillfull`, `nearfull`, `full`,
+The utilization thresholds for `nearfull`, `backfillfull`, `full`,
 and/or `failsafe_full` are not ascending.  In particular, we expect
-`backfillfull < nearfull`, `nearfull < full`, and `full <
+`nearfull < backfillfull`, `backfillfull < full`, and `full <
 failsafe_full`.
 
 The thresholds can be adjusted with::
 
-  ceph osd set-backfillfull-ratio <ratio>
   ceph osd set-nearfull-ratio <ratio>
+  ceph osd set-backfillfull-ratio <ratio>
   ceph osd set-full-ratio <ratio>
 
 
@@ -530,6 +542,28 @@ are correctly installed and that the OSD daemon(s) have been
 restarted.  If the problem persists, check the OSD log for any clues
 as to the source of the problem.
 
+BLUESTORE_SPURIOUS_READ_ERRORS
+______________________________
+
+One or more OSDs using BlueStore detects spurious read errors at main device.
+BlueStore has recovered from these errors by retrying disk reads.
+Though this might show some issues with underlying hardware, I/O subsystem,
+etc.
+Which theoretically might cause permanent data corruption.
+Some observations on the root cause can be found at 
+https://tracker.ceph.com/issues/22464
+
+This alert doesn't require immediate response but corresponding host might need
+additional attention, e.g. upgrading to the latest OS/kernel versions and
+H/W resource utilization monitoring.
+
+This warning can be disabled on all OSDs with::
+
+  ceph config set osd bluestore_warn_on_spurious_read_errors false
+
+Alternatively, it can be disabled on a specific OSD with::
+
+  ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
 
 
 Device health
@@ -688,6 +722,16 @@ paired with *PG_DAMAGED* (see above).
 
 See :doc:`pg-repair` for more information.
 
+OSD_TOO_MANY_REPAIRS
+____________________
+
+When a read error occurs and another replica is available it is used to repair
+the error immediately, so that the client can get the object data.  Scrub
+handles errors for data at rest.  In order to identify possible failing disks
+that aren't seeing scrub errors, a count of read repairs is maintained.  If
+it exceeds a config value threshold *mon_osd_warn_num_repaired* default 10,
+this health warning is generated.
+
 LARGE_OMAP_OBJECTS
 __________________
 
@@ -739,6 +783,23 @@ created.
 The PG count for existing pools can be increased or new pools can be created.
 Please refer to :ref:`choosing-number-of-placement-groups` for more
 information.
+
+POOL_PG_NUM_NOT_POWER_OF_TWO
+____________________________
+
+One or more pools has a ``pg_num`` value that is not a power of two.
+Although this is not strictly incorrect, it does lead to a less
+balanced distribution of data because some PGs have roughly twice as
+much data as others.
+
+This is easily corrected by setting the ``pg_num`` value for the
+affected pool(s) to a nearby power of two::
+
+  ceph osd pool set <pool-name> pg_num <value>
+
+This health warning can be disabled with::
+
+  ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
 
 POOL_TOO_FEW_PGS
 ________________
@@ -816,21 +877,6 @@ recommended amount with::
 Please refer to :ref:`choosing-number-of-placement-groups` and
 :ref:`pg-autoscaler` for more information.
 
-POOL_TARGET_SIZE_RATIO_OVERCOMMITTED
-____________________________________
-
-One or more pools have a ``target_size_ratio`` property set to
-estimate the expected size of the pool as a fraction of total storage,
-but the value(s) exceed the total available storage (either by
-themselves or in combination with other pools' actual usage).
-
-This is usually an indication that the ``target_size_ratio`` value for
-the pool is too large and should be reduced or set to zero with::
-
-  ceph osd pool set <pool-name> target_size_ratio 0
-
-For more information, see :ref:`specifying_pool_target_size`.
-
 POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
 ____________________________________
 
@@ -841,6 +887,21 @@ themselves or in combination with other pools' actual usage).
 
 This is usually an indication that the ``target_size_bytes`` value for
 the pool is too large and should be reduced or set to zero with::
+
+  ceph osd pool set <pool-name> target_size_bytes 0
+
+For more information, see :ref:`specifying_pool_target_size`.
+
+POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO
+____________________________________
+
+One or more pools have both ``target_size_bytes`` and
+``target_size_ratio`` set to estimate the expected size of the pool.
+Only one of these properties should be non-zero. If both are set,
+``target_size_ratio`` takes precedence and ``target_size_bytes`` is
+ignored.
+
+To reset ``target_size_bytes`` to zero::
 
   ceph osd pool set <pool-name> target_size_bytes 0
 
@@ -920,8 +981,9 @@ Setting the quota value to 0 will disable the quota.
 POOL_NEAR_FULL
 ______________
 
-One or more pools is approaching is quota.  The threshold to trigger
-this warning condition is controlled by the
+One or more pools is approaching a configured fullness threshold.
+
+One threshold that can trigger this warning condition is the
 ``mon_pool_quota_warn_threshold`` configuration option.
 
 Pool quotas can be adjusted up or down (or removed) with::
@@ -930,6 +992,11 @@ Pool quotas can be adjusted up or down (or removed) with::
   ceph osd pool set-quota <pool> max_objects <objects>
 
 Setting the quota value to 0 will disable the quota.
+
+Other thresholds that can trigger the above two warning conditions are
+``mon_osd_nearfull_ratio`` and ``mon_osd_full_ratio``.  Visit the
+:ref:`storage-capacity` and :ref:`no-free-drive-space` documents for details
+and resolution.
 
 OBJECT_MISPLACED
 ________________
@@ -966,12 +1033,12 @@ told to roll back to a previous version of the object. See
 SLOW_OPS
 ________
 
-One or more OSD requests is taking a long time to process.  This can
+One or more OSD or monitor requests is taking a long time to process.  This can
 be an indication of extreme load, a slow storage device, or a software
 bug.
 
-The request queue on the OSD(s) in question can be queried with the
-following command, executed from the OSD host::
+The request queue for the daemon in question can be queried with the
+following command, executed from the daemon's host::
 
   ceph daemon osd.<id> ops
 
@@ -986,10 +1053,13 @@ The location of an OSD can be found with::
 PG_NOT_SCRUBBED
 _______________
 
-One or more PGs has not been scrubbed recently.  PGs are normally
-scrubbed every ``mon_scrub_interval`` seconds, and this warning
-triggers when ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed
-without a scrub since it was due.
+One or more PGs has not been scrubbed recently.  PGs are normally scrubbed
+within every configured interval specified by
+:ref:`osd_scrub_max_interval <osd_scrub_max_interval>` globally. This
+interval can be overriden on per-pool basis with
+:ref:`scrub_max_interval <scrub_max_interval>`. The warning triggers when
+``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
+scrub since it was due.
 
 PGs will not scrub if they are not flagged as *clean*, which may
 happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
@@ -1035,8 +1105,6 @@ also indicate some other performance issue with the OSDs.
 
 The exact size of the snapshot trim queue is reported by the
 ``snaptrimq_len`` field of ``ceph pg ls -f json-detail``.
-
-
 
 Miscellaneous
 -------------
@@ -1131,7 +1199,6 @@ Alternatively, the capabilities for the user can be updated with::
 
 For more information about auth capabilities, see :ref:`user-management`.
 
-
 OSD_NO_DOWN_OUT_INTERVAL
 ________________________
 
@@ -1148,3 +1215,16 @@ This warning can silenced by setting the
 ``mon_warn_on_osd_down_out_interval_zero`` to false::
 
   ceph config global mon mon_warn_on_osd_down_out_interval_zero false
+
+DASHBOARD_DEBUG
+_______________
+
+The Dashboard debug mode is enabled. This means, if there is an error
+while processing a REST API request, the HTTP error response contains
+a Python traceback. This behaviour should be disabled in production
+environments because such a traceback might contain and expose sensible
+information.
+
+The debug mode can be disabled with::
+
+  ceph dashboard debug disable

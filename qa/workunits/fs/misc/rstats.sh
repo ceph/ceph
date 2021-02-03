@@ -33,7 +33,7 @@ check_rctime() {
 # does not notify ceph-fuse about it. Use fsync(3) instead.
 fsync_path() {
 	cmd="import os; fd=os.open(\"$1\", os.O_RDONLY); os.fsync(fd); os.close(fd)"
-	python -c "$cmd"
+	python3 -c "$cmd"
 }
 
 set -e

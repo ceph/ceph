@@ -1,15 +1,15 @@
-from StringIO import StringIO
 import json
 import logging
-import time
-from textwrap import dedent
-from teuthology.orchestra.run import CommandFailedError
-from teuthology import misc
+import re
 
-from teuthology.orchestra import remote as orchestra_remote
+from io import StringIO
+from textwrap import dedent
+
+from teuthology.orchestra.run import CommandFailedError
 from teuthology.orchestra import run
 from teuthology.contextutil import MaxWhileTries
-from .mount import CephFSMount
+
+from tasks.cephfs.mount import CephFSMount
 
 log = logging.getLogger(__name__)
 
@@ -18,123 +18,125 @@ UMOUNT_TIMEOUT = 300
 
 
 class KernelMount(CephFSMount):
-    def __init__(self, ctx, mons, test_dir, client_id, client_remote,
-                 ipmi_user, ipmi_password, ipmi_domain):
-        super(KernelMount, self).__init__(ctx, test_dir, client_id, client_remote)
-        self.mons = mons
+    def __init__(self, ctx, test_dir, client_id, client_remote,
+                 client_keyring_path=None, hostfs_mntpt=None,
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None, config={}):
+        super(KernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
+            client_id=client_id, client_remote=client_remote,
+            client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
-        self.mounted = False
-        self.ipmi_user = ipmi_user
-        self.ipmi_password = ipmi_password
-        self.ipmi_domain = ipmi_domain
+        self.rbytes = config.get('rbytes', False)
+        self.inst = None
+        self.addr = None
 
-    def write_secret_file(self, remote, role, keyring, filename):
-        """
-        Stash the keyring in the filename specified.
-        """
-        remote.run(
-            args=[
-                'adjust-ulimits',
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=self.test_dir),
-                'ceph-authtool',
-                '--name={role}'.format(role=role),
-                '--print-key',
-                keyring,
-                run.Raw('>'),
-                filename,
-            ],
-            timeout=(5*60),
-        )
+    def mount(self, mntopts=[], createfs=True, check_status=True, **kwargs):
+        self.update_attrs(**kwargs)
+        self.assert_and_log_minimum_mount_details()
 
-    def mount(self, mount_path=None, mount_fs_name=None):
-        self.setupfs(name=mount_fs_name)
+        self.setup_netns()
 
-        log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
-            id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
+        # TODO: don't call setupfs() from within mount(), since it's
+        # absurd. The proper order should be: create FS first and then
+        # call mount().
+        if createfs:
+            self.setupfs(name=self.cephfs_name)
+        if not self.cephfs_mntpt:
+            self.cephfs_mntpt = '/'
 
-        keyring = self.get_keyring_path()
-        secret = '{tdir}/ceph.data/client.{id}.secret'.format(tdir=self.test_dir, id=self.client_id)
-        self.write_secret_file(self.client_remote, 'client.{id}'.format(id=self.client_id),
-                               keyring, secret)
+        stderr = StringIO()
+        try:
+            self.client_remote.run(args=['mkdir', '-p', self.hostfs_mntpt],
+                                   timeout=(5*60), stderr=stderr)
+        except CommandFailedError:
+            if 'file exists' not in stderr.getvalue().lower():
+                raise
 
-        self.client_remote.run(
-            args=[
-                'mkdir',
-                '--',
-                self.mountpoint,
-            ],
-            timeout=(5*60),
-        )
+        retval = self._run_mount_cmd(mntopts, check_status)
+        if retval:
+            return retval
 
-        if mount_path is None:
-            mount_path = "/"
+        stderr = StringIO()
+        try:
+            self.client_remote.run(
+                args=['sudo', 'chmod', '1777', self.hostfs_mntpt],
+                stderr=stderr, timeout=(5*60))
+        except CommandFailedError:
+            # the client does not have write permissions in the caps it holds
+            # for the Ceph FS that was just mounted.
+            if 'permission denied' in stderr.getvalue().lower():
+                pass
 
-        opts = 'name={id},secretfile={secret},norequire_active_mds'.format(id=self.client_id,
-                                                      secret=secret)
-
-        if mount_fs_name is not None:
-            opts += ",mds_namespace={0}".format(mount_fs_name)
-
-        self.client_remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                '{tdir}/archive/coverage'.format(tdir=self.test_dir),
-                '/sbin/mount.ceph',
-                '{mons}:{mount_path}'.format(mons=','.join(self.mons), mount_path=mount_path),
-                self.mountpoint,
-                '-v',
-                '-o',
-                opts
-            ],
-            timeout=(30*60),
-        )
-
-        self.client_remote.run(
-            args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(5*60))
 
         self.mounted = True
 
+    def _run_mount_cmd(self, mntopts, check_status):
+        opts = 'norequire_active_mds'
+        if self.client_id:
+            opts += ',name=' + self.client_id
+        if self.client_keyring_path and self.client_id:
+            opts += ',secret=' + self.get_key_from_keyfile()
+        if self.config_path:
+            opts += ',conf=' + self.config_path
+        if self.cephfs_name:
+            opts += ",mds_namespace=" + self.cephfs_name
+        if self.rbytes:
+            opts += ",rbytes"
+        else:
+            opts += ",norbytes"
+        if mntopts:
+            opts += ',' + ','.join(mntopts)
+
+        mount_dev = ':' + self.cephfs_mntpt
+        prefix = ['sudo', 'adjust-ulimits', 'ceph-coverage',
+                  self.test_dir + '/archive/coverage',
+                  'nsenter',
+                  '--net=/var/run/netns/{0}'.format(self.netns_name)]
+        cmdargs = prefix + ['/bin/mount', '-t', 'ceph', mount_dev,
+                            self.hostfs_mntpt, '-v', '-o', opts]
+
+        mountcmd_stdout, mountcmd_stderr = StringIO(), StringIO()
+        try:
+            self.client_remote.run(args=cmdargs, timeout=(30*60),
+                                   stdout=mountcmd_stdout,
+                                   stderr=mountcmd_stderr)
+        except CommandFailedError as e:
+            log.info('mount command failed')
+            if check_status:
+                raise
+            else:
+                return (e, mountcmd_stdout.getvalue(),
+                        mountcmd_stderr.getvalue())
+        log.info('mount command passed')
+
     def umount(self, force=False):
+        if not self.is_mounted():
+            self.cleanup()
+            return
+
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
 
-        cmd=['sudo', 'umount', self.mountpoint]
-        if force:
-            cmd.append('-f')
-
         try:
-            self.client_remote.run(args=cmd, timeout=(15*60))
+            cmd=['sudo', 'umount', self.hostfs_mntpt]
+            if force:
+                cmd.append('-f')
+            self.client_remote.run(args=cmd, timeout=(15*60), omit_sudo=False)
         except Exception as e:
-            self.client_remote.run(args=[
-                'sudo',
-                run.Raw('PATH=/usr/sbin:$PATH'),
-                'lsof',
-                run.Raw(';'),
-                'ps', 'auxf',
-            ], timeout=(15*60))
+            self.client_remote.run(
+                args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
+                      run.Raw(';'), 'ps', 'auxf'],
+                timeout=(15*60), omit_sudo=False)
             raise e
 
-        rproc = self.client_remote.run(
-            args=[
-                'rmdir',
-                '--',
-                self.mountpoint,
-            ],
-            wait=False
-        )
-        run.wait([rproc], UMOUNT_TIMEOUT)
         self.mounted = False
-
-    def cleanup(self):
-        pass
+        self.cleanup()
 
     def umount_wait(self, force=False, require_clean=False, timeout=900):
         """
         Unlike the fuse client, the kernel client's umount is immediate
         """
         if not self.is_mounted():
+            self.cleanup()
             return
 
         try:
@@ -143,13 +145,13 @@ class KernelMount(CephFSMount):
             if not force:
                 raise
 
-            self.kill()
-            self.kill_cleanup()
+            # force delete the netns and umount
+            self.client_remote.run(args=['sudo', 'umount', '-f', '-l',
+                                         self.mountpoint],
+                                   timeout=(15*60), omit_sudo=False)
 
-        self.mounted = False
-
-    def is_mounted(self):
-        return self.mounted
+            self.mounted = False
+            self.cleanup()
 
     def wait_until_mounted(self):
         """
@@ -162,56 +164,6 @@ class KernelMount(CephFSMount):
         super(KernelMount, self).teardown()
         if self.mounted:
             self.umount()
-
-    def kill(self):
-        """
-        The Ceph kernel client doesn't have a mechanism to kill itself (doing
-        that in side the kernel would be weird anyway), so we reboot the whole node
-        to get the same effect.
-
-        We use IPMI to reboot, because we don't want the client to send any
-        releases of capabilities.
-        """
-
-        con = orchestra_remote.getRemoteConsole(self.client_remote.hostname,
-                                                self.ipmi_user,
-                                                self.ipmi_password,
-                                                self.ipmi_domain)
-        con.hard_reset(wait_for_login=False)
-
-        self.mounted = False
-
-    def kill_cleanup(self):
-        assert not self.mounted
-
-        # We need to do a sleep here because we don't know how long it will
-        # take for a hard_reset to be effected.
-        time.sleep(30)
-
-        try:
-            # Wait for node to come back up after reboot
-            misc.reconnect(None, 300, [self.client_remote])
-        except:
-            # attempt to get some useful debug output:
-            con = orchestra_remote.getRemoteConsole(self.client_remote.hostname,
-                                                    self.ipmi_user,
-                                                    self.ipmi_password,
-                                                    self.ipmi_domain)
-            con.check_status(timeout=60)
-            raise
-
-        # Remove mount directory
-        self.client_remote.run(args=['uptime'], timeout=10)
-
-        # Remove mount directory
-        self.client_remote.run(
-            args=[
-                'rmdir',
-                '--',
-                self.mountpoint,
-            ],
-            timeout=(5*60),
-        )
 
     def _find_debug_dir(self):
         """
@@ -231,13 +183,13 @@ class KernelMount(CephFSMount):
                     result[client_id] = dir
                 return result
 
-            print json.dumps(get_id_to_dir())
+            print(json.dumps(get_id_to_dir()))
             """)
 
-        p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO(), timeout=(5*60))
-        client_id_to_dir = json.loads(p.stdout.getvalue())
+        output = self.client_remote.sh([
+            'sudo', 'python3', '-c', pyscript
+        ], timeout=(5*60))
+        client_id_to_dir = json.loads(output)
 
         try:
             return client_id_to_dir[self.client_id]
@@ -247,19 +199,29 @@ class KernelMount(CephFSMount):
             ))
             raise
 
-    def _read_debug_file(self, filename):
+    def read_debug_file(self, filename):
+        """
+        Read the debug file "filename", return None if the file doesn't exist.
+        """
         debug_dir = self._find_debug_dir()
 
         pyscript = dedent("""
             import os
 
-            print open(os.path.join("{debug_dir}", "{filename}")).read()
+            print(open(os.path.join("{debug_dir}", "{filename}")).read())
             """).format(debug_dir=debug_dir, filename=filename)
 
-        p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO(), timeout=(5*60))
-        return p.stdout.getvalue()
+        stderr = StringIO()
+        try:
+            output = self.client_remote.sh([
+                'sudo', 'python3', '-c', pyscript
+            ], stderr=stderr, timeout=(5*60))
+
+            return output
+        except CommandFailedError:
+            if 'no such file or directory' in stderr.getvalue().lower():
+                return None
+            raise
 
     def get_global_id(self):
         """
@@ -268,17 +230,66 @@ class KernelMount(CephFSMount):
 
         assert self.mounted
 
-        mds_sessions = self._read_debug_file("mds_sessions")
+        mds_sessions = self.read_debug_file("mds_sessions")
+        assert mds_sessions 
+
         lines = mds_sessions.split("\n")
         return int(lines[0].split()[1])
+
+    @property
+    def _global_addr(self):
+        if self.addr is not None:
+            return self.addr
+
+        # The first line of the "status" file's output will be something
+        # like:
+        #   "instance: client.4297 (0)10.72.47.117:0/1148470933"
+        # What we need here is only the string "10.72.47.117:0/1148470933"
+        status = self.read_debug_file("status")
+        if status is None:
+            return None
+
+        instance = re.findall(r'instance:.*', status)[0]
+        self.addr = instance.split()[2].split(')')[1]
+        return self.addr;
+
+    @property
+    def _global_inst(self):
+        if self.inst is not None:
+            return self.inst
+
+        client_gid = "client%d" % self.get_global_id()
+        self.inst = " ".join([client_gid, self._global_addr])
+        return self.inst
+
+    def get_global_inst(self):
+        """
+        Look up the CephFS client instance for this mount
+        """
+        return self._global_inst
+
+    def get_global_addr(self):
+        """
+        Look up the CephFS client addr for this mount
+        """
+        return self._global_addr
 
     def get_osd_epoch(self):
         """
         Return 2-tuple of osd_epoch, osd_epoch_barrier
         """
-        osd_map = self._read_debug_file("osdmap")
+        osd_map = self.read_debug_file("osdmap")
+        assert osd_map
+
         lines = osd_map.split("\n")
         first_line_tokens = lines[0].split()
         epoch, barrier = int(first_line_tokens[1]), int(first_line_tokens[3])
 
         return epoch, barrier
+
+    def get_op_read_count(self):
+        buf = self.read_debug_file("metrics")
+        if buf is None:
+            return 0
+        else:
+            return int(re.findall(r'read.*', buf)[0].split()[1])

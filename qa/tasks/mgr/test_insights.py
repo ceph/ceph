@@ -2,7 +2,9 @@ import logging
 import json
 import datetime
 import time
-from mgr_test_case import MgrTestCase
+
+from .mgr_test_case import MgrTestCase
+
 
 log = logging.getLogger(__name__)
 UUID = 'd5775432-0742-44a3-a435-45095e32e6b2'
@@ -10,6 +12,7 @@ DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
 
 class TestInsights(MgrTestCase):
     def setUp(self):
+        super(TestInsights, self).setUp()
         self.setup_mgrs()
         self._load_module("insights")
         self._load_module("selftest")
@@ -116,7 +119,7 @@ class TestInsights(MgrTestCase):
             check_names.add(unique_check_name)
 
             # and also set the same health check to test deduplication
-            dupe_check_name = "insights_health_check".format(hours)
+            dupe_check_name = "insights_health_check"
             health_check = {
                 dupe_check_name: {
                     "severity": "warning",

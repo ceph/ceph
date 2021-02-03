@@ -161,7 +161,7 @@ int KrbClientHandler::handle_response(
           << gss_minor_status << " " 
           << status_str 
           << dendl;
-      return (-EPERM);
+      return (-EACCES);
     }
 
     gss_buffer_desc krb_input_name_buff = {0, nullptr};
@@ -244,7 +244,7 @@ int KrbClientHandler::handle_response(
           << gss_minor_status << " " 
           << status_str 
           << dendl;
-      result = (-EPERM);
+      result = (-EACCES);
       break;
   }
 

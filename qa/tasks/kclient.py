@@ -8,7 +8,7 @@ from teuthology.misc import deep_merge
 from teuthology.orchestra.run import CommandFailedError
 from teuthology import misc
 from teuthology.contextutil import MaxWhileTries
-from cephfs.kernel_mount import KernelMount
+from tasks.cephfs.kernel_mount import KernelMount
 
 log = logging.getLogger(__name__)
 
@@ -22,12 +22,16 @@ def task(ctx, config):
     this operation on. This lets you e.g. set up one client with
     ``ceph-fuse`` and another with ``kclient``.
 
+    ``brxnet`` should be a Private IPv4 Address range, default range is
+    [192.168.0.0/16]
+
     Example that mounts all clients::
 
         tasks:
         - ceph:
         - kclient:
         - interactive:
+        - brxnet: [192.168.0.0/16]
 
     Example that uses both ``kclient` and ``ceph-fuse``::
 
@@ -44,60 +48,62 @@ def task(ctx, config):
         -kclient:
             client.0:
                 debug: true
+                mntopts: ["nowsync"]
 
     :param ctx: Context
     :param config: Configuration
     """
     log.info('Mounting kernel clients...')
-    assert config is None or isinstance(config, list) or isinstance(config, dict), \
-        "task kclient got invalid config"
 
     if config is None:
-        config = ['client.{id}'.format(id=id_)
-                  for id_ in misc.all_roles_of_type(ctx.cluster, 'client')]
-
-    if isinstance(config, list):
+        ids = misc.all_roles_of_type(ctx.cluster, 'client')
+        client_roles = [f'client.{id_}' for id_ in ids]
+        config = dict([r, dict()] for r in client_roles)
+    elif isinstance(config, list):
         client_roles = config
         config = dict([r, dict()] for r in client_roles)
     elif isinstance(config, dict):
         client_roles = filter(lambda x: 'client.' in x, config.keys())
     else:
-        raise ValueError("Invalid config object: {0} ({1})".format(config, config.__class__))
-
-    # config has been converted to a dict by this point
-    overrides = ctx.config.get('overrides', {})
-    deep_merge(config, overrides.get('kclient', {}))
+        raise ValueError(f"Invalid config object: {config} ({config.__class__})")
+    log.info(f"config is {config}")
 
     clients = list(misc.get_clients(ctx=ctx, roles=client_roles))
 
     test_dir = misc.get_testdir(ctx)
 
-    # Assemble mon addresses
-    remotes_and_roles = ctx.cluster.remotes.items()
-    roles = [roles for (remote_, roles) in remotes_and_roles]
-    ips = [remote_.ssh.get_transport().getpeername()[0]
-           for (remote_, _) in remotes_and_roles]
-    mons = misc.get_mons(roles, ips).values()
+    for id_, remote in clients:
+        KernelMount.cleanup_stale_netnses_and_bridge(remote)
 
     mounts = {}
+    overrides = ctx.config.get('overrides', {}).get('kclient', {})
+    top_overrides = dict(filter(lambda x: 'client.' not in x[0], overrides.items()))
     for id_, remote in clients:
-        client_config = config.get("client.%s" % id_)
+        entity = f"client.{id_}"
+        client_config = config.get(entity)
         if client_config is None:
             client_config = {}
+        # top level overrides
+        for k, v in top_overrides.items():
+            if v is not None:
+                client_config[k] = v
+        # mount specific overrides
+        client_config_overrides = overrides.get(entity)
+        deep_merge(client_config, client_config_overrides)
+        log.info(f"{entity} config is {client_config}")
 
+        cephfs_name = client_config.get("cephfs_name")
         if config.get("disabled", False) or not client_config.get('mounted', True):
             continue
 
         kernel_mount = KernelMount(
-            ctx,
-            mons,
-            test_dir,
-            id_,
-            remote,
-            ctx.teuthology_config.get('ipmi_user', None),
-            ctx.teuthology_config.get('ipmi_password', None),
-            ctx.teuthology_config.get('ipmi_domain', None)
-        )
+            ctx=ctx,
+            test_dir=test_dir,
+            client_id=id_,
+            client_remote=remote,
+            brxnet=ctx.teuthology_config.get('brxnet', None),
+            config=client_config,
+            cephfs_name=cephfs_name)
 
         mounts[id_] = kernel_mount
 
@@ -105,8 +111,7 @@ def task(ctx, config):
             remote.run(args=["sudo", "bash", "-c", "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"])
             remote.run(args=["sudo", "bash", "-c", "echo 'module libceph +p' > /sys/kernel/debug/dynamic_debug/control"])
 
-        kernel_mount.mount()
-
+        kernel_mount.mount(mntopts=client_config.get('mntopts', []))
 
     def umount_all():
         log.info('Unmounting kernel clients...')
@@ -117,9 +122,12 @@ def task(ctx, config):
                 try:
                     mount.umount()
                 except (CommandFailedError, MaxWhileTries):
-                    log.warn("Ordinary umount failed, forcing...")
+                    log.warning("Ordinary umount failed, forcing...")
                     forced = True
                     mount.umount_wait(force=True)
+
+        for id_, remote in clients:
+            KernelMount.cleanup_stale_netnses_and_bridge(remote)
 
         return forced
 

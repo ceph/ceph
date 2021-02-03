@@ -5,9 +5,9 @@
 #ifndef CEPH_RGW_AUTH_KEYSTONE_H
 #define CEPH_RGW_AUTH_KEYSTONE_H
 
+#include <string_view>
 #include <utility>
 #include <boost/optional.hpp>
-#include <boost/utility/string_view.hpp>
 
 #include "rgw_auth.h"
 #include "rgw_rest_s3.h"
@@ -66,7 +66,8 @@ public:
     return "rgw::auth::keystone::TokenEngine";
   }
 
-  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s) const override {
+  result_t authenticate(const DoutPrefixProvider* dpp, const req_state* const s,
+			optional_yield y) const override {
     return authenticate(dpp, extractor->get_token(s), s);
   }
 }; /* class TokenEngine */
@@ -141,26 +142,27 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                             ) const noexcept;
   std::pair<boost::optional<token_envelope_t>, int>
   get_from_keystone(const DoutPrefixProvider* dpp,
-                    const boost::string_view& access_key_id,
+                    const std::string_view& access_key_id,
                     const std::string& string_to_sign,
-                    const boost::string_view& signature) const;
+                    const std::string_view& signature) const;
   std::pair<boost::optional<token_envelope_t>, int>
   get_access_token(const DoutPrefixProvider* dpp,
-                   const boost::string_view& access_key_id,
+                   const std::string_view& access_key_id,
                    const std::string& string_to_sign,
-                   const boost::string_view& signature,
+                   const std::string_view& signature,
 		   const signature_factory_t& signature_factory) const;
   result_t authenticate(const DoutPrefixProvider* dpp,
-                        const boost::string_view& access_key_id,
-                        const boost::string_view& signature,
-                        const boost::string_view& session_token,
+                        const std::string_view& access_key_id,
+                        const std::string_view& signature,
+                        const std::string_view& session_token,
                         const string_to_sign_t& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
-                        const req_state* s) const override;
+                        const req_state* s,
+			optional_yield y) const override;
   std::pair<boost::optional<std::string>, int> get_secret_from_keystone(const DoutPrefixProvider* dpp,
                                                                         const std::string& user_id,
-                                                                        const boost::string_view& access_key_id) const;
+                                                                        const std::string_view& access_key_id) const;
 public:
   EC2Engine(CephContext* const cct,
             const rgw::auth::s3::AWSEngine::VersionAbstractor* const ver_abstractor,

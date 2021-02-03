@@ -6,7 +6,7 @@ Placement Groups Never Get Clean
 ================================
 
 When you create a cluster and your cluster remains in ``active``,
-``active+remapped`` or ``active+degraded`` status and never achieve an
+``active+remapped`` or ``active+degraded`` status and never achieves an
 ``active+clean`` status, you likely have a problem with your configuration.
 
 You may need to review settings in the `Pool, PG and CRUSH Config Reference`_
@@ -39,9 +39,7 @@ another node, chassis, rack, row, or even datacenter depending on the setting.
    can mount kernel clients within virtual machines (VMs) on a single node.
 
 If you are creating OSDs using a single disk, you must create directories
-for the data manually first. For example::
-
-	ceph-deploy osd create --data {disk} {host}
+for the data manually first.
 
 
 Fewer OSDs than Replicas
@@ -217,28 +215,55 @@ First, you can identify which objects are unfound with::
 
 .. code-block:: javascript
 
- { "offset": { "oid": "",
-      "key": "",
-      "snapid": 0,
-      "hash": 0,
-      "max": 0},
-  "num_missing": 0,
-  "num_unfound": 0,
-  "objects": [
-     { "oid": "object 1",
-       "key": "",
-       "hash": 0,
-       "max": 0 },
-     ...
-  ],
-  "more": 0}
+  {
+    "num_missing": 1,
+    "num_unfound": 1,
+    "objects": [
+        {
+            "oid": {
+                "oid": "object",
+                "key": "",
+                "snapid": -2,
+                "hash": 2249616407,
+                "max": 0,
+                "pool": 2,
+                "namespace": ""
+            },
+            "need": "43'251",
+            "have": "0'0",
+            "flags": "none",
+            "clean_regions": "clean_offsets: [], clean_omap: 0, new_object: 1",
+            "locations": [
+                "0(3)",
+                "4(2)"
+            ]
+        }
+    ],
+    "state": "NotRecovering",
+    "available_might_have_unfound": true,
+    "might_have_unfound": [
+        {
+            "osd": "2(4)",
+            "status": "osd is down"
+        }
+    ],
+    "more": false
+  }
 
 If there are too many objects to list in a single result, the ``more``
 field will be true and you can query for more.  (Eventually the
 command line tool will hide this from you, but not yet.)
 
 Second, you can identify which OSDs have been probed or might contain
-data::
+data.
+
+At the end of the listing (before ``more`` is false), ``might_have_unfound`` is provided
+when ``available_might_have_unfound`` is true.  This is equivalent to the output
+of ``ceph pg #.# query``.  This eliminates the need to use ``query`` directly.
+The ``might_have_unfound`` information given behaves the same way as described below for ``query``.
+The only difference is that OSDs that have ``already probed`` status are ignored.
+
+Use of ``query``::
 
 	ceph pg 2.4 query
 
@@ -476,7 +501,7 @@ If the Ceph cluster only has 8 OSDs and the erasure coded pool needs
 coded pool that requires less OSDs::
 
      ceph osd erasure-code-profile set myprofile k=5 m=3
-     ceph osd pool create erasurepool 16 16 erasure myprofile
+     ceph osd pool create erasurepool erasure myprofile
 
 or add a new OSDs and the PG will automatically use them.
 
@@ -515,7 +540,7 @@ You can resolve the problem by creating a new pool in which PGs are allowed
 to have OSDs residing on the same host with::
 
      ceph osd erasure-code-profile set myprofile crush-failure-domain=osd
-     ceph osd pool create erasurepool 16 16 erasure myprofile
+     ceph osd pool create erasurepool erasure myprofile
 
 CRUSH gives up too soon
 -----------------------
@@ -580,7 +605,7 @@ and adding the following line to the rule::
 
     step set_choose_tries 100
 
-The relevant part of of the ``crush.txt`` file should look something
+The relevant part of the ``crush.txt`` file should look something
 like::
 
      rule erasurepool {

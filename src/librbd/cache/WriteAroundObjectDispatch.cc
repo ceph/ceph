@@ -4,11 +4,11 @@
 #include "librbd/cache/WriteAroundObjectDispatch.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -44,7 +44,7 @@ void WriteAroundObjectDispatch<I>::init() {
   if (m_init_max_dirty > 0) {
     m_image_ctx->disable_zero_copy = true;
   }
-  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+  m_image_ctx->io_object_dispatcher->register_dispatch(this);
 }
 
 template <typename I>
@@ -57,19 +57,23 @@ void WriteAroundObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool WriteAroundObjectDispatch<I>::read(
-    uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::ExtentMap* extent_map,
-    int* object_dispatch_flags, io::DispatchResult* dispatch_result,
-    Context** on_finish, Context* on_dispatched) {
-  return dispatch_unoptimized_io(object_no, object_off, object_len,
-                                 dispatch_result, on_dispatched);
+    uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
+    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+    uint64_t* version, int* object_dispatch_flags,
+    io::DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
+  bool handled = false;
+  for (auto& extent: *extents) {
+    handled |= dispatch_unoptimized_io(object_no, extent.offset, extent.length,
+                                       dispatch_result, on_dispatched);
+  }
+  return handled;
 }
 
 template <typename I>
 bool WriteAroundObjectDispatch<I>::discard(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    const ::SnapContext &snapc, int discard_flags,
+    IOContext io_context, int discard_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
@@ -84,7 +88,8 @@ bool WriteAroundObjectDispatch<I>::discard(
 template <typename I>
 bool WriteAroundObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    IOContext io_context, int op_flags, int write_flags,
+    std::optional<uint64_t> assert_version,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context**on_finish, Context* on_dispatched) {
@@ -100,7 +105,7 @@ template <typename I>
 bool WriteAroundObjectDispatch<I>::write_same(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
-    const ::SnapContext &snapc, int op_flags,
+    IOContext io_context, int op_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
     Context**on_finish, Context* on_dispatched) {
@@ -115,7 +120,7 @@ bool WriteAroundObjectDispatch<I>::write_same(
 template <typename I>
 bool WriteAroundObjectDispatch<I>::compare_and_write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
-    ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
+    ceph::bufferlist&& write_data, IOContext io_context, int op_flags,
     const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
     int* object_dispatch_flags, uint64_t* journal_tid,
     io::DispatchResult* dispatch_result, Context** on_finish,

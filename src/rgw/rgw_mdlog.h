@@ -117,7 +117,9 @@ public:
     LogListCtx() : cur_shard(0), done(false) {}
   };
 
-  void init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, string& marker, void **handle);
+  void init_list_entries(int shard_id, const real_time& from_time,
+			 const real_time& end_time, const string& marker,
+			 void **handle);
   void complete_list_entries(void *handle);
   int list_entries(void *handle,
                    int max_entries,

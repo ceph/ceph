@@ -477,6 +477,13 @@ void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
   o.push_back(new RGWPeriod);
 }
 
+void RGWPeriodLatestEpochInfo::generate_test_instances(list<RGWPeriodLatestEpochInfo*> &o)
+{
+  RGWPeriodLatestEpochInfo *z = new RGWPeriodLatestEpochInfo;
+  o.push_back(z);
+  o.push_back(new RGWPeriodLatestEpochInfo);
+}
+
 void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
 {
   o.push_back(new RGWZoneParams);

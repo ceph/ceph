@@ -19,7 +19,7 @@ to their respective shards.
 
 The choice of whether to use a read-modify-write or a
 parity-delta-write is complex policy issue that is TBD in the details
-and is likely to be heavily dependant on the computational costs
+and is likely to be heavily dependent on the computational costs
 associated with a parity-delta vs. a regular parity-generation
 operation. However, it is believed that the parity-delta scheme is
 likely to be the preferred choice, when available.
@@ -193,7 +193,7 @@ RADOS Client Acknowledgement Generation Optimization
 ====================================================
 
 Now that the recovery scheme is understood, we can discuss the
-generation of of the RADOS operation acknowledgement (ACK) by the
+generation of the RADOS operation acknowledgement (ACK) by the
 primary ("sufficient" from above). It is NOT required that the primary
 wait for all shards to complete their respective prepare
 operations. Using our example where the RADOS operations writes only

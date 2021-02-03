@@ -46,6 +46,21 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
 
+using std::list;
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+
 const static int64_t ONE_MEG(1 << 20);
 const static int CEPH_DIRECTIO_ALIGNMENT(4096);
 
@@ -225,18 +240,18 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     for (; (i + write_size) <= (uint64_t)max_size; i += write_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), write_size, i);
       if (ret < 0) {
-	free(buf);
+	aligned_free(buf);
 	return -errno;
       }
     }
     if (i < (uint64_t)max_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
       if (ret < 0) {
-	free(buf);
+	aligned_free(buf);
 	return -errno;
       }
     }
-    free(buf);
+    aligned_free(buf);
   }
 
 
@@ -281,7 +296,7 @@ int FileJournal::create()
   void *buf = 0;
   int64_t needed_space;
   int ret;
-  buffer::ptr bp;
+  ceph::buffer::ptr bp;
   dout(2) << "create " << fn << " fsid " << fsid << dendl;
 
   ret = _open(true, true);
@@ -673,7 +688,7 @@ int FileJournal::read_header(header_t *hdr) const
   dout(10) << "read_header" << dendl;
   bufferlist bl;
 
-  buffer::ptr bp = buffer::create_small_page_aligned(block_size);
+  ceph::buffer::ptr bp = ceph::buffer::create_small_page_aligned(block_size);
   char* bpdata = bp.c_str();
   int r = ::pread(fd, bpdata, bp.length(), 0);
 
@@ -697,7 +712,7 @@ int FileJournal::read_header(header_t *hdr) const
     auto p = bl.cbegin();
     decode(*hdr, p);
   }
-  catch (buffer::error& e) {
+  catch (ceph::buffer::error& e) {
     derr << "read_header error decoding journal header" << dendl;
     return -EINVAL;
   }
@@ -728,7 +743,7 @@ bufferptr FileJournal::prepare_header()
     header.committed_up_to = journaled_seq;
   }
   encode(header, bl);
-  bufferptr bp = buffer::create_small_page_aligned(get_top());
+  bufferptr bp = ceph::buffer::create_small_page_aligned(get_top());
   // don't use bp.zero() here, because it also invalidates
   // crc cache (which is not yet populated anyway)
   char* data = bp.c_str();
@@ -1019,7 +1034,7 @@ void FileJournal::do_write(bufferlist& bl)
   if (bl.length() == 0 && !must_write_header)
     return;
 
-  buffer::ptr hbp;
+  ceph::buffer::ptr hbp;
   if (cct->_conf->journal_write_header_frequency &&
       (((++journaled_since_start) %
 	cct->_conf->journal_write_header_frequency) == 0)) {
@@ -1292,7 +1307,7 @@ void FileJournal::do_aio_write(bufferlist& bl)
   if (bl.length() == 0 && !must_write_header)
     return;
 
-  buffer::ptr hbp;
+  ceph::buffer::ptr hbp;
   if (must_write_header) {
     must_write_header = false;
     hbp = prepare_header();
@@ -1576,18 +1591,18 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
   // header
   ebl.append((const char*)&h, sizeof(h));
   if (h.pre_pad) {
-    ebl.push_back(buffer::create_static(h.pre_pad, zero_buf));
+    ebl.push_back(ceph::buffer::create_static(h.pre_pad, zero_buf));
   }
   // payload
-  ebl.claim_append(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
+  ebl.claim_append(bl);
   if (h.post_pad) {
-    ebl.push_back(buffer::create_static(h.post_pad, zero_buf));
+    ebl.push_back(ceph::buffer::create_static(h.post_pad, zero_buf));
   }
   // footer
   ebl.append((const char*)&h, sizeof(h));
   if (directio)
     ebl.rebuild_aligned(CEPH_DIRECTIO_ALIGNMENT);
-  tbl->claim(ebl);
+  *tbl = std::move(ebl);
   return h.len;
 }
 
@@ -1905,7 +1920,7 @@ void FileJournal::wrap_read_bl(
     int64_t actual = ::lseek64(fd, pos, SEEK_SET);
     ceph_assert(actual == pos);
 
-    bufferptr bp = buffer::create(len);
+    bufferptr bp = ceph::buffer::create(len);
     int r = safe_read_exact(fd, bp.c_str(), len);
     if (r) {
       derr << "FileJournal::wrap_read_bl: safe_read_exact " << pos << "~" << len << " returned "

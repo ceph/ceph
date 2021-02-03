@@ -8,6 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
+#include "librbd/internal.h"
 #include "test/librados/test_cxx.h"
 #include "tools/rbd_mirror/Threads.h"
 
@@ -71,8 +72,7 @@ void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados->ioctx_create(_remote_pool_name.c_str(), m_remote_io_ctx));
   m_image_name = get_temp_image_name();
 
-  m_threads = new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
-    m_local_io_ctx.cct()));
+  m_threads = new rbd::mirror::Threads<>(_rados);
 }
 
 void TestFixture::TearDown() {
@@ -89,9 +89,7 @@ void TestFixture::TearDown() {
 int TestFixture::create_image(librbd::RBD &rbd, librados::IoCtx &ioctx,
                               const std::string &name, uint64_t size) {
   int order = 18;
-  return rbd.create2(ioctx, name.c_str(), size,
-                     (RBD_FEATURES_ALL & ~RBD_FEATURES_IMPLICIT_ENABLE),
-                     &order);
+  return rbd.create2(ioctx, name.c_str(), size, RBD_FEATURES_ALL, &order);
 }
 
 int TestFixture::open_image(librados::IoCtx &io_ctx,
@@ -105,8 +103,9 @@ int TestFixture::open_image(librados::IoCtx &io_ctx,
 
 int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,
                              librados::snap_t *snap_id) {
+  librbd::NoOpProgressContext prog_ctx;
   int r = image_ctx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-					     snap_name);
+					     snap_name, 0, prog_ctx);
   if (r < 0) {
     return r;
   }

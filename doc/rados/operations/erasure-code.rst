@@ -18,14 +18,11 @@ The simplest erasure coded pool is equivalent to `RAID5
 <https://en.wikipedia.org/wiki/Standard_RAID_levels#RAID_5>`_ and
 requires at least three hosts::
 
-    $ ceph osd pool create ecpool 12 12 erasure
+    $ ceph osd pool create ecpool erasure
     pool 'ecpool' created
     $ echo ABCDEFGHI | rados --pool ecpool put NYAN -
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI
-
-.. note:: the 12 in *pool create* stands for 
-          `the number of placement groups <../pools>`_.
 
 Erasure code profiles
 ---------------------
@@ -56,7 +53,7 @@ the following profile can be defined::
        k=3 \
        m=2 \
        crush-failure-domain=rack
-    $ ceph osd pool create ecpool 12 12 erasure myprofile
+    $ ceph osd pool create ecpool erasure myprofile
     $ echo ABCDEFGHI | rados --pool ecpool put NYAN -
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI

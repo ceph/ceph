@@ -3,15 +3,23 @@
 ============
 
 You can get Ceph software by retrieving Ceph source code and building it yourself.
-To build Ceph, you need to set up a development environment, compile Ceph, 
-and then either install in user space or build packages and install the packages. 
+To build Ceph, you need to set up a development environment, compile Ceph,
+and then either install in user space or build packages and install the packages.
 
 Build Prerequisites
 ===================
 
 
-.. tip:: Check this section to see if there are specific prerequisites for your 
+.. tip:: Check this section to see if there are specific prerequisites for your
    Linux/Unix distribution.
+
+A debug build of Ceph may take around 40 gigabytes. If you want to build Ceph in
+a virtual machine (VM) please make sure total disk space on the VM is at least
+60 gigabytes.
+
+Please also be aware that some distributions of Linux, like CentOS, use Linux
+Volume Manager (LVM) for the default installation. LVM may reserve a large
+portion of disk space of a typical sized virtual disk for the operating system.
 
 Before you can build Ceph source code, you need to install several libraries
 and tools::

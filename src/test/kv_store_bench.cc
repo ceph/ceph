@@ -412,15 +412,16 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
 	delete cb_args;
 	continue;
       }
-      bufferlist val;
       ops_in_flight++;
       cb_args->sw.start_time();
       kvs->aio_get(kv.first, &cb_args->val, aio_callback_timed,
 	  cb_args, &cb_args->err);
       break;
+    default:
+      // shouldn't happen here
+      assert(false);
     }
 
-    delete cb_args;
   }
 
   op_avail.wait(l, [this] { return ops_in_flight <= 0; });
@@ -535,7 +536,7 @@ void KvStoreBench::print_time_data() {
 int KvStoreBench::teuthology_tests() {
   int err = 0;
   if (max_ops_in_flight > 1) {
-    test_teuthology_aio(&KvStoreBench::rand_distr, probs);
+    err = test_teuthology_aio(&KvStoreBench::rand_distr, probs);
   } else {
     err = test_teuthology_sync(&KvStoreBench::rand_distr, probs);
   }

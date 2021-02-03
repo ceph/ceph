@@ -20,7 +20,7 @@ foreach(component ${Sanitizers_FIND_COMPONENTS})
     elseif(NOT CMAKE_POSITION_INDEPENDENT_CODE)
       message(SEND_ERROR "TSan requires all code to be position independent")
     endif()
-    set(Sanitizers_Thread_COMPILE_OPTIONS "-fsanitize=thread")
+    set(Sanitizers_thread_COMPILE_OPTIONS "-fsanitize=thread")
   elseif(component STREQUAL "undefined_behavior")
     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=88684
     set(Sanitizers_undefined_behavior_COMPILE_OPTIONS "-fsanitize=undefined;-fno-sanitize=vptr")
@@ -44,13 +44,15 @@ if(Sanitizers_COMPILE_OPTIONS)
     "-fno-omit-frame-pointer")
 endif()
 
-string (REPLACE ";" " " Sanitizers_COMPILE_OPTIONS "${Sanitizers_COMPILE_OPTIONS}")
-
 include(CheckCXXSourceCompiles)
-set(CMAKE_REQUIRED_FLAGS ${Sanitizers_COMPILE_OPTIONS})
+include(CMakePushCheckState)
+
+cmake_push_check_state()
+string (REPLACE ";" " " CMAKE_REQUIRED_FLAGS "${Sanitizers_COMPILE_OPTIONS}")
 set(CMAKE_REQUIRED_LIBRARIES ${Sanitizers_COMPILE_OPTIONS})
 check_cxx_source_compiles("int main() {}"
   Sanitizers_ARE_SUPPORTED)
+cmake_pop_check_state()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Sanitizers

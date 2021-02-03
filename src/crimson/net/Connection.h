@@ -20,7 +20,7 @@
 
 #include "Fwd.h"
 
-namespace ceph::net {
+namespace crimson::net {
 
 #ifdef UNIT_TESTS_BUILT
 class Interceptor;
@@ -29,7 +29,7 @@ class Interceptor;
 using seq_num_t = uint64_t;
 
 class Connection : public seastar::enable_shared_from_this<Connection> {
-  entity_name_t peer_name = {0, -1};
+  entity_name_t peer_name = {0, entity_name_t::NEW};
 
  protected:
   entity_addr_t peer_addr;
@@ -42,9 +42,34 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   clock_t::time_point last_keepalive;
   clock_t::time_point last_keepalive_ack;
 
-  void set_peer_type(entity_type_t peer_type) { peer_name._type = peer_type; }
-  void set_peer_id(int64_t peer_id) { peer_name._num = peer_id; }
-  void set_peer_name(entity_name_t name) { peer_name = name; }
+  void set_peer_type(entity_type_t peer_type) {
+    // it is not allowed to assign an unknown value when the current
+    // value is known
+    assert(!(peer_type == 0 &&
+             peer_name.type() != 0));
+    // it is not allowed to assign a different known value when the
+    // current value is also known.
+    assert(!(peer_type != 0 &&
+             peer_name.type() != 0 &&
+             peer_type != peer_name.type()));
+    peer_name._type = peer_type;
+  }
+  void set_peer_id(int64_t peer_id) {
+    // it is not allowed to assign an unknown value when the current
+    // value is known
+    assert(!(peer_id == entity_name_t::NEW &&
+             peer_name.num() != entity_name_t::NEW));
+    // it is not allowed to assign a different known value when the
+    // current value is also known.
+    assert(!(peer_id != entity_name_t::NEW &&
+             peer_name.num() != entity_name_t::NEW &&
+             peer_id != peer_name.num()));
+    peer_name._num = peer_id;
+  }
+  void set_peer_name(entity_name_t name) {
+    set_peer_type(name.type());
+    set_peer_id(name.num());
+  }
 
  public:
   uint64_t peer_global_id = 0;
@@ -95,6 +120,8 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 #ifdef UNIT_TESTS_BUILT
   virtual bool is_closed() const = 0;
 
+  virtual bool is_closed_clean() const = 0;
+
   virtual bool peer_wins() const = 0;
 #endif
 
@@ -105,13 +132,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   /// handshake
   virtual seastar::future<> keepalive() = 0;
 
-  // close the connection and cancel any any pending futures from read/send
-  // Note it's OK to discard the returned future because Messenger::shutdown()
-  // will wait for all connections closed
-  virtual seastar::future<> close() = 0;
-
-  /// which shard id the connection lives
-  virtual seastar::shard_id shard_id() const = 0;
+  // close the connection and cancel any any pending futures from read/send,
+  // without dispatching any reset event
+  virtual void mark_down() = 0;
 
   virtual void print(ostream& out) const = 0;
 
@@ -123,10 +146,6 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   }
   auto get_last_keepalive() const { return last_keepalive; }
   auto get_last_keepalive_ack() const { return last_keepalive_ack; }
-
-  seastar::shared_ptr<Connection> get_shared() {
-    return shared_from_this();
-  }
 
   struct user_private_t {
     virtual ~user_private_t() = default;
@@ -153,4 +172,4 @@ inline ostream& operator<<(ostream& out, const Connection& conn) {
   return out;
 }
 
-} // namespace ceph::net
+} // namespace crimson::net

@@ -1,7 +1,0 @@
-tasks:
-- install:
-    branch: nautilus
-- install.upgrade:
-    mon.a:
-    mon.b:
-    mon.c:

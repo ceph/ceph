@@ -85,12 +85,12 @@ public:
   typedef ResizeRequest<MockOperationImageCtx> MockResizeRequest;
 
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes())
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes())
                   .Times(1);
   }
 
@@ -187,7 +187,7 @@ public:
 
   void expect_invalidate_cache(MockOperationImageCtx &mock_image_ctx,
                                int r) {
-    EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, invalidate_cache(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, invalidate_cache(_))
                    .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
@@ -214,10 +214,10 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, Success) {
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
-  MockObjectMap *mock_object_map = new MockObjectMap();
-  MockObjectMap *mock_snap_object_map = new MockObjectMap();
+  MockObjectMap mock_object_map;
+  MockObjectMap mock_snap_object_map;
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
-                      *mock_object_map);
+                      mock_object_map);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -226,10 +226,10 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, Success) {
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
   expect_get_flags(mock_image_ctx, 123, 0);
-  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
-  expect_rollback_object_map(mock_image_ctx, *mock_object_map);
+  expect_get_snap_object_map(mock_image_ctx, &mock_snap_object_map, 123);
+  expect_rollback_object_map(mock_image_ctx, mock_object_map);
   expect_rollback(mock_image_ctx, 0);
-  expect_refresh_object_map(mock_image_ctx, *mock_object_map);
+  expect_refresh_object_map(mock_image_ctx, mock_object_map);
   expect_invalidate_cache(mock_image_ctx, 0);
   expect_commit_op_event(mock_image_ctx, 0);
   expect_unblock_writes(mock_image_ctx);
@@ -263,10 +263,10 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, SkipResize) {
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
-  MockObjectMap *mock_object_map = new MockObjectMap();
-  MockObjectMap *mock_snap_object_map = new MockObjectMap();
+  MockObjectMap mock_object_map;
+  MockObjectMap mock_snap_object_map;
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
-                      *mock_object_map);
+                      mock_object_map);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -274,10 +274,10 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, SkipResize) {
   expect_block_writes(mock_image_ctx, 0);
   expect_get_image_size(mock_image_ctx, 345);
   expect_get_flags(mock_image_ctx, 123, 0);
-  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
-  expect_rollback_object_map(mock_image_ctx, *mock_object_map);
+  expect_get_snap_object_map(mock_image_ctx, &mock_snap_object_map, 123);
+  expect_rollback_object_map(mock_image_ctx, mock_object_map);
   expect_rollback(mock_image_ctx, 0);
-  expect_refresh_object_map(mock_image_ctx, *mock_object_map);
+  expect_refresh_object_map(mock_image_ctx, mock_object_map);
   expect_invalidate_cache(mock_image_ctx, 0);
   expect_commit_op_event(mock_image_ctx, 0);
   expect_unblock_writes(mock_image_ctx);
@@ -314,7 +314,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, RollbackObjectsError) {
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
   MockObjectMap mock_object_map;
-  MockObjectMap *mock_snap_object_map = new MockObjectMap();
+  MockObjectMap mock_snap_object_map;
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
                       mock_object_map);
   expect_op_work_queue(mock_image_ctx);
@@ -325,7 +325,7 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, RollbackObjectsError) {
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
   expect_get_flags(mock_image_ctx, 123, 0);
-  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
+  expect_get_snap_object_map(mock_image_ctx, &mock_snap_object_map, 123);
   expect_rollback_object_map(mock_image_ctx, mock_object_map);
   expect_rollback(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
@@ -341,10 +341,10 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
   MockJournal mock_journal;
-  MockObjectMap *mock_object_map = new MockObjectMap();
-  MockObjectMap *mock_snap_object_map = new MockObjectMap();
+  MockObjectMap mock_object_map;
+  MockObjectMap mock_snap_object_map;
   initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
-                      *mock_object_map);
+                      mock_object_map);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
@@ -353,10 +353,10 @@ TEST_F(TestMockOperationSnapshotRollbackRequest, InvalidateCacheError) {
   expect_block_writes(mock_image_ctx, 0);
   expect_resize(mock_image_ctx, mock_resize_request, 0);
   expect_get_flags(mock_image_ctx, 123, 0);
-  expect_get_snap_object_map(mock_image_ctx, mock_snap_object_map, 123);
-  expect_rollback_object_map(mock_image_ctx, *mock_object_map);
+  expect_get_snap_object_map(mock_image_ctx, &mock_snap_object_map, 123);
+  expect_rollback_object_map(mock_image_ctx, mock_object_map);
   expect_rollback(mock_image_ctx, 0);
-  expect_refresh_object_map(mock_image_ctx, *mock_object_map);
+  expect_refresh_object_map(mock_image_ctx, mock_object_map);
   expect_invalidate_cache(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);

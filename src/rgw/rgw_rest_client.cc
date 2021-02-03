@@ -5,7 +5,6 @@
 #include "rgw_rest_client.h"
 #include "rgw_auth_s3.h"
 #include "rgw_http_errors.h"
-#include "rgw_rados.h"
 
 #include "common/armor.h"
 #include "common/strtol.h"
@@ -117,7 +116,7 @@ static void get_gmt_date_str(string& date_str)
   date_str = buffer;
 }
 
-int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const char *resource)
+int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const char *resource, optional_yield y)
 {
   method = _method;
   string new_url = url;
@@ -137,7 +136,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const 
   headers.push_back(pair<string, string>("HTTP_DATE", date_str));
 
   string canonical_header;
-  map<string, string> meta_map;
+  meta_map_t meta_map;
   map<string, string> sub_resources;
 
   rgw_create_s3_canonical_header(method.c_str(), NULL, NULL, date_str.c_str(),
@@ -156,7 +155,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const 
   ldout(cct, 15) << "generated auth header: " << auth_hdr << dendl;
 
   headers.push_back(pair<string, string>("AUTHORIZATION", auth_hdr));
-  int r = process(null_yield);
+  int r = process(y);
   if (r < 0)
     return r;
 
@@ -270,7 +269,7 @@ static int sign_request(CephContext *cct, RGWAccessKey& key, RGWEnv& env, req_in
   return 0;
 }
 
-int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
 
   string date_str;
@@ -279,9 +278,21 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
   new_info.rebuild_from(info);
-
+  string bucket_encode;
+  string request_uri_encode;
+  size_t pos = new_info.request_uri.substr(1, new_info.request_uri.size() - 1).find("/");
+  string bucket = new_info.request_uri.substr(1, pos);
+  url_encode(bucket, bucket_encode);
+  if (std::string::npos != pos)
+    request_uri_encode = string("/") + bucket_encode + new_info.request_uri.substr(pos + 1);
+  else
+    request_uri_encode = string("/") + bucket_encode;
+  new_info.request_uri = request_uri_encode;
   new_env.set("HTTP_DATE", date_str.c_str());
-
+  const char* const content_md5 = info.env->get("HTTP_CONTENT_MD5");
+  if (content_md5) {
+    new_env.set("HTTP_CONTENT_MD5", content_md5);
+  }
   int ret = sign_request(cct, key, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
@@ -292,7 +303,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     headers.emplace_back(kv);
   }
 
-  map<string, string>& meta_map = new_info.x_meta_map;
+  meta_map_t& meta_map = new_info.x_meta_map;
   for (const auto& kv: meta_map) {
     headers.emplace_back(kv);
   }
@@ -323,7 +334,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   method = new_info.method;
   url = new_url;
 
-  int r = process(null_yield);
+  int r = process(y);
   if (r < 0){
     if (r == -EINVAL){
       // curl_easy has errored, generally means the service is not available
@@ -335,7 +346,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
   response.append((char)0); /* NULL terminate response */
 
   if (outbl) {
-    outbl->claim(response);
+    *outbl = std::move(response);
   }
 
   return status;
@@ -426,7 +437,7 @@ static void grants_by_type_add_perm(map<int, string>& grants_by_type, int perm, 
   }
 }
 
-static void add_grants_headers(map<int, string>& grants, RGWEnv& env, map<string, string>& meta_map)
+static void add_grants_headers(map<int, string>& grants, RGWEnv& env, meta_map_t& meta_map)
 {
   struct grant_type_to_header *t;
 
@@ -557,17 +568,17 @@ int RGWRESTGenerateHTTPHeaders::sign(RGWAccessKey& key)
   return 0;
 }
 
-void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
+void RGWRESTStreamS3PutObj::send_init(rgw::sal::RGWObject* obj)
 {
   string resource_str;
   string resource;
   string new_url = url;
 
   if (host_style == VirtualStyle) {
-    resource_str = obj.get_oid();
-    new_url = obj.bucket.name + "."  + new_url;
+    resource_str = obj->get_oid();
+    new_url = obj->get_bucket()->get_name() + "."  + new_url;
   } else {
-    resource_str = obj.bucket.name + "/" + obj.get_oid();
+    resource_str = obj->get_bucket()->get_name() + "/" + obj->get_oid();
   }
 
   //do not encode slash in object key name
@@ -617,7 +628,7 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, bool send)
   return 0;
 }
 
-int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
+int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw::sal::RGWObject* obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
 {
   send_init(obj);
   return send_ready(key, attrs, send);
@@ -795,13 +806,14 @@ int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
   return 0;
 }
 
-int RGWRESTStreamRWRequest::complete_request(string *etag,
+int RGWRESTStreamRWRequest::complete_request(optional_yield y,
+                                             string *etag,
                                              real_time *mtime,
                                              uint64_t *psize,
                                              map<string, string> *pattrs,
                                              map<string, string> *pheaders)
 {
-  int ret = wait(null_yield);
+  int ret = wait(y);
   if (ret < 0) {
     return ret;
   }

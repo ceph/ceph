@@ -17,6 +17,16 @@
 #include "common/Checksummer.h"
 #include "include/stringify.h"
 
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::string;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::Formatter;
+
 // bluestore_bdev_label_t
 
 void bluestore_bdev_label_t::encode(bufferlist& bl) const
@@ -36,7 +46,7 @@ void bluestore_bdev_label_t::encode(bufferlist& bl) const
 
 void bluestore_bdev_label_t::decode(bufferlist::const_iterator& p)
 {
-  p.advance(60u); // see above
+  p += 60u; // see above
   DECODE_START(2, p);
   decode(osd_uuid, p);
   decode(size, p);
@@ -389,6 +399,10 @@ void bluestore_blob_use_tracker_t::allocate()
 {
   ceph_assert(num_au != 0);
   bytes_per_au = new uint32_t[num_au];
+  mempool::get_pool(
+    mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
+      adjust_count(1, sizeof(uint32_t) * num_au);
+
   for (uint32_t i = 0; i < num_au; ++i) {
     bytes_per_au[i] = 0;
   }
@@ -677,7 +691,7 @@ void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
   ls.back()->allocated_test(bluestore_pextent_t(111, 222));
   ls.push_back(new bluestore_blob_t);
   ls.back()->init_csum(Checksummer::CSUM_XXHASH32, 16, 65536);
-  ls.back()->csum_data = buffer::claim_malloc(4, strdup("abcd"));
+  ls.back()->csum_data = ceph::buffer::claim_malloc(4, strdup("abcd"));
   ls.back()->add_unused(0, 3);
   ls.back()->add_unused(8, 8);
   ls.back()->allocated_test(bluestore_pextent_t(0x40100000, 0x10000));
@@ -1032,6 +1046,8 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
 }
 
 // bluestore_shared_blob_t
+MEMPOOL_DEFINE_OBJECT_FACTORY(bluestore_shared_blob_t, bluestore_shared_blob_t,
+	          bluestore_cache_other);
 
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {
@@ -1153,6 +1169,9 @@ void bluestore_compression_header_t::dump(Formatter *f) const
 {
   f->dump_unsigned("type", type);
   f->dump_unsigned("length", length);
+  if (compressor_message) {
+    f->dump_int("compressor_message", *compressor_message);
+  }
 }
 
 void bluestore_compression_header_t::generate_test_instances(

@@ -13,8 +13,6 @@
 	ms die on old message = true
 	ms die on bug = true
 
-	mon pg warn min per osd = 1
-	mon pg warn max per osd = 10000   # <= luminous
 	mon max pg per osd = 10000        # >= luminous
 	mon pg warn max object skew = 0
 
@@ -30,6 +28,9 @@
 	mon warn on no sortbitwise = false
 	mon warn on osd down out interval zero = false
 	mon warn on too few osds = false
+	mon_warn_on_pool_pg_num_not_power_of_two = false
+        mon_warn_on_pool_no_redundancy = false
+	mon_allow_pool_size_one = true
 
         osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd crush-failure-domain=osd"
 
@@ -39,6 +40,7 @@
 
 	mon cluster log file level = debug
 	debug asserts on shutdown = true
+	mon health detail to clog = false
 
 [osd]
         osd journal size = 100

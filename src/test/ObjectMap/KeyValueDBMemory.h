@@ -21,10 +21,10 @@ public:
   int init(string _opt) override {
     return 0;
   }
-  int open(std::ostream &out, const vector<ColumnFamily>& cfs = {}) override {
+  int open(std::ostream &out, const std::string& cfs="") override {
     return 0;
   }
-  int create_and_open(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
+  int create_and_open(ostream &out, const std::string& cfs="") override {
     return 0;
   }
 
@@ -186,5 +186,5 @@ private:
   friend class WholeSpaceMemIterator;
 
 public:
-  WholeSpaceIterator get_wholespace_iterator() override;
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 };

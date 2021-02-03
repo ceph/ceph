@@ -123,17 +123,6 @@ class ipv4_tcp final : public ip_protocol {
   friend class ipv4;
 };
 
-struct icmp_hdr {
-  enum class msg_type : uint8_t {
-    echo_reply = 0,
-    echo_request = 8,
-  };
-  msg_type type;
-  uint8_t code;
-  uint16_t csum;
-  uint32_t rest;
-} __attribute__((packed));
-
 
 class icmp {
  public:

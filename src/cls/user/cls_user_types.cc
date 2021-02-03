@@ -1,10 +1,17 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/user/cls_user_types.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "include/utime.h"
+
+using std::list;
+using std::string;
+
+using ceph::Formatter;
+using ceph::bufferlist;
+using ceph::real_clock;
 
 void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i)
 {

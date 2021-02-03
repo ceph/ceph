@@ -1,13 +1,13 @@
 
   $ get_block_name_prefix() {
-  >     rbd info --format=json $1 | python -c "import sys, json; print json.load(sys.stdin)['block_name_prefix']"
+  >     rbd info --format=json $1 | python3 -c "import sys, json; print(json.load(sys.stdin)['block_name_prefix'])"
   > }
 
   $ rbd create --size 200M img
   $ DEV=$(sudo rbd map img)
   $ xfs_io -c 'pwrite -b 4M 0 200M' $DEV >/dev/null
   $ sudo rbd unmap $DEV
-  $ rbd snap create img@snap
+  $ rbd snap create --no-progress img@snap
   $ rbd snap protect img@snap
 
 cloneimg1:

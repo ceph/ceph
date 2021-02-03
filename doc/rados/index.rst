@@ -21,19 +21,19 @@ and write data to the Ceph Storage Cluster.
 Ceph Storage Clusters have a few required settings, but most configuration
 settings have default values. A typical deployment uses a deployment tool 
 to define a cluster and bootstrap a monitor. See `Deployment`_ for details 
-on ``ceph-deploy.``
+on ``cephadm.``
 
 .. toctree::
 	:maxdepth: 2
 
 	Configuration <configuration/index>
-	Deployment <deployment/index>
+	Deployment <../cephadm/index>
 
 .. raw:: html 
 
 	</td><td><h3>Operations</h3>
 
-Once you have a deployed a Ceph Storage Cluster, you may begin operating 
+Once you have deployed a Ceph Storage Cluster, you may begin operating 
 your cluster.
 
 .. toctree::
@@ -73,4 +73,4 @@ the Ceph Storage Cluster.
 .. _Ceph Block Devices: ../rbd/
 .. _Ceph File System: ../cephfs/
 .. _Ceph Object Storage: ../radosgw/
-.. _Deployment: ../rados/deployment/
+.. _Deployment: ../cephadm/

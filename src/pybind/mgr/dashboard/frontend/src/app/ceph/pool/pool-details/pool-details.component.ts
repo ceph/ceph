@@ -1,71 +1,79 @@
-import { Component, Input, OnChanges, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import { TabsetComponent } from 'ngx-bootstrap/tabs';
+import _ from 'lodash';
 
-import { PoolService } from '../../../shared/api/pool.service';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { RbdConfigurationEntry } from '../../../shared/models/configuration';
-import { Permissions } from '../../../shared/models/permissions';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { RbdConfigurationEntry } from '~/app/shared/models/configuration';
+import { Permissions } from '~/app/shared/models/permissions';
 
 @Component({
   selector: 'cd-pool-details',
   templateUrl: './pool-details.component.html',
-  styleUrls: ['./pool-details.component.scss']
+  styleUrls: ['./pool-details.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PoolDetailsComponent implements OnChanges {
-  cacheTierColumns: Array<CdTableColumn> = [];
-
   @Input()
-  selection: CdTableSelection;
+  cacheTiers: any[];
   @Input()
   permissions: Permissions;
   @Input()
-  cacheTiers: any[];
-  @ViewChild(TabsetComponent, { static: false })
-  tabsetChild: TabsetComponent;
+  selection: any;
+
+  cacheTierColumns: Array<CdTableColumn> = [];
+  // 'stats' won't be shown as the pure stat numbers won't tell the user much,
+  // if they are not converted or used in a chart (like the ones available in the pool listing)
+  omittedPoolAttributes = ['cdExecuting', 'cdIsBinary', 'stats'];
+
+  poolDetails: object;
   selectedPoolConfiguration: RbdConfigurationEntry[];
 
-  constructor(private i18n: I18n, private poolService: PoolService) {
+  constructor(private poolService: PoolService) {
     this.cacheTierColumns = [
       {
         prop: 'pool_name',
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         flexGrow: 3
       },
       {
         prop: 'cache_mode',
-        name: this.i18n('Cache Mode'),
+        name: $localize`Cache Mode`,
         flexGrow: 2
       },
       {
         prop: 'cache_min_evict_age',
-        name: this.i18n('Min Evict Age'),
+        name: $localize`Min Evict Age`,
         flexGrow: 2
       },
       {
         prop: 'cache_min_flush_age',
-        name: this.i18n('Min Flush Age'),
+        name: $localize`Min Flush Age`,
         flexGrow: 2
       },
       {
         prop: 'target_max_bytes',
-        name: this.i18n('Target Max Bytes'),
+        name: $localize`Target Max Bytes`,
         flexGrow: 2
       },
       {
         prop: 'target_max_objects',
-        name: this.i18n('Target Max Objects'),
+        name: $localize`Target Max Objects`,
         flexGrow: 2
       }
     ];
   }
 
   ngOnChanges() {
-    if (this.selection.hasSingleSelection) {
-      this.poolService.getConfiguration(this.selection.first().pool_name).subscribe((poolConf) => {
-        this.selectedPoolConfiguration = poolConf;
+    if (this.selection) {
+      this.poolService
+        .getConfiguration(this.selection.pool_name)
+        .subscribe((poolConf: RbdConfigurationEntry[]) => {
+          CdHelperClass.updateChanged(this, { selectedPoolConfiguration: poolConf });
+        });
+      CdHelperClass.updateChanged(this, {
+        poolDetails: _.omit(this.selection, this.omittedPoolAttributes)
       });
     }
   }

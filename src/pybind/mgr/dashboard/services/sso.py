@@ -2,25 +2,23 @@
 # pylint: disable=too-many-return-statements,too-many-branches
 from __future__ import absolute_import
 
-import os
 import errno
 import json
+import logging
+import os
 import threading
 import warnings
+from urllib import parse
 
-import six
-from six.moves.urllib import parse
-
-from .. import mgr, logger
+from .. import mgr
 from ..tools import prepare_url_prefix
 
-if six.PY2:
-    FileNotFoundError = IOError  # pylint: disable=redefined-builtin
+logger = logging.getLogger('sso')
 
 try:
-    from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
     from onelogin.saml2.errors import OneLogin_Saml2_Error as Saml2Error
     from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser as Saml2Parser
+    from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
 
     python_saml_imported = True
 except ImportError:
@@ -71,24 +69,25 @@ class SsoDB(object):
         return "{}{}".format(cls.SSODB_CONFIG_KEY, version)
 
     def check_and_update_db(self):
-        logger.debug("SSO: Checking for previews DB versions")
+        logger.debug("Checking for previous DB versions")
         if self.VERSION != 1:
             raise NotImplementedError()
 
     @classmethod
     def load(cls):
-        logger.info("SSO: Loading SSO DB version=%s", cls.VERSION)
+        logger.info("Loading SSO DB version=%s", cls.VERSION)
 
         json_db = mgr.get_store(cls.ssodb_config_key(), None)
         if json_db is None:
-            logger.debug("SSO: No DB v%s found, creating new...", cls.VERSION)
+            logger.debug("No DB v%s found, creating new...", cls.VERSION)
             db = cls(cls.VERSION, '', Saml2({}))
             # check if we can update from a previous version database
             db.check_and_update_db()
             return db
 
-        db = json.loads(json_db)
-        return cls(db['version'], db.get('protocol'), Saml2.from_dict(db.get('saml2')))
+        dict_db = json.loads(json_db)  # type: dict
+        return cls(dict_db['version'], dict_db.get('protocol'),
+                   Saml2.from_dict(dict_db.get('saml2')))
 
 
 def load_sso_db():
@@ -122,8 +121,8 @@ SSO_COMMANDS = [
                'name=idp_metadata,type=CephString '
                'name=idp_username_attribute,type=CephString,req=false '
                'name=idp_entity_id,type=CephString,req=false '
-               'name=sp_x_509_cert,type=CephString,req=false '
-               'name=sp_private_key,type=CephString,req=false',
+               'name=sp_x_509_cert,type=CephFilepath,req=false '
+               'name=sp_private_key,type=CephFilepath,req=false',
         'desc': 'Setup SAML2 Single Sign-On',
         'perm': 'w'
     }
@@ -145,6 +144,11 @@ def handle_sso_command(cmd):
                              'dashboard sso setup saml2']:
         return -errno.ENOSYS, '', ''
 
+    if cmd['prefix'] == 'dashboard sso disable':
+        mgr.SSO_DB.protocol = ''
+        mgr.SSO_DB.save()
+        return 0, 'SSO is "disabled".', ''
+
     if not python_saml_imported:
         return -errno.EPERM, '', 'Required library not found: `python3-saml`'
 
@@ -153,15 +157,10 @@ def handle_sso_command(cmd):
             Saml2Settings(mgr.SSO_DB.saml2.onelogin_settings)
         except Saml2Error:
             return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
-                          'use `ceph dashboard sso setup saml2`'
+                'use `ceph dashboard sso setup saml2`'
         mgr.SSO_DB.protocol = 'saml2'
         mgr.SSO_DB.save()
         return 0, 'SSO is "enabled" with "SAML2" protocol.', ''
-
-    if cmd['prefix'] == 'dashboard sso disable':
-        mgr.SSO_DB.protocol = ''
-        mgr.SSO_DB.save()
-        return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso status':
         if mgr.SSO_DB.protocol == 'saml2':
@@ -184,21 +183,25 @@ def handle_sso_command(cmd):
         if not sp_x_509_cert_path and sp_private_key_path:
             return -errno.EINVAL, '', 'Missing parameter `sp_x_509_cert`.'
         has_sp_cert = sp_x_509_cert_path != "" and sp_private_key_path != ""
-        try:
-            with open(sp_x_509_cert_path, 'r') as f:
-                sp_x_509_cert = f.read()
-        except FileNotFoundError:
+        if has_sp_cert:
+            try:
+                with open(sp_x_509_cert_path, 'r', encoding='utf-8') as f:
+                    sp_x_509_cert = f.read()
+            except FileNotFoundError:
+                return -errno.EINVAL, '', '`{}` not found.'.format(sp_x_509_cert_path)
+            try:
+                with open(sp_private_key_path, 'r', encoding='utf-8') as f:
+                    sp_private_key = f.read()
+            except FileNotFoundError:
+                return -errno.EINVAL, '', '`{}` not found.'.format(sp_private_key_path)
+        else:
             sp_x_509_cert = ''
-        try:
-            with open(sp_private_key_path, 'r') as f:
-                sp_private_key = f.read()
-        except FileNotFoundError:
             sp_private_key = ''
 
         if os.path.isfile(idp_metadata):
             warnings.warn(
                 "Please prepend 'file://' to indicate a local SAML2 IdP file", DeprecationWarning)
-            with open(idp_metadata, 'r') as f:
+            with open(idp_metadata, 'r', encoding='utf-8') as f:
                 idp_settings = Saml2Parser.parse(f.read(), entity_id=idp_entity_id)
         elif parse.urlparse(idp_metadata)[0] in ('http', 'https', 'file'):
             idp_settings = Saml2Parser.parse_remote(
@@ -240,7 +243,7 @@ def handle_sso_command(cmd):
                 "wantMessagesSigned": has_sp_cert,
                 "wantAssertionsSigned": has_sp_cert,
                 "wantAssertionsEncrypted": has_sp_cert,
-                "wantNameIdEncrypted": has_sp_cert,
+                "wantNameIdEncrypted": False,  # Not all Identity Providers support this.
                 "metadataValidUntil": '',
                 "wantAttributeStatement": False
             }

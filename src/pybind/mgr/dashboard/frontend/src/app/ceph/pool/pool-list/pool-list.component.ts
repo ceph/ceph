@@ -1,31 +1,35 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import _ from 'lodash';
+import { mergeMap } from 'rxjs/operators';
 
-import { ConfigurationService } from '../../../shared/api/configuration.service';
-import { PoolService } from '../../../shared/api/pool.service';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { ExecutingTask } from '../../../shared/models/executing-task';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permissions } from '../../../shared/models/permissions';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { TaskListService } from '../../../shared/services/task-list.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
-import { URLBuilderService } from '../../../shared/services/url-builder.service';
-import { PgCategoryService } from '../../shared/pg-category.service';
+import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
+import { ConfigurationService } from '~/app/shared/api/configuration.service';
+import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { ViewCacheStatus } from '~/app/shared/enum/view-cache-status.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Permissions } from '~/app/shared/models/permissions';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskListService } from '~/app/shared/services/task-list.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Pool } from '../pool';
-import { PoolStats } from '../pool-stat';
+import { PoolStat, PoolStats } from '../pool-stat';
 
 const BASE_URL = 'pool';
 
@@ -38,39 +42,40 @@ const BASE_URL = 'pool';
   ],
   styleUrls: ['./pool-list.component.scss']
 })
-export class PoolListComponent implements OnInit {
-  @ViewChild(TableComponent, { static: true })
+export class PoolListComponent extends ListWithDetails implements OnInit {
+  @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('poolUsageTpl', { static: true })
   poolUsageTpl: TemplateRef<any>;
 
-  @ViewChild('poolConfigurationSourceTpl', { static: false })
+  @ViewChild('poolConfigurationSourceTpl')
   poolConfigurationSourceTpl: TemplateRef<any>;
 
-  pools: Pool[] = [];
+  pools: Pool[];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
-  modalRef: BsModalRef;
   executingTasks: ExecutingTask[] = [];
   permissions: Permissions;
   tableActions: CdTableAction[];
-  viewCacheStatusList: any[];
-  selectionCacheTiers: any[] = [];
+  tableStatus = new TableStatusViewCache();
+  cacheTiers: any[] = [];
   monAllowPoolDelete = false;
+  ecProfileList: ErasureCodeProfile[];
 
   constructor(
     private poolService: PoolService,
     private taskWrapper: TaskWrapperService,
+    private ecpService: ErasureCodeProfileService,
     private authStorageService: AuthStorageService,
-    private taskListService: TaskListService,
-    private modalService: BsModalService,
-    private i18n: I18n,
+    public taskListService: TaskListService,
+    private modalService: ModalService,
     private pgCategoryService: PgCategoryService,
     private dimlessPipe: DimlessPipe,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
@@ -91,8 +96,7 @@ export class PoolListComponent implements OnInit {
         icon: Icons.destroy,
         click: () => this.deletePoolModal(),
         name: this.actionLabels.DELETE,
-        disable: () => !this.selection.first() || !this.monAllowPoolDelete,
-        disableDesc: () => this.getDisableDesc()
+        disable: this.getDisableDesc.bind(this)
       }
     ];
 
@@ -116,82 +120,74 @@ export class PoolListComponent implements OnInit {
     this.columns = [
       {
         prop: 'pool_name',
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         flexGrow: 4,
         cellTransformation: CellTemplate.executing
       },
       {
-        prop: 'type',
-        name: this.i18n('Type'),
-        flexGrow: 2
+        prop: 'data_protection',
+        name: $localize`Data Protection`,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          class: 'badge-background-gray'
+        },
+        flexGrow: 1.3
       },
       {
         prop: 'application_metadata',
-        name: this.i18n('Applications'),
-        flexGrow: 2
+        name: $localize`Applications`,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          class: 'badge-background-primary'
+        },
+        flexGrow: 1.5
       },
       {
         prop: 'pg_status',
-        name: this.i18n('PG Status'),
-        flexGrow: 3,
+        name: $localize`PG Status`,
+        flexGrow: 1.2,
         cellClass: ({ row, column, value }): any => {
           return this.getPgStatusCellClass(row, column, value);
         }
       },
       {
-        prop: 'size',
-        name: this.i18n('Replica Size'),
-        flexGrow: 1,
-        cellClass: 'text-right'
-      },
-      {
-        prop: 'last_change',
-        name: this.i18n('Last Change'),
-        flexGrow: 1,
-        cellClass: 'text-right'
-      },
-      {
-        prop: 'erasure_code_profile',
-        name: this.i18n('Erasure Coded Profile'),
+        prop: 'crush_rule',
+        name: $localize`Crush Ruleset`,
+        isHidden: true,
         flexGrow: 2
       },
       {
-        prop: 'crush_rule',
-        name: this.i18n('Crush Ruleset'),
-        flexGrow: 3
-      },
-      {
-        name: this.i18n('Usage'),
+        name: $localize`Usage`,
         prop: 'usage',
         cellTemplate: this.poolUsageTpl,
-        flexGrow: 3
+        flexGrow: 1.2
       },
       {
         prop: 'stats.rd_bytes.rates',
-        name: this.i18n('Read bytes'),
-        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+        name: $localize`Read bytes`,
+        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
           compare('stats.rd_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
-        flexGrow: 3
+        flexGrow: 1.5
       },
       {
         prop: 'stats.wr_bytes.rates',
-        name: this.i18n('Write bytes'),
-        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+        name: $localize`Write bytes`,
+        comparator: (_valueA: any, _valueB: any, rowA: Pool, rowB: Pool) =>
           compare('stats.wr_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
-        flexGrow: 3
+        flexGrow: 1.5
       },
       {
         prop: 'stats.rd.rate',
-        name: this.i18n('Read ops'),
+        name: $localize`Read ops`,
         flexGrow: 1,
         pipe: this.dimlessPipe,
         cellTransformation: CellTemplate.perSecond
       },
       {
         prop: 'stats.wr.rate',
-        name: this.i18n('Write ops'),
+        name: $localize`Write ops`,
         flexGrow: 1,
         pipe: this.dimlessPipe,
         cellTransformation: CellTemplate.perSecond
@@ -199,12 +195,21 @@ export class PoolListComponent implements OnInit {
     ];
 
     this.taskListService.init(
-      () => this.poolService.getList(),
+      () =>
+        this.ecpService.list().pipe(
+          mergeMap((ecProfileList: ErasureCodeProfile[]) => {
+            this.ecProfileList = ecProfileList;
+            return this.poolService.getList();
+          })
+        ),
       undefined,
-      (pools) => (this.pools = this.transformPoolsData(pools)),
+      (pools) => {
+        this.pools = this.transformPoolsData(pools);
+        this.tableStatus = new TableStatusViewCache();
+      },
       () => {
         this.table.reset(); // Disable loading indicator.
-        this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
+        this.tableStatus = new TableStatusViewCache(ViewCacheStatus.ValueException);
       },
       (task) => task.name.startsWith(`${BASE_URL}/`),
       (pool, task) => task.metadata['pool_name'] === pool.pool_name,
@@ -214,33 +219,50 @@ export class PoolListComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
-    this.getSelectionTiers();
   }
 
   deletePoolModal() {
     const name = this.selection.first().pool_name;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: 'Pool',
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
-            call: this.poolService.delete(name)
-          })
-      }
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: 'Pool',
+      itemNames: [name],
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
+          call: this.poolService.delete(name)
+        })
     });
   }
 
-  getPgStatusCellClass(_row, _column, value): object {
+  getPgStatusCellClass(_row: any, _column: any, value: string): object {
     return {
       'text-right': true,
       [`pg-${this.pgCategoryService.getTypeByStates(value)}`]: true
     };
   }
 
+  getErasureCodeProfile(erasureCodeProfile: string) {
+    let ecpInfo = '';
+    _.forEach(this.ecProfileList, (ecpKey) => {
+      if (ecpKey['name'] === erasureCodeProfile) {
+        ecpInfo = `EC: ${ecpKey['k']}+${ecpKey['m']}`;
+      }
+    });
+    return ecpInfo;
+  }
+
   transformPoolsData(pools: any) {
-    const requiredStats = ['bytes_used', 'max_avail', 'rd_bytes', 'wr_bytes', 'rd', 'wr'];
-    const emptyStat = { latest: 0, rate: 0, rates: [] };
+    const requiredStats = [
+      'bytes_used',
+      'max_avail',
+      'avail_raw',
+      'percent_used',
+      'rd_bytes',
+      'wr_bytes',
+      'rd',
+      'wr'
+    ];
+    const emptyStat: PoolStat = { latest: 0, rate: 0, rates: [] };
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
@@ -249,8 +271,7 @@ export class PoolListComponent implements OnInit {
         stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
       });
       pool['stats'] = stats;
-      const avail = stats.bytes_used.latest + stats.max_avail.latest;
-      pool['usage'] = avail > 0 ? stats.bytes_used.latest / avail : avail;
+      pool['usage'] = stats.percent_used.latest;
 
       if (
         !pool.cdExecuting &&
@@ -260,16 +281,24 @@ export class PoolListComponent implements OnInit {
       }
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
-        pool.stats[stat].rates = pool.stats[stat].rates.map((point) => point[1]);
+        pool.stats[stat].rates = pool.stats[stat].rates.map((point: any) => point[1]);
       });
       pool.cdIsBinary = true;
+
+      if (pool['type'] === 'erasure') {
+        const erasureCodeProfile = pool['erasure_code_profile'];
+        pool['data_protection'] = this.getErasureCodeProfile(erasureCodeProfile);
+      }
+      if (pool['type'] === 'replicated') {
+        pool['data_protection'] = `replica: ×${pool['size']}`;
+      }
     });
 
     return pools;
   }
 
   transformPgStatus(pgStatus: any): string {
-    const strings = [];
+    const strings: string[] = [];
     _.forEach(pgStatus, (count, state) => {
       strings.push(`${count} ${state}`);
     });
@@ -277,22 +306,27 @@ export class PoolListComponent implements OnInit {
     return strings.join(', ');
   }
 
-  getPoolDetails(pool: object) {
-    return _.omit(pool, ['cdExecuting', 'cdIsBinary']);
-  }
-
   getSelectionTiers() {
-    const cacheTierIds = this.selection.hasSingleSelection
-      ? this.selection.first()['tiers'] || []
-      : [];
-    this.selectionCacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
+    if (typeof this.expandedRow !== 'undefined') {
+      const cacheTierIds = this.expandedRow['tiers'];
+      this.cacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
+    }
   }
 
-  getDisableDesc(): string | undefined {
-    if (!this.monAllowPoolDelete) {
-      return this.i18n(
-        'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
-      );
+  getDisableDesc(): boolean | string {
+    if (this.selection?.hasSelection) {
+      if (!this.monAllowPoolDelete) {
+        return $localize`Pool deletion is disabled by the mon_allow_pool_delete configuration setting.`;
+      }
+
+      return false;
     }
+
+    return true;
+  }
+
+  setExpandedRow(expandedRow: any) {
+    super.setExpandedRow(expandedRow);
+    this.getSelectionTiers();
   }
 }

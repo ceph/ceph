@@ -85,7 +85,7 @@ static void pull585()
   std::vector<MonCommand> mon_commands = {
     { "osd pool create "		       
       "name=pool,type=CephPoolname " 
-      "name=pg_num,type=CephInt,range=0 " 
+      "name=pg_num,type=CephInt,range=0,req=false "
       "name=pgp_num,type=CephInt,range=0,req=false" // !!! missing trailing space
       "name=properties,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", 
       "create pool", "osd", "rw" }

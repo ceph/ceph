@@ -29,6 +29,8 @@
 
 #include "include/compat.h"
 
+using std::string;
+
 //
 // derr can be used for functions exclusively called from pidfile_write
 //
@@ -159,6 +161,9 @@ int pidfh::open(std::string_view pid_file)
   pf_dev = st.st_dev;
   pf_ino = st.st_ino;
 
+  // Default Windows file share flags prevent other processes from writing
+  // to this file.
+  #ifndef _WIN32
   struct flock l = {
     .l_type = F_WRLCK,
     .l_whence = SEEK_SET,
@@ -175,10 +180,12 @@ int pidfh::open(std::string_view pid_file)
       derr << __func__ << ": failed to lock pidfile "
 	   << pf_path << "': " << cpp_strerror(errno) << dendl;
     }
+    const auto lock_errno = errno;
     ::close(pf_fd);
     reset();
-    return -errno;
+    return -lock_errno;
   }
+  #endif
   return 0;
 }
 

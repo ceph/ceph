@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import _ from 'lodash';
 import { IndividualConfig, ToastrService } from 'ngx-toastr';
-import { BehaviorSubject } from 'rxjs';
+import { BehaviorSubject, Subject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
@@ -16,11 +16,12 @@ import { TaskMessageService } from './task-message.service';
 export class NotificationService {
   private hideToasties = false;
 
-  // Observable sources
+  // Data observable
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
-
-  // Observable streams
   data$ = this.dataSource.asObservable();
+
+  // Sidebar observable
+  sidebarSubject = new Subject();
 
   private queued: CdNotificationConfig[] = [];
   private queuedTimeoutId: number;
@@ -55,13 +56,24 @@ export class NotificationService {
   }
 
   /**
+   * Removes a single saved notifications
+   */
+  remove(index: number) {
+    const recent = this.dataSource.getValue();
+    recent.splice(index, 1);
+    this.dataSource.next(recent);
+    localStorage.setItem(this.KEY, JSON.stringify(recent));
+  }
+
+  /**
    * Method used for saving a shown notification (check show() method).
    */
   save(notification: CdNotification) {
     const recent = this.dataSource.getValue();
     recent.push(notification);
+    recent.sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1));
     while (recent.length > 10) {
-      recent.shift();
+      recent.pop();
     }
     this.dataSource.next(recent);
     localStorage.setItem(this.KEY, JSON.stringify(recent));
@@ -124,7 +136,10 @@ export class NotificationService {
   private showQueued() {
     this.getUnifiedTitleQueue().forEach((config) => {
       const notification = new CdNotification(config);
-      this.save(notification);
+
+      if (!notification.isFinishedTask) {
+        this.save(notification);
+      }
       this.showToasty(notification);
     });
   }
@@ -173,6 +188,15 @@ export class NotificationService {
   }
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true): number {
+    const notification = this.finishedTaskToNotification(finishedTask, success);
+    notification.isFinishedTask = true;
+    return this.show(notification);
+  }
+
+  finishedTaskToNotification(
+    finishedTask: FinishedTask,
+    success: boolean = true
+  ): CdNotificationConfig {
     let notification: CdNotificationConfig;
     if (finishedTask.success && success) {
       notification = new CdNotificationConfig(
@@ -186,14 +210,16 @@ export class NotificationService {
         this.taskMessageService.getErrorMessage(finishedTask)
       );
     }
-    return this.show(notification);
+    notification.isFinishedTask = true;
+
+    return notification;
   }
 
   /**
    * Prevent the notification from being shown.
    * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
    */
-  cancel(timeoutId) {
+  cancel(timeoutId: number) {
     window.clearTimeout(timeoutId);
   }
 
@@ -203,5 +229,9 @@ export class NotificationService {
    */
   suspendToasties(suspend: boolean) {
     this.hideToasties = suspend;
+  }
+
+  toggleSidebar(forceClose = false) {
+    this.sidebarSubject.next(forceClose);
   }
 }

@@ -19,12 +19,13 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
+#include "common/ceph_context.h"
 #include "compressor/CompressionPlugin.h"
 #include "ZlibCompressor.h"
 
 // -----------------------------------------------------------------------------
 
-class CompressionPluginZlib : public CompressionPlugin {
+class CompressionPluginZlib : public ceph::CompressionPlugin {
 public:
   bool has_isal = false;
 

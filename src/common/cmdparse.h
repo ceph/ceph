@@ -8,10 +8,9 @@
 #include <ostream>
 #include <boost/variant.hpp>
 #include "include/ceph_assert.h"	// boost clobbers this
+#include "include/common_fwd.h"
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
-
-class CephContext;
 
 typedef boost::variant<std::string,
 		       bool,
@@ -22,7 +21,8 @@ typedef boost::variant<std::string,
 		       std::vector<double>>  cmd_vartype;
 typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
-std::string cmddesc_get_prefix(const std::string &cmddesc);
+namespace TOPNSPC::common {
+std::string cmddesc_get_prefix(const std::string_view &cmddesc);
 std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc);
 void dump_cmd_to_json(ceph::Formatter *f, uint64_t features,
                       const std::string& cmd);
@@ -39,8 +39,8 @@ void dump_cmddesc_to_json(ceph::Formatter *jf,
 		          const std::string& module,
 		          const std::string& perm,
 		          uint64_t flags);
-bool cmdmap_from_json(std::vector<std::string> cmd, cmdmap_t *mapp,
-		      std::stringstream &ss);
+bool cmdmap_from_json(const std::vector<std::string>& cmd, cmdmap_t *mapp,
+		      std::ostream& ss);
 void cmdmap_dump(const cmdmap_t &cmdmap, ceph::Formatter *f);
 void handle_bad_get(CephContext *cct, const std::string& k, const char *name);
 
@@ -56,11 +56,11 @@ struct bad_cmd_get : public std::exception {
   }
 };
 
-bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+bool cmd_getval(const cmdmap_t& cmdmap,
 		const std::string& k, bool& val);
 
 template <typename T>
-bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+bool cmd_getval(const cmdmap_t& cmdmap,
 		const std::string& k, T& val)
 {
   if (cmdmap.count(k)) {
@@ -78,7 +78,7 @@ bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
 
 template <typename T>
 bool cmd_getval(
-  CephContext *cct, const cmdmap_t& cmdmap, const std::string& k,
+  const cmdmap_t& cmdmap, const std::string& k,
   T& val, const T& defval)
 {
   if (cmdmap.count(k)) {
@@ -108,4 +108,5 @@ bool validate_cmd(CephContext* cct,
 extern int parse_osd_id(const char *s, std::ostream *pss);
 extern long parse_pos_long(const char *s, std::ostream *pss = NULL);
 
+}
 #endif

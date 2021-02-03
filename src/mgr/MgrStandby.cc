@@ -38,17 +38,16 @@
 
 MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
-  monc{g_ceph_context},
+  monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(
 		     g_ceph_context,
 		     cct->_conf.get_val<std::string>("ms_type"),
 		     entity_name_t::MGR(),
 		     "mgr",
-		     getpid(),
-		     0)),
-  objecter{g_ceph_context, client_messenger.get(), &monc, NULL, 0, 0},
+		     Messenger::get_pid_nonce())),
+  objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
   client{client_messenger.get(), &monc, &objecter},
-  mgrc(g_ceph_context, client_messenger.get()),
+  mgrc(g_ceph_context, client_messenger.get(), &monc.monmap),
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
@@ -115,6 +114,8 @@ int MgrStandby::init()
   client_messenger->add_dispatcher_tail(&client);
   client_messenger->start();
 
+  poolctx.start(2);
+
   // Initialize MonClient
   if (monc.build_initial_monmap() < 0) {
     client_messenger->shutdown();
@@ -131,7 +132,10 @@ int MgrStandby::init()
   // We must register our config callback before calling init(), so
   // that we see the initial configuration message
   monc.register_config_callback([this](const std::string &k, const std::string &v){
-      dout(10) << "config_callback: " << k << " : " << v << dendl;
+      // removing value to hide sensitive data going into mgr logs
+      // leaving this for debugging purposes
+      // dout(10) << "config_callback: " << k << " : " << v << dendl;
+      dout(10) << "config_callback: " << k << " : " << dendl;
       if (k.substr(0, 4) == "mgr/") {
 	const std::string global_key = PyModule::config_prefix + k.substr(4);
         py_module_registry.handle_config(global_key, v);
@@ -192,7 +196,7 @@ void MgrStandby::send_beacon()
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
   dout(20) << state_str() << dendl;
 
-  std::list<PyModuleRef> modules = py_module_registry.get_modules();
+  auto modules = py_module_registry.get_modules();
 
   // Construct a list of the info about each loaded module
   // which we will transmit to the monitor.
@@ -204,6 +208,11 @@ void MgrStandby::send_beacon()
     info.can_run = module->get_can_run();
     info.module_options = module->get_options();
     module_info.push_back(std::move(info));
+  }
+
+  auto clients = py_module_registry.get_clients();
+  for (const auto& client : clients) {
+    dout(15) << "noting RADOS client for blocklist: " << client << dendl;
   }
 
   // Whether I think I am available (request MgrMonitor to set me
@@ -218,13 +227,14 @@ void MgrStandby::send_beacon()
   metadata["addrs"] = stringify(client_messenger->get_myaddrs());
   collect_sys_info(&metadata, g_ceph_context);
 
-  MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
+  auto m = ceph::make_message<MMgrBeacon>(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf()->name.get_id(),
                                  addrs,
                                  available,
 				 std::move(module_info),
 				 std::move(metadata),
+                                 std::move(clients),
 				 CEPH_FEATURES_ALL);
 
   if (available) {
@@ -243,7 +253,7 @@ void MgrStandby::send_beacon()
     m->set_services(active_mgr->get_services());
   }
                                  
-  monc.send_mon_message(m);
+  monc.send_mon_message(std::move(m));
 }
 
 void MgrStandby::tick()
@@ -259,14 +269,6 @@ void MgrStandby::tick()
   )); 
 }
 
-void MgrStandby::handle_signal(int signum)
-{
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
-  //shutdown();
-}
-
 void MgrStandby::shutdown()
 {
   finisher.queue(new LambdaContext([&](int) {
@@ -274,20 +276,21 @@ void MgrStandby::shutdown()
 
     dout(4) << "Shutting down" << dendl;
 
-    // stop sending beacon first, i use monc to talk with monitors
+    py_module_registry.shutdown();
+    // stop sending beacon first, I use monc to talk with monitors
     timer.shutdown();
     // client uses monc and objecter
     client.shutdown();
     mgrc.shutdown();
+    // Stop asio threads, so leftover events won't call into shut down
+    // monclient/objecter.
+    poolctx.finish();
     // stop monc, so mon won't be able to instruct me to shutdown/activate after
     // the active_mgr is stopped
     monc.shutdown();
     if (active_mgr) {
       active_mgr->shutdown();
     }
-
-    py_module_registry.shutdown();
-
     // objecter is used by monc and active_mgr
     objecter.shutdown();
     // client_messenger is used by all of them, so stop it in the end
@@ -386,6 +389,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
   // this MgrMap is changing its set of enabled modules
   bool need_respawn = py_module_registry.handle_mgr_map(map);
   if (need_respawn) {
+    dout(1) << "respawning because set of enabled modules changed!" << dendl;
     respawn();
   }
 
@@ -458,31 +462,13 @@ bool MgrStandby::ms_handle_refused(Connection *con)
   return false;
 }
 
-// A reference for use by the signal handler
-static MgrStandby *signal_mgr = nullptr;
-
-static void handle_mgr_signal(int signum)
-{
-  if (signal_mgr) {
-    signal_mgr->handle_signal(signum);
-  }
-}
-
 int MgrStandby::main(vector<const char *> args)
 {
-  // Enable signal handlers
-  signal_mgr = this;
-  register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
-
   client_messenger->wait();
 
   // Disable signal handlers
   unregister_async_signal_handler(SIGHUP, sighup_handler);
-  unregister_async_signal_handler(SIGINT, handle_mgr_signal);
-  unregister_async_signal_handler(SIGTERM, handle_mgr_signal);
   shutdown_async_signal_handler();
-  signal_mgr = nullptr;
 
   return 0;
 }

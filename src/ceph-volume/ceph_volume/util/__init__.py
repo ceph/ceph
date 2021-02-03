@@ -98,3 +98,11 @@ def prompt_bool(question, input_=None):
         terminal.error('Valid false responses are: n, no')
         terminal.error('That response was invalid, please try again')
         return prompt_bool(question, input_=input_prompt)
+
+def merge_dict(x, y):
+    """
+    Return two dicts merged
+    """
+    z = x.copy()
+    z.update(y)
+    return z

@@ -21,7 +21,7 @@
 #include "mon/health_check.h"
 #include "mon/PGMap.h"
 
-class MMonMgrReport : public PaxosServiceMessage {
+class MMonMgrReport final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -29,19 +29,19 @@ private:
 public:
   // PGMapDigest is in data payload
   health_check_map_t health_checks;
-  bufferlist service_map_bl;  // encoded ServiceMap
+  ceph::buffer::list service_map_bl;  // encoded ServiceMap
   std::map<std::string,ProgressEvent> progress_events;
 
   MMonMgrReport()
     : PaxosServiceMessage{MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
-  ~MMonMgrReport() override {}
+  ~MMonMgrReport() final {}
 
 public:
   std::string_view get_type_name() const override { return "monmgrreport"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_type_name() << "(" << health_checks.checks.size() << " checks, "
 	<< progress_events.size() << " progress events)";
   }
@@ -65,12 +65,13 @@ public:
       PGMapDigest digest;
       auto p = data.cbegin();
       decode(digest, p);
-      bufferlist bl;
+      ceph::buffer::list bl;
       encode(digest, bl, features);
       set_data(bl);
     }
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(health_checks, p);

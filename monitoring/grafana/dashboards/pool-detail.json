@@ -50,6 +50,7 @@
         "#d44a3a"
       ],
       "datasource": "$datasource",
+      "decimals": 2,
       "format": "percentunit",
       "gauge": {
         "maxValue": 1,
@@ -101,7 +102,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "(ceph_pool_stored / ceph_pool_max_avail) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
+          "expr": "(ceph_pool_stored / (ceph_pool_stored + ceph_pool_max_avail)) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -182,7 +183,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "((ceph_pool_max_avail - ceph_pool_stored) / deriv(ceph_pool_stored[6h])) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"} > 0",
+          "expr": "(ceph_pool_max_avail / deriv(ceph_pool_stored[6h])) * on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~\"$pool_name\"} > 0",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -257,7 +258,7 @@
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "$pool_name Object In-/Egress",
+      "title": "$pool_name Object Ingress/Egress",
       "tooltip": {
         "shared": true,
         "sort": 0,

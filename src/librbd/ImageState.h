@@ -16,6 +16,8 @@ class RWLock;
 
 namespace librbd {
 
+class QuiesceWatchCtx;
+class QuiesceWatchers;
 class ImageCtx;
 class ImageUpdateWatchers;
 class UpdateWatchCtx;
@@ -46,9 +48,16 @@ public:
   void handle_prepare_lock_complete();
 
   int register_update_watcher(UpdateWatchCtx *watcher, uint64_t *handle);
+  void unregister_update_watcher(uint64_t handle, Context *on_finish);
   int unregister_update_watcher(uint64_t handle);
   void flush_update_watchers(Context *on_finish);
   void shut_down_update_watchers(Context *on_finish);
+
+  int register_quiesce_watcher(QuiesceWatchCtx *watcher, uint64_t *handle);
+  int unregister_quiesce_watcher(uint64_t handle);
+  void notify_quiesce(Context *on_finish);
+  void notify_unquiesce(Context *on_finish);
+  void quiesce_complete(uint64_t handle, int r);
 
 private:
   enum State {
@@ -109,6 +118,7 @@ private:
   uint64_t m_refresh_seq;
 
   ImageUpdateWatchers *m_update_watchers;
+  QuiesceWatchers *m_quiesce_watchers;
 
   uint64_t m_open_flags;
 

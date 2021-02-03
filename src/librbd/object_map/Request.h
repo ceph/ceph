@@ -41,6 +41,9 @@ protected:
 
 private:
   /**
+   *              STATE_TIMEOUT --------\
+   *                   ^                |
+   *                   |                v
    * <start> ---> STATE_REQUEST ---> <finish>
    *                   |                ^
    *                   v                |
@@ -48,6 +51,7 @@ private:
    */
   enum State {
     STATE_REQUEST,
+    STATE_TIMEOUT,
     STATE_INVALIDATE
   };
 

@@ -1,10 +1,16 @@
-@import 'styles';
+@use './src/styles/vendor/variables' as vv;
 
 p {
   font-family: monospace;
 }
 
 .card {
+  .btn-group {
+    margin-top: -45px;
+    position: absolute;
+    right: 0;
+  }
+
   div p {
     display: flex;
 
@@ -14,8 +20,8 @@ p {
   }
 
   .timestamp {
-    font-weight: bold;
     flex-shrink: 0;
+    font-weight: bold;
   }
 
   .priority {
@@ -27,35 +33,22 @@ p {
   }
 
   .err {
-    color: $color-pink;
+    color: vv.$danger;
   }
 
   .warn {
-    color: $color-bright-yellow;
+    color: vv.$warning;
   }
 
   .info {
-    color: $color-brand-teal;
+    color: vv.$info;
+  }
+
+  .debug {
+    color: vv.$gray-700;
   }
 }
 
-::ng-deep timepicker table tbody tr td {
-  input.bs-timepicker-field {
-    width: 3.5rem !important;
-    font-size: 1rem;
-    padding: 4px 6px;
-  }
-}
-
-label {
-  @extend .mr-2;
-}
-
-.form-group {
-  @extend .mr-3;
-  @extend .mb-3;
-}
-
-.middle {
-  padding-top: 7px;
+::ng-deep cd-logs ngb-timepicker input.ngb-tp-input {
+  width: 3.5rem !important;
 }

@@ -8,6 +8,7 @@
 #include "rgw_tools.h"
 #include "rgw_lc.h"
 
+#include "services/svc_bucket_sync.h"
 
 struct rgw_user_create_params {
   rgw_user user;
@@ -74,5 +75,15 @@ struct rgw_bucket_lifecycle_config_params {
 
 using RGWBucketLifecycleConfigCR = RGWSimpleWriteOnlyAsyncCR<rgw_bucket_lifecycle_config_params>;
 
+struct rgw_bucket_get_sync_policy_params {
+  std::optional<rgw_zone_id> zone;
+  std::optional<rgw_bucket> bucket;
+};
+
+struct rgw_bucket_get_sync_policy_result {
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+};
+
+using RGWBucketGetSyncPolicyHandlerCR = RGWSimpleAsyncCR<rgw_bucket_get_sync_policy_params, rgw_bucket_get_sync_policy_result>;
 
 #endif

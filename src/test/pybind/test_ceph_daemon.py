@@ -1,4 +1,4 @@
-#!/usr/bin/env nosetests
+#!/usr/bin/env python3
 # -*- mode:python; tab-width:4; indent-tabs-mode:t -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
@@ -40,8 +40,9 @@ class TestDaemonWatcher(TestCase):
         dw = DaemonWatcher(None)
         # Can't count on having a tty available during tests, so only test the false case
         self.assertEqual(dw.supports_color(StringIO()), False)
+
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 &&
-#  PYTHONPATH=pybind nosetests --stop \
-#  test/pybind/test_ceph_daemon.py
+# compile-command: "cd ../../..;
+#  PYTHONPATH=src/pybind nosetests --stop \
+#  src/test/pybind/test_ceph_daemon.py"
 # End:

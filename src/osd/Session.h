@@ -99,7 +99,7 @@ struct Backoff : public RefCountedObject {
   //   - both null (teardown), or
   //   - only session is set (and state == DELETING)
   PGRef pg;             ///< owning pg
-  ceph::ref_t<class Session> session;   ///< owning session
+  ceph::ref_t<struct Session> session;   ///< owning session
   hobject_t begin, end; ///< [) range to block, unless ==, then single obj
 
   friend ostream& operator<<(ostream& out, const Backoff& b) {
@@ -143,7 +143,7 @@ struct Session : public RefCountedObject {
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   ceph::mutex backoff_lock = ceph::make_mutex("Session::backoff_lock");
   std::atomic<int> backoff_count= {0};  ///< simple count of backoffs
-  map<spg_t,map<hobject_t,set<ceph::ref_t<Backoff>>>> backoffs;
+  std::map<spg_t, std::map<hobject_t, std::set<ceph::ref_t<Backoff>>>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
 

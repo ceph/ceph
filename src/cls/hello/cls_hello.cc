@@ -37,8 +37,12 @@
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
 
-using ceph::bufferlist;
 using std::string;
+using std::ostringstream;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
 
 CLS_VER(1,0)
 CLS_NAME(hello)
@@ -139,7 +143,7 @@ static int record_hello(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   return 0;
 }
 
-static int writes_dont_return_data(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int write_return_data(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // make some change to the object
   bufferlist attrbl;
@@ -156,16 +160,32 @@ static int writes_dont_return_data(cls_method_context_t hctx, bufferlist *in, bu
     return -EINVAL;
   }
 
-  // try to return some data.  note that this *won't* reach the
-  // client!  see the matching test case in test_cls_hello.cc.
-#warning "disable this return data temporarily"
-  //out->append("you will never see this");
+  // try to return some data.  note that this will only reach the client
+  // if the client has set the CEPH_OSD_FLAG_RETURNVEC flag on the op.
+  out->append("you might see this");
 
-  // if we try to return anything > 0 here the client will see 0.
-  //return 42;
-  return 0;
+  // client will only see a >0 value with the RETURNVEC flag is set; otherwise
+  // they will see 0.
+  return 42;
 }
 
+static int write_too_much_return_data(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // make some change to the object
+  bufferlist attrbl;
+  attrbl.append("bar");
+  int r = cls_cxx_setxattr(hctx, "foo", &attrbl);
+  if (r < 0)
+    return r;
+
+  // try to return too much data.  this should be enough to exceed
+  // osd_max_write_op_reply_len, which defaults to a pretty small number.
+  for (unsigned i=0; i < 10; ++i) {
+    out->append("you should not see this because it is toooooo long. ");
+  }
+
+  return 42;
+}
 
 /**
  * replay - a "read" method to get a previously recorded hello
@@ -262,7 +282,7 @@ public:
     try {
       decode(xattr, params);
       decode(val, params);
-    } catch (buffer::error &e) {
+    } catch (ceph::buffer::error &e) {
       return -EINVAL;
     }
     return 0;
@@ -299,7 +319,9 @@ CLS_INIT(hello)
   cls_method_handle_t h_say_hello;
   cls_method_handle_t h_record_hello;
   cls_method_handle_t h_replay;
+  cls_method_handle_t h_write_return_data;
   cls_method_handle_t h_writes_dont_return_data;
+  cls_method_handle_t h_write_too_much_return_data;
   cls_method_handle_t h_turn_it_to_11;
   cls_method_handle_t h_bad_reader;
   cls_method_handle_t h_bad_writer;
@@ -321,9 +343,16 @@ CLS_INIT(hello)
   cls_register_cxx_method(h_class, "record_hello",
 			  CLS_METHOD_WR | CLS_METHOD_PROMOTE,
 			  record_hello, &h_record_hello);
+  cls_register_cxx_method(h_class, "write_return_data",
+			  CLS_METHOD_WR,
+			  write_return_data, &h_write_return_data);
+  // legacy alias for this method for pre-octopus clients
   cls_register_cxx_method(h_class, "writes_dont_return_data",
 			  CLS_METHOD_WR,
-			  writes_dont_return_data, &h_writes_dont_return_data);
+			  write_return_data, &h_writes_dont_return_data);
+  cls_register_cxx_method(h_class, "write_too_much_return_data",
+			  CLS_METHOD_WR,
+			  write_too_much_return_data, &h_write_too_much_return_data);
   cls_register_cxx_method(h_class, "replay",
 			  CLS_METHOD_RD,
 			  replay, &h_replay);

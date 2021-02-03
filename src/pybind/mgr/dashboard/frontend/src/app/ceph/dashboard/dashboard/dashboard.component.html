@@ -1,13 +1,28 @@
 <div>
   <cd-refresh-selector></cd-refresh-selector>
-  <tabset *ngIf="hasGrafana">
-    <tab i18n-heading
-         heading="Health">
-      <cd-health></cd-health>
-    </tab>
-    <tab i18n-heading
-         heading="Statistics">
-    </tab>
-  </tabset>
+
+  <ng-container *ngIf="hasGrafana">
+    <ul ngbNav
+        #nav="ngbNav"
+        class="nav-tabs">
+      <li ngbNavItem>
+        <a ngbNavLink
+           i18n>Health</a>
+        <ng-template ngbNavContent>
+          <cd-health></cd-health>
+        </ng-template>
+      </li>
+      <li ngbNavItem>
+        <a ngbNavLink
+           i18n>Statistics</a>
+        <ng-template ngbNavContent>
+        </ng-template>
+      </li>
+
+    </ul>
+
+    <div [ngbNavOutlet]="nav"></div>
+  </ng-container>
+
   <cd-health *ngIf="!hasGrafana"></cd-health>
 </div>

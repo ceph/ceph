@@ -1,20 +1,22 @@
+# vim: expandtab smarttab shiftwidth=4 softtabstop=4
+
 import argparse
 from textwrap import dedent
 from ceph_volume import terminal
 
+from . import inventory
+from . import prepare
+from . import zap
 
-class ZFS(object):
+class ZFSDEV(object):
 
     help = 'Use ZFS to deploy OSDs'
 
     _help = dedent("""
-    Use ZFS to deploy OSDs
+        Use ZFS to deploy OSDs
 
-    {sub_help}
+        {sub_help}
     """)
-
-    mapper = {
-    }
 
     def __init__(self, argv):
         self.argv = argv

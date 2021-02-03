@@ -1,15 +1,15 @@
------------------------------
-Monitoring the iSCSI gateways
------------------------------
+------------------------------
+Monitoring Ceph iSCSI gateways
+------------------------------
 
-Ceph provides an additional tool for iSCSI gateway environments
+Ceph provides a tool for iSCSI gateway environments
 to monitor performance of exported RADOS Block Device (RBD) images.
 
 The ``gwtop`` tool is a ``top``-like tool that displays aggregated
 performance metrics of RBD images that are exported to clients over
 iSCSI. The metrics are sourced from a Performance Metrics Domain Agent
 (PMDA). Information from the Linux-IO target (LIO) PMDA is used to list
-each exported RBD image with the connected client and its associated I/O
+each exported RBD image, the connected client, and its associated I/O
 metrics.
 
 **Requirements:**

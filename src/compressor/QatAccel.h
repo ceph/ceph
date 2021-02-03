@@ -16,6 +16,7 @@
 #define CEPH_QATACCEL_H
 
 #include <qatzip.h>
+#include <boost/optional.hpp>
 #include "include/buffer.h"
 
 class QatAccel {
@@ -27,9 +28,9 @@ class QatAccel {
 
   bool init(const std::string &alg);
 
-  int compress(const bufferlist &in, bufferlist &out);
-  int decompress(const bufferlist &in, bufferlist &out);
-  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst);
+  int compress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> &compressor_message);
+  int decompress(const bufferlist &in, bufferlist &out, boost::optional<int32_t> compressor_message);
+  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst, boost::optional<int32_t> compressor_message);
 };
 
 #endif

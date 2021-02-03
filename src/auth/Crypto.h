@@ -15,13 +15,13 @@
 #ifndef CEPH_AUTH_CRYPTO_H
 #define CEPH_AUTH_CRYPTO_H
 
+#include "include/common_fwd.h"
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/buffer.h"
 
 #include <string>
 
-class CephContext;
 class CryptoKeyContext;
 namespace ceph { class Formatter; }
 
@@ -29,13 +29,14 @@ namespace ceph { class Formatter; }
  * Random byte stream generator suitable for cryptographic use
  */
 class CryptoRandom {
-  const int fd;
- public:
+public:
   CryptoRandom(); // throws on failure
   ~CryptoRandom();
-
   /// copy up to 256 random bytes into the given buffer. throws on failure
   void get_bytes(char *buf, int len);
+private:
+  static int open_urandom();
+  const int fd;
 };
 
 /*

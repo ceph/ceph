@@ -7,9 +7,8 @@ To extract the inventory (in csv format) use the command:
    grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
 
 """
-from cStringIO import StringIO
 import logging
-import json
+
 
 import boto.exception
 import boto.s3.connection
@@ -20,7 +19,7 @@ import time
 
 from boto.connection import AWSAuthConnection
 from teuthology import misc as teuthology
-from util.rgw import get_user_summary, get_user_successful_ops, rgwadmin
+from tasks.util.rgw import get_user_summary, get_user_successful_ops, rgwadmin
 
 log = logging.getLogger(__name__)
 
@@ -131,7 +130,7 @@ def task(ctx, config):
     clients = config.keys()
 
     # just use the first client...
-    client = clients[0]
+    client = next(iter(clients))
 
     ##
     admin_user = 'ada'
@@ -464,6 +463,11 @@ def task(ctx, config):
     assert out['id'] == bucket_id
     assert out['usage']['rgw.main']['num_objects'] == 1
     assert out['usage']['rgw.main']['size_kb'] > 0
+
+    # TESTCASE 'bucket-stats6', 'bucket', 'stats', 'non-existent bucket', 'fails, 'bucket not found error'
+    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'info'], {'bucket' : 'doesnotexist'})
+    assert ret == 404
+    assert out['Code'] == 'NoSuchBucket'
 
     # reclaim it
     key.delete()

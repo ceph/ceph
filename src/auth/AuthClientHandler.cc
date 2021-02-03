@@ -40,4 +40,3 @@ AuthClientHandler::create(CephContext* cct, int proto,
     return NULL;
   }
 }
-

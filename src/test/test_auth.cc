@@ -55,16 +55,18 @@ TEST(AuthRegistry, con_modes)
   ASSERT_EQ(modes, crc_secure);
 
   cct->_set_module_type(CEPH_ENTITY_TYPE_OSD);
+
+  /* mon/mgr are treated the same, and relevant config is ms_mon_cluster_mode */
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   cct->_set_module_type(CEPH_ENTITY_TYPE_MON);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   // how all cluster -> mon connections secure?
   cct->_conf.set_val("ms_mon_service_mode", "secure");
@@ -78,9 +80,9 @@ TEST(AuthRegistry, con_modes)
 
   cct->_set_module_type(CEPH_ENTITY_TYPE_OSD);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   cct->_set_module_type(CEPH_ENTITY_TYPE_MON);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_OSD, CEPH_AUTH_CEPHX, &modes);
@@ -99,7 +101,7 @@ TEST(AuthRegistry, con_modes)
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   //  ms_mon)client_mode doesn't does't affect daemons, though...
   cct->_conf.set_val("ms_mon_service_mode", "crc secure");
@@ -109,7 +111,7 @@ TEST(AuthRegistry, con_modes)
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   cct->_set_module_type(CEPH_ENTITY_TYPE_MON);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_OSD, CEPH_AUTH_CEPHX, &modes);
@@ -117,7 +119,7 @@ TEST(AuthRegistry, con_modes)
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MDS, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, crc_secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   // how about all internal cluster connection secure?
   cct->_conf.set_val("ms_cluster_mode", "secure");
@@ -128,7 +130,7 @@ TEST(AuthRegistry, con_modes)
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   cct->_set_module_type(CEPH_ENTITY_TYPE_OSD);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
@@ -144,7 +146,7 @@ TEST(AuthRegistry, con_modes)
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MDS, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_CLIENT, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
 
   cct->_set_module_type(CEPH_ENTITY_TYPE_MDS);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
@@ -172,7 +174,7 @@ TEST(AuthRegistry, con_modes)
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MON, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MGR, CEPH_AUTH_CEPHX, &modes);
-  ASSERT_EQ(modes, crc_secure);
+  ASSERT_EQ(modes, secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_OSD, CEPH_AUTH_CEPHX, &modes);
   ASSERT_EQ(modes, crc_secure);
   reg.get_supported_modes(CEPH_ENTITY_TYPE_MDS, CEPH_AUTH_CEPHX, &modes);

@@ -28,8 +28,7 @@ class ConnectedSocketImpl {
   virtual ~ConnectedSocketImpl() {}
   virtual int is_connected() = 0;
   virtual ssize_t read(char*, size_t) = 0;
-  virtual ssize_t zero_copy_read(bufferptr&) = 0;
-  virtual ssize_t send(bufferlist &bl, bool more) = 0;
+  virtual ssize_t send(ceph::buffer::list &bl, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
@@ -94,16 +93,10 @@ class ConnectedSocket {
   ssize_t read(char* buf, size_t len) {
     return _csi->read(buf, len);
   }
-  /// Gets the input stream.
-  ///
-  /// Gets an object returning data sent from the remote endpoint.
-  ssize_t zero_copy_read(bufferptr &data) {
-    return _csi->zero_copy_read(data);
-  }
   /// Gets the output stream.
   ///
   /// Gets an object that sends data to the remote endpoint.
-  ssize_t send(bufferlist &bl, bool more) {
+  ssize_t send(ceph::buffer::list &bl, bool more) {
     return _csi->send(bl, more);
   }
   /// Disables output to the socket.
@@ -300,18 +293,19 @@ class Worker {
 };
 
 class NetworkStack {
-  std::string type;
   unsigned num_workers = 0;
   ceph::spinlock pool_spin;
   bool started = false;
 
   std::function<void ()> add_thread(unsigned i);
 
+  virtual Worker* create_worker(CephContext *c, unsigned i) = 0;
+
  protected:
   CephContext *cct;
-  vector<Worker*> workers;
+  std::vector<Worker*> workers;
 
-  explicit NetworkStack(CephContext *c, const string &t);
+  explicit NetworkStack(CephContext *c);
  public:
   NetworkStack(const NetworkStack &) = delete;
   NetworkStack& operator=(const NetworkStack &) = delete;
@@ -321,12 +315,8 @@ class NetworkStack {
   }
 
   static std::shared_ptr<NetworkStack> create(
-          CephContext *c, const string &type);
+    CephContext *c, const std::string &type);
 
-  static Worker* create_worker(
-          CephContext *c, const string &t, unsigned i);
-  // backend need to override this method if supports zero copy read
-  virtual bool support_zero_copy_read() const { return false; }
   // backend need to override this method if backend doesn't support shared
   // listen table.
   // For example, posix backend has in kernel global listen table. If one

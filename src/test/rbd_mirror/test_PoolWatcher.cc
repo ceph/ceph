@@ -100,16 +100,16 @@ public:
     ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
     ioctx.application_enable("rbd", true);
 
-    m_pool_watcher.reset(new PoolWatcher<>(m_threads, ioctx,
+    m_pool_watcher.reset(new PoolWatcher<>(m_threads, ioctx, "mirror uuid",
                                            m_pool_watcher_listener));
 
     if (enable_mirroring) {
       ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(ioctx,
                                                    RBD_MIRROR_MODE_POOL));
       std::string uuid;
-      ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx, &uuid,
-                                                   peer.cluster_name,
-                                                   peer.client_name));
+      ASSERT_EQ(0, librbd::api::Mirror<>::peer_site_add(
+        ioctx, &uuid, RBD_MIRROR_PEER_DIRECTION_RX_TX, peer.cluster_name,
+        peer.client_name));
     }
     if (name != nullptr) {
       *name = pool_name;
@@ -142,7 +142,7 @@ public:
       librbd::Image image;
       librbd::RBD rbd;
       rbd.open(ioctx, image, name.c_str());
-      image.mirror_image_enable();
+      image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL);
 
       librbd::mirror_image_info_t mirror_image_info;
       ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image_info,
@@ -170,10 +170,11 @@ public:
       librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_name.c_str(),
 						    "", "", pioctx, false);
       ictx->state->open(0);
+      librbd::NoOpProgressContext prog_ctx;
       EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-						 snap_name.c_str()));
+						 snap_name, 0, prog_ctx));
       EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
-						  snap_name.c_str()));
+						  snap_name));
       ictx->state->close();
     }
 
@@ -189,7 +190,7 @@ public:
       librbd::Image image;
       librbd::RBD rbd;
       rbd.open(cioctx, image, name.c_str());
-      image.mirror_image_enable();
+      image.mirror_image_enable2(RBD_MIRROR_IMAGE_MODE_JOURNAL);
 
       librbd::mirror_image_info_t mirror_image_info;
       ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image_info,

@@ -4,21 +4,25 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/exclusive_lock/MockPolicy.h"
+#include "test/librbd/mock/io/MockImageDispatch.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ManagedLock.h"
+#include "librbd/exclusive_lock/ImageDispatch.h"
 #include "librbd/exclusive_lock/PreAcquireRequest.h"
 #include "librbd/exclusive_lock/PostAcquireRequest.h"
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <list>
+#include <boost/scope_exit.hpp>
 
 namespace librbd {
 
 namespace {
 
 struct MockExclusiveLockImageCtx : public MockImageCtx {
-  ContextWQ *op_work_queue;
+  asio::ContextWQ *op_work_queue;
 
   MockExclusiveLockImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
     op_work_queue = image_ctx.op_work_queue;
@@ -36,10 +40,10 @@ struct Traits<MockExclusiveLockImageCtx> {
 
 template <>
 struct ManagedLock<MockExclusiveLockImageCtx> {
-  ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  ManagedLock(librados::IoCtx& ioctx, AsioEngine& asio_engine,
               const std::string& oid, librbd::MockImageWatcher *watcher,
-              managed_lock::Mode  mode, bool blacklist_on_break_lock,
-              uint32_t blacklist_expire_seconds)
+              managed_lock::Mode  mode, bool blocklist_on_break_lock,
+              uint32_t blocklist_expire_seconds)
   {}
 
   virtual ~ManagedLock() = default;
@@ -107,6 +111,33 @@ struct BaseRequest {
 template<typename T>
 std::list<T *> BaseRequest<T>::s_requests;
 
+template<>
+struct ImageDispatch<MockExclusiveLockImageCtx>
+  : public librbd::io::MockImageDispatch {
+  static ImageDispatch* s_instance;
+  static ImageDispatch* create(MockExclusiveLockImageCtx*) {
+    ceph_assert(s_instance != nullptr);
+    return s_instance;
+  }
+
+  void destroy() {
+  }
+
+  ImageDispatch() {
+    s_instance = this;
+  }
+
+  io::ImageDispatchLayer get_dispatch_layer() const override {
+    return io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK;
+  }
+
+  MOCK_METHOD3(set_require_lock, void(bool, io::Direction, Context*));
+  MOCK_METHOD1(unset_require_lock, void(io::Direction));
+
+};
+
+ImageDispatch<MockExclusiveLockImageCtx>* ImageDispatch<MockExclusiveLockImageCtx>::s_instance = nullptr;
+
 template <>
 struct PreAcquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<PreAcquireRequest<MockExclusiveLockImageCtx> > {
   static PreAcquireRequest<MockExclusiveLockImageCtx> *create(
@@ -124,8 +155,10 @@ struct PostAcquireRequest<MockExclusiveLockImageCtx> : public BaseRequest<PostAc
 template <>
 struct PreReleaseRequest<MockExclusiveLockImageCtx> : public BaseRequest<PreReleaseRequest<MockExclusiveLockImageCtx> > {
   static PreReleaseRequest<MockExclusiveLockImageCtx> *create(
-      MockExclusiveLockImageCtx &image_ctx, bool shutting_down,
-      AsyncOpTracker &async_op_tracker, Context *on_finish) {
+      MockExclusiveLockImageCtx &image_ctx,
+      ImageDispatch<MockExclusiveLockImageCtx>* ImageDispatch,
+      bool shutting_down, AsyncOpTracker &async_op_tracker,
+      Context *on_finish) {
     return BaseRequest::create(image_ctx, nullptr, on_finish);
   }
   MOCK_METHOD0(send, void());
@@ -154,89 +187,106 @@ using ::testing::DoAll;
 using ::testing::Invoke;
 using ::testing::InSequence;
 using ::testing::Return;
+using ::testing::WithArg;
 
 class TestMockExclusiveLock : public TestMockFixture {
 public:
   typedef ManagedLock<MockExclusiveLockImageCtx> MockManagedLock;
   typedef ExclusiveLock<MockExclusiveLockImageCtx> MockExclusiveLock;
+  typedef exclusive_lock::ImageDispatch<MockExclusiveLockImageCtx> MockImageDispatch;
   typedef exclusive_lock::PreAcquireRequest<MockExclusiveLockImageCtx> MockPreAcquireRequest;
   typedef exclusive_lock::PostAcquireRequest<MockExclusiveLockImageCtx> MockPostAcquireRequest;
   typedef exclusive_lock::PreReleaseRequest<MockExclusiveLockImageCtx> MockPreReleaseRequest;
 
-  void expect_set_state_initializing(MockManagedLock &managed_lock) {
-    EXPECT_CALL(managed_lock, set_state_initializing());
+
+  void expect_set_state_initializing(MockManagedLock *managed_lock) {
+    EXPECT_CALL(*managed_lock, set_state_initializing());
   }
 
-  void expect_set_state_unlocked(MockManagedLock &managed_lock) {
-    EXPECT_CALL(managed_lock, set_state_unlocked());
+  void expect_set_state_unlocked(MockManagedLock *managed_lock) {
+    EXPECT_CALL(*managed_lock, set_state_unlocked());
   }
 
-  void expect_set_state_waiting_for_lock(MockManagedLock &managed_lock) {
-    EXPECT_CALL(managed_lock, set_state_waiting_for_lock());
+  void expect_set_state_waiting_for_lock(MockManagedLock *managed_lock) {
+    EXPECT_CALL(*managed_lock, set_state_waiting_for_lock());
   }
 
-  void expect_set_state_post_acquiring(MockManagedLock &managed_lock) {
-    EXPECT_CALL(managed_lock, set_state_post_acquiring());
+  void expect_set_state_post_acquiring(MockManagedLock *managed_lock) {
+    EXPECT_CALL(*managed_lock, set_state_post_acquiring());
   }
 
-  void expect_is_state_acquiring(MockManagedLock &managed_lock, bool ret_val) {
-    EXPECT_CALL(managed_lock, is_state_acquiring())
+  void expect_is_state_acquiring(MockManagedLock *managed_lock, bool ret_val) {
+    EXPECT_CALL(*managed_lock, is_state_acquiring())
       .WillOnce(Return(ret_val));
   }
 
-  void expect_is_state_waiting_for_lock(MockManagedLock &managed_lock,
+  void expect_is_state_waiting_for_lock(MockManagedLock *managed_lock,
                                         bool ret_val) {
-    EXPECT_CALL(managed_lock, is_state_waiting_for_lock())
+    EXPECT_CALL(*managed_lock, is_state_waiting_for_lock())
       .WillOnce(Return(ret_val));
   }
 
-  void expect_is_state_pre_releasing(MockManagedLock &managed_lock,
+  void expect_is_state_pre_releasing(MockManagedLock *managed_lock,
                                      bool ret_val) {
-    EXPECT_CALL(managed_lock, is_state_pre_releasing())
+    EXPECT_CALL(*managed_lock, is_state_pre_releasing())
       .WillOnce(Return(ret_val));
   }
 
-  void expect_is_state_releasing(MockManagedLock &managed_lock, bool ret_val) {
-    EXPECT_CALL(managed_lock, is_state_releasing())
+  void expect_is_state_releasing(MockManagedLock *managed_lock, bool ret_val) {
+    EXPECT_CALL(*managed_lock, is_state_releasing())
       .WillOnce(Return(ret_val));
   }
 
-  void expect_is_state_locked(MockManagedLock &managed_lock, bool ret_val) {
-    EXPECT_CALL(managed_lock, is_state_locked())
+  void expect_is_state_locked(MockManagedLock *managed_lock, bool ret_val) {
+    EXPECT_CALL(*managed_lock, is_state_locked())
       .WillOnce(Return(ret_val));
   }
 
-  void expect_is_state_shutdown(MockManagedLock &managed_lock, bool ret_val) {
-    EXPECT_CALL(managed_lock, is_state_shutdown())
+  void expect_is_state_shutdown(MockManagedLock *managed_lock, bool ret_val) {
+    EXPECT_CALL(*managed_lock, is_state_shutdown())
       .WillOnce(Return(ret_val));
   }
 
-  void expect_is_action_acquire_lock(MockManagedLock &managed_lock,
+  void expect_is_action_acquire_lock(MockManagedLock *managed_lock,
                                      bool ret_val) {
-    EXPECT_CALL(managed_lock, is_action_acquire_lock())
+    EXPECT_CALL(*managed_lock, is_action_acquire_lock())
       .WillOnce(Return(ret_val));
+  }
+
+  void expect_set_require_lock(MockImageDispatch &mock_image_dispatch,
+                               bool init_shutdown, io::Direction direction) {
+    EXPECT_CALL(mock_image_dispatch, set_require_lock(init_shutdown,
+                                                      direction, _))
+      .WillOnce(WithArg<2>(Invoke([](Context* ctx) { ctx->complete(0); })));
   }
 
   void expect_set_require_lock(MockExclusiveLockImageCtx &mock_image_ctx,
-                               io::Direction direction, bool enabled) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock(direction,
-                                                                enabled));
-  }
-
-  void expect_block_writes(MockExclusiveLockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
-                  .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
+                               MockImageDispatch &mock_image_dispatch,
+                               bool init_shutdown) {
     if (mock_image_ctx.clone_copy_on_read ||
-        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0) {
-      expect_set_require_lock(mock_image_ctx, io::DIRECTION_BOTH, true);
+        (mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0 ||
+        is_rbd_pwl_enabled(mock_image_ctx.cct)) {
+      expect_set_require_lock(mock_image_dispatch, init_shutdown,
+                              io::DIRECTION_BOTH);
     } else {
-      expect_set_require_lock(mock_image_ctx, io::DIRECTION_WRITE, true);
+      expect_set_require_lock(mock_image_dispatch, init_shutdown,
+                              io::DIRECTION_WRITE);
     }
   }
 
-  void expect_unblock_writes(MockExclusiveLockImageCtx &mock_image_ctx) {
-    expect_set_require_lock(mock_image_ctx, io::DIRECTION_BOTH, false);
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes());
+  void expect_unset_require_lock(MockImageDispatch &mock_image_dispatch) {
+    EXPECT_CALL(mock_image_dispatch, unset_require_lock(io::DIRECTION_BOTH));
+  }
+
+  void expect_register_dispatch(MockExclusiveLockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, register_dispatch(_));
+  }
+
+  void expect_shut_down_dispatch(MockExclusiveLockImageCtx &mock_image_ctx) {
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, shut_down_dispatch(_, _))
+      .WillOnce(WithArg<1>(Invoke([](Context* ctx) {
+        ctx->complete(0);
+      })));
   }
 
   void expect_prepare_lock_complete(MockExclusiveLockImageCtx &mock_image_ctx) {
@@ -249,7 +299,7 @@ public:
       .WillOnce(CompleteRequest(&pre_acquire_request, r));
   }
 
-  void expect_post_acquire_request(MockExclusiveLock &mock_exclusive_lock,
+  void expect_post_acquire_request(MockExclusiveLock *mock_exclusive_lock,
                                    MockPostAcquireRequest &post_acquire_request,
                                    int r) {
     EXPECT_CALL(post_acquire_request, send())
@@ -265,7 +315,7 @@ public:
   }
 
   void expect_notify_request_lock(MockExclusiveLockImageCtx &mock_image_ctx,
-                                  MockExclusiveLock &mock_exclusive_lock) {
+                                  MockExclusiveLock *mock_exclusive_lock) {
     EXPECT_CALL(*mock_image_ctx.image_watcher, notify_request_lock());
   }
 
@@ -284,67 +334,77 @@ public:
                   .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
-  void expect_shut_down(MockManagedLock &managed_lock) {
-    EXPECT_CALL(managed_lock, shut_down(_))
-      .WillOnce(CompleteContext(0, static_cast<ContextWQ*>(nullptr)));
+  void expect_shut_down(MockManagedLock *managed_lock) {
+    EXPECT_CALL(*managed_lock, shut_down(_))
+      .WillOnce(CompleteContext(0, static_cast<asio::ContextWQ*>(nullptr)));
+  }
+
+  void expect_accept_blocked_request(
+      MockExclusiveLockImageCtx &mock_image_ctx,
+      exclusive_lock::MockPolicy &policy,
+      exclusive_lock::OperationRequestType request_type, bool value) {
+    EXPECT_CALL(mock_image_ctx, get_exclusive_lock_policy())
+      .WillOnce(Return(&policy));
+    EXPECT_CALL(policy, accept_blocked_request(request_type))
+      .WillOnce(Return(value));
   }
 
   int when_init(MockExclusiveLockImageCtx &mock_image_ctx,
-                MockExclusiveLock &exclusive_lock) {
+                MockExclusiveLock *exclusive_lock) {
     C_SaferCond ctx;
     {
       std::unique_lock owner_locker{mock_image_ctx.owner_lock};
-      exclusive_lock.init(mock_image_ctx.features, &ctx);
+      exclusive_lock->init(mock_image_ctx.features, &ctx);
     }
     return ctx.wait();
   }
 
-  int when_pre_acquire_lock_handler(MockManagedLock &managed_lock) {
+  int when_pre_acquire_lock_handler(MockManagedLock *managed_lock) {
     C_SaferCond ctx;
-    managed_lock.pre_acquire_lock_handler(&ctx);
+    managed_lock->pre_acquire_lock_handler(&ctx);
     return ctx.wait();
   }
 
-  int when_post_acquire_lock_handler(MockManagedLock &managed_lock, int r) {
+  int when_post_acquire_lock_handler(MockManagedLock *managed_lock, int r) {
     C_SaferCond ctx;
-    managed_lock.post_acquire_lock_handler(r, &ctx);
+    managed_lock->post_acquire_lock_handler(r, &ctx);
     return ctx.wait();
   }
 
-  int when_pre_release_lock_handler(MockManagedLock &managed_lock,
+  int when_pre_release_lock_handler(MockManagedLock *managed_lock,
                                     bool shutting_down) {
     C_SaferCond ctx;
-    managed_lock.pre_release_lock_handler(shutting_down, &ctx);
+    managed_lock->pre_release_lock_handler(shutting_down, &ctx);
     return ctx.wait();
   }
 
-  int when_post_release_lock_handler(MockManagedLock &managed_lock,
+  int when_post_release_lock_handler(MockManagedLock *managed_lock,
                                      bool shutting_down, int r) {
     C_SaferCond ctx;
-    managed_lock.post_release_lock_handler(shutting_down, r, &ctx);
+    managed_lock->post_release_lock_handler(shutting_down, r, &ctx);
     return ctx.wait();
   }
 
-  int when_post_reacquire_lock_handler(MockManagedLock &managed_lock, int r) {
+  int when_post_reacquire_lock_handler(MockManagedLock *managed_lock, int r) {
     C_SaferCond ctx;
-    managed_lock.post_reacquire_lock_handler(r, &ctx);
+    managed_lock->post_reacquire_lock_handler(r, &ctx);
     return ctx.wait();
   }
 
   int when_shut_down(MockExclusiveLockImageCtx &mock_image_ctx,
-                     MockExclusiveLock &exclusive_lock) {
+                     MockExclusiveLock *exclusive_lock) {
     C_SaferCond ctx;
     {
       std::unique_lock owner_locker{mock_image_ctx.owner_lock};
-      exclusive_lock.shut_down(&ctx);
+      exclusive_lock->shut_down(&ctx);
     }
     return ctx.wait();
   }
 
   bool is_lock_owner(MockExclusiveLockImageCtx &mock_image_ctx,
-                     MockExclusiveLock &exclusive_lock) {
+                     MockExclusiveLock *exclusive_lock) {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
-    return exclusive_lock.is_lock_owner();
+    return exclusive_lock->is_lock_owner();
   }
 };
 
@@ -355,12 +415,18 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -373,7 +439,7 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   expect_post_acquire_request(exclusive_lock, try_lock_post_acquire, 0);
   expect_is_state_acquiring(exclusive_lock, true);
   expect_notify_acquired_lock(mock_image_ctx);
-  expect_unblock_writes(mock_image_ctx);
+  expect_unset_require_lock(mock_image_dispatch);
   ASSERT_EQ(0, when_post_acquire_lock_handler(exclusive_lock, 0));
 
   // release lock
@@ -395,7 +461,7 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   expect_post_acquire_request(exclusive_lock, request_lock_post_acquire, 0);
   expect_is_state_acquiring(exclusive_lock, true);
   expect_notify_acquired_lock(mock_image_ctx);
-  expect_unblock_writes(mock_image_ctx);
+  expect_unset_require_lock(mock_image_dispatch);
   ASSERT_EQ(0, when_post_acquire_lock_handler(exclusive_lock, 0));
 
   // shut down (and release)
@@ -407,7 +473,7 @@ TEST_F(TestMockExclusiveLock, StateTransitions) {
   expect_pre_release_request(shutdown_pre_release, 0);
   ASSERT_EQ(0, when_pre_release_lock_handler(exclusive_lock, true));
 
-  expect_unblock_writes(mock_image_ctx);
+  expect_shut_down_dispatch(mock_image_ctx);
   expect_notify_released_lock(mock_image_ctx);
   ASSERT_EQ(0, when_post_release_lock_handler(exclusive_lock, true, 0));
 }
@@ -419,12 +485,17 @@ TEST_F(TestMockExclusiveLock, TryLockAlreadyLocked) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
-  InSequence seq;
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
+
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -446,12 +517,18 @@ TEST_F(TestMockExclusiveLock, TryLockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -473,12 +550,18 @@ TEST_F(TestMockExclusiveLock, AcquireLockAlreadyLocked) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -503,12 +586,18 @@ TEST_F(TestMockExclusiveLock, AcquireLockBusy) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -533,12 +622,18 @@ TEST_F(TestMockExclusiveLock, AcquireLockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -550,8 +645,8 @@ TEST_F(TestMockExclusiveLock, AcquireLockError) {
   expect_is_state_acquiring(exclusive_lock, true);
   expect_prepare_lock_complete(mock_image_ctx);
   expect_is_action_acquire_lock(exclusive_lock, true);
-  ASSERT_EQ(-EBLACKLISTED, when_post_acquire_lock_handler(exclusive_lock,
-                                                          -EBLACKLISTED));
+  ASSERT_EQ(-EBLOCKLISTED, when_post_acquire_lock_handler(exclusive_lock,
+                                                          -EBLOCKLISTED));
 }
 
 TEST_F(TestMockExclusiveLock, PostAcquireLockError) {
@@ -561,12 +656,18 @@ TEST_F(TestMockExclusiveLock, PostAcquireLockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -589,12 +690,18 @@ TEST_F(TestMockExclusiveLock, PreReleaseLockError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -615,12 +722,18 @@ TEST_F(TestMockExclusiveLock, ReacquireLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
   expect_op_work_queue(mock_image_ctx);
+
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
 
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
@@ -633,7 +746,7 @@ TEST_F(TestMockExclusiveLock, ReacquireLock) {
   expect_post_acquire_request(exclusive_lock, try_lock_post_acquire, 0);
   expect_is_state_acquiring(exclusive_lock, true);
   expect_notify_acquired_lock(mock_image_ctx);
-  expect_unblock_writes(mock_image_ctx);
+  expect_unset_require_lock(mock_image_dispatch);
   ASSERT_EQ(0, when_post_acquire_lock_handler(exclusive_lock, 0));
 
   // reacquire lock
@@ -649,7 +762,7 @@ TEST_F(TestMockExclusiveLock, ReacquireLock) {
   expect_pre_release_request(shutdown_pre_release, 0);
   ASSERT_EQ(0, when_pre_release_lock_handler(exclusive_lock, true));
 
-  expect_unblock_writes(mock_image_ctx);
+  expect_shut_down_dispatch(mock_image_ctx);
   expect_notify_released_lock(mock_image_ctx);
   ASSERT_EQ(0, when_post_release_lock_handler(exclusive_lock, true, 0));
 }
@@ -661,32 +774,56 @@ TEST_F(TestMockExclusiveLock, BlockRequests) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockExclusiveLockImageCtx mock_image_ctx(*ictx);
-  MockExclusiveLock exclusive_lock(mock_image_ctx);
+
+  MockExclusiveLock *exclusive_lock = new MockExclusiveLock(mock_image_ctx);
+  exclusive_lock::MockPolicy mock_exclusive_lock_policy;
 
   expect_op_work_queue(mock_image_ctx);
 
+  BOOST_SCOPE_EXIT(&exclusive_lock) {
+    exclusive_lock->put();
+  } BOOST_SCOPE_EXIT_END
+
   InSequence seq;
   expect_set_state_initializing(exclusive_lock);
-  expect_block_writes(mock_image_ctx);
+  MockImageDispatch mock_image_dispatch;
+  expect_register_dispatch(mock_image_ctx);
+  expect_set_require_lock(mock_image_ctx, mock_image_dispatch, true);
   expect_set_state_unlocked(exclusive_lock);
   ASSERT_EQ(0, when_init(mock_image_ctx, exclusive_lock));
 
   int ret_val;
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
-  ASSERT_TRUE(exclusive_lock.accept_requests(&ret_val));
+  ASSERT_TRUE(exclusive_lock->accept_request(
+                exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(0, ret_val);
 
-  exclusive_lock.block_requests(-EROFS);
+  exclusive_lock->block_requests(-EROFS);
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
-  ASSERT_FALSE(exclusive_lock.accept_requests(&ret_val));
+  expect_accept_blocked_request(mock_image_ctx, mock_exclusive_lock_policy,
+                                exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL,
+                                false);
+  ASSERT_FALSE(exclusive_lock->accept_request(
+                 exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(-EROFS, ret_val);
 
-  exclusive_lock.unblock_requests();
   expect_is_state_shutdown(exclusive_lock, false);
   expect_is_state_locked(exclusive_lock, true);
-  ASSERT_TRUE(exclusive_lock.accept_requests(&ret_val));
+  expect_accept_blocked_request(
+    mock_image_ctx, mock_exclusive_lock_policy,
+    exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE, true);
+  ASSERT_TRUE(exclusive_lock->accept_request(
+                exclusive_lock::OPERATION_REQUEST_TYPE_TRASH_SNAP_REMOVE,
+                &ret_val));
+  ASSERT_EQ(0, ret_val);
+
+  exclusive_lock->unblock_requests();
+  expect_is_state_shutdown(exclusive_lock, false);
+  expect_is_state_locked(exclusive_lock, true);
+  ASSERT_TRUE(exclusive_lock->accept_request(
+                exclusive_lock::OPERATION_REQUEST_TYPE_GENERAL, &ret_val));
   ASSERT_EQ(0, ret_val);
 }
 

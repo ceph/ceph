@@ -1,17 +1,12 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ModalModule } from 'ngx-bootstrap/modal';
-
-import {
-  configureTestBed,
-  i18nProviders,
-  PermissionHelper
-} from '../../../../testing/unit-test-helper';
-import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
-import { SharedModule } from '../../../shared/shared.module';
+import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { RgwUserListComponent } from './rgw-user-list.component';
 
 describe('RgwUserListComponent', () => {
@@ -20,9 +15,8 @@ describe('RgwUserListComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserListComponent],
-    imports: [RouterTestingModule, HttpClientTestingModule, ModalModule.forRoot(), SharedModule],
-    schemas: [NO_ERRORS_SCHEMA],
-    providers: i18nProviders
+    imports: [BrowserAnimationsModule, RouterTestingModule, HttpClientTestingModule, SharedModule],
+    schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {
@@ -44,7 +38,7 @@ describe('RgwUserListComponent', () => {
     expect(tableActions).toEqual({
       'create,update,delete': {
         actions: ['Create', 'Edit', 'Delete'],
-        primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
+        primary: { multiple: 'Delete', executing: 'Edit', single: 'Edit', no: 'Create' }
       },
       'create,update': {
         actions: ['Create', 'Edit'],
@@ -52,7 +46,7 @@ describe('RgwUserListComponent', () => {
       },
       'create,delete': {
         actions: ['Create', 'Delete'],
-        primary: { multiple: 'Create', executing: 'Delete', single: 'Delete', no: 'Create' }
+        primary: { multiple: 'Delete', executing: 'Create', single: 'Create', no: 'Create' }
       },
       create: {
         actions: ['Create'],
@@ -60,7 +54,7 @@ describe('RgwUserListComponent', () => {
       },
       'update,delete': {
         actions: ['Edit', 'Delete'],
-        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: { multiple: 'Delete', executing: 'Edit', single: 'Edit', no: 'Edit' }
       },
       update: {
         actions: ['Edit'],

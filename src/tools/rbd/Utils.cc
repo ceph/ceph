@@ -10,6 +10,7 @@
 #include "include/rbd/features.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/escape.h"
 #include "common/safe_io.h"
 #include "global/global_context.h"
 #include <iostream>
@@ -23,10 +24,28 @@ namespace utils {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+namespace {
+
+static std::string mgr_command_args_to_str(
+    const std::map<std::string, std::string> &args) {
+  std::string out = "";
+
+  std::string delimiter;
+  for (auto &it : args) {
+    out += delimiter + "\"" + it.first + "\": \"" +
+      stringify(json_stream_escaper(it.second)) + "\"";
+    delimiter = ",\n";
+  }
+
+  return out;
+}
+
+} // anonymous namespace
+
 int ProgressContext::update_progress(uint64_t offset, uint64_t total) {
   if (progress) {
     int pc = total ? (offset * 100ull / total) : 0;
-    if (pc != last_pc) {
+    if (pc > last_pc) {
       cerr << "\r" << operation << ": "
            << pc << "% complete...";
       cerr.flush();
@@ -164,6 +183,12 @@ std::string get_positional_argument(const po::variables_map &vm, size_t index) {
   return "";
 }
 
+void normalize_pool_name(std::string* pool_name) {
+  if (pool_name->empty()) {
+    *pool_name = get_default_pool_name();
+  }
+}
+
 std::string get_default_pool_name() {
   return g_ceph_context->_conf.get_val<std::string>("rbd_default_pool");
 }
@@ -190,10 +215,6 @@ int get_pool_and_namespace_names(
       }
       ++(*arg_index);
     }
-  }
-
-  if (default_empty_pool_name && pool_name->empty()) {
-    *pool_name = get_default_pool_name();
   }
 
   if (!g_ceph_context->_conf.get_val<bool>("rbd_validate_names")) {
@@ -240,10 +261,6 @@ int get_pool_image_id(const po::variables_map &vm,
         return r;
       }
     }
-  }
-
-  if (pool_name != nullptr && pool_name->empty()) {
-    *pool_name = get_default_pool_name();
   }
 
   if (image_id != nullptr && image_id->empty()) {
@@ -331,10 +348,6 @@ int get_pool_generic_snapshot_names(const po::variables_map &vm,
     }
   }
 
-  if (pool_name != nullptr && pool_name->empty()) {
-    *pool_name = get_default_pool_name();
-  }
-
   if (generic_name != nullptr && generic_name_required &&
       generic_name->empty()) {
     std::string prefix = at::get_description_prefix(mod);
@@ -344,7 +357,7 @@ int get_pool_generic_snapshot_names(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  std::regex pattern("^[^@/]+?$");
+  std::regex pattern("^[^@/]*?$");
   if (spec_validation == SPEC_VALIDATION_FULL) {
     // validate pool name while creating/renaming/copying/cloning/importing/etc
     if ((pool_name != nullptr) && !std::regex_match (*pool_name, pattern)) {
@@ -420,8 +433,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
 
   if (vm.count(at::IMAGE_ORDER)) {
     order = vm[at::IMAGE_ORDER].as<uint64_t>();
-    std::cerr << "rbd: --order is deprecated, use --object-size"
-	      << std::endl;
   } else if (vm.count(at::IMAGE_OBJECT_SIZE)) {
     object_size = vm[at::IMAGE_OBJECT_SIZE].as<uint64_t>();
     order = std::round(std::log2(object_size));
@@ -432,8 +443,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
   if (vm.count(at::IMAGE_FEATURES)) {
     features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
-  } else {
-    features = get_rbd_default_features(g_ceph_context);
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
@@ -538,6 +547,11 @@ int get_image_options(const boost::program_options::variables_map &vm,
     return r;
   }
 
+  if (vm.count(at::IMAGE_MIRROR_IMAGE_MODE)) {
+    opts->set(RBD_IMAGE_OPTION_MIRROR_IMAGE_MODE,
+              vm[at::IMAGE_MIRROR_IMAGE_MODE].as<librbd::mirror_image_mode_t>());
+  }
+
   return 0;
 }
 
@@ -634,10 +648,27 @@ int get_formatter(const po::variables_map &vm,
   return 0;
 }
 
+int get_snap_create_flags(const po::variables_map &vm, uint32_t *flags) {
+  if (vm[at::SKIP_QUIESCE].as<bool>() &&
+      vm[at::IGNORE_QUIESCE_ERROR].as<bool>()) {
+    std::cerr << "rbd: " << at::IGNORE_QUIESCE_ERROR
+              << " cannot be used together with " << at::SKIP_QUIESCE
+              << std::endl;
+    return -EINVAL;
+  }
+
+  *flags = 0;
+  if (vm[at::SKIP_QUIESCE].as<bool>()) {
+    *flags |= RBD_SNAP_CREATE_SKIP_QUIESCE;
+  } else if (vm[at::IGNORE_QUIESCE_ERROR].as<bool>()) {
+    *flags |= RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR;
+  }
+  return 0;
+}
+
 void init_context() {
   g_conf().set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   g_conf().apply_changes(nullptr);
-  common_init_finish(g_ceph_context);
 }
 
 int init_rados(librados::Rados *rados) {
@@ -674,8 +705,10 @@ int init(const std::string &pool_name, const std::string& namespace_name,
   return 0;
 }
 
-int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
+int init_io_ctx(librados::Rados &rados, std::string pool_name,
                 const std::string& namespace_name, librados::IoCtx *io_ctx) {
+  normalize_pool_name(&pool_name);
+
   int r = rados.ioctx_create(pool_name.c_str(), *io_ctx);
   if (r < 0) {
     if (r == -ENOENT && pool_name == get_default_pool_name()) {
@@ -837,6 +870,17 @@ std::string image_id(librbd::Image& image) {
   return id;
 }
 
+std::string mirror_image_mode(librbd::mirror_image_mode_t mode) {
+  switch (mode) {
+    case RBD_MIRROR_IMAGE_MODE_JOURNAL:
+      return "journal";
+    case RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+      return "snapshot";
+    default:
+      return "unknown";
+  }
+}
+
 std::string mirror_image_state(librbd::mirror_image_state_t state) {
   switch (state) {
     case RBD_MIRROR_IMAGE_DISABLING:
@@ -850,7 +894,8 @@ std::string mirror_image_state(librbd::mirror_image_state_t state) {
   }
 }
 
-std::string mirror_image_status_state(librbd::mirror_image_status_state_t state) {
+std::string mirror_image_status_state(
+    librbd::mirror_image_status_state_t state) {
   switch (state) {
   case MIRROR_IMAGE_STATUS_STATE_UNKNOWN:
     return "unknown";
@@ -871,18 +916,51 @@ std::string mirror_image_status_state(librbd::mirror_image_status_state_t state)
   }
 }
 
-std::string mirror_image_status_state(librbd::mirror_image_status_t status) {
+std::string mirror_image_site_status_state(
+    const librbd::mirror_image_site_status_t& status) {
   return (status.up ? "up+" : "down+") +
     mirror_image_status_state(status.state);
 }
 
+std::string mirror_image_global_status_state(
+    const librbd::mirror_image_global_status_t& status) {
+  librbd::mirror_image_site_status_t local_status;
+  int r = get_local_mirror_image_status(status, &local_status);
+  if (r < 0) {
+    return "down+unknown";
+  }
+
+  return mirror_image_site_status_state(local_status);
+}
+
+int get_local_mirror_image_status(
+    const librbd::mirror_image_global_status_t& status,
+    librbd::mirror_image_site_status_t* local_status) {
+  auto it = std::find_if(status.site_statuses.begin(),
+                         status.site_statuses.end(),
+                         [](auto& site_status) {
+      return (site_status.mirror_uuid ==
+                RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
+    });
+  if (it == status.site_statuses.end()) {
+    return -ENOENT;
+  }
+
+  *local_status = *it;
+  return 0;
+}
+
 std::string timestr(time_t t) {
+  if (t == 0) {
+    return "";
+  }
+
   struct tm tm;
 
   localtime_r(&t, &tm);
 
   char buf[32];
-  strftime(buf, sizeof(buf), "%F %T", &tm);
+  strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &tm);
 
   return buf;
 }
@@ -901,6 +979,103 @@ bool is_not_user_snap_namespace(librbd::Image* image,
     return false;
   }
   return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
+}
+
+void get_mirror_peer_sites(
+    librados::IoCtx& io_ctx,
+    std::vector<librbd::mirror_peer_site_t>* mirror_peers) {
+  librados::IoCtx default_io_ctx;
+  default_io_ctx.dup(io_ctx);
+  default_io_ctx.set_namespace("");
+
+  mirror_peers->clear();
+
+  librbd::RBD rbd;
+  int r = rbd.mirror_peer_site_list(default_io_ctx, mirror_peers);
+  if (r < 0 && r != -ENOENT) {
+    std::cerr << "rbd: failed to list mirror peers" << std::endl;
+  }
+}
+
+void get_mirror_peer_mirror_uuids_to_names(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    std::map<std::string, std::string>* mirror_uuids_to_name) {
+  mirror_uuids_to_name->clear();
+  for (auto& peer : mirror_peers) {
+    if (!peer.mirror_uuid.empty() && !peer.site_name.empty()) {
+      (*mirror_uuids_to_name)[peer.mirror_uuid] = peer.site_name;
+    }
+  }
+}
+
+void populate_unknown_mirror_image_site_statuses(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    librbd::mirror_image_global_status_t* global_status) {
+  std::set<std::string> missing_mirror_uuids;
+  librbd::mirror_peer_direction_t mirror_peer_direction =
+    RBD_MIRROR_PEER_DIRECTION_RX_TX;
+  for (auto& peer : mirror_peers) {
+    if (peer.uuid == mirror_peers.begin()->uuid) {
+      mirror_peer_direction = peer.direction;
+    } else if (mirror_peer_direction != RBD_MIRROR_PEER_DIRECTION_RX_TX &&
+               mirror_peer_direction != peer.direction) {
+      mirror_peer_direction = RBD_MIRROR_PEER_DIRECTION_RX_TX;
+    }
+
+    if (!peer.mirror_uuid.empty() &&
+        peer.direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+      missing_mirror_uuids.insert(peer.mirror_uuid);
+    }
+  }
+
+  if (mirror_peer_direction != RBD_MIRROR_PEER_DIRECTION_TX) {
+    missing_mirror_uuids.insert(RBD_MIRROR_IMAGE_STATUS_LOCAL_MIRROR_UUID);
+  }
+
+  std::vector<librbd::mirror_image_site_status_t> site_statuses;
+  site_statuses.reserve(missing_mirror_uuids.size());
+
+  for (auto& site_status : global_status->site_statuses) {
+    if (missing_mirror_uuids.count(site_status.mirror_uuid) > 0) {
+      missing_mirror_uuids.erase(site_status.mirror_uuid);
+      site_statuses.push_back(site_status);
+    }
+  }
+
+  for (auto& mirror_uuid : missing_mirror_uuids) {
+    site_statuses.push_back({mirror_uuid, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                             "status not found", 0, false});
+  }
+
+  std::swap(global_status->site_statuses, site_statuses);
+}
+
+int mgr_command(librados::Rados& rados, const std::string& cmd,
+                const std::map<std::string, std::string> &args,
+                std::ostream *out_os, std::ostream *err_os) {
+  std::string command = R"(
+    {
+      "prefix": ")" + cmd + R"(", )" + mgr_command_args_to_str(args) + R"(
+    })";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+  std::string outs;
+  int r = rados.mgr_command(command, in_bl, &out_bl, &outs);
+  if (r < 0) {
+    (*err_os) << "rbd: " << cmd << " failed: " << cpp_strerror(r);
+    if (!outs.empty()) {
+      (*err_os) << ": " << outs;
+    }
+    (*err_os) << std::endl;
+    return r;
+  }
+
+  if (out_bl.length() != 0) {
+    (*out_os) << out_bl.c_str();
+  }
+
+  return 0;
 }
 
 } // namespace utils

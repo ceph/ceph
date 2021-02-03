@@ -136,9 +136,8 @@ void JournalTrimmer::remove_set(uint64_t object_set) {
                                              object_number);
 
     ldout(m_cct, 20) << "removing journal object " << oid << dendl;
-    librados::AioCompletion *comp =
-      librados::Rados::aio_create_completion(ctx, NULL,
-                                             utils::rados_ctx_callback);
+    auto comp =
+      librados::Rados::aio_create_completion(ctx, utils::rados_ctx_callback);
     int r = m_ioctx.aio_remove(oid, comp,
                                CEPH_OSD_FLAG_FULL_FORCE | CEPH_OSD_FLAG_FULL_TRY);
     ceph_assert(r == 0);

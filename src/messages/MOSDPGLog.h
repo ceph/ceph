@@ -19,9 +19,9 @@
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPGLog : public MOSDPeeringOp {
+class MOSDPGLog final : public MOSDPeeringOp {
 private:
-  static constexpr int HEAD_VERSION = 5;
+  static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 5;
 
   epoch_t epoch = 0;
@@ -38,6 +38,7 @@ public:
   pg_log_t log;
   pg_missing_t missing;
   PastIntervals past_intervals;
+  std::optional<pg_lease_t> lease;
 
   epoch_t get_epoch() const { return epoch; }
   spg_t get_pgid() const { return spg_t(info.pgid.pgid, to); }
@@ -80,7 +81,7 @@ public:
   }
 
 private:
-  ~MOSDPGLog() override {}
+  ~MOSDPGLog() final {}
 
 public:
   std::string_view get_type_name() const override { return "PGlog"; }
@@ -89,6 +90,9 @@ public:
     // swapped out by OSD code.
     out << "log " << log
 	<< " pi " << past_intervals;
+    if (lease) {
+      out << " " << *lease;
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -106,6 +110,7 @@ public:
     encode(past_intervals, payload);
     encode(to, payload);
     encode(from, payload);
+    encode(lease, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -118,6 +123,9 @@ public:
     decode(past_intervals, p);
     decode(to, p);
     decode(from, p);
+    if (header.version >= 6) {
+      decode(lease, p);
+    }
   }
 private:
   template<class T, typename... Args>

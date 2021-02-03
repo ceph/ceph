@@ -1,11 +1,10 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { SummaryService } from '../../../shared/services/summary.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { DocService } from '~/app/shared/services/doc.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { AboutComponent } from '../about/about.component';
 
 @Component({
@@ -15,41 +14,24 @@ import { AboutComponent } from '../about/about.component';
 })
 export class DashboardHelpComponent implements OnInit {
   @ViewChild('docsForm', { static: true })
-  docsFormElement;
+  docsFormElement: any;
   docsUrl: string;
-  modalRef: BsModalRef;
+  modalRef: NgbModalRef;
   icons = Icons;
 
-  constructor(
-    private summaryService: SummaryService,
-    private cephReleaseNamePipe: CephReleaseNamePipe,
-    private modalService: BsModalService,
-    private authStorageService: AuthStorageService
-  ) {}
+  constructor(private modalService: ModalService, private docService: DocService) {}
 
   ngOnInit() {
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
+    this.docService.subscribeOnce('dashboard', (url: string) => {
+      this.docsUrl = url;
     });
   }
 
   openAboutModal() {
-    this.modalRef = this.modalService.show(AboutComponent);
-    this.modalRef.setClass('modal-lg');
+    this.modalRef = this.modalService.show(AboutComponent, null, { size: 'lg' });
   }
 
   goToApiDocs() {
-    const tokenInput = this.docsFormElement.nativeElement.children[0];
-    tokenInput.value = this.authStorageService.getToken();
     this.docsFormElement.nativeElement.submit();
   }
 }

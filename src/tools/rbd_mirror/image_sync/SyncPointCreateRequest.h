@@ -4,8 +4,8 @@
 #ifndef RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_CREATE_REQUEST_H
 #define RBD_MIRROR_IMAGE_SYNC_SYNC_POINT_CREATE_REQUEST_H
 
-#include "librbd/journal/Types.h"
-#include "librbd/journal/TypeTraits.h"
+#include "librbd/internal.h"
+#include "Types.h"
 #include <string>
 
 class Context;
@@ -20,23 +20,20 @@ namespace image_sync {
 template <typename ImageCtxT = librbd::ImageCtx>
 class SyncPointCreateRequest {
 public:
-  typedef librbd::journal::TypeTraits<ImageCtxT> TypeTraits;
-  typedef typename TypeTraits::Journaler Journaler;
-  typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
-  typedef librbd::journal::MirrorPeerSyncPoint MirrorPeerSyncPoint;
-
-  static SyncPointCreateRequest* create(ImageCtxT *remote_image_ctx,
-                                        const std::string &mirror_uuid,
-                                        Journaler *journaler,
-                                        MirrorPeerClientMeta *client_meta,
-                                        Context *on_finish) {
-    return new SyncPointCreateRequest(remote_image_ctx, mirror_uuid, journaler,
-                                      client_meta, on_finish);
+  static SyncPointCreateRequest* create(
+      ImageCtxT *remote_image_ctx,
+      const std::string &local_mirror_uuid,
+      SyncPointHandler* sync_point_handler,
+      Context *on_finish) {
+    return new SyncPointCreateRequest(remote_image_ctx, local_mirror_uuid,
+                                      sync_point_handler, on_finish);
   }
 
-  SyncPointCreateRequest(ImageCtxT *remote_image_ctx,
-                         const std::string &mirror_uuid, Journaler *journaler,
-                         MirrorPeerClientMeta *client_meta, Context *on_finish);
+  SyncPointCreateRequest(
+      ImageCtxT *remote_image_ctx,
+      const std::string &local_mirror_uuid,
+      SyncPointHandler* sync_point_handler,
+      Context *on_finish);
 
   void send();
 
@@ -47,13 +44,13 @@ private:
    * <start>
    *    |
    *    v
-   * UPDATE_CLIENT < . .
-   *    |              .
-   *    v              .
-   * REFRESH_IMAGE     .
-   *    |              . (repeat on EEXIST)
-   *    v              .
-   * CREATE_SNAP . . . .
+   * UPDATE_SYNC_POINTS < . .
+   *    |                   .
+   *    v                   .
+   * REFRESH_IMAGE          .
+   *    |                   . (repeat on EEXIST)
+   *    v                   .
+   * CREATE_SNAP  . . . . . .
    *    |
    *    v
    * REFRESH_IMAGE
@@ -65,15 +62,15 @@ private:
    */
 
   ImageCtxT *m_remote_image_ctx;
-  std::string m_mirror_uuid;
-  Journaler *m_journaler;
-  MirrorPeerClientMeta *m_client_meta;
+  std::string m_local_mirror_uuid;
+  SyncPointHandler* m_sync_point_handler;
   Context *m_on_finish;
 
-  MirrorPeerClientMeta m_client_meta_copy;
+  SyncPoints m_sync_points_copy;
+  librbd::NoOpProgressContext m_prog_ctx;
 
-  void send_update_client();
-  void handle_update_client(int r);
+  void send_update_sync_points();
+  void handle_update_sync_points(int r);
 
   void send_refresh_image();
   void handle_refresh_image(int r);

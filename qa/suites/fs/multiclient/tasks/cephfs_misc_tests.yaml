@@ -5,7 +5,9 @@ tasks:
 
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - evicting unresponsive client
       - POOL_APP_NOT_ENABLED
       - has not responded to cap revoke by MDS for over
+      - MDS_CLIENT_LATE_RELEASE
+      - responding to mclientcaps

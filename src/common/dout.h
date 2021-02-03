@@ -19,7 +19,8 @@
 #include <type_traits>
 
 #include "include/ceph_assert.h"
-#ifdef WITH_SEASTAR
+#include "include/common_fwd.h"
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #include <seastar/util/log.hh>
 #include "crimson/common/log.h"
 #include "crimson/common/config_proxy.h"
@@ -117,19 +118,29 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 // generic macros
 #define dout_prefix *_dout
 
-#ifdef WITH_SEASTAR
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #define dout_impl(cct, sub, v)                                          \
   do {                                                                  \
-    if (ceph::common::local_conf()->subsys.should_gather(sub, v)) {     \
-      seastar::logger& _logger = ceph::get_logger(sub);                 \
+    if (crimson::common::local_conf()->subsys.should_gather(sub, v)) {  \
+      seastar::logger& _logger = crimson::get_logger(sub);              \
       const auto _lv = v;                                               \
       std::ostringstream _out;                                          \
       std::ostream* _dout = &_out;
 #define dendl_impl                              \
      "";                                        \
-      _logger.log(ceph::to_log_level(_lv),      \
-                  _out.str().c_str());          \
+      _logger.log(crimson::to_log_level(_lv),   \
+                  "{}", _out.str().c_str());    \
     }                                           \
+  } while (0)
+#elif defined(WITH_SEASTAR) && defined(WITH_ALIEN)
+#define dout_impl(cct, sub, v)						\
+  do {									\
+  if (0) {							\
+    ceph::logging::MutableEntry _dout_e(v, sub);                        \
+    std::ostream* _dout = &_dout_e.get_ostream();
+
+#define dendl_impl std::flush;                                          \
+  }                                                                     \
   } while (0)
 #else
 #define dout_impl(cct, sub, v)						\

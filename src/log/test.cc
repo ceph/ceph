@@ -362,7 +362,7 @@ TEST(Log, GarbleRecovery)
   log.flush();
   log.stop();
   struct stat file_status;
-  ASSERT_EQ(lstat(test_file, &file_status), 0);
+  ASSERT_EQ(stat(test_file, &file_status), 0);
   ASSERT_GT(file_status.st_size, 2000);
 }
 

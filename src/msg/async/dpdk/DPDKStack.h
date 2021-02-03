@@ -97,7 +97,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     return len - left ? len - left : -EAGAIN;
   }
 
-  virtual ssize_t zero_copy_read(bufferptr &data) override {
+private:
+  ssize_t zero_copy_read(bufferptr &data) {
     auto err = _conn.get_errno();
     if (err <= 0)
       return err;
@@ -135,12 +136,16 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
     }
 
     std::vector<fragment> frags;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
-    uint64_t left_pbrs = bl.buffers().size();
+    auto pb = bl.buffers().begin();
     uint64_t len = 0;
     uint64_t seglen = 0;
-    while (len < available && left_pbrs--) {
+    while (len < available && pb != bl.buffers().end()) {
       seglen = pb->length();
+      // Buffer length is zero, no need to send, so skip it
+      if (seglen == 0) {
+        ++pb;
+        continue;
+      }
       if (len + seglen > available) {
         // don't continue if we enough at least 1 fragment since no available
         // space for next ptr.
@@ -166,6 +171,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
       return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
     }
   }
+
+public:
   virtual void shutdown() override {
     _conn.close_write();
   }
@@ -241,11 +248,15 @@ class DPDKWorker : public Worker {
 
 class DPDKStack : public NetworkStack {
   vector<std::function<void()> > funcs;
+
+  virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
+    return new DPDKWorker(c, worker_id);
+  }
+
  public:
-  explicit DPDKStack(CephContext *cct, const string &t): NetworkStack(cct, t) {
+  explicit DPDKStack(CephContext *cct): NetworkStack(cct) {
     funcs.resize(cct->_conf->ms_async_max_op_threads);
   }
-  virtual bool support_zero_copy_read() const override { return true; }
   virtual bool support_local_listen_table() const override { return true; }
 
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;

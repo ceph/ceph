@@ -1,28 +1,83 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212,too-many-return-statements
+# pylint: disable=W0212,too-many-return-statements,too-many-public-methods
 from __future__ import absolute_import
 
 import json
 import logging
-from collections import namedtuple
+import random
+import re
+import string
 import time
+from collections import namedtuple
+from typing import List
 
 import requests
-import six
-from teuthology.exceptions import CommandFailedError
+from tasks.mgr.mgr_test_case import MgrTestCase
+from teuthology.exceptions import \
+    CommandFailedError  # pylint: disable=import-error
 
-from ..mgr_test_case import MgrTestCase
-
+from . import DEFAULT_VERSION
 
 log = logging.getLogger(__name__)
 
 
 class DashboardTestCase(MgrTestCase):
+    # Display full error diffs
+    maxDiff = None
+
+    # Increased x3 (20 -> 60)
+    TIMEOUT_HEALTH_CLEAR = 60
+
     MGRS_REQUIRED = 2
     MDSS_REQUIRED = 1
     REQUIRE_FILESYSTEM = True
     CLIENTS_REQUIRED = 1
     CEPHFS = False
+    ORCHESTRATOR = False
+    ORCHESTRATOR_TEST_DATA = {
+        'inventory': [
+            {
+                'name': 'test-host0',
+                'addr': '1.2.3.4',
+                'devices': [
+                    {
+                        'path': '/dev/sda',
+                    }
+                ]
+            },
+            {
+                'name': 'test-host1',
+                'addr': '1.2.3.5',
+                'devices': [
+                    {
+                        'path': '/dev/sdb',
+                    }
+                ]
+            }
+        ],
+        'daemons': [
+            {
+                'nodename': 'test-host0',
+                'daemon_type': 'mon',
+                'daemon_id': 'a'
+            },
+            {
+                'nodename': 'test-host0',
+                'daemon_type': 'mgr',
+                'daemon_id': 'x'
+            },
+            {
+                'nodename': 'test-host0',
+                'daemon_type': 'osd',
+                'daemon_id': '0'
+            },
+            {
+                'nodename': 'test-host1',
+                'daemon_type': 'osd',
+                'daemon_id': '1'
+            }
+        ]
+    }
 
     _session = None  # type: requests.sessions.Session
     _token = None
@@ -35,7 +90,23 @@ class DashboardTestCase(MgrTestCase):
     AUTH_ROLES = ['administrator']
 
     @classmethod
-    def create_user(cls, username, password, roles):
+    def create_user(cls, username, password, roles=None,
+                    force_password=True, cmd_args=None):
+        # pylint: disable=too-many-arguments
+        """
+        :param username: The name of the user.
+        :type username: str
+        :param password: The password.
+        :type password: str
+        :param roles: A list of roles.
+        :type roles: list
+        :param force_password: Force the use of the specified password. This
+          will bypass the password complexity check. Defaults to 'True'.
+        :type force_password: bool
+        :param cmd_args: Additional command line arguments for the
+          'ac-user-create' command.
+        :type cmd_args: None | list[str]
+        """
         try:
             cls._ceph_cmd(['dashboard', 'ac-user-show', username])
             cls._ceph_cmd(['dashboard', 'ac-user-delete', username])
@@ -43,41 +114,63 @@ class DashboardTestCase(MgrTestCase):
             if ex.exitstatus != 2:
                 raise ex
 
-        cls._ceph_cmd(['dashboard', 'ac-user-create', username, password])
-
-        set_roles_args = ['dashboard', 'ac-user-set-roles', username]
-        for idx, role in enumerate(roles):
-            if isinstance(role, str):
-                set_roles_args.append(role)
-            else:
-                assert isinstance(role, dict)
-                rolename = 'test_role_{}'.format(idx)
-                try:
-                    cls._ceph_cmd(['dashboard', 'ac-role-show', rolename])
-                    cls._ceph_cmd(['dashboard', 'ac-role-delete', rolename])
-                except CommandFailedError as ex:
-                    if ex.exitstatus != 2:
-                        raise ex
-                cls._ceph_cmd(['dashboard', 'ac-role-create', rolename])
-                for mod, perms in role.items():
-                    args = ['dashboard', 'ac-role-add-scope-perms', rolename, mod]
-                    args.extend(perms)
-                    cls._ceph_cmd(args)
-                set_roles_args.append(rolename)
-        cls._ceph_cmd(set_roles_args)
+        user_create_args = [
+            'dashboard', 'ac-user-create', username
+        ]
+        if force_password:
+            user_create_args.append('--force-password')
+        if cmd_args:
+            user_create_args.extend(cmd_args)
+        cls._ceph_cmd_with_secret(user_create_args, password)
+        if roles:
+            set_roles_args = ['dashboard', 'ac-user-set-roles', username]
+            for idx, role in enumerate(roles):
+                if isinstance(role, str):
+                    set_roles_args.append(role)
+                else:
+                    assert isinstance(role, dict)
+                    rolename = 'test_role_{}'.format(idx)
+                    try:
+                        cls._ceph_cmd(['dashboard', 'ac-role-show', rolename])
+                        cls._ceph_cmd(['dashboard', 'ac-role-delete', rolename])
+                    except CommandFailedError as ex:
+                        if ex.exitstatus != 2:
+                            raise ex
+                    cls._ceph_cmd(['dashboard', 'ac-role-create', rolename])
+                    for mod, perms in role.items():
+                        args = ['dashboard', 'ac-role-add-scope-perms', rolename, mod]
+                        args.extend(perms)
+                        cls._ceph_cmd(args)
+                    set_roles_args.append(rolename)
+            cls._ceph_cmd(set_roles_args)
 
     @classmethod
-    def login(cls, username, password):
+    def create_pool(cls, name, pg_num, pool_type, application='rbd'):
+        data = {
+            'pool': name,
+            'pg_num': pg_num,
+            'pool_type': pool_type,
+            'application_metadata': [application]
+        }
+        if pool_type == 'erasure':
+            data['flags'] = ['ec_overwrites']
+        cls._task_post("/api/pool", data)
+
+    @classmethod
+    def login(cls, username, password, set_cookies=False):
         if cls._loggedin:
             cls.logout()
-        cls._post('/api/auth', {'username': username, 'password': password})
+        cls._post('/api/auth', {'username': username,
+                                'password': password}, set_cookies=set_cookies)
+        cls._assertEq(cls._resp.status_code, 201)
         cls._token = cls.jsonBody()['token']
         cls._loggedin = True
 
     @classmethod
-    def logout(cls):
+    def logout(cls, set_cookies=False):
         if cls._loggedin:
-            cls._post('/api/auth/logout')
+            cls._post('/api/auth/logout', set_cookies=set_cookies)
+            cls._assertEq(cls._resp.status_code, 200)
             cls._token = None
             cls._loggedin = False
 
@@ -91,16 +184,23 @@ class DashboardTestCase(MgrTestCase):
                 cls._ceph_cmd(['dashboard', 'ac-role-delete', 'test_role_{}'.format(idx)])
 
     @classmethod
-    def RunAs(cls, username, password, roles):
+    def RunAs(cls, username, password, roles=None, force_password=True,
+              cmd_args=None, login=True):
+        # pylint: disable=too-many-arguments
         def wrapper(func):
             def execute(self, *args, **kwargs):
-                self.create_user(username, password, roles)
-                self.login(username, password)
+                self.create_user(username, password, roles,
+                                 force_password, cmd_args)
+                if login:
+                    self.login(username, password)
                 res = func(self, *args, **kwargs)
-                self.logout()
+                if login:
+                    self.logout()
                 self.delete_user(username, roles)
                 return res
+
             return execute
+
         return wrapper
 
     @classmethod
@@ -112,7 +212,7 @@ class DashboardTestCase(MgrTestCase):
         super(DashboardTestCase, cls).setUpClass()
         cls._assign_ports("dashboard", "ssl_server_port")
         cls._load_module("dashboard")
-        cls._base_uri = cls._get_uri("dashboard").rstrip('/')
+        cls.update_base_uri()
 
         if cls.CEPHFS:
             cls.mds_cluster.clear_firewall()
@@ -140,6 +240,17 @@ class DashboardTestCase(MgrTestCase):
             # wait for mds restart to complete...
             cls.fs.wait_for_daemons()
 
+        if cls.ORCHESTRATOR:
+            cls._load_module("test_orchestrator")
+
+            cmd = ['orch', 'set', 'backend', 'test_orchestrator']
+            cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
+
+            cmd = ['test_orchestrator', 'load_data', '-i', '-']
+            cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd, stdin=json.dumps(
+                cls.ORCHESTRATOR_TEST_DATA
+            ))
+
         cls._token = None
         cls._session = requests.Session()
         cls._resp = None
@@ -148,44 +259,76 @@ class DashboardTestCase(MgrTestCase):
         if cls.AUTO_AUTHENTICATE:
             cls.login('admin', 'admin')
 
+    @classmethod
+    def update_base_uri(cls):
+        if cls._base_uri is None:
+            cls._base_uri = cls._get_uri("dashboard").rstrip('/')
+
     def setUp(self):
+        super(DashboardTestCase, self).setUp()
         if not self._loggedin and self.AUTO_AUTHENTICATE:
             self.login('admin', 'admin')
-        self.wait_for_health_clear(20)
+        self.wait_for_health_clear(self.TIMEOUT_HEALTH_CLEAR)
 
     @classmethod
     def tearDownClass(cls):
         super(DashboardTestCase, cls).tearDownClass()
 
-    # pylint: disable=inconsistent-return-statements
+    # pylint: disable=inconsistent-return-statements, too-many-arguments, too-many-branches
     @classmethod
-    def _request(cls, url, method, data=None, params=None):
+    def _request(cls, url, method, data=None, params=None, version=DEFAULT_VERSION,
+                 set_cookies=False):
         url = "{}{}".format(cls._base_uri, url)
-        log.info("Request %s to %s", method, url)
+        log.debug("Request %s to %s", method, url)
         headers = {}
+        cookies = {}
         if cls._token:
-            headers['Authorization'] = "Bearer {}".format(cls._token)
-
-        if method == 'GET':
-            cls._resp = cls._session.get(url, params=params, verify=False,
-                                         headers=headers)
-        elif method == 'POST':
-            cls._resp = cls._session.post(url, json=data, params=params,
-                                          verify=False, headers=headers)
-        elif method == 'DELETE':
-            cls._resp = cls._session.delete(url, json=data, params=params,
-                                            verify=False, headers=headers)
-        elif method == 'PUT':
-            cls._resp = cls._session.put(url, json=data, params=params,
-                                         verify=False, headers=headers)
+            if set_cookies:
+                cookies['token'] = cls._token
+            else:
+                headers['Authorization'] = "Bearer {}".format(cls._token)
+        if version is None:
+            headers['Accept'] = 'application/json'
         else:
-            assert False
+            headers['Accept'] = 'application/vnd.ceph.api.v{}+json'.format(version)
+
+        if set_cookies:
+            if method == 'GET':
+                cls._resp = cls._session.get(url, params=params, verify=False,
+                                             headers=headers, cookies=cookies)
+            elif method == 'POST':
+                cls._resp = cls._session.post(url, json=data, params=params,
+                                              verify=False, headers=headers, cookies=cookies)
+            elif method == 'DELETE':
+                cls._resp = cls._session.delete(url, json=data, params=params,
+                                                verify=False, headers=headers, cookies=cookies)
+            elif method == 'PUT':
+                cls._resp = cls._session.put(url, json=data, params=params,
+                                             verify=False, headers=headers, cookies=cookies)
+            else:
+                assert False
+        else:
+            if method == 'GET':
+                cls._resp = cls._session.get(url, params=params, verify=False,
+                                             headers=headers)
+            elif method == 'POST':
+                cls._resp = cls._session.post(url, json=data, params=params,
+                                              verify=False, headers=headers)
+            elif method == 'DELETE':
+                cls._resp = cls._session.delete(url, json=data, params=params,
+                                                verify=False, headers=headers)
+            elif method == 'PUT':
+                cls._resp = cls._session.put(url, json=data, params=params,
+                                             verify=False, headers=headers)
+            else:
+                assert False
         try:
             if not cls._resp.ok:
                 # Output response for easier debugging.
                 log.error("Request response: %s", cls._resp.text)
             content_type = cls._resp.headers['content-type']
-            if content_type == 'application/json' and cls._resp.text and cls._resp.text != "":
+            if re.match(r'^application/.*json',
+                        content_type) and cls._resp.text and cls._resp.text != "":
                 return cls._resp.json()
             return cls._resp.text
         except ValueError as ex:
@@ -193,15 +336,15 @@ class DashboardTestCase(MgrTestCase):
             raise ex
 
     @classmethod
-    def _get(cls, url, params=None):
-        return cls._request(url, 'GET', params=params)
+    def _get(cls, url, params=None, version=DEFAULT_VERSION, set_cookies=False):
+        return cls._request(url, 'GET', params=params, version=version, set_cookies=set_cookies)
 
     @classmethod
     def _view_cache_get(cls, url, retries=5):
         retry = True
         while retry and retries > 0:
             retry = False
-            res = cls._get(url)
+            res = cls._get(url, version=DEFAULT_VERSION)
             if isinstance(res, dict):
                 res = [res]
             for view in res:
@@ -215,16 +358,16 @@ class DashboardTestCase(MgrTestCase):
         return res
 
     @classmethod
-    def _post(cls, url, data=None, params=None):
-        cls._request(url, 'POST', data, params)
+    def _post(cls, url, data=None, params=None, version=DEFAULT_VERSION, set_cookies=False):
+        cls._request(url, 'POST', data, params, version=version, set_cookies=set_cookies)
 
     @classmethod
-    def _delete(cls, url, data=None, params=None):
-        cls._request(url, 'DELETE', data, params)
+    def _delete(cls, url, data=None, params=None, version=DEFAULT_VERSION, set_cookies=False):
+        cls._request(url, 'DELETE', data, params, version=version, set_cookies=set_cookies)
 
     @classmethod
-    def _put(cls, url, data=None, params=None):
-        cls._request(url, 'PUT', data, params)
+    def _put(cls, url, data=None, params=None, version=DEFAULT_VERSION, set_cookies=False):
+        cls._request(url, 'PUT', data, params, version=version, set_cookies=set_cookies)
 
     @classmethod
     def _assertEq(cls, v1, v2):
@@ -243,15 +386,15 @@ class DashboardTestCase(MgrTestCase):
 
     # pylint: disable=too-many-arguments
     @classmethod
-    def _task_request(cls, method, url, data, timeout):
-        res = cls._request(url, method, data)
-        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 400, 403])
+    def _task_request(cls, method, url, data, timeout, version=DEFAULT_VERSION, set_cookies=False):
+        res = cls._request(url, method, data, version=version, set_cookies=set_cookies)
+        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 400, 403, 404])
 
         if cls._resp.status_code == 403:
             return None
 
         if cls._resp.status_code != 202:
-            log.info("task finished immediately")
+            log.debug("task finished immediately")
             return res
 
         cls._assertIn('name', res)
@@ -263,15 +406,14 @@ class DashboardTestCase(MgrTestCase):
         res_task = None
         while retries > 0 and not res_task:
             retries -= 1
-            log.info("task (%s, %s) is still executing", task_name,
-                     task_metadata)
+            log.debug("task (%s, %s) is still executing", task_name, task_metadata)
             time.sleep(1)
-            _res = cls._get('/api/task?name={}'.format(task_name))
+            _res = cls._get('/api/task?name={}'.format(task_name), version=version)
             cls._assertEq(cls._resp.status_code, 200)
             executing_tasks = [task for task in _res['executing_tasks'] if
                                task['metadata'] == task_metadata]
             finished_tasks = [task for task in _res['finished_tasks'] if
-                               task['metadata'] == task_metadata]
+                              task['metadata'] == task_metadata]
             if not executing_tasks and finished_tasks:
                 res_task = finished_tasks[0]
 
@@ -279,7 +421,7 @@ class DashboardTestCase(MgrTestCase):
             raise Exception("Waiting for task ({}, {}) to finish timed out. {}"
                             .format(task_name, task_metadata, _res))
 
-        log.info("task (%s, %s) finished", task_name, task_metadata)
+        log.debug("task (%s, %s) finished", task_name, task_metadata)
         if res_task['success']:
             if method == 'POST':
                 cls._resp.status_code = 201
@@ -288,24 +430,27 @@ class DashboardTestCase(MgrTestCase):
             elif method == 'DELETE':
                 cls._resp.status_code = 204
             return res_task['ret_value']
+
+        if 'status' in res_task['exception']:
+            cls._resp.status_code = res_task['exception']['status']
         else:
-            if 'status' in res_task['exception']:
-                cls._resp.status_code = res_task['exception']['status']
-            else:
-                cls._resp.status_code = 500
-            return res_task['exception']
+            cls._resp.status_code = 500
+        return res_task['exception']
 
     @classmethod
-    def _task_post(cls, url, data=None, timeout=60):
-        return cls._task_request('POST', url, data, timeout)
+    def _task_post(cls, url, data=None, timeout=60, version=DEFAULT_VERSION, set_cookies=False):
+        return cls._task_request('POST', url, data, timeout, version=version,
+                                 set_cookies=set_cookies)
 
     @classmethod
-    def _task_delete(cls, url, timeout=60):
-        return cls._task_request('DELETE', url, None, timeout)
+    def _task_delete(cls, url, timeout=60, version=DEFAULT_VERSION, set_cookies=False):
+        return cls._task_request('DELETE', url, None, timeout, version=version,
+                                 set_cookies=set_cookies)
 
     @classmethod
-    def _task_put(cls, url, data=None, timeout=60):
-        return cls._task_request('PUT', url, data, timeout)
+    def _task_put(cls, url, data=None, timeout=60, version=DEFAULT_VERSION, set_cookies=False):
+        return cls._task_request('PUT', url, data, timeout, version=version,
+                                 set_cookies=set_cookies)
 
     @classmethod
     def cookies(cls):
@@ -365,8 +510,30 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def _ceph_cmd(cls, cmd):
         res = cls.mgr_cluster.mon_manager.raw_cluster_cmd(*cmd)
-        log.info("command result: %s", res)
+        log.debug("command result: %s", res)
         return res
+
+    @classmethod
+    def _ceph_cmd_result(cls, cmd):
+        exitstatus = cls.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd)
+        log.debug("command exit status: %d", exitstatus)
+        return exitstatus
+
+    @classmethod
+    def _ceph_cmd_with_secret(cls, cmd: List[str], secret: str, return_exit_code: bool = False):
+        cmd.append('-i')
+        cmd.append('{}'.format(cls._ceph_create_tmp_file(secret)))
+        if return_exit_code:
+            return cls._ceph_cmd_result(cmd)
+        return cls._ceph_cmd(cmd)
+
+    @classmethod
+    def _ceph_create_tmp_file(cls, content: str) -> str:
+        """Create a temporary file in the remote cluster"""
+        file_name = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+        file_path = '/tmp/{}'.format(file_name)
+        cls._cmd(['sh', '-c', 'echo -n {} > {}'.format(content, file_path)])
+        return file_path
 
     def set_config_key(self, key, value):
         self._ceph_cmd(['config-key', 'set', key, value])
@@ -375,30 +542,30 @@ class DashboardTestCase(MgrTestCase):
         return self._ceph_cmd(['config-key', 'get', key])
 
     @classmethod
+    def _cmd(cls, args):
+        return cls.mgr_cluster.admin_remote.run(args=args)
+
+    @classmethod
     def _rbd_cmd(cls, cmd):
-        args = [
-            'rbd'
-        ]
+        args = ['rbd']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def _radosgw_admin_cmd(cls, cmd):
-        args = [
-            'radosgw-admin'
-        ]
+        args = ['radosgw-admin']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def _rados_cmd(cls, cmd):
         args = ['rados']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def mons(cls):
-        out = cls.ceph_cluster.mon_manager.raw_cluster_cmd('mon_status')
+        out = cls.ceph_cluster.mon_manager.raw_cluster_cmd('quorum_status')
         j = json.loads(out)
         return [mon['name'] for mon in j['monmap']['mons']]
 
@@ -418,16 +585,17 @@ class DashboardTestCase(MgrTestCase):
         return None
 
 
+# TODP: pass defaults=(False,) to namedtuple() if python3.7
 class JLeaf(namedtuple('JLeaf', ['typ', 'none'])):
     def __new__(cls, typ, none=False):
-        if typ == str:
-            typ = six.string_types
-        return super(JLeaf, cls).__new__(cls, typ, none)
+        return super().__new__(cls, typ, none)
 
 
 JList = namedtuple('JList', ['elem_typ'])
 
 JTuple = namedtuple('JList', ['elem_typs'])
+
+JUnion = namedtuple('JUnion', ['elem_typs'])
 
 
 class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none', 'unknown_schema'])):
@@ -444,6 +612,42 @@ class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none', 'unknown_sc
 
 JAny = namedtuple('JAny', ['none'])
 
+module_options_object_schema = JObj({
+    'name': str,
+    'type': str,
+    'level': str,
+    'flags': int,
+    'default_value': JAny(none=True),
+    'min': JAny(none=False),
+    'max': JAny(none=False),
+    'enum_allowed': JList(str),
+    'see_also': JList(str),
+    'desc': str,
+    'long_desc': str,
+    'tags': JList(str),
+})
+
+module_options_schema = JObj(
+    {},
+    allow_unknown=True,
+    unknown_schema=module_options_object_schema)
+
+addrvec_schema = JList(JObj({
+    'addr': str,
+    'nonce': int,
+    'type': str
+}))
+
+devices_schema = JList(JObj({
+    'daemons': JList(str),
+    'devid': str,
+    'location': JList(JObj({
+        'host': str,
+        'dev': str,
+        'path': str
+    }))
+}))
+
 
 class _ValError(Exception):
     def __init__(self, msg, path):
@@ -451,13 +655,17 @@ class _ValError(Exception):
         super(_ValError, self).__init__('In `input{}`: {}'.format(path_str, msg))
 
 
-# pylint: disable=dangerous-default-value,inconsistent-return-statements
+# pylint: disable=dangerous-default-value,inconsistent-return-statements,too-many-branches
 def _validate_json(val, schema, path=[]):
     """
     >>> d = {'a': 1, 'b': 'x', 'c': range(10)}
     ... ds = JObj({'a': int, 'b': str, 'c': JList(int)})
     ... _validate_json(d, ds)
     True
+    >>> _validate_json({'num': 1}, JObj({'num': JUnion([int,float])}))
+    True
+    >>> _validate_json({'num': 'a'}, JObj({'num': JUnion([int,float])}))
+    False
     """
     if isinstance(schema, JAny):
         if not schema.none and val is None:
@@ -476,10 +684,18 @@ def _validate_json(val, schema, path=[]):
     if isinstance(schema, JTuple):
         return all(_validate_json(val[i], typ, path + [i])
                    for i, typ in enumerate(schema.elem_typs))
+    if isinstance(schema, JUnion):
+        for typ in schema.elem_typs:
+            try:
+                if _validate_json(val, typ, path):
+                    return True
+            except _ValError:
+                pass
+        return False
     if isinstance(schema, JObj):
         if val is None and schema.none:
             return True
-        elif val is None:
+        if val is None:
             raise _ValError('val is None', path)
         if not hasattr(val, 'keys'):
             raise _ValError('val="{}" is not a dict'.format(val), path)
@@ -499,7 +715,7 @@ def _validate_json(val, schema, path=[]):
                 for key in unknown_keys
             )
         return result
-    if schema in [str, int, float, bool, six.string_types]:
+    if schema in [str, int, float, bool]:
         return _validate_json(val, JLeaf(schema), path)
 
     assert False, str(path)

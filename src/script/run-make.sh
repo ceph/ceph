@@ -41,6 +41,11 @@ function detect_ceph_dev_pkgs() {
     else
         cmake_opts+=" -DBOOST_J=$(get_processors)"
     fi
+
+    source /etc/os-release
+    if [[ "$ID" == "ubuntu" ]] && [[ "$VERSION" =~ .*Xenial*. ]]; then 
+        cmake_opts+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=NO"
+    fi
     echo "$cmake_opts"
 }
 
@@ -83,7 +88,6 @@ function prepare() {
     fi
 
     if test -f ./install-deps.sh ; then
-	    export WITH_SEASTAR=1
 	    $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi

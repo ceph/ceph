@@ -34,6 +34,10 @@ if(WITH_RADOSGW)
     list(APPEND DENCODER_EXTRALIBS
       rabbitmq)
   endif()
+  if(WITH_RADOSGW_KAFKA_ENDPOINT)
+    list(APPEND DENCODER_EXTRALIBS
+      rdkafka)
+  endif()
 endif()
 
 if(WITH_RBD)
@@ -67,6 +71,8 @@ target_link_libraries(ceph-dencoder
   cls_user_client
   cls_journal_client
   cls_timeindex_client
+  cls_cas_internal
+  cls_cas_client
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
 install(TARGETS ceph-dencoder DESTINATION bin)

@@ -1,12 +1,13 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { BehaviorSubject } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { SharedModule } from '../../../shared/shared.module';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { environment } from '~/environments/environment';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { AboutComponent } from './about.component';
 
 export class SummaryServiceMock {
@@ -18,7 +19,7 @@ export class SummaryServiceMock {
   });
   summaryData$ = this.summaryDataSource.asObservable();
 
-  subscribe(call) {
+  subscribe(call: any) {
     return this.summaryData$.subscribe(call);
   }
 }
@@ -30,7 +31,7 @@ describe('AboutComponent', () => {
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule],
     declarations: [AboutComponent],
-    providers: [BsModalRef, { provide: SummaryService, useClass: SummaryServiceMock }]
+    providers: [NgbActiveModal, { provide: SummaryService, useClass: SummaryServiceMock }]
   });
 
   beforeEach(() => {
@@ -51,5 +52,9 @@ describe('AboutComponent', () => {
 
   it('should get host', () => {
     expect(component.hostAddr).toBe('localhost:11000');
+  });
+
+  it('should display copyright', () => {
+    expect(component.projectConstants.copyright).toContain(environment.year);
   });
 });

@@ -2,24 +2,22 @@
 <cd-loading-panel *ngIf="loading && grafanaExist"
                   i18n>Loading panel data...</cd-loading-panel>
 
-<cd-info-panel *ngIf="!grafanaExist"
-               i18n>Please consult the
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  configure and enable the monitoring functionality.</cd-info-panel>
+<cd-alert-panel type="info"
+                *ngIf="!grafanaExist"
+                i18n>Please consult the <cd-doc section="grafana"></cd-doc> on
+  how to configure and enable the monitoring functionality.</cd-alert-panel>
 
-<cd-info-panel *ngIf="!dashboardExist"
-               i18n>Grafana Dashboard doesn't exist. Please refer to
-  <a href="{{ docsUrl }}"
-     target="_blank">documentation</a> on how to
-  add dashboards to Grafana.</cd-info-panel>
+<cd-alert-panel type="info"
+                *ngIf="!dashboardExist"
+                i18n>Grafana Dashboard doesn't exist. Please refer to
+  <cd-doc section="grafana"></cd-doc> on how to add dashboards to Grafana.</cd-alert-panel>
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
   <div class="row">
-    <div class="col-12">
+    <div class="col">
       <div class="form-inline timepicker">
         <label for="timepicker"
-               class="ml-1 my-1 col-form-label"
+               class="ml-1 my-1"
                i18n>Grafana Time Picker</label>
 
         <select id="timepicker"
@@ -43,7 +41,7 @@
   </div>
 
   <div class="row">
-    <div class="col-12">
+    <div class="col">
       <div class="grafana-container">
         <iframe #iframe
                 id="iframe"

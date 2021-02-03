@@ -1,10 +1,9 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
-import { IscsiService } from '../../../shared/api/iscsi.service';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
+import { IscsiService } from '~/app/shared/api/iscsi.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
+import { IscsiBackstorePipe } from '~/app/shared/pipes/iscsi-backstore.pipe';
 
 @Component({
   selector: 'cd-iscsi',
@@ -12,8 +11,6 @@ import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
   styleUrls: ['./iscsi.component.scss']
 })
 export class IscsiComponent implements OnInit {
-  @ViewChild('statusColorTpl', { static: true })
-  statusColorTpl: TemplateRef<any>;
   @ViewChild('iscsiSparklineTpl', { static: true })
   iscsiSparklineTpl: TemplateRef<any>;
   @ViewChild('iscsiPerSecondTpl', { static: true })
@@ -21,76 +18,82 @@ export class IscsiComponent implements OnInit {
   @ViewChild('iscsiRelativeDateTpl', { static: true })
   iscsiRelativeDateTpl: TemplateRef<any>;
 
-  gateways = [];
+  gateways: any[] = [];
   gatewaysColumns: any;
-  images = [];
+  images: any[] = [];
   imagesColumns: any;
 
   constructor(
     private iscsiService: IscsiService,
     private dimlessPipe: DimlessPipe,
-    private iscsiBackstorePipe: IscsiBackstorePipe,
-    private i18n: I18n
+    private iscsiBackstorePipe: IscsiBackstorePipe
   ) {}
 
   ngOnInit() {
     this.gatewaysColumns = [
       {
-        name: this.i18n('Name'),
+        name: $localize`Name`,
         prop: 'name'
       },
       {
-        name: this.i18n('State'),
+        name: $localize`State`,
         prop: 'state',
-        cellTemplate: this.statusColorTpl
+        flexGrow: 1,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            up: { class: 'badge-success' },
+            down: { class: 'badge-danger' }
+          }
+        }
       },
       {
-        name: this.i18n('# Targets'),
+        name: $localize`# Targets`,
         prop: 'num_targets'
       },
       {
-        name: this.i18n('# Sessions'),
+        name: $localize`# Sessions`,
         prop: 'num_sessions'
       }
     ];
     this.imagesColumns = [
       {
-        name: this.i18n('Pool'),
+        name: $localize`Pool`,
         prop: 'pool'
       },
       {
-        name: this.i18n('Image'),
+        name: $localize`Image`,
         prop: 'image'
       },
       {
-        name: this.i18n('Backstore'),
+        name: $localize`Backstore`,
         prop: 'backstore',
         pipe: this.iscsiBackstorePipe
       },
       {
-        name: this.i18n('Read Bytes'),
+        name: $localize`Read Bytes`,
         prop: 'stats_history.rd_bytes',
         cellTemplate: this.iscsiSparklineTpl
       },
       {
-        name: this.i18n('Write Bytes'),
+        name: $localize`Write Bytes`,
         prop: 'stats_history.wr_bytes',
         cellTemplate: this.iscsiSparklineTpl
       },
       {
-        name: this.i18n('Read Ops'),
+        name: $localize`Read Ops`,
         prop: 'stats.rd',
         pipe: this.dimlessPipe,
         cellTemplate: this.iscsiPerSecondTpl
       },
       {
-        name: this.i18n('Write Ops'),
+        name: $localize`Write Ops`,
         prop: 'stats.wr',
         pipe: this.dimlessPipe,
         cellTemplate: this.iscsiPerSecondTpl
       },
       {
-        name: this.i18n('A/O Since'),
+        name: $localize`A/O Since`,
         prop: 'optimized_since',
         cellTemplate: this.iscsiRelativeDateTpl
       }
@@ -98,13 +101,13 @@ export class IscsiComponent implements OnInit {
   }
 
   refresh() {
-    this.iscsiService.overview().subscribe((overview: Array<any>) => {
+    this.iscsiService.overview().subscribe((overview: object) => {
       this.gateways = overview['gateways'];
       this.images = overview['images'];
       this.images.map((image) => {
         if (image.stats_history) {
-          image.stats_history.rd_bytes = image.stats_history.rd_bytes.map((i) => i[1]);
-          image.stats_history.wr_bytes = image.stats_history.wr_bytes.map((i) => i[1]);
+          image.stats_history.rd_bytes = image.stats_history.rd_bytes.map((i: any) => i[1]);
+          image.stats_history.wr_bytes = image.stats_history.wr_bytes.map((i: any) => i[1]);
         }
         image.cdIsBinary = true;
         return image;

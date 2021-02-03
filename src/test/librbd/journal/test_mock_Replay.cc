@@ -32,7 +32,8 @@ struct ImageRequest<MockReplayImageCtx> {
                                const bufferlist &bl, int op_flags));
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl,
-                        int op_flags, const ZTracer::Trace &parent_trace) {
+                        IOContext io_context, int op_flags,
+                        const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_write(c, image_extents, bl, op_flags);
   }
@@ -42,6 +43,7 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c,
                           Extents&& image_extents,
                           uint32_t discard_granularity_bytes,
+                          IOContext io_context,
                           const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_discard(c, image_extents, discard_granularity_bytes);
@@ -56,21 +58,25 @@ struct ImageRequest<MockReplayImageCtx> {
 
   MOCK_METHOD4(aio_writesame, void(AioCompletion *c,
                                    const Extents& image_extents,
-                                   const bufferlist &bl, int op_flags));
+                                   const bufferlist &bl,
+                                   int op_flags));
   static void aio_writesame(MockReplayImageCtx *ictx, AioCompletion *c,
                             Extents&& image_extents, bufferlist &&bl,
-                            int op_flags, const ZTracer::Trace &parent_trace) {
+                            IOContext io_context, int op_flags,
+                            const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_writesame(c, image_extents, bl, op_flags);
   }
 
   MOCK_METHOD6(aio_compare_and_write, void(AioCompletion *c, const Extents &image_extents,
                                            const bufferlist &cmp_bl, const bufferlist &bl,
-                                           uint64_t *mismatch_offset, int op_flags));
+                                           uint64_t *mismatch_offset,
+                                           int op_flags));
   static void aio_compare_and_write(MockReplayImageCtx *ictx, AioCompletion *c,
                                     Extents &&image_extents, bufferlist &&cmp_bl,
                                     bufferlist &&bl, uint64_t *mismatch_offset,
-                                    int op_flags, const ZTracer::Trace &parent_trace) {
+                                    IOContext io_context, int op_flags,
+                                    const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_compare_and_write(c, image_extents, cmp_bl, bl,
                                       mismatch_offset, op_flags);
@@ -218,8 +224,9 @@ public:
   void expect_snap_create(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(_, StrEq(snap_name), _,
-                                                                op_tid, false))
+    EXPECT_CALL(*mock_image_ctx.operations,
+                execute_snap_create(_, StrEq(snap_name), _, op_tid,
+                                    SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE, _))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
@@ -830,6 +837,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 					  "snap")},
                &on_snap_remove_ready,
 	       &on_snap_remove_safe);
+  ictx->op_work_queue->drain();
   ASSERT_EQ(0, on_snap_remove_ready.wait());
 
   C_SaferCond on_snap_create_ready;
@@ -840,6 +848,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 					  "snap")},
                &on_snap_create_ready,
 	       &on_snap_create_safe);
+  ictx->op_work_queue->drain();
 
   C_SaferCond on_shut_down;
   mock_journal_replay.shut_down(false, &on_shut_down);
@@ -886,6 +895,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 					  "snap")},
                &on_snap_remove_ready,
 	       &on_snap_remove_safe);
+  ictx->op_work_queue->drain();
   ASSERT_EQ(0, on_snap_remove_ready.wait());
 
   C_SaferCond on_snap_create_ready;
@@ -896,6 +906,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 					  "snap")},
                &on_snap_create_ready,
 	       &on_snap_create_safe);
+  ictx->op_work_queue->drain();
 
   C_SaferCond on_resume;
   when_replay_op_ready(mock_journal_replay, 123, &on_resume);

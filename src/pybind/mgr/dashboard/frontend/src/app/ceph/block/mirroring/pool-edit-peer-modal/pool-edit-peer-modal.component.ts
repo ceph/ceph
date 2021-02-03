@@ -1,12 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
-import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.service';
-import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
-import { FinishedTask } from '../../../../shared/models/finished-task';
-import { TaskWrapperService } from '../../../../shared/services/task-wrapper.service';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolEditPeerResponseModel } from './pool-edit-peer-response.model';
 
 @Component({
@@ -28,7 +29,8 @@ export class PoolEditPeerModalComponent implements OnInit {
   response: PoolEditPeerResponseModel;
 
   constructor(
-    public modalRef: BsModalRef,
+    public activeModal: NgbActiveModal,
+    public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
     private taskWrapper: TaskWrapperService
   ) {
@@ -67,18 +69,24 @@ export class PoolEditPeerModalComponent implements OnInit {
     if (!control.value.match(/^[\w\-_]*$/)) {
       return { invalidClusterName: { value: control.value } };
     }
+
+    return undefined;
   }
 
   validateClientID(control: AbstractControl) {
     if (!control.value.match(/^(?!client\.)[\w\-_.]*$/)) {
       return { invalidClientID: { value: control.value } };
     }
+
+    return undefined;
   }
 
   validateMonAddr(control: AbstractControl) {
     if (!control.value.match(/^[,; ]*([\w.\-_\[\]]+(:[\d]+)?[,; ]*)*$/)) {
       return { invalidMonAddr: { value: control.value } };
     }
+
+    return undefined;
   }
 
   validateKey(control: AbstractControl) {
@@ -122,13 +130,12 @@ export class PoolEditPeerModalComponent implements OnInit {
       });
     }
 
-    action.subscribe(
-      undefined,
-      () => this.editPeerForm.setErrors({ cdSubmitButton: true }),
-      () => {
+    action.subscribe({
+      error: () => this.editPeerForm.setErrors({ cdSubmitButton: true }),
+      complete: () => {
         this.rbdMirroringService.refresh();
-        this.modalRef.hide();
+        this.activeModal.close();
       }
-    );
+    });
   }
 }

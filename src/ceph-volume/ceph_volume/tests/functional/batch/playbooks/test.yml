@@ -9,15 +9,16 @@
         state: stopped
       with_items: "{{ osd_ids }}"
 
-
 - hosts: mons
   become: yes
   tasks:
 
+    - name: mark osds down
+      command: "ceph --cluster {{ cluster }} osd down osd.{{ item }}"
+      with_items: "{{ osd_ids }}"
     - name: purge osds
       command: "ceph --cluster {{ cluster }} osd purge osd.{{ item }} --yes-i-really-mean-it"
       with_items: "{{ osd_ids }}"
-
 
 - hosts: osds
   become: yes

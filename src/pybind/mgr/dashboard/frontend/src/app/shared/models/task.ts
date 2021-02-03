@@ -1,5 +1,5 @@
 export class Task {
-  constructor(name?, metadata?) {
+  constructor(name?: string, metadata?: object) {
     this.name = name;
     this.metadata = metadata;
   }

@@ -23,6 +23,7 @@ struct Option {
     TYPE_UUID = 7,
     TYPE_SIZE = 8,
     TYPE_SECS = 9,
+    TYPE_MILLISECS = 10,
   };
 
   static const char *type_to_c_type_str(type_t t) {
@@ -35,8 +36,9 @@ struct Option {
     case TYPE_ADDR: return "entity_addr_t";
     case TYPE_ADDRVEC: return "entity_addrvec_t";
     case TYPE_UUID: return "uuid_d";
-    case TYPE_SIZE: return "size_t";
+    case TYPE_SIZE: return "uint64_t";
     case TYPE_SECS: return "secs";
+    case TYPE_MILLISECS: return "millisecs";
     default: return "unknown";
     }
   }
@@ -52,6 +54,7 @@ struct Option {
     case TYPE_UUID: return "uuid";
     case TYPE_SIZE: return "size";
     case TYPE_SECS: return "secs";
+    case TYPE_MILLISECS: return "millisecs";
     default: return "unknown";
     }
   }
@@ -86,6 +89,9 @@ struct Option {
     if (s == "secs") {
       return TYPE_SECS;
     }
+    if (s == "millisecs") {
+      return TYPE_MILLISECS;
+    }
     return -1;
   }
 
@@ -111,7 +117,7 @@ struct Option {
   }
 
   enum flag_t {
-    FLAG_RUNTIME = 0x1,         ///< option can change changed at runtime
+    FLAG_RUNTIME = 0x1,         ///< option can be changed at runtime
     FLAG_NO_MON_UPDATE = 0x2,   ///< option cannot be changed via mon config
     FLAG_STARTUP = 0x4,         ///< option can only take effect at startup
     FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
@@ -121,7 +127,7 @@ struct Option {
   };
 
   struct size_t {
-    std::size_t value;
+    std::uint64_t value;
     operator uint64_t() const {
       return static_cast<uint64_t>(value);
     }
@@ -140,6 +146,7 @@ struct Option {
     entity_addr_t,
     entity_addrvec_t,
     std::chrono::seconds,
+    std::chrono::milliseconds,
     size_t,
     uuid_d>;
   const std::string name;
@@ -215,6 +222,8 @@ struct Option {
       value = size_t{0}; break;
     case TYPE_SECS:
       value = std::chrono::seconds{0}; break;
+    case TYPE_MILLISECS:
+      value = std::chrono::milliseconds{0}; break;
     default:
       ceph_abort();
     }
@@ -236,12 +245,12 @@ struct Option {
 
   // bool is an integer, but we don't think so. teach it the hard way.
   template<typename T>
-  using is_not_integer = std::enable_if<!std::is_integral<T>::value ||
-					std::is_same<T, bool>::value, int>;
+  using is_not_integer_t =
+      std::enable_if_t<!std::is_integral_v<T> || std::is_same_v<T, bool>, int>;
   template<typename T>
-  using is_integer = std::enable_if<std::is_integral<T>::value &&
-				    !std::is_same<T, bool>::value, int>;
-  template<typename T, typename is_not_integer<T>::type = 0>
+  using is_integer_t =
+      std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, int>;
+  template<typename T, typename = is_not_integer_t<T>>
   Option& set_value(value_t& v, const T& new_value) {
     v = new_value;
     return *this;
@@ -250,7 +259,7 @@ struct Option {
   // For potentially ambiguous types, inspect Option::type and
   // do some casting.  This is necessary to make sure that setting
   // a float option to "0" actually sets the double part of variant.
-  template<typename T, typename is_integer<T>::type = 0>
+  template<typename T, typename = is_integer_t<T>>
   Option& set_value(value_t& v, T new_value) {
     switch (type) {
     case TYPE_INT:
@@ -262,9 +271,11 @@ struct Option {
     case TYPE_BOOL:
       v = bool(new_value); break;
     case TYPE_SIZE:
-      v = size_t{static_cast<std::size_t>(new_value)}; break;
+      v = size_t{static_cast<std::uint64_t>(new_value)}; break;
     case TYPE_SECS:
       v = std::chrono::seconds{new_value}; break;
+    case TYPE_MILLISECS:
+      v = std::chrono::milliseconds{new_value}; break;
     default:
       std::cerr << "Bad type in set_value: " << name << ": "
                 << typeid(T).name() << std::endl;
@@ -377,10 +388,11 @@ struct Option {
   {
     return
       (has_flag(FLAG_RUNTIME)
-       || (!has_flag(FLAG_MGR)
-	   && (type == TYPE_BOOL || type == TYPE_INT
-	       || type == TYPE_UINT || type == TYPE_FLOAT
-	       || type == TYPE_SIZE || type == TYPE_SECS)))
+        || (!has_flag(FLAG_MGR)
+          && (type == TYPE_BOOL || type == TYPE_INT
+            || type == TYPE_UINT || type == TYPE_FLOAT
+            || type == TYPE_SIZE || type == TYPE_SECS
+            || type == TYPE_MILLISECS)))
       && !has_flag(FLAG_STARTUP)
       && !has_flag(FLAG_CLUSTER_CREATE)
       && !has_flag(FLAG_CREATE);

@@ -41,10 +41,10 @@ the PG count with this command::
 
 Output will be something like::
 
-   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  PG_NUM  NEW PG_NUM  AUTOSCALE
-   a     12900M                3.0        82431M  0.4695                     8         128  warn
-   c         0                 3.0        82431M  0.0000        0.2000       1          64  warn
-   b         0        953.6M   3.0        82431M  0.0347                     8              warn
+   POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO PG_NUM  NEW PG_NUM  AUTOSCALE
+   a     12900M                3.0        82431M  0.4695                                     8         128  warn
+   c         0                 3.0        82431M  0.0000        0.2000           0.9884      1          64  warn
+   b         0        953.6M   3.0        82431M  0.0347                                     8              warn
 
 **SIZE** is the amount of data stored in the pool. **TARGET SIZE**, if
 present, is the amount of data the administrator has specified that
@@ -62,10 +62,20 @@ pools') data.  **RATIO** is the ratio of that total capacity that
 this pool is consuming (i.e., ratio = size * rate / raw capacity).
 
 **TARGET RATIO**, if present, is the ratio of storage that the
-administrator has specified that they expect this pool to consume.
-The system uses the larger of the actual ratio and the target ratio
-for its calculation.  If both target size bytes and ratio are specified, the
+administrator has specified that they expect this pool to consume
+relative to other pools with target ratios set.
+If both target size bytes and ratio are specified, the
 ratio takes precedence.
+
+**EFFECTIVE RATIO** is the target ratio after adjusting in two ways:
+
+1. subtracting any capacity expected to be used by pools with target size set
+2. normalizing the target ratios among pools with target ratio set so
+   they collectively target the rest of the space. For example, 4
+   pools with target_ratio 1.0 would have an effective ratio of 0.25.
+
+The system uses the larger of the actual ratio and the effective ratio
+for its calculation.
 
 **PG_NUM** is the current number of PGs for the pool (or the current
 number of PGs that the pool is working towards, if a ``pg_num``
@@ -119,9 +129,9 @@ PGs can be used from the beginning, preventing subsequent changes in
 ``pg_num`` and the overhead associated with moving data around when
 those adjustments are made.
 
-The *target size** of a pool can be specified in two ways: either in
-terms of the absolute size of the pool (i.e., bytes), or as a ratio of
-the total cluster capacity.
+The *target size* of a pool can be specified in two ways: either in
+terms of the absolute size of the pool (i.e., bytes), or as a weight
+relative to other pools with a ``target_size_ratio`` set.
 
 For example,::
 
@@ -130,18 +140,23 @@ For example,::
 will tell the system that `mypool` is expected to consume 100 TiB of
 space.  Alternatively,::
 
-  ceph osd pool set mypool target_size_ratio .9
+  ceph osd pool set mypool target_size_ratio 1.0
 
-will tell the system that `mypool` is expected to consume 90% of the
-total cluster capacity.
+will tell the system that `mypool` is expected to consume 1.0 relative
+to the other pools with ``target_size_ratio`` set. If `mypool` is the
+only pool in the cluster, this means an expected use of 100% of the
+total capacity. If there is a second pool with ``target_size_ratio``
+1.0, both pools would expect to use 50% of the cluster capacity.
 
 You can also set the target size of a pool at creation time with the optional ``--target-size-bytes <bytes>`` or ``--target-size-ratio <ratio>`` arguments to the ``ceph osd pool create`` command.
 
 Note that if impossible target size values are specified (for example,
-a capacity larger than the total cluster, or ratio(s) that sum to more
-than 1.0) then a health warning
-(``POOL_TARET_SIZE_RATIO_OVERCOMMITTED`` or
-``POOL_TARGET_SIZE_BYTES_OVERCOMMITTED``) will be raised.
+a capacity larger than the total cluster) then a health warning
+(``POOL_TARGET_SIZE_BYTES_OVERCOMMITTED``) will be raised.
+
+If both ``target_size_ratio`` and ``target_size_bytes`` are specified
+for a pool, only the ratio will be considered, and a health warning
+(``POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO``) will be issued.
 
 Specifying bounds on a pool's PGs
 ---------------------------------
@@ -167,27 +182,28 @@ A preselection of pg_num
 
 When creating a new pool with::
 
-        ceph osd pool create {pool-name} pg_num
+        ceph osd pool create {pool-name} [pg_num]
 
-it is mandatory to choose the value of ``pg_num`` because it cannot (currently) be
-calculated automatically. Here are a few values commonly used:
+it is optional to choose the value of ``pg_num``.  If you do not
+specify ``pg_num``, the cluster can (by default) automatically tune it
+for you based on how much data is stored in the pool (see above, :ref:`pg-autoscaler`).
 
-- Less than 5 OSDs set ``pg_num`` to 128
+Alternatively, ``pg_num`` can be explicitly provided.  However,
+whether you specify a ``pg_num`` value or not does not affect whether
+the value is automatically tuned by the cluster after the fact.  To
+enable or disable auto-tuning,::
 
-- Between 5 and 10 OSDs set ``pg_num`` to 512
+  ceph osd pool set {pool-name} pg_autoscale_mode (on|off|warn)
 
-- Between 10 and 50 OSDs set ``pg_num`` to 1024
+The "rule of thumb" for PGs per OSD has traditionally be 100.  With
+the additional of the balancer (which is also enabled by default), a
+value of more like 50 PGs per OSD is probably reasonable.  The
+challenge (which the autoscaler normally does for you), is to:
 
-- If you have more than 50 OSDs, you need to understand the tradeoffs
-  and how to calculate the ``pg_num`` value by yourself
-
-- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool
-
-As the number of OSDs increases, choosing the right value for pg_num
-becomes more important because it has a significant influence on the
-behavior of the cluster as well as the durability of the data when
-something goes wrong (i.e. the probability that a catastrophic event
-leads to data loss).
+- have the PGs per pool proportional to the data in the pool, and
+- end up with 50-100 PGs per OSDs, after the replication or
+  erasuring-coding fan-out of each PG across OSDs is taken into
+  consideration
 
 How are Placement Groups used ?
 ===============================
@@ -228,7 +244,6 @@ OSDs. For instance, in a replicated pool of size two, each placement
 group will store objects on two OSDs, as shown below.
 
 .. ditaa::
-
    +-----------------------+      +-----------------------+
    |  Placement Group #1   |      |  Placement Group #2   |
    |                       |      |                       |
@@ -420,11 +435,9 @@ If you have more than 50 OSDs, we recommend approximately 50-100
 placement groups per OSD to balance out resource usage, data
 durability and distribution. If you have less than 50 OSDs, choosing
 among the `preselection`_ above is best. For a single pool of objects,
-you can use the following formula to get a baseline::
+you can use the following formula to get a baseline
 
-                (OSDs * 100)
-   Total PGs =  ------------
-                 pool size
+  Total PGs = :math:`\frac{OSDs \times 100}{pool \: size}`
 
 Where **pool size** is either the number of replicas for replicated
 pools or the K+M sum for erasure coded pools (as returned by **ceph
@@ -442,11 +455,9 @@ data across your OSDs. Their use should be limited to incrementally
 stepping from one power of two to another.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
-replicas, you would estimate your number of PGs as follows::
+replicas, you would estimate your number of PGs as follows
 
-   (200 * 100)
-   ----------- = 6667. Nearest power of 2: 8192
-        3
+  :math:`\frac{200 \times 100}{3} = 6667`. Nearest power of 2: 8192
 
 When using multiple data pools for storing objects, you need to ensure
 that you balance the number of placement groups per pool with the

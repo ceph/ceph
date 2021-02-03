@@ -1,15 +1,8 @@
-#include <boost/format.hpp>
+#include <fmt/format.h>
 
 #include "include/health.h"
 #include "include/types.h"
 #include "DaemonHealthMetricCollector.h"
-
-
-
-ostream& operator<<(ostream& os,
-                    const DaemonHealthMetricCollector::DaemonKey& daemon) {
-  return os << daemon.first << "." << daemon.second;
-}
 
 namespace {
 
@@ -37,7 +30,8 @@ class SlowOps final : public DaemonHealthMetricCollector {
     if (daemons.empty()) {
       return;
     }
-    static const char* fmt = "%1% slow ops, oldest one blocked for %2% sec, %3%";
+    // Note this message format is used in mgr/prometheus, so any change in format
+    // requires a corresponding change in the mgr/prometheus module.
     ostringstream ss;
     if (daemons.size() > 1) {
       if (daemons.size() > 10) {
@@ -49,7 +43,9 @@ class SlowOps final : public DaemonHealthMetricCollector {
     } else {
       ss << daemons.front() << " has slow ops";
     }
-    check.summary = boost::str(boost::format(fmt) % value.n1 % value.n2 % ss.str());
+    check.summary =
+        fmt::format("{} slow ops, oldest one blocked for {} sec, {}",
+                    value.n1, value.n2, ss.str());
     // No detail
   }
   vector<DaemonKey> daemons;
@@ -77,8 +73,7 @@ class PendingPGs final : public DaemonHealthMetricCollector {
     if (osds.empty()) {
       return;
     }
-    static const char* fmt = "%1% PGs pending on creation";
-    check.summary = boost::str(boost::format(fmt) % value.n);
+    check.summary = fmt::format("{} PGs pending on creation", value.n);
     ostringstream ss;
     if (osds.size() > 1) {
       ss << "osds " << osds << " have pending PGs.";
@@ -97,10 +92,10 @@ DaemonHealthMetricCollector::create(daemon_metric m)
 {
   switch (m) {
   case daemon_metric::SLOW_OPS:
-    return unique_ptr<DaemonHealthMetricCollector>{new SlowOps};
+    return std::make_unique<SlowOps>();
   case daemon_metric::PENDING_CREATING_PGS:
-    return unique_ptr<DaemonHealthMetricCollector>{new PendingPGs};
+    return std::make_unique<PendingPGs>();
   default:
-    return unique_ptr<DaemonHealthMetricCollector>{};
+    return {};
   }
 }

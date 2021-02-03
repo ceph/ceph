@@ -58,7 +58,7 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
-  ClsLockType lock_type = LOCK_NONE;
+  ClsLockType lock_type = ClsLockType::NONE;
   std::string lock_tag;
   if (r == 0) {
     auto it = m_out_bl.cbegin();
@@ -84,11 +84,11 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
     return;
   }
 
-  if (m_exclusive && lock_type == LOCK_SHARED) {
+  if (m_exclusive && lock_type == ClsLockType::SHARED) {
     ldout(m_cct, 5) << "incompatible shared lock type detected" << dendl;
     finish(-EBUSY);
     return;
-  } else if (!m_exclusive && lock_type == LOCK_EXCLUSIVE) {
+  } else if (!m_exclusive && lock_type == ClsLockType::EXCLUSIVE) {
     ldout(m_cct, 5) << "incompatible exclusive lock type detected" << dendl;
     finish(-EBUSY);
     return;

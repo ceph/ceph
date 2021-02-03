@@ -13,25 +13,15 @@
 #include "common/buffer_seastar.h"
 #include "auth/KeyRing.h"
 #include "include/denc.h"
+#include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
 
-namespace ceph::auth {
-
-seastar::future<seastar::temporary_buffer<char>> read_file(const std::string& path)
-{
-  return seastar::open_file_dma(path, seastar::open_flags::ro).then([] (seastar::file f) {
-    return f.size().then([f = std::move(f)](size_t s) {
-      return seastar::do_with(seastar::make_file_input_stream(f), [s](seastar::input_stream<char>& in) {
-        return in.read_exactly(s);
-      });
-    });
-  });
-}
+namespace crimson::auth {
 
 seastar::future<KeyRing*> load_from_keyring(KeyRing* keyring)
 {
   std::vector<std::string> paths;
-  boost::split(paths, ceph::common::local_conf()->keyring,
+  boost::split(paths, crimson::common::local_conf()->keyring,
                boost::is_any_of(",;"));
   std::pair<bool, std::string> found;
   return seastar::map_reduce(paths, [](auto path) {
@@ -61,13 +51,13 @@ seastar::future<KeyRing*> load_from_keyring(KeyRing* keyring)
 
 seastar::future<KeyRing*> load_from_keyfile(KeyRing* keyring)
 {
-  auto& path = ceph::common::local_conf()->keyfile;
+  auto& path = crimson::common::local_conf()->keyfile;
   if (!path.empty()) {
     return read_file(path).then([keyring](auto buf) {
       EntityAuth ea;
       ea.key.decode_base64(std::string(buf.begin(),
                                        buf.end()));
-      keyring->add(ceph::common::local_conf()->name, ea);
+      keyring->add(crimson::common::local_conf()->name, ea);
       return seastar::make_ready_future<KeyRing*>(keyring);
     });
   } else {
@@ -77,13 +67,13 @@ seastar::future<KeyRing*> load_from_keyfile(KeyRing* keyring)
 
 seastar::future<KeyRing*> load_from_key(KeyRing* keyring)
 {
-  auto& key = ceph::common::local_conf()->key;
+  auto& key = crimson::common::local_conf()->key;
   if (!key.empty()) {
     EntityAuth ea;
     ea.key.decode_base64(key);
-    keyring->add(ceph::common::local_conf()->name, ea);
+    keyring->add(crimson::common::local_conf()->name, ea);
   }
   return seastar::make_ready_future<KeyRing*>(keyring);
 }
 
-} // namespace ceph::auth
+} // namespace crimson::auth

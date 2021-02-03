@@ -22,20 +22,18 @@
 #include "include/encoding.h"
 #include "compressor/Compressor.h"
 
-#define COMPRESSION_LEVEL 5
-
 class ZstdCompressor : public Compressor {
  public:
-  ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {}
+  ZstdCompressor(CephContext *cct) : Compressor(COMP_ALG_ZSTD, "zstd"), cct(cct) {}
 
-  int compress(const bufferlist &src, bufferlist &dst) override {
+  int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> &compressor_message) override {
     ZSTD_CStream *s = ZSTD_createCStream();
-    ZSTD_initCStream_srcSize(s, COMPRESSION_LEVEL, src.length());
+    ZSTD_initCStream_srcSize(s, cct->_conf->compressor_zstd_level, src.length());
     auto p = src.begin();
     size_t left = src.length();
 
     size_t const out_max = ZSTD_compressBound(left);
-    bufferptr outptr = buffer::create_small_page_aligned(out_max);
+    ceph::buffer::ptr outptr = ceph::buffer::create_small_page_aligned(out_max);
     ZSTD_outBuffer_s outbuf;
     outbuf.dst = outptr.c_str();
     outbuf.size = outptr.length();
@@ -58,27 +56,28 @@ class ZstdCompressor : public Compressor {
     ZSTD_freeCStream(s);
 
     // prefix with decompressed length
-    encode((uint32_t)src.length(), dst);
+    ceph::encode((uint32_t)src.length(), dst);
     dst.append(outptr, 0, outbuf.pos);
     return 0;
   }
 
-  int decompress(const bufferlist &src, bufferlist &dst) override {
+  int decompress(const ceph::buffer::list &src, ceph::buffer::list &dst, boost::optional<int32_t> compressor_message) override {
     auto i = std::cbegin(src);
-    return decompress(i, src.length(), dst);
+    return decompress(i, src.length(), dst, compressor_message);
   }
 
-  int decompress(bufferlist::const_iterator &p,
+  int decompress(ceph::buffer::list::const_iterator &p,
 		 size_t compressed_len,
-		 bufferlist &dst) override {
+		 ceph::buffer::list &dst,
+		 boost::optional<int32_t> compressor_message) override {
     if (compressed_len < 4) {
       return -1;
     }
     compressed_len -= 4;
     uint32_t dst_len;
-    decode(dst_len, p);
+    ceph::decode(dst_len, p);
 
-    bufferptr dstptr(dst_len);
+    ceph::buffer::ptr dstptr(dst_len);
     ZSTD_outBuffer_s outbuf;
     outbuf.dst = dstptr.c_str();
     outbuf.size = dstptr.length();
@@ -101,6 +100,8 @@ class ZstdCompressor : public Compressor {
     dst.append(dstptr, 0, outbuf.pos);
     return 0;
   }
+ private:
+  CephContext *const cct;
 };
 
 #endif

@@ -18,6 +18,7 @@
 #include "rgw_multi.h"
 #include "rgw_compression.h"
 #include "services/svc_sys_obj.h"
+#include "rgw_sal_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -124,9 +125,9 @@ RadosWriter::~RadosWriter()
 
   bool need_to_remove_head = false;
   std::optional<rgw_raw_obj> raw_head;
-  if (!head_obj.empty()) {
+  if (!rgw::sal::RGWObject::empty(head_obj.get())) {
     raw_head.emplace();
-    store->getRados()->obj_to_raw(bucket_info.placement_rule, head_obj, &*raw_head);
+    head_obj->get_raw_obj(&*raw_head);
   }
 
   /**
@@ -148,15 +149,17 @@ RadosWriter::~RadosWriter()
       continue;
     }
 
-    int r = store->getRados()->delete_raw_obj(obj);
+    int r = store->delete_raw_obj(obj);
     if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
   }
 
   if (need_to_remove_head) {
+    std::string version_id;
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = store->getRados()->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
+    int r = head_obj->delete_object(dpp, &obj_ctx, ACLOwner(), bucket->get_acl_owner(), ceph::real_time(),
+				    false, 0, version_id, null_yield);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
@@ -173,10 +176,10 @@ int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
 
   uint64_t chunk_size = 0;
-  r = store->getRados()->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  r = store->get_raw_chunk_size(dpp, stripe_obj, &chunk_size);
   if (r < 0) {
     return r;
   }
@@ -206,33 +209,21 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t head_max_size;
   uint64_t chunk_size = 0;
   uint64_t alignment;
-  rgw_pool head_pool;
 
-  if (!store->getRados()->get_obj_data_pool(bucket_info.placement_rule, head_obj, &head_pool)) {
-    return -EIO;
-  }
-
-  int r = store->getRados()->get_max_chunk_size(head_pool, &max_head_chunk_size, &alignment);
+  int r = head_obj->get_max_chunk_size(dpp, bucket->get_placement_rule(),
+				       &max_head_chunk_size, &alignment);
   if (r < 0) {
     return r;
   }
 
   bool same_pool = true;
-
-  if (bucket_info.placement_rule != tail_placement_rule) {
-    rgw_pool tail_pool;
-    if (!store->getRados()->get_obj_data_pool(tail_placement_rule, head_obj, &tail_pool)) {
-      return -EIO;
-    }
-
-    if (tail_pool != head_pool) {
+  if (bucket->get_placement_rule() != tail_placement_rule) {
+    if (!head_obj->placement_rules_match(bucket->get_placement_rule(), tail_placement_rule)) {
       same_pool = false;
-
-      r = store->getRados()->get_max_chunk_size(tail_pool, &chunk_size);
+      r = head_obj->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size);
       if (r < 0) {
         return r;
       }
-
       head_max_size = 0;
     }
   }
@@ -245,19 +236,21 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t stripe_size;
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
 
-  store->getRados()->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+  head_obj->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
 
   manifest.set_trivial_rule(head_max_size, stripe_size);
 
+  rgw_obj obj = head_obj->get_obj();
+
   r = manifest_gen.create_begin(store->ctx(), &manifest,
-                                bucket_info.placement_rule,
+                                bucket->get_placement_rule(),
                                 &tail_placement_rule,
-                                head_obj.bucket, head_obj);
+                                obj.bucket, obj);
   if (r < 0) {
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
 
   r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
@@ -275,7 +268,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const std::string& etag,
                                     ceph::real_time *mtime,
                                     ceph::real_time set_mtime,
-                                    std::map<std::string, bufferlist>& attrs,
+                                    rgw::sal::RGWAttrs& attrs,
                                     ceph::real_time delete_at,
                                     const char *if_match,
                                     const char *if_nomatch,
@@ -293,40 +286,43 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  obj_ctx.set_atomic(head_obj);
+  head_obj->set_atomic(&obj_ctx);
 
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
+  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
-  op_target.set_versioning_disabled(!bucket_info.versioning_enabled());
+  obj_op->params.versioning_disabled = !bucket->versioning_enabled();
+  obj_op->params.data = &first_chunk;
+  obj_op->params.manifest = &manifest;
+  obj_op->params.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op->params.if_match = if_match;
+  obj_op->params.if_nomatch = if_nomatch;
+  obj_op->params.mtime = mtime;
+  obj_op->params.set_mtime = set_mtime;
+  obj_op->params.owner = ACLOwner(owner);
+  obj_op->params.flags = PUT_OBJ_CREATE;
+  obj_op->params.olh_epoch = olh_epoch;
+  obj_op->params.delete_at = delete_at;
+  obj_op->params.user_data = user_data;
+  obj_op->params.zones_trace = zones_trace;
+  obj_op->params.modify_tail = true;
+  obj_op->params.attrs = &attrs;
 
-  RGWRados::Object::Write obj_op(&op_target);
-
-  obj_op.meta.data = &first_chunk;
-  obj_op.meta.manifest = &manifest;
-  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
-  obj_op.meta.if_match = if_match;
-  obj_op.meta.if_nomatch = if_nomatch;
-  obj_op.meta.mtime = mtime;
-  obj_op.meta.set_mtime = set_mtime;
-  obj_op.meta.owner = owner;
-  obj_op.meta.flags = PUT_OBJ_CREATE;
-  obj_op.meta.olh_epoch = olh_epoch;
-  obj_op.meta.delete_at = delete_at;
-  obj_op.meta.user_data = user_data;
-  obj_op.meta.zones_trace = zones_trace;
-  obj_op.meta.modify_tail = true;
-
-  r = obj_op.write_meta(actual_size, accounted_size, attrs, y);
+  r = obj_op->prepare(y);
   if (r < 0) {
     return r;
   }
-  if (!obj_op.meta.canceled) {
+
+  r = obj_op->write_meta(dpp, actual_size, accounted_size, y);
+  if (r < 0) {
+    return r;
+  }
+  if (!obj_op->params.canceled) {
     // on success, clear the set of objects for deletion
     writer.clear_written();
   }
   if (pcanceled) {
-    *pcanceled = obj_op.meta.canceled;
+    *pcanceled = obj_op->params.canceled;
   }
   return 0;
 }
@@ -340,11 +336,10 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
   int r = writer.write_exclusive(data);
   if (r == -EEXIST) {
     // randomize the oid prefix and reprepare the head/manifest
-    std::string oid_rand(32, 0);
-    gen_rand_alphanumeric(store->ctx(), oid_rand.data(), oid_rand.size());
+    std::string oid_rand = gen_rand_alphanumeric(store->ctx(), 32);
 
-    mp.init(target_obj.key.name, upload_id, oid_rand);
-    manifest.set_prefix(target_obj.key.name + "." + oid_rand);
+    mp.init(target_obj->get_name(), upload_id, oid_rand);
+    manifest.set_prefix(target_obj->get_name() + "." + oid_rand);
 
     r = prepare_head();
     if (r < 0) {
@@ -367,44 +362,43 @@ int MultipartObjectProcessor::prepare_head()
   uint64_t stripe_size;
   uint64_t alignment;
 
-  int r = store->getRados()->get_max_chunk_size(tail_placement_rule, target_obj, &chunk_size, &alignment);
+  int r = target_obj->get_max_chunk_size(dpp, tail_placement_rule, &chunk_size, &alignment);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
     return r;
   }
-  store->getRados()->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+  target_obj->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
 
   manifest.set_multipart_part_rule(stripe_size, part_num);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
-                                bucket_info.placement_rule,
-                                &tail_placement_rule,
-                                target_obj.bucket, target_obj);
+				bucket->get_placement_rule(),
+				&tail_placement_rule,
+				target_obj->get_bucket()->get_key(),
+				target_obj->get_obj());
   if (r < 0) {
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
-  RGWSI_Tier_RADOS::raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
-  head_obj.index_hash_source = target_obj.key.name;
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  head_obj->raw_obj_to_obj(stripe_obj);
+  head_obj->set_hash_source(target_obj->get_name());
 
   r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
     return r;
   }
   stripe_size = manifest_gen.cur_stripe_max_size();
-
-  uint64_t max_head_size = std::min(chunk_size, stripe_size);
-  set_head_chunk_size(max_head_size);
+  set_head_chunk_size(stripe_size);
 
   chunk = ChunkProcessor(&writer, chunk_size);
-  stripe = StripeProcessor(&chunk, this, max_head_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
   return 0;
 }
 
 int MultipartObjectProcessor::prepare(optional_yield y)
 {
-  manifest.set_prefix(target_obj.key.name + "." + upload_id);
+  manifest.set_prefix(target_obj->get_name() + "." + upload_id);
 
   return prepare_head();
 }
@@ -431,18 +425,22 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
-  op_target.set_versioning_disabled(true);
-  RGWRados::Object::Write obj_op(&op_target);
+  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
 
-  obj_op.meta.set_mtime = set_mtime;
-  obj_op.meta.mtime = mtime;
-  obj_op.meta.owner = owner;
-  obj_op.meta.delete_at = delete_at;
-  obj_op.meta.zones_trace = zones_trace;
-  obj_op.meta.modify_tail = true;
+  obj_op->params.versioning_disabled = true;
+  obj_op->params.set_mtime = set_mtime;
+  obj_op->params.mtime = mtime;
+  obj_op->params.owner = ACLOwner(owner);
+  obj_op->params.delete_at = delete_at;
+  obj_op->params.zones_trace = zones_trace;
+  obj_op->params.modify_tail = true;
+  obj_op->params.attrs = &attrs;
+  r = obj_op->prepare(y);
+  if (r < 0) {
+    return r;
+  }
 
-  r = obj_op.write_meta(actual_size, accounted_size, attrs, y);
+  r = obj_op->write_meta(dpp, actual_size, accounted_size, y);
   if (r < 0)
     return r;
 
@@ -474,30 +472,21 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   encode(info, bl);
 
-  rgw_obj meta_obj;
-  meta_obj.init_ns(bucket_info.bucket, mp.get_meta(), RGW_OBJ_NS_MULTIPART);
-  meta_obj.set_in_extra_data(true);
+  std::unique_ptr<rgw::sal::RGWObject> meta_obj =
+    bucket->get_object(rgw_obj_key(mp.get_meta(), std::string(), RGW_OBJ_NS_MULTIPART));
+  meta_obj->set_in_extra_data(true);
 
-  rgw_raw_obj raw_meta_obj;
-
-  store->getRados()->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
-
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(raw_meta_obj);
-
-  r = sysobj.omap()
-      .set_must_exist(true)
-      .set(p, bl, null_yield);
+  r = meta_obj->omap_set_val_by_key(p, bl, true, null_yield);
   if (r < 0) {
-    return r;
+    return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
 
-  if (!obj_op.meta.canceled) {
+  if (!obj_op->params.canceled) {
     // on success, clear the set of objects for deletion
     writer.clear_written();
   }
   if (pcanceled) {
-    *pcanceled = obj_op.meta.canceled;
+    *pcanceled = obj_op->params.canceled;
   }
   return 0;
 }
@@ -515,7 +504,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::D
 int AppendObjectProcessor::prepare(optional_yield y)
 {
   RGWObjState *astate;
-  int r = store->getRados()->get_obj_state(&obj_ctx, bucket_info, head_obj, &astate, y);
+  int r = head_obj->get_obj_state(dpp, &obj_ctx, *bucket, &astate, y);
   if (r < 0) {
     return r;
   }
@@ -530,7 +519,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
       //set the prefix
       char buf[33];
       gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
-      string oid_prefix = head_obj.key.name;
+      string oid_prefix = head_obj->get_name();
       oid_prefix.append(".");
       oid_prefix.append(buf);
       oid_prefix.append("_");
@@ -548,6 +537,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
       return -ERR_POSITION_NOT_EQUAL_TO_LENGTH;
     }
     try {
+      using ceph::decode;
       decode(cur_part_num, iter->second);
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 5) << "ERROR: failed to decode part num" << dendl;
@@ -561,19 +551,27 @@ int AppendObjectProcessor::prepare(optional_yield y)
       size_t pos = s.find("-");
       cur_etag = s.substr(0, pos);
     }
+
+    iter = astate->attrset.find(RGW_ATTR_STORAGE_CLASS);
+    if (iter != astate->attrset.end()) {
+      tail_placement_rule.storage_class = iter->second.to_str();
+    }
     cur_manifest = &(*astate->manifest);
     manifest.set_prefix(cur_manifest->get_prefix());
+    astate->keep_tail = true;
   }
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
 
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, &tail_placement_rule, head_obj.bucket, head_obj);
+  rgw_obj obj = head_obj->get_obj();
+
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket->get_placement_rule(), &tail_placement_rule, obj.bucket, obj);
   if (r < 0) {
     return r;
   }
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
 
   uint64_t chunk_size = 0;
-  r = store->getRados()->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  r = store->get_raw_chunk_size(dpp, stripe_obj, &chunk_size);
   if (r < 0) {
     return r;
   }
@@ -595,7 +593,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
 }
 
 int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, ceph::real_time *mtime,
-                                    ceph::real_time set_mtime, map <string, bufferlist> &attrs,
+                                    ceph::real_time set_mtime, rgw::sal::RGWAttrs& attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
                                     optional_yield y)
@@ -608,29 +606,30 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   if (r < 0) {
     return r;
   }
-  obj_ctx.set_atomic(head_obj);
-  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
+  head_obj->set_atomic(&obj_ctx);
+  std::unique_ptr<rgw::sal::RGWObject::WriteOp> obj_op = head_obj->get_write_op(&obj_ctx);
   //For Append obj, disable versioning
-  op_target.set_versioning_disabled(true);
-  RGWRados::Object::Write obj_op(&op_target);
+  obj_op->params.versioning_disabled = true;
   if (cur_manifest) {
     cur_manifest->append(manifest, store->svc()->zone);
-    obj_op.meta.manifest = cur_manifest;
+    obj_op->params.manifest = cur_manifest;
   } else {
-    obj_op.meta.manifest = &manifest;
+    obj_op->params.manifest = &manifest;
   }
-  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
-  obj_op.meta.mtime = mtime;
-  obj_op.meta.set_mtime = set_mtime;
-  obj_op.meta.owner = owner;
-  obj_op.meta.flags = PUT_OBJ_CREATE;
-  obj_op.meta.delete_at = delete_at;
-  obj_op.meta.user_data = user_data;
-  obj_op.meta.zones_trace = zones_trace;
-  obj_op.meta.modify_tail = true;
-  obj_op.meta.appendable = true;
+  obj_op->params.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op->params.mtime = mtime;
+  obj_op->params.set_mtime = set_mtime;
+  obj_op->params.owner = ACLOwner(owner);
+  obj_op->params.flags = PUT_OBJ_CREATE;
+  obj_op->params.delete_at = delete_at;
+  obj_op->params.user_data = user_data;
+  obj_op->params.zones_trace = zones_trace;
+  obj_op->params.modify_tail = true;
+  obj_op->params.appendable = true;
+  obj_op->params.attrs = &attrs;
   //Add the append part number
   bufferlist cur_part_num_bl;
+  using ceph::encode;
   encode(cur_part_num, cur_part_num_bl);
   attrs[RGW_ATTR_APPEND_PART_NUM] = cur_part_num_bl;
   //calculate the etag
@@ -651,16 +650,20 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
     attrs[RGW_ATTR_ETAG] = etag_bl;
   }
-  r = obj_op.write_meta(actual_size + cur_size, accounted_size + *cur_accounted_size, attrs, y);
+  r = obj_op->prepare(y);
   if (r < 0) {
     return r;
   }
-  if (!obj_op.meta.canceled) {
+  r = obj_op->write_meta(dpp, actual_size + cur_size, accounted_size + *cur_accounted_size, y);
+  if (r < 0) {
+    return r;
+  }
+  if (!obj_op->params.canceled) {
     // on success, clear the set of objects for deletion
     writer.clear_written();
   }
   if (pcanceled) {
-    *pcanceled = obj_op.meta.canceled;
+    *pcanceled = obj_op->params.canceled;
   }
   *cur_accounted_size += accounted_size;
 

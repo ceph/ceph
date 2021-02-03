@@ -4,13 +4,13 @@
 #include "librbd/journal/Replay.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 
@@ -42,7 +42,9 @@ struct ExecuteOp : public Context {
     image_ctx.operations->execute_snap_create(event.snap_namespace,
 					      event.snap_name,
                                               on_op_complete,
-                                              event.op_tid, false);
+                                              event.op_tid,
+                                              SNAP_CREATE_FLAG_SKIP_NOTIFY_QUIESCE,
+                                              no_op_progress_callback);
   }
 
   void execute(const journal::SnapRemoveEvent &_) {
@@ -178,6 +180,7 @@ Replay<I>::Replay(I &image_ctx)
 
 template <typename I>
 Replay<I>::~Replay() {
+  std::lock_guard locker{m_lock};
   ceph_assert(m_in_flight_aio_flush == 0);
   ceph_assert(m_in_flight_aio_modify == 0);
   ceph_assert(m_aio_modify_unsafe_contexts.empty());
@@ -353,7 +356,8 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
                                      {{event.offset, event.length}},
-                                     event.discard_granularity_bytes, {});
+                                     event.discard_granularity_bytes,
+                                     m_image_ctx.get_data_io_context(), {});
   }
 
   if (flush_required) {
@@ -387,7 +391,8 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_write(&m_image_ctx, aio_comp,
                                    {{event.offset, event.length}},
-                                   std::move(data), 0, {});
+                                   std::move(data),
+                                   m_image_ctx.get_data_io_context(), 0, {});
   }
 
   if (flush_required) {
@@ -440,7 +445,9 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp,
                                        {{event.offset, event.length}},
-                                       std::move(data), 0, {});
+                                       std::move(data),
+                                       m_image_ctx.get_data_io_context(), 0,
+                                       {});
   }
 
   if (flush_required) {
@@ -474,7 +481,9 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
                                                {{event.offset, event.length}},
                                                std::move(cmp_data),
                                                std::move(write_data),
-                                               nullptr, 0, {});
+                                               nullptr,
+                                               m_image_ctx.get_data_io_context(),
+                                               0, {});
   }
 
   if (flush_required) {

@@ -20,6 +20,8 @@
 
 #define dout_subsys ceph_subsys_
 
+using std::map;
+using std::string;
 
 namespace ceph {
 
@@ -52,8 +54,7 @@ int ResolvHWrapper::res_search(const char *hostname, int cls,
 DNSResolver::~DNSResolver()
 {
 #ifdef HAVE_RES_NQUERY
-  list<res_state>::iterator iter;
-  for (iter = states.begin(); iter != states.end(); ++iter) {
+  for (auto iter = states.begin(); iter != states.end(); ++iter) {
     struct __res_state *s = *iter;
     delete s;
   }
@@ -249,6 +250,7 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
   }
 
   char addr_buf[64];
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(addr_buf, 0, sizeof(addr_buf));
   inet_ntop(family, ns_rr_rdata(rr), addr_buf, sizeof(addr_buf));
   if (!addr->parse(addr_buf)) {
@@ -339,6 +341,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     uint16_t priority = ns_get16(rdata); rdata += NS_INT16SZ;
     uint16_t weight = ns_get16(rdata); rdata += NS_INT16SZ;
     uint16_t port = ns_get16(rdata); rdata += NS_INT16SZ;
+    // FIPS zeroization audit 20191115: this memset is not security related.
     memset(full_target, 0, sizeof(full_target));
     ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
                        rdata, full_target, sizeof(full_target));

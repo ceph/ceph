@@ -5,8 +5,10 @@
 
 #include <map>
 
+#include "include/Context.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
+
 #include "osd/osd_types.h"
 
 #define OPS_PER_PTR 32
@@ -167,14 +169,7 @@ public:
     ceph_le32 dest_cid;
     ceph_le32 dest_oid;               //OP_CLONE, OP_CLONERANGE
     ceph_le64 dest_off;               //OP_CLONERANGE
-    union {
-	struct {
-	  ceph_le32 hint_type;          //OP_COLL_HINT
-	};
-	struct {
-	  ceph_le32 alloc_hint_flags;   //OP_SETALLOCHINT
-	};
-    };
+    ceph_le32 hint;                   //OP_COLL_HINT,OP_SETALLOCHINT
     ceph_le64 expected_object_size;   //OP_SETALLOCHINT
     ceph_le64 expected_write_size;    //OP_SETALLOCHINT
     ceph_le32 split_bits;             //OP_SPLIT_COLLECTION2,OP_COLL_SET_BITS,
@@ -237,11 +232,11 @@ public:
 private:
   TransactionData data;
 
-  std::map<coll_t, __le32> coll_index;
-  std::map<ghobject_t, __le32> object_index;
+  std::map<coll_t, uint32_t> coll_index;
+  std::map<ghobject_t, uint32_t> object_index;
 
-  __le32 coll_id {0};
-  __le32 object_id {0};
+  uint32_t coll_id = 0;
+  uint32_t object_id = 0;
 
   ceph::buffer::list data_bl;
   ceph::buffer::list op_bl;
@@ -297,7 +292,7 @@ public:
   Transaction& operator=(const Transaction& other) = default;
 
   // expose object_index for FileStore::Op's benefit
-  const std::map<ghobject_t, __le32>& get_object_index() const {
+  const std::map<ghobject_t, uint32_t>& get_object_index() const {
     return object_index;
   }
 
@@ -360,6 +355,14 @@ public:
 				    i.on_applied_sync);
     }
   }
+  static Context *collect_all_contexts(
+    Transaction& t) {
+    std::list<Context*> contexts;
+    contexts.splice(contexts.end(), t.on_applied);
+    contexts.splice(contexts.end(), t.on_commit);
+    contexts.splice(contexts.end(), t.on_applied_sync);
+    return C_Contexts::list_to_context(contexts);
+  }
 
   Context *get_on_applied() {
     return C_Contexts::list_to_context(on_applied);
@@ -394,8 +397,8 @@ public:
   }
 
   void _update_op(Op* op,
-    std::vector<__le32> &cm,
-    std::vector<__le32> &om) {
+    std::vector<uint32_t> &cm,
+    std::vector<uint32_t> &om) {
 
     switch (op->op) {
     case OP_NOP:
@@ -494,8 +497,8 @@ public:
   }
   void _update_op_bl(
     ceph::buffer::list& bl,
-    std::vector<__le32> &cm,
-    std::vector<__le32> &om) {
+    std::vector<uint32_t> &cm,
+    std::vector<uint32_t> &om) {
     for (auto& bp : bl.buffers()) {
       ceph_assert(bp.length() % sizeof(Op) == 0);
 
@@ -522,16 +525,16 @@ public:
     on_applied_sync.splice(on_applied_sync.end(), other.on_applied_sync);
 
     //append coll_index & object_index
-    std::vector<__le32> cm(other.coll_index.size());
-    std::map<coll_t, __le32>::iterator coll_index_p;
+    std::vector<uint32_t> cm(other.coll_index.size());
+    std::map<coll_t, uint32_t>::iterator coll_index_p;
     for (coll_index_p = other.coll_index.begin();
          coll_index_p != other.coll_index.end();
          ++coll_index_p) {
       cm[coll_index_p->second] = _get_coll_id(coll_index_p->first);
     }
 
-    std::vector<__le32> om(other.object_index.size());
-    std::map<ghobject_t, __le32>::iterator object_index_p;
+    std::vector<uint32_t> om(other.object_index.size());
+    std::map<ghobject_t, uint32_t>::iterator object_index_p;
     for (object_index_p = other.object_index.begin();
          object_index_p != other.object_index.end();
          ++object_index_p) {
@@ -543,7 +546,7 @@ public:
     ceph::buffer::list other_op_bl;
     {
       ceph::buffer::ptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+      other.op_bl.begin().copy(other.op_bl.length(), other_op_bl_ptr.c_str());
       other_op_bl.append(std::move(other_op_bl_ptr));
     }
 
@@ -570,7 +573,7 @@ public:
     size_t final_size = sizeof(__u32) * 2 + sizeof(data);
 
     // coll_index second and object_index second
-    final_size += (coll_index.size() + object_index.size()) * sizeof(__le32);
+    final_size += (coll_index.size() + object_index.size()) * sizeof(__u32);
 
     // coll_index first
     for (auto p = coll_index.begin(); p != coll_index.end(); ++p) {
@@ -665,14 +668,14 @@ public:
       ops = t->data.ops;
       op_buffer_p = t->op_bl.c_str();
 
-      std::map<coll_t, __le32>::iterator coll_index_p;
+      std::map<coll_t, uint32_t>::iterator coll_index_p;
       for (coll_index_p = t->coll_index.begin();
            coll_index_p != t->coll_index.end();
            ++coll_index_p) {
         colls[coll_index_p->second] = coll_index_p->first;
       }
 
-      std::map<ghobject_t, __le32>::iterator object_index_p;
+      std::map<ghobject_t, uint32_t>::iterator object_index_p;
       for (object_index_p = t->object_index.begin();
            object_index_p != t->object_index.end();
            ++object_index_p) {
@@ -729,16 +732,20 @@ public:
       decode_str_set_to_bl(data_bl_p, pbl);
     }
 
-    const ghobject_t &get_oid(__le32 oid_id) {
+    const ghobject_t &get_oid(uint32_t oid_id) {
       ceph_assert(oid_id < objects.size());
       return objects[oid_id];
     }
-    const coll_t &get_cid(__le32 cid_id) {
+    const coll_t &get_cid(uint32_t cid_id) {
       ceph_assert(cid_id < colls.size());
       return colls[cid_id];
     }
     uint32_t get_fadvise_flags() const {
 	return t->get_fadvise_flags();
+    }
+
+    const vector<ghobject_t> &get_objects() const {
+      return objects;
     }
   };
 
@@ -767,21 +774,21 @@ private:
     memset(p, 0, sizeof(Op));
     return reinterpret_cast<Op*>(p);
   }
-  __le32 _get_coll_id(const coll_t& coll) {
-    std::map<coll_t, __le32>::iterator c = coll_index.find(coll);
+  uint32_t _get_coll_id(const coll_t& coll) {
+    std::map<coll_t, uint32_t>::iterator c = coll_index.find(coll);
     if (c != coll_index.end())
       return c->second;
 
-    __le32 index_id = coll_id++;
+    uint32_t index_id = coll_id++;
     coll_index[coll] = index_id;
     return index_id;
   }
-  __le32 _get_object_id(const ghobject_t& oid) {
-    std::map<ghobject_t, __le32>::iterator o = object_index.find(oid);
+  uint32_t _get_object_id(const ghobject_t& oid) {
+    std::map<ghobject_t, uint32_t>::iterator o = object_index.find(oid);
     if (o != object_index.end())
       return o->second;
 
-    __le32 index_id = object_id++;
+    uint32_t index_id = object_id++;
     object_index[oid] = index_id;
     return index_id;
   }
@@ -1015,7 +1022,7 @@ public:
     Op* _op = _get_next_op();
     _op->op = OP_COLL_HINT;
     _op->cid = _get_coll_id(cid);
-    _op->hint_type = type;
+    _op->hint = type;
     encode(hint, data_bl);
     data.ops = data.ops + 1;
   }
@@ -1116,6 +1123,22 @@ public:
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
     encode(keys, data_bl);
+    data.ops = data.ops + 1;
+  }
+
+  /// Remove key from oid omap
+  void omap_rmkey(
+    const coll_t &cid,             ///< [in] Collection containing oid
+    const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+    const std::string& key ///< [in] Keys to clear
+    ) {
+    Op* _op = _get_next_op();
+    _op->op = OP_OMAP_RMKEYS;
+    _op->cid = _get_coll_id(cid);
+    _op->oid = _get_object_id(oid);
+    using ceph::encode;
+    encode((uint32_t)1, data_bl);
+    encode(key, data_bl);
     data.ops = data.ops + 1;
   }
 
@@ -1233,7 +1256,7 @@ public:
     _op->oid = _get_object_id(oid);
     _op->expected_object_size = expected_object_size;
     _op->expected_write_size = expected_write_size;
-    _op->alloc_hint_flags = flags;
+    _op->hint = flags;
     data.ops = data.ops + 1;
   }
 

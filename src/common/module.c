@@ -11,6 +11,7 @@
  */
 
 #include "acconfig.h"
+#include "include/compat.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@
 #include <sys/wait.h>
 #endif 
 
+#ifndef _WIN32
 /*
  * TODO: Switch to libkmod when we abandon older platforms.  The APIs
  * we want are:
@@ -42,14 +44,9 @@ static int run_command(const char *command)
 
 	if (status < 0) {
 		char error_buf[80];
-#ifdef STRERROR_R_CHAR_P
-		char* dummy = strerror_r(errno, error_buf, sizeof(error_buf));
-		(void)dummy;
-#else
-		strerror_r(errno, error_buf, sizeof(error_buf));
-#endif
+		char* errp = ceph_strerror_r(errno, error_buf, sizeof(error_buf));
 		fprintf(stderr, "couldn't run '%s': %s\n", command,
-			error_buf);
+			errp);
 	} else if (WIFSIGNALED(status)) {
 		fprintf(stderr, "'%s' killed by signal %d\n", command,
 			WTERMSIG(status));
@@ -81,3 +78,18 @@ int module_load(const char *module, const char *options)
 
 	return run_command(command);
 }
+
+#else
+
+// We're stubbing out those functions, for now.
+int module_has_param(const char *module, const char *param)
+{
+	return -1;
+}
+
+int module_load(const char *module, const char *options)
+{
+	return -1;
+}
+
+#endif /* _WIN32 */

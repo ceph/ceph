@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, JList, JObj
+from .helper import DashboardTestCase, JList, JObj, addrvec_schema
 
 
 class LogsTest(DashboardTestCase):
@@ -12,11 +12,7 @@ class LogsTest(DashboardTestCase):
         self.assertStatus(200)
         log_entry_schema = JList(JObj({
             'addrs': JObj({
-                'addrvec': JList(JObj({
-                    'addr': str,
-                    'nonce': int,
-                    'type': str
-                }))
+                'addrvec': addrvec_schema
             }),
             'channel': str,
             'message': str,

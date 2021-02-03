@@ -108,11 +108,9 @@ Space Efficiency
 
 Space efficiency is a ratio of data chunks to all ones in a object and
 represented as k/(k+m).
-In order to improve space efficiency, you should increase k or decrease m.
+In order to improve space efficiency, you should increase k or decrease m:
 
-::
-
-        space efficiency of SHEC(4,3,2) = 4/(4+3) = 0.57
+        space efficiency of SHEC(4,3,2) = :math:`\frac{4}{4+3}` = 0.57
         SHEC(5,3,2) or SHEC(4,2,2) improves SHEC(4,3,2)'s space efficiency
 
 Durability
@@ -141,4 +139,4 @@ Erasure code profile examples
              plugin=shec \
              k=8 m=4 c=3 \
              crush-failure-domain=host
-        $ ceph osd pool create shecpool 256 256 erasure SHECprofile
+        $ ceph osd pool create shecpool erasure SHECprofile

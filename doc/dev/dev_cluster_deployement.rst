@@ -59,7 +59,7 @@ Options
 
 .. option:: -l, --localhost
 
-    Use localhost instead of hostanme.
+    Use localhost instead of hostname.
 
 .. option:: -m ip[:port]
 

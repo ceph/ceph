@@ -6,7 +6,6 @@
 #include "cls/lock/cls_lock_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "include/stringify.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -17,6 +16,7 @@
 #include "librbd/Utils.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/journal/Policy.h"
+#include "librbd/PluginRegistry.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -115,7 +115,7 @@ void PostAcquireRequest<I>::send_open_journal() {
   }
   if (!journal_enabled) {
     apply();
-    finish();
+    send_process_plugin_acquire_lock();
     return;
   }
 
@@ -156,7 +156,7 @@ void PostAcquireRequest<I>::send_allocate_journal_tag() {
   std::shared_lock image_locker{m_image_ctx.image_lock};
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_allocate_journal_tag>(this);
+    klass, &klass::handle_allocate_journal_tag>(this, m_journal);
   m_image_ctx.get_journal_policy()->allocate_tag_on_lock(ctx);
 }
 
@@ -173,11 +173,67 @@ void PostAcquireRequest<I>::handle_allocate_journal_tag(int r) {
     return;
   }
 
+  send_process_plugin_acquire_lock();
+}
+
+template <typename I>
+void PostAcquireRequest<I>::send_process_plugin_acquire_lock() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
+
+  using klass = PostAcquireRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_process_plugin_acquire_lock>(this);
+  m_image_ctx.plugin_registry->acquired_exclusive_lock(ctx);
+}
+
+template <typename I>
+void PostAcquireRequest<I>::handle_process_plugin_acquire_lock(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "failed to process plugins: " << cpp_strerror(r)
+               << dendl;
+    send_process_plugin_release_lock();
+    return;
+  }
+
   finish();
 }
 
 template <typename I>
+void PostAcquireRequest<I>::send_process_plugin_release_lock() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << dendl;
+
+  using klass = PostAcquireRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_process_plugin_release_lock>(this);
+  m_image_ctx.plugin_registry->prerelease_exclusive_lock(ctx);
+}
+
+template <typename I>
+void PostAcquireRequest<I>::handle_process_plugin_release_lock(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << "r=" << r << dendl;
+
+  save_result(r);
+  if (r < 0) {
+    lderr(cct) << "failed to release plugins: " << cpp_strerror(r)
+               << dendl;
+  }
+  send_close_journal();
+}
+
+template <typename I>
 void PostAcquireRequest<I>::send_close_journal() {
+  if (m_journal == nullptr) {
+    send_close_object_map();
+    return;
+  }
+
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
@@ -225,7 +281,7 @@ void PostAcquireRequest<I>::handle_open_object_map(int r) {
 
   if (r < 0) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(r) << dendl;
-    delete m_object_map;
+    m_object_map->put();
     m_object_map = nullptr;
 
     if (r != -EFBIG) {
@@ -290,8 +346,12 @@ void PostAcquireRequest<I>::revert() {
   m_image_ctx.object_map = nullptr;
   m_image_ctx.journal = nullptr;
 
-  delete m_object_map;
-  delete m_journal;
+  if (m_object_map) {
+    m_object_map->put();
+  }
+  if (m_journal) {
+    m_journal->put();
+  }
 
   ceph_assert(m_error_result < 0);
 }

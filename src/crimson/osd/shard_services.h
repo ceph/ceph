@@ -6,71 +6,79 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 
+#include "include/common_fwd.h"
 #include "osd_operation.h"
 #include "msg/MessageRef.h"
+#include "crimson/common/exception.h"
 #include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
 #include "crimson/osd/osdmap_service.h"
+#include "crimson/osd/object_context.h"
+#include "common/AsyncReserver.h"
 
-namespace ceph::net {
+namespace crimson::net {
   class Messenger;
 }
 
-namespace ceph::mgr {
+namespace crimson::mgr {
   class Client;
 }
 
-namespace ceph::mon {
+namespace crimson::mon {
   class Client;
 }
 
-namespace ceph::os {
+namespace crimson::os {
   class FuturizedStore;
 }
 
-class PerfCounters;
 class OSDMap;
 class PeeringCtx;
 class BufferedRecoveryMessages;
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 /**
  * Represents services available to each PG
  */
-class ShardServices {
+class ShardServices : public md_config_obs_t {
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
   OSDMapService &osdmap_service;
-  ceph::net::Messenger &cluster_msgr;
-  ceph::net::Messenger &public_msgr;
-  ceph::mon::Client &monc;
-  ceph::mgr::Client &mgrc;
-  ceph::os::FuturizedStore &store;
+  const int whoami;
+  crimson::net::Messenger &cluster_msgr;
+  crimson::net::Messenger &public_msgr;
+  crimson::mon::Client &monc;
+  crimson::mgr::Client &mgrc;
+  crimson::os::FuturizedStore &store;
 
-  CephContext cct;
+  crimson::common::CephContext cct;
 
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
 
+  const char** get_tracked_conf_keys() const final;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) final;
 public:
   ShardServices(
     OSDMapService &osdmap_service,
-    ceph::net::Messenger &cluster_msgr,
-    ceph::net::Messenger &public_msgr,
-    ceph::mon::Client &monc,
-    ceph::mgr::Client &mgrc,
-    ceph::os::FuturizedStore &store);
+    const int whoami,
+    crimson::net::Messenger &cluster_msgr,
+    crimson::net::Messenger &public_msgr,
+    crimson::mon::Client &monc,
+    crimson::mgr::Client &mgrc,
+    crimson::os::FuturizedStore &store);
 
   seastar::future<> send_to_osd(
     int peer,
     MessageRef m,
     epoch_t from_epoch);
 
-  ceph::os::FuturizedStore &get_store() {
+  crimson::os::FuturizedStore &get_store() {
     return store;
   }
 
-  CephContext *get_cct() {
+  crimson::common::CephContext *get_cct() {
     return &cct;
   }
 
@@ -79,13 +87,28 @@ public:
     return osdmap_service;
   }
 
-  // Op Tracking
-  OperationRegistry registry;
+  // Op Management
+  OSDOperationRegistry registry;
+  OperationThrottler throttler;
 
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
+    if (__builtin_expect(stopping, false)) {
+      throw crimson::common::system_shutdown_exception();
+    }
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
-    return std::make_pair(op, op->start());
+    auto fut = op->start().then([op /* by copy */] {
+      // ensure the op's lifetime is appropriate. It is not enough to
+      // guarantee it's alive at the scheduling stages (i.e. `then()`
+      // calling) but also during the actual execution (i.e. when passed
+      // lambdas are actually run).
+    });
+    return std::make_pair(std::move(op), std::move(fut));
+  }
+
+  seastar::future<> stop() {
+    stopping = true;
+    return registry.stop();
   }
 
   // Loggers
@@ -98,7 +121,7 @@ public:
 
   /// Dispatch and reset ctx transaction
   seastar::future<> dispatch_context_transaction(
-    ceph::os::CollectionRef col, PeeringCtx &ctx);
+    crimson::os::CollectionRef col, PeeringCtx &ctx);
 
   /// Dispatch and reset ctx messages
   seastar::future<> dispatch_context_messages(
@@ -106,7 +129,7 @@ public:
 
   /// Dispatch ctx and dispose of context
   seastar::future<> dispatch_context(
-    ceph::os::CollectionRef col,
+    crimson::os::CollectionRef col,
     PeeringCtx &&ctx);
 
   /// Dispatch ctx and dispose of ctx, transaction must be empty
@@ -125,7 +148,6 @@ private:
   };
   map<pg_t, pg_temp_t> pg_temp_wanted;
   map<pg_t, pg_temp_t> pg_temp_pending;
-  void _sent_pg_temp();
   friend std::ostream& operator<<(std::ostream&, const pg_temp_t&);
 public:
   void queue_want_pg_temp(pg_t pgid, const vector<int>& want,
@@ -149,6 +171,16 @@ public:
   seastar::future<> send_pg_created();
   void prune_pg_created();
 
+  unsigned get_pg_num() const {
+    return num_pgs;
+  }
+  void inc_pg_num() {
+    ++num_pgs;
+  }
+  void dec_pg_num() {
+    --num_pgs;
+  }
+
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   // Time state
@@ -157,7 +189,33 @@ public:
     return ceph::mono_clock::now() - startup_time;
   }
   HeartbeatStampsRef get_hb_stamps(int peer);
-};
+  std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
+  crimson::osd::ObjectContextRegistry obc_registry;
+
+  // Async Reservers
+private:
+  unsigned num_pgs = 0;
+
+  struct DirectFinisher {
+    void queue(Context *c) {
+      c->complete(0);
+    }
+  } finisher;
+  // prevent creating new osd operations when system is shutting down,
+  // this is necessary because there are chances that a new operation
+  // is created, after the interruption of all ongoing operations, and
+  // creats and waits on a new and may-never-resolve future, in which
+  // case the shutdown may never succeed.
+  bool stopping = false;
+public:
+  AsyncReserver<spg_t, DirectFinisher> local_reserver;
+  AsyncReserver<spg_t, DirectFinisher> remote_reserver;
+
+private:
+  epoch_t up_thru_wanted = 0;
+public:
+  seastar::future<> send_alive(epoch_t want);
+};
 
 }

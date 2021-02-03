@@ -15,13 +15,13 @@ whether authentication is required, etc. Most of these values are set by
 default, so it's useful to know about them when setting up your cluster for
 production.
 
-Following the same configuration as `Installation (Quick)`_, we will set up a
-cluster with ``node1`` as  the monitor node, and ``node2`` and ``node3`` for
-OSD nodes.
+We will set up a cluster with ``node1`` as  the monitor node, and ``node2`` and
+``node3`` for OSD nodes.
 
 
 
 .. ditaa::
+
            /------------------\         /----------------\
            |    Admin Node    |         |     node1      |
            |                  +-------->+                |
@@ -156,10 +156,6 @@ The procedure is as follows:
    create the ``/etc/ceph`` directory automatically. ::
 
 	ls /etc/ceph
-
-   **Note:** Deployment tools may remove this directory when purging a
-   cluster (e.g., ``ceph-deploy purgedata {node-name}``, ``ceph-deploy purge
-   {node-name}``).
 
 #. Create a Ceph configuration file. By default, Ceph uses
    ``ceph.conf``, where ``ceph`` reflects the cluster name. ::
@@ -523,7 +519,7 @@ In the below instructions, ``{id}`` is an arbitrary name, such as the hostname o
 
 #. Import the keyring and set caps.::
 
-	ceph auth add mds.{id} osd "allow rwx" mds "allow" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
+	ceph auth add mds.{id} osd "allow rwx" mds "allow *" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
 
 #. Add to ceph.conf.::
 
@@ -572,7 +568,6 @@ To add (or remove) additional monitors, see `Add/Remove Monitors`_.
 To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 
 
-.. _Installation (Quick): ../../start
 .. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref

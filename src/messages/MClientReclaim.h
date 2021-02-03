@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientReclaim: public Message {
+class MClientReclaim final : public SafeMessage {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -28,7 +28,7 @@ public:
   std::string_view get_uuid() const { return uuid; }
 
   std::string_view get_type_name() const override { return "client_reclaim"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     std::ios_base::fmtflags f(o.flags());
     o << "client_reclaim(" << get_uuid() << " flags 0x" << std::hex << get_flags() << ")";
     o.flags(f);
@@ -49,12 +49,12 @@ public:
 
 protected:
   MClientReclaim() :
-    Message{CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION} {}
+    SafeMessage{CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION} {}
   MClientReclaim(std::string_view _uuid, uint32_t _flags) :
-    Message{CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION},
+    SafeMessage{CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION},
     uuid(_uuid), flags(_flags) {}
 private:
-  ~MClientReclaim() override {}
+  ~MClientReclaim() final {}
 
   std::string uuid;
   uint32_t flags = 0;

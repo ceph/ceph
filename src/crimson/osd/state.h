@@ -15,6 +15,7 @@ class OSDState {
     PREBOOT,
     BOOTING,
     ACTIVE,
+    PRESTOP,
     STOPPING,
     WAITING_FOR_HEALTHY,
   };
@@ -34,6 +35,9 @@ public:
   bool is_active() const {
     return state == State::ACTIVE;
   }
+  bool is_prestop() const {
+    return state == State::PRESTOP;
+  }
   bool is_stopping() const {
     return state == State::STOPPING;
   }
@@ -49,6 +53,9 @@ public:
   void set_active() {
     state = State::ACTIVE;
   }
+  void set_prestop() {
+    state = State::PRESTOP;
+  }
   void set_stopping() {
     state = State::STOPPING;
   }
@@ -58,6 +65,7 @@ public:
     case State::PREBOOT: return "preboot";
     case State::BOOTING: return "booting";
     case State::ACTIVE: return "active";
+    case State::PRESTOP: return "prestop";
     case State::STOPPING: return "stopping";
     case State::WAITING_FOR_HEALTHY: return "waiting_for_healthy";
     default: return "???";

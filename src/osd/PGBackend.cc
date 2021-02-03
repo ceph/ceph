@@ -30,6 +30,22 @@
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::ErasureCodeProfile;
+using ceph::ErasureCodeInterfaceRef;
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -127,7 +143,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
     get_parent()->remove_missing_object(p.first, p.second, gather.new_sub());
   }
 
-  MOSDPGRecoveryDeleteReply *reply = new MOSDPGRecoveryDeleteReply;
+  auto reply = make_message<MOSDPGRecoveryDeleteReply>();
   reply->from = get_parent()->whoami_shard();
   reply->set_priority(m->get_priority());
   reply->pgid = spg_t(get_parent()->get_info().pgid.pgid, m->from.shard);
@@ -350,13 +366,24 @@ int PGBackend::objects_list_partial(
 
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
-    r = store->collection_list(
-      ch,
-      _next,
-      ghobject_t::get_max(),
-      max - ls->size(),
-      &objects,
-      &_next);
+    if (HAVE_FEATURE(parent->min_upacting_features(),
+                     OSD_FIXED_COLLECTION_LIST)) {
+      r = store->collection_list(
+        ch,
+        _next,
+        ghobject_t::get_max(),
+        max - ls->size(),
+        &objects,
+        &_next);
+    } else {
+      r = store->collection_list_legacy(
+        ch,
+        _next,
+        ghobject_t::get_max(),
+        max - ls->size(),
+        &objects,
+        &_next);
+    }
     if (r != 0) {
       derr << __func__ << " list collection " << ch << " got: " << cpp_strerror(r) << dendl;
       break;
@@ -385,13 +412,25 @@ int PGBackend::objects_list_range(
 {
   ceph_assert(ls);
   vector<ghobject_t> objects;
-  int r = store->collection_list(
-    ch,
-    ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    INT_MAX,
-    &objects,
-    NULL);
+  int r;
+  if (HAVE_FEATURE(parent->min_upacting_features(),
+                   OSD_FIXED_COLLECTION_LIST)) {
+    r = store->collection_list(
+      ch,
+      ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      INT_MAX,
+      &objects,
+      NULL);
+  } else {
+    r = store->collection_list_legacy(
+      ch,
+      ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      INT_MAX,
+      &objects,
+      NULL);
+  }
   ls->reserve(objects.size());
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
@@ -1270,10 +1309,16 @@ void PGBackend::be_omap_checks(const map<pg_shard_t,ScrubMap*> &maps,
       omap_stats.omap_bytes += obj.object_omap_bytes;
       omap_stats.omap_keys += obj.object_omap_keys;
       if (obj.large_omap_object_found) {
+        pg_t pg;
+        auto osdmap = get_osdmap();
+        osdmap->map_to_pg(k.pool, k.oid.name, k.get_key(), k.nspace, &pg);
+        pg_t mpg = osdmap->raw_pg_to_pg(pg);
         omap_stats.large_omap_objects++;
-        warnstream << "Large omap object found. Object: " << k << " Key count: "
-                   << obj.large_omap_object_key_count << " Size (bytes): "
-                   << obj.large_omap_object_value_size << '\n';
+        warnstream << "Large omap object found. Object: " << k
+                   << " PG: " << pg << " (" << mpg << ")"
+                   << " Key count: " << obj.large_omap_object_key_count
+                   << " Size (bytes): " << obj.large_omap_object_value_size
+                   << '\n';
         break;
       }
     }

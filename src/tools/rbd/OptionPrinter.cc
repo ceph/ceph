@@ -19,41 +19,88 @@ OptionPrinter::OptionPrinter(const OptionsDescription &positional,
 }
 
 void OptionPrinter::print_short(std::ostream &os, size_t initial_offset) {
-  size_t name_width = std::min(initial_offset, MAX_DESCRIPTION_OFFSET) + 1;
-
-  IndentStream indent_stream(name_width, initial_offset, LINE_WIDTH, os);
-  indent_stream.set_delimiter("[");
+  size_t max_option_width = 0;
+  std::vector<std::string> optionals;
   for (size_t i = 0; i < m_optional.options().size(); ++i) {
+    std::stringstream option;
+
     bool required = m_optional.options()[i]->semantic()->is_required();
     if (!required) {
-      indent_stream << "[";
+      option << "[";
     }
-    indent_stream << "--" << m_optional.options()[i]->long_name();
+    option << "--" << m_optional.options()[i]->long_name();
     if (m_optional.options()[i]->semantic()->max_tokens() != 0) {
-      indent_stream << " <" << m_optional.options()[i]->long_name() << ">";
+      option << " <" << m_optional.options()[i]->long_name() << ">";
     }
     if (!required) {
-      indent_stream << "]";
+      option << "]";
     }
-    indent_stream << " ";
+    max_option_width = std::max(max_option_width, option.str().size());
+    optionals.emplace_back(option.str());
   }
 
-  if (m_optional.options().size() > 0 || m_positional.options().size() == 0) {
+  std::vector<std::string> positionals;
+  for (size_t i = 0; i < m_positional.options().size(); ++i) {
+    std::stringstream option;
+
+    option << "<" << m_positional.options()[i]->long_name() << ">";
+    if (m_positional.options()[i]->semantic()->max_tokens() > 1) {
+      option << " [<" << m_positional.options()[i]->long_name() << "> ...]";
+    }
+
+    max_option_width = std::max(max_option_width, option.str().size());
+    positionals.emplace_back(option.str());
+
+    if (m_positional.options()[i]->semantic()->max_tokens() > 1) {
+      break;
+    }
+  }
+
+  size_t indent = std::min(initial_offset, MAX_DESCRIPTION_OFFSET) + 1;
+  if (indent + max_option_width + 2 > LINE_WIDTH) {
+    // decrease the indent so that we don't wrap past the end of the line
+    indent = LINE_WIDTH - max_option_width - 2;
+  }
+
+  IndentStream indent_stream(indent, initial_offset, LINE_WIDTH, os);
+  indent_stream.set_delimiter("[");
+  for (auto& option : optionals) {
+    indent_stream << option << " ";
+  }
+
+  if (optionals.size() > 0 || positionals.size() == 0) {
     indent_stream << std::endl;
   }
 
-  if (m_positional.options().size() > 0) {
+  if (positionals.size() > 0) {
     indent_stream.set_delimiter(" ");
-    for (size_t i = 0; i < m_positional.options().size(); ++i) {
-      indent_stream << "<" << m_positional.options()[i]->long_name() << "> ";
-      if (m_positional.options()[i]->semantic()->max_tokens() > 1) {
-        indent_stream << "[<" << m_positional.options()[i]->long_name()
-                      << "> ...]";
-        break;
-      }
+    for (auto& option : positionals) {
+      indent_stream << option << " ";
     }
     indent_stream << std::endl;
   }
+}
+
+void OptionPrinter::print_optional(const OptionsDescription &global_opts,
+                                   size_t &name_width, std::ostream &os) {
+  std::string indent2(2, ' ');
+
+  for (size_t i = 0; i < global_opts.options().size(); ++i) {
+    std::string description = global_opts.options()[i]->description();
+    auto result = boost::find_first(description, "deprecated");
+    if (!result.empty()) {
+      continue;
+    }
+    std::stringstream ss;
+    ss << indent2
+       << global_opts.options()[i]->format_name() << " "
+       << global_opts.options()[i]->format_parameter();
+
+    std::cout << ss.str();
+    IndentStream indent_stream(name_width, ss.str().size(), LINE_WIDTH, std::cout);
+    indent_stream << global_opts.options()[i]->description() << std::endl;
+  }
+
 }
 
 void OptionPrinter::print_detailed(std::ostream &os) {
@@ -76,16 +123,7 @@ void OptionPrinter::print_detailed(std::ostream &os) {
 
   if (m_optional.options().size() > 0) {
     std::cout << OPTIONAL_ARGUMENTS << std::endl;
-    for (size_t i = 0; i < m_optional.options().size(); ++i) {
-      std::stringstream ss;
-      ss << indent_prefix
-         << m_optional.options()[i]->format_name() << " "
-         << m_optional.options()[i]->format_parameter();
-
-      std::cout << ss.str();
-      IndentStream indent_stream(name_width, ss.str().size(), LINE_WIDTH, os);
-      indent_stream << m_optional.options()[i]->description() << std::endl;
-    }
+    print_optional(m_optional, name_width, os);
     std::cout << std::endl;
   }
 }

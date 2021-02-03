@@ -20,7 +20,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "timer(" << this << ")."
 
+using std::pair;
 
+using ceph::operator <<;
 
 class SafeTimerThread : public Thread {
   SafeTimer *parent;
@@ -105,7 +107,8 @@ void SafeTimer::timer_thread()
     if (schedule.empty()) {
       cond.wait(l);
     } else {
-      cond.wait_until(l, schedule.begin()->first);
+      auto when = schedule.begin()->first;
+      cond.wait_until(l, when);
     }
     ldout(cct,20) << "timer_thread awake" << dendl;
   }
@@ -114,9 +117,14 @@ void SafeTimer::timer_thread()
 
 Context* SafeTimer::add_event_after(double seconds, Context *callback)
 {
+  return add_event_after(ceph::make_timespan(seconds), callback);
+}
+
+Context* SafeTimer::add_event_after(ceph::timespan duration, Context *callback)
+{
   ceph_assert(ceph_mutex_is_locked(lock));
 
-  auto when = clock_t::now() + ceph::make_timespan(seconds);
+  auto when = clock_t::now() + duration;
   return add_event_at(when, callback);
 }
 

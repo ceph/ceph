@@ -119,48 +119,41 @@ this to your ``ceph.conf``:
 ::
 
     [mon]
-        mgr initial modules = dashboard balancer
+        mgr_initial_modules = dashboard balancer
 
 Calling module commands
 -----------------------
 
 Where a module implements command line hooks, the commands will
-be accessible as ordinary Ceph commands::
+be accessible as ordinary Ceph commands.  Ceph will automatically incorporate
+module commands into the standard CLI interface and route them appropriately to
+the module.::
 
     ceph <command | help>
-
-If you would like to see the list of commands handled by the
-manager (where normal ``ceph help`` would show all mon and mgr commands),
-you can send a command directly to the manager daemon::
-
-    ceph tell mgr help
-
-Note that it is not necessary to address a particular mgr instance,
-simply ``mgr`` will pick the current active daemon.
 
 Configuration
 -------------
 
-``mgr module path``
+``mgr_module_path``
 
 :Description: Path to load modules from
 :Type: String
 :Default: ``"<library dir>/mgr"``
 
-``mgr data``
+``mgr_data``
 
 :Description: Path to load daemon data (such as keyring)
 :Type: String
 :Default: ``"/var/lib/ceph/mgr/$cluster-$id"``
 
-``mgr tick period``
+``mgr_tick_period``
 
 :Description: How many seconds between mgr beacons to monitors, and other
               periodic checks.
 :Type: Integer
 :Default: ``5``
 
-``mon mgr beacon grace``
+``mon_mgr_beacon_grace``
 
 :Description: How long after last beacon should a mgr be considered failed
 :Type: Integer

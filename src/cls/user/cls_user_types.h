@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_CLS_USER_TYPES_H
@@ -23,7 +23,7 @@ struct cls_user_bucket {
     std::string data_extra_pool;
   } explicit_placement;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     /* since new version of this structure is not backward compatible,
      * we have older rgw running against newer osd if we encode it
      * in the new way. Only encode newer version if placement_id is
@@ -47,7 +47,7 @@ struct cls_user_bucket {
       ENCODE_FINISH(bl);
     }
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     decode(name, bl);
     if (struct_v < 8) {
@@ -89,8 +89,8 @@ struct cls_user_bucket {
     return name.compare(b.name) < 0;
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_bucket*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_bucket*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_bucket)
 
@@ -107,11 +107,11 @@ struct cls_user_bucket_entry {
 
   cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(9, 5, bl);
     uint64_t s = size;
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
-    string empty_str;  // originally had the bucket name here, but we encode bucket later
+    std::string empty_str;  // originally had the bucket name here, but we encode bucket later
     encode(empty_str, bl);
     encode(s, bl);
     encode(mt, bl);
@@ -124,11 +124,11 @@ struct cls_user_bucket_entry {
     //::encode(placement_rule, bl); removed in v9
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
     __u32 mt;
     uint64_t s;
-    string empty_str;  // backward compatibility
+    std::string empty_str;  // backward compatibility
     decode(empty_str, bl);
     decode(s, bl);
     decode(mt, bl);
@@ -153,8 +153,8 @@ struct cls_user_bucket_entry {
     }
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_bucket_entry*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_bucket_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_bucket_entry)
 
@@ -168,14 +168,14 @@ struct cls_user_stats {
       total_bytes(0),
       total_bytes_rounded(0) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
      ENCODE_START(1, 1, bl);
     encode(total_entries, bl);
     encode(total_bytes, bl);
     encode(total_bytes_rounded, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(total_entries, bl);
     decode(total_bytes, bl);
@@ -183,8 +183,8 @@ struct cls_user_stats {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_stats*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_stats*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_stats)
 
@@ -196,14 +196,14 @@ struct cls_user_header {
   ceph::real_time last_stats_sync;     /* last time a full stats sync completed */
   ceph::real_time last_stats_update;   /* last time a stats update was done */
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
      ENCODE_START(1, 1, bl);
     encode(stats, bl);
     encode(last_stats_sync, bl);
     encode(last_stats_update, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(stats, bl);
     decode(last_stats_sync, bl);
@@ -211,8 +211,8 @@ struct cls_user_header {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_header*>& ls);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<cls_user_header*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_header)
 
@@ -222,5 +222,3 @@ void cls_user_gen_test_stats(cls_user_stats *stats);
 void cls_user_gen_test_header(cls_user_header *h);
 
 #endif
-
-

@@ -1,9 +1,8 @@
 import { Injectable } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
+import { ImageSpec } from '../models/image-spec';
 import { Task } from '../models/task';
 
 export class TaskMessageOperation {
@@ -19,34 +18,27 @@ export class TaskMessageOperation {
 }
 
 class TaskMessage {
-  i18n: I18n;
-
   operation: TaskMessageOperation;
-  involves: (object) => string;
-  errors: (metadata) => object;
+  involves: (object: any) => string;
+  errors: (metadata: any) => object;
 
-  failure(metadata): string {
-    return this.i18n('Failed to {{failure}} {{metadata}}', {
-      failure: this.operation.failure,
-      metadata: this.involves(metadata)
-    });
+  failure(metadata: any): string {
+    return $localize`Failed to ${this.operation.failure} ${this.involves(metadata)}`;
   }
 
-  running(metadata): string {
+  running(metadata: any): string {
     return `${this.operation.running} ${this.involves(metadata)}`;
   }
 
-  success(metadata): string {
+  success(metadata: any): string {
     return `${this.operation.success} ${this.involves(metadata)}`;
   }
 
   constructor(
-    i18n: I18n,
     operation: TaskMessageOperation,
-    involves: (metadata) => string,
-    errors?: (metadata) => object
+    involves: (metadata: any) => string,
+    errors?: (metadata: any) => object
   ) {
-    this.i18n = i18n;
     this.operation = operation;
     this.involves = involves;
     this.errors = errors || (() => ({}));
@@ -57,14 +49,12 @@ class TaskMessage {
   providedIn: 'root'
 })
 export class TaskMessageService {
-  constructor(private i18n: I18n) {}
-
   defaultMessage = this.newTaskMessage(
-    new TaskMessageOperation(this.i18n('Executing'), this.i18n('execute'), this.i18n('Executed')),
+    new TaskMessageOperation($localize`Executing`, $localize`execute`, $localize`Executed`),
     (metadata) => {
       return (
         (metadata && (Components[metadata.component] || metadata.component)) ||
-        this.i18n('unknown task')
+        $localize`unknown task`
       );
     },
     () => {
@@ -73,86 +63,88 @@ export class TaskMessageService {
   );
 
   commonOperations = {
-    create: new TaskMessageOperation(
-      this.i18n('Creating'),
-      this.i18n('create'),
-      this.i18n('Created')
-    ),
-    update: new TaskMessageOperation(
-      this.i18n('Updating'),
-      this.i18n('update'),
-      this.i18n('Updated')
-    ),
-    delete: new TaskMessageOperation(
-      this.i18n('Deleting'),
-      this.i18n('delete'),
-      this.i18n('Deleted')
-    ),
-    add: new TaskMessageOperation(this.i18n('Adding'), this.i18n('add'), this.i18n('Added')),
-    remove: new TaskMessageOperation(
-      this.i18n('Removing'),
-      this.i18n('remove'),
-      this.i18n('Removed')
-    )
+    create: new TaskMessageOperation($localize`Creating`, $localize`create`, $localize`Created`),
+    update: new TaskMessageOperation($localize`Updating`, $localize`update`, $localize`Updated`),
+    delete: new TaskMessageOperation($localize`Deleting`, $localize`delete`, $localize`Deleted`),
+    add: new TaskMessageOperation($localize`Adding`, $localize`add`, $localize`Added`),
+    remove: new TaskMessageOperation($localize`Removing`, $localize`remove`, $localize`Removed`),
+    import: new TaskMessageOperation($localize`Importing`, $localize`import`, $localize`Imported`)
   };
 
   rbd = {
-    default: (metadata) =>
-      this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.pool_name}/${metadata.image_name}`
-      }),
-    child: (metadata) =>
-      this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.child_pool_name}/${metadata.child_image_name}`
-      }),
-    destination: (metadata) =>
-      this.i18n(`RBD '{{id}}'`, {
-        id: `${metadata.dest_pool_name}/${metadata.dest_image_name}`
-      }),
-    snapshot: (metadata) =>
-      this.i18n(`RBD snapshot '{{id}}'`, {
-        id: `${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}`
-      })
+    default: (metadata: any) => $localize`RBD '${metadata.image_spec}'`,
+    create: (metadata: any) => {
+      const id = new ImageSpec(
+        metadata.pool_name,
+        metadata.namespace,
+        metadata.image_name
+      ).toString();
+      return $localize`RBD '${id}'`;
+    },
+    child: (metadata: any) => {
+      const id = new ImageSpec(
+        metadata.child_pool_name,
+        metadata.child_namespace,
+        metadata.child_image_name
+      ).toString();
+      return $localize`RBD '${id}'`;
+    },
+    destination: (metadata: any) => {
+      const id = new ImageSpec(
+        metadata.dest_pool_name,
+        metadata.dest_namespace,
+        metadata.dest_image_name
+      ).toString();
+      return $localize`RBD '${id}'`;
+    },
+    snapshot: (metadata: any) =>
+      $localize`RBD snapshot '${metadata.image_spec}@${metadata.snapshot_name}'`
   };
 
   rbd_mirroring = {
-    pool: (metadata) =>
-      this.i18n(`mirror mode for pool '{{id}}'`, {
-        id: `${metadata.pool_name}`
-      }),
-    pool_peer: (metadata) =>
-      this.i18n(`mirror peer for pool '{{id}}'`, {
-        id: `${metadata.pool_name}`
-      })
+    site_name: () => $localize`mirroring site name`,
+    bootstrap: () => $localize`bootstrap token`,
+    pool: (metadata: any) => $localize`mirror mode for pool '${metadata.pool_name}'`,
+    pool_peer: (metadata: any) => $localize`mirror peer for pool '${metadata.pool_name}'`
   };
 
   grafana = {
-    update_dashboards: () => this.i18n('all dashboards')
+    update_dashboards: () => $localize`all dashboards`
   };
 
   messages = {
     // Host tasks
-    'host/add': this.newTaskMessage(this.commonOperations.add, (metadata) => this.host(metadata)),
-    'host/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+    'host/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.host(metadata)
+    ),
+    'host/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.host(metadata)
+    ),
+    'host/identify_device': this.newTaskMessage(
+      new TaskMessageOperation($localize`Identifying`, $localize`identify`, $localize`Identified`),
+      (metadata) => $localize`device '${metadata.device}' on host '${metadata.hostname}'`
+    ),
+    // OSD tasks
+    'osd/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) => $localize`OSDs (DriveGroups: ${metadata.tracking_id})`
+    ),
+    'osd/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.osd(metadata)
     ),
     // Pool tasks
     'pool/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata) => this.pool(metadata),
       (metadata) => ({
-        '17': this.i18n('Name is already used by {{pool_name}}.', {
-          pool_name: this.pool(metadata)
-        })
+        '17': $localize`Name is already used by ${this.pool(metadata)}.`
       })
     ),
     'pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       (metadata) => this.pool(metadata),
       (metadata) => ({
-        '17': this.i18n('Name is already used by {{pool_name}}.', {
-          pool_name: this.pool(metadata)
-        })
+        '17': $localize`Name is already used by ${this.pool(metadata)}.`
       })
     ),
     'pool/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
@@ -163,65 +155,59 @@ export class TaskMessageService {
       this.commonOperations.create,
       (metadata) => this.ecp(metadata),
       (metadata) => ({
-        '17': this.i18n('Name is already used by {{name}}.', {
-          name: this.ecp(metadata)
-        })
+        '17': $localize`Name is already used by ${this.ecp(metadata)}.`
       })
     ),
     'ecp/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.ecp(metadata)
     ),
+    // Crush rule tasks
+    'crushRule/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) => this.crushRule(metadata),
+      (metadata) => ({
+        '17': $localize`Name is already used by ${this.crushRule(metadata)}.`
+      })
+    ),
+    'crushRule/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.crushRule(metadata)
+    ),
     // RBD tasks
     'rbd/create': this.newTaskMessage(
       this.commonOperations.create,
-      this.rbd.default,
+      this.rbd.create,
       (metadata) => ({
-        '17': this.i18n('Name is already used by {{rbd_name}}.', {
-          rbd_name: this.rbd.default(metadata)
-        })
+        '17': $localize`Name is already used by ${this.rbd.create(metadata)}.`
       })
     ),
     'rbd/edit': this.newTaskMessage(this.commonOperations.update, this.rbd.default, (metadata) => ({
-      '17': this.i18n('Name is already used by {{rbd_name}}.', {
-        rbd_name: this.rbd.default(metadata)
-      })
+      '17': $localize`Name is already used by ${this.rbd.default(metadata)}.`
     })),
     'rbd/delete': this.newTaskMessage(
       this.commonOperations.delete,
       this.rbd.default,
       (metadata) => ({
-        '39': this.i18n('{{rbd_name}} contains snapshots.', {
-          rbd_name: this.rbd.default(metadata)
-        })
+        '16': $localize`${this.rbd.default(metadata)} is busy.`,
+        '39': $localize`${this.rbd.default(metadata)} contains snapshots.`
       })
     ),
     'rbd/clone': this.newTaskMessage(
-      new TaskMessageOperation(this.i18n('Cloning'), this.i18n('clone'), this.i18n('Cloned')),
+      new TaskMessageOperation($localize`Cloning`, $localize`clone`, $localize`Cloned`),
       this.rbd.child,
       (metadata) => ({
-        '17': this.i18n('Name is already used by {{rbd_name}}.', {
-          rbd_name: this.rbd.child(metadata)
-        }),
-        '22': this.i18n('Snapshot of {{rbd_name}} must be protected.', {
-          rbd_name: this.rbd.child(metadata)
-        })
+        '17': $localize`Name is already used by ${this.rbd.child(metadata)}.`,
+        '22': $localize`Snapshot of ${this.rbd.child(metadata)} must be protected.`
       })
     ),
     'rbd/copy': this.newTaskMessage(
-      new TaskMessageOperation(this.i18n('Copying'), this.i18n('copy'), this.i18n('Copied')),
+      new TaskMessageOperation($localize`Copying`, $localize`copy`, $localize`Copied`),
       this.rbd.destination,
       (metadata) => ({
-        '17': this.i18n('Name is already used by {{rbd_name}}.', {
-          rbd_name: this.rbd.destination(metadata)
-        })
+        '17': $localize`Name is already used by ${this.rbd.destination(metadata)}.`
       })
     ),
     'rbd/flatten': this.newTaskMessage(
-      new TaskMessageOperation(
-        this.i18n('Flattening'),
-        this.i18n('flatten'),
-        this.i18n('Flattened')
-      ),
+      new TaskMessageOperation($localize`Flattening`, $localize`flatten`, $localize`Flattened`),
       this.rbd.default
     ),
     // RBD snapshot tasks
@@ -229,86 +215,83 @@ export class TaskMessageService {
       this.commonOperations.create,
       this.rbd.snapshot,
       (metadata) => ({
-        '17': this.i18n('Name is already used by {{snap_name}}.', {
-          snap_name: this.rbd.snapshot(metadata)
-        })
+        '17': $localize`Name is already used by ${this.rbd.snapshot(metadata)}.`
       })
     ),
     'rbd/snap/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd.snapshot,
       (metadata) => ({
-        '16': this.i18n('Cannot unprotect {{snap_name}} because it contains child images.', {
-          snap_name: this.rbd.snapshot(metadata)
-        })
+        '16': $localize`Cannot unprotect ${this.rbd.snapshot(
+          metadata
+        )} because it contains child images.`
       })
     ),
     'rbd/snap/delete': this.newTaskMessage(
       this.commonOperations.delete,
       this.rbd.snapshot,
       (metadata) => ({
-        '16': this.i18n(`Cannot delete {{snap_name}} because it's protected.`, {
-          snap_name: this.rbd.snapshot(metadata)
-        })
+        '16': $localize`Cannot delete ${this.rbd.snapshot(metadata)} because it's protected.`
       })
     ),
     'rbd/snap/rollback': this.newTaskMessage(
       new TaskMessageOperation(
-        this.i18n('Rolling back'),
-        this.i18n('rollback'),
-        this.i18n('Rolled back')
+        $localize`Rolling back`,
+        $localize`rollback`,
+        $localize`Rolled back`
       ),
       this.rbd.snapshot
     ),
     // RBD trash tasks
     'rbd/trash/move': this.newTaskMessage(
-      new TaskMessageOperation(this.i18n('Moving'), this.i18n('move'), this.i18n('Moved')),
-      (metadata) =>
-        this.i18n(`image '{{id}}' to trash`, {
-          id: `${metadata.pool_name}/${metadata.image_name}`
-        }),
+      new TaskMessageOperation($localize`Moving`, $localize`move`, $localize`Moved`),
+      (metadata) => $localize`image '${metadata.image_spec}' to trash`,
       () => ({
-        2: this.i18n('Could not find image.')
+        2: $localize`Could not find image.`
       })
     ),
     'rbd/trash/restore': this.newTaskMessage(
-      new TaskMessageOperation(this.i18n('Restoring'), this.i18n('restore'), this.i18n('Restored')),
-      (metadata) =>
-        this.i18n(`image '{{id}}' into '{{new_id}}'`, {
-          id: `${metadata.pool_name}@${metadata.image_id}`,
-          new_id: `${metadata.pool_name}/${metadata.new_image_name}`
-        }),
+      new TaskMessageOperation($localize`Restoring`, $localize`restore`, $localize`Restored`),
+      (metadata) => $localize`image '${metadata.image_id_spec}' into '${metadata.new_image_name}'`,
       (metadata) => ({
-        17: this.i18n(`Image name '{{id}}' is already in use.`, {
-          id: `${metadata.pool_name}/${metadata.new_image_name}`
-        })
+        17: $localize`Image name '${metadata.new_image_name}' is already in use.`
       })
     ),
     'rbd/trash/remove': this.newTaskMessage(
-      new TaskMessageOperation(this.i18n('Deleting'), this.i18n('delete'), this.i18n('Deleted')),
-      (metadata) =>
-        this.i18n(`image '{{id}}'`, {
-          id: `${metadata.pool_name}/${metadata.image_name}@${metadata.image_id}`
-        })
+      new TaskMessageOperation($localize`Deleting`, $localize`delete`, $localize`Deleted`),
+      (metadata) => $localize`image '${metadata.image_id_spec}'`
     ),
     'rbd/trash/purge': this.newTaskMessage(
-      new TaskMessageOperation(this.i18n('Purging'), this.i18n('purge'), this.i18n('Purged')),
+      new TaskMessageOperation($localize`Purging`, $localize`purge`, $localize`Purged`),
       (metadata) => {
-        let message = this.i18n('all pools');
+        let message = $localize`all pools`;
         if (metadata.pool_name) {
           message = `'${metadata.pool_name}'`;
         }
-        return this.i18n('images from {{message}}', {
-          message: message
-        });
+        return $localize`images from ${message}`;
       }
     ),
     // RBD mirroring tasks
+    'rbd/mirroring/site_name/edit': this.newTaskMessage(
+      this.commonOperations.update,
+      this.rbd_mirroring.site_name,
+      () => ({})
+    ),
+    'rbd/mirroring/bootstrap/create': this.newTaskMessage(
+      this.commonOperations.create,
+      this.rbd_mirroring.bootstrap,
+      () => ({})
+    ),
+    'rbd/mirroring/bootstrap/import': this.newTaskMessage(
+      this.commonOperations.import,
+      this.rbd_mirroring.bootstrap,
+      () => ({})
+    ),
     'rbd/mirroring/pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool,
       () => ({
-        16: this.i18n('Cannot disable mirroring because it contains a peer.')
+        16: $localize`Cannot disable mirroring because it contains a peer.`
       })
     ),
     'rbd/mirroring/peer/add': this.newTaskMessage(
@@ -348,41 +331,56 @@ export class TaskMessageService {
       this.commonOperations.update,
       this.grafana.update_dashboards,
       () => ({})
+    ),
+    // Service tasks
+    'service/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.service(metadata)
+    ),
+    'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.service(metadata)
     )
   };
 
   newTaskMessage(
     operation: TaskMessageOperation,
-    involves: (metadata) => string,
-    errors?: (metadata) => object
+    involves: (metadata: any) => string,
+    errors?: (metadata: any) => object
   ) {
-    return new TaskMessage(this.i18n, operation, involves, errors);
+    return new TaskMessage(operation, involves, errors);
   }
 
-  host(metadata) {
-    return this.i18n(`host '{{hostname}}'`, {
-      hostname: metadata.hostname
-    });
+  host(metadata: any) {
+    return $localize`host '${metadata.hostname}'`;
   }
 
-  pool(metadata) {
-    return this.i18n(`pool '{{pool_name}}'`, {
-      pool_name: metadata.pool_name
-    });
+  osd(metadata: any) {
+    return $localize`OSD '${metadata.svc_id}'`;
   }
 
-  ecp(metadata) {
-    return this.i18n(`erasure code profile '{{name}}'`, { name: metadata.name });
+  pool(metadata: any) {
+    return $localize`pool '${metadata.pool_name}'`;
   }
 
-  iscsiTarget(metadata) {
-    return this.i18n(`target '{{target_iqn}}'`, { target_iqn: metadata.target_iqn });
+  ecp(metadata: any) {
+    return $localize`erasure code profile '${metadata.name}'`;
   }
 
-  nfs(metadata) {
-    return this.i18n(`NFS {{nfs_id}}`, {
-      nfs_id: `'${metadata.cluster_id}:${metadata.export_id ? metadata.export_id : metadata.path}'`
-    });
+  crushRule(metadata: any) {
+    return $localize`crush rule '${metadata.name}'`;
+  }
+
+  iscsiTarget(metadata: any) {
+    return $localize`target '${metadata.target_iqn}'`;
+  }
+
+  nfs(metadata: any) {
+    return $localize`NFS '${metadata.cluster_id}\:${
+      metadata.export_id ? metadata.export_id : metadata.path
+    }'`;
+  }
+
+  service(metadata: any) {
+    return $localize`Service '${metadata.service_name}'`;
   }
 
   _getTaskTitle(task: Task) {

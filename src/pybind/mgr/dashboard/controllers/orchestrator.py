@@ -1,53 +1,48 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import cherrypy
+from functools import wraps
 
-from . import ApiController, Endpoint, ReadPermission
-from . import RESTController, Task
-from ..security import Scope
+from ..exceptions import DashboardException
 from ..services.orchestrator import OrchClient
-from ..tools import wraps
+from . import ApiController, ControllerDoc, Endpoint, EndpointDoc, ReadPermission, RESTController
+
+STATUS_SCHEMA = {
+    "available": (bool, "Orchestrator status"),
+    "message": (str, "Error message")
+}
 
 
-def orchestrator_task(name, metadata, wait_for=2.0):
-    return Task("orchestrator/{}".format(name), metadata, wait_for)
-
-
-def raise_if_no_orchestrator(method):
-    @wraps(method)
-    def inner(self, *args, **kwargs):
-        orch = OrchClient.instance()
-        if not orch.available():
-            raise cherrypy.HTTPError(503)
-        return method(self, *args, **kwargs)
+def raise_if_no_orchestrator(features=None):
+    def inner(method):
+        @wraps(method)
+        def _inner(self, *args, **kwargs):
+            orch = OrchClient.instance()
+            if not orch.available():
+                raise DashboardException(code='orchestrator_status_unavailable',  # pragma: no cover
+                                         msg='Orchestrator is unavailable',
+                                         component='orchestrator',
+                                         http_status_code=503)
+            if features is not None:
+                missing = orch.get_missing_features(features)
+                if missing:
+                    msg = 'Orchestrator feature(s) are unavailable: {}'.format(', '.join(missing))
+                    raise DashboardException(code='orchestrator_features_unavailable',
+                                             msg=msg,
+                                             component='orchestrator',
+                                             http_status_code=503)
+            return method(self, *args, **kwargs)
+        return _inner
     return inner
 
 
 @ApiController('/orchestrator')
+@ControllerDoc("Orchestrator Management API", "Orchestrator")
 class Orchestrator(RESTController):
 
     @Endpoint()
     @ReadPermission
+    @EndpointDoc("Display Orchestrator Status",
+                 responses={200: STATUS_SCHEMA})
     def status(self):
         return OrchClient.instance().status()
-
-
-@ApiController('/orchestrator/inventory', Scope.HOSTS)
-class OrchestratorInventory(RESTController):
-
-    @raise_if_no_orchestrator
-    def list(self, hostname=None):
-        orch = OrchClient.instance()
-        hosts = [hostname] if hostname else None
-        inventory_nodes = orch.inventory.list(hosts)
-        return [node.to_json() for node in inventory_nodes]
-
-
-@ApiController('/orchestrator/service', Scope.HOSTS)
-class OrchestratorService(RESTController):
-
-    @raise_if_no_orchestrator
-    def list(self, hostname=None):
-        orch = OrchClient.instance()
-        return [service.to_json() for service in orch.services.list(None, None, hostname)]

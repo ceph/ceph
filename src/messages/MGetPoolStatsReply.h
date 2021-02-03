@@ -16,13 +16,13 @@
 #ifndef CEPH_MGETPOOLSTATSREPLY_H
 #define CEPH_MGETPOOLSTATSREPLY_H
 
-class MGetPoolStatsReply : public PaxosServiceMessage {
+class MGetPoolStatsReply final : public PaxosServiceMessage {
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
   uuid_d fsid;
-  std::map<std::string,pool_stat_t> pool_stats;
+  boost::container::flat_map<std::string, pool_stat_t> pool_stats;
   bool per_pool = false;
 
   MGetPoolStatsReply() : PaxosServiceMessage{MSG_GETPOOLSTATSREPLY, 0,
@@ -35,7 +35,7 @@ public:
   }
 
 private:
-  ~MGetPoolStatsReply() override {}
+  ~MGetPoolStatsReply() final {}
 
 public:
   std::string_view get_type_name() const override { return "getpoolstats"; }

@@ -9,14 +9,13 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
-#include <bitset>
+#include <string_view>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/optional.hpp>
 #include <boost/thread/shared_mutex.hpp>
-#include <boost/utility/string_ref.hpp>
 #include <boost/variant.hpp>
 
 #include "common/ceph_time.h"
@@ -101,39 +100,63 @@ static constexpr std::uint64_t s3GetObjectRetention = 57;
 static constexpr std::uint64_t s3PutObjectLegalHold = 58;
 static constexpr std::uint64_t s3GetObjectLegalHold = 59;
 static constexpr std::uint64_t s3BypassGovernanceRetention = 60;
-static constexpr std::uint64_t s3All = 61;
+static constexpr std::uint64_t s3GetBucketPolicyStatus = 61;
+static constexpr std::uint64_t s3PutPublicAccessBlock = 62;
+static constexpr std::uint64_t s3GetPublicAccessBlock = 63;
+static constexpr std::uint64_t s3DeletePublicAccessBlock = 64;
+static constexpr std::uint64_t s3GetBucketPublicAccessBlock = 65;
+static constexpr std::uint64_t s3PutBucketPublicAccessBlock = 66;
+static constexpr std::uint64_t s3DeleteBucketPublicAccessBlock = 67;
+static constexpr std::uint64_t s3All = 68;
 
-static constexpr std::uint64_t iamPutUserPolicy = 62;
-static constexpr std::uint64_t iamGetUserPolicy = 63;
-static constexpr std::uint64_t iamDeleteUserPolicy = 64;
-static constexpr std::uint64_t iamListUserPolicies = 65;
-static constexpr std::uint64_t iamCreateRole = 66;
-static constexpr std::uint64_t iamDeleteRole = 67;
-static constexpr std::uint64_t iamModifyRole = 68;
-static constexpr std::uint64_t iamGetRole = 69;
-static constexpr std::uint64_t iamListRoles = 70;
-static constexpr std::uint64_t iamPutRolePolicy = 71;
-static constexpr std::uint64_t iamGetRolePolicy = 72;
-static constexpr std::uint64_t iamListRolePolicies = 73;
-static constexpr std::uint64_t iamDeleteRolePolicy = 74;
-static constexpr std::uint64_t iamAll = 75;
-static constexpr std::uint64_t stsAssumeRole = 76;
-static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = 77;
-static constexpr std::uint64_t stsGetSessionToken = 78;
-static constexpr std::uint64_t stsAll = 79;
+static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
+static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
+static constexpr std::uint64_t iamDeleteUserPolicy = s3All + 3;
+static constexpr std::uint64_t iamListUserPolicies = s3All + 4;
+static constexpr std::uint64_t iamCreateRole = s3All + 5;
+static constexpr std::uint64_t iamDeleteRole = s3All + 6;
+static constexpr std::uint64_t iamModifyRole = s3All + 7;
+static constexpr std::uint64_t iamGetRole = s3All + 8;
+static constexpr std::uint64_t iamListRoles = s3All + 9;
+static constexpr std::uint64_t iamPutRolePolicy = s3All + 10;
+static constexpr std::uint64_t iamGetRolePolicy = s3All + 11;
+static constexpr std::uint64_t iamListRolePolicies = s3All + 12;
+static constexpr std::uint64_t iamDeleteRolePolicy = s3All + 13;
+static constexpr std::uint64_t iamCreateOIDCProvider = s3All + 14;
+static constexpr std::uint64_t iamDeleteOIDCProvider = s3All + 15;
+static constexpr std::uint64_t iamGetOIDCProvider = s3All + 16;
+static constexpr std::uint64_t iamListOIDCProviders = s3All + 17;
+static constexpr std::uint64_t iamAll = s3All + 18;
 
-static constexpr std::uint64_t s3Count = s3BypassGovernanceRetention + 1;
+static constexpr std::uint64_t stsAssumeRole = iamAll + 1;
+static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = iamAll + 2;
+static constexpr std::uint64_t stsGetSessionToken = iamAll + 3;
+static constexpr std::uint64_t stsAll = iamAll + 4;
+
+static constexpr std::uint64_t s3Count = s3All;
 static constexpr std::uint64_t allCount = stsAll + 1;
 
-using Action_t = bitset<allCount>;
+using Action_t = std::bitset<allCount>;
 using NotAction_t = Action_t;
 
+template <size_t N>
+constexpr std::bitset<N> make_bitmask(size_t s) {
+  // unfortunately none of the shift/logic operators of std::bitset have a constexpr variation
+  return s < 64 ? std::bitset<N> ((1ULL << s) - 1) :
+    std::bitset<N>((1ULL << 63) - 1) | make_bitmask<N> (s - 63) << 63;
+}
+
+template <size_t N>
+constexpr std::bitset<N> set_cont_bits(size_t start, size_t end)
+{
+  return (make_bitmask<N>(end - start)) << start;
+}
+
 static const Action_t None(0);
-static const Action_t s3AllValue("1111111111111111111111111111111111111111111111111111111111111");
-static const Action_t iamAllValue("111111111111100000000000000000000000000000000000000000000000000000000000000");
-static const Action_t stsAllValue("1110000000000000000000000000000000000000000000000000000000000000000000000000000");
-//Modify allValue if more Actions are added
-static const Action_t allValue("11111111111111111111111111111111111111111111111111111111111111111111111111111111");
+static const Action_t s3AllValue = set_cont_bits<allCount>(0,s3All);
+static const Action_t iamAllValue = set_cont_bits<allCount>(s3All+1,iamAll);
+static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
+static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
 // Please update the table in doc/radosgw/s3/authentication.rst if you
@@ -178,6 +201,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetBucketLogging:
   case s3GetBucketNotification:
   case s3GetBucketPolicy:
+  case s3GetBucketPolicyStatus:
   case s3GetBucketRequestPayment:
   case s3GetBucketTagging:
   case s3GetBucketVersioning:
@@ -187,6 +211,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectVersionAcl:
   case s3GetReplicationConfiguration:
   case s3GetBucketObjectLockConfiguration:
+  case s3GetBucketPublicAccessBlock:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -207,6 +232,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectVersionAcl:
   case s3PutReplicationConfiguration:
   case s3PutBucketObjectLockConfiguration:
+  case s3PutBucketPublicAccessBlock:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:
@@ -286,7 +312,7 @@ struct Condition {
 				  * 1000000000)));
       }
 
-      return from_iso_8601(boost::string_ref(s), false);
+      return from_iso_8601(std::string_view(s), false);
     } catch (const std::logic_error& e) {
       return boost::none;
     }
@@ -322,7 +348,7 @@ struct Condition {
     ceph::bufferlist bin;
 
     try {
-      base64.decode_base64(bin);
+      bin.decode_base64(base64);
     } catch (const ceph::buffer::malformed_input& e) {
       return boost::none;
     }
@@ -472,6 +498,8 @@ struct Policy {
 };
 
 std::ostream& operator <<(ostream& m, const Policy& p);
+bool is_public(const Policy& p);
+
 }
 }
 

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { CanActivate, CanActivateChild, Router } from '@angular/router';
+import { CanActivate, CanActivateChild } from '@angular/router';
 
+import { DashboardUserDeniedError } from '~/app/core/error/error';
 import { AuthStorageService } from './auth-storage.service';
 
 /**
@@ -11,13 +12,13 @@ import { AuthStorageService } from './auth-storage.service';
   providedIn: 'root'
 })
 export class NoSsoGuardService implements CanActivate, CanActivateChild {
-  constructor(private authStorageService: AuthStorageService, private router: Router) {}
+  constructor(private authStorageService: AuthStorageService) {}
 
   canActivate() {
     if (!this.authStorageService.isSSO()) {
       return true;
     }
-    this.router.navigate(['404']);
+    throw new DashboardUserDeniedError();
     return false;
   }
 

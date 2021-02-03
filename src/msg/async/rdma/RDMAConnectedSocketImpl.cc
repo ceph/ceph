@@ -15,25 +15,54 @@
  */
 #include "RDMAStack.h"
 
+class C_handle_connection_established : public EventCallback {
+  RDMAConnectedSocketImpl *csi;
+  bool active = true;
+ public:
+  C_handle_connection_established(RDMAConnectedSocketImpl *w) : csi(w) {}
+  void do_request(uint64_t fd) final {
+    if (active)
+      csi->handle_connection_established();
+  }
+  void close() {
+    active = false;
+  }
+};
+
+class C_handle_connection_read : public EventCallback {
+  RDMAConnectedSocketImpl *csi;
+  bool active = true;
+ public:
+  explicit C_handle_connection_read(RDMAConnectedSocketImpl *w): csi(w) {}
+  void do_request(uint64_t fd) final {
+    if (active)
+      csi->handle_connection();
+  }
+  void close() {
+    active = false;
+  }
+};
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
 
-RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband> &ib,
-                                                 shared_ptr<RDMADispatcher>& rdma_dispatcher,
+RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, std::shared_ptr<Infiniband> &ib,
+                                                 std::shared_ptr<RDMADispatcher>& rdma_dispatcher,
                                                  RDMAWorker *w)
   : cct(cct), connected(0), error(0), ib(ib),
     dispatcher(rdma_dispatcher), worker(w),
-    is_server(false), con_handler(new C_handle_connection(this)),
+    is_server(false), read_handler(new C_handle_connection_read(this)),
+    established_handler(new C_handle_connection_established(this)),
     active(false), pending(false)
 {
   if (!cct->_conf->ms_async_rdma_cm) {
     qp = ib->create_queue_pair(cct, dispatcher->get_tx_cq(), dispatcher->get_rx_cq(), IBV_QPT_RC, NULL);
-    my_msg.qpn = qp->get_local_qp_number();
-    my_msg.psn = qp->get_initial_psn();
-    my_msg.lid = ib->get_lid();
-    my_msg.peer_qpn = 0;
-    my_msg.gid = ib->get_gid();
+    if (!qp) {
+      lderr(cct) << __func__ << " queue pair create failed" << dendl;
+      return;
+    }
+    local_qpn = qp->get_local_qp_number();
     notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
     dispatcher->register_qp(qp, this);
     dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
@@ -46,7 +75,7 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
   ldout(cct, 20) << __func__ << " destruct." << dendl;
   cleanup();
   worker->remove_pending_conn(this);
-  dispatcher->erase_qpn(my_msg.qpn);
+  dispatcher->schedule_qp_destroy(local_qpn);
 
   for (unsigned i=0; i < wc.size(); ++i) {
     dispatcher->post_chunk_to_pool(reinterpret_cast<Chunk*>(wc[i].wr_id));
@@ -83,89 +112,20 @@ void RDMAConnectedSocketImpl::get_wc(std::vector<ibv_wc> &w)
 
 int RDMAConnectedSocketImpl::activate()
 {
-  ibv_qp_attr qpa;
-  int r;
-
-  // now connect up the qps and switch to RTR
-  memset(&qpa, 0, sizeof(qpa));
-  qpa.qp_state = IBV_QPS_RTR;
-  qpa.path_mtu = IBV_MTU_1024;
-  qpa.dest_qp_num = peer_msg.qpn;
-  qpa.rq_psn = peer_msg.psn;
-  qpa.max_dest_rd_atomic = 1;
-  qpa.min_rnr_timer = 12;
-  //qpa.ah_attr.is_global = 0;
-  qpa.ah_attr.is_global = 1;
-  qpa.ah_attr.grh.hop_limit = 6;
-  qpa.ah_attr.grh.dgid = peer_msg.gid;
-
-  qpa.ah_attr.grh.sgid_index = ib->get_device()->get_gid_idx();
-
-  qpa.ah_attr.dlid = peer_msg.lid;
-  qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
-  qpa.ah_attr.grh.traffic_class = cct->_conf->ms_async_rdma_dscp;
-  qpa.ah_attr.src_path_bits = 0;
-  qpa.ah_attr.port_num = (uint8_t)(ib->get_ib_physical_port());
-
-  ldout(cct, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
-
-  r = ibv_modify_qp(qp->get_qp(), &qpa, IBV_QP_STATE |
-      IBV_QP_AV |
-      IBV_QP_PATH_MTU |
-      IBV_QP_DEST_QPN |
-      IBV_QP_RQ_PSN |
-      IBV_QP_MIN_RNR_TIMER |
-      IBV_QP_MAX_DEST_RD_ATOMIC);
-  if (r) {
-    lderr(cct) << __func__ << " failed to transition to RTR state: "
-               << cpp_strerror(errno) << dendl;
+  qp->get_local_cm_meta().peer_qpn = qp->get_peer_cm_meta().local_qpn;
+  if (qp->modify_qp_to_rtr() != 0)
     return -1;
-  }
 
-  ldout(cct, 20) << __func__ << " transition to RTR state successfully." << dendl;
-
-  // now move to RTS
-  qpa.qp_state = IBV_QPS_RTS;
-
-  // How long to wait before retrying if packet lost or server dead.
-  // Supposedly the timeout is 4.096us*2^timeout.  However, the actual
-  // timeout appears to be 4.096us*2^(timeout+1), so the setting
-  // below creates a 135ms timeout.
-  qpa.timeout = 14;
-
-  // How many times to retry after timeouts before giving up.
-  qpa.retry_cnt = 7;
-
-  // How many times to retry after RNR (receiver not ready) condition
-  // before giving up. Occurs when the remote side has not yet posted
-  // a receive request.
-  qpa.rnr_retry = 7; // 7 is infinite retry.
-  qpa.sq_psn = my_msg.psn;
-  qpa.max_rd_atomic = 1;
-
-  r = ibv_modify_qp(qp->get_qp(), &qpa, IBV_QP_STATE |
-      IBV_QP_TIMEOUT |
-      IBV_QP_RETRY_CNT |
-      IBV_QP_RNR_RETRY |
-      IBV_QP_SQ_PSN |
-      IBV_QP_MAX_QP_RD_ATOMIC);
-  if (r) {
-    lderr(cct) << __func__ << " failed to transition to RTS state: "
-               << cpp_strerror(errno) << dendl;
+  if (qp->modify_qp_to_rts() != 0)
     return -1;
-  }
-
-  // the queue pair should be ready to use once the client has finished
-  // setting up their end.
-  ldout(cct, 20) << __func__ << " transition to RTS state successfully." << dendl;
-  ldout(cct, 20) << __func__ << " QueuePair: " << qp << " with qp:" << qp->get_qp() << dendl;
 
   if (!is_server) {
     connected = 1; //indicate successfully
-    ldout(cct, 20) << __func__ << " handle fake send, wake it up. QP: " << my_msg.qpn << dendl;
+    ldout(cct, 20) << __func__ << " handle fake send, wake it up. QP: " << local_qpn << dendl;
     submit(false);
   }
   active = true;
+  peer_qpn = qp->get_local_cm_meta().peer_qpn;
 
   return 0;
 }
@@ -173,8 +133,15 @@ int RDMAConnectedSocketImpl::activate()
 int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const SocketOptions &opts) {
   ldout(cct, 20) << __func__ << " nonblock:" << opts.nonblock << ", nodelay:"
                  << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << dendl;
-  NetHandler net(cct);
-  tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
+  ceph::NetHandler net(cct);
+
+  // we construct a socket to transport ib sync message
+  // but we shouldn't block in tcp connecting
+  if (opts.nonblock) {
+    tcp_fd = net.nonblock_connect(peer_addr, opts.connect_bind_addr);
+  } else {
+    tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
+  }
 
   if (tcp_fd < 0) {
     return -errno;
@@ -189,18 +156,44 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
   net.set_priority(tcp_fd, opts.priority, peer_addr.get_family());
-  my_msg.peer_qpn = 0;
-  r = ib->send_msg(cct, tcp_fd, my_msg);
-  if (r < 0)
-    return r;
+  r = 0;
+  if (opts.nonblock) {
+    worker->center.create_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE , established_handler);
+  } else {
+    r = handle_connection_established(false);
+  }
+  return r;
+}
 
-  worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+int RDMAConnectedSocketImpl::handle_connection_established(bool need_set_fault) {
+  ldout(cct, 20) << __func__ << " start " << dendl;
+  // delete read event
+  worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
+  if (1 == connected) {
+    ldout(cct, 1) << __func__ << " warnning: logic failed " << dendl;
+    if (need_set_fault) {
+      fault();
+    }
+    return -1;
+  }
+  // send handshake msg to server
+  qp->get_local_cm_meta().peer_qpn = 0;
+  int r = qp->send_cm_meta(cct, tcp_fd);
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " send handshake msg failed." << r << dendl;
+    if (need_set_fault) {
+      fault();
+    }
+    return r;
+  }
+  worker->center.create_file_event(tcp_fd, EVENT_READABLE, read_handler);
+  ldout(cct, 20) << __func__ << " finish " << dendl;
   return 0;
 }
 
 void RDMAConnectedSocketImpl::handle_connection() {
-  ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " tcp_fd: " << tcp_fd << " notify_fd: " << notify_fd << dendl;
-  int r = ib->recv_msg(cct, tcp_fd, peer_msg);
+  ldout(cct, 20) << __func__ << " QP: " << local_qpn << " tcp_fd: " << tcp_fd << " notify_fd: " << notify_fd << dendl;
+  int r = qp->recv_cm_meta(cct, tcp_fd);
   if (r <= 0) {
     if (r != -EAGAIN) {
       dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
@@ -216,37 +209,34 @@ void RDMAConnectedSocketImpl::handle_connection() {
     return;
   }
 
-  if (!is_server) {// syn + ack from server
-    my_msg.peer_qpn = peer_msg.qpn;
-    ldout(cct, 20) << __func__ << " peer msg :  < " << peer_msg.qpn << ", " << peer_msg.psn
-                   <<  ", " << peer_msg.lid << ", " << peer_msg.peer_qpn << "> " << dendl;
+  if (!is_server) {// first time: cm meta sync + ack from server
     if (!connected) {
       r = activate();
       ceph_assert(!r);
     }
     notify();
-    r = ib->send_msg(cct, tcp_fd, my_msg);
+    r = qp->send_cm_meta(cct, tcp_fd);
     if (r < 0) {
       ldout(cct, 1) << __func__ << " send client ack failed." << dendl;
       dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
       fault();
     }
   } else {
-    if (peer_msg.peer_qpn == 0) {// syn from client
+    if (qp->get_peer_cm_meta().peer_qpn == 0) {// first time: cm meta sync from client
       if (active) {
         ldout(cct, 10) << __func__ << " server is already active." << dendl;
         return ;
       }
       r = activate();
       ceph_assert(!r);
-      r = ib->send_msg(cct, tcp_fd, my_msg);
+      r = qp->send_cm_meta(cct, tcp_fd);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
         dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
         fault();
         return ;
       }
-    } else { // ack from client
+    } else { // second time: cm meta ack from client
       connected = 1;
       ldout(cct, 10) << __func__ << " handshake of rdma is done. server connected: " << connected << dendl;
       //cleanup();
@@ -260,13 +250,14 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
 {
   eventfd_t event_val = 0;
   int r = eventfd_read(notify_fd, &event_val);
-  ldout(cct, 20) << __func__ << " notify_fd : " << event_val << " in " << my_msg.qpn << " r = " << r << dendl;
-  
+  ldout(cct, 20) << __func__ << " notify_fd : " << event_val << " in " << local_qpn
+                 << " r = " << r << dendl;
+
   if (!active) {
     ldout(cct, 1) << __func__ << " when ib not active. len: " << len << dendl;
     return -EAGAIN;
   }
-  
+
   if (0 == connected) {
     ldout(cct, 1) << __func__ << " when ib not connected. len: " << len <<dendl;
     return -EAGAIN;
@@ -275,7 +266,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
   read = read_buffers(buf,len);
 
   if (is_server && connected == 0) {
-    ldout(cct, 20) << __func__ << " we do not need last handshake, QP: " << my_msg.qpn << " peer QP: " << peer_msg.qpn << dendl;
+    ldout(cct, 20) << __func__ << " we do not need last handshake, QP: " << local_qpn << " peer QP: " << peer_qpn << dendl;
     connected = 1; //if so, we don't need the last handshake
     cleanup();
     submit(false);
@@ -350,54 +341,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
   return read_size;
 }
 
-ssize_t RDMAConnectedSocketImpl::zero_copy_read(bufferptr &data)
-{
-  if (error)
-    return -error;
-  static const int MAX_COMPLETIONS = 16;
-  ibv_wc wc[MAX_COMPLETIONS];
-  ssize_t size = 0;
-
-  ibv_wc*  response;
-  Chunk* chunk;
-  bool loaded = false;
-  auto iter = buffers.begin();
-  if (iter != buffers.end()) {
-    chunk = *iter;
-    // FIXME need to handle release
-    // auto del = std::bind(&Chunk::post_srq, std::move(chunk), infiniband);
-    buffers.erase(iter);
-    loaded = true;
-    size = chunk->bound;
-  }
-
-  std::vector<ibv_wc> cqe;
-  get_wc(cqe);
-  if (cqe.empty())
-    return size == 0 ? -EAGAIN : size;
-
-  ldout(cct, 20) << __func__ << " pool completion queue got " << cqe.size() << " responses."<< dendl;
-
-  for (size_t i = 0; i < cqe.size(); ++i) {
-    response = &wc[i];
-    chunk = reinterpret_cast<Chunk*>(response->wr_id);
-    chunk->prepare_read(response->byte_len);
-    if (!loaded && i == 0) {
-      // FIXME need to handle release
-      // auto del = std::bind(&Chunk::post_srq, std::move(chunk), infiniband);
-      size = chunk->bound;
-      continue;
-    }
-    buffers.push_back(chunk);
-    iter++;
-  }
-
-  if (size == 0)
-    return -EAGAIN;
-  return size;
-}
-
-ssize_t RDMAConnectedSocketImpl::send(bufferlist &bl, bool more)
+ssize_t RDMAConnectedSocketImpl::send(ceph::buffer::list &bl, bool more)
 {
   if (error) {
     if (!active)
@@ -411,11 +355,11 @@ ssize_t RDMAConnectedSocketImpl::send(bufferlist &bl, bool more)
     std::lock_guard l{lock};
     pending_bl.claim_append(bl);
     if (!connected) {
-      ldout(cct, 20) << __func__ << " fake send to upper, QP: " << my_msg.qpn << dendl;
+      ldout(cct, 20) << __func__ << " fake send to upper, QP: " << local_qpn << dendl;
       return bytes;
     }
   }
-  ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << dendl;
+  ldout(cct, 20) << __func__ << " QP: " << local_qpn << dendl;
   ssize_t r = submit(more);
   if (r < 0 && r != -EAGAIN)
     return r;
@@ -467,7 +411,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   std::lock_guard l{lock};
   size_t bytes = pending_bl.length();
   ldout(cct, 20) << __func__ << " we need " << bytes << " bytes. iov size: "
-                 << pending_bl.buffers().size() << dendl;
+                 << pending_bl.get_num_buffers() << dendl;
   if (!bytes)
     return 0;
 
@@ -500,7 +444,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (total_copied == 0)
     return -EAGAIN;
   ceph_assert(total_copied <= pending_bl.length());
-  bufferlist swapped;
+  ceph::buffer::list swapped;
   if (total_copied < pending_bl.length()) {
     worker->perf_logger->inc(l_msgr_rdma_tx_parital_mem);
     pending_bl.splice(total_copied, pending_bl.length() - total_copied, &swapped);
@@ -510,7 +454,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   }
 
   ldout(cct, 20) << __func__ << " left bytes: " << pending_bl.length() << " in buffers "
-                 << pending_bl.buffers().size() << " tx chunks " << tx_buffers.size() << dendl;
+                 << pending_bl.get_num_buffers() << " tx chunks " << tx_buffers.size() << dendl;
 
   int r = post_work_request(tx_buffers);
   if (r < 0)
@@ -522,8 +466,8 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
 
 int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
 {
-  ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " " << tx_buffers[0] << dendl;
-  vector<Chunk*>::iterator current_buffer = tx_buffers.begin();
+  ldout(cct, 20) << __func__ << " QP: " << local_qpn << " " << tx_buffers[0] << dendl;
+  auto current_buffer = tx_buffers.begin();
   ibv_sge isge[tx_buffers.size()];
   uint32_t current_sge = 0;
   ibv_send_wr iswr[tx_buffers.size()];
@@ -531,6 +475,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
   ibv_send_wr* pre_wr = NULL;
   uint32_t num = 0; 
 
+  // FIPS zeroization audit 20191115: these memsets are not security related.
   memset(iswr, 0, sizeof(iswr));
   memset(isge, 0, sizeof(isge));
  
@@ -546,10 +491,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     iswr[current_swr].num_sge = 1;
     iswr[current_swr].opcode = IBV_WR_SEND;
     iswr[current_swr].send_flags = IBV_SEND_SIGNALED;
-    /*if (isge[current_sge].length < infiniband->max_inline_data) {
-      iswr[current_swr].send_flags = IBV_SEND_INLINE;
-      ldout(cct, 20) << __func__ << " send_inline." << dendl;
-      }*/
 
     num++;
     worker->perf_logger->inc(l_msgr_rdma_tx_bytes, isge[current_sge].length);
@@ -569,14 +510,14 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     worker->perf_logger->inc(l_msgr_rdma_tx_failed);
     return -errno;
   }
-  qp->add_tx_wr(num);
   worker->perf_logger->inc(l_msgr_rdma_tx_chunks, tx_buffers.size());
-  ldout(cct, 20) << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << dendl;
+  ldout(cct, 20) << __func__ << " qp state is " << get_qp_state() << dendl;
   return 0;
 }
 
 void RDMAConnectedSocketImpl::fin() {
   ibv_send_wr wr;
+  // FIPS zeroization audit 20191115: this memset is not security related.
   memset(&wr, 0, sizeof(wr));
 
   wr.wr_id = reinterpret_cast<uint64_t>(qp);
@@ -591,17 +532,21 @@ void RDMAConnectedSocketImpl::fin() {
     worker->perf_logger->inc(l_msgr_rdma_tx_failed);
     return ;
   }
-  qp->add_tx_wr(1);
 }
 
 void RDMAConnectedSocketImpl::cleanup() {
-  if (con_handler && tcp_fd >= 0) {
-    (static_cast<C_handle_connection*>(con_handler))->close();
+  if (read_handler && tcp_fd >= 0) {
+    (static_cast<C_handle_connection_read*>(read_handler))->close();
     worker->center.submit_to(worker->center.get_id(), [this]() {
-      worker->center.delete_file_event(tcp_fd, EVENT_READABLE);
+      worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
     }, false);
-    delete con_handler;
-    con_handler = nullptr;
+    delete read_handler;
+    read_handler = nullptr;
+  }
+  if (established_handler) {
+    (static_cast<C_handle_connection_established*>(established_handler))->close();
+    delete established_handler;
+    established_handler = nullptr;
   }
 }
 
@@ -631,10 +576,6 @@ void RDMAConnectedSocketImpl::close()
 void RDMAConnectedSocketImpl::fault()
 {
   ldout(cct, 1) << __func__ << " tcp fd " << tcp_fd << dendl;
-  /*if (qp) {
-    qp->to_dead();
-    qp = NULL;
-    }*/
   error = ECONNRESET;
   connected = 1;
   notify();
@@ -645,17 +586,17 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd)
   tcp_fd = sd;
   is_server = true;
   worker->center.submit_to(worker->center.get_id(), [this]() {
-			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, read_handler);
 			   }, true);
 }
 
 void RDMAConnectedSocketImpl::post_chunks_to_rq(int num)
 {
-  post_backlog += num - ib->post_chunks_to_rq(num, qp->get_qp());
+  post_backlog += num - ib->post_chunks_to_rq(num, qp);
 }
 
 void RDMAConnectedSocketImpl::update_post_backlog()
 {
   if (post_backlog)
-    post_backlog -= post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp->get_qp());
+    post_backlog -= post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp);
 }

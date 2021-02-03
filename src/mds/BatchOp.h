@@ -25,7 +25,7 @@ public:
   virtual ~BatchOp() {}
 
   virtual void add_request(const ceph::ref_t<class MDRequestImpl>& mdr) = 0;
-  virtual void set_request(const ceph::ref_t<class MDRequestImpl>& mdr) = 0;
+  virtual ceph::ref_t<class MDRequestImpl> find_new_head() = 0;
 
   virtual void print(std::ostream&) = 0;
 

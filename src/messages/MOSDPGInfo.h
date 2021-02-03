@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDPGInfo : public Message {
+class MOSDPGInfo final : public Message {
 private:
   static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 5;
@@ -46,11 +46,11 @@ public:
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGInfo() override {}
+  ~MOSDPGInfo() final {}
 
 public:
   std::string_view get_type_name() const override { return "pg_info"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_info(";
     for (auto i = pg_list.begin();
          i != pg_list.end();
@@ -80,6 +80,7 @@ public:
     encode(pg_list, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     if (header.version == 5) {

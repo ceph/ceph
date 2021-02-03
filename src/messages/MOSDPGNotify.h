@@ -23,7 +23,7 @@
  * PGNotify - notify primary of my PGs and versions.
  */
 
-class MOSDPGNotify : public Message {
+class MOSDPGNotify final : public Message {
 private:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 6;
@@ -52,7 +52,7 @@ private:
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGNotify() override {}
+  ~MOSDPGNotify() final {}
 
 public:  
   std::string_view get_type_name() const override { return "PGnot"; }
@@ -76,6 +76,7 @@ public:
 
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     decode(epoch, p);
     if (header.version == 6) {
       // decode legacy vector<pair<pg_notify_t,PastIntervals>>
@@ -90,7 +91,7 @@ public:
     }
     decode(pg_list, p);
   }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_notify(";
     for (auto i = pg_list.begin();
          i != pg_list.end();

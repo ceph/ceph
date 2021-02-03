@@ -14,7 +14,7 @@
 #
 # Author: Loic Dachary <loic@dachary.org>
 # Author: Nathan Cutler <ncutler@suse.com>
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
 # published by the Free Software Foundation, either version 3 of the
@@ -30,6 +30,7 @@
 #
 import argparse
 import logging
+import os
 import re
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
@@ -38,6 +39,7 @@ redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
 delay_seconds = 5
+redmine_key_file="~/.redmine_key"
 #
 # NOTE: release_id is hard-coded because
 # http://www.redmine.org/projects/redmine/wiki/Rest_CustomFields
@@ -56,24 +58,26 @@ version2version_id = {}
 resolve_parent = None
 
 def usage():
-    logging.error("Command-line arguments must include either a Redmine key (--key) "
+    logging.error("Redmine credentials are required to perform this operation. "
+                  "Please provide either a Redmine key (via %s) "
                   "or a Redmine username and password (via --user and --password). "
                   "Optionally, one or more issue numbers can be given via positional "
                   "argument(s). In the absence of positional arguments, the script "
-                  "will loop through all issues in Pending Backport status.")
+                  "will loop through all issues in Pending Backport status." % redmine_key_file)
     exit(-1)
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("issue_numbers", nargs='*', help="Issue number")
-    parser.add_argument("--key", help="Redmine user key")
     parser.add_argument("--user", help="Redmine user")
     parser.add_argument("--password", help="Redmine password")
-    parser.add_argument("--resolve-parent", help="Resolve parent issue if all backports resolved",
+    parser.add_argument("--resolve-parent", help="Resolve parent issue if all backports resolved/rejected",
                         action="store_true")
     parser.add_argument("--debug", help="Show debug-level messages",
                         action="store_true")
     parser.add_argument("--dry-run", help="Do not write anything to Redmine",
+                        action="store_true")
+    parser.add_argument("--force", help="Create backport issues even if status not Pending Backport",
                         action="store_true")
     return parser.parse_args()
 
@@ -95,22 +99,30 @@ def process_resolve_parent_option(a):
     global resolve_parent
     resolve_parent = a.resolve_parent
     if a.resolve_parent:
-        logging.warning("Parent issues with all backports resolved will be marked Resolved")
+        logging.warning("Parent issues with all backports resolved/rejected will be marked Resolved")
 
 def connect_to_redmine(a):
-    if a.key:
-        logging.info("Redmine key was provided; using it")
-        return Redmine(redmine_endpoint, key=a.key)
-    elif a.user and a.password:
+    full_path=os.path.expanduser(redmine_key_file)
+    redmine_key=''
+    try:
+        with open(full_path, "r") as f:
+            redmine_key = f.read().strip()
+    except FileNotFoundError:
+        pass
+
+    if a.user and a.password:
         logging.info("Redmine username and password were provided; using them")
         return Redmine(redmine_endpoint, username=a.user, password=a.password)
+    elif redmine_key:
+        logging.info("Redmine key was read from '%s'; using it" % redmine_key_file)
+        return Redmine(redmine_endpoint, key=redmine_key)
     else:
         usage()
 
 def releases():
     return ('argonaut', 'bobtail', 'cuttlefish', 'dumpling', 'emperor',
             'firefly', 'giant', 'hammer', 'infernalis', 'jewel', 'kraken',
-            'luminous', 'mimic', 'nautilus')
+            'luminous', 'mimic', 'nautilus', 'octopus', 'pacific')
 
 def populate_status_dict(r):
     for status in r.issue_status.all():
@@ -229,29 +241,33 @@ def maybe_resolve(issue, backports, dry_run):
     '''
     issue is a parent issue in Pending Backports status, and backports is a dict
     like, e.g., { "luminous": 25345, "mimic": 32134 }.
-    If all the backport issues are Resolved, set the parent issue to Resolved, too.
+    If all the backport issues are Resolved/Rejected, set the parent issue to Resolved, too.
     '''
     global delay_seconds
     global redmine
     global status2status_id
+    if not backports:
+        return None
     pending_backport_status_id = status2status_id["Pending Backport"]
     resolved_status_id = status2status_id["Resolved"]
+    rejected_status_id = status2status_id["Rejected"]
     logging.debug("entering maybe_resolve with parent issue ->{}<- backports ->{}<-"
                   .format(issue.id, backports))
     assert issue.status.id == pending_backport_status_id, \
         "Parent Redmine issue ->{}<- has status ->{}<- (expected Pending Backport)".format(issue.id, issue.status)
     all_resolved = True
+    resolved_equiv_statuses = [resolved_status_id, rejected_status_id]
     for backport in backports.keys():
         tracker_issue_id = backports[backport]
         backport_issue = redmine.issue.get(tracker_issue_id)
         logging.debug("{} backport is in status {}".format(backport, backport_issue.status.name))
-        if backport_issue.status.id != resolved_status_id:
+        if backport_issue.status.id not in resolved_equiv_statuses:
             all_resolved = False
             break
     if all_resolved:
         logging.debug("Parent ->{}<- all backport issues in status Resolved".format(url(issue)))
         note = ("While running with --resolve-parent, the script \"backport-create-issue\" "
-                "noticed that all backports of this issue are in status \"Resolved\".")
+                "noticed that all backports of this issue are in status \"Resolved\" or \"Rejected\".")
         if dry_run:
             logging.info("Set status of parent ->{}<- to Resolved".format(url(issue)))
         else:
@@ -262,13 +278,13 @@ def maybe_resolve(issue, backports, dry_run):
     else:
         logging.debug("Some backport issues are still unresolved: leaving parent issue open")
 
-def iterate_over_backports(r, issues, dry_run):
+def iterate_over_backports(r, issues, dry_run=False):
     counter = 0
     for issue in issues:
         counter += 1
         logging.debug("{} ({}) {}".format(issue.id, issue.project,
             issue.subject))
-        print('{}\r'.format(issue.id), end='', flush=True)
+        print('Examining issue#{} ({}/{})\r'.format(issue.id, counter, len(issues)), end='', flush=True)
         if not has_tracker(r, issue['project']['id'], 'Backport'):
             logging.info("{} skipped because the project {} does not "
                 "have a Backport tracker".format(url(issue),
@@ -280,8 +296,8 @@ def iterate_over_backports(r, issues, dry_run):
         if len(issue['backports']) == 0:
             logging.error(url(issue) + " the backport field is empty")
         update_relations(r, issue, dry_run)
-    logging.info("Processed {} issues with status Pending Backport"
-                 .format(counter))
+    print('                                     \r', end='', flush=True)
+    logging.info("Processed {} issues".format(counter))
     return None
 
 
@@ -299,13 +315,29 @@ if __name__ == '__main__':
     logging.debug("Pending Backport status has ID {}"
         .format(pending_backport_status_id))
     populate_tracker_dict(redmine)
+    force_create = False
     if args.issue_numbers:
         issue_list = ','.join(args.issue_numbers)
         logging.info("Processing issue list ->{}<-".format(issue_list))
-        issues = redmine.issue.filter(project_id=ceph_project_id,
-                                      issue_id=issue_list,
-                                      status_id=pending_backport_status_id)
+        if args.force:
+            force_create = True
+            logging.warn("--force option was given: ignoring issue status!")
+            issues = redmine.issue.filter(project_id=ceph_project_id,
+                                          issue_id=issue_list)
+
+        else:
+            issues = redmine.issue.filter(project_id=ceph_project_id,
+                                          issue_id=issue_list,
+                                          status_id=pending_backport_status_id)
     else:
+        if args.force:
+            logging.warn("ignoring --force option, which can only be used with an explicit issue list")
         issues = redmine.issue.filter(project_id=ceph_project_id,
                                       status_id=pending_backport_status_id)
-    iterate_over_backports(redmine, issues, args.dry_run)
+    if force_create:
+        logging.info("Processing {} issues regardless of status"
+                     .format(len(issues)))
+    else:
+        logging.info("Processing {} issues with status Pending Backport"
+                     .format(len(issues)))
+    iterate_over_backports(redmine, issues, dry_run=args.dry_run)

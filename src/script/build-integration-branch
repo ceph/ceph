@@ -1,32 +1,70 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-from __future__ import print_function
+"""
+Builds integration branches. Something similar to
+  $ git checkout -b branch-name
+  $ for b in $(get-branches-from-github) ; do
+  >   git pull b
+  > done
+
+Requires `~/.github_token`.
+
+
+Usage:
+  build-integration-branch <label> [--no-date]
+  build-integration-branch -h | --help
+
+Options:
+  -h --help   Show this screen.
+  --no-date   Don't add `{postfix}` to the branch name.
+"""
 
 import json
 import os
 import requests
-from subprocess import call
 import sys
 import time
-try:
-    from urllib.parse import urljoin
-except:
-    from urlparse import urljoin
 
-label = sys.argv[1]
+from subprocess import call, check_output
+from urllib.parse import urljoin
+
+TIME_FORMAT = '%Y-%m-%d-%H%M'
+postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
+
+current_branch = check_output('git rev-parse --abbrev-ref HEAD',
+                              shell=True).strip().decode()
+if current_branch in 'mimic nautilus octopus pacific'.split():
+    postfix += '-' + current_branch
+    print(f"Adding current branch name '-{current_branch}' as a postfix")
+
 repo = "ceph/ceph"
 
-with open(os.environ['HOME'] + '/.github_token', 'r') as myfile:
+try:
+    from docopt import docopt
+    arguments = docopt(__doc__.format(postfix=postfix))
+    label = arguments['<label>']
+    branch = label
+    if not arguments['--no-date']:
+        branch += postfix
+except ImportError:
+    # Fallback without docopt.
+    label = sys.argv[1]
+    assert len(sys.argv) == 2
+    branch = label + postfix
+
+
+with open(os.path.expanduser('~/.github_token')) as myfile:
     token = myfile.readline().strip()
 
 # get prs
 baseurl = urljoin('https://api.github.com',
-                  'repos/{repo}/issues?labels={label}&access_token={token}')
-url = baseurl.format(
-    label=label,
-    repo=repo,
-    token=token)
-r = requests.get(url)
+                  ('repos/{repo}/issues?labels={label}'
+                   '&sort=created'
+                   '&direction=asc'))
+url = baseurl.format(label=label,
+                     repo=repo)
+r = requests.get(url,
+                 headers={'Authorization': 'token %s' % token})
 assert(r.ok)
 j = json.loads(r.text or r.content)
 print("--- found %d issues tagged with %s" % (len(j), label))
@@ -36,19 +74,18 @@ prtext = []
 for issue in j:
     if 'pull_request' not in issue:
         continue
-    r = requests.get(issue['pull_request']['url'] + '?access_token=' + token)
+    r = requests.get(issue['pull_request']['url'],
+                     headers={'Authorization': 'token %s' % token})
     pr = json.loads(r.text or r.content)
     prs.append(pr)
     prtext.append(pr['html_url'] + ' - ' + pr['title'])
 print("--- queried %s prs" % len(prs))
 
-# name branch
-TIME_FORMAT = '%Y-%m-%d-%H%M'
-branch = label + "-" + time.strftime(TIME_FORMAT, time.localtime())
 print("branch %s" % branch)
 
 # assemble
 print('--- creating branch %s' % branch)
+r = call(['git', 'branch', '-D', branch])
 r = call(['git', 'checkout', '-b', branch])
 assert not r
 for pr in prs:

@@ -15,7 +15,7 @@
 #ifndef CEPH_MEMORYMODEL_H
 #define CEPH_MEMORYMODEL_H
 
-class CephContext;
+#include "include/common_fwd.h"
 
 class MemoryModel {
 public:

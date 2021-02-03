@@ -22,13 +22,18 @@ public:
   {
   }
 
-
+  const char* get_type() const override
+  {
+    return "bitmap";
+  }
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
     int64_t hint, PExtentVector *extents) override;
 
   void release(
     const interval_set<uint64_t>& release_set) override;
+
+  using Allocator::release;
 
   uint64_t get_free() override
   {

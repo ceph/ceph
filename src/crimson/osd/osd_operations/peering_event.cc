@@ -13,11 +13,11 @@
 
 namespace {
   seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_osd);
+    return crimson::get_logger(ceph_subsys_osd);
   }
 }
 
-namespace ceph::osd {
+namespace crimson::osd {
 
 void PeeringEvent::print(std::ostream &lhs) const
 {
@@ -53,7 +53,16 @@ seastar::future<> PeeringEvent::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  return get_pg().then([this](Ref<PG> pg) {
+  return [this] {
+    if (delay) {
+      return seastar::sleep(std::chrono::milliseconds(
+		std::lround(delay*1000)));
+    } else {
+      return seastar::now();
+    }
+  }().then([this] {
+    return get_pg();
+  }).then([this](Ref<PG> pg) {
     if (!pg) {
       logger().warn("{}: pg absent, did not create", *this);
       on_pg_absent();
@@ -68,11 +77,21 @@ seastar::future<> PeeringEvent::start()
       }).then([this, pg](auto) {
 	return with_blocking_future(handle.enter(pp(*pg).process));
       }).then([this, pg] {
+        // TODO: likely we should synchronize also with the pg log-based
+        // recovery.
+	return with_blocking_future(
+          handle.enter(BackfillRecovery::bp(*pg).process));
+      }).then([this, pg] {
 	pg->do_peering_event(evt, ctx);
 	handle.exit();
 	return complete_rctx(pg);
+      }).then([this, pg] {
+	return pg->get_need_up_thru() ? shard_services.send_alive(pg->get_same_interval_since())
+                               : seastar::now();
       });
     }
+  }).then([this] {
+    return shard_services.send_pg_temp();
   }).then([this, ref=std::move(ref)] {
     logger().debug("{}: complete", *this);
   });
@@ -106,10 +125,10 @@ void RemotePeeringEvent::on_pg_absent()
     const pg_info_t empty{spg_t{pgid.pgid, q.query.to}};
     if (q.query.type == q.query.LOG ||
 	q.query.type == q.query.FULLLOG)  {
-      auto m = new MOSDPGLog{q.query.from, q.query.to,
-			     map_epoch, empty,
-			     q.query.epoch_sent};
-      ctx.send_osd_message(q.from.osd, m);
+      auto m = ceph::make_message<MOSDPGLog>(q.query.from, q.query.to,
+					     map_epoch, empty,
+					     q.query.epoch_sent);
+      ctx.send_osd_message(q.from.osd, std::move(m));
     } else {
       ctx.send_notify(q.from.osd, {q.query.from, q.query.to,
 				   q.query.epoch_sent,

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 import requests
 import time
@@ -85,7 +85,7 @@ for method, endpoint, args in screenplay:
     print("URL = " + url)
     request = getattr(requests, method)(
         url,
-        data=json.dumps(args),
+        data=json.dumps(args) if args else None,
         headers=headers,
         verify=False,
         auth=auth)

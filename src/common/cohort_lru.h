@@ -42,6 +42,8 @@ namespace cohort {
 
     typedef bi::link_mode<bi::safe_link> link_mode;
 
+    class ObjectFactory; // Forward declaration
+
     class Object
     {
     private:
@@ -70,7 +72,7 @@ namespace cohort {
 
       uint32_t get_refcnt() const { return lru_refcnt; }
 
-      virtual bool reclaim() = 0;
+      virtual bool reclaim(const ObjectFactory* newobj_fac) = 0;
 
       virtual ~Object() {}
 
@@ -132,7 +134,7 @@ namespace cohort {
 		(!(o->lru_flags & FLAG_EVICTING)));
       }
 
-      Object* evict_block() {
+      Object* evict_block(const ObjectFactory* newobj_fac) {
 	uint32_t lane_ix = next_evict_lane();
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
@@ -144,7 +146,7 @@ namespace cohort {
 	    ++(o->lru_refcnt);
 	    o->lru_flags |= FLAG_EVICTING;
 	    lane.lock.unlock();
-	    if (o->reclaim()) {
+	    if (o->reclaim(newobj_fac)) {
 	      lane.lock.lock();
 	      --(o->lru_refcnt);
 	      /* assertions that o state has not changed across
@@ -236,7 +238,7 @@ namespace cohort {
       Object* insert(ObjectFactory* fac, Edge edge, uint32_t& flags) {
 	/* use supplied functor to re-use an evicted object, or
 	 * allocate a new one of the descendant type */
-	Object* o = evict_block();
+	Object* o = evict_block(fac);
 	if (o) {
 	  fac->recycle(o); /* recycle existing object */
 	  flags |= FLAG_RECYCLE;
@@ -343,6 +345,7 @@ namespace cohort {
 	  if (csz) {
 	    p.csz = csz;
 	    p.cache = (T**) ::operator new(csz * sizeof(T*));
+	    // FIPS zeroization audit 20191115: this memset is not security related.
 	    memset(p.cache, 0, csz * sizeof(T*));
 	  }
 	  locks.push_back(&p.lock);
@@ -424,7 +427,9 @@ namespace cohort {
 	  lat.lock->unlock();
 	return v;
       } /* find_latch */
-
+      bool is_same_partition(uint64_t lhs, uint64_t rhs) {
+        return ((lhs % n_part) == (rhs % n_part));
+      }
       void insert_latched(T* v, Latch& lat, uint32_t flags) {
 	(void) lat.p->tr.insert_unique_commit(*v, lat.commit_data);
 	if (flags & FLAG_UNLOCK)

@@ -11,6 +11,7 @@
 
 #include "rgw_rest_role.h"
 #include "rgw_rest_user_policy.h"
+#include "rgw_rest_oidc_provider.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -26,13 +27,8 @@ void RGWHandler_REST_IAM::rgw_iam_parse_input()
       for (const auto& t : tokens) {
         auto pos = t.find("=");
         if (pos != string::npos) {
-          const auto key = t.substr(0, pos);
-          if (key == "Action") {
-            s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
-          } else if (key == "AssumeRolePolicyDocument" || key == "Path" || key == "PolicyDocument") {
-            const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
-            s->info.args.append(key, value);
-          }
+          s->info.args.append(t.substr(0,pos),
+                              url_decode(t.substr(pos+1, t.size() -1)));
         }
       }
     }
@@ -73,6 +69,14 @@ RGWOp *RGWHandler_REST_IAM::op_post()
       return new RGWListUserPolicies;
     if (action.compare("DeleteUserPolicy") == 0)
       return new RGWDeleteUserPolicy;
+    if (action.compare("CreateOpenIDConnectProvider") == 0)
+      return new RGWCreateOIDCProvider;
+    if (action.compare("ListOpenIDConnectProviders") == 0)
+      return new RGWListOIDCProviders;
+    if (action.compare("GetOpenIDConnectProvider") == 0)
+      return new RGWGetOIDCProvider;
+    if (action.compare("DeleteOpenIDConnectProvider") == 0)
+      return new RGWDeleteOIDCProvider;
   }
 
   return nullptr;
@@ -92,9 +96,9 @@ int RGWHandler_REST_IAM::init(rgw::sal::RGWRadosStore *store,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp)
+int RGWHandler_REST_IAM::authorize(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
+  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s, y);
 }
 
 int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
@@ -114,7 +118,7 @@ int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
   }
 
   s->info.args.set(p);
-  s->info.args.parse();
+  s->info.args.parse(s);
 
   /* must be called after the args parsing */
   if (int ret = allocate_formatter(s, default_formatter, configurable_format); ret < 0)
@@ -140,9 +144,10 @@ int RGWHandler_REST_IAM::init_from_header(struct req_state* s,
 }
 
 RGWHandler_REST*
-RGWRESTMgr_IAM::get_handler(struct req_state* const s,
-                              const rgw::auth::StrategyRegistry& auth_registry,
-                              const std::string& frontend_prefix)
+RGWRESTMgr_IAM::get_handler(rgw::sal::RGWRadosStore *store,
+			    struct req_state* const s,
+			    const rgw::auth::StrategyRegistry& auth_registry,
+			    const std::string& frontend_prefix)
 {
   return new RGWHandler_REST_IAM(auth_registry);
 }

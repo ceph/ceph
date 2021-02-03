@@ -17,6 +17,13 @@
 #define dout_prefix *_dout << "librbd::image::ListWatchersRequest: " << this \
                            << " " << __func__ << ": "
 
+static std::ostream& operator<<(std::ostream& os, const obj_watch_t& watch) {
+  os << "{addr=" << watch.addr << ", "
+     << "watcher_id=" << watch.watcher_id << ", "
+     << "cookie=" << watch.cookie << "}";
+  return os;
+}
+
 namespace librbd {
 namespace image {
 
@@ -29,6 +36,8 @@ ListWatchersRequest<I>::ListWatchersRequest(I &image_ctx, int flags,
                                             Context *on_finish)
   : m_image_ctx(image_ctx), m_flags(flags), m_watchers(watchers),
     m_on_finish(on_finish), m_cct(m_image_ctx.cct) {
+  ceph_assert((m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) == 0 ||
+              (m_flags & LIST_WATCHERS_MIRROR_INSTANCES_ONLY) == 0);
 }
 
 template<typename I>
@@ -69,14 +78,15 @@ void ListWatchersRequest<I>::handle_list_image_watchers(int r) {
     return;
   }
 
+  ldout(m_cct, 20) << "object_watchers=" << m_object_watchers << dendl;
   list_mirror_watchers();
 }
 
 template<typename I>
 void ListWatchersRequest<I>::list_mirror_watchers() {
   if ((m_object_watchers.empty()) ||
-      (m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) == 0 ||
-      (m_image_ctx.features & RBD_FEATURE_JOURNALING) == 0) {
+      (m_flags & (LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES |
+                  LIST_WATCHERS_MIRROR_INSTANCES_ONLY)) == 0) {
     finish(0);
     return;
   }
@@ -107,6 +117,8 @@ void ListWatchersRequest<I>::handle_list_mirror_watchers(int r) {
     ldout(m_cct, 1) << "error listing mirror watchers: " << cpp_strerror(r)
                     << dendl;
   }
+
+  ldout(m_cct, 20) << "mirror_watchers=" << m_mirror_watchers << dendl;
   finish(0);
 }
 
@@ -125,17 +137,25 @@ void ListWatchersRequest<I>::finish(int r) {
       for (auto &w : m_object_watchers) {
         if ((m_flags & LIST_WATCHERS_FILTER_OUT_MY_INSTANCE) != 0) {
           if (w.cookie == watch_handle) {
+            ldout(m_cct, 20) << "filtering out my instance: " << w << dendl;
             continue;
           }
         }
+        auto it = std::find_if(m_mirror_watchers.begin(),
+                               m_mirror_watchers.end(),
+                               [w] (obj_watch_t &watcher) {
+                                 return (strncmp(w.addr, watcher.addr,
+                                                 sizeof(w.addr)) == 0);
+                               });
         if ((m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) != 0) {
-          auto it = std::find_if(m_mirror_watchers.begin(),
-                                 m_mirror_watchers.end(),
-                                 [w] (obj_watch_t &watcher) {
-                                   return (strncmp(w.addr, watcher.addr,
-                                                   sizeof(w.addr)) == 0);
-                                 });
           if (it != m_mirror_watchers.end()) {
+            ldout(m_cct, 20) << "filtering out mirror instance: " << w << dendl;
+            continue;
+          }
+        } else if ((m_flags & LIST_WATCHERS_MIRROR_INSTANCES_ONLY) != 0) {
+          if (it == m_mirror_watchers.end()) {
+            ldout(m_cct, 20) << "filtering out non-mirror instance: " << w
+                             << dendl;
             continue;
           }
         }

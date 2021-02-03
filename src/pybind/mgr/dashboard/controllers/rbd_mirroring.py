@@ -2,24 +2,30 @@
 from __future__ import absolute_import
 
 import json
+import logging
 import re
-
 from functools import partial
 
 import cherrypy
-
 import rbd
 
-from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
-    RESTController
-from .rbd import _rbd_call
-
-from .. import logger, mgr
+from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
+from ..services.rbd import rbd_call
 from ..tools import ViewCache
-from ..services.exception import handle_rados_error, handle_rbd_error, \
-    serialize_dashboard_exception
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UpdatePermission, \
+    allow_empty_body
+
+try:
+    from typing import no_type_check
+except ImportError:
+    no_type_check = object()  # Just for type checking
+
+
+logger = logging.getLogger('controllers.rbd_mirror')
 
 
 # pylint: disable=not-callable
@@ -47,7 +53,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
             for service in server['services']:
                 id = service['id']  # pylint: disable=W0622
                 metadata = service['metadata']
-                status = service['status']
+                status = service['status'] or {}
 
                 try:
                     status = json.loads(status['json'])
@@ -144,7 +150,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
         for daemon in daemons:
             for _, pool_data in daemon['status'].items():
-                stats = pool_stats.get(pool_data['name'], None)
+                stats = pool_stats.get(pool_data['name'], None)  # type: ignore
                 if stats is None:
                     continue
 
@@ -187,6 +193,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
 
 @ViewCache()
+@no_type_check
 def _get_pool_datum(pool_name):
     data = {}
     logger.debug("Constructing IOCtx %s", pool_name)
@@ -325,18 +332,76 @@ def _reset_view_cache():
     _get_content_data.reset()
 
 
+RBD_MIRROR_SCHEMA = {
+    "site_name": (str, "Site Name")
+}
+
+RBDM_POOL_SCHEMA = {
+    "mirror_mode": (str, "Mirror Mode")
+}
+
+RBDM_SUMMARY_SCHEMA = {
+    "site_name": (str, "site name"),
+    "status": (int, ""),
+    "content_data": ({
+        "daemons": ([str], ""),
+        "pools": ([{
+            "name": (str, "Pool name"),
+            "health_color": (str, ""),
+            "health": (str, "pool health"),
+            "mirror_mode": (str, "status"),
+            "peer_uuids": ([str], "")
+        }], "Pools"),
+        "image_error": ([str], ""),
+        "image_syncing": ([str], ""),
+        "image_ready": ([str], "")
+    }, "")
+}
+
+
+@ApiController('/block/mirroring', Scope.RBD_MIRRORING)
+@ControllerDoc("RBD Mirroring Management API", "RbdMirroring")
+class RbdMirroring(BaseController):
+
+    @Endpoint(method='GET', path='site_name')
+    @handle_rbd_mirror_error()
+    @ReadPermission
+    @EndpointDoc("Display Rbd Mirroring sitename",
+                 responses={200: RBD_MIRROR_SCHEMA})
+    def get(self):
+        return self._get_site_name()
+
+    @Endpoint(method='PUT', path='site_name')
+    @handle_rbd_mirror_error()
+    @UpdatePermission
+    def set(self, site_name):
+        rbd.RBD().mirror_site_name_set(mgr.rados, site_name)
+        return self._get_site_name()
+
+    def _get_site_name(self):
+        return {'site_name': rbd.RBD().mirror_site_name_get(mgr.rados)}
+
+
 @ApiController('/block/mirroring/summary', Scope.RBD_MIRRORING)
+@ControllerDoc("RBD Mirroring Summary Management API", "RbdMirroringSummary")
 class RbdMirroringSummary(BaseController):
 
     @Endpoint()
     @handle_rbd_mirror_error()
     @ReadPermission
+    @EndpointDoc("Display Rbd Mirroring Summary",
+                 responses={200: RBDM_SUMMARY_SCHEMA})
     def __call__(self):
+        site_name = rbd.RBD().mirror_site_name_get(mgr.rados)
+
         status, content_data = _get_content_data()
-        return {'status': status, 'content_data': content_data}
+        return {'site_name': site_name,
+                'status': status,
+                'content_data': content_data}
 
 
 @ApiController('/block/mirroring/pool', Scope.RBD_MIRRORING)
+@ControllerDoc("RBD Mirroring Pool Mode Management API", "RbdMirroringPoolMode")
 class RbdMirroringPoolMode(RESTController):
 
     RESOURCE_ID = "pool_name"
@@ -347,6 +412,11 @@ class RbdMirroringPoolMode(RESTController):
     }
 
     @handle_rbd_mirror_error()
+    @EndpointDoc("Display Rbd Mirroring Summary",
+                 parameters={
+                     'pool_name': (str, 'Pool Name'),
+                 },
+                 responses={200: RBDM_POOL_SCHEMA})
     def get(self, pool_name):
         ioctx = mgr.rados.open_ioctx(pool_name)
         mode = rbd.RBD().mirror_mode_get(ioctx)
@@ -369,10 +439,45 @@ class RbdMirroringPoolMode(RESTController):
                     rbd.RBD().mirror_mode_set(ioctx, mode_enum)
                 _reset_view_cache()
 
-        return _rbd_call(pool_name, _edit, mirror_mode)
+        return rbd_call(pool_name, None, _edit, mirror_mode)
+
+
+@ApiController('/block/mirroring/pool/{pool_name}/bootstrap',
+               Scope.RBD_MIRRORING)
+@ControllerDoc("RBD Mirroring Pool Bootstrap Management API", "RbdMirroringPoolBootstrap")
+class RbdMirroringPoolBootstrap(BaseController):
+
+    @Endpoint(method='POST', path='token')
+    @handle_rbd_mirror_error()
+    @UpdatePermission
+    @allow_empty_body
+    def create_token(self, pool_name):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        token = rbd.RBD().mirror_peer_bootstrap_create(ioctx)
+        return {'token': token}
+
+    @Endpoint(method='POST', path='peer')
+    @handle_rbd_mirror_error()
+    @UpdatePermission
+    @allow_empty_body
+    def import_token(self, pool_name, direction, token):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+
+        directions = {
+            'rx': rbd.RBD_MIRROR_PEER_DIRECTION_RX,
+            'rx-tx': rbd.RBD_MIRROR_PEER_DIRECTION_RX_TX
+        }
+
+        direction_enum = directions.get(direction)
+        if direction_enum is None:
+            raise rbd.Error('invalid direction "{}"'.format(direction))
+
+        rbd.RBD().mirror_peer_bootstrap_import(ioctx, direction_enum, token)
+        return {}
 
 
 @ApiController('/block/mirroring/pool/{pool_name}/peer', Scope.RBD_MIRRORING)
+@ControllerDoc("RBD Mirroring Pool Peer Management API", "RbdMirroringPoolPeer")
 class RbdMirroringPoolPeer(RESTController):
 
     RESOURCE_ID = "peer_uuid"
@@ -416,6 +521,14 @@ class RbdMirroringPoolPeer(RESTController):
         # convert full client name to just the client id
         peer['client_id'] = peer['client_name'].split('.', 1)[-1]
         del peer['client_name']
+
+        # convert direction enum to string
+        directions = {
+            rbd.RBD_MIRROR_PEER_DIRECTION_RX: 'rx',
+            rbd.RBD_MIRROR_PEER_DIRECTION_TX: 'tx',
+            rbd.RBD_MIRROR_PEER_DIRECTION_RX_TX: 'rx-tx'
+        }
+        peer['direction'] = directions[peer.get('direction', rbd.RBD_MIRROR_PEER_DIRECTION_RX)]
 
         try:
             attributes = rbd.RBD().mirror_peer_get_attributes(ioctx, peer_uuid)

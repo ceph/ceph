@@ -7,12 +7,14 @@
 #include "test/librbd/mock/MockJournalPolicy.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/internal.h"
+#include "librbd/Journal.h"
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/StandardPolicy.h"
 #include "librbd/journal/Types.h"
+#include "librbd/journal/TypeTraits.h"
 #include "librbd/object_map/RemoveRequest.h"
 #include "librbd/operation/DisableFeaturesRequest.h"
 #include "gmock/gmock.h"
@@ -28,6 +30,12 @@ struct MockOperationImageCtx : public MockImageCtx {
 };
 
 } // anonymous namespace
+
+template<>
+struct Journal<MockOperationImageCtx> {
+  static void get_work_queue(CephContext*, MockContextWQ**) {
+  }
+};
 
 namespace image {
 
@@ -86,6 +94,11 @@ class StandardPolicy<MockOperationImageCtx> : public MockJournalPolicy {
 public:
   StandardPolicy(MockOperationImageCtx* image_ctx) {
   }
+};
+
+template <>
+struct TypeTraits<MockOperationImageCtx> {
+  typedef librbd::MockContextWQ ContextWQ;
 };
 
 } // namespace journal
@@ -174,20 +187,21 @@ public:
   typedef librbd::object_map::RemoveRequest<MockOperationImageCtx> MockRemoveObjectMapRequest;
   typedef DisableFeaturesRequest<MockOperationImageCtx> MockDisableFeaturesRequest;
 
-  class PoolMirrorModeEnabler {
+  class MirrorModeEnabler {
   public:
-    PoolMirrorModeEnabler(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
+    MirrorModeEnabler(librados::IoCtx &ioctx, cls::rbd::MirrorMode mirror_mode)
+      : m_ioctx(ioctx), m_mirror_mode(mirror_mode) {
       EXPECT_EQ(0, librbd::cls_client::mirror_uuid_set(&m_ioctx, "test-uuid"));
-      EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(
-		  &m_ioctx, cls::rbd::MIRROR_MODE_POOL));
+      EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(&m_ioctx, m_mirror_mode));
     }
 
-    ~PoolMirrorModeEnabler() {
+    ~MirrorModeEnabler() {
       EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(
-		&m_ioctx, cls::rbd::MIRROR_MODE_DISABLED));
+                &m_ioctx, cls::rbd::MIRROR_MODE_DISABLED));
     }
   private:
     librados::IoCtx &m_ioctx;
+    cls::rbd::MirrorMode m_mirror_mode;
   };
 
   void expect_prepare_lock(MockOperationImageCtx &mock_image_ctx) {
@@ -203,12 +217,12 @@ public:
   }
 
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, block_writes(_))
       .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes()).Times(1);
+    EXPECT_CALL(*mock_image_ctx.io_image_dispatcher, unblock_writes()).Times(1);
   }
 
   void expect_verify_lock_ownership(MockOperationImageCtx &mock_image_ctx) {
@@ -292,13 +306,9 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
-  MockJournal mock_journal_stack;
-  MockJournal *mock_journal = &mock_journal_stack;
-  if (features_to_disable & RBD_FEATURE_JOURNALING) {
-    mock_journal = new MockJournal();
-  }
+  MockJournal mock_journal;
   MockObjectMap mock_object_map;
-  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, *mock_journal,
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
 		      mock_object_map);
 
   expect_verify_lock_ownership(mock_image_ctx);
@@ -439,14 +449,16 @@ TEST_F(TestMockOperationDisableFeaturesRequest, ObjectMapError) {
 TEST_F(TestMockOperationDisableFeaturesRequest, Mirroring) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
+  MirrorModeEnabler mirror_mode_enabler(m_ioctx, cls::rbd::MIRROR_MODE_POOL);
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
-  MockJournal *mock_journal = new MockJournal();
+  MockJournal mock_journal;
   MockObjectMap mock_object_map;
-  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, *mock_journal,
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
 		      mock_object_map);
 
   expect_verify_lock_ownership(mock_image_ctx);
@@ -487,9 +499,9 @@ TEST_F(TestMockOperationDisableFeaturesRequest, MirroringError) {
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
-  MockJournal *mock_journal = new MockJournal();
+  MockJournal mock_journal;
   MockObjectMap mock_object_map;
-  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, *mock_journal,
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
 		      mock_object_map);
 
   expect_verify_lock_ownership(mock_image_ctx);

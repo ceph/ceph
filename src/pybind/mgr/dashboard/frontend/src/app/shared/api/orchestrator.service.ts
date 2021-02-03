@@ -1,28 +1,46 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { ApiModule } from './api.module';
+
+import _ from 'lodash';
+import { Observable } from 'rxjs';
+
+import { OrchestratorFeature } from '../models/orchestrator.enum';
+import { OrchestratorStatus } from '../models/orchestrator.interface';
 
 @Injectable({
-  providedIn: ApiModule
+  providedIn: 'root'
 })
 export class OrchestratorService {
-  statusURL = 'api/orchestrator/status';
-  inventoryURL = 'api/orchestrator/inventory';
-  serviceURL = 'api/orchestrator/service';
+  private url = 'api/orchestrator';
+
+  disableMessages = {
+    noOrchestrator: $localize`The feature is disabled because Orchestrator is not available.`,
+    missingFeature: $localize`The Orchestrator backend doesn't support this feature.`
+  };
 
   constructor(private http: HttpClient) {}
 
-  status() {
-    return this.http.get(this.statusURL);
+  status(): Observable<OrchestratorStatus> {
+    return this.http.get<OrchestratorStatus>(`${this.url}/status`);
   }
 
-  inventoryList(hostname: string) {
-    const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get(this.inventoryURL, options);
+  hasFeature(status: OrchestratorStatus, features: OrchestratorFeature[]): boolean {
+    return _.every(features, (feature) => _.get(status.features, `${feature}.available`));
   }
 
-  serviceList(hostname: string) {
-    const options = hostname ? { params: new HttpParams().set('hostname', hostname) } : {};
-    return this.http.get(this.serviceURL, options);
+  getTableActionDisableDesc(
+    status: OrchestratorStatus,
+    features: OrchestratorFeature[]
+  ): boolean | string {
+    if (!status) {
+      return false;
+    }
+    if (!status.available) {
+      return this.disableMessages.noOrchestrator;
+    }
+    if (!this.hasFeature(status, features)) {
+      return this.disableMessages.missingFeature;
+    }
+    return false;
   }
 }

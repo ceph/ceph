@@ -14,7 +14,7 @@
 
 #pragma once
 
-class MTimeCheck2 : public Message {
+class MTimeCheck2 final : public Message {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -30,8 +30,8 @@ public:
   version_t round = 0;
 
   utime_t timestamp;
-  map<int, double> skews;
-  map<int, double> latencies;
+  std::map<int, double> skews;
+  std::map<int, double> latencies;
 
   MTimeCheck2() : Message{MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION} { }
   MTimeCheck2(int op) :
@@ -40,7 +40,7 @@ public:
   { }
 
 private:
-  ~MTimeCheck2() override { }
+  ~MTimeCheck2() final { }
 
 public:
   std::string_view get_type_name() const override { return "time_check2"; }
@@ -52,7 +52,7 @@ public:
     }
     return "???";
   }
-  void print(ostream &o) const override {
+  void print(std::ostream &o) const override {
     o << "time_check( " << get_op_name()
       << " e " << epoch << " r " << round;
     if (op == OP_PONG) {
@@ -65,6 +65,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(op, p);
     decode(epoch, p);

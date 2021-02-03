@@ -10,7 +10,6 @@
 #include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
-#include "rgw_rados.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_zone.h"
@@ -27,7 +26,7 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 }
 
 string render_log_object_name(const string& format,
-			      struct tm *dt, string& bucket_id,
+			      struct tm *dt, const string& bucket_id,
 			      const string& bucket_name)
 {
   string o;
@@ -198,12 +197,14 @@ static void log_usage(struct req_state *s, const string& op_name)
   bucket_name = s->bucket_name;
 
   if (!bucket_name.empty()) {
+  bucket_name = s->bucket_name;
     user = s->bucket_owner.get_id();
-    if (s->bucket_info.requester_pays) {
-      payer = s->user->user_id;
+    if (!rgw::sal::RGWBucket::empty(s->bucket.get()) &&
+	s->bucket->get_info().requester_pays) {
+      payer = s->user->get_id();
     }
   } else {
-      user = s->user->user_id;
+      user = s->user->get_id();
   }
 
   bool error = s->err.is_err();
@@ -274,6 +275,19 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     formatter->close_section();
   }
   formatter->dump_string("trans_id", entry.trans_id);
+  if (entry.token_claims.size() > 0) {
+    if (entry.token_claims[0] == "sts") {
+      formatter->open_object_section("sts_token_claims");
+      for (const auto& iter: entry.token_claims) {
+        auto pos = iter.find(":");
+        if (pos != string::npos) {
+          formatter->dump_string(iter.substr(0, pos), iter.substr(pos + 1));
+        }
+      }
+      formatter->close_section();
+    }
+  }
+
   formatter->close_section();
 }
 
@@ -330,24 +344,24 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
-  if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
+  if (s->err.ret == -ERR_NO_SUCH_BUCKET || rgw::sal::RGWBucket::empty(s->bucket.get())) {
     if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
-      ldout(s->cct, 5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
+      ldout(s->cct, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = "";
   } else {
-    bucket_id = s->bucket.bucket_id;
+    bucket_id = s->bucket->get_bucket_id();
   }
-  rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, entry.bucket);
+  entry.bucket = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
 
   if (check_utf8(entry.bucket.c_str(), entry.bucket.size()) != 0) {
     ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
 
-  if (!s->object.empty()) {
-    entry.obj = s->object;
+  if (!rgw::sal::RGWObject::empty(s->object.get())) {
+    entry.obj = s->object->get_key();
   } else {
     entry.obj = rgw_obj_key("-");
   }
@@ -392,7 +406,11 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   entry.uri = std::move(uri);
 
-  set_param_str(s, "REQUEST_METHOD", entry.op);
+  entry.op = op_name;
+
+  if (! s->token_claims.empty()) {
+    entry.token_claims = std::move(s->token_claims);
+  }
 
   /* custom header logging */
   if (rest) {
@@ -406,7 +424,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     }
   }
 
-  entry.user = s->user->user_id.to_str();
+  entry.user = s->user->get_id().to_str();
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();
@@ -443,7 +461,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   if (s->cct->_conf->rgw_ops_log_rados) {
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				        s->bucket.bucket_id, entry.bucket);
+				        entry.bucket_id, entry.bucket);
 
     rgw_raw_obj obj(store->svc.zone->get_zone_params().log_pool, oid);
 

@@ -1,77 +1,68 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { FormsModule } from '@angular/forms';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
+
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { OrchestratorService } from '../../../shared/api/orchestrator.service';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { SharedModule } from '../../../shared/shared.module';
+
+import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
+import { InventoryDevicesComponent } from './inventory-devices/inventory-devices.component';
 import { InventoryComponent } from './inventory.component';
 
 describe('InventoryComponent', () => {
   let component: InventoryComponent;
   let fixture: ComponentFixture<InventoryComponent>;
-  let reqHostname: string;
-
-  const inventoryNodes = [
-    {
-      name: 'host0',
-      devices: [
-        {
-          type: 'hdd',
-          id: '/dev/sda'
-        }
-      ]
-    },
-    {
-      name: 'host1',
-      devices: [
-        {
-          type: 'hdd',
-          id: '/dev/sda'
-        }
-      ]
-    }
-  ];
-
-  const getIventoryList = (hostname: String) => {
-    return hostname ? inventoryNodes.filter((node) => node.name === hostname) : inventoryNodes;
-  };
+  let orchService: OrchestratorService;
+  let hostService: HostService;
 
   configureTestBed({
-    imports: [SharedModule, HttpClientTestingModule, RouterTestingModule],
-    providers: [i18nProviders],
-    declarations: [InventoryComponent]
+    imports: [
+      BrowserAnimationsModule,
+      FormsModule,
+      SharedModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      ToastrModule.forRoot()
+    ],
+    declarations: [InventoryComponent, InventoryDevicesComponent]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(InventoryComponent);
     component = fixture.componentInstance;
-    const orchService = TestBed.get(OrchestratorService);
+    orchService = TestBed.inject(OrchestratorService);
+    hostService = TestBed.inject(HostService);
     spyOn(orchService, 'status').and.returnValue(of({ available: true }));
-    reqHostname = '';
-    spyOn(orchService, 'inventoryList').and.callFake(() => of(getIventoryList(reqHostname)));
-    fixture.detectChanges();
+    spyOn(hostService, 'inventoryDeviceList').and.callThrough();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should have columns that are sortable', () => {
-    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+  it('should not display doc panel if orchestrator is available', () => {
+    expect(component.showDocPanel).toBeFalsy();
   });
 
-  it('should return all devices', () => {
-    component.getInventory(new CdTableFetchDataContext(() => {}));
-    expect(component.devices.length).toBe(2);
-  });
+  describe('after ngOnInit', () => {
+    it('should load devices', () => {
+      fixture.detectChanges();
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(1, undefined, false);
+      component.refresh(); // click refresh button
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(2, undefined, true);
 
-  it('should return devices on a host', () => {
-    reqHostname = 'host0';
-    component.getInventory(new CdTableFetchDataContext(() => {}));
-    expect(component.devices.length).toBe(1);
-    expect(component.devices[0].hostname).toBe(reqHostname);
+      const newHost = 'host0';
+      component.hostname = newHost;
+      fixture.detectChanges();
+      component.ngOnChanges();
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(3, newHost, false);
+      component.refresh(); // click refresh button
+      expect(hostService.inventoryDeviceList).toHaveBeenNthCalledWith(4, newHost, true);
+    });
   });
 });

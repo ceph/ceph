@@ -15,12 +15,19 @@
 #ifndef CEPHFS_FEATURES_H
 #define CEPHFS_FEATURES_H
 
+#include "include/cephfs/metrics/Types.h"
+
+class feature_bitset_t;
+namespace ceph {
+  class Formatter;
+}
+
 // When adding a new release, please update the "current" release below, add a
 // feature bit for that release, add that feature bit to CEPHFS_FEATURES_ALL,
 // and update Server::update_required_client_features(). This feature bit
 // is used to indicate that operator only wants clients from that release or
 // later to mount CephFS.
-#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_OCTOPUS
+#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_QUINCY
 
 // The first 5 bits are reserved for old ceph releases.
 #define CEPHFS_FEATURE_JEWEL		5
@@ -32,7 +39,11 @@
 #define CEPHFS_FEATURE_LAZY_CAP_WANTED  11
 #define CEPHFS_FEATURE_MULTI_RECONNECT  12
 #define CEPHFS_FEATURE_NAUTILUS         12
+#define CEPHFS_FEATURE_DELEG_INO        13
 #define CEPHFS_FEATURE_OCTOPUS          13
+#define CEPHFS_FEATURE_METRIC_COLLECT   14
+#define CEPHFS_FEATURE_ALTERNATE_NAME   15
+#define CEPHFS_FEATURE_MAX              15
 
 #define CEPHFS_FEATURES_ALL {		\
   0, 1, 2, 3, 4,			\
@@ -45,7 +56,18 @@
   CEPHFS_FEATURE_LAZY_CAP_WANTED,	\
   CEPHFS_FEATURE_MULTI_RECONNECT,	\
   CEPHFS_FEATURE_NAUTILUS,              \
+  CEPHFS_FEATURE_DELEG_INO,             \
   CEPHFS_FEATURE_OCTOPUS,               \
+  CEPHFS_FEATURE_METRIC_COLLECT,        \
+  CEPHFS_FEATURE_ALTERNATE_NAME,        \
+}
+
+#define CEPHFS_METRIC_FEATURES_ALL {		\
+    CLIENT_METRIC_TYPE_CAP_INFO,		\
+    CLIENT_METRIC_TYPE_READ_LATENCY,		\
+    CLIENT_METRIC_TYPE_WRITE_LATENCY,		\
+    CLIENT_METRIC_TYPE_METADATA_LATENCY,	\
+    CLIENT_METRIC_TYPE_DENTRY_LEASE,		\
 }
 
 #define CEPHFS_FEATURES_MDS_SUPPORTED CEPHFS_FEATURES_ALL
@@ -53,5 +75,10 @@
 
 #define CEPHFS_FEATURES_CLIENT_SUPPORTED CEPHFS_FEATURES_ALL
 #define CEPHFS_FEATURES_CLIENT_REQUIRED {}
+
+extern std::string_view cephfs_feature_name(size_t id);
+extern int cephfs_feature_from_name(std::string_view name);
+std::string cephfs_stringify_features(const feature_bitset_t& features);
+void cephfs_dump_features(ceph::Formatter *f, const feature_bitset_t& features);
 
 #endif

@@ -14,7 +14,10 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
+    create_rbd_pool: false
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    log-ignorelist:
       - objects unfound and apparently lost
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
@@ -22,4 +25,5 @@ tasks:
       - \(PG_
       - \(OBJECT_
       - \(SLOW_OPS\)
+      - slow request
 - ec_lost_unfound:

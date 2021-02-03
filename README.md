@@ -51,8 +51,6 @@ suitable for installation we recommend you build deb or rpm packages,
 or refer to the `ceph.spec.in` or `debian/rules` to see which
 configuration options are specified for production builds.
 
-Prerequisite: CMake 3.5.1
-
 Build instructions:
 
 	./do_cmake.sh
@@ -61,13 +59,17 @@ Build instructions:
 
 (Note: do_cmake.sh now defaults to creating a debug build of ceph that can
 be up to 5x slower with some workloads. Please pass 
-"-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug 
+"-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug
 release.)
 
+(Note: `make` alone will use only one CPU thread, this could take a while. use
+the `-j` option to use more threads. Something like `make -j$(nproc)` would be
+a good start.
+
 This assumes you make your build dir a subdirectory of the ceph.git
-checkout. If you put it elsewhere, just replace `..` in do_cmake.sh with a
-correct path to the checkout. Any additional CMake args can be specified
-setting ARGS before invoking do_cmake. See [cmake options](#cmake-options) 
+checkout. If you put it elsewhere, just point `CEPH_GIT_DIR`to the correct
+path to the checkout. Any additional CMake args can be specified setting ARGS
+before invoking do_cmake. See [cmake options](#cmake-options)
 for more details. Eg.
 
     ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
@@ -91,8 +93,8 @@ defaulted to ON. To build without the RADOS Gateway:
 Another example below is building with debugging and alternate locations 
 for a couple of external dependencies:
 
-	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
-	-DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
+	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" \
+	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
 	..
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:

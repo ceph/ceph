@@ -9,8 +9,9 @@
 #include <string>
 
 #include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 
-class CephContext;
+namespace TOPNSPC::crush {
 
 class CrushLocation {
 public:
@@ -32,5 +33,5 @@ private:
 };
 
 std::ostream& operator<<(std::ostream& os, const CrushLocation& loc);
-
+}
 #endif

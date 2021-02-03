@@ -214,7 +214,7 @@ void Replayer::run(const std::string& replay_file) {
       m_rbd = new librbd::RBD();
       map<thread_id_t, Worker*> workers;
 
-      int fd = open(replay_file.c_str(), O_RDONLY);
+      int fd = open(replay_file.c_str(), O_RDONLY|O_BINARY);
       if (fd < 0) {
         std::cerr << "Failed to open " << replay_file << ": "
                   << cpp_strerror(errno) << std::endl;
@@ -300,10 +300,11 @@ void Replayer::erase_image(imagectx_id_t imagectx_id) {
   if (m_dump_perf_counters) {
     string command = "perf dump";
     cmdmap_t cmdmap;
-    string format = "json-pretty";
+    JSONFormatter jf(true);
     bufferlist out;
-    g_ceph_context->do_command(command, cmdmap, format, &out);
-    out.write_stream(cout);
+    stringstream ss;
+    g_ceph_context->do_command(command, cmdmap, &jf, ss, &out);
+    jf.flush(cout);
     cout << std::endl;
     cout.flush();
   }
@@ -369,11 +370,13 @@ void Replayer::clear_images() {
   if (m_dump_perf_counters && !m_images.empty()) {
     string command = "perf dump";
     cmdmap_t cmdmap;
-    string format = "json-pretty";
+    JSONFormatter jf(true);
     bufferlist out;
-    g_ceph_context->do_command(command, cmdmap, format, &out);
-    out.write_stream(cout);
+    stringstream ss;
+    g_ceph_context->do_command(command, cmdmap, &jf, ss, &out);
+    jf.flush(cout);
     cout << std::endl;
+    cout.flush();
   }
   for (auto& p : m_images) {
     delete p.second;

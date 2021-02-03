@@ -23,8 +23,10 @@
 #include "mon/MonOpRequest.h"
 #include "mon/mon_types.h"
 #include "mon/ElectionLogic.h"
+#include "mon/ConnectionTracker.h"
 
 class Monitor;
+
 
 /**
  * This class is responsible for handling messages and maintaining
@@ -32,12 +34,20 @@ class Monitor;
  * a new Leader. We may win or we may lose. If we win, it means we became the
  * Leader; if we lose, it means we are a Peon.
  */
-class Elector : public ElectionOwner {
+class Elector : public ElectionOwner, RankProvider {
   /**
    * @defgroup Elector_h_class Elector
    * @{
    */
   ElectionLogic logic;
+  // connectivity validation and scoring
+  ConnectionTracker peer_tracker;
+  map<int, utime_t> peer_acked_ping; // rank -> last ping stamp they acked
+  map<int, utime_t> peer_sent_ping; // rank -> last ping stamp we sent
+  set<int> live_pinging; // ranks which we are currently pinging
+  set<int> dead_pinging; // ranks which didn't answer (degrading scores)
+  double ping_timeout; // the timeout after which we consider a ping to be dead
+  int PING_DIVISOR = 2;  // we time out pings
 
    /**
    * @defgroup Elector_h_internal_types Internal Types
@@ -53,7 +63,7 @@ class Elector : public ElectionOwner {
     uint64_t cluster_features = 0;
     mon_feature_t mon_features;
     ceph_release_t mon_release{0};
-    map<string,string> metadata;
+    std::map<std::string,std::string> metadata;
   };
 
   /**
@@ -100,7 +110,7 @@ class Elector : public ElectionOwner {
    * Map containing info of all those that acked our proposal to become the Leader.
    * Note each peer's info.
    */
-  map<int, elector_info_t> peer_info;
+  std::map<int, elector_info_t> peer_info;
   /**
    * @}
    */
@@ -174,13 +184,44 @@ class Elector : public ElectionOwner {
    * @param m A message with an operation type of OP_NAK
    */
   void handle_nak(MonOpRequestRef op);
+  /**
+   * Send a ping to the specified peer.
+   * @n optional time that we will use instead of calling ceph_clock_now()
+   */
+  void send_peer_ping(int peer, const utime_t *n=NULL);
+  /**
+   * Check the state of pinging the specified peer. This is our
+   * "tick" for heartbeating; scheduled by itself and begin_peer_ping().
+   */
+  void ping_check(int peer);
+  /**
+   * Move the peer out of live_pinging into dead_pinging set
+   * and schedule dead_ping()ing on it.
+   */
+  void begin_dead_ping(int peer);
+  /**
+   * Checks that the peer is still marked for dead pinging,
+   * and then marks it as dead for the appropriate interval.
+   */
+  void dead_ping(int peer);
+  /**
+   * Handle a ping from another monitor and assimilate the data it contains.
+   */
+  void handle_ping(MonOpRequestRef op);
+  /**
+   * Update our view of everybody else's connectivity based on the provided
+   * tracker bufferlist
+   */
+  void assimilate_connection_reports(const bufferlist& bl);
   
  public:
   /**
    * @defgroup Elector_h_ElectionOwner Functions from the ElectionOwner interface
    * @{
    */
-  /* Commit the given epoch to our MonStore */
+  /* Commit the given epoch to our MonStore.
+   * We also take the opportunity to persist our peer_tracker.
+   */
   void persist_epoch(epoch_t e);
   /* Read the epoch out of our MonStore */
   epoch_t read_persisted_epoch() const;
@@ -193,13 +234,16 @@ class Elector : public ElectionOwner {
   /* Retrieve rank from the Monitor */
   int get_my_rank() const;
   /* Send MMonElection OP_PROPOSE to every monitor in the map. */
-  void propose_to_peers(epoch_t e);
+  void propose_to_peers(epoch_t e, bufferlist &bl);
   /* bootstrap() the Monitor */
   void reset_election();
   /* Retrieve the Monitor::has_ever_joined member */
   bool ever_participated() const;
   /* Retrieve monmap->size() */
   unsigned paxos_size() const;
+  /* Right now we don't disallow anybody */
+  set<int> disallowed_leaders;
+  const set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
   /**
    * Reset the expire_event timer so we can limit the amount of time we 
    * will be electing. Clean up our peer_info.
@@ -228,6 +272,10 @@ class Elector : public ElectionOwner {
   /*
    * @}
    */
+  /**
+   * Persist our peer_tracker to disk.
+   */
+  void persist_connectivity_scores();
 
   Elector *elector;
   
@@ -235,8 +283,9 @@ class Elector : public ElectionOwner {
    * Create an Elector class
    *
    * @param m A Monitor instance
+   * @param strategy The election strategy to use, defined in MonMap/ElectionLogic
    */
-  explicit Elector(Monitor *m);
+  explicit Elector(Monitor *m, int strategy);
   virtual ~Elector() {}
 
   /**
@@ -262,7 +311,12 @@ class Elector : public ElectionOwner {
   void declare_standalone_victory() {
     logic.declare_standalone_victory();
   }
-
+  /**
+   * Tell the Elector to start pinging a given peer.
+   * Do this when you discover a peer and it has a rank assigned.
+   * We do it ourselves on receipt of pings and when receiving other messages.
+   */
+  void begin_peer_ping(int peer);
   /**
    * Handle received messages.
    *
@@ -303,7 +357,40 @@ class Elector : public ElectionOwner {
    * @post  @p participating is true
    */
   void start_participating();
-
+  /**
+   * Forget everything about our peers. :(
+   */
+  void notify_clear_peer_state();
+  /**
+   * Notify that our local rank has changed
+   * and we may need to update internal data structures.
+   */
+  void notify_rank_changed(int new_rank);
+  /**
+   * A peer has been removed so we should clean up state related to it.
+   */
+  void notify_rank_removed(int rank_removed);
+  void notify_strategy_maybe_changed(int strategy);
+  /**
+   * Set the disallowed leaders.
+   *
+   * If you call this and the new disallowed set
+   * contains your current leader, you are
+   * responsible for calling an election!
+   *
+   * @returns false if the set is unchanged,
+   *   true if the set changed
+   */
+  bool set_disallowed_leaders(const set<int>& dl) {
+    if (dl == disallowed_leaders) return false;
+    disallowed_leaders = dl;
+    return true;
+  }
+  void dump_connection_scores(Formatter *f) {
+    f->open_object_section("connection scores");
+    peer_tracker.dump(f);
+    f->close_section();
+  }
   /**
    * @}
    */

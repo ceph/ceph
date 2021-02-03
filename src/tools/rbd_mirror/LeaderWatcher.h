@@ -17,7 +17,10 @@
 #include "tools/rbd_mirror/instances/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 
-namespace librbd { class ImageCtx; }
+namespace librbd {
+class ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -44,6 +47,7 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
+  bool is_blocklisted() const;
   bool is_leader() const;
   bool is_releasing_leader() const;
   bool get_leader_instance_id(std::string *instance_id) const;
@@ -115,12 +119,13 @@ private:
   public:
     typedef librbd::ManagedLock<ImageCtxT> Parent;
 
-    LeaderLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+    LeaderLock(librados::IoCtx& ioctx, librbd::AsioEngine& asio_engine,
                const std::string& oid, LeaderWatcher *watcher,
-               bool blacklist_on_break_lock,
-               uint32_t blacklist_expire_seconds)
-      : Parent(ioctx, work_queue, oid, watcher, librbd::managed_lock::EXCLUSIVE,
-               blacklist_on_break_lock, blacklist_expire_seconds),
+               bool blocklist_on_break_lock,
+               uint32_t blocklist_expire_seconds)
+      : Parent(ioctx, asio_engine, oid, watcher,
+               librbd::managed_lock::EXCLUSIVE, blocklist_on_break_lock,
+               blocklist_expire_seconds),
         watcher(watcher) {
     }
 
@@ -214,6 +219,8 @@ private:
   int m_ret_val = 0;
   Instances<ImageCtxT> *m_instances = nullptr;
   librbd::managed_lock::Locker m_locker;
+
+  bool m_blocklisted = false;
 
   AsyncOpTracker m_timer_op_tracker;
   Context *m_timer_task = nullptr;

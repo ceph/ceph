@@ -335,7 +335,7 @@ struct crush_bucket_straw {
  * __h.alg__ == ::CRUSH_BUCKET_STRAW2.
  *
  * The weight of __h.items[i]__ is __item_weights[i]__ for i in
- * [0,__h.size__[.
+ * [0,__h.size__].
  */
 struct crush_bucket_straw2 {
         struct crush_bucket h; /*!< generic bucket information */

@@ -1,62 +1,178 @@
 import time
 import signal
-import json
 import logging
+import operator
 from random import randint
 
-from cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
-from teuthology import misc as teuthology
 from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
 
+class TestClusterAffinity(CephFSTestCase):
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 4
+
+    def _verify_join_fs(self, target, status=None):
+        if status is None:
+            status = self.fs.wait_for_daemons(timeout=30)
+            log.debug("%s", status)
+        target = sorted(target, key=operator.itemgetter('name'))
+        log.info("target = %s", target)
+        current = list(status.get_all())
+        current = sorted(current, key=operator.itemgetter('name'))
+        log.info("current = %s", current)
+        self.assertEqual(len(current), len(target))
+        for i in range(len(current)):
+            for attr in target[i]:
+                self.assertIn(attr, current[i])
+                self.assertEqual(target[i][attr], current[i][attr])
+
+    def _change_target_state(self, state, name, changes):
+        for entity in state:
+            if entity['name'] == name:
+                for k, v in changes.items():
+                    entity[k] = v
+                return
+        self.fail("no entity")
+
+    def _verify_init(self):
+        status = self.fs.status()
+        log.info("status = {0}".format(status))
+        target = [{'join_fscid': -1, 'name': info['name']} for info in status.get_all()]
+        self._verify_join_fs(target, status=status)
+        return (status, target)
+
+    def _reach_target(self, target):
+        def takeover():
+            try:
+                self._verify_join_fs(target)
+                return True
+            except AssertionError as e:
+                log.debug("%s", e)
+                return False
+        self.wait_until_true(takeover, 30)
+
+    def test_join_fs_runtime(self):
+        """
+        That setting mds_join_fs at runtime affects the cluster layout.
+        """
+        status, target = self._verify_init()
+        standbys = list(status.get_standbys())
+        self.config_set('mds.'+standbys[0]['name'], 'mds_join_fs', 'cephfs')
+        self._change_target_state(target, standbys[0]['name'], {'join_fscid': self.fs.id, 'state': 'up:active'})
+        self._reach_target(target)
+
+    def test_join_fs_unset(self):
+        """
+        That unsetting mds_join_fs will cause failover if another high-affinity standby exists.
+        """
+        status, target = self._verify_init()
+        standbys = list(status.get_standbys())
+        names = (standbys[0]['name'], standbys[1]['name'])
+        self.config_set('mds.'+names[0], 'mds_join_fs', 'cephfs')
+        self.config_set('mds.'+names[1], 'mds_join_fs', 'cephfs')
+        self._change_target_state(target, names[0], {'join_fscid': self.fs.id})
+        self._change_target_state(target, names[1], {'join_fscid': self.fs.id})
+        self._reach_target(target)
+        status = self.fs.status()
+        active = self.fs.get_active_names(status=status)[0]
+        self.assertIn(active, names)
+        self.config_rm('mds.'+active, 'mds_join_fs')
+        self._change_target_state(target, active, {'join_fscid': -1})
+        new_active = (set(names) - set((active,))).pop()
+        self._change_target_state(target, new_active, {'state': 'up:active'})
+        self._reach_target(target)
+
+    def test_join_fs_drop(self):
+        """
+        That unsetting mds_join_fs will not cause failover if no high-affinity standby exists.
+        """
+        status, target = self._verify_init()
+        standbys = list(status.get_standbys())
+        active = standbys[0]['name']
+        self.config_set('mds.'+active, 'mds_join_fs', 'cephfs')
+        self._change_target_state(target, active, {'join_fscid': self.fs.id, 'state': 'up:active'})
+        self._reach_target(target)
+        self.config_rm('mds.'+active, 'mds_join_fs')
+        self._change_target_state(target, active, {'join_fscid': -1})
+        self._reach_target(target)
+
+    def test_join_fs_vanilla(self):
+        """
+        That a vanilla standby is preferred over others with mds_join_fs set to another fs.
+        """
+        # After Octopus is EOL, we can remove this setting:
+        self.fs.set_allow_multifs()
+        fs2 = self.mds_cluster.newfs(name="cephfs2")
+        status, target = self._verify_init()
+        active = self.fs.get_active_names(status=status)[0]
+        standbys = [info['name'] for info in status.get_standbys()]
+        victim = standbys.pop()
+        # Set a bogus fs on the others
+        for mds in standbys:
+            self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
+            self._change_target_state(target, mds, {'join_fscid': fs2.id})
+        self.fs.rank_fail()
+        self._change_target_state(target, victim, {'state': 'up:active'})
+        self._reach_target(target)
+        status = self.fs.status()
+        active = self.fs.get_active_names(status=status)[0]
+        self.assertEqual(active, victim)
+
+    def test_join_fs_last_resort(self):
+        """
+        That a standby with mds_join_fs set to another fs is still used if necessary.
+        """
+        status, target = self._verify_init()
+        standbys = [info['name'] for info in status.get_standbys()]
+        for mds in standbys:
+            self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
+        # After Octopus is EOL, we can remove this setting:
+        self.fs.set_allow_multifs()
+        fs2 = self.mds_cluster.newfs(name="cephfs2")
+        for mds in standbys:
+            self._change_target_state(target, mds, {'join_fscid': fs2.id})
+        self.fs.rank_fail()
+        status = self.fs.status()
+        ranks = list(self.fs.get_ranks(status=status))
+        self.assertEqual(len(ranks), 1)
+        self.assertIn(ranks[0]['name'], standbys)
+        # Note that we would expect the former active to reclaim its spot, but
+        # we're not testing that here.
+
+    def test_join_fs_steady(self):
+        """
+        That a sole MDS with mds_join_fs set will come back as active eventually even after failover.
+        """
+        status, target = self._verify_init()
+        active = self.fs.get_active_names(status=status)[0]
+        self.config_set('mds.'+active, 'mds_join_fs', 'cephfs')
+        self._change_target_state(target, active, {'join_fscid': self.fs.id})
+        self._reach_target(target)
+        self.fs.rank_fail()
+        self._reach_target(target)
+
+    def test_join_fs_standby_replay(self):
+        """
+        That a standby-replay daemon with weak affinity is replaced by a stronger one.
+        """
+        status, target = self._verify_init()
+        standbys = [info['name'] for info in status.get_standbys()]
+        self.config_set('mds.'+standbys[0], 'mds_join_fs', 'cephfs')
+        self._change_target_state(target, standbys[0], {'join_fscid': self.fs.id, 'state': 'up:active'})
+        self._reach_target(target)
+        self.fs.set_allow_standby_replay(True)
+        status = self.fs.status()
+        standbys = [info['name'] for info in status.get_standbys()]
+        self.config_set('mds.'+standbys[0], 'mds_join_fs', 'cephfs')
+        self._change_target_state(target, standbys[0], {'join_fscid': self.fs.id, 'state': 'up:standby-replay'})
+        self._reach_target(target)
 
 class TestClusterResize(CephFSTestCase):
-    CLIENTS_REQUIRED = 1
+    CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 3
-
-    def grow(self, n):
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
-        fscid = self.fs.id
-        status = self.fs.status()
-        log.info("status = {0}".format(status))
-
-        original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        original_standbys = set([info['gid'] for info in status.get_standbys()])
-
-        oldmax = self.fs.get_var('max_mds')
-        self.assertTrue(n > oldmax)
-        self.fs.set_max_mds(n)
-
-        log.info("Waiting for cluster to grow.")
-        status = self.fs.wait_for_daemons(timeout=60+grace*2)
-        ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        self.assertTrue(original_ranks.issubset(ranks) and len(ranks) == n)
-        return status
-
-    def shrink(self, n):
-        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
-
-        fscid = self.fs.id
-        status = self.fs.status()
-        log.info("status = {0}".format(status))
-
-        original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        original_standbys = set([info['gid'] for info in status.get_standbys()])
-
-        oldmax = self.fs.get_var('max_mds')
-        self.assertTrue(n < oldmax)
-        self.fs.set_max_mds(n)
-
-        # Wait until the monitor finishes stopping ranks >= n
-        log.info("Waiting for cluster to shink.")
-        status = self.fs.wait_for_daemons(timeout=60+grace*2)
-        ranks = set([info['gid'] for info in status.get_ranks(fscid)])
-        self.assertTrue(ranks.issubset(original_ranks) and len(ranks) == n)
-        return status
-
 
     def test_grow(self):
         """
@@ -66,8 +182,8 @@ class TestClusterResize(CephFSTestCase):
         # Need all my standbys up as well as the active daemons
         # self.wait_for_daemon_start() necessary?
 
-        self.grow(2)
-        self.grow(3)
+        self.fs.grow(2)
+        self.fs.grow(3)
 
 
     def test_shrink(self):
@@ -75,8 +191,8 @@ class TestClusterResize(CephFSTestCase):
         That the MDS cluster shrinks automatically after decreasing max_mds.
         """
 
-        self.grow(3)
-        self.shrink(1)
+        self.fs.grow(3)
+        self.fs.shrink(1)
 
     def test_up_less_than_max(self):
         """
@@ -87,15 +203,13 @@ class TestClusterResize(CephFSTestCase):
         mdss = [info['gid'] for info in status.get_all()]
         self.fs.set_max_mds(len(mdss)+1)
         self.wait_for_health("MDS_UP_LESS_THAN_MAX", 30)
-        self.shrink(2)
+        self.fs.shrink(2)
         self.wait_for_health_clear(30)
 
     def test_down_health(self):
         """
         That marking a FS down does not generate a health warning
         """
-
-        self.mount_a.umount_wait()
 
         self.fs.set_down()
         try:
@@ -112,9 +226,7 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down twice does not wipe old_max_mds.
         """
 
-        self.mount_a.umount_wait()
-
-        self.grow(2)
+        self.fs.grow(2)
         self.fs.set_down()
         self.fs.wait_for_daemons()
         self.fs.set_down(False)
@@ -126,19 +238,15 @@ class TestClusterResize(CephFSTestCase):
         That setting max_mds undoes down.
         """
 
-        self.mount_a.umount_wait()
-
         self.fs.set_down()
         self.fs.wait_for_daemons()
-        self.grow(2)
+        self.fs.grow(2)
         self.fs.wait_for_daemons()
 
     def test_down(self):
         """
         That down setting toggles and sets max_mds appropriately.
         """
-
-        self.mount_a.umount_wait()
 
         self.fs.set_down()
         self.fs.wait_for_daemons()
@@ -155,28 +263,25 @@ class TestClusterResize(CephFSTestCase):
 
         fscid = self.fs.id
 
-        self.grow(2)
+        self.fs.grow(2)
 
+        # Now add a delay which should slow down how quickly rank 1 stops
+        self.config_set('mds', 'ms_inject_delay_max', '5.0')
+        self.config_set('mds', 'ms_inject_delay_probability', '1.0')
         self.fs.set_max_mds(1)
         log.info("status = {0}".format(self.fs.status()))
 
-        self.fs.set_max_mds(3)
         # Don't wait for rank 1 to stop
+        self.fs.set_max_mds(3)
+        log.info("status = {0}".format(self.fs.status()))
 
+        # Now check that the mons didn't try to promote a standby to rank 2
         self.fs.set_max_mds(2)
-        # Prevent another MDS from taking rank 1
-        # XXX This is a little racy because rank 1 may have stopped and a
-        #     standby assigned to rank 1 before joinable=0 is set.
-        self.fs.set_joinable(False) # XXX keep in mind changing max_mds clears this flag
-
+        status = self.fs.status()
         try:
             status = self.fs.wait_for_daemons(timeout=90)
-            raise RuntimeError("should not be able to successfully shrink cluster!")
-        except:
-            # could not shrink to max_mds=2 and reach 2 actives (because joinable=False)
-            status = self.fs.status()
             ranks = set([info['rank'] for info in status.get_ranks(fscid)])
-            self.assertTrue(ranks == set([0]))
+            self.assertEqual(ranks, set([0, 1]))
         finally:
             log.info("status = {0}".format(status))
 
@@ -256,8 +361,7 @@ class TestFailover(CephFSTestCase):
         self.mounts[0].umount_wait()
 
         # Control: that we can mount and unmount usually, while the cluster is healthy
-        self.mounts[0].mount()
-        self.mounts[0].wait_until_mounted()
+        self.mounts[0].mount_wait()
         self.mounts[0].umount_wait()
 
         # Stop the daemon processes
@@ -274,7 +378,7 @@ class TestFailover(CephFSTestCase):
 
         self.wait_until_true(laggy, grace * 2)
         with self.assertRaises(CommandFailedError):
-            self.mounts[0].mount()
+            self.mounts[0].mount_wait()
 
     def test_standby_count_wanted(self):
         """
@@ -360,7 +464,7 @@ class TestStandbyReplay(CephFSTestCase):
 
     def _confirm_no_replay(self):
         status = self.fs.status()
-        standby_count = len(list(status.get_standbys()))
+        _ = len(list(status.get_standbys()))
         self.assertEqual(0, len(list(self.fs.get_replays(status=status))))
         return status
 
@@ -509,8 +613,8 @@ class TestMultiFilesystems(CephFSTestCase):
             "--yes-i-really-mean-it")
 
     def _setup_two(self):
-        fs_a = self.mds_cluster.newfs("alpha")
-        fs_b = self.mds_cluster.newfs("bravo")
+        fs_a = self.mds_cluster.newfs(name="alpha")
+        fs_b = self.mds_cluster.newfs(name="bravo")
 
         self.mds_cluster.mds_restart()
 
@@ -533,14 +637,14 @@ class TestMultiFilesystems(CephFSTestCase):
         fs_a, fs_b = self._setup_two()
 
         # Mount a client on fs_a
-        self.mount_a.mount(mount_fs_name=fs_a.name)
+        self.mount_a.mount(cephfs_name=fs_a.name)
         self.mount_a.write_n_mb("pad.bin", 1)
         self.mount_a.write_n_mb("test.bin", 2)
         a_created_ino = self.mount_a.path_to_ino("test.bin")
         self.mount_a.create_files()
 
         # Mount a client on fs_b
-        self.mount_b.mount(mount_fs_name=fs_b.name)
+        self.mount_b.mount(cephfs_name=fs_b.name)
         self.mount_b.write_n_mb("test.bin", 1)
         b_created_ino = self.mount_b.path_to_ino("test.bin")
         self.mount_b.create_files()

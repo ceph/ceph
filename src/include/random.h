@@ -20,10 +20,19 @@
 #include <type_traits>
 #include <boost/optional.hpp>
 
-// Basic random number facility, adapted from N3551:
+// Workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85494
+#ifdef __MINGW32__
+#include <boost/random/random_device.hpp>
+
+using random_device_t = boost::random::random_device;
+#else
+using random_device_t = std::random_device;
+#endif
+
+// Basic random number facility (see N3551 for inspiration):
 namespace ceph::util {
 
-inline namespace version_1_0_2 {
+inline namespace version_1_0_3 {
 
 namespace detail {
 
@@ -91,7 +100,7 @@ void randomize_rng(const SeedT seed, MutexT& m, EngineT& e)
 template <typename MutexT, typename EngineT>
 void randomize_rng(MutexT& m, EngineT& e)
 {
-  std::random_device rd;
+  random_device_t rd;
  
   std::lock_guard<MutexT> lg(m);
   e.seed(rd());
@@ -107,7 +116,7 @@ void randomize_rng(const SeedT n)
 template <typename EngineT = std::default_random_engine>
 void randomize_rng()
 {
-  std::random_device rd;
+  random_device_t rd;
   detail::engine<EngineT>().seed(rd());
 }
 
@@ -232,7 +241,7 @@ template <typename NumberT>
 class random_number_generator final
 {
   std::mutex l;
-  std::random_device rd;
+  random_device_t rd;
   std::default_random_engine e;
 
   using seed_type = typename decltype(e)::result_type;
@@ -281,6 +290,9 @@ class random_number_generator final
     detail::randomize_rng(n, l, e); 
   }
 };
+
+template <typename NumberT>
+random_number_generator(const NumberT max) -> random_number_generator<NumberT>;
 
 } // inline namespace version_*
 

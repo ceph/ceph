@@ -3,37 +3,47 @@
 
 #pragma once
 
+#include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/common/type_helpers.h"
+#include "messages/MOSDOp.h"
 
-class MOSDOp;
-
-namespace ceph::osd {
+namespace crimson::osd {
 class PG;
 class OSD;
 
 class ClientRequest final : public OperationT<ClientRequest> {
   OSD &osd;
-  ceph::net::ConnectionRef conn;
+  crimson::net::ConnectionRef conn;
   Ref<MOSDOp> m;
-  OrderedPipelinePhase::Handle handle;
+  OpInfo op_info;
+  PipelineHandle handle;
 
 public:
   class ConnectionPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "ClientRequest::ConnectionPipeline::await_map"
     };
-    OrderedPipelinePhase get_pg = {
+    OrderedExclusivePhase get_pg = {
       "ClientRequest::ConnectionPipeline::get_pg"
     };
     friend class ClientRequest;
   };
   class PGPipeline {
-    OrderedPipelinePhase await_map = {
+    OrderedExclusivePhase await_map = {
       "ClientRequest::PGPipeline::await_map"
     };
-    OrderedPipelinePhase process = {
+    OrderedExclusivePhase wait_for_active = {
+      "ClientRequest::PGPipeline::wait_for_active"
+    };
+    OrderedExclusivePhase recover_missing = {
+      "ClientRequest::PGPipeline::recover_missing"
+    };
+    OrderedExclusivePhase get_obc = {
+      "ClientRequest::PGPipeline::get_obc"
+    };
+    OrderedExclusivePhase process = {
       "ClientRequest::PGPipeline::process"
     };
     friend class ClientRequest;
@@ -41,15 +51,26 @@ public:
 
   static constexpr OperationTypeCode type = OperationTypeCode::client_request;
 
-  ClientRequest(OSD &osd, ceph::net::ConnectionRef, Ref<MOSDOp> &&m);
+  ClientRequest(OSD &osd, crimson::net::ConnectionRef, Ref<MOSDOp> &&m);
 
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;
+
+public:
   seastar::future<> start();
 
 private:
+  seastar::future<> process_pg_op(
+    Ref<PG> &pg);
+  seastar::future<> process_op(
+    Ref<PG> &pg);
+  bool is_pg_op() const;
+
   ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
+
+private:
+  bool is_misdirected(const PG& pg) const;
 };
 
 }

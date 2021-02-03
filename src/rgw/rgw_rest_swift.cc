@@ -27,19 +27,19 @@
 #include "rgw_process.h"
 
 #include "rgw_zone.h"
+#include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
 
 #include <array>
+#include <string_view>
 #include <sstream>
 #include <memory>
-
-#include <boost/utility/string_ref.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-int RGWListBuckets_ObjStore_SWIFT::get_params()
+int RGWListBuckets_ObjStore_SWIFT::get_params(optional_yield y)
 {
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
@@ -114,13 +114,13 @@ static void dump_account_metadata(struct req_state * const s,
 
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
-    auto iter = s->user->temp_url_keys.find(0);
-    if (iter != std::end(s->user->temp_url_keys) && ! iter->second.empty()) {
+    auto iter = s->user->get_info().temp_url_keys.find(0);
+    if (iter != std::end(s->user->get_info().temp_url_keys) && ! iter->second.empty()) {
       dump_header(s, "X-Account-Meta-Temp-Url-Key", iter->second);
     }
 
-    iter = s->user->temp_url_keys.find(1);
-    if (iter != std::end(s->user->temp_url_keys) && ! iter->second.empty()) {
+    iter = s->user->get_info().temp_url_keys.find(1);
+    if (iter != std::end(s->user->get_info().temp_url_keys) && ! iter->second.empty()) {
       dump_header(s, "X-Account-Meta-Temp-Url-Key-2", iter->second);
     }
   }
@@ -176,7 +176,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             global_stats,
             policies_stats,
             attrs,
-            user_quota,
+            s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
@@ -186,13 +186,13 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   if (! op_ret) {
     dump_start(s);
     s->formatter->open_array_section_with_attrs("account",
-            FormatterAttrs("name", s->user->display_name.c_str(), NULL));
+            FormatterAttrs("name", s->user->get_display_name().c_str(), NULL));
 
     sent_data = true;
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets&& buckets)
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::RGWBucketList&& buckets)
 {
   if (wants_reversed) {
     /* Just store in the reversal buffer. Its content will be handled later,
@@ -203,7 +203,7 @@ void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(RGWUserBuckets&& bucket
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::RGWBucketList& buckets)
 {
   if (! sent_data) {
     return;
@@ -213,22 +213,22 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  const std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+  const auto& m = buckets.get_buckets();
   for (auto iter = m.lower_bound(prefix);
        iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
        ++iter) {
-    dump_bucket_entry(iter->second);
+    dump_bucket_entry(*iter->second);
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& obj)
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::RGWBucket& obj)
 {
   s->formatter->open_object_section("container");
-  s->formatter->dump_string("name", obj.bucket.name);
+  s->formatter->dump_string("name", obj.get_name());
 
   if (need_stats) {
-    s->formatter->dump_int("count", obj.count);
-    s->formatter->dump_int("bytes", obj.size);
+    s->formatter->dump_int("count", obj.get_count());
+    s->formatter->dump_int("bytes", obj.get_size());
   }
 
   s->formatter->close_section();
@@ -238,7 +238,7 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& obj)
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& buckets)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::RGWBucketList& buckets)
 {
   if (! sent_data) {
     return;
@@ -248,7 +248,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& 
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  std::map<std::string, RGWBucketEnt>& m = buckets.get_buckets();
+  auto& m = buckets.get_buckets();
 
   auto iter = m.rbegin();
   for (/* initialized above */;
@@ -260,7 +260,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(RGWUserBuckets& 
   for (/* iter carried */;
        iter != m.rend() && boost::algorithm::starts_with(iter->first, prefix);
        ++iter) {
-    dump_bucket_entry(iter->second);
+    dump_bucket_entry(*iter->second);
   }
 }
 
@@ -282,7 +282,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             global_stats,
             policies_stats,
             attrs,
-            user_quota,
+            s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
     end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
@@ -293,7 +293,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
   }
 }
 
-int RGWListBucket_ObjStore_SWIFT::get_params()
+int RGWListBucket_ObjStore_SWIFT::get_params(optional_yield y)
 {
   prefix = s->info.args.get("prefix");
   marker = s->info.args.get("marker");
@@ -340,7 +340,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
 }
 
 static void dump_container_metadata(struct req_state *,
-                                    const RGWBucketEnt&,
+                                    const rgw::sal::RGWBucket*,
                                     const RGWQuotaInfo&,
                                     const RGWBucketWebsiteConf&);
 
@@ -350,12 +350,12 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, bucket, bucket_quota,
-                          s->bucket_info.website_conf);
+  dump_container_metadata(s, s->bucket.get(), bucket_quota,
+                          s->bucket->get_info().website_conf);
 
   s->formatter->open_array_section_with_attrs("container",
 					      FormatterAttrs("name",
-							     s->bucket.name.c_str(),
+							     s->bucket->get_name().c_str(),
 							     NULL));
 
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
@@ -450,18 +450,18 @@ next:
 } // RGWListBucket_ObjStore_SWIFT::send_response
 
 static void dump_container_metadata(struct req_state *s,
-                                    const RGWBucketEnt& bucket,
+                                    const rgw::sal::RGWBucket* bucket,
                                     const RGWQuotaInfo& quota,
                                     const RGWBucketWebsiteConf& ws_conf)
 {
   /* Adding X-Timestamp to keep align with Swift API */
-  dump_header(s, "X-Timestamp", utime_t(s->bucket_info.creation_time));
+  dump_header(s, "X-Timestamp", utime_t(s->bucket->get_info().creation_time));
 
-  dump_header(s, "X-Container-Object-Count", bucket.count);
-  dump_header(s, "X-Container-Bytes-Used", bucket.size);
-  dump_header(s, "X-Container-Bytes-Used-Actual", bucket.size_rounded);
+  dump_header(s, "X-Container-Object-Count", bucket->get_count());
+  dump_header(s, "X-Container-Bytes-Used", bucket->get_size());
+  dump_header(s, "X-Container-Bytes-Used-Actual", bucket->get_size_rounded());
 
-  if (s->object.empty()) {
+  if (rgw::sal::RGWObject::empty(s->object.get())) {
     auto swift_policy = \
       static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
     std::string read_acl, write_acl;
@@ -473,10 +473,10 @@ static void dump_container_metadata(struct req_state *s,
     if (write_acl.size()) {
       dump_header(s, "X-Container-Write", write_acl);
     }
-    if (!s->bucket_info.placement_rule.name.empty()) {
-      dump_header(s, "X-Storage-Policy", s->bucket_info.placement_rule.name);
+    if (!s->bucket->get_placement_rule().name.empty()) {
+      dump_header(s, "X-Storage-Policy", s->bucket->get_placement_rule().name);
     }
-    dump_header(s, "X-Storage-Class", s->bucket_info.placement_rule.get_storage_class());
+    dump_header(s, "X-Storage-Class", s->bucket->get_placement_rule().get_storage_class());
 
     /* Dump user-defined metadata items and generic attrs. */
     const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
@@ -498,9 +498,9 @@ static void dump_container_metadata(struct req_state *s,
   }
 
   /* Dump container versioning info. */
-  if (! s->bucket_info.swift_ver_location.empty()) {
+  if (! s->bucket->get_info().swift_ver_location.empty()) {
     dump_header(s, "X-Versions-Location",
-                url_encode(s->bucket_info.swift_ver_location));
+                url_encode(s->bucket->get_info().swift_ver_location));
   }
 
   /* Dump quota headers. */
@@ -542,10 +542,10 @@ static void dump_container_metadata(struct req_state *s,
   dump_last_modified(s, s->bucket_mtime);
 }
 
-void RGWStatAccount_ObjStore_SWIFT::execute()
+void RGWStatAccount_ObjStore_SWIFT::execute(optional_yield y)
 {
-  RGWStatAccount_ObjStore::execute();
-  op_ret = store->ctl()->user->get_attrs_by_uid(s->user->user_id, &attrs, s->yield);
+  RGWStatAccount_ObjStore::execute(y);
+  op_ret = store->ctl()->user->get_attrs_by_uid(s, s->user->get_id(), &attrs, s->yield);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
@@ -556,7 +556,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
             global_stats,
             policies_stats,
             attrs,
-            user_quota,
+            s->user->get_info().user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
   }
 
@@ -572,8 +572,8 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket, bucket_quota,
-                            s->bucket_info.website_conf);
+    dump_container_metadata(s, bucket.get(), bucket_quota,
+                            s->bucket->get_info().website_conf);
   }
 
   set_req_state_err(s, op_ret);
@@ -598,9 +598,9 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_list || write_list) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    const auto r = swift_policy.create(store->ctl()->user,
-                                       s->user->user_id,
-                                       s->user->display_name,
+    const auto r = swift_policy.create(s, store->ctl()->user,
+                                       s->user->get_id(),
+                                       s->user->get_display_name(),
                                        read_list,
                                        write_list,
                                        *rw_mask);
@@ -696,7 +696,7 @@ static int get_swift_versioning_settings(
   return 0;
 }
 
-int RGWCreateBucket_ObjStore_SWIFT::get_params()
+int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
 {
   bool has_policy;
   uint32_t policy_rw_mask = 0;
@@ -708,7 +708,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   }
 
   if (!has_policy) {
-    policy.create_default(s->user->user_id, s->user->display_name);
+    policy.create_default(s->user->get_id(), s->user->get_display_name());
   }
 
   location_constraint = store->svc()->zone->get_zonegroup().api_name;
@@ -810,9 +810,9 @@ static int get_delete_at_param(req_state *s, boost::optional<real_time> &delete_
   return 0;
 }
 
-int RGWPutObj_ObjStore_SWIFT::verify_permission()
+int RGWPutObj_ObjStore_SWIFT::verify_permission(optional_yield y)
 {
-  op_ret = RGWPutObj_ObjStore::verify_permission();
+  op_ret = RGWPutObj_ObjStore::verify_permission(y);
 
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
@@ -846,13 +846,12 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
   rgw_bucket bucket;
 
-  if (bucket_name.compare(s->bucket.name) != 0) {
+  if (bucket_name.compare(s->bucket->get_name()) != 0) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
-    auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-    r = store->getRados()->get_bucket_info(obj_ctx, s->user->user_id.tenant,
+    r = store->getRados()->get_bucket_info(store->svc(), s->user->get_id().tenant,
 			       bucket_name, bucket_info, nullptr,
-			       s->yield, &bucket_attrs);
+			       s->yield, s, &bucket_attrs);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			 << bucket_name << dendl;
@@ -860,7 +859,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
     }
     bucket = bucket_info.bucket;
   } else {
-    bucket = s->bucket;
+    bucket = s->bucket->get_key();
   }
 
   /* fetch the stored size of the seg (or error if not valid) */
@@ -871,7 +870,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   RGWObjectCtx obj_ctx(store);
   obj_ctx.set_atomic(slo_seg);
 
-  RGWRados::Object op_target(store->getRados(), s->bucket_info, obj_ctx, slo_seg);
+  RGWRados::Object op_target(store->getRados(), s->bucket->get_info(), obj_ctx, slo_seg);
   RGWRados::Object::Read read_op(&op_target);
 
   bool compressed;
@@ -882,7 +881,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &size_bytes;
 
-  r = read_op.prepare(s->yield);
+  r = read_op.prepare(s->yield, s);
   if (r < 0) {
     return r;
   }
@@ -911,7 +910,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   return 0;
 } /* RGWPutObj_ObjStore_SWIFT::update_slo_segment_sizes */
 
-int RGWPutObj_ObjStore_SWIFT::get_params()
+int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
 {
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -931,7 +930,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
     ldpp_dout(this, 5) << "content type wasn't provided, trying to guess" << dendl;
-    const char *suffix = strrchr(s->object.name.c_str(), '.');
+    const char *suffix = strrchr(s->object->get_name().c_str(), '.');
     if (suffix) {
       suffix++;
       if (*suffix) {
@@ -944,7 +943,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     }
   }
 
-  policy.create_default(s->user->user_id, s->user->display_name);
+  policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
@@ -1015,7 +1014,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     ofs = slo_info->raw_data.length();
   }
 
-  return RGWPutObj_ObjStore::get_params();
+  return RGWPutObj_ObjStore::get_params(y);
 }
 
 void RGWPutObj_ObjStore_SWIFT::send_response()
@@ -1061,9 +1060,9 @@ static int get_swift_account_settings(req_state * const s,
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
     RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
-    const bool r = swift_acct_policy.create(store->ctl()->user,
-                                     s->user->user_id,
-                                     s->user->display_name,
+    const bool r = swift_acct_policy.create(s, store->ctl()->user,
+                                     s->user->get_id(),
+                                     s->user->get_display_name(),
                                      string(acl_attr));
     if (r != true) {
       return -EINVAL;
@@ -1076,7 +1075,7 @@ static int get_swift_account_settings(req_state * const s,
   return 0;
 }
 
-int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
+int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(optional_yield y)
 {
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -1114,7 +1113,7 @@ void RGWPutMetadataAccount_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
+int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(optional_yield y)
 {
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -1150,7 +1149,7 @@ void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
+int RGWPutMetadataObject_ObjStore_SWIFT::get_params(optional_yield y)
 {
   if (s->has_bad_meta) {
     return -EINVAL;
@@ -1202,7 +1201,7 @@ static void bulkdelete_respond(const unsigned num_deleted,
 
   if (!failures.empty()) {
     int reason = ERR_INVALID_REQUEST;
-    for (const auto fail_desc : failures) {
+    for (const auto& fail_desc : failures) {
       if (-ENOENT != fail_desc.err && -EACCES != fail_desc.err) {
         reason = fail_desc.err;
       }
@@ -1225,7 +1224,7 @@ static void bulkdelete_respond(const unsigned num_deleted,
   encode_json("Response Status", resp_status, &formatter);
 
   formatter.open_array_section("Errors");
-  for (const auto fail_desc : failures) {
+  for (const auto& fail_desc : failures) {
     formatter.open_array_section("object");
 
     stringstream ss_name;
@@ -1244,9 +1243,9 @@ static void bulkdelete_respond(const unsigned num_deleted,
   formatter.close_section();
 }
 
-int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
+int RGWDeleteObj_ObjStore_SWIFT::verify_permission(optional_yield y)
 {
-  op_ret = RGWDeleteObj_ObjStore::verify_permission();
+  op_ret = RGWDeleteObj_ObjStore::verify_permission(y);
 
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
@@ -1258,12 +1257,12 @@ int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
   }
 }
 
-int RGWDeleteObj_ObjStore_SWIFT::get_params()
+int RGWDeleteObj_ObjStore_SWIFT::get_params(optional_yield y)
 {
   const string& mm = s->info.args.get("multipart-manifest");
   multipart_delete = (mm.compare("delete") == 0);
 
-  return RGWDeleteObj_ObjStore::get_params();
+  return RGWDeleteObj_ObjStore::get_params(y);
 }
 
 void RGWDeleteObj_ObjStore_SWIFT::send_response()
@@ -1294,7 +1293,7 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
     } else {
       RGWBulkDelete::acct_path_t path;
       path.bucket_name = s->bucket_name;
-      path.obj_key = s->object;
+      path.obj_key = s->object->get_key();
 
       RGWBulkDelete::fail_desc_t fail_desc;
       fail_desc.err = op_ret;
@@ -1355,7 +1354,7 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state
     }
   }
 
-  for (const auto kv : response_attrs) {
+  for (const auto& kv : response_attrs) {
     dump_header(s, kv.first, kv.second);
   }
 
@@ -1377,12 +1376,12 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state
 
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 {
-  dest_policy.create_default(s->user->user_id, s->user->display_name);
+  dest_policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   return 0;
 }
 
-int RGWCopyObj_ObjStore_SWIFT::get_params()
+int RGWCopyObj_ObjStore_SWIFT::get_params(optional_yield y)
 {
   if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
   if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
@@ -1391,16 +1390,16 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
 
   src_tenant_name = s->src_tenant_name;
   src_bucket_name = s->src_bucket_name;
-  src_object = s->src_object;
+  src_object = s->src_object->clone();
   dest_tenant_name = s->bucket_tenant;
   dest_bucket_name = s->bucket_name;
-  dest_object = s->object.name;
+  dest_obj_name = s->object->get_name();
 
   const char * const fresh_meta = s->info.env->get("HTTP_X_FRESH_METADATA");
   if (fresh_meta && strcasecmp(fresh_meta, "TRUE") == 0) {
-    attrs_mod = RGWRados::ATTRSMOD_REPLACE;
+    attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
   } else {
-    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+    attrs_mod = rgw::sal::ATTRSMOD_MERGE;
   }
 
   int r = get_delete_at_param(s, delete_at);
@@ -1437,12 +1436,12 @@ void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs)
 void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 {
   /* Dump X-Copied-From. */
-  dump_header(s, "X-Copied-From", url_encode(src_bucket.name) +
-              "/" + url_encode(src_object.name));
+  dump_header(s, "X-Copied-From", url_encode(src_bucket->get_name()) +
+              "/" + url_encode(src_object->get_name()));
 
   /* Dump X-Copied-From-Account. */
   /* XXX tenant */
-  dump_header(s, "X-Copied-From-Account", url_encode(s->user->user_id.id));
+  dump_header(s, "X-Copied-From-Account", url_encode(s->user->get_id().id));
 
   /* Dump X-Copied-From-Last-Modified. */
   dump_time_header(s, "X-Copied-From-Last-Modified", src_mtime);
@@ -1469,9 +1468,9 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
   }
 }
 
-int RGWGetObj_ObjStore_SWIFT::verify_permission()
+int RGWGetObj_ObjStore_SWIFT::verify_permission(optional_yield y)
 {
-  op_ret = RGWGetObj_ObjStore::verify_permission();
+  op_ret = RGWGetObj_ObjStore::verify_permission(y);
 
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
@@ -1483,18 +1482,18 @@ int RGWGetObj_ObjStore_SWIFT::verify_permission()
   }
 }
 
-int RGWGetObj_ObjStore_SWIFT::get_params()
+int RGWGetObj_ObjStore_SWIFT::get_params(optional_yield y)
 {
   const string& mm = s->info.args.get("multipart-manifest");
   skip_manifest = (mm.compare("get") == 0);
 
-  return RGWGetObj_ObjStore::get_params();
+  return RGWGetObj_ObjStore::get_params(y);
 }
 
-int RGWGetObj_ObjStore_SWIFT::send_response_data_error()
+int RGWGetObj_ObjStore_SWIFT::send_response_data_error(optional_yield y)
 {
   std::string error_content;
-  op_ret = error_handler(op_ret, &error_content);
+  op_ret = error_handler(op_ret, &error_content, y);
   if (! op_ret) {
     /* The error handler has taken care of the error. */
     return 0;
@@ -1835,7 +1834,7 @@ const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT:
     {"tempauth", {false, RGWInfo_ObjStore_SWIFT::list_tempauth_data}},
 };
 
-void RGWInfo_ObjStore_SWIFT::execute()
+void RGWInfo_ObjStore_SWIFT::execute(optional_yield y)
 {
   bool is_admin_info_enabled = false;
 
@@ -1981,8 +1980,8 @@ void RGWFormPost::init(rgw::sal::RGWRadosStore* const store,
                        req_state* const s,
                        RGWHandler* const dialect_handler)
 {
-  prefix = std::move(s->object.name);
-  s->object = rgw_obj_key();
+  prefix = std::move(s->object->get_name());
+  s->object->set_key(rgw_obj_key());
 
   return RGWPostObj_ObjStore::init(store, s, dialect_handler);
 }
@@ -2032,14 +2031,14 @@ bool RGWFormPost::is_integral()
   const std::string form_signature = get_part_str(ctrl_parts, "signature");
 
   try {
-    get_owner_info(s, *s->user);
+    get_owner_info(s, s->user->get_info());
     s->auth.identity = rgw::auth::transform_old_authinfo(s);
   } catch (...) {
     ldpp_dout(this, 5) << "cannot get user_info of account's owner" << dendl;
     return false;
   }
 
-  for (const auto& kv : s->user->temp_url_keys) {
+  for (const auto& kv : s->user->get_info().temp_url_keys) {
     const int temp_url_key_num = kv.first;
     const string& temp_url_key = kv.second;
 
@@ -2094,14 +2093,14 @@ void RGWFormPost::get_owner_info(const req_state* const s,
     if (uid.tenant.empty()) {
       const rgw_user tenanted_uid(uid.id, uid.id);
 
-      if (user_ctl->get_info_by_uid(tenanted_uid, &uinfo, s->yield) >= 0) {
+      if (user_ctl->get_info_by_uid(s, tenanted_uid, &uinfo, s->yield) >= 0) {
         /* Succeeded. */
         bucket_tenant = uinfo.user_id.tenant;
         found = true;
       }
     }
 
-    if (!found && user_ctl->get_info_by_uid(uid, &uinfo, s->yield) < 0) {
+    if (!found && user_ctl->get_info_by_uid(s, uid, &uinfo, s->yield) < 0) {
       throw -EPERM;
     } else {
       bucket_tenant = uinfo.user_id.tenant;
@@ -2110,9 +2109,9 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;
-  int ret = store->getRados()->get_bucket_info(*s->sysobj_ctx,
+  int ret = store->getRados()->get_bucket_info(store->svc(),
                                    bucket_tenant, bucket_name,
-                                   bucket_info, nullptr, s->yield);
+                                   bucket_info, nullptr, s->yield, s);
   if (ret < 0) {
     throw ret;
   }
@@ -2120,20 +2119,20 @@ void RGWFormPost::get_owner_info(const req_state* const s,
   ldpp_dout(this, 20) << "temp url user (bucket owner): " << bucket_info.owner
                  << dendl;
 
-  if (user_ctl->get_info_by_uid(bucket_info.owner, &owner_info, s->yield) < 0) {
+  if (user_ctl->get_info_by_uid(s, bucket_info.owner, &owner_info, s->yield) < 0) {
     throw -EPERM;
   }
 }
 
-int RGWFormPost::get_params()
+int RGWFormPost::get_params(optional_yield y)
 {
   /* The parentt class extracts boundary info from the Content-Type. */
-  int ret = RGWPostObj_ObjStore::get_params();
+  int ret = RGWPostObj_ObjStore::get_params(y);
   if (ret < 0) {
     return ret;
   }
 
-  policy.create_default(s->user->user_id, s->user->display_name);
+  policy.create_default(s->user->get_id(), s->user->get_display_name());
 
   /* Let's start parsing the HTTP body by parsing each form part step-
    * by-step till encountering the first part with file data. */
@@ -2276,7 +2275,7 @@ int RGWFormPost::get_data(ceph::bufferlist& bl, bool& again)
     return r;
   }
 
-  /* Tell RGWPostObj::execute() that it has some data to put. */
+  /* Tell RGWPostObj::execute(optional_yield y) that it has some data to put. */
   again = !boundary;
 
   return bl.length();
@@ -2346,7 +2345,8 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_delete()
 }
 
 int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
-                                           const std::string error_doc)
+                                           const std::string error_doc,
+					   optional_yield y)
 {
   /* Try to throw it all away. */
   s->formatter->reset();
@@ -2365,7 +2365,7 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
     }
 
     int error_handler(const int err_no,
-                      std::string* const error_content) override {
+                      std::string* const error_content, optional_yield y) override {
       /* Enforce that any error generated while getting the error page will
        * not be send to a client. This allows us to recover from the double
        * fault situation by sending the original message. */
@@ -2373,21 +2373,31 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
     }
   } get_errpage_op(store, handler, s, http_ret);
 
-  s->object = std::to_string(http_ret) + error_doc;
+  if (!rgw::sal::RGWBucket::empty(s->bucket.get())) {
+    s->object = s->bucket->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
+  } else {
+    s->object = store->get_object(rgw_obj_key(std::to_string(http_ret) + error_doc));
+  }
 
   RGWOp* newop = &get_errpage_op;
   RGWRequest req(0);
-  return rgw_process_authenticated(handler, newop, &req, s, true);
+  return rgw_process_authenticated(handler, newop, &req, s, y, true);
 }
 
 int RGWSwiftWebsiteHandler::error_handler(const int err_no,
-                                          std::string* const error_content)
+                                          std::string* const error_content,
+					  optional_yield y)
 {
-  const auto& ws_conf = s->bucket_info.website_conf;
+  if (!s->bucket.get()) {
+    /* No bucket, default no-op handler */
+    return err_no;
+  }
+
+  const auto& ws_conf = s->bucket->get_info().website_conf;
 
   if (can_be_website_req() && ! ws_conf.error_doc.empty()) {
     set_req_state_err(s, err_no);
-    return serve_errordoc(s->err.http_ret, ws_conf.error_doc);
+    return serve_errordoc(s->err.http_ret, ws_conf.error_doc, y);
   }
 
   /* Let's go to the default, no-op handler. */
@@ -2396,14 +2406,14 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
 
 bool RGWSwiftWebsiteHandler::is_web_mode() const
 {
-  const boost::string_ref webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
+  const std::string_view webmode = s->info.env->get("HTTP_X_WEB_MODE", "");
   return boost::algorithm::iequals(webmode, "true");
 }
 
 bool RGWSwiftWebsiteHandler::can_be_website_req() const
 {
   /* Static website works only with the GET or HEAD method. Nothing more. */
-  static const std::set<boost::string_ref> ws_methods = { "GET", "HEAD" };
+  static const std::set<std::string_view> ws_methods = { "GET", "HEAD" };
   if (ws_methods.count(s->info.method) == 0) {
     return false;
   }
@@ -2433,11 +2443,11 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
       : location(location) {
     }
 
-    int verify_permission() override {
+    int verify_permission(optional_yield) override {
       return 0;
     }
 
-    void execute() override {
+    void execute(optional_yield) override {
       op_ret = -ERR_PERMANENT_REDIRECT;
       return;
     }
@@ -2461,11 +2471,11 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
 RGWOp* RGWSwiftWebsiteHandler::get_ws_index_op()
 {
   /* Retarget to get obj on requested index file. */
-  if (! s->object.empty()) {
-    s->object = s->object.name +
-                s->bucket_info.website_conf.get_index_doc();
+  if (! s->object->empty()) {
+    s->object->set_name(s->object->get_name() +
+                s->bucket->get_info().website_conf.get_index_doc());
   } else {
-    s->object = s->bucket_info.website_conf.get_index_doc();
+    s->object->set_name(s->bucket->get_info().website_conf.get_index_doc());
   }
 
   auto getop = new RGWGetObj_ObjStore_SWIFT;
@@ -2479,7 +2489,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
   class RGWWebsiteListing : public RGWListBucket_ObjStore_SWIFT {
     const std::string prefix_override;
 
-    int get_params() override {
+    int get_params(optional_yield) override {
       prefix = prefix_override;
       max = default_max;
       delimiter = "/";
@@ -2490,8 +2500,8 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
       dump_errno(s);
-      dump_container_metadata(s, bucket, bucket_quota,
-                              s->bucket_info.website_conf);
+      dump_container_metadata(s, s->bucket.get(), bucket_quota,
+                              s->bucket->get_info().website_conf);
       end_header(s, this, "text/html");
       if (op_ret < 0) {
         return;
@@ -2503,7 +2513,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       std::stringstream ss;
       RGWSwiftWebsiteListingFormatter htmler(ss, prefix);
 
-      const auto& ws_conf = s->bucket_info.website_conf;
+      const auto& ws_conf = s->bucket->get_info().website_conf;
       htmler.generate_header(s->decoded_uri,
                              ws_conf.listing_css_doc);
 
@@ -2535,15 +2545,15 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
     }
   };
 
-  std::string prefix = std::move(s->object.name);
-  s->object = rgw_obj_key();
+  std::string prefix = std::move(s->object->get_name());
+  s->object->set_key(rgw_obj_key());
 
   return new RGWWebsiteListing(std::move(prefix));
 }
 
 bool RGWSwiftWebsiteHandler::is_web_dir() const
 {
-  std::string subdir_name = url_decode(s->object.name);
+  std::string subdir_name = url_decode(s->object->get_name());
 
   /* Remove character from the subdir name if it is "/". */
   if (subdir_name.empty()) {
@@ -2552,15 +2562,15 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
     subdir_name.pop_back();
   }
 
-  rgw_obj obj(s->bucket, std::move(subdir_name));
+  rgw::sal::RGWRadosObject obj(store, rgw_obj_key(std::move(subdir_name)), s->bucket.get());
 
   /* First, get attrset of the object we'll try to retrieve. */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
-  obj_ctx.set_prefetch_data(obj);
+  obj.set_atomic(&obj_ctx);
+  obj.set_prefetch_data(&obj_ctx);
 
   RGWObjState* state = nullptr;
-  if (store->getRados()->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false, s->yield) < 0) {
+  if (obj.get_obj_state(s, &obj_ctx, *s->bucket, &state, s->yield, false)) {
     return false;
   }
 
@@ -2574,23 +2584,23 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   std::string content_type;
   get_contype_from_attrs(state->attrset, content_type);
 
-  const auto& ws_conf = s->bucket_info.website_conf;
+  const auto& ws_conf = s->bucket->get_info().website_conf;
   const std::string subdir_marker = ws_conf.subdir_marker.empty()
                                       ? "application/directory"
                                       : ws_conf.subdir_marker;
   return subdir_marker == content_type && state->size <= 1;
 }
 
-bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
+bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
-  rgw_obj obj(s->bucket, index);
+  rgw::sal::RGWRadosObject obj(store, rgw_obj_key(index), s->bucket.get());
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
-  obj_ctx.set_prefetch_data(obj);
+  obj.set_atomic(&obj_ctx);
+  obj.set_prefetch_data(&obj_ctx);
 
   RGWObjState* state = nullptr;
-  if (store->getRados()->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false, s->yield) < 0) {
+  if (obj.get_obj_state(s, &obj_ctx, *s->bucket, &state, s->yield, false)) {
     return false;
   }
 
@@ -2607,8 +2617,8 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
   /* In Swift static web content is served if the request is anonymous or
    * has X-Web-Mode HTTP header specified to true. */
   if (can_be_website_req()) {
-    const auto& ws_conf = s->bucket_info.website_conf;
-    const auto& index = s->bucket_info.website_conf.get_index_doc();
+    const auto& ws_conf = s->bucket->get_info().website_conf;
+    const auto& index = s->bucket->get_info().website_conf.get_index_doc();
 
     if (s->decoded_uri.back() != '/') {
       op_override = get_ws_redirect_op();
@@ -2641,8 +2651,8 @@ int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
   /* In Swift static web content is served if the request is anonymous or
    * has X-Web-Mode HTTP header specified to true. */
   if (can_be_website_req() && is_web_dir()) {
-    const auto& ws_conf = s->bucket_info.website_conf;
-    const auto& index = s->bucket_info.website_conf.get_index_doc();
+    const auto& ws_conf = s->bucket->get_info().website_conf;
+    const auto& index = s->bucket->get_info().website_conf.get_index_doc();
 
     if (s->decoded_uri.back() != '/') {
       op_override = get_ws_redirect_op();
@@ -2785,21 +2795,26 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
 }
 
 
-int RGWHandler_REST_SWIFT::authorize(const DoutPrefixProvider *dpp)
+int RGWHandler_REST_SWIFT::authorize(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return rgw::auth::Strategy::apply(dpp, auth_strategy, s);
+  return rgw::auth::Strategy::apply(dpp, auth_strategy, s, y);
 }
 
-int RGWHandler_REST_SWIFT::postauth_init()
+int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
 {
   struct req_init_state* t = &s->init_state;
 
   /* XXX Stub this until Swift Auth sets account into URL. */
-  s->bucket_tenant = s->user->user_id.tenant;
+  s->bucket_tenant = s->user->get_tenant();
   s->bucket_name = t->url_bucket;
 
-  dout(10) << "s->object=" <<
-    (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
+  if (!s->object) {
+    /* Need an object, even an empty one */
+    s->object = store->get_object(rgw_obj_key());
+  }
+
+  ldpp_dout(s, 10) << "s->object=" <<
+    (!s->object->empty() ? s->object->get_key() : rgw_obj_key("<NULL>"))
            << " s->bucket="
 	   << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name)
 	   << dendl;
@@ -2811,7 +2826,7 @@ int RGWHandler_REST_SWIFT::postauth_init()
   ret = validate_bucket_name(s->bucket_name);
   if (ret)
     return ret;
-  ret = validate_object_name(s->object.name);
+  ret = validate_object_name(s->object->get_name());
   if (ret)
     return ret;
 
@@ -2820,14 +2835,14 @@ int RGWHandler_REST_SWIFT::postauth_init()
      * We don't allow cross-tenant copy at present. It requires account
      * names in the URL for Swift.
      */
-    s->src_tenant_name = s->user->user_id.tenant;
+    s->src_tenant_name = s->user->get_tenant();
     s->src_bucket_name = t->src_bucket;
 
     ret = validate_bucket_name(s->src_bucket_name);
     if (ret < 0) {
       return ret;
     }
-    ret = validate_object_name(s->src_object.name);
+    ret = validate_object_name(s->src_object->get_name());
     if (ret < 0) {
       return ret;
     }
@@ -2892,7 +2907,8 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
-int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
+int RGWHandler_REST_SWIFT::init_from_header(rgw::sal::RGWRadosStore* store,
+					    struct req_state* const s,
                                             const std::string& frontend_prefix)
 {
   string req;
@@ -2913,7 +2929,7 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
   }
 
   s->info.args.set(p);
-  s->info.args.parse();
+  s->info.args.parse(s);
 
   /* Skip the leading slash of URL hierarchy. */
   if (req_name[0] != '/') {
@@ -2981,7 +2997,7 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
     /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
     const vector<string> skipped_prefixes = { "AUTH_", "KEY_" };
 
-    for (const auto pfx : skipped_prefixes) {
+    for (const auto& pfx : skipped_prefixes) {
       const size_t comp_len = min(account_name.length(), pfx.length());
       if (account_name.compare(0, comp_len, pfx) == 0) {
         /* Prefix is present. Drop it. */
@@ -3009,9 +3025,9 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state* const s,
   s->init_state.url_bucket = first;
 
   if (req.size()) {
-    s->object =
-      rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", "")); /* rgw swift extension */
-    s->info.effective_uri.append("/" + s->object.name);
+    s->object = store->get_object(
+      rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", ""))); /* rgw swift extension */
+    s->info.effective_uri.append("/" + s->object->get_name());
   }
 
   return 0;
@@ -3026,9 +3042,12 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
 
   std::string copy_source = s->info.env->get("HTTP_X_COPY_FROM", "");
   if (! copy_source.empty()) {
-    bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket,
-						  s->src_object);
+    rgw_obj_key key;
+    bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket, key, s);
     if (!result)
+      return -ERR_BAD_URL;
+    s->src_object = store->get_object(key);
+    if (!s->src_object)
       return -ERR_BAD_URL;
   }
 
@@ -3041,17 +3060,17 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
     rgw_obj_key dest_obj_key;
     bool result =
       RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name,
-				      dest_obj_key);
+				      dest_obj_key, s);
     if (!result)
        return -ERR_BAD_URL;
 
-    std::string dest_object = dest_obj_key.name;
+    std::string dest_object_name = dest_obj_key.name;
 
     /* convert COPY operation into PUT */
     t->src_bucket = t->url_bucket;
-    s->src_object = s->object;
+    s->src_object = s->object->clone();
     t->url_bucket = dest_bucket_name;
-    s->object = rgw_obj_key(dest_object);
+    s->object->set_name(dest_object_name);
     s->op = OP_PUT;
   }
 
@@ -3061,11 +3080,12 @@ int RGWHandler_REST_SWIFT::init(rgw::sal::RGWRadosStore* store, struct req_state
 }
 
 RGWHandler_REST*
-RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
+RGWRESTMgr_SWIFT::get_handler(rgw::sal::RGWRadosStore* store,
+			      struct req_state* const s,
                               const rgw::auth::StrategyRegistry& auth_registry,
                               const std::string& frontend_prefix)
 {
-  int ret = RGWHandler_REST_SWIFT::init_from_header(s, frontend_prefix);
+  int ret = RGWHandler_REST_SWIFT::init_from_header(store, s, frontend_prefix);
   if (ret < 0) {
     ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return nullptr;
@@ -3077,7 +3097,7 @@ RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
     return new RGWHandler_REST_Service_SWIFT(auth_strategy);
   }
 
-  if (s->object.empty()) {
+  if (rgw::sal::RGWObject::empty(s->object.get())) {
     return new RGWHandler_REST_Bucket_SWIFT(auth_strategy);
   }
 
@@ -3085,6 +3105,7 @@ RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
 }
 
 RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
+  rgw::sal::RGWRadosStore* store,
   struct req_state* const s,
   const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix)

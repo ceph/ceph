@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { ModuleStatusGuardService } from './module-status-guard.service';
 
 describe('ModuleStatusGuardService', () => {
@@ -39,19 +39,16 @@ describe('ModuleStatusGuardService', () => {
     expect(router.url).toBe(urlResult);
   };
 
-  configureTestBed(
-    {
-      imports: [RouterTestingModule.withRoutes(routes)],
-      providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
-      declarations: [FooComponent]
-    },
-    true
-  );
+  configureTestBed({
+    imports: [RouterTestingModule.withRoutes(routes)],
+    providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
+    declarations: [FooComponent]
+  });
 
   beforeEach(() => {
-    service = TestBed.get(ModuleStatusGuardService);
-    httpClient = TestBed.get(HttpClient);
-    router = TestBed.get(Router);
+    service = TestBed.inject(ModuleStatusGuardService);
+    httpClient = TestBed.inject(HttpClient);
+    router = TestBed.inject(Router);
     route = new ActivatedRouteSnapshot();
     route.url = [];
     route.data = {
@@ -60,7 +57,7 @@ describe('ModuleStatusGuardService', () => {
         redirectTo: '/foo'
       }
     };
-    ngZone = TestBed.get(NgZone);
+    ngZone = TestBed.inject(NgZone);
   });
 
   it('should be created', () => {
@@ -73,7 +70,7 @@ describe('ModuleStatusGuardService', () => {
   }));
 
   it('should test canActivateChild with status unavailable', fakeAsync(() => {
-    testCanActivate({ available: false, message: null }, false, '/foo/');
+    testCanActivate({ available: false, message: null }, false, '/foo');
   }));
 
   it('should test canActivateChild with status unavailable', fakeAsync(() => {

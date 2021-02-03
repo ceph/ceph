@@ -1,9 +1,9 @@
 import { NO_ERRORS_SCHEMA, SimpleChange } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
-import { FormatterService } from '../../services/formatter.service';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { SparklineComponent } from './sparkline.component';
 
 describe('SparklineComponent', () => {
@@ -13,7 +13,6 @@ describe('SparklineComponent', () => {
   configureTestBed({
     declarations: [SparklineComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    imports: [],
     providers: [DimlessBinaryPipe, FormatterService]
   });
 

@@ -1,75 +1,111 @@
-<tabset>
-  <tab i18n-heading
-       heading="OSDs List">
+<ul ngbNav
+    #nav="ngbNav"
+    class="nav-tabs">
+  <li ngbNavItem>
+    <a ngbNavLink
+       i18n>OSDs List</a>
+    <ng-template ngbNavContent>
+      <cd-table [data]="osds"
+                (fetchData)="getOsdList()"
+                [columns]="columns"
+                selectionType="multiClick"
+                [hasDetails]="true"
+                (setExpandedRow)="setExpandedRow($event)"
+                (updateSelection)="updateSelection($event)"
+                [updateSelectionOnRefresh]="'never'">
 
-    <cd-table [data]="osds"
-              (fetchData)="getOsdList()"
-              [columns]="columns"
-              selectionType="multi"
-              (updateSelection)="updateSelection($event)"
-              [updateSelectionOnRefresh]="'never'">
+        <div class="table-actions btn-toolbar">
+          <cd-table-actions [permission]="permissions.osd"
+                            [selection]="selection"
+                            class="btn-group"
+                            id="osd-actions"
+                            [tableActions]="tableActions">
+          </cd-table-actions>
+          <cd-table-actions [permission]="{read: true}"
+                            [selection]="selection"
+                            dropDownOnly="Cluster-wide configuration"
+                            btnColor="light"
+                            class="btn-group"
+                            id="cluster-wide-actions"
+                            [tableActions]="clusterWideActions">
+          </cd-table-actions>
+        </div>
 
-      <div class="table-actions btn-toolbar">
-        <cd-table-actions [permission]="permissions.osd"
-                          [selection]="selection"
-                          class="btn-group"
-                          id="osd-actions"
-                          [tableActions]="tableActions">
-        </cd-table-actions>
-        <cd-table-actions [permission]="{read: true}"
-                          [selection]="selection"
-                          dropDownOnly="Cluster-wide configuration"
-                          btnColor="light"
-                          class="btn-group"
-                          id="cluster-wide-actions"
-                          [tableActions]="clusterWideActions">
-        </cd-table-actions>
-      </div>
-
-      <cd-osd-details cdTableDetail
-                      [selection]="selection">
-      </cd-osd-details>
-    </cd-table>
-
-    <ng-template #statusColor
-                 let-value="value">
-      <span *ngFor="let state of value; last as last">
-        <span class="badge"
-              [ngClass]="{'badge-success': ['in', 'up'].includes(state), 'badge-danger': ['down', 'out'].includes(state)}">{{ state }}</span>
-        <span *ngIf="!last">&nbsp;</span>
-      </span>
+        <cd-osd-details cdTableDetail
+                        [selection]="expandedRow">
+        </cd-osd-details>
+      </cd-table>
     </ng-template>
+  </li>
 
-    <ng-template #osdUsageTpl
-                 let-row="row">
-      <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
-                    [usedBytes]="row.stats.stat_bytes_used">
-      </cd-usage-bar>
+  <li ngbNavItem
+      *ngIf="permissions.grafana.read">
+    <a ngbNavLink
+       i18n>Overall Performance</a>
+    <ng-template ngbNavContent>
+      <cd-grafana [grafanaPath]="'osd-overview?'"
+                  uid="lo02I1Aiz"
+                  grafanaStyle="four">
+      </cd-grafana>
     </ng-template>
-  </tab>
-  <tab i18n-heading
-       *ngIf="permissions.grafana.read"
-       heading="Overall Performance">
-    <cd-grafana [grafanaPath]="'osd-overview?'"
-                uid="lo02I1Aiz"
-                grafanaStyle="three">
-    </cd-grafana>
-  </tab>
-</tabset>
+  </li>
+</ul>
+
+<div [ngbNavOutlet]="nav"></div>
 
 <ng-template #markOsdConfirmationTpl
-             let-markActionDescription="markActionDescription">
-  <ng-container i18n><strong>OSD(s) {{  getSelectedIds() | list }}</strong> will be marked
-<strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
+             let-markActionDescription="markActionDescription"
+             let-osdIds="osdIds">
+  <ng-container i18n><strong>OSD(s) {{ osdIds | join }}</strong> will be marked
+  <strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
 
 <ng-template #criticalConfirmationTpl
-             let-safeToDestroyResult="result"
-             let-actionDescription="actionDescription">
-  <div *ngIf="!safeToDestroyResult['is_safe_to_destroy']"
+             let-safeToPerform="safeToPerform"
+             let-message="message"
+             let-actionDescription="actionDescription"
+             let-osdIds="osdIds">
+  <div *ngIf="!safeToPerform"
        class="danger">
-  <cd-warning-panel i18n>The {selection.hasSingleSelection, select, 1 {OSD is} 0 {OSDs are}} not safe to destroy!</cd-warning-panel>
+    <cd-alert-panel type="warning"
+                    i18n>The {selection.hasSingleSelection, select, true {OSD is} other {OSDs are}} not safe to be
+      {{ actionDescription }}! {{ message }}</cd-alert-panel>
   </div>
-  <ng-container i18n><strong>OSD {{ getSelectedIds() | list }}</strong> will be
-<strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+  <ng-container i18n><strong>OSD {{ osdIds | join }}</strong> will be
+  <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+</ng-template>
+
+<ng-template #flagsTpl
+             let-row="row">
+  <span *ngFor="let flag of row.cdClusterFlags;"
+        class="badge badge-hdd mr-1">{{ flag }}</span>
+  <span *ngFor="let flag of row.cdIndivFlags;"
+        class="badge badge-info mr-1">{{ flag }}</span>
+</ng-template>
+
+<ng-template #osdUsageTpl
+             let-row="row">
+  <cd-usage-bar [total]="row.stats.stat_bytes"
+                [used]="row.stats.stat_bytes_used">
+  </cd-usage-bar>
+</ng-template>
+
+<ng-template #deleteOsdExtraTpl
+             let-form="form">
+  <ng-container [formGroup]="form">
+    <ng-container formGroupName="child">
+      <div class="form-group">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox"
+                 class="custom-control-input"
+                 name="preserve"
+                 id="preserve"
+                 formControlName="preserve">
+          <label class="custom-control-label"
+                 for="preserve"
+                 i18n>Preserve OSD ID(s) for replacement.</label>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
 </ng-template>

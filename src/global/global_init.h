@@ -20,10 +20,9 @@
 #include <map>
 #include <boost/intrusive_ptr.hpp>
 #include "include/ceph_assert.h"
+#include "common/ceph_context.h"
 #include "common/code_environment.h"
 #include "common/common_init.h"
-
-class CephContext;
 
 /*
  * global_init is the first initialization function that
@@ -36,12 +35,7 @@ global_init(
   std::vector < const char* >& args,
   uint32_t module_type,
   code_environment_t code_env,
-  int flags,
-  const char *data_dir_option = 0,
-  bool run_pre_init = true);
-
-void intrusive_ptr_add_ref(CephContext* cct);
-void intrusive_ptr_release(CephContext* cct);
+  int flags, bool run_pre_init = true);
 
 // just the first half; enough to get config parsed but doesn't start up the
 // cct or log.
@@ -104,5 +98,4 @@ int global_init_preload_erasure_code(const CephContext *cct);
  * print daemon startup banner/warning
  */
 void global_print_banner(void);
-
 #endif

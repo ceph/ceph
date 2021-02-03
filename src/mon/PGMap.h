@@ -439,11 +439,12 @@ public:
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
   void get_rules_avail(const OSDMap& osdmap,
 		       std::map<int,int64_t> *avail_map) const;
-  void dump(ceph::Formatter *f) const; 
+  void dump(ceph::Formatter *f, bool with_net = true) const;
   void dump_basic(ceph::Formatter *f) const;
   void dump_pg_stats(ceph::Formatter *f, bool brief) const;
   void dump_pool_stats(ceph::Formatter *f) const;
-  void dump_osd_stats(ceph::Formatter *f) const;
+  void dump_osd_stats(ceph::Formatter *f, bool with_net = true) const;
+  void dump_osd_ping_times(ceph::Formatter *f) const;
   void dump_delta(ceph::Formatter *f) const;
   void dump_filtered_pg_stats(ceph::Formatter *f, std::set<pg_t>& pgs) const;
   void dump_pool_stats_full(const OSDMap &osd_map, std::stringstream *ss,
@@ -491,10 +492,12 @@ public:
   void get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
                              bool primary, std::set<pg_t>& pgs) const;
 
+  std::set<std::string> osd_parentage(const OSDMap& osdmap, int id) const;
   void get_health_checks(
     CephContext *cct,
     const OSDMap& osdmap,
     health_check_map_t *checks) const;
+  void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
   static void generate_test_instances(std::list<PGMap*>& o);
 };

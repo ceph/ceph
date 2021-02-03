@@ -1,14 +1,8 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-
-import { CephfsService } from '../../../shared/api/cephfs.service';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 
 @Component({
   selector: 'cd-cephfs-detail',
@@ -22,76 +16,57 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   activityTmpl: TemplateRef<any>;
 
   @Input()
-  selection: CdTableSelection;
+  data: {
+    standbys: string;
+    pools: any[];
+    ranks: any[];
+    mdsCounters: object;
+    name: string;
+  };
 
-  selectedItem: any;
-
-  id: number;
-  name: string;
-  ranks: any;
-  pools: any;
-  standbys = [];
-  clientCount: number;
-  mdsCounters = {};
-  grafanaId: any;
-  grafanaPermission: Permission;
+  columns: {
+    ranks: CdTableColumn[];
+    pools: CdTableColumn[];
+  };
+  standbys: any[] = [];
 
   objectValues = Object.values;
 
-  constructor(
-    private authStorageService: AuthStorageService,
-    private cephfsService: CephfsService,
-    private dimlessBinary: DimlessBinaryPipe,
-    private dimless: DimlessPipe,
-    private i18n: I18n
-  ) {
-    this.grafanaPermission = this.authStorageService.getPermissions().grafana;
-  }
+  constructor(private dimlessBinary: DimlessBinaryPipe, private dimless: DimlessPipe) {}
 
   ngOnChanges() {
-    if (this.selection.hasSelection) {
-      this.selectedItem = this.selection.first();
-      const mdsInfo: any[] = this.selectedItem.mdsmap.info;
-      const values = Object.values(mdsInfo);
-      this.grafanaId = values.length ? _.first(values).name : undefined;
+    this.setStandbys();
+  }
 
-      if (this.id !== this.selectedItem.id) {
-        this.id = this.selectedItem.id;
-        this.ranks.data = [];
-        this.pools.data = [];
-        this.standbys = [];
-        this.mdsCounters = {};
-        this.clientCount = 0;
+  private setStandbys() {
+    this.standbys = [
+      {
+        key: $localize`Standby daemons`,
+        value: this.data.standbys
       }
-
-      // Immediately refresh the displayed data, don't wait until the
-      // table refreshes the data itself.
-      this.refresh();
-    }
+    ];
   }
 
   ngOnInit() {
-    this.ranks = {
-      columns: [
-        { prop: 'rank', name: this.i18n('Rank') },
-        { prop: 'state', name: this.i18n('State') },
-        { prop: 'mds', name: this.i18n('Daemon') },
-        { prop: 'activity', name: this.i18n('Activity'), cellTemplate: this.activityTmpl },
-        { prop: 'dns', name: this.i18n('Dentries'), pipe: this.dimless },
-        { prop: 'inos', name: this.i18n('Inodes'), pipe: this.dimless }
+    this.columns = {
+      ranks: [
+        { prop: 'rank', name: $localize`Rank` },
+        { prop: 'state', name: $localize`State` },
+        { prop: 'mds', name: $localize`Daemon` },
+        { prop: 'activity', name: $localize`Activity`, cellTemplate: this.activityTmpl },
+        { prop: 'dns', name: $localize`Dentries`, pipe: this.dimless },
+        { prop: 'inos', name: $localize`Inodes`, pipe: this.dimless },
+        { prop: 'dirs', name: $localize`Dirs`, pipe: this.dimless },
+        { prop: 'caps', name: $localize`Caps`, pipe: this.dimless }
       ],
-      data: []
-    };
-
-    this.pools = {
-      columns: [
-        { prop: 'pool', name: this.i18n('Pool') },
-        { prop: 'type', name: this.i18n('Type') },
-        { prop: 'size', name: this.i18n('Size'), pipe: this.dimlessBinary },
+      pools: [
+        { prop: 'pool', name: $localize`Pool` },
+        { prop: 'type', name: $localize`Type` },
+        { prop: 'size', name: $localize`Size`, pipe: this.dimlessBinary },
         {
-          name: this.i18n('Usage'),
+          name: $localize`Usage`,
           cellTemplate: this.poolUsageTpl,
-          comparator: (_valueA, _valueB, rowA, rowB) => {
+          comparator: (_valueA: any, _valueB: any, rowA: any, rowB: any) => {
             const valA = rowA.used / rowA.avail;
             const valB = rowB.used / rowB.avail;
 
@@ -105,44 +80,12 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
               return -1;
             }
           }
-        }
-      ],
-      data: []
+        } as CdTableColumn
+      ]
     };
   }
 
-  refresh() {
-    this.cephfsService.getCephfs(this.id).subscribe((data: any) => {
-      this.ranks.data = data.cephfs.ranks;
-      this.pools.data = data.cephfs.pools;
-      this.pools.data.forEach((pool) => {
-        pool.size = pool.used + pool.avail;
-      });
-      this.standbys = [
-        {
-          key: this.i18n('Standby daemons'),
-          value: data.standbys.map((value) => value.name).join(', ')
-        }
-      ];
-      this.name = data.cephfs.name;
-      this.clientCount = data.cephfs.client_count;
-    });
-
-    this.cephfsService.getMdsCounters(this.id).subscribe((data) => {
-      _.each(this.mdsCounters, (_value, key) => {
-        if (data[key] === undefined) {
-          delete this.mdsCounters[key];
-        }
-      });
-
-      _.each(data, (mdsData: any, mdsName) => {
-        mdsData.name = mdsName;
-        this.mdsCounters[mdsName] = mdsData;
-      });
-    });
-  }
-
-  trackByFn(_index, item) {
+  trackByFn(_index: any, item: any) {
     return item.name;
   }
 }

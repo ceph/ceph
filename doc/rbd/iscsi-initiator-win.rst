@@ -4,7 +4,7 @@ iSCSI Initiator for Microsoft Windows
 
 **Prerequisite:**
 
--  Microsoft Windows Server 2016
+-  Microsoft Windows Server 2016 or later
 
 **iSCSI Initiator, Discovery and Setup:**
 

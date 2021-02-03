@@ -70,7 +70,7 @@ To make use of the debugging option in the module:
     [mgr]
         debug_mgr = 20  
 
-- Use this command ``ceph tell mgr.<mymonitor> influx self-test``.
+- Use this command ``ceph influx self-test``.
 - Check the log files. Users may find it easier to filter the log files using *mgr[influx]*.
 
 --------------------

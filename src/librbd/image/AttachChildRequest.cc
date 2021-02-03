@@ -46,8 +46,7 @@ void AttachChildRequest<I>::v1_add_child() {
   ldout(m_cct, 15) << dendl;
 
   librados::ObjectWriteOperation op;
-  cls_client::add_child(&op, {m_parent_image_ctx->md_ctx.get_id(),
-                              m_parent_image_ctx->md_ctx.get_namespace(),
+  cls_client::add_child(&op, {m_parent_image_ctx->md_ctx.get_id(), "",
                               m_parent_image_ctx->id,
                               m_parent_snap_id}, m_image_ctx->id);
 

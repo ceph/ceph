@@ -14,12 +14,9 @@
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
 #include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 #include "rgw_sync_trace.h"
 #include "rgw_mdlog.h"
-
-namespace rgw { namespace sal {
-  class RGWRadosStore;
-} }
 
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
@@ -239,7 +236,7 @@ public:
   int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status(rgw_meta_sync_status *sync_status);
   int init_sync_status();
-  int run_sync();
+  int run_sync(optional_yield y);
 
   void wakeup(int shard_id);
 
@@ -294,7 +291,7 @@ public:
     return master_log.read_master_log_shards_next(period, shard_markers, result);
   }
 
-  int run() { return master_log.run_sync(); }
+  int run(optional_yield y) { return master_log.run_sync(y); }
 
 
   // implements DoutPrefixProvider

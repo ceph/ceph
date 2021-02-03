@@ -30,19 +30,19 @@ public:
   }
 };
 
-int RGWSI_SysObj_Cache::do_start()
+int RGWSI_SysObj_Cache::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
   int r = asocket.start();
   if (r < 0) {
     return r;
   }
 
-  r = RGWSI_SysObj_Core::do_start();
+  r = RGWSI_SysObj_Core::do_start(y, dpp);
   if (r < 0) {
     return r;
   }
 
-  r = notify_svc->start();
+  r = notify_svc->start(y, dpp);
   if (r < 0) {
     return r;
   }
@@ -132,8 +132,9 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     flags |= CACHE_FLAG_OBJV;
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
-
-  if ((cache.get(name, info, flags, cache_info) == 0) &&
+  
+  int r = cache.get(name, info, flags, cache_info);
+  if (r == 0 &&
       (!refresh_version || !info.version.compare(&(*refresh_version)))) {
     if (info.status < 0)
       return info.status;
@@ -156,9 +157,11 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     }
     return obl->length();
   }
+  if(r == -ENODATA)
+    return -ENOENT;
 
   map<string, bufferlist> unfiltered_attrset;
-  int r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
+  r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
                          obj, obl, ofs, end,
 			 (attrs ? &unfiltered_attrset : nullptr),
 			 true, /* cache unfiltered attrs */
@@ -215,7 +218,8 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 
   uint32_t flags = CACHE_FLAG_XATTRS;
 
-  if (cache.get(name, info, flags, nullptr) == 0) {
+  int r = cache.get(name, info, flags, nullptr);
+  if (r == 0) {
     if (info.status < 0)
       return info.status;
 
@@ -226,6 +230,8 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 
     *dest = iter->second;
     return dest->length();
+  } else if (r == -ENODATA) {
+    return -ENOENT;
   }
   /* don't try to cache this one */
   return RGWSI_SysObj_Core::get_attr(obj, attr_name, dest, y);
@@ -247,13 +253,13 @@ int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
   }
   info.status = 0;
   info.flags = CACHE_FLAG_MODIFY_XATTRS;
-  if (objv_tracker) {
-    info.version = objv_tracker->write_version;
-    info.flags |= CACHE_FLAG_OBJV;
-  }
   int ret = RGWSI_SysObj_Core::set_attrs(obj, attrs, rmattrs, objv_tracker, y);
   string name = normal_name(pool, oid);
   if (ret >= 0) {
+    if (objv_tracker && objv_tracker->read_version.ver) {
+      info.version = objv_tracker->read_version;
+      info.flags |= CACHE_FLAG_OBJV;
+    }
     cache.put(name, info, NULL);
     int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
     if (r < 0)
@@ -282,10 +288,6 @@ int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
   info.status = 0;
   info.data = data;
   info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
-  if (objv_tracker) {
-    info.version = objv_tracker->write_version;
-    info.flags |= CACHE_FLAG_OBJV;
-  }
   ceph::real_time result_mtime;
   int ret = RGWSI_SysObj_Core::write(obj, &result_mtime, attrs,
                                      exclusive, data,
@@ -293,23 +295,18 @@ int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
   if (pmtime) {
     *pmtime = result_mtime;
   }
+  if (objv_tracker && objv_tracker->read_version.ver) {
+    info.version = objv_tracker->read_version;
+    info.flags |= CACHE_FLAG_OBJV;
+  }
   info.meta.mtime = result_mtime;
   info.meta.size = data.length();
   string name = normal_name(pool, oid);
   if (ret >= 0) {
     cache.put(name, info, NULL);
-    // Only distribute the cache information if we did not just create
-    // the object with the exclusive flag. Note: PUT_OBJ_EXCL implies
-    // PUT_OBJ_CREATE. Generally speaking, when successfully creating
-    // a system object with the exclusive flag it is not necessary to
-    // call distribute_cache, as a) it's unclear whether other RGWs
-    // will need that system object in the near-term and b) it
-    // generates additional network traffic.
-    if (!exclusive) {
-      int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
-      if (r < 0)
-	ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
-    }
+    int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
+    if (r < 0)
+      ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
     cache.remove(name);
   }
@@ -333,13 +330,13 @@ int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
   info.status = 0;
   info.flags = CACHE_FLAG_DATA;
 
-  if (objv_tracker) {
-    info.version = objv_tracker->write_version;
-    info.flags |= CACHE_FLAG_OBJV;
-  }
   int ret = RGWSI_SysObj_Core::write_data(obj, data, exclusive, objv_tracker, y);
   string name = normal_name(pool, oid);
   if (ret >= 0) {
+    if (objv_tracker && objv_tracker->read_version.ver) {
+      info.version = objv_tracker->read_version;
+      info.flags |= CACHE_FLAG_OBJV;
+    }
     cache.put(name, info, NULL);
     int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
     if (r < 0)
@@ -381,6 +378,9 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
     if (objv_tracker)
       objv_tracker->read_version = info.version;
     goto done;
+  }
+  if (r == -ENODATA) {
+    return -ENOENT;
   }
   r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &info.xattrs,
                                   first_chunk, objv_tracker, y);
@@ -499,18 +499,14 @@ static void cache_list_dump_helper(Formatter* f,
 class RGWSI_SysObj_Cache_ASocketHook : public AdminSocketHook {
   RGWSI_SysObj_Cache *svc;
 
-  static constexpr const char* admin_commands[4][3] = {
-    { "cache list",
-      "cache list name=filter,type=CephString,req=false",
+  static constexpr std::string_view admin_commands[][2] = {
+    { "cache list name=filter,type=CephString,req=false",
       "cache list [filter_str]: list object cache, possibly matching substrings" },
-    { "cache inspect",
-      "cache inspect name=target,type=CephString,req=true",
+    { "cache inspect name=target,type=CephString,req=true",
       "cache inspect target: print cache element" },
-    { "cache erase",
-      "cache erase name=target,type=CephString,req=true",
+    { "cache erase name=target,type=CephString,req=true",
       "cache erase target: erase element from cache" },
     { "cache zap",
-      "cache zap",
       "cache zap: erase all elements from cache" }
   };
 
@@ -520,16 +516,17 @@ public:
     int start();
     void shutdown();
 
-    bool call(std::string_view command, const cmdmap_t& cmdmap,
-              std::string_view format, bufferlist& out) override;
+    int call(std::string_view command, const cmdmap_t& cmdmap,
+	     Formatter *f,
+	     std::ostream& ss,
+	     bufferlist& out) override;
 };
 
 int RGWSI_SysObj_Cache_ASocketHook::start()
 {
   auto admin_socket = svc->ctx()->get_admin_socket();
   for (auto cmd : admin_commands) {
-    int r = admin_socket->register_command(cmd[0], cmd[1], this,
-                                           cmd[2]);
+    int r = admin_socket->register_command(cmd[0], this, cmd[1]);
     if (r < 0) {
       ldout(svc->ctx(), 0) << "ERROR: fail to register admin socket command (r=" << r
                            << ")" << dendl;
@@ -545,53 +542,42 @@ void RGWSI_SysObj_Cache_ASocketHook::shutdown()
   admin_socket->unregister_commands(this);
 }
 
-bool RGWSI_SysObj_Cache_ASocketHook::call(std::string_view command, const cmdmap_t& cmdmap,
-                                          std::string_view format, bufferlist& out)
+int RGWSI_SysObj_Cache_ASocketHook::call(
+  std::string_view command, const cmdmap_t& cmdmap,
+  Formatter *f,
+  std::ostream& ss,
+  bufferlist& out)
 {
   if (command == "cache list"sv) {
     std::optional<std::string> filter;
     if (auto i = cmdmap.find("filter"); i != cmdmap.cend()) {
       filter = boost::get<std::string>(i->second);
     }
-    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "table"));
-    if (f) {
-      f->open_array_section("cache_entries");
-      svc->asocket.call_list(filter, f.get());
-      f->close_section();
-      f->flush(out);
-      return true;
-    } else {
-      out.append("Unable to create Formatter.\n");
-      return false;
-    }
+    f->open_array_section("cache_entries");
+    svc->asocket.call_list(filter, f);
+    f->close_section();
+    return 0;
   } else if (command == "cache inspect"sv) {
-    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "json-pretty"));
-    if (f) {
-      const auto& target = boost::get<std::string>(cmdmap.at("target"));
-      if (svc->asocket.call_inspect(target, f.get())) {
-        f->flush(out);
-        return true;
-      } else {
-        out.append("Unable to find entry "s + target + ".\n");
-        return false;
-      }
+    const auto& target = boost::get<std::string>(cmdmap.at("target"));
+    if (svc->asocket.call_inspect(target, f)) {
+      return 0;
     } else {
-      out.append("Unable to create Formatter.\n");
-      return false;
+      ss << "Unable to find entry "s + target + ".\n";
+      return -ENOENT;
     }
   } else if (command == "cache erase"sv) {
     const auto& target = boost::get<std::string>(cmdmap.at("target"));
     if (svc->asocket.call_erase(target)) {
-      return true;
+      return 0;
     } else {
-      out.append("Unable to find entry "s + target + ".\n");
-      return false;
+      ss << "Unable to find entry "s + target + ".\n";
+      return -ENOENT;
     }
   } else if (command == "cache zap"sv) {
     svc->asocket.call_zap();
-    return true;
+    return 0;
   }
-  return false;
+  return -ENOSYS;
 }
 
 RGWSI_SysObj_Cache::ASocketHandler::ASocketHandler(RGWSI_SysObj_Cache *_svc) : svc(_svc)

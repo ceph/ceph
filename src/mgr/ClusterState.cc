@@ -62,6 +62,7 @@ void ClusterState::set_service_map(ServiceMap const &new_service_map)
 
 void ClusterState::load_digest(MMgrDigest *m)
 {
+  std::lock_guard l(lock);
   health_json = std::move(m->health_json);
   mon_status_json = std::move(m->mon_status_json);
 }
@@ -71,7 +72,17 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
   std::lock_guard l(lock);
 
   const int from = stats->get_orig_source().num();
-  pending_inc.update_stat(from, std::move(stats->osd_stat));
+  bool is_in = with_osdmap([from](const OSDMap& osdmap) {
+    return osdmap.is_in(from);
+  });
+
+  if (is_in) {
+    pending_inc.update_stat(from, std::move(stats->osd_stat));
+  } else {
+    osd_stat_t empty_stat;
+    empty_stat.seq = stats->osd_stat.seq;
+    pending_inc.update_stat(from, std::move(empty_stat));  
+  }
 
   for (auto p : stats->pg_stat) {
     pg_t pgid = p.first;
@@ -181,17 +192,19 @@ class ClusterSocketHook : public AdminSocketHook {
   ClusterState *cluster_state;
 public:
   explicit ClusterSocketHook(ClusterState *o) : cluster_state(o) {}
-  bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
-    stringstream ss;
-    bool r = true;
+  int call(std::string_view admin_command, const cmdmap_t& cmdmap,
+	   Formatter *f,
+	   std::ostream& errss,
+	   bufferlist& out) override {
+    stringstream outss;
+    int r = 0;
     try {
-      r = cluster_state->asok_command(admin_command, cmdmap, format, ss);
-    } catch (const bad_cmd_get& e) {
-      ss << e.what();
-      r = true;
+      r = cluster_state->asok_command(admin_command, cmdmap, f, outss);
+      out.append(outss);
+    } catch (const TOPNSPC::common::bad_cmd_get& e) {
+      errss << e.what();
+      r = -EINVAL;
     }
-    out.append(ss);
     return r;
   }
 };
@@ -200,9 +213,9 @@ void ClusterState::final_init()
 {
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   asok_hook = new ClusterSocketHook(this);
-  int r = admin_socket->register_command("dump_osd_network",
-		      "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
-		      "Dump osd heartbeat network ping times");
+  int r = admin_socket->register_command(
+    "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
+    "Dump osd heartbeat network ping times");
   ceph_assert(r == 0);
 }
 
@@ -214,15 +227,17 @@ void ClusterState::shutdown()
   asok_hook = NULL;
 }
 
-bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
-		       std::string_view format, ostream& ss)
+bool ClusterState::asok_command(
+  std::string_view admin_command,
+  const cmdmap_t& cmdmap,
+  Formatter *f,
+  ostream& ss)
 {
   std::lock_guard l(lock);
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (admin_command == "dump_osd_network") {
     int64_t value = 0;
     // Default to health warning level if nothing specified
-    if (!(cmd_getval(g_ceph_context, cmdmap, "value", value))) {
+    if (!(TOPNSPC::common::cmd_getval(cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
       value = static_cast<int64_t>(g_ceph_context->_conf.get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {
@@ -365,7 +380,5 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
   } else {
     ceph_abort_msg("broken asok registration");
   }
-  f->flush(ss);
-  delete f;
   return true;
 }

@@ -73,10 +73,21 @@ struct MInfoRec : boost::statechart::event< MInfoRec > {
   pg_shard_t from;
   pg_info_t info;
   epoch_t msg_epoch;
-  MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch) :
-    from(from), info(info), msg_epoch(msg_epoch) {}
+  std::optional<pg_lease_t> lease;
+  std::optional<pg_lease_ack_t> lease_ack;
+  MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch,
+	   std::optional<pg_lease_t> l = {},
+	   std::optional<pg_lease_ack_t> la = {})
+    : from(from), info(info), msg_epoch(msg_epoch),
+      lease(l), lease_ack(la) {}
   void print(std::ostream *out) const {
     *out << "MInfoRec from " << from << " info: " << info;
+    if (lease) {
+      *out << " " << *lease;
+    }
+    if (lease_ack) {
+      *out << " " << *lease_ack;
+    }
   }
 };
 
@@ -84,9 +95,7 @@ struct MLogRec : boost::statechart::event< MLogRec > {
   pg_shard_t from;
   boost::intrusive_ptr<MOSDPGLog> msg;
   MLogRec(pg_shard_t from, MOSDPGLog *msg);
-  void print(std::ostream *out) const {
-    *out << "MLogRec from " << from;
-  }
+  void print(std::ostream *out) const;
 };
 
 struct MNotifyRec : boost::statechart::event< MNotifyRec > {
@@ -126,6 +135,29 @@ struct MTrim : boost::statechart::event<MTrim> {
   void print(std::ostream *out) const {
     *out << "MTrim epoch " << epoch << " from " << from << " shard " << shard
 	 << " trim_to " << trim_to;
+  }
+};
+
+struct MLease : boost::statechart::event<MLease> {
+  epoch_t epoch;
+  int from;
+  pg_lease_t lease;
+  MLease(epoch_t epoch, int from, pg_lease_t l)
+    : epoch(epoch), from(from), lease(l) {}
+  void print(std::ostream *out) const {
+    *out << "MLease epoch " << epoch << " from osd." << from << " " << lease;
+  }
+};
+
+struct MLeaseAck : boost::statechart::event<MLeaseAck> {
+  epoch_t epoch;
+  int from;
+  pg_lease_ack_t lease_ack;
+  MLeaseAck(epoch_t epoch, int from, pg_lease_ack_t l)
+    : epoch(epoch), from(from), lease_ack(l) {}
+  void print(std::ostream *out) const {
+    *out << "MLeaseAck epoch " << epoch << " from osd." << from
+	 << " " << lease_ack;
   }
 };
 
@@ -184,3 +216,5 @@ struct DeferBackfill : boost::statechart::event<DeferBackfill> {
     *out << "DeferBackfill: delay " << delay;
   }
 };
+
+TrivialEvent(RenewLease)

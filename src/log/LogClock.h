@@ -12,6 +12,10 @@
 #include "include/ceph_assert.h"
 #include "common/ceph_time.h"
 
+#ifndef suseconds_t
+typedef long suseconds_t;
+#endif
+
 namespace ceph {
 namespace logging {
 namespace _logclock {
@@ -108,9 +112,15 @@ public:
   static timeval to_timeval(time_point t) {
     auto rep = t.time_since_epoch().count();
     timespan ts(rep.count);
+    #ifndef _WIN32
     return { static_cast<time_t>(std::chrono::duration_cast<std::chrono::seconds>(ts).count()),
              static_cast<suseconds_t>(std::chrono::duration_cast<std::chrono::microseconds>(
                ts % std::chrono::seconds(1)).count()) };
+    #else
+    return { static_cast<long>(std::chrono::duration_cast<std::chrono::seconds>(ts).count()),
+             static_cast<long>(std::chrono::duration_cast<std::chrono::microseconds>(
+               ts % std::chrono::seconds(1)).count()) };
+    #endif
   }
 private:
   static time_point coarse_now() {
@@ -130,7 +140,8 @@ inline int append_time(const log_time& t, char *out, int outlen) {
   bool coarse = t.time_since_epoch().count().coarse;
   auto tv = log_clock::to_timeval(t);
   std::tm bdt;
-  localtime_r(&tv.tv_sec, &bdt);
+  time_t t_sec = tv.tv_sec;
+  localtime_r(&t_sec, &bdt);
   char tz[32] = { 0 };
   strftime(tz, sizeof(tz), "%z", &bdt);
 

@@ -68,7 +68,7 @@ public:
 };
 
 // notify
-static sem_t *sem;
+static sem_t sem;
 
 class WatchNotifyTestCtx : public WatchCtx
 {
@@ -76,12 +76,12 @@ public:
   void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) override
   {
     std::cout << __func__ << std::endl;
-    sem_post(sem);
+    sem_post(&sem);
   }
 };
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -94,15 +94,23 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
   ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
   ASSERT_EQ(1u, watches.size());
   bufferlist bl2;
-  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  for (unsigned i=0; i<10; ++i) {
+    int r = ioctx.notify("foo", 0, bl2);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   ioctx.unwatch("foo", handle);
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -115,17 +123,25 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
   ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
   ASSERT_EQ(1u, watches.size());
   bufferlist bl2;
-  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  for (unsigned i=0; i<10; ++i) {
+    int r = ioctx.notify("foo", 0, bl2);
+    if (r == 0) {
+      break;
+    }
+    if (!getenv("ALLOW_TIMEOUTS")) {
+      ASSERT_EQ(0, r);
+    }
+  }
   TestAlarm alarm;
-  sem_wait(sem);
+  sem_wait(&sem);
   ioctx.unwatch("foo", handle);
-  sem_close(sem);
+  sem_destroy(&sem);
 }
 
 // --
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;
@@ -137,12 +153,12 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  sem_close(sem);
+  sem_destroy(&sem);
   ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
 TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
-  ASSERT_NE(SEM_FAILED, (sem = sem_open("/test_watch_notify_sem", O_CREAT, 0644, 0)));
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
   WatchNotifyTestCtx ctx;
@@ -154,7 +170,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
   ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
 
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  sem_close(sem);
+  sem_destroy(&sem);
   ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
@@ -260,17 +276,15 @@ TEST_P(LibRadosWatchNotifyPP, AioNotify) {
   ASSERT_EQ(0, comp->wait_for_complete());
   ASSERT_EQ(0, comp->get_return_value());
   comp->release();
-  auto p = bl_reply.cbegin();
-  std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
-  std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  decode(reply_map, p);
-  decode(missed_map, p);
+  std::vector<librados::notify_ack_t> acks;
+  std::vector<librados::notify_timeout_t> timeouts;
+  ioctx.decode_notify_response(bl_reply, &acks, &timeouts);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1u, notify_cookies.count(handle));
-  ASSERT_EQ(1u, reply_map.size());
-  ASSERT_EQ(5u, reply_map.begin()->second.length());
-  ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
-  ASSERT_EQ(0u, missed_map.size());
+  ASSERT_EQ(1u, acks.size());
+  ASSERT_EQ(5u, acks[0].payload_bl.length());
+  ASSERT_EQ(0, strncmp("reply", acks[0].payload_bl.c_str(), acks[0].payload_bl.length()));
+  ASSERT_EQ(0u, timeouts.size());
   ASSERT_GT(ioctx.watch_check(handle), 0);
   ioctx.unwatch2(handle);
   cluster.watch_flush();

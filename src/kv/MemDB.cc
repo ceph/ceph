@@ -10,6 +10,13 @@
 #include <map>
 #include <string>
 #include <memory>
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -36,6 +43,16 @@
 #define dtrace dout(30)
 #define dwarn dout(0)
 #define dinfo dout(0)
+
+using std::cerr;
+using std::ostream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
 
 static void split_key(const string& raw_key, string *prefix, string *key)
 {
@@ -121,8 +138,8 @@ int MemDB::_load()
     string key;
     bufferptr datap;
 
-    bytes_done += ::decode_file(fd, key);
-    bytes_done += ::decode_file(fd, datap);
+    bytes_done += ceph::decode_file(fd, key);
+    bytes_done += ceph::decode_file(fd, datap);
 
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_map[key] = datap;
@@ -134,17 +151,18 @@ int MemDB::_load()
 
 int MemDB::_init(bool create)
 {
-  int r;
+  int r = 0;
   dout(1) << __func__ << dendl;
   if (create) {
-    r = ::mkdir(m_db_path.c_str(), 0700);
-    if (r < 0) {
-      r = -errno;
-      if (r != -EEXIST) {
-	derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
-	return r;
-      }
+    if (fs::exists(m_db_path)) {
       r = 0; // ignore EEXIST
+    } else {
+      std::error_code ec;
+      if (!fs::create_directory(m_db_path, ec)) {
+	derr << __func__ << " mkdir failed: " << ec.message() << dendl;
+	return -ec.value();
+      }
+      fs::permissions(m_db_path, fs::perms::owner_all);
     }
   } else {
     r = _load();
@@ -177,14 +195,14 @@ int MemDB::do_open(ostream &out, bool create)
   return _init(create);
 }
 
-int MemDB::open(ostream &out, const vector<ColumnFamily>& cfs) {
+int MemDB::open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
   return do_open(out, false);
 }
 
-int MemDB::create_and_open(ostream &out, const vector<ColumnFamily>& cfs) {
+int MemDB::create_and_open(ostream &out, const std::string& cfs) {
   if (!cfs.empty()) {
     ceph_abort_msg("Not implemented");
   }
@@ -516,11 +534,11 @@ string MemDB::MDBWholeSpaceIteratorImpl::key()
   return key;
 }
 
-pair<string,string> MemDB::MDBWholeSpaceIteratorImpl::raw_key()
+std::pair<string,string> MemDB::MDBWholeSpaceIteratorImpl::raw_key()
 {
   string prefix, key;
   split_key(m_key_value.first, &prefix, &key);
-  return make_pair(prefix, key);
+  return { prefix, key };
 }
 
 bool MemDB::MDBWholeSpaceIteratorImpl::raw_key_is_prefixed(

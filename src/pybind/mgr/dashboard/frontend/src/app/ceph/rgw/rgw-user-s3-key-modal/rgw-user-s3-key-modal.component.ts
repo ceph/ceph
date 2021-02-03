@@ -1,14 +1,13 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 
-import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
-import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 
 @Component({
@@ -31,11 +30,10 @@ export class RgwUserS3KeyModalComponent {
 
   constructor(
     private formBuilder: CdFormBuilder,
-    public bsModalRef: BsModalRef,
-    private i18n: I18n,
+    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n
   ) {
-    this.resource = this.i18n('S3 Key');
+    this.resource = $localize`S3 Key`;
     this.createForm();
   }
 
@@ -81,6 +79,6 @@ export class RgwUserS3KeyModalComponent {
   onSubmit() {
     const key: RgwUserS3Key = this.formGroup.value;
     this.submitAction.emit(key);
-    this.bsModalRef.hide();
+    this.activeModal.close();
   }
 }

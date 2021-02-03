@@ -5,17 +5,17 @@
  * Crypto filters for Put/Post/Get operations.
  */
 
+#include <string_view>
+
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_crypt.h>
 #include <auth/Crypto.h>
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
 #include "include/ceph_assert.h"
-#include <boost/utility/string_view.hpp>
-#include <rgw/rgw_keystone.h>
-#include "include/str_map.h"
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
+#include "rgw/rgw_kms.h"
 
 #include <openssl/evp.h>
 
@@ -148,7 +148,7 @@ public:
   explicit AES_256_CBC(CephContext* cct): cct(cct) {
   }
   ~AES_256_CBC() {
-    memset(key, 0, AES_256_KEYSIZE);
+    ::ceph::crypto::zeroize_for_security(key, AES_256_KEYSIZE);
   }
   bool set_key(const uint8_t* _key, size_t key_size) {
     if (key_size != AES_256_KEYSIZE) {
@@ -473,7 +473,7 @@ int RGWGetObj_BlockDecrypt::process(bufferlist& in, size_t part_ofs, size_t size
 
 int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
   ldout(cct, 25) << "Decrypt " << bl_len << " bytes" << dendl;
-  bl.copy(bl_ofs, bl_len, cache);
+  bl.begin(bl_ofs).copy(bl_len, cache);
 
   int res = 0;
   size_t part_ofs = ofs;
@@ -578,122 +578,9 @@ std::string create_random_key_selector(CephContext * const cct) {
   return std::string(random, sizeof(random));
 }
 
-static int get_barbican_url(CephContext * const cct,
-                     std::string& url)
-{
-  url = cct->_conf->rgw_barbican_url;
-  if (url.empty()) {
-    ldout(cct, 0) << "ERROR: conf rgw_barbican_url is not set" << dendl;
-    return -EINVAL;
-  }
-
-  if (url.back() != '/') {
-    url.append("/");
-  }
-
-  return 0;
-}
-
-static int request_key_from_barbican(CephContext *cct,
-                              boost::string_view key_id,
-                              boost::string_view key_selector,
-                              const std::string& barbican_token,
-                              std::string& actual_key) {
-  std::string secret_url;
-  int res;
-  res = get_barbican_url(cct, secret_url);
-  if (res < 0) {
-     return res;
-  }
-  secret_url += "v1/secrets/" + std::string(key_id);
-
-  bufferlist secret_bl;
-  RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
-  secret_req.append_header("Accept", "application/octet-stream");
-  secret_req.append_header("X-Auth-Token", barbican_token);
-
-  res = secret_req.process(null_yield);
-  if (res < 0) {
-    return res;
-  }
-  if (secret_req.get_http_status() ==
-      RGWHTTPTransceiver::HTTP_STATUS_UNAUTHORIZED) {
-    return -EACCES;
-  }
-
-  if (secret_req.get_http_status() >=200 &&
-      secret_req.get_http_status() < 300 &&
-      secret_bl.length() == AES_256_KEYSIZE) {
-    actual_key.assign(secret_bl.c_str(), secret_bl.length());
-    memset(secret_bl.c_str(), 0, secret_bl.length());
-    } else {
-      res = -EACCES;
-    }
-  return res;
-}
-
-static map<string,string> get_str_map(const string &str) {
-  map<string,string> m;
-  get_str_map(str, &m, ";, \t");
-  return m;
-}
-
-static int get_actual_key_from_kms(CephContext *cct,
-                            boost::string_view key_id,
-                            boost::string_view key_selector,
-                            std::string& actual_key)
-{
-  int res = 0;
-  ldout(cct, 20) << "Getting KMS encryption key for key=" << key_id << dendl;
-  static map<string,string> str_map = get_str_map(
-      cct->_conf->rgw_crypt_s3_kms_encryption_keys);
-
-  map<string, string>::iterator it = str_map.find(std::string(key_id));
-  if (it != str_map.end() ) {
-    std::string master_key;
-    try {
-      master_key = from_base64((*it).second);
-    } catch (...) {
-      ldout(cct, 5) << "ERROR: get_actual_key_from_kms invalid encryption key id "
-                    << "which contains character that is not base64 encoded."
-                    << dendl;
-      return -EINVAL;
-    }
-
-    if (master_key.length() == AES_256_KEYSIZE) {
-      uint8_t _actual_key[AES_256_KEYSIZE];
-      if (AES_256_ECB_encrypt(cct,
-          reinterpret_cast<const uint8_t*>(master_key.c_str()), AES_256_KEYSIZE,
-          reinterpret_cast<const uint8_t*>(key_selector.data()),
-          _actual_key, AES_256_KEYSIZE)) {
-        actual_key = std::string((char*)&_actual_key[0], AES_256_KEYSIZE);
-      } else {
-        res = -EIO;
-      }
-      memset(_actual_key, 0, sizeof(_actual_key));
-    } else {
-      ldout(cct, 20) << "Wrong size for key=" << key_id << dendl;
-      res = -EIO;
-    }
-  } else {
-    std::string token;
-    if (rgw::keystone::Service::get_keystone_barbican_token(cct, token) < 0) {
-      ldout(cct, 5) << "Failed to retrieve token for barbican" << dendl;
-      res = -EINVAL;
-      return res;
-    }
-
-    res = request_key_from_barbican(cct, key_id, key_selector, token, actual_key);
-    if (res != 0) {
-      ldout(cct, 5) << "Failed to retrieve secret from barbican:" << key_id << dendl;
-    }
-  }
-  return res;
-}
-
 static inline void set_attr(map<string, bufferlist>& attrs,
                             const char* key,
-                            boost::string_view value)
+                            std::string_view value)
 {
   bufferlist bl;
   bl.append(value.data(), value.size());
@@ -732,7 +619,7 @@ static const crypt_option_names crypt_options[] = {
     {"HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID",      "x-amz-server-side-encryption-aws-kms-key-id"},
 };
 
-static boost::string_view get_crypt_attribute(
+static std::string_view get_crypt_attribute(
     const RGWEnv* env,
     std::map<std::string,
              RGWPostObj_ObjStore::post_form_part,
@@ -746,16 +633,16 @@ static boost::string_view get_crypt_attribute(
     auto iter
       = parts->find(crypt_options[option].post_part_name);
     if (iter == parts->end())
-      return boost::string_view();
+      return std::string_view();
     bufferlist& data = iter->second.data;
-    boost::string_view str = boost::string_view(data.c_str(), data.length());
+    std::string_view str = std::string_view(data.c_str(), data.length());
     return rgw_trim_whitespace(str);
   } else {
     const char* hdr = env->get(crypt_options[option].http_header_name, nullptr);
     if (hdr != nullptr) {
-      return boost::string_view(hdr);
+      return std::string_view(hdr);
     } else {
-      return boost::string_view();
+      return std::string_view();
     }
   }
 }
@@ -772,7 +659,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
   int res = 0;
   crypt_http_responses.clear();
   {
-    boost::string_view req_sse_ca =
+    std::string_view req_sse_ca =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
     if (! req_sse_ca.empty()) {
       if (req_sse_ca != "AES256") {
@@ -808,7 +695,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -EINVAL;
       }
 
-      boost::string_view keymd5 =
+      std::string_view keymd5 =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5);
 
       std::string keymd5_bin;
@@ -851,10 +738,10 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
 
       crypt_http_responses["x-amz-server-side-encryption-customer-algorithm"] = "AES256";
-      crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] = keymd5.to_string();
+      crypt_http_responses["x-amz-server-side-encryption-customer-key-MD5"] = std::string(keymd5);
       return 0;
     } else {
-      boost::string_view customer_key =
+      std::string_view customer_key =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY);
       if (!customer_key.empty()) {
         ldout(s->cct, 5) << "ERROR: SSE-C encryption request is missing the header "
@@ -865,7 +752,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -EINVAL;
       }
 
-      boost::string_view customer_key_md5 =
+      std::string_view customer_key_md5 =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5);
       if (!customer_key_md5.empty()) {
         ldout(s->cct, 5) << "ERROR: SSE-C encryption request is missing the header "
@@ -878,7 +765,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
     }
 
     /* AMAZON server side encryption with KMS (key management service) */
-    boost::string_view req_sse =
+    std::string_view req_sse =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
 
@@ -889,7 +776,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
 
       if (req_sse == "aws:kms") {
-	boost::string_view key_id =
+	std::string_view key_id =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
 	if (key_id.empty()) {
 	  ldout(s->cct, 5) << "ERROR: not provide a valid key id" << dendl;
@@ -903,7 +790,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 	res = get_actual_key_from_kms(s->cct, key_id, key_selector, actual_key);
 	if (res != 0) {
 	  ldout(s->cct, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
-	  s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id.to_string();
+	  s->err.message = "Failed to retrieve the actual key, kms-keyid: " + std::string(key_id);
 	  return res;
 	}
 	if (actual_key.size() != AES_256_KEYSIZE) {
@@ -924,7 +811,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 	actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
 
 	crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
-	crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = key_id.to_string();
+	crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = std::string(key_id);
 	return 0;
       } else if (req_sse == "AES256") {
 	/* if a default encryption key was provided, we will use it for SSE-S3 */
@@ -937,7 +824,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
     } else {
       /* x-amz-server-side-encryption not present or empty */
-      boost::string_view key_id =
+      std::string_view key_id =
 	get_crypt_attribute(s->info.env, parts,
 			    X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
       if (!key_id.empty()) {
@@ -979,7 +866,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
                               reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()), AES_256_KEYSIZE,
                               reinterpret_cast<const uint8_t*>(key_selector.c_str()),
                               actual_key, AES_256_KEYSIZE) != true) {
-        memset(actual_key, 0, sizeof(actual_key));
+        ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
         return -EIO;
       }
       if (block_crypt) {
@@ -987,7 +874,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         aes->set_key(reinterpret_cast<const uint8_t*>(actual_key), AES_256_KEYSIZE);
         *block_crypt = std::move(aes);
       }
-      memset(actual_key, 0, sizeof(actual_key));
+      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return 0;
     }
   }
@@ -1152,12 +1039,12 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
                             AES_256_KEYSIZE,
                             reinterpret_cast<const uint8_t*>(attr_key_selector.c_str()),
                             actual_key, AES_256_KEYSIZE) != true) {
-      memset(actual_key, 0, sizeof(actual_key));
+      ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return -EIO;
     }
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
     aes->set_key(actual_key, AES_256_KEYSIZE);
-    memset(actual_key, 0, sizeof(actual_key));
+    ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
     if (block_crypt) *block_crypt = std::move(aes);
     return 0;
   }

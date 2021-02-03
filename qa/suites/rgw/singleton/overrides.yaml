@@ -3,4 +3,6 @@ overrides:
     wait-for-scrub: false
     conf:
       client:
+        setuser: ceph
+        setgroup: ceph
         debug rgw: 20

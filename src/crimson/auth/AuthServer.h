@@ -10,7 +10,7 @@
 
 struct AuthAuthorizeHandler;
 
-namespace ceph::auth {
+namespace crimson::auth {
 
 class AuthServer {
 public:
@@ -30,7 +30,7 @@ public:
     int auth_method) = 0;
   // Handle an authentication request on an incoming connection
   virtual int handle_auth_request(
-    ceph::net::ConnectionRef conn,
+    crimson::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
     bool more,           //< true if this is not the first part of the handshake
     uint32_t auth_method,
@@ -38,4 +38,4 @@ public:
     bufferlist *reply) = 0;
 };
 
-} // namespace ceph::auth
+} // namespace crimson::auth

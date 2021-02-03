@@ -7,6 +7,7 @@
 #include "test/rbd_mirror/test_fixture.h"
 #include "test/librados_test_stub/LibradosTestStub.h"
 #include "common/WorkQueue.h"
+#include "librbd/asio/ContextWQ.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
 #include "include/ceph_assert.h"
@@ -31,7 +32,7 @@ ACTION_P(CompleteContext, r) {
 }
 
 ACTION_P2(CompleteContext, wq, r) {
-  ContextWQ *context_wq = reinterpret_cast<ContextWQ *>(wq);
+  auto context_wq = reinterpret_cast<librbd::asio::ContextWQ *>(wq);
   context_wq->queue(arg0, r);
 }
 

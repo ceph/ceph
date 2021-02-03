@@ -1,34 +1,40 @@
-import { Component, EventEmitter, OnInit } from '@angular/core';
+import { Component, OnInit, Type, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap/modal';
-import { forkJoin, Subscription } from 'rxjs';
+import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
+import { Observable, ReplaySubject, Subscription } from 'rxjs';
 
-import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
-import { PoolService } from '../../../shared/api/pool.service';
-import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
-import { Icons } from '../../../shared/enum/icons.enum';
-import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators } from '../../../shared/forms/cd-validators';
+import { DashboardNotFoundError } from '~/app/core/error/error';
+import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
+import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
+import { PoolService } from '~/app/shared/api/pool.service';
+import { CrushNodeSelectionClass } from '~/app/shared/classes/crush.node.selection.class';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { SelectOption } from '~/app/shared/components/select/select-option.model';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField
-} from '../../../shared/models/configuration';
-import { CrushRule } from '../../../shared/models/crush-rule';
-import { CrushStep } from '../../../shared/models/crush-step';
-import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
-import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permission } from '../../../shared/models/permissions';
-import { PoolFormInfo } from '../../../shared/models/pool-form-info';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { FormatterService } from '../../../shared/services/formatter.service';
-import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
-import { ErasureCodeProfileFormComponent } from '../erasure-code-profile-form/erasure-code-profile-form.component';
+} from '~/app/shared/models/configuration';
+import { CrushRule } from '~/app/shared/models/crush-rule';
+import { CrushStep } from '~/app/shared/models/crush-step';
+import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Permission } from '~/app/shared/models/permissions';
+import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { FormatterService } from '~/app/shared/services/formatter.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule-form-modal.component';
+import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
 
@@ -46,45 +52,56 @@ interface FormFieldDescription {
   templateUrl: './pool-form.component.html',
   styleUrls: ['./pool-form.component.scss']
 })
-export class PoolFormComponent implements OnInit {
+export class PoolFormComponent extends CdForm implements OnInit {
+  @ViewChild('crushInfoTabs') crushInfoTabs: NgbNav;
+  @ViewChild('crushDeletionBtn') crushDeletionBtn: NgbTooltip;
+  @ViewChild('ecpInfoTabs') ecpInfoTabs: NgbNav;
+  @ViewChild('ecpDeletionBtn') ecpDeletionBtn: NgbTooltip;
+
   permission: Permission;
   form: CdFormGroup;
   ecProfiles: ErasureCodeProfile[];
   info: PoolFormInfo;
   routeParamsSubscribe: any;
   editing = false;
-  data = new PoolFormData(this.i18n);
+  isReplicated = false;
+  isErasure = false;
+  data = new PoolFormData();
   externalPgChange = false;
-  private modalSubscription: Subscription;
-  current = {
+  current: Record<string, any> = {
     rules: []
   };
-  initializeConfigData = new EventEmitter<{
+  initializeConfigData = new ReplaySubject<{
     initialData: RbdConfigurationEntry[];
     sourceType: RbdConfigurationSourceField;
-  }>();
+  }>(1);
   currentConfigurationValues: { [configKey: string]: any } = {};
   action: string;
   resource: string;
   icons = Icons;
+  pgAutoscaleModes: string[];
+  crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
+  ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
+
+  private modalSubscription: Subscription;
 
   constructor(
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private route: ActivatedRoute,
     private router: Router,
-    private modalService: BsModalService,
+    private modalService: ModalService,
     private poolService: PoolService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
-    private bsModalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
-    private i18n: I18n,
+    private crushRuleService: CrushRuleService,
     public actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = this.i18n('pool');
+    this.resource = $localize`pool`;
     this.authenticate();
     this.createForm();
   }
@@ -93,9 +110,10 @@ export class PoolFormComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().pool;
     if (
       !this.permission.read ||
-      ((!this.permission.update && this.editing) || (!this.permission.create && !this.editing))
+      (!this.permission.update && this.editing) ||
+      (!this.permission.create && !this.editing)
     ) {
-      this.router.navigate(['/404']);
+      throw new DashboardNotFoundError();
     }
   }
 
@@ -137,7 +155,12 @@ export class PoolFormComponent implements OnInit {
           validators: [
             CdValidators.custom(
               'tooFewOsds',
-              (rule) => this.info && rule && this.info.osd_count < rule.min_size
+              (rule: any) => this.info && rule && this.info.osd_count < rule.min_size
+            ),
+            CdValidators.custom(
+              'required',
+              (rule: CrushRule) =>
+                this.isReplicated && this.info.crush_rules_replicated.length > 0 && !rule
             )
           ]
         }),
@@ -148,6 +171,7 @@ export class PoolFormComponent implements OnInit {
         pgNum: new FormControl('', {
           validators: [Validators.required, Validators.min(1)]
         }),
+        pgAutoscaleMode: new FormControl(null),
         ecOverwrites: new FormControl(false),
         compression: compressionForm,
         max_bytes: new FormControl(''),
@@ -155,41 +179,60 @@ export class PoolFormComponent implements OnInit {
           validators: [Validators.min(0)]
         })
       },
-      [CdValidators.custom('form', () => null)]
+      [CdValidators.custom('form', (): null => null)]
     );
   }
 
   ngOnInit() {
-    forkJoin(this.poolService.getInfo(), this.ecpService.list()).subscribe(
-      (data: [PoolFormInfo, ErasureCodeProfile[]]) => {
-        this.initInfo(data[0]);
-        this.initEcp(data[1]);
-        if (this.editing) {
-          this.initEditMode();
-        }
-        this.listenToChanges();
-        this.setComplexValidators();
+    this.poolService.getInfo().subscribe((info: PoolFormInfo) => {
+      this.initInfo(info);
+      if (this.editing) {
+        this.initEditMode();
+      } else {
+        this.setAvailableApps();
+        this.loadingReady();
       }
-    );
+      this.listenToChanges();
+      this.setComplexValidators();
+    });
   }
 
   private initInfo(info: PoolFormInfo) {
+    this.pgAutoscaleModes = info.pg_autoscale_modes;
+    this.form.silentSet('pgAutoscaleMode', info.pg_autoscale_default_mode);
     this.form.silentSet('algorithm', info.bluestore_compression_algorithm);
-    info.compression_modes.push('unset');
     this.info = info;
+    this.initEcp(info.erasure_code_profiles);
   }
 
   private initEcp(ecProfiles: ErasureCodeProfile[]) {
-    const control = this.form.get('erasureProfile');
-    if (ecProfiles.length <= 1) {
-      control.disable();
+    this.setListControlStatus('erasureProfile', ecProfiles);
+    this.ecProfiles = ecProfiles;
+  }
+
+  /**
+   * Used to update the crush rule or erasure code profile listings.
+   *
+   * If only one rule or profile exists it will be selected.
+   * If nothing exists null will be selected.
+   * If more than one rule or profile exists the listing will be enabled,
+   * otherwise disabled.
+   */
+  private setListControlStatus(controlName: string, arr: any[]) {
+    const control = this.form.get(controlName);
+    const value = control.value;
+    if (arr.length === 1 && (!value || !_.isEqual(value, arr[0]))) {
+      control.setValue(arr[0]);
+    } else if (arr.length === 0 && value) {
+      control.setValue(null);
     }
-    if (ecProfiles.length === 1) {
-      control.setValue(ecProfiles[0]);
-    } else if (ecProfiles.length > 1 && control.disabled) {
+    if (arr.length <= 1) {
+      if (control.enabled) {
+        control.disable();
+      }
+    } else if (control.disabled) {
       control.enable();
     }
-    this.ecProfiles = ecProfiles;
   }
 
   private initEditMode() {
@@ -198,6 +241,7 @@ export class PoolFormComponent implements OnInit {
       this.poolService.get(param.name).subscribe((pool: Pool) => {
         this.data.pool = pool;
         this.initEditFormData(pool);
+        this.loadingReady();
       })
     );
   }
@@ -209,19 +253,19 @@ export class PoolFormComponent implements OnInit {
   }
 
   private initEditFormData(pool: Pool) {
-    this.initializeConfigData.emit({
+    this.initializeConfigData.next({
       initialData: pool.configuration,
       sourceType: RbdConfigurationSourceField.pool
     });
-
+    this.poolTypeChange(pool.type);
+    const rules = this.info.crush_rules_replicated.concat(this.info.crush_rules_erasure);
     const dataMap = {
       name: pool.pool_name,
       poolType: pool.type,
-      crushRule: this.info['crush_rules_' + pool.type].find(
-        (rule: CrushRule) => rule.rule_name === pool.crush_rule
-      ),
+      crushRule: rules.find((rule: CrushRule) => rule.rule_name === pool.crush_rule),
       size: pool.size,
       erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile),
+      pgAutoscaleMode: pool.pg_autoscale_mode,
       pgNum: pool.pg_num,
       ecOverwrites: pool.flags_names.includes('ec_overwrites'),
       mode: pool.options.compression_mode,
@@ -232,7 +276,6 @@ export class PoolFormComponent implements OnInit {
       max_bytes: this.dimlessBinaryPipe.transform(pool.quota_max_bytes),
       max_objects: pool.quota_max_objects
     };
-
     Object.keys(dataMap).forEach((controlName: string) => {
       const value = dataMap[controlName];
       if (!_.isUndefined(value) && value !== '') {
@@ -240,7 +283,14 @@ export class PoolFormComponent implements OnInit {
       }
     });
     this.data.pgs = this.form.getValue('pgNum');
+    this.setAvailableApps(this.data.applications.default.concat(pool.application_metadata));
     this.data.applications.selected = pool.application_metadata;
+  }
+
+  private setAvailableApps(apps: string[] = this.data.applications.default) {
+    this.data.applications.available = _.uniq(apps.sort()).map(
+      (x: string) => new SelectOption(false, x, '')
+    );
   }
 
   private listenToChanges() {
@@ -278,23 +328,34 @@ export class PoolFormComponent implements OnInit {
 
   private listenToChangesDuringAdd() {
     this.form.get('poolType').valueChanges.subscribe((poolType) => {
-      this.form.get('size').updateValueAndValidity();
-      this.rulesChange();
-      if (poolType === 'replicated') {
-        this.replicatedRuleChange();
-      }
-      this.pgCalc();
+      this.poolTypeChange(poolType);
     });
-    this.form.get('crushRule').valueChanges.subscribe(() => {
-      if (this.form.getValue('poolType') === 'replicated') {
-        this.replicatedRuleChange();
+    this.form.get('crushRule').valueChanges.subscribe((rule) => {
+      // The crush rule can only be changed if type 'replicated' is set.
+      if (this.crushDeletionBtn && this.crushDeletionBtn.isOpen()) {
+        this.crushDeletionBtn.close();
       }
+      if (!rule) {
+        return;
+      }
+      this.setCorrectMaxSize(rule);
+      this.crushRuleIsUsedBy(rule.rule_name);
+      this.replicatedRuleChange();
       this.pgCalc();
     });
     this.form.get('size').valueChanges.subscribe(() => {
+      // The size can only be changed if type 'replicated' is set.
       this.pgCalc();
     });
-    this.form.get('erasureProfile').valueChanges.subscribe(() => {
+    this.form.get('erasureProfile').valueChanges.subscribe((profile) => {
+      // The ec profile can only be changed if type 'erasure' is set.
+      if (this.ecpDeletionBtn && this.ecpDeletionBtn.isOpen()) {
+        this.ecpDeletionBtn.close();
+      }
+      if (!profile) {
+        return;
+      }
+      this.ecpIsUsedBy(profile.name);
       this.pgCalc();
     });
     this.form.get('mode').valueChanges.subscribe(() => {
@@ -310,26 +371,37 @@ export class PoolFormComponent implements OnInit {
     });
   }
 
-  private rulesChange() {
-    const poolType = this.form.getValue('poolType');
+  private poolTypeChange(poolType: string) {
+    if (poolType === 'replicated') {
+      this.setTypeBooleans(true, false);
+    } else if (poolType === 'erasure') {
+      this.setTypeBooleans(false, true);
+    } else {
+      this.setTypeBooleans(false, false);
+    }
     if (!poolType || !this.info) {
       this.current.rules = [];
       return;
     }
     const rules = this.info['crush_rules_' + poolType] || [];
-    const control = this.form.get('crushRule');
-    if (rules.length === 1) {
-      control.setValue(rules[0]);
-      control.disable();
-    } else {
-      control.setValue(null);
-      control.enable();
-    }
     this.current.rules = rules;
+    if (this.editing) {
+      return;
+    }
+    if (this.isReplicated) {
+      this.setListControlStatus('crushRule', rules);
+    }
+    this.replicatedRuleChange();
+    this.pgCalc();
+  }
+
+  private setTypeBooleans(replicated: boolean, erasure: boolean) {
+    this.isReplicated = replicated;
+    this.isErasure = erasure;
   }
 
   private replicatedRuleChange() {
-    if (this.form.getValue('poolType') !== 'replicated') {
+    if (!this.isReplicated) {
       return;
     }
     const control = this.form.get('size');
@@ -348,7 +420,7 @@ export class PoolFormComponent implements OnInit {
 
   getMinSize(): number {
     if (!this.info || this.info.osd_count < 1) {
-      return;
+      return 0;
     }
     const rule = this.form.getValue('crushRule');
     if (rule) {
@@ -358,17 +430,16 @@ export class PoolFormComponent implements OnInit {
   }
 
   getMaxSize(): number {
-    if (!this.info || this.info.osd_count < 1) {
-      return;
+    const rule = this.form.getValue('crushRule');
+    if (!this.info) {
+      return 0;
     }
-    const osds: number = this.info.osd_count;
-    if (this.form.getValue('crushRule')) {
-      const max: number = this.form.get('crushRule').value.max_size;
-      if (max < osds) {
-        return max;
-      }
+    if (!rule) {
+      const osds = this.info.osd_count;
+      const defaultSize = 3;
+      return Math.min(osds, defaultSize);
     }
-    return osds;
+    return rule.usable_size;
   }
 
   private pgCalc() {
@@ -377,8 +448,7 @@ export class PoolFormComponent implements OnInit {
       return;
     }
     const pgMax = this.info.osd_count * 100;
-    const pgs =
-      poolType === 'replicated' ? this.replicatedPgCalc(pgMax) : this.erasurePgCalc(pgMax);
+    const pgs = this.isReplicated ? this.replicatedPgCalc(pgMax) : this.erasurePgCalc(pgMax);
     if (!pgs) {
       return;
     }
@@ -390,23 +460,32 @@ export class PoolFormComponent implements OnInit {
     }
   }
 
-  private replicatedPgCalc(pgs): number {
+  private setCorrectMaxSize(rule: CrushRule = this.form.getValue('crushRule')) {
+    if (!rule) {
+      return;
+    }
+    const domains = CrushNodeSelectionClass.searchFailureDomains(
+      this.info.nodes,
+      rule.steps[0].item_name
+    );
+    const currentDomain = domains[rule.steps[1].type];
+    const usable = currentDomain ? currentDomain.length : rule.max_size;
+    rule.usable_size = Math.min(usable, rule.max_size);
+  }
+
+  private replicatedPgCalc(pgs: number): number {
     const sizeControl = this.form.get('size');
     const size = sizeControl.value;
-    if (sizeControl.valid && size > 0) {
-      return pgs / size;
-    }
+    return sizeControl.valid && size > 0 ? pgs / size : 0;
   }
 
-  private erasurePgCalc(pgs): number {
+  private erasurePgCalc(pgs: number): number {
     const ecpControl = this.form.get('erasureProfile');
     const ecp = ecpControl.value;
-    if ((ecpControl.valid || ecpControl.disabled) && ecp) {
-      return pgs / (ecp.k + ecp.m);
-    }
+    return (ecpControl.valid || ecpControl.disabled) && ecp ? pgs / (ecp.k + ecp.m) : 0;
   }
 
-  private alignPgs(pgs = this.form.getValue('pgNum')) {
+  alignPgs(pgs = this.form.getValue('pgNum')) {
     this.setPgs(Math.round(this.calculatePgPower(pgs < 1 ? 1 : pgs)));
   }
 
@@ -418,7 +497,7 @@ export class PoolFormComponent implements OnInit {
           this.form.get('name').validator,
           CdValidators.custom(
             'uniqueName',
-            (name) =>
+            (name: string) =>
               this.data.pool &&
               this.info &&
               this.info.pool_names.indexOf(name) !== -1 &&
@@ -427,27 +506,23 @@ export class PoolFormComponent implements OnInit {
           )
         ]);
     } else {
-      CdValidators.validateIf(
-        this.form.get('size'),
-        () => this.form.get('poolType').value === 'replicated',
-        [
-          CdValidators.custom(
-            'min',
-            (value) => this.form.getValue('size') && value < this.getMinSize()
-          ),
-          CdValidators.custom(
-            'max',
-            (value) => this.form.getValue('size') && this.getMaxSize() < value
-          )
-        ]
-      );
+      CdValidators.validateIf(this.form.get('size'), () => this.isReplicated, [
+        CdValidators.custom(
+          'min',
+          (value: number) => this.form.getValue('size') && value < this.getMinSize()
+        ),
+        CdValidators.custom(
+          'max',
+          (value: number) => this.form.getValue('size') && this.getMaxSize() < value
+        )
+      ]);
       this.form
         .get('name')
         .setValidators([
           this.form.get('name').validator,
           CdValidators.custom(
             'uniqueName',
-            (name) => this.info && this.info.pool_names.indexOf(name) !== -1
+            (name: string) => this.info && this.info.pool_names.indexOf(name) !== -1
           )
         ]);
     }
@@ -457,13 +532,13 @@ export class PoolFormComponent implements OnInit {
   private setCompressionValidators() {
     CdValidators.validateIf(this.form.get('minBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
-      CdValidators.custom('maximum', (size) =>
+      CdValidators.custom('maximum', (size: string) =>
         this.oddBlobSize(size, this.form.getValue('maxBlobSize'))
       )
     ]);
     CdValidators.validateIf(this.form.get('maxBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
-      CdValidators.custom('minimum', (size) =>
+      CdValidators.custom('minimum', (size: string) =>
         this.oddBlobSize(this.form.getValue('minBlobSize'), size)
       )
     ]);
@@ -473,10 +548,10 @@ export class PoolFormComponent implements OnInit {
     ]);
   }
 
-  private oddBlobSize(minimum, maximum) {
-    minimum = this.formatter.toBytes(minimum);
-    maximum = this.formatter.toBytes(maximum);
-    return Boolean(minimum && maximum && minimum >= maximum);
+  private oddBlobSize(minimum: string, maximum: string) {
+    const min = this.formatter.toBytes(minimum);
+    const max = this.formatter.toBytes(maximum);
+    return Boolean(min && max && min >= max);
   }
 
   hasCompressionEnabled() {
@@ -492,32 +567,171 @@ export class PoolFormComponent implements OnInit {
   }
 
   addErasureCodeProfile() {
-    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
-    this.bsModalService.show(ErasureCodeProfileFormComponent);
+    this.addModal(ErasureCodeProfileFormModalComponent, (name) => this.reloadECPs(name));
   }
 
-  private reloadECPs() {
-    this.ecpService.list().subscribe((profiles: ErasureCodeProfile[]) => this.initEcp(profiles));
-    this.modalSubscription.unsubscribe();
+  private addModal(modalComponent: Type<any>, reload: (name: string) => void) {
+    this.hideOpenTooltips();
+    const modalRef = this.modalService.show(modalComponent);
+    modalRef.componentInstance.submitAction.subscribe((item: any) => {
+      reload(item.name);
+    });
+  }
+
+  private hideOpenTooltips() {
+    const hideTooltip = (btn: NgbTooltip) => btn && btn.isOpen() && btn.close();
+    hideTooltip(this.ecpDeletionBtn);
+    hideTooltip(this.crushDeletionBtn);
+  }
+
+  private reloadECPs(profileName?: string) {
+    this.reloadList({
+      newItemName: profileName,
+      getInfo: () => this.ecpService.list(),
+      initInfo: (profiles) => this.initEcp(profiles),
+      findNewItem: () => this.ecProfiles.find((p) => p.name === profileName),
+      controlName: 'erasureProfile'
+    });
+  }
+
+  private reloadList({
+    newItemName,
+    getInfo,
+    initInfo,
+    findNewItem,
+    controlName
+  }: {
+    newItemName: string;
+    getInfo: () => Observable<any>;
+    initInfo: (items: any) => void;
+    findNewItem: () => any;
+    controlName: string;
+  }) {
+    if (this.modalSubscription) {
+      this.modalSubscription.unsubscribe();
+    }
+    getInfo().subscribe((items: any) => {
+      initInfo(items);
+      if (!newItemName) {
+        return;
+      }
+      const item = findNewItem();
+      if (item) {
+        this.form.get(controlName).setValue(item);
+      }
+    });
   }
 
   deleteErasureCodeProfile() {
-    const ecp = this.form.getValue('erasureProfile');
-    if (!ecp) {
+    this.deletionModal({
+      value: this.form.getValue('erasureProfile'),
+      usage: this.ecpUsage,
+      deletionBtn: this.ecpDeletionBtn,
+      dataName: 'erasureInfo',
+      getTabs: () => this.ecpInfoTabs,
+      tabPosition: 'used-by-pools',
+      nameAttribute: 'name',
+      itemDescription: $localize`erasure code profile`,
+      reloadFn: () => this.reloadECPs(),
+      deleteFn: (name) => this.ecpService.delete(name),
+      taskName: 'ecp/delete'
+    });
+  }
+
+  private deletionModal({
+    value,
+    usage,
+    deletionBtn,
+    dataName,
+    getTabs,
+    tabPosition,
+    nameAttribute,
+    itemDescription,
+    reloadFn,
+    deleteFn,
+    taskName
+  }: {
+    value: any;
+    usage: string[];
+    deletionBtn: NgbTooltip;
+    dataName: string;
+    getTabs: () => NgbNav;
+    tabPosition: string;
+    nameAttribute: string;
+    itemDescription: string;
+    reloadFn: Function;
+    deleteFn: (name: string) => Observable<any>;
+    taskName: string;
+  }) {
+    if (!value) {
       return;
     }
-    const name = ecp.name;
-    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
+    if (usage) {
+      deletionBtn.toggle();
+      this.data[dataName] = true;
+      setTimeout(() => {
+        const tabs = getTabs();
+        if (tabs) {
+          tabs.select(tabPosition);
+        }
+      }, 50);
+      return;
+    }
+    const name = value[nameAttribute];
     this.modalService.show(CriticalConfirmationModalComponent, {
-      initialState: {
-        itemDescription: this.i18n('erasure code profile'),
-        submitActionObservable: () =>
-          this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('ecp/delete', { name: name }),
-            call: this.ecpService.delete(name)
-          })
+      itemDescription,
+      itemNames: [name],
+      submitActionObservable: () => {
+        const deletion = deleteFn(name);
+        deletion.subscribe(() => reloadFn());
+        return this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask(taskName, { name: name }),
+          call: deletion
+        });
       }
     });
+  }
+
+  addCrushRule() {
+    this.addModal(CrushRuleFormModalComponent, (name) => this.reloadCrushRules(name));
+  }
+
+  private reloadCrushRules(ruleName?: string) {
+    this.reloadList({
+      newItemName: ruleName,
+      getInfo: () => this.poolService.getInfo(),
+      initInfo: (info) => {
+        this.initInfo(info);
+        this.poolTypeChange('replicated');
+      },
+      findNewItem: () =>
+        this.info.crush_rules_replicated.find((rule) => rule.rule_name === ruleName),
+      controlName: 'crushRule'
+    });
+  }
+
+  deleteCrushRule() {
+    this.deletionModal({
+      value: this.form.getValue('crushRule'),
+      usage: this.crushUsage,
+      deletionBtn: this.crushDeletionBtn,
+      dataName: 'crushInfo',
+      getTabs: () => this.crushInfoTabs,
+      tabPosition: 'used-by-pools',
+      nameAttribute: 'rule_name',
+      itemDescription: $localize`crush rule`,
+      reloadFn: () => this.reloadCrushRules(),
+      deleteFn: (name) => this.crushRuleService.delete(name),
+      taskName: 'crushRule/delete'
+    });
+  }
+
+  crushRuleIsUsedBy(ruleName: string) {
+    this.crushUsage = ruleName ? this.info.used_rules[ruleName] : undefined;
+  }
+
+  ecpIsUsedBy(profileName: string) {
+    this.ecpUsage = profileName ? this.info.used_profiles[profileName] : undefined;
   }
 
   submit() {
@@ -530,15 +744,29 @@ export class PoolFormComponent implements OnInit {
 
     this.assignFormFields(pool, [
       { externalFieldName: 'pool_type', formControlName: 'poolType' },
-      { externalFieldName: 'pg_num', formControlName: 'pgNum', editable: true },
-      this.form.getValue('poolType') === 'replicated'
+      {
+        externalFieldName: 'pg_autoscale_mode',
+        formControlName: 'pgAutoscaleMode',
+        editable: true
+      },
+      {
+        externalFieldName: 'pg_num',
+        formControlName: 'pgNum',
+        replaceFn: (value: number) => (this.form.getValue('pgAutoscaleMode') === 'on' ? 1 : value),
+        editable: true
+      },
+      this.isReplicated
         ? { externalFieldName: 'size', formControlName: 'size' }
         : {
             externalFieldName: 'erasure_code_profile',
             formControlName: 'erasureProfile',
             attr: 'name'
           },
-      { externalFieldName: 'rule_name', formControlName: 'crushRule', attr: 'rule_name' },
+      {
+        externalFieldName: 'rule_name',
+        formControlName: 'crushRule',
+        replaceFn: (value: CrushRule) => (this.isReplicated ? value && value.rule_name : undefined)
+      },
       {
         externalFieldName: 'quota_max_bytes',
         formControlName: 'max_bytes',
@@ -558,7 +786,7 @@ export class PoolFormComponent implements OnInit {
       this.assignFormField(pool, {
         externalFieldName: 'flags',
         formControlName: 'ecOverwrites',
-        replaceFn: () => ['ec_overwrites']
+        replaceFn: () => (this.isErasure ? ['ec_overwrites'] : undefined)
       });
 
       if (this.form.getValue('mode') !== 'none') {
@@ -567,7 +795,7 @@ export class PoolFormComponent implements OnInit {
             externalFieldName: 'compression_mode',
             formControlName: 'mode',
             editable: true,
-            replaceFn: (value) => this.hasCompressionEnabled() && value
+            replaceFn: (value: boolean) => this.hasCompressionEnabled() && value
           },
           {
             externalFieldName: 'compression_algorithm',
@@ -601,7 +829,7 @@ export class PoolFormComponent implements OnInit {
             externalFieldName: 'compression_mode',
             formControlName: 'mode',
             editable: true,
-            replaceFn: () => 'unset'
+            replaceFn: () => 'unset' // Is used if no compression is set
           },
           {
             externalFieldName: 'srcpool',
@@ -620,10 +848,7 @@ export class PoolFormComponent implements OnInit {
 
     // Only collect configuration data for replicated pools, as QoS cannot be configured on EC
     // pools. EC data pools inherit their settings from the corresponding replicated metadata pool.
-    if (
-      this.form.get('poolType').value === 'replicated' &&
-      !_.isEmpty(this.currentConfigurationValues)
-    ) {
+    if (this.isReplicated && !_.isEmpty(this.currentConfigurationValues)) {
       pool['configuration'] = this.currentConfigurationValues;
     }
 
@@ -670,7 +895,7 @@ export class PoolFormComponent implements OnInit {
     pool[externalFieldName] = apiValue;
   }
 
-  private triggerApiTask(pool) {
+  private triggerApiTask(pool: Record<string, any>) {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('pool/' + (this.editing ? URLVerbs.EDIT : URLVerbs.CREATE), {
@@ -678,16 +903,15 @@ export class PoolFormComponent implements OnInit {
         }),
         call: this.poolService[this.editing ? URLVerbs.UPDATE : URLVerbs.CREATE](pool)
       })
-      .subscribe(
-        undefined,
-        (resp) => {
+      .subscribe({
+        error: (resp) => {
           if (_.isObject(resp.error) && resp.error.code === '34') {
             this.form.get('pgNum').setErrors({ '34': true });
           }
           this.form.setErrors({ cdSubmitButton: true });
         },
-        () => this.router.navigate(['/pool'])
-      );
+        complete: () => this.router.navigate(['/pool'])
+      });
   }
 
   appSelection() {

@@ -2,16 +2,15 @@
  Block Device Quick Start
 ==========================
 
-To use this guide, you must have executed the procedures in the `Storage
-Cluster Quick Start`_ guide first. Ensure your :term:`Ceph Storage Cluster` is
-in an ``active + clean`` state before working with the :term:`Ceph Block
-Device`. 
+Ensure your :term:`Ceph Storage Cluster` is in an ``active + clean`` state
+before working with the :term:`Ceph Block Device`.
 
 .. note:: The Ceph Block Device is also known as :term:`RBD` or :term:`RADOS`
    Block Device.
 
 
-.. ditaa:: 
+.. ditaa::
+
            /------------------\         /----------------\
            |    Admin Node    |         |   ceph-client  |
            |                  +-------->+ cCCC           |
@@ -22,30 +21,6 @@ Device`.
 You may use a virtual machine for your ``ceph-client`` node, but do not 
 execute the following procedures on the same physical node as your Ceph 
 Storage Cluster nodes (unless you use a VM). See `FAQ`_ for details.
-
-
-Install Ceph
-============
-
-#. Verify that you have an appropriate version of the Linux kernel. 
-   See `OS Recommendations`_ for details. ::
-   
-	lsb_release -a
-	uname -r
-
-#. On the admin node, use ``ceph-deploy`` to install Ceph on your 
-   ``ceph-client`` node. ::
-
-	ceph-deploy install ceph-client
-	
-#. On the admin node, use ``ceph-deploy`` to copy the Ceph configuration file
-   and the ``ceph.client.admin.keyring`` to the ``ceph-client``. :: 
-
-	ceph-deploy admin ceph-client
-
-   The ``ceph-deploy`` utility copies the keyring to the ``/etc/ceph`` 
-   directory. Ensure that the keyring file has appropriate read permissions 
-   (e.g., ``sudo chmod +r /etc/ceph/ceph.client.admin.keyring``).
 
 Create a Block Device Pool
 ==========================
@@ -87,7 +62,6 @@ Configure a Block Device
 
 See `block devices`_ for additional details.
 
-.. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _create a pool: ../../rados/operations/pools/#create-a-pool
 .. _block devices: ../../rbd
 .. _FAQ: http://wiki.ceph.com/How_Can_I_Give_Ceph_a_Try

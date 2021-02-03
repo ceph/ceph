@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, Subscriber } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
+import { CdNotificationConfig } from '../models/cd-notification';
 import { ExecutingTask } from '../models/executing-task';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
@@ -46,10 +47,12 @@ export class TaskWrapperService {
   }
 
   _handleExecutingTasks(task: FinishedTask) {
-    this.notificationService.show(
+    const notification = new CdNotificationConfig(
       NotificationType.info,
       this.taskMessageService.getRunningTitle(task)
     );
+    notification.isFinishedTask = true;
+    this.notificationService.show(notification);
 
     const executingTask = new ExecutingTask(task.name, task.metadata);
     this.summaryService.addRunningTask(executingTask);

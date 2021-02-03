@@ -13,11 +13,10 @@
 #include "journal/ReplayEntry.h"
 #include "journal/Settings.h"
 #include "journal/Utils.h"
-#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
-#include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/DemoteRequest.h"
 #include "librbd/journal/ObjectDispatch.h"
@@ -43,15 +42,24 @@ using journal::util::C_DecodeTags;
 
 namespace {
 
-// TODO: once journaler is 100% async, remove separate threads and
-// reuse ImageCtx's thread pool
+// TODO: once journaler is 100% async and converted to ASIO, remove separate
+// threads and reuse librbd's AsioEngine
 class ThreadPoolSingleton : public ThreadPool {
 public:
+  ContextWQ *work_queue;
+
   explicit ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::Journal", "tp_librbd_journ", 1) {
+    : ThreadPool(cct, "librbd::Journal", "tp_librbd_journ", 1),
+      work_queue(new ContextWQ("librbd::journal::work_queue",
+                               ceph::make_timespan(
+                                 cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout")),
+                               this)) {
     start();
   }
   ~ThreadPoolSingleton() override {
+    work_queue->drain();
+    delete work_queue;
+
     stop();
   }
 };
@@ -61,7 +69,7 @@ struct C_IsTagOwner : public Context {
   librados::IoCtx &io_ctx;
   std::string image_id;
   bool *is_tag_owner;
-  ContextWQ *op_work_queue;
+  asio::ContextWQ *op_work_queue;
   Context *on_finish;
 
   CephContext *cct = nullptr;
@@ -72,7 +80,8 @@ struct C_IsTagOwner : public Context {
   journal::TagData tag_data;
 
   C_IsTagOwner(librados::IoCtx &io_ctx, const std::string &image_id,
-               bool *is_tag_owner, ContextWQ *op_work_queue, Context *on_finish)
+               bool *is_tag_owner, asio::ContextWQ *op_work_queue,
+               Context *on_finish)
     : io_ctx(io_ctx), image_id(image_id), is_tag_owner(is_tag_owner),
       op_work_queue(op_work_queue), on_finish(on_finish),
       cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
@@ -325,9 +334,28 @@ std::ostream &operator<<(std::ostream &os,
   return os;
 }
 
+
+template <typename I>
+void Journal<I>::MetadataListener::handle_update(::journal::JournalMetadata *) {
+  auto ctx = new LambdaContext([this](int r) {
+    journal->handle_metadata_updated();
+  });
+  journal->m_work_queue->queue(ctx, 0);
+}
+
+
+template <typename I>
+void Journal<I>::get_work_queue(CephContext *cct, ContextWQ **work_queue) {
+  auto thread_pool_singleton =
+    &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      "librbd::journal::thread_pool", false, cct);
+  *work_queue = thread_pool_singleton->work_queue;
+}
+
 template <typename I>
 Journal<I>::Journal(I &image_ctx)
-  : m_image_ctx(image_ctx), m_journaler(NULL),
+  : RefCountedObject(image_ctx.cct),
+    m_image_ctx(image_ctx), m_journaler(NULL),
     m_state(STATE_UNINITIALIZED),
     m_error_result(0), m_replay_handler(this), m_close_pending(false),
     m_event_tid(0),
@@ -337,12 +365,7 @@ Journal<I>::Journal(I &image_ctx)
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << ": ictx=" << &m_image_ctx << dendl;
 
-  auto thread_pool_singleton =
-    &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      "librbd::journal::thread_pool", false, cct);
-  m_work_queue = new ContextWQ("librbd::journal::work_queue",
-                               cct->_conf.get_val<uint64_t>("rbd_op_thread_timeout"),
-                               thread_pool_singleton);
+  get_work_queue(cct, &m_work_queue);
   ImageCtx::get_timer_instance(cct, &m_timer, &m_timer_lock);
 }
 
@@ -350,9 +373,9 @@ template <typename I>
 Journal<I>::~Journal() {
   if (m_work_queue != nullptr) {
     m_work_queue->drain();
-    delete m_work_queue;
   }
 
+  std::lock_guard locker{m_lock};
   ceph_assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
   ceph_assert(m_journaler == NULL);
   ceph_assert(m_journal_replay == NULL);
@@ -373,15 +396,14 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  ContextWQ *work_queue;
+  get_work_queue(cct, &work_queue);
 
   C_SaferCond cond;
   journal::TagData tag_data(LOCAL_MIRROR_UUID);
   journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
     io_ctx, image_id, order, splay_width, object_pool, cls::journal::Tag::TAG_CLASS_NEW,
-    tag_data, IMAGE_CLIENT_ID, op_work_queue, &cond);
+    tag_data, IMAGE_CLIENT_ID, work_queue, &cond);
   req->send();
 
   return cond.wait();
@@ -392,13 +414,12 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  ContextWQ *work_queue;
+  get_work_queue(cct, &work_queue);
 
   C_SaferCond cond;
   journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
-    io_ctx, image_id, IMAGE_CLIENT_ID, op_work_queue, &cond);
+    io_ctx, image_id, IMAGE_CLIENT_ID, work_queue, &cond);
   req->send();
 
   return cond.wait();
@@ -409,14 +430,13 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  ThreadPool *thread_pool;
-  ContextWQ *op_work_queue;
-  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  ContextWQ *work_queue;
+  get_work_queue(cct, &work_queue);
 
   C_SaferCond cond;
   auto req = journal::ResetRequest<I>::create(io_ctx, image_id, IMAGE_CLIENT_ID,
                                               Journal<>::LOCAL_MIRROR_UUID,
-                                              op_work_queue, &cond);
+                                              work_queue, &cond);
   req->send();
 
   return cond.wait();
@@ -431,7 +451,8 @@ void Journal<I>::is_tag_owner(I *image_ctx, bool *owner,
 
 template <typename I>
 void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
-                              bool *is_tag_owner, ContextWQ *op_work_queue,
+                              bool *is_tag_owner,
+                              asio::ContextWQ *op_work_queue,
                               Context *on_finish) {
   CephContext *cct = reinterpret_cast<CephContext*>(io_ctx.cct());
   ldout(cct, 20) << __func__ << dendl;
@@ -446,7 +467,8 @@ void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
 template <typename I>
 void Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
                                std::string *mirror_uuid,
-                               ContextWQ *op_work_queue, Context *on_finish) {
+                               asio::ContextWQ *op_work_queue,
+                               Context *on_finish) {
   CephContext *cct = static_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << __func__ << dendl;
 
@@ -566,10 +588,12 @@ void Journal<I>::open(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  on_finish = create_context_callback<Context>(on_finish, this);
+
   on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
   // inject our handler into the object dispatcher chain
-  m_image_ctx.io_object_dispatcher->register_object_dispatch(
+  m_image_ctx.io_object_dispatcher->register_dispatch(
     journal::ObjectDispatch<I>::create(&m_image_ctx, this));
 
   std::lock_guard locker{m_lock};
@@ -583,12 +607,14 @@ void Journal<I>::close(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  on_finish = create_context_callback<Context>(on_finish, this);
+
   on_finish = new LambdaContext([this, on_finish](int r) {
       // remove our handler from object dispatcher chain - preserve error
       auto ctx = new LambdaContext([on_finish, r](int _) {
           on_finish->complete(r);
         });
-      m_image_ctx.io_object_dispatcher->shut_down_object_dispatch(
+      m_image_ctx.io_object_dispatcher->shut_down_dispatch(
         io::OBJECT_DISPATCH_LAYER_JOURNAL, ctx);
     });
   on_finish = create_async_context_callback(m_image_ctx, on_finish);
@@ -598,12 +624,12 @@ void Journal<I>::close(Context *on_finish) {
 
   Listeners listeners(m_listeners);
   m_listener_notify = true;
-  m_lock.unlock();
+  locker.unlock();
   for (auto listener : listeners) {
     listener->handle_close();
   }
 
-  m_lock.lock();
+  locker.lock();
   m_listener_notify = false;
   m_listener_cond.notify_all();
 
@@ -958,6 +984,8 @@ void Journal<I>::flush_event(uint64_t tid, Context *on_safe) {
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  << "on_safe=" << on_safe << dendl;
 
+  on_safe = create_context_callback<Context>(on_safe, this);
+
   Future future;
   {
     std::lock_guard event_locker{m_event_lock};
@@ -974,6 +1002,8 @@ void Journal<I>::wait_event(uint64_t tid, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  << "on_safe=" << on_safe << dendl;
+
+  on_safe = create_context_callback<Context>(on_safe, this);
 
   std::lock_guard event_locker{m_event_lock};
   wait_event(m_lock, tid, on_safe);
@@ -1090,7 +1120,7 @@ void Journal<I>::create_journaler() {
     m_image_ctx.config.template get_val<uint64_t>("rbd_journal_max_concurrent_object_sets");
   // TODO: a configurable filter to exclude certain peers from being
   // disconnected.
-  settings.whitelisted_laggy_clients = {IMAGE_CLIENT_ID};
+  settings.ignored_laggy_clients = {IMAGE_CLIENT_ID};
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
@@ -1249,6 +1279,8 @@ void Journal<I>::handle_replay_ready() {
     m_processing_entry = true;
   }
 
+  m_async_journal_op_tracker.start_op();
+
   bufferlist data = replay_entry.get_data();
   auto it = data.cbegin();
 
@@ -1310,11 +1342,16 @@ void Journal<I>::handle_replay_complete(int r) {
       // ensure the commit position is flushed to disk
       m_journaler->flush_commit_position(ctx);
     });
+  ctx = create_async_context_callback(m_image_ctx, ctx);
+  ctx = new LambdaContext([this, ctx](int r) {
+      m_async_journal_op_tracker.wait_for_ops(ctx);
+    });
   ctx = new LambdaContext([this, cct, cancel_ops, ctx](int r) {
       ldout(cct, 20) << this << " handle_replay_complete: "
                      << "shut down replay" << dendl;
       m_journal_replay->shut_down(cancel_ops, ctx);
     });
+
   m_journaler->stop_replay(ctx);
 }
 
@@ -1373,16 +1410,21 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
           m_journal_replay->shut_down(true, ctx);
         });
       m_journaler->stop_replay(ctx);
+      m_async_journal_op_tracker.finish_op();
       return;
     } else if (m_state == STATE_FLUSHING_REPLAY) {
       // end-of-replay flush in-progress -- we need to restart replay
       transition_state(STATE_FLUSHING_RESTART, r);
+      locker.unlock();
+      m_async_journal_op_tracker.finish_op();
       return;
     }
   } else {
     // only commit the entry if written successfully
     m_journaler->committed(replay_entry);
   }
+  locker.unlock();
+  m_async_journal_op_tracker.finish_op();
 }
 
 template <typename I>
@@ -1558,7 +1600,9 @@ void Journal<I>::transition_state(State state, int r) {
   }
 
   if (is_steady_state()) {
-    Contexts wait_for_state_contexts(std::move(m_wait_for_state_contexts));
+    auto wait_for_state_contexts(std::move(m_wait_for_state_contexts));
+    m_wait_for_state_contexts.clear();
+
     for (auto ctx : wait_for_state_contexts) {
       ctx->complete(m_error_result);
     }
@@ -1624,7 +1668,7 @@ int Journal<I>::check_resync_requested(bool *do_resync) {
     decode(client_data, bl_it);
   } catch (const buffer::error &err) {
     lderr(cct) << this << " " << __func__ << ": "
-               << "failed to decode client data: " << err << dendl;
+               << "failed to decode client data: " << err.what() << dendl;
     return -EINVAL;
   }
 
@@ -1738,7 +1782,7 @@ void Journal<I>::handle_refresh_metadata(uint64_t refresh_sequence,
 
   Listeners listeners(m_listeners);
   m_listener_notify = true;
-  m_lock.unlock();
+  locker.unlock();
 
   if (promoted_to_primary) {
     for (auto listener : listeners) {
@@ -1750,7 +1794,7 @@ void Journal<I>::handle_refresh_metadata(uint64_t refresh_sequence,
     }
   }
 
-  m_lock.lock();
+  locker.lock();
   m_listener_notify = false;
   m_listener_cond.notify_all();
 }

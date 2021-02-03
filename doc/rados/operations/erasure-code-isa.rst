@@ -4,7 +4,7 @@ ISA erasure code plugin
 
 The *isa* plugin encapsulates the `ISA
 <https://01.org/intel%C2%AE-storage-acceleration-library-open-source-version/>`_
-library. It only runs on Intel processors.
+library.
 
 Create an isa profile
 =====================
@@ -59,7 +59,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the CRUSH rule. For intance **step take default**.
+              the CRUSH rule. For instance **step take default**.
 
 :Type: String
 :Required: No.

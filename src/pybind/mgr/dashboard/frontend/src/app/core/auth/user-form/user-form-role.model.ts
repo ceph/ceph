@@ -1,4 +1,4 @@
-import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { SelectOption } from '~/app/shared/components/select/select-option.model';
 
 export class UserFormRoleModel implements SelectOption {
   name: string;
@@ -7,7 +7,7 @@ export class UserFormRoleModel implements SelectOption {
   scopes_permissions: object;
   enabled = true;
 
-  constructor(name, description) {
+  constructor(name: string, description: string) {
     this.name = name;
     this.description = description;
   }

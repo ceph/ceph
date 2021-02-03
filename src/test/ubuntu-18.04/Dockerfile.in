@@ -25,7 +25,7 @@ RUN mkdir /root/debian
 COPY debian /root/debian/
 RUN apt-get update
 # build dependencies
-RUN cd /root ; ./install-deps.sh
+RUN cd /root ; DEBIAN_FRONTEND=noninteractive ./install-deps.sh
 # development tools
-RUN apt-get install -y ccache valgrind gdb python-virtualenv gdisk kpartx jq xmlstarlet sudo
+RUN apt-get install -y ccache valgrind gdb gdisk kpartx jq xmlstarlet sudo
 RUN if test %%USER%% != root ; then useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers ; fi

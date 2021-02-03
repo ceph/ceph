@@ -7,25 +7,25 @@ from __future__ import absolute_import
 
 import os
 
+import cherrypy
+
+DEFAULT_VERSION = '1.0'
+
+if 'COVERAGE_ENABLED' in os.environ:
+    import coverage  # pylint: disable=import-error
+    __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),
+                              data_suffix=True)
+    __cov.start()
+    cherrypy.engine.subscribe('after_request', __cov.save)
+    cherrypy.engine.subscribe('stop', __cov.stop)
 
 if 'UNITTEST' not in os.environ:
-    class _LoggerProxy(object):
-        def __init__(self):
-            self._logger = None
-
-        def __getattr__(self, item):
-            if self._logger is None:
-                raise AttributeError("logger not initialized")
-            return getattr(self._logger, item)
-
     class _ModuleProxy(object):
         def __init__(self):
             self._mgr = None
 
         def init(self, module_inst):
-            global logger
             self._mgr = module_inst
-            logger._logger = self._mgr._logger
 
         def __getattr__(self, item):
             if self._mgr is None:
@@ -33,26 +33,23 @@ if 'UNITTEST' not in os.environ:
             return getattr(self._mgr, item)
 
     mgr = _ModuleProxy()
-    logger = _LoggerProxy()
 
-    # DO NOT REMOVE: required for ceph-mgr to load a module
-    from .module import Module, StandbyModule  # noqa: F401
 else:
     import logging
     logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
     logging.root.handlers[0].setLevel(logging.DEBUG)
     os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
                                         os.environ['PATH'])
-
-    # Mock ceph module otherwise every module that is involved in a testcase and imports it will
-    # raise an ImportError
     import sys
-    try:
-        import mock
-    except ImportError:
-        import unittest.mock as mock
 
-    sys.modules['ceph_module'] = mock.Mock()
+    # Used to allow the running of a tox-based yml doc generator from the dashboard directory
+    if os.path.abspath(sys.path[0]) == os.getcwd():
+        sys.path.pop(0)
+
+    from tests import mock  # type: ignore
 
     mgr = mock.Mock()
+    mgr.get_frontend_path.side_effect = lambda: os.path.abspath("./frontend/dist")
+
+# DO NOT REMOVE: required for ceph-mgr to load a module
+from .module import Module, StandbyModule  # noqa: F401

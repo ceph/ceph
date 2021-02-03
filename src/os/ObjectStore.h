@@ -14,10 +14,13 @@
 #ifndef CEPH_OBJECTSTORE_H
 #define CEPH_OBJECTSTORE_H
 
-#include "include/Context.h"
 #include "include/buffer.h"
-#include "include/types.h"
+#include "include/common_fwd.h"
+#include "include/Context.h"
+#include "include/interval_set.h"
 #include "include/stringify.h"
+#include "include/types.h"
+
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
@@ -29,13 +32,11 @@
 #include <vector>
 #include <map>
 
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__sun)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__sun) || defined(_WIN32)
 #include <sys/statvfs.h>
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif
-
-class CephContext;
 
 namespace ceph {
   class Formatter;
@@ -343,7 +344,7 @@ public:
   virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
 			  bool *per_pool_omap) = 0;
 
-  virtual void collect_metadata(std::map<std::string,string> *pm) { }
+  virtual void collect_metadata(std::map<std::string,std::string> *pm) { }
 
   /**
    * write_meta - write a simple configuration key out-of-band
@@ -515,7 +516,7 @@ public:
      uint32_t op_flags = 0) {
      int total = 0;
      for (auto p = m.begin(); p != m.end(); p++) {
-       bufferlist t;
+       ceph::buffer::list t;
        int r = read(c, oid, p.get_start(), p.get_len(), t, op_flags);
        if (r < 0)
          return r;
@@ -554,8 +555,8 @@ public:
   virtual int dump_onode(
     CollectionHandle &c,
     const ghobject_t& oid,
-    const string& section_name,
-    Formatter *f) {
+    const std::string& section_name,
+    ceph::Formatter *f) {
     return -ENOTSUP;
   }
 
@@ -673,6 +674,13 @@ public:
 			      int max,
 			      std::vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
+  virtual int collection_list_legacy(CollectionHandle &c,
+                                     const ghobject_t& start,
+                                     const ghobject_t& end, int max,
+                                     std::vector<ghobject_t> *ls,
+                                     ghobject_t *next) {
+    return collection_list(c, start, end, max, ls, next);
+  }
 
   /// OMAP
   /// Get omap contents
@@ -705,6 +713,15 @@ public:
     const std::set<std::string> &keys,     ///< [in] Keys to get
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) = 0;
+
+#ifdef WITH_SEASTAR
+  virtual int omap_get_values(
+    CollectionHandle &c,         ///< [in] Collection containing oid
+    const ghobject_t &oid,       ///< [in] Object containing omap
+    const std::optional<std::string> &start_after,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
+    ) = 0;
+#endif
 
   /// Filters keys into out which are defined on oid
   virtual int omap_check_keys(

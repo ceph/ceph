@@ -33,11 +33,142 @@
 #include "include/compat.h"
 
 #define dout_subsys ceph_subsys_mon
+
+using namespace TOPNSPC::common;
+
+using std::cerr;
+using std::cout;
+using std::dec;
+using std::hex;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::setfill;
+using std::string;
+using std::stringstream;
+using std::to_string;
+using std::vector;
+using std::unique_ptr;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+using ceph::JSONFormatter;
+using ceph::make_message;
+using ceph::mono_clock;
+using ceph::mono_time;
+using ceph::timespan_str;
+
+string LogMonitor::log_channel_info::get_log_file(const string &channel)
+{
+  dout(25) << __func__ << " for channel '"
+	   << channel << "'" << dendl;
+
+  if (expanded_log_file.count(channel) == 0) {
+    string fname = expand_channel_meta(
+      get_str_map_key(log_file, channel, &CLOG_CONFIG_DEFAULT_KEY),
+      channel);
+    expanded_log_file[channel] = fname;
+
+    dout(20) << __func__ << " for channel '"
+	     << channel << "' expanded to '"
+	     << fname << "'" << dendl;
+  }
+  return expanded_log_file[channel];
+}
+
+
+void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
+{
+  dout(20) << __func__ << " expand map: " << m << dendl;
+  for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p) {
+    m[p->first] = expand_channel_meta(p->second, p->first);
+  }
+  dout(20) << __func__ << " expanded map: " << m << dendl;
+}
+
+string LogMonitor::log_channel_info::expand_channel_meta(
+    const string &input,
+    const string &change_to)
+{
+  size_t pos = string::npos;
+  string s(input);
+  while ((pos = s.find(LOG_META_CHANNEL)) != string::npos) {
+    string tmp = s.substr(0, pos) + change_to;
+    if (pos+LOG_META_CHANNEL.length() < s.length())
+      tmp += s.substr(pos+LOG_META_CHANNEL.length());
+    s = tmp;
+  }
+  dout(20) << __func__ << " from '" << input
+	   << "' to '" << s << "'" << dendl;
+
+  return s;
+}
+
+bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
+  string v = get_str_map_key(log_to_syslog, channel,
+                             &CLOG_CONFIG_DEFAULT_KEY);
+  // We expect booleans, but they are in k/v pairs, kept
+  // as strings, in 'log_to_syslog'. We must ensure
+  // compatibility with existing boolean handling, and so
+  // we are here using a modified version of how
+  // md_config_t::set_val_raw() handles booleans. We will
+  // accept both 'true' and 'false', but will also check for
+  // '1' and '0'. The main distiction between this and the
+  // original code is that we will assume everything not '1',
+  // '0', 'true' or 'false' to be 'false'.
+  bool ret = false;
+
+  if (boost::iequals(v, "false")) {
+    ret = false;
+  } else if (boost::iequals(v, "true")) {
+    ret = true;
+  } else {
+    std::string err;
+    int b = strict_strtol(v.c_str(), 10, &err);
+    ret = (err.empty() && b == 1);
+  }
+
+  return ret;
+}
+
+ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
+    const string &channel)
+{
+  dout(25) << __func__ << " for channel '"
+	   << channel << "'" << dendl;
+
+  if (graylogs.count(channel) == 0) {
+    auto graylog(std::make_shared<ceph::logging::Graylog>("mon"));
+
+    graylog->set_fsid(g_conf().get_val<uuid_d>("fsid"));
+    graylog->set_hostname(g_conf()->host);
+    graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
+					     &CLOG_CONFIG_DEFAULT_KEY),
+			     atoi(get_str_map_key(log_to_graylog_port, channel,
+						  &CLOG_CONFIG_DEFAULT_KEY).c_str()));
+
+    graylogs[channel] = graylog;
+    dout(20) << __func__ << " for channel '"
+	     << channel << "' to graylog host '"
+	     << log_to_graylog_host[channel] << ":"
+	     << log_to_graylog_port[channel]
+	     << "'" << dendl;
+  }
+  return graylogs[channel];
+}
+
+
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
-  return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< "(" << mon->get_state_name()
+static ostream& _prefix(std::ostream *_dout, Monitor &mon, version_t v) {
+  return *_dout << "mon." << mon.name << "@" << mon.rank
+		<< "(" << mon.get_state_name()
 		<< ").log v" << v << " ";
 }
 
@@ -63,12 +194,12 @@ void LogMonitor::create_initial()
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
   e.name = g_conf()->name;
-  e.rank = entity_name_t::MON(mon->rank);
-  e.addrs = mon->messenger->get_myaddrs();
+  e.rank = entity_name_t::MON(mon.rank);
+  e.addrs = mon.messenger->get_myaddrs();
   e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
   std::stringstream ss;
-  ss << "mkfs " << mon->monmap->get_fsid();
+  ss << "mkfs " << mon.monmap->get_fsid();
   e.msg = ss.str();
   e.seq = 0;
   pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
@@ -221,9 +352,8 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << __func__ << " v" << version << dendl;
   __u8 v = 1;
   encode(v, bl);
-  multimap<utime_t,LogEntry>::iterator p;
-  for (p = pending_log.begin(); p != pending_log.end(); ++p)
-    p->second.encode(bl, mon->get_quorum_con_features());
+  for (auto p = pending_log.begin(); p != pending_log.end(); ++p)
+    p->second.encode(bl, mon.get_quorum_con_features());
 
   put_version(t, version, bl);
   put_last_committed(t, version);
@@ -235,7 +365,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
   ceph_assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
-  encode(summary, summary_bl, mon->get_quorum_con_features());
+  encode(summary, summary_bl, mon.get_quorum_con_features());
 
   put_version_full(t, summary.version, summary_bl);
   put_version_latest_full(t, summary.version);
@@ -243,7 +373,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
 
 version_t LogMonitor::get_trim_to() const
 {
-  if (!mon->is_leader())
+  if (!mon.is_leader())
     return 0;
 
   unsigned max = g_conf()->mon_max_log_epochs;
@@ -264,7 +394,7 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
       return preprocess_command(op);
     } catch (const bad_cmd_get& e) {
       bufferlist bl;
-      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
     }
 
@@ -288,7 +418,7 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
       return prepare_command(op);
     } catch (const bad_cmd_get& e) {
       bufferlist bl;
-      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
       return true;
     }
   case MSG_LOG:
@@ -315,7 +445,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
     goto done;
   }
   
-  for (deque<LogEntry>::iterator p = m->entries.begin();
+  for (auto p = m->entries.begin();
        p != m->entries.end();
        ++p) {
     if (!pending_summary.contains(p->key()))
@@ -329,7 +459,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   return false;
 
  done:
-  mon->no_reply(op);
+  mon.no_reply(op);
   return true;
 }
 
@@ -351,13 +481,13 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
   auto m = op->get_req<MLog>();
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
-  if (m->fsid != mon->monmap->fsid) {
-    dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid 
+  if (m->fsid != mon.monmap->fsid) {
+    dout(0) << "handle_log on fsid " << m->fsid << " != " << mon.monmap->fsid 
 	    << dendl;
     return false;
   }
 
-  for (deque<LogEntry>::iterator p = m->entries.begin();
+  for (auto p = m->entries.begin();
        p != m->entries.end();
        ++p) {
     dout(10) << " logging " << *p << dendl;
@@ -375,7 +505,7 @@ void LogMonitor::_updated_log(MonOpRequestRef op)
 {
   auto m = op->get_req<MLog>();
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
-  mon->send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
+  mon.send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
 }
 
 bool LogMonitor::should_propose(double& delay)
@@ -401,36 +531,36 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
   MonSession *session = op->get_session();
   if (!session) {
-    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
+    mon.reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval(cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "log last") {
     int64_t num = 20;
-    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    cmd_getval(cmdmap, "num", num);
     if (f) {
       f->open_array_section("tail");
     }
 
     std::string level_str;
     clog_type level;
-    if (cmd_getval(g_ceph_context, cmdmap, "level", level_str)) {
+    if (cmd_getval(cmdmap, "level", level_str)) {
       level = LogEntry::str_to_level(level_str);
       if (level == CLOG_UNKNOWN) {
         ss << "Invalid severity '" << level_str << "'";
-        mon->reply_command(op, -EINVAL, ss.str(), get_last_committed());
+        mon.reply_command(op, -EINVAL, ss.str(), get_last_committed());
         return true;
       }
     } else {
@@ -438,7 +568,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     }
 
     std::string channel;
-    if (!cmd_getval(g_ceph_context, cmdmap, "channel", channel)) {
+    if (!cmd_getval(cmdmap, "channel", channel)) {
       channel = CLOG_CHANNEL_DEFAULT;
     }
 
@@ -538,7 +668,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 
   string rs;
   getline(ss, rs);
-  mon->reply_command(op, r, rs, rdata, get_last_committed());
+  mon.reply_command(op, r, rs, rdata, get_last_committed());
   return true;
 }
 
@@ -555,29 +685,31 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    mon.reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval(cmdmap, "prefix", prefix);
 
   MonSession *session = op->get_session();
   if (!session) {
-    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
+    mon.reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
   if (prefix == "log") {
     vector<string> logtext;
-    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
+    string level_str;
+    cmd_getval(cmdmap, "logtext", logtext);
     LogEntry le;
     le.rank = m->get_orig_source();
     le.addrs.v.push_back(m->get_orig_source_addr());
     le.name = session->entity_name;
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
-    le.prio = CLOG_INFO;
+    cmd_getval(cmdmap, "level", level_str, string("info"));
+    le.prio = LogEntry::str_to_level(level_str);
     le.channel = CLOG_CHANNEL_DEFAULT;
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
@@ -589,7 +721,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   }
 
   getline(ss, rs);
-  mon->reply_command(op, err, rs, get_last_committed());
+  mon.reply_command(op, err, rs, get_last_committed());
   return false;
 }
 
@@ -606,8 +738,8 @@ int LogMonitor::sub_name_to_id(const string& n)
 void LogMonitor::check_subs()
 {
   dout(10) << __func__ << dendl;
-  for (map<string, xlist<Subscription*>*>::iterator i = mon->session_map.subs.begin();
-       i != mon->session_map.subs.end();
+  for (map<string, xlist<Subscription*>*>::iterator i = mon.session_map.subs.begin();
+       i != mon.session_map.subs.end();
        ++i) {
     for (xlist<Subscription*>::iterator j = i->second->begin(); !j.end(); ++j) {
       if (sub_name_to_id((*j)->type) >= 0)
@@ -632,7 +764,7 @@ void LogMonitor::check_sub(Subscription *s)
     return;
   } 
  
-  MLog *mlog = new MLog(mon->monmap->fsid);
+  MLog *mlog = new MLog(mon.monmap->fsid);
 
   if (s->next == 0) { 
     /* First timer, heh? */
@@ -652,7 +784,7 @@ void LogMonitor::check_sub(Subscription *s)
     mlog->put();
   }
   if (s->onetime)
-    mon->session_map.remove_sub(s);
+    mon.session_map.remove_sub(s);
   else
     s->next = summary_version+1;
 }
@@ -798,85 +930,6 @@ void LogMonitor::update_log_channels()
   channels.expand_channel_meta();
 }
 
-void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
-{
-  generic_dout(20) << __func__ << " expand map: " << m << dendl;
-  for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p) {
-    m[p->first] = expand_channel_meta(p->second, p->first);
-  }
-  generic_dout(20) << __func__ << " expanded map: " << m << dendl;
-}
-
-string LogMonitor::log_channel_info::expand_channel_meta(
-    const string &input,
-    const string &change_to)
-{
-  size_t pos = string::npos;
-  string s(input);
-  while ((pos = s.find(LOG_META_CHANNEL)) != string::npos) {
-    string tmp = s.substr(0, pos) + change_to;
-    if (pos+LOG_META_CHANNEL.length() < s.length())
-      tmp += s.substr(pos+LOG_META_CHANNEL.length());
-    s = tmp;
-  }
-  generic_dout(20) << __func__ << " from '" << input
-                   << "' to '" << s << "'" << dendl;
-
-  return s;
-}
-
-bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
-  string v = get_str_map_key(log_to_syslog, channel,
-                             &CLOG_CONFIG_DEFAULT_KEY);
-  // We expect booleans, but they are in k/v pairs, kept
-  // as strings, in 'log_to_syslog'. We must ensure
-  // compatibility with existing boolean handling, and so
-  // we are here using a modified version of how
-  // md_config_t::set_val_raw() handles booleans. We will
-  // accept both 'true' and 'false', but will also check for
-  // '1' and '0'. The main distiction between this and the
-  // original code is that we will assume everything not '1',
-  // '0', 'true' or 'false' to be 'false'.
-  bool ret = false;
-
-  if (boost::iequals(v, "false")) {
-    ret = false;
-  } else if (boost::iequals(v, "true")) {
-    ret = true;
-  } else {
-    std::string err;
-    int b = strict_strtol(v.c_str(), 10, &err);
-    ret = (err.empty() && b == 1);
-  }
-
-  return ret;
-}
-
-ceph::logging::Graylog::Ref LogMonitor::log_channel_info::get_graylog(
-    const string &channel)
-{
-  generic_dout(25) << __func__ << " for channel '"
-		   << channel << "'" << dendl;
-
-  if (graylogs.count(channel) == 0) {
-    auto graylog(std::make_shared<ceph::logging::Graylog>("mon"));
-
-    graylog->set_fsid(g_conf().get_val<uuid_d>("fsid"));
-    graylog->set_hostname(g_conf()->host);
-    graylog->set_destination(get_str_map_key(log_to_graylog_host, channel,
-					     &CLOG_CONFIG_DEFAULT_KEY),
-			     atoi(get_str_map_key(log_to_graylog_port, channel,
-						  &CLOG_CONFIG_DEFAULT_KEY).c_str()));
-
-    graylogs[channel] = graylog;
-    generic_dout(20) << __func__ << " for channel '"
-		     << channel << "' to graylog host '"
-		     << log_to_graylog_host[channel] << ":"
-		     << log_to_graylog_port[channel]
-		     << "'" << dendl;
-  }
-  return graylogs[channel];
-}
 
 void LogMonitor::handle_conf_change(const ConfigProxy& conf,
                                     const std::set<std::string> &changed)

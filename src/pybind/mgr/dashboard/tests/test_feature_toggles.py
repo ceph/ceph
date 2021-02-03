@@ -2,13 +2,14 @@
 from __future__ import absolute_import
 
 import unittest
+
 try:
     from mock import Mock, patch
 except ImportError:
     from unittest.mock import Mock, patch
 
-from . import KVStoreMockMixin
-from ..plugins.feature_toggles import FeatureToggles, Features
+from ..plugins.feature_toggles import Features, FeatureToggles
+from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):

@@ -1,123 +1,166 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
-import { I18n } from '@ngx-translate/i18n-polyfill';
 
-import { OrchestratorService } from '../../../shared/api/orchestrator.service';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
-import { SummaryService } from '../../../shared/services/summary.service';
-import { Service } from './services.model';
+import { delay, finalize } from 'rxjs/operators';
+
+import { CephServiceService } from '~/app/shared/api/ceph-service.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
+import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
+import { Permissions } from '~/app/shared/models/permissions';
+import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { PlacementPipe } from './placement.pipe';
+
+const BASE_URL = 'services';
 
 @Component({
   selector: 'cd-services',
   templateUrl: './services.component.html',
-  styleUrls: ['./services.component.scss']
+  styleUrls: ['./services.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class ServicesComponent implements OnChanges, OnInit {
-  @ViewChild(TableComponent, { static: false })
+export class ServicesComponent extends ListWithDetails implements OnChanges, OnInit {
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
-  @Input() hostname = '';
+  @Input() hostname: string;
 
-  checkingOrchestrator = true;
-  orchestratorExist = false;
-  docsUrl: string;
+  // Do not display these columns
+  @Input() hiddenColumns: string[] = [];
+
+  permissions: Permissions;
+  tableActions: CdTableAction[];
+  showDocPanel = false;
+
+  orchStatus: OrchestratorStatus;
+  actionOrchFeatures = {
+    create: [OrchestratorFeature.SERVICE_CREATE],
+    delete: [OrchestratorFeature.SERVICE_DELETE]
+  };
 
   columns: Array<CdTableColumn> = [];
-  services: Array<Service> = [];
+  services: Array<CephServiceSpec> = [];
   isLoadingServices = false;
+  selection: CdTableSelection = new CdTableSelection();
 
   constructor(
-    private cephReleaseNamePipe: CephReleaseNamePipe,
-    private i18n: I18n,
+    private actionLabels: ActionLabelsI18n,
+    private authStorageService: AuthStorageService,
+    private modalService: ModalService,
     private orchService: OrchestratorService,
-    private summaryService: SummaryService
-  ) {}
+    private cephServiceService: CephServiceService,
+    private relativeDatePipe: RelativeDatePipe,
+    private taskWrapperService: TaskWrapperService,
+    private urlBuilder: URLBuilderService
+  ) {
+    super();
+    this.permissions = this.authStorageService.getPermissions();
+    this.tableActions = [
+      {
+        permission: 'create',
+        icon: Icons.add,
+        routerLink: () => this.urlBuilder.getCreate(),
+        name: this.actionLabels.CREATE,
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
+        disable: (selection: CdTableSelection) => this.getDisable('create', selection)
+      },
+      {
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.deleteAction(),
+        name: this.actionLabels.DELETE,
+        disable: (selection: CdTableSelection) => this.getDisable('delete', selection)
+      }
+    ];
+  }
 
   ngOnInit() {
-    this.columns = [
+    const columns = [
       {
-        name: this.i18n('Service type'),
-        prop: 'service_type',
+        name: $localize`Service`,
+        prop: 'service_name',
         flexGrow: 1
       },
       {
-        name: this.i18n('Service'),
-        prop: 'service',
-        flexGrow: 1
-      },
-      {
-        name: this.i18n('Service instance'),
-        prop: 'service_instance',
-        flexGrow: 1
-      },
-      {
-        name: this.i18n('Container id'),
-        prop: 'container_id',
+        name: $localize`Container image name`,
+        prop: 'status.container_image_name',
         flexGrow: 3
       },
       {
-        name: this.i18n('Version'),
-        prop: 'version',
+        name: $localize`Container image ID`,
+        prop: 'status.container_image_id',
+        flexGrow: 3,
+        cellTransformation: CellTemplate.truncate,
+        customTemplateConfig: {
+          length: 12
+        }
+      },
+      {
+        name: $localize`Placement`,
+        prop: '',
+        pipe: new PlacementPipe(),
         flexGrow: 1
       },
       {
-        name: this.i18n('Rados config location'),
-        prop: 'rados_config_location',
+        name: $localize`Running`,
+        prop: 'status.running',
         flexGrow: 1
       },
       {
-        name: this.i18n('Service URL'),
-        prop: 'service_url',
-        flexGrow: 2
-      },
-      {
-        name: this.i18n('Status'),
-        prop: 'status',
+        name: $localize`Size`,
+        prop: 'status.size',
         flexGrow: 1
       },
       {
-        name: this.i18n('Status Description'),
-        prop: 'status_desc',
+        name: $localize`Last Refreshed`,
+        prop: 'status.last_refresh',
+        pipe: this.relativeDatePipe,
         flexGrow: 1
       }
     ];
 
-    if (!this.hostname) {
-      const hostnameColumn = {
-        name: this.i18n('Hostname'),
-        prop: 'nodename',
-        flexGrow: 2
-      };
-      this.columns.splice(0, 0, hostnameColumn);
-    }
-
-    // duplicated code with grafana
-    const subs = this.summaryService.subscribe((summary: any) => {
-      if (!summary) {
-        return;
-      }
-
-      const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-      this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/orchestrator_cli/`;
-
-      setTimeout(() => {
-        subs.unsubscribe();
-      }, 0);
+    this.columns = columns.filter((col: any) => {
+      return !this.hiddenColumns.includes(col.prop);
     });
 
-    this.orchService.status().subscribe((data: { available: boolean }) => {
-      this.orchestratorExist = data.available;
-      this.checkingOrchestrator = false;
+    this.orchService.status().subscribe((status: OrchestratorStatus) => {
+      this.orchStatus = status;
+      this.showDocPanel = !status.available;
     });
   }
 
   ngOnChanges() {
-    if (this.orchestratorExist) {
+    if (this.orchStatus?.available) {
       this.services = [];
       this.table.reloadData();
     }
+  }
+
+  getDisable(action: 'create' | 'delete', selection: CdTableSelection): boolean | string {
+    if (action === 'delete') {
+      if (!selection?.hasSingleSelection) {
+        return true;
+      }
+    }
+    return this.orchService.getTableActionDisableDesc(
+      this.orchStatus,
+      this.actionOrchFeatures[action]
+    );
   }
 
   getServices(context: CdTableFetchDataContext) {
@@ -125,13 +168,8 @@ export class ServicesComponent implements OnChanges, OnInit {
       return;
     }
     this.isLoadingServices = true;
-    this.orchService.serviceList(this.hostname).subscribe(
-      (data: Service[]) => {
-        const services: Service[] = [];
-        data.forEach((service: Service) => {
-          service.uid = `${service.nodename}-${service.service_type}-${service.service}-${service.service_instance}`;
-          services.push(service);
-        });
+    this.cephServiceService.list().subscribe(
+      (services: CephServiceSpec[]) => {
         this.services = services;
         this.isLoadingServices = false;
       },
@@ -141,5 +179,38 @@ export class ServicesComponent implements OnChanges, OnInit {
         context.error();
       }
     );
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
+  deleteAction() {
+    const service = this.selection.first();
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`Service`,
+      itemNames: [service.service_name],
+      actionDescription: 'delete',
+      submitActionObservable: () =>
+        this.taskWrapperService
+          .wrapTaskAroundCall({
+            task: new FinishedTask(`service/${URLVerbs.DELETE}`, {
+              service_name: service.service_name
+            }),
+            call: this.cephServiceService.delete(service.service_name)
+          })
+          .pipe(
+            // Delay closing the dialog, otherwise the datatable still
+            // shows the deleted service after forcing a reload.
+            // Showing the dialog while delaying is done to increase
+            // the user experience.
+            delay(2000),
+            finalize(() => {
+              // Force reloading the data table content because it is
+              // auto-reloaded only every 60s.
+              this.table.refreshBtn();
+            })
+          )
+    });
   }
 }

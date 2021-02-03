@@ -18,7 +18,7 @@
 #include "messages/MMonQuorumService.h"
 #include "mon/mon_types.h"
 
-class MMonHealth : public MMonQuorumService {
+class MMonHealth final : public MMonQuorumService {
 public:
   static constexpr int HEAD_VERSION = 1;
 
@@ -31,11 +31,11 @@ public:
   MMonHealth() : MMonQuorumService{MSG_MON_HEALTH, HEAD_VERSION} { }
 
 private:
-  ~MMonHealth() override { }
+  ~MMonHealth() final { }
 
 public:
   std::string_view get_type_name() const override { return "mon_health"; }
-  void print(ostream &o) const override {
+  void print(std::ostream &o) const override {
     o << "mon_health("
       << " e " << get_epoch()
       << " r " << get_round()
@@ -43,6 +43,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     service_decode(p);
     decode(service_type, p);

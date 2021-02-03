@@ -53,7 +53,7 @@ class KStore : public ObjectStore {
   // types
 public:
 
-  class TransContext;
+  struct TransContext;
 
   /// an in-memory object
   struct Onode {
@@ -61,7 +61,7 @@ public:
     std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
-    string key;     ///< key under PREFIX_OBJ where we are stored
+    std::string key;     ///< key under PREFIX_OBJ where we are stored
     boost::intrusive::list_member_hook<> lru_item;
 
     kstore_onode_t onode;  ///< metadata stored as value in kv store
@@ -70,14 +70,14 @@ public:
 
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
-    set<TransContext*> flush_txns;   ///< committing txns
+    std::set<TransContext*> flush_txns;   ///< committing txns
 
     uint64_t tail_offset;
-    bufferlist tail_bl;
+    ceph::buffer::list tail_bl;
 
-    map<uint64_t,bufferlist> pending_stripes;  ///< unwritten stripes
+    std::map<uint64_t,ceph::buffer::list> pending_stripes;  ///< unwritten stripes
 
-    Onode(CephContext* cct, const ghobject_t& o, const string& k)
+    Onode(CephContext* cct, const ghobject_t& o, const std::string& k)
       : cct(cct),
 	nref(0),
 	oid(o),
@@ -126,7 +126,7 @@ public:
     OnodeRef lookup(const ghobject_t& o);
     void rename(const ghobject_t& old_oid, const ghobject_t& new_oid);
     void clear();
-    bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
+    bool get_next(const ghobject_t& after, std::pair<ghobject_t,OnodeRef> *next);
     int trim(int max=-1);
   };
 
@@ -171,16 +171,16 @@ public:
     CollectionRef c;
     OnodeRef o;
     KeyValueDB::Iterator it;
-    string head, tail;
+    std::string head, tail;
   public:
     OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
     int seek_to_first() override;
-    int upper_bound(const string &after) override;
-    int lower_bound(const string &to) override;
+    int upper_bound(const std::string &after) override;
+    int lower_bound(const std::string &to) override;
     bool valid() override;
     int next() override;
-    string key() override;
-    bufferlist value() override;
+    std::string key() override;
+    ceph::buffer::list value() override;
     int status() override {
       return 0;
     }
@@ -227,13 +227,13 @@ public:
 
     uint64_t ops, bytes;
 
-    set<OnodeRef> onodes;     ///< these onodes need to be updated/written
+    std::set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
     Context *onreadable_sync;         ///< signal on readable
-    list<Context*> oncommits;  ///< more commit completions
-    list<CollectionRef> removed_collections; ///< colls we removed
+    std::list<Context*> oncommits;  ///< more commit completions
+    std::list<CollectionRef> removed_collections; ///< colls we removed
 
     CollectionRef first_collection;  ///< first referenced collection
     utime_t start;
@@ -313,7 +313,7 @@ public:
 private:
   KeyValueDB *db;
   uuid_d fsid;
-  string basedir;
+  std::string basedir;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   bool mounted;
@@ -321,7 +321,7 @@ private:
   /// rwlock to protect coll_map
   ceph::shared_mutex coll_lock = ceph::make_shared_mutex("KStore::coll_lock");
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
-  map<coll_t,CollectionRef> new_coll_map;
+  std::map<coll_t,CollectionRef> new_coll_map;
 
   std::mutex nid_lock;
   uint64_t nid_last;
@@ -335,12 +335,12 @@ private:
   std::mutex kv_lock;
   std::condition_variable kv_cond, kv_sync_cond;
   bool kv_stop;
-  deque<TransContext*> kv_queue, kv_committing;
+  std::deque<TransContext*> kv_queue, kv_committing;
 
   //Logger *logger;
   PerfCounters *logger;
   std::mutex reap_lock;
-  list<CollectionRef> removed_collections;
+  std::list<CollectionRef> removed_collections;
 
 
   // --------------------------------------------------------
@@ -392,20 +392,20 @@ private:
     kv_stop = false;
   }
 
-  void _do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl);
+  void _do_read_stripe(OnodeRef o, uint64_t offset, ceph::buffer::list *pbl, bool do_cache);
   void _do_write_stripe(TransContext *txc, OnodeRef o,
-			uint64_t offset, bufferlist& bl);
+			uint64_t offset, ceph::buffer::list& bl);
   void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max, std::vector<ghobject_t> *ls, ghobject_t *next);
 
 public:
-  KStore(CephContext *cct, const string& path);
+  KStore(CephContext *cct, const std::string& path);
   ~KStore() override;
 
-  string get_type() override {
+  std::string get_type() override {
     return "kstore";
   }
 
@@ -413,7 +413,7 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
-  static int get_block_device_fsid(const string& path, uuid_d *fsid);
+  static int get_block_device_fsid(const std::string& path, uuid_d *fsid);
 
   bool test_mount_in_use() override;
 
@@ -435,12 +435,12 @@ public:
   int mkjournal() override {
     return 0;
   }
-  void dump_perf_counters(Formatter *f) override {
+  void dump_perf_counters(ceph::Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
     f->close_section();
   }
-  void get_db_statistics(Formatter *f) override {
+  void get_db_statistics(ceph::Formatter *f) override {
     db->get_statistics(f);
   }
   int statfs(struct store_statfs_t *buf,
@@ -471,38 +471,39 @@ public:
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
+    ceph::buffer::list& bl,
     uint32_t op_flags = 0) override;
   int _do_read(
     OnodeRef o,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
+    ceph::buffer::list& bl,
+    bool do_cache,
     uint32_t op_flags = 0);
 
   using ObjectStore::fiemap;
-  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
-  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& outbl) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, ceph::buffer::list& outbl) override;
   using ObjectStore::getattr;
-  int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, bufferptr& value) override;
+  int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, ceph::buffer::ptr& value) override;
   using ObjectStore::getattrs;
-  int getattrs(CollectionHandle& c, const ghobject_t& oid, map<string,bufferptr>& aset) override;
+  int getattrs(CollectionHandle& c, const ghobject_t& oid, std::map<std::string,ceph::buffer::ptr>& aset) override;
 
-  int list_collections(vector<coll_t>& ls) override;
+  int list_collections(std::vector<coll_t>& ls) override;
   bool collection_exists(const coll_t& c) override;
   int collection_empty(CollectionHandle& c, bool *empty) override;
   int collection_bits(CollectionHandle& c) override;
   int collection_list(
     CollectionHandle &c, const ghobject_t& start, const ghobject_t& end,
     int max,
-    vector<ghobject_t> *ls, ghobject_t *next) override;
+    std::vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
   int omap_get(
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value std::map
     ) override;
 
   using ObjectStore::omap_get_header;
@@ -510,7 +511,7 @@ public:
   int omap_get_header(
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
+    ceph::buffer::list *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
     ) override;
 
@@ -519,7 +520,7 @@ public:
   int omap_get_keys(
     CollectionHandle& c,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
+    std::set<std::string> *keys      ///< [out] Keys defined on oid
     ) override;
 
   using ObjectStore::omap_get_values;
@@ -527,8 +528,8 @@ public:
   int omap_get_values(
     CollectionHandle& c,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    const std::set<std::string> &keys,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
 
   using ObjectStore::omap_check_keys;
@@ -536,8 +537,8 @@ public:
   int omap_check_keys(
     CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) override;
 
   using ObjectStore::get_omap_iterator;
@@ -567,7 +568,7 @@ public:
 
   int queue_transactions(
     CollectionHandle& ch,
-    vector<Transaction>& tls,
+    std::vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 
@@ -584,12 +585,12 @@ private:
 	     CollectionRef& c,
 	     OnodeRef& o,
 	     uint64_t offset, size_t len,
-	     bufferlist& bl,
+	     ceph::buffer::list& bl,
 	     uint32_t fadvise_flags);
   int _do_write(TransContext *txc,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
-		bufferlist& bl,
+		ceph::buffer::list& bl,
 		uint32_t fadvise_flags);
   int _touch(TransContext *txc,
 	     CollectionRef& c,
@@ -613,16 +614,16 @@ private:
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
-	       const string& name,
-	       bufferptr& val);
+	       const std::string& name,
+	       ceph::buffer::ptr& val);
   int _setattrs(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,
-		const map<string,bufferptr>& aset);
+		const std::map<std::string,ceph::buffer::ptr>& aset);
   int _rmattr(TransContext *txc,
 	      CollectionRef& c,
 	      OnodeRef& o,
-	      const string& name);
+	      const std::string& name);
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o);
@@ -633,19 +634,19 @@ private:
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
 		    OnodeRef& o,
-		    bufferlist& bl);
+		    ceph::buffer::list& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,
 		      OnodeRef& o,
-		      bufferlist& header);
+		      ceph::buffer::list& header);
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& o,
-		   const bufferlist& bl);
+		   const ceph::buffer::list& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			OnodeRef& o,
-			const string& first, const string& last);
+			const std::string& first, const std::string& last);
   int _setallochint(TransContext *txc,
 		    CollectionRef& c,
 		    OnodeRef& o,

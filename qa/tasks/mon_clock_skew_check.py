@@ -2,11 +2,8 @@
 Handle clock skews in monitors.
 """
 import logging
-import contextlib
-import ceph_manager
 import time
-import gevent
-from StringIO import StringIO
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -50,7 +47,7 @@ def task(ctx, config):
 
     log.info('Beginning mon_clock_skew_check...')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,

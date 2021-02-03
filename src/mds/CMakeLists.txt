@@ -40,9 +40,14 @@ set(mds_srcs
   Mantle.cc
   Anchor.cc
   OpenFileTable.cc
+  MDSPinger.cc
+  MetricAggregator.cc
+  MetricsHandler.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
-  ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)
+  ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
+  ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
-  heap_profiler cpu_profiler osdc liblua)
+  heap_profiler cpu_profiler osdc ${LUA_LIBRARIES})
+target_include_directories(mds PRIVATE "${LUA_INCLUDE_DIR}")

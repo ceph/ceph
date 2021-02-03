@@ -106,6 +106,10 @@ const char *ceph_release_name(int r)
 		return "nautilus";
 	case CEPH_RELEASE_OCTOPUS:
 		return "octopus";
+	case CEPH_RELEASE_PACIFIC:
+		return "pacific";
+	case CEPH_RELEASE_QUINCY:
+		return "quincy";
 	default:
 		if (r < 0)
 			return "unspecified";

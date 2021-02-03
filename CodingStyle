@@ -9,7 +9,7 @@ C code
 
 For C code, we conform by the Linux kernel coding standards:
 
-    https://www.kernel.org/doc/Documentation/CodingStyle
+    https://www.kernel.org/doc/Documentation/process/coding-style.rst
 
 
 C++ code
@@ -105,7 +105,7 @@ by section.
 * Header Files -> The `#define` Guard:
 
   `#pragma once` is allowed for simplicity at the expense of
-   portability sinces `#pragma once` is wildly supported and is known
+   portability since `#pragma once` is widely supported and is known
    to work on GCC and Clang.
 
 

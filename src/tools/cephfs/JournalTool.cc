@@ -48,8 +48,8 @@ void JournalTool::usage()
     << "      import <path> [--force]\n"
     << "      export <path>\n"
     << "      reset [--force]\n"
-    << "  cephfs-journal-tool [options] header <get|set <field> <value>\n"
-    << "    <field>: [trimmed_pos|expire_pos|write_pos|pool_id]"
+    << "  cephfs-journal-tool [options] header <get|set> <field> <value>\n"
+    << "    <field>: [trimmed_pos|expire_pos|write_pos|pool_id]\n"
     << "  cephfs-journal-tool [options] event <effect> <selector> <output> [special options]\n"
     << "    <selector>:\n"
     << "      --range=<start>..<end>\n"
@@ -65,7 +65,7 @@ void JournalTool::usage()
     << "  --rank=filesystem:mds-rank|all Journal rank (mandatory)\n"
     << "  --journal=<mdlog|purge_queue>  Journal type (purge_queue means\n"
     << "                                 this journal is used to queue for purge operation,\n"
-    << "                                 default is mdlog, and only mdlog support event mode)\n" 
+    << "                                 default is mdlog, and only mdlog support event mode)\n"
     << "\n"
     << "Special options\n"
     << "  --alternate-pool <name>     Alternative metadata pool to target\n"
@@ -224,6 +224,11 @@ bool JournalTool::can_execute_for_all_ranks(const std::string &mode,
  */
 int JournalTool::main_journal(std::vector<const char*> &argv)
 {
+  if (argv.empty()) {
+    derr << "Missing journal command, please see help" << dendl;
+    return -EINVAL;
+  }
+
   std::string command = argv[0];
   if (command == "inspect") {
     return journal_inspect();
@@ -291,8 +296,8 @@ int JournalTool::main_header(std::vector<const char*> &argv)
     ceph_assert(js.header != NULL);
   }
 
-  if (argv.size() == 0) {
-    derr << "Invalid header command, must be [get|set]" << dendl;
+  if (argv.empty()) {
+    derr << "Missing header command, must be [get|set]" << dendl;
     return -EINVAL;
   }
   std::vector<const char *>::iterator arg = argv.begin();
@@ -367,7 +372,13 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 {
   int r;
 
+  if (argv.empty()) {
+    derr << "Missing event command, please see help" << dendl;
+    return -EINVAL;
+  }
+
   std::vector<const char*>::iterator arg = argv.begin();
+  bool dry_run = false;
 
   std::string command = *(arg++);
   if (command != "get" && command != "splice" && command != "recover_dentries") {
@@ -375,9 +386,15 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     return -EINVAL;
   }
 
-  if (command == "recover_dentries" && type != "mdlog") {
-    derr << "journaler for " << type << " can't do \"recover_dentries\"." << dendl;
-    return -EINVAL;
+  if (command == "recover_dentries") {
+    if (type != "mdlog") {
+      derr << "journaler for " << type << " can't do \"recover_dentries\"." << dendl;
+      return -EINVAL;
+    } else {
+      if (arg != argv.end() && ceph_argparse_flag(argv, arg, "--dry_run", (char*)NULL)) {
+        dry_run = true;
+      }
+    }
   }
 
   if (arg == argv.end()) {
@@ -439,11 +456,6 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     if (r) {
       derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
       return r;
-    }
-
-    bool dry_run = false;
-    if (arg != argv.end() && ceph_argparse_flag(argv, arg, "--dry_run", (char*)NULL)) {
-      dry_run = true;
     }
 
     /**
@@ -718,9 +730,9 @@ int JournalTool::recover_dentries(
       try {
         old_fnode.decode(old_fnode_iter);
         dout(4) << "frag " << frag_oid.name << " fnode old v" <<
-          old_fnode.version << " vs new v" << lump.fnode.version << dendl;
+          old_fnode.version << " vs new v" << lump.fnode->version << dendl;
         old_fnode_version = old_fnode.version;
-        write_fnode = old_fnode_version < lump.fnode.version;
+        write_fnode = old_fnode_version < lump.fnode->version;
       } catch (const buffer::error &err) {
         dout(1) << "frag " << frag_oid.name
                 << " is corrupt, overwriting" << dendl;
@@ -736,7 +748,7 @@ int JournalTool::recover_dentries(
     if ((other_pool || write_fnode) && !dry_run) {
       dout(4) << "writing fnode to omap header" << dendl;
       bufferlist fnode_bl;
-      lump.fnode.encode(fnode_bl);
+      lump.fnode->encode(fnode_bl);
       if (!other_pool || frag.ino >= MDS_INO_SYSTEM_BASE) {
 	r = output.omap_set_header(frag_oid.name, fnode_bl);
       }
@@ -812,23 +824,33 @@ int JournalTool::recover_dentries(
         char dentry_type;
         decode(dentry_type, q);
 
-        if (dentry_type == 'L') {
+        if (dentry_type == 'L' || dentry_type == 'l') {
           // leave write_dentry false, we have no version to
           // compare with in a hardlink, so it's not safe to
           // squash over it with what's in this fullbit
           dout(10) << "Existing remote inode in slot to be (maybe) written "
                << "by a full inode from the journal dn '" << fb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode.version
+               << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode.version;
-        } else if (dentry_type == 'I') {
+          write_dentry = old_fnode_version < lump.fnode->version;
+        } else if (dentry_type == 'I' || dentry_type == 'i') {
           // Read out inode version to compare with backing store
           InodeStore inode;
-          inode.decode_bare(q);
+          if (dentry_type == 'i') {
+            mempool::mds_co::string alternate_name;
+
+            DECODE_START(2, q);
+            if (struct_v >= 2)
+              decode(alternate_name, q);
+            inode.decode(q);
+            DECODE_FINISH(q);
+	  } else {
+            inode.decode_bare(q);
+	  }
           dout(4) << "decoded embedded inode version "
-            << inode.inode.version << " vs fullbit version "
-            << fb.inode.version << dendl;
-          if (inode.inode.version < fb.inode.version) {
+            << inode.inode->version << " vs fullbit version "
+            << fb.inode->version << dendl;
+          if (inode.inode->version < fb.inode->version) {
             write_dentry = true;
           }
         } else {
@@ -850,7 +872,7 @@ int JournalTool::recover_dentries(
 
         // Record for writing to RADOS
         write_vals[key] = dentry_bl;
-        consumed_inos->insert(fb.inode.ino);
+        consumed_inos->insert(fb.inode->ino);
       }
     }
 
@@ -878,18 +900,18 @@ int JournalTool::recover_dentries(
         char dentry_type;
         decode(dentry_type, q);
 
-        if (dentry_type == 'L') {
+        if (dentry_type == 'L' || dentry_type == 'l') {
           dout(10) << "Existing hardlink inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode.version
+               << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode.version;
-        } else if (dentry_type == 'I') {
+          write_dentry = old_fnode_version < lump.fnode->version;
+        } else if (dentry_type == 'I' || dentry_type == 'i') {
           dout(10) << "Existing full inode in slot to be (maybe) written "
                << "by a remote inode from the journal dn '" << rb.dn.c_str()
-               << "' with lump fnode version " << lump.fnode.version
+               << "' with lump fnode version " << lump.fnode->version
                << "vs existing fnode version " << old_fnode_version << dendl;
-          write_dentry = old_fnode_version < lump.fnode.version;
+          write_dentry = old_fnode_version < lump.fnode->version;
         } else {
           dout(4) << "corrupt dentry in backing store, overwriting from "
             "journal" << dendl;
@@ -934,18 +956,18 @@ int JournalTool::recover_dentries(
 	decode(dentry_type, q);
 
 	bool remove_dentry = false;
-	if (dentry_type == 'L') {
+	if (dentry_type == 'L' || dentry_type == 'l') {
 	  dout(10) << "Existing hardlink inode in slot to be (maybe) removed "
 	    << "by null journal dn '" << nb.dn.c_str()
-	    << "' with lump fnode version " << lump.fnode.version
+	    << "' with lump fnode version " << lump.fnode->version
 	    << "vs existing fnode version " << old_fnode_version << dendl;
-	  remove_dentry = old_fnode_version < lump.fnode.version;
-	} else if (dentry_type == 'I') {
+	  remove_dentry = old_fnode_version < lump.fnode->version;
+	} else if (dentry_type == 'I' || dentry_type == 'i') {
 	  dout(10) << "Existing full inode in slot to be (maybe) removed "
 	    << "by null journal dn '" << nb.dn.c_str()
-	    << "' with lump fnode version " << lump.fnode.version
+	    << "' with lump fnode version " << lump.fnode->version
 	    << "vs existing fnode version " << old_fnode_version << dendl;
-	  remove_dentry = old_fnode_version < lump.fnode.version;
+	  remove_dentry = old_fnode_version < lump.fnode->version;
 	} else {
 	  dout(4) << "corrupt dentry in backing store, will remove" << dendl;
 	  remove_dentry = true;
@@ -984,7 +1006,7 @@ int JournalTool::recover_dentries(
    * of directories
    */
   for (const auto& fb : metablob.roots) {
-    inodeno_t ino = fb.inode.ino;
+    inodeno_t ino = fb.inode->ino;
     dout(4) << "updating root 0x" << std::hex << ino << std::dec << dendl;
 
     object_t root_oid = InodeStore::get_object_name(ino, frag_t(), ".inode");
@@ -1008,7 +1030,7 @@ int JournalTool::recover_dentries(
         dout(4) << "magic ok" << dendl;
         old_inode.decode(inode_bl_iter);
 
-        if (old_inode.inode.version < fb.inode.version) {
+        if (old_inode.inode->version < fb.inode->version) {
           write_root_ino = true;
         }
       } else {
@@ -1023,7 +1045,7 @@ int JournalTool::recover_dentries(
 
     if (write_root_ino && !dry_run) {
       dout(4) << "writing root ino " << root_oid.name
-               << " version " << fb.inode.version << dendl;
+               << " version " << fb.inode->version << dendl;
 
       // Compose: root ino format is magic,InodeStore(bare=false)
       bufferlist new_root_ino_bl;

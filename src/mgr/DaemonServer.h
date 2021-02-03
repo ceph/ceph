@@ -18,6 +18,7 @@
 
 #include <set>
 #include <string>
+#include <boost/variant.hpp>
 
 #include "common/ceph_mutex.h"
 #include "common/LogClient.h"
@@ -29,7 +30,9 @@
 #include "ServiceMap.h"
 #include "MgrSession.h"
 #include "DaemonState.h"
+#include "MetricCollector.h"
 #include "OSDPerfMetricCollector.h"
+#include "MDSPerfMetricCollector.h"
 
 class MMgrReport;
 class MMgrOpen;
@@ -40,7 +43,7 @@ class MMgrCommand;
 struct MonCommand;
 class CommandContext;
 struct OSDPerfMetricQuery;
-
+struct MDSPerfMetricQuery;
 
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
@@ -84,8 +87,8 @@ protected:
   static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
                                            const std::vector<MonCommand> &commands);
   bool _allowed_command(
-    MgrSession *s, const string &module, const string &prefix,
-    const cmdmap_t& cmdmap,
+    MgrSession *s, const string &service, const string &module,
+    const string &prefix, const cmdmap_t& cmdmap,
     const map<string,string>& param_str_map,
     const MonCommand *this_cmd);
 
@@ -107,8 +110,7 @@ private:
   void tick();
   void schedule_tick_locked(double delay_sec);
 
-  class OSDPerfMetricCollectorListener :
-      public OSDPerfMetricCollector::Listener {
+  class OSDPerfMetricCollectorListener : public MetricListener {
   public:
     OSDPerfMetricCollectorListener(DaemonServer *server)
       : server(server) {
@@ -122,6 +124,49 @@ private:
   OSDPerfMetricCollectorListener osd_perf_metric_collector_listener;
   OSDPerfMetricCollector osd_perf_metric_collector;
   void handle_osd_perf_metric_query_updated();
+
+  class MDSPerfMetricCollectorListener : public MetricListener {
+  public:
+    MDSPerfMetricCollectorListener(DaemonServer *server)
+      : server(server) {
+    }
+    void handle_query_updated() override {
+      server->handle_mds_perf_metric_query_updated();
+    }
+  private:
+    DaemonServer *server;
+  };
+  MDSPerfMetricCollectorListener mds_perf_metric_collector_listener;
+  MDSPerfMetricCollector mds_perf_metric_collector;
+  void handle_mds_perf_metric_query_updated();
+
+  void handle_metric_payload(const OSDMetricPayload &payload) {
+    osd_perf_metric_collector.process_reports(payload);
+  }
+
+  void handle_metric_payload(const MDSMetricPayload &payload) {
+    mds_perf_metric_collector.process_reports(payload);
+  }
+
+  void handle_metric_payload(const UnknownMetricPayload &payload) {
+    ceph_abort();
+  }
+
+  struct HandlePayloadVisitor : public boost::static_visitor<void> {
+    DaemonServer *server;
+
+    HandlePayloadVisitor(DaemonServer *server)
+      : server(server) {
+    }
+
+    template <typename MetricPayload>
+    inline void operator()(const MetricPayload &payload) const {
+      server->handle_metric_payload(payload);
+    }
+  };
+
+  void update_task_status(DaemonKey key,
+			  const std::map<std::string,std::string>& task_status);
 
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
@@ -144,6 +189,7 @@ public:
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
 
+  void fetch_missing_metadata(const DaemonKey& key, const entity_addr_t& addr);
   bool handle_open(const ceph::ref_t<MMgrOpen>& m);
   bool handle_close(const ceph::ref_t<MMgrClose>& m);
   bool handle_report(const ceph::ref_t<MMgrReport>& m);
@@ -157,18 +203,26 @@ public:
 
   void _send_configure(ConnectionRef c);
 
-  OSDPerfMetricQueryID add_osd_perf_query(
+  MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,
       const std::optional<OSDPerfMetricLimit> &limit);
-  int remove_osd_perf_query(OSDPerfMetricQueryID query_id);
-  int get_osd_perf_counters(OSDPerfMetricQueryID query_id,
-                            std::map<OSDPerfMetricKey, PerformanceCounters> *c);
+  int remove_osd_perf_query(MetricQueryID query_id);
+  int get_osd_perf_counters(OSDPerfCollector *collector);
+
+  MetricQueryID add_mds_perf_query(const MDSPerfMetricQuery &query,
+                                   const std::optional<MDSPerfMetricLimit> &limit);
+  int remove_mds_perf_query(MetricQueryID query_id);
+  int get_mds_perf_counters(MDSPerfCollector *collector);
 
   virtual const char** get_tracked_conf_keys() const override;
   virtual void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
 
   void schedule_tick(double delay_sec);
+
+  void log_access_denied(std::shared_ptr<CommandContext>& cmdctx,
+                         MgrSession* session, std::stringstream& ss);
+  void dump_pg_ready(ceph::Formatter *f);
 };
 
 #endif

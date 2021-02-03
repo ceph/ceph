@@ -9,6 +9,8 @@
 #include <vector>
 #include <memory>
 
+#include "common/async/yield_context.h"
+
 #include "rgw/rgw_common.h"
 
 struct RGWServices_Def;
@@ -27,14 +29,14 @@ protected:
   } start_state{StateInit};
 
   virtual void shutdown() {}
-  virtual int do_start() {
+  virtual int do_start(optional_yield, const DoutPrefixProvider *dpp) {
     return 0;
   }
 public:
   RGWServiceInstance(CephContext *_cct) : cct(_cct) {}
   virtual ~RGWServiceInstance() {}
 
-  int start();
+  int start(optional_yield y, const DoutPrefixProvider *dpp);
   bool is_started() {
     return (start_state == StateStarted);
   }
@@ -47,11 +49,14 @@ public:
 class RGWSI_Finisher;
 class RGWSI_Bucket;
 class RGWSI_Bucket_SObj;
+class RGWSI_Bucket_Sync;
+class RGWSI_Bucket_Sync_SObj;
 class RGWSI_BucketIndex;
 class RGWSI_BucketIndex_RADOS;
 class RGWSI_BILog_RADOS;
 class RGWSI_Cls;
-class RGWSI_DataLog_RADOS;
+class RGWSI_ConfigKey;
+class RGWSI_ConfigKey_RADOS;
 class RGWSI_MDLog;
 class RGWSI_Meta;
 class RGWSI_MetaBackend;
@@ -69,6 +74,7 @@ class RGWSI_SysObj_Core;
 class RGWSI_SysObj_Cache;
 class RGWSI_User;
 class RGWSI_User_RADOS;
+class RGWDataChangesLog;
 
 struct RGWServices_Def
 {
@@ -77,10 +83,11 @@ struct RGWServices_Def
 
   std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
+  std::unique_ptr<RGWSI_Bucket_Sync_SObj> bucket_sync_sobj;
   std::unique_ptr<RGWSI_BucketIndex_RADOS> bi_rados;
   std::unique_ptr<RGWSI_BILog_RADOS> bilog_rados;
   std::unique_ptr<RGWSI_Cls> cls;
-  std::unique_ptr<RGWSI_DataLog_RADOS> datalog_rados;
+  std::unique_ptr<RGWSI_ConfigKey_RADOS> config_key_rados;
   std::unique_ptr<RGWSI_MDLog> mdlog;
   std::unique_ptr<RGWSI_Meta> meta;
   std::unique_ptr<RGWSI_MetaBackend_SObj> meta_be_sobj;
@@ -96,11 +103,12 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj_Core> sysobj_core;
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
   std::unique_ptr<RGWSI_User_RADOS> user_rados;
+  std::unique_ptr<RGWDataChangesLog> datalog_rados;
 
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync);
+  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
   void shutdown();
 };
 
@@ -114,11 +122,15 @@ struct RGWServices
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_Bucket_SObj *bucket_sobj{nullptr};
+  RGWSI_Bucket_Sync *bucket_sync{nullptr};
+  RGWSI_Bucket_Sync_SObj *bucket_sync_sobj{nullptr};
   RGWSI_BucketIndex *bi{nullptr};
   RGWSI_BucketIndex_RADOS *bi_rados{nullptr};
   RGWSI_BILog_RADOS *bilog_rados{nullptr};
   RGWSI_Cls *cls{nullptr};
-  RGWSI_DataLog_RADOS *datalog_rados{nullptr};
+  RGWSI_ConfigKey_RADOS *config_key_rados{nullptr};
+  RGWSI_ConfigKey *config_key{nullptr};
+  RGWDataChangesLog *datalog_rados{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
   RGWSI_Meta *meta{nullptr};
   RGWSI_MetaBackend *meta_be_sobj{nullptr};
@@ -135,14 +147,14 @@ struct RGWServices
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync);
+  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync) {
-    return do_init(cct, have_cache, false, run_sync);
+  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, false, run_sync, y, dpp);
   }
 
-  int init_raw(CephContext *cct, bool have_cache) {
-    return do_init(cct, have_cache, true, false);
+  int init_raw(CephContext *cct, bool have_cache, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, have_cache, true, false, y, dpp);
   }
   void shutdown() {
     _svc.shutdown();
@@ -174,7 +186,7 @@ struct RGWCtlDef {
   RGWCtlDef();
   ~RGWCtlDef();
 
-  int init(RGWServices& svc);
+  int init(RGWServices& svc, const DoutPrefixProvider *dpp);
 };
 
 struct RGWCtl {
@@ -196,7 +208,7 @@ struct RGWCtl {
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
 
-  int init(RGWServices *_svc);
+  int init(RGWServices *_svc, const DoutPrefixProvider *dpp);
 };
 
 #endif

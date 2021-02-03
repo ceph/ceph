@@ -19,7 +19,7 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-class MOSDFailure : public PaxosServiceMessage {
+class MOSDFailure final : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
@@ -57,7 +57,7 @@ private:
       flags(extra_flags),
       epoch(e), failed_for(duration) { }
 private:
-  ~MOSDFailure() override {}
+  ~MOSDFailure() final {}
 
 public:
   int get_target_osd() { return target_osd; }
@@ -71,6 +71,7 @@ public:
   epoch_t get_epoch() const { return epoch; }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
@@ -113,7 +114,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "osd_failure"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_failure("
 	<< (if_osd_failed() ? "failed " : "recovered ")
 	<< (is_immediate() ? "immediate " : "timeout ")

@@ -3,6 +3,7 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
 
 import { ExecutingTask } from '../models/executing-task';
+import { Summary } from '../models/summary.model';
 import { SummaryService } from './summary.service';
 import { TaskMessageService } from './task-message.service';
 
@@ -15,8 +16,9 @@ export class TaskListService implements OnDestroy {
   setList: (_: any[]) => void;
   onFetchError: (error: any) => void;
   taskFilter: (task: ExecutingTask) => boolean;
-  itemFilter: (item, task: ExecutingTask) => boolean;
+  itemFilter: (item: any, task: ExecutingTask) => boolean;
   builders: object;
+  summary: Summary;
 
   constructor(
     private taskMessageService: TaskMessageService,
@@ -45,7 +47,7 @@ export class TaskListService implements OnDestroy {
     setList: (_: any[]) => void,
     onFetchError: (error: any) => void,
     taskFilter: (task: ExecutingTask) => boolean,
-    itemFilter: (item, task: ExecutingTask) => boolean,
+    itemFilter: (item: any, task: ExecutingTask) => boolean,
     builders: object
   ) {
     this.getUpdate = getUpdate;
@@ -56,12 +58,15 @@ export class TaskListService implements OnDestroy {
     this.itemFilter = itemFilter;
     this.builders = builders || {};
 
-    this.summaryDataSubscription = this.summaryService.subscribe((tasks: any) => {
-      if (tasks) {
-        this.getUpdate().subscribe((resp: any) => {
-          this.updateData(resp, tasks.executing_tasks.filter(this.taskFilter));
-        }, this.onFetchError);
-      }
+    this.summaryDataSubscription = this.summaryService.subscribe((summary) => {
+      this.summary = summary;
+      this.fetch();
+    }, this.onFetchError);
+  }
+
+  fetch() {
+    this.getUpdate().subscribe((resp: any) => {
+      this.updateData(resp, this.summary['executing_tasks'].filter(this.taskFilter));
     }, this.onFetchError);
   }
 
@@ -88,7 +93,7 @@ export class TaskListService implements OnDestroy {
 
   private getTaskAction(tasks: ExecutingTask[]): string {
     if (tasks.length === 0) {
-      return;
+      return undefined;
     }
     return tasks
       .map((task) => {

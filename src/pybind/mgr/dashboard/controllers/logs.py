@@ -3,16 +3,36 @@ from __future__ import absolute_import
 
 import collections
 
-from . import ApiController, Endpoint, BaseController, ReadPermission
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..tools import NotificationQueue
-
+from . import ApiController, BaseController, ControllerDoc, Endpoint, EndpointDoc, ReadPermission
 
 LOG_BUFFER_SIZE = 30
 
+LOGS_SCHEMA = {
+    "clog": ([str], ""),
+    "audit_log": ([{
+        "name": (str, ""),
+        "rank": (str, ""),
+        "addrs": ({
+            "addrvec": ([{
+                "type": (str, ""),
+                "addr": (str, "IP Address"),
+                "nonce": (int, ""),
+            }], ""),
+        }, ""),
+        "stamp": (str, ""),
+        "seq": (int, ""),
+        "channel": (str, ""),
+        "priority": (str, ""),
+        "message": (str, ""),
+    }], "Audit log")
+}
+
 
 @ApiController('/logs', Scope.LOG)
+@ControllerDoc("Logs Management API", "Logs")
 class Logs(BaseController):
     def __init__(self):
         super(Logs, self).__init__()
@@ -28,9 +48,9 @@ class Logs(BaseController):
 
     def load_buffer(self, buf, channel_name):
         lines = CephService.send_command(
-            'mon', 'log last', channel=channel_name, num=LOG_BUFFER_SIZE)
-        for l in lines:
-            buf.appendleft(l)
+            'mon', 'log last', channel=channel_name, num=LOG_BUFFER_SIZE, level='debug')
+        for line in lines:
+            buf.appendleft(line)
 
     def initialize_buffers(self):
         if not self._log_initialized:
@@ -43,6 +63,8 @@ class Logs(BaseController):
 
     @Endpoint()
     @ReadPermission
+    @EndpointDoc("Display Logs Configuration",
+                 responses={200: LOGS_SCHEMA})
     def all(self):
         self.initialize_buffers()
         return dict(

@@ -1,7 +1,6 @@
 import errno
 import json
 import itertools
-import six
 import socket
 import time
 from threading import Event
@@ -99,7 +98,7 @@ class Module(MgrModule):
                 }
 
     def get_daemon_stats(self):
-        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
+        for daemon, counters in self.get_all_perf_counters().items():
             svc_type, svc_id = daemon.split('.', 1)
             metadata = self.get_metadata(svc_type, svc_id)
             if not metadata:
@@ -240,8 +239,8 @@ class Module(MgrModule):
         sock = BaseSocket(url)
         self.log.debug('Sending data to Telegraf at %s', sock.address)
         now = self.now()
-        with sock as s:
-            try:
+        try:
+            with sock as s:
                 for measurement in self.gather_measurements():
                     self.log.debug(measurement)
                     line = Line(measurement['measurement'],
@@ -249,8 +248,10 @@ class Module(MgrModule):
                                 measurement['tags'], now)
                     self.log.debug(line.to_line_protocol())
                     s.send(line.to_line_protocol())
-            except (socket.error, RuntimeError, IOError, OSError):
-                self.log.exception('Failed to send statistics to Telegraf:')
+        except (socket.error, RuntimeError, IOError, OSError):
+            self.log.exception('Failed to send statistics to Telegraf:')
+        except FileNotFoundError:
+            self.log.exception('Failed to open Telegraf at: %s', url.geturl())
 
     def shutdown(self):
         self.log.info('Stopping Telegraf module')

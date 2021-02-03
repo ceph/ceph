@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <zabbix_export>
     <version>3.0</version>
-    <date>2017-10-24T07:00:13Z</date>
+    <date>2019-01-25T10:12:41Z</date>
     <groups>
         <group>
             <name>Templates</name>
@@ -2425,7 +2425,7 @@
                             <history>90</history>
                             <trends>365</trends>
                             <status>0</status>
-                            <value_type>3</value_type>
+                            <value_type>0</value_type>
                             <allowed_hosts/>
                             <units>%</units>
                             <delta>0</delta>
@@ -2829,22 +2829,22 @@
             <dependencies/>
         </trigger>
         <trigger>
-            <expression>{ceph-mgr Zabbix module:ceph.num_osd_in.change()}&gt;0</expression>
-            <name>Number of IN OSDs decreased</name>
+            <expression>{ceph-mgr Zabbix module:ceph.num_osd_in.abschange()}&gt;0</expression>
+            <name>Number of IN OSDs changed</name>
             <url/>
             <status>0</status>
             <priority>2</priority>
-            <description>Amount of OSDs in IN state decreased</description>
+            <description>Amount of OSDs in IN state changed</description>
             <type>0</type>
             <dependencies/>
         </trigger>
         <trigger>
-            <expression>{ceph-mgr Zabbix module:ceph.num_osd_up.change()}&gt;0</expression>
-            <name>Number of UP OSDs decreased</name>
+            <expression>{ceph-mgr Zabbix module:ceph.num_osd_up.abschange()}&gt;0</expression>
+            <name>Number of UP OSDs changed</name>
             <url/>
             <status>0</status>
             <priority>2</priority>
-            <description>Amount of OSDs in UP state decreased</description>
+            <description>Amount of OSDs in UP state changed</description>
             <type>0</type>
             <dependencies/>
         </trigger>

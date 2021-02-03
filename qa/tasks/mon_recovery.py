@@ -2,7 +2,7 @@
 Monitor recovery
 """
 import logging
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 
@@ -17,7 +17,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -55,7 +55,7 @@ def task(ctx, config):
             manager.kill_mon(m)
 
         log.info('forming a minimal quorum for %s, then adding monitors' % mons)
-        qnum = (len(mons) / 2) + 1
+        qnum = (len(mons) // 2) + 1
         num = 0
         for m in mons:
             manager.revive_mon(m)

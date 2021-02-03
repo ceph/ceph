@@ -44,9 +44,9 @@ class AsyncMessenger;
  */
 class Processor {
   AsyncMessenger *msgr;
-  NetHandler net;
+  ceph::NetHandler net;
   Worker *worker;
-  vector<ServerSocket> listen_sockets;
+  std::vector<ServerSocket> listen_sockets;
   EventCallbackRef listen_handler;
 
   class C_processor_accept;
@@ -57,7 +57,7 @@ class Processor {
 
   void stop();
   int bind(const entity_addrvec_t &bind_addrs,
-	   const set<int>& avoid_ports,
+	   const std::set<int>& avoid_ports,
 	   entity_addrvec_t* bound_addrs);
   void start();
   void accept();
@@ -82,7 +82,7 @@ public:
    * be a value that will be repeated if the daemon restarts.
    */
   AsyncMessenger(CephContext *cct, entity_name_t name, const std::string &type,
-                 string mname, uint64_t _nonce);
+                 std::string mname, uint64_t _nonce);
 
   /**
    * Destroy the AsyncMessenger. Pretty simple since all the work is done
@@ -115,10 +115,12 @@ public:
   }
 
   int bind(const entity_addr_t& bind_addr) override;
-  int rebind(const set<int>& avoid_ports) override;
+  int rebind(const std::set<int>& avoid_ports) override;
+  int bindv(const entity_addrvec_t& bind_addrs) override;
+
   int client_bind(const entity_addr_t& bind_addr) override;
 
-  int bindv(const entity_addrvec_t& bind_addrs) override;
+  int client_reset() override;
 
   bool should_use_msgr2() override;
 
@@ -147,7 +149,8 @@ public:
    * @{
    */
   ConnectionRef connect_to(int type,
-			   const entity_addrvec_t& addrs) override;
+			   const entity_addrvec_t& addrs,
+			   bool anon, bool not_local_dest=false) override;
   ConnectionRef get_loopback_connection() override;
   void mark_down(const entity_addr_t& addr) override {
     mark_down_addrs(entity_addrvec_t(addr));
@@ -196,22 +199,9 @@ private:
    * @return a pointer to the newly-created connection. Caller does not own a
    * reference; take one if you need it.
    */
-  AsyncConnectionRef create_connect(const entity_addrvec_t& addrs, int type);
+  AsyncConnectionRef create_connect(const entity_addrvec_t& addrs, int type,
+				    bool anon);
 
-  /**
-   * Queue up a Message for delivery to the entity specified
-   * by addr and dest_type.
-   * submit_message() is responsible for creating
-   * new AsyncConnection (and closing old ones) as necessary.
-   *
-   * @param m The Message to queue up. This function eats a reference.
-   * @param con The existing Connection to use, or NULL if you don't know of one.
-   * @param dest_addr The address to send the Message to.
-   * @param dest_type The peer type of the address we're sending to
-   * just drop silently under failure.
-   */
-  void submit_message(Message *m, const AsyncConnectionRef& con,
-                      const entity_addrvec_t& dest_addrs, int dest_type);
 
   void _finish_bind(const entity_addrvec_t& bind_addrs,
 		    const entity_addrvec_t& listen_addrs);
@@ -280,7 +270,10 @@ private:
    *
    * These are not yet in the conns map.
    */
-  set<AsyncConnectionRef> accepting_conns;
+  std::set<AsyncConnectionRef> accepting_conns;
+
+  /// anonymous outgoing connections
+  std::set<AsyncConnectionRef> anon_conns;
 
   /**
    * list of connection are closed which need to be clean up
@@ -294,7 +287,7 @@ private:
    * AsyncConnection in this set.
    */
   ceph::mutex deleted_lock = ceph::make_mutex("AsyncMessenger::deleted_lock");
-  set<AsyncConnectionRef> deleted_conns;
+  std::set<AsyncConnectionRef> deleted_conns;
 
   EventCallbackRef reap_handler;
 
@@ -314,10 +307,13 @@ private:
     }
 
     // lazy delete, see "deleted_conns"
-    std::lock_guard l{deleted_lock};
-    if (deleted_conns.erase(p->second)) {
-      conns.erase(p);
-      return nullref;
+    // don't worry omit, Connection::send_message can handle this case.
+    if (p->second->is_unregistered()) {
+      std::lock_guard l{deleted_lock};
+      if (deleted_conns.erase(p->second)) {
+	conns.erase(p);
+	return nullref;
+      }
     }
 
     return p->second;
@@ -403,8 +399,10 @@ public:
    */
   void unregister_conn(const AsyncConnectionRef& conn) {
     std::lock_guard l{deleted_lock};
-    conn->get_perf_counter()->dec(l_msgr_active_connections);
+    if (!accepting_conns.count(conn) || anon_conns.count(conn))
+      conn->get_perf_counter()->dec(l_msgr_active_connections);
     deleted_conns.emplace(std::move(conn));
+    conn->unregister();
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
       local_worker->center.dispatch_event_external(reap_handler);
@@ -418,7 +416,7 @@ public:
    *
    * See "deleted_conns"
    */
-  int reap_dead();
+  void reap_dead();
 
   /**
    * @} // AsyncMessenger Internals

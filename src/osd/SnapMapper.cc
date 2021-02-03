@@ -19,13 +19,22 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "snap_mapper."
 
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
 using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::timespan_str;
 
 const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
 const string SnapMapper::MAPPING_PREFIX = "SNA_";
 const string SnapMapper::OBJECT_PREFIX = "OBJ_";
 
-const char *SnapMapper::PURGED_SNAP_EPOCH_PREFIX = "PSE_";
 const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
 /*
@@ -471,12 +480,6 @@ void SnapMapper::record_purged_snaps(
   map<string,bufferlist> m;
   set<string> rm;
   for (auto& [epoch, bypool] : purged_snaps) {
-    // store per-epoch key
-    char ek[80];
-    snprintf(ek, sizeof(ek), "%s_%08lx", PURGED_SNAP_EPOCH_PREFIX,
-	     (unsigned long)epoch);
-    ceph::encode(bypool, m[ek]);
-
     // index by (pool, snap)
     for (auto& [pool, snaps] : bypool) {
       for (auto i = snaps.begin();

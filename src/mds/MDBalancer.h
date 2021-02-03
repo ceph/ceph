@@ -11,14 +11,8 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-
-
 #ifndef CEPH_MDBALANCER_H
 #define CEPH_MDBALANCER_H
-
-#include <list>
-#include <map>
 
 #include "include/types.h"
 #include "common/Clock.h"
@@ -55,6 +49,8 @@ public:
    */
   void tick();
 
+  void handle_export_pins(void);
+
   void subtract_export(CDir *ex);
   void add_import(CDir *im);
   void adjust_pop_for_rename(CDir *pdir, CDir *dir, bool inc);
@@ -64,6 +60,9 @@ public:
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
+  bool is_fragment_pending(dirfrag_t df) {
+    return split_pending.count(df) || merge_pending.count(df);
+  }
 
   /**
    * Based on size and configuration, decide whether to issue a queue_split
@@ -78,10 +77,6 @@ public:
   int dump_loads(Formatter *f) const;
 
 private:
-  bool bal_fragment_dirs;
-  int64_t bal_fragment_interval;
-  static const unsigned int AUTH_TREES_THRESHOLD = 5;
-
   typedef struct {
     std::map<mds_rank_t, double> targets;
     std::map<mds_rank_t, double> imported;
@@ -92,8 +87,6 @@ private:
   //MDSMap is up to date
   void prep_rebalance(int beat);
   int mantle_prep_rebalance();
-
-  void handle_export_pins(void);
 
   mds_load_t get_load();
   int localize_balancer();
@@ -125,6 +118,10 @@ private:
    */
   void try_rebalance(balance_state_t& state);
 
+  bool bal_fragment_dirs;
+  int64_t bal_fragment_interval;
+  static const unsigned int AUTH_TREES_THRESHOLD = 5;
+
   MDSRank *mds;
   Messenger *messenger;
   MonClient *mon_client;
@@ -145,11 +142,11 @@ private:
   // just as soon as a delayed context comes back and triggers it.
   // These sets just prevent us from spawning extra timer contexts for
   // dirfrags that already have one in flight.
-  set<dirfrag_t>   split_pending, merge_pending;
+  set<dirfrag_t> split_pending, merge_pending;
 
   // per-epoch scatter/gathered info
-  std::map<mds_rank_t, mds_load_t>  mds_load;
-  std::map<mds_rank_t, double>       mds_meta_load;
+  std::map<mds_rank_t, mds_load_t> mds_load;
+  std::map<mds_rank_t, double> mds_meta_load;
   std::map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
   std::map<mds_rank_t, int> mds_last_epoch_under_map;
 
@@ -157,5 +154,4 @@ private:
   double my_load = 0;
   double target_load = 0;
 };
-
 #endif

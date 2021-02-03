@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import logging
+import os
 from functools import partial
 
-import cherrypy
 import cephfs
+import cherrypy
 
-from . import ApiController, RESTController, UiApiController, BaseController, \
-              Endpoint, Task, ReadPermission, ControllerDoc, EndpointDoc
-from .. import logger
 from ..security import Scope
 from ..services.cephfs import CephFS
 from ..services.cephx import CephX
-from ..services.exception import serialize_dashboard_exception
+from ..services.exception import DashboardException, serialize_dashboard_exception
 from ..services.ganesha import Ganesha, GaneshaConf, NFSException
 from ..services.rgw_client import RgwClient
+from . import ApiController, BaseController, ControllerDoc, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, Task, UiApiController
+
+logger = logging.getLogger('controllers.ganesha')
 
 
 # documentation helpers
@@ -99,7 +102,7 @@ class NFSGanesha(RESTController):
         try:
             Ganesha.get_ganesha_clusters()
         except NFSException as e:
-            status['message'] = str(e)
+            status['message'] = str(e)  # type: ignore
             status['available'] = False
 
         return status
@@ -178,7 +181,7 @@ class NFSGaneshaExports(RESTController):
         ganesha_conf = GaneshaConf.instance(cluster_id)
 
         if not ganesha_conf.has_export(export_id):
-            raise cherrypy.HTTPError(404)
+            raise cherrypy.HTTPError(404)  # pragma: no cover - the handling is too obvious
 
         if fsal['name'] not in Ganesha.fsals_available():
             raise NFSException("Cannot make modifications to this export. "
@@ -224,14 +227,13 @@ class NFSGaneshaExports(RESTController):
         ganesha_conf = GaneshaConf.instance(cluster_id)
 
         if not ganesha_conf.has_export(export_id):
-            raise cherrypy.HTTPError(404)
-
+            raise cherrypy.HTTPError(404)  # pragma: no cover - the handling is too obvious
         export = ganesha_conf.remove_export(export_id)
         if reload_daemons:
             ganesha_conf.reload_daemons(export.daemons)
 
 
-@ApiController('/nfs-ganesha/daemon')
+@ApiController('/nfs-ganesha/daemon', Scope.NFS_GANESHA)
 @ControllerDoc(group="NFS-Ganesha")
 class NFSGaneshaService(RESTController):
 
@@ -239,71 +241,75 @@ class NFSGaneshaService(RESTController):
                  responses={200: [{
                      'daemon_id': (str, 'Daemon identifier'),
                      'cluster_id': (str, 'Cluster identifier'),
-                     'status': (int,
-                                'Status of daemon (1=RUNNING, 0=STOPPED, -1=ERROR',
-                                True),
-                     'desc': (str, 'Error description (if status==-1)', True)
+                     'cluster_type': (str, 'Cluster type'),
+                     'status': (int, 'Status of daemon', True),
+                     'desc': (str, 'Status description', True)
                  }]})
     def list(self):
-        status_dict = Ganesha.get_daemons_status()
-        if status_dict:
-            return [
-                {
-                    'daemon_id': daemon_id,
-                    'cluster_id': cluster_id,
-                    'status': status_dict[cluster_id][daemon_id]['status'],
-                    'desc': status_dict[cluster_id][daemon_id]['desc']
-                }
-                for cluster_id in status_dict
-                for daemon_id in status_dict[cluster_id]
-            ]
-
         result = []
         for cluster_id in Ganesha.get_ganesha_clusters():
-            result.extend(
-                [{'daemon_id': daemon_id, 'cluster_id': cluster_id}
-                 for daemon_id in GaneshaConf.instance(cluster_id).list_daemons()])
+            result.extend(GaneshaConf.instance(cluster_id).list_daemons())
         return result
 
 
-@UiApiController('/nfs-ganesha')
+@UiApiController('/nfs-ganesha', Scope.NFS_GANESHA)
 class NFSGaneshaUi(BaseController):
     @Endpoint('GET', '/cephx/clients')
+    @ReadPermission
     def cephx_clients(self):
-        return [client for client in CephX.list_clients()]
+        return list(CephX.list_clients())
 
     @Endpoint('GET', '/fsals')
+    @ReadPermission
     def fsals(self):
         return Ganesha.fsals_available()
 
     @Endpoint('GET', '/lsdir')
-    def lsdir(self, root_dir=None, depth=1):
+    @ReadPermission
+    def lsdir(self, fs_name, root_dir=None, depth=1):  # pragma: no cover
         if root_dir is None:
             root_dir = "/"
-        depth = int(depth)
-        if depth > 5:
-            logger.warning("[NFS] Limiting depth to maximum value of 5: "
-                           "input depth=%s", depth)
-            depth = 5
-        root_dir = '{}{}'.format(root_dir.rstrip('/'), '/')
+        if not root_dir.startswith('/'):
+            root_dir = '/{}'.format(root_dir)
+        root_dir = os.path.normpath(root_dir)
+
         try:
-            cfs = CephFS()
-            root_dir = root_dir.encode()
-            paths = cfs.get_dir_list(root_dir, depth)
-            # Convert (bytes => string) and prettify paths (strip slashes).
-            paths = [p.decode().rstrip('/') for p in paths if p != root_dir]
+            depth = int(depth)
+            error_msg = ''
+            if depth < 0:
+                error_msg = '`depth` must be greater or equal to 0.'
+            if depth > 5:
+                logger.warning("Limiting depth to maximum value of 5: "
+                               "input depth=%s", depth)
+                depth = 5
+        except ValueError:
+            error_msg = '`depth` must be an integer.'
+        finally:
+            if error_msg:
+                raise DashboardException(code=400,
+                                         component='nfsganesha',
+                                         msg=error_msg)
+
+        try:
+            cfs = CephFS(fs_name)
+            paths = [root_dir]
+            paths.extend([p['path'].rstrip('/')
+                          for p in cfs.ls_dir(root_dir, depth)])
         except (cephfs.ObjectNotFound, cephfs.PermissionError):
             paths = []
         return {'paths': paths}
 
     @Endpoint('GET', '/cephfs/filesystems')
+    @ReadPermission
     def filesystems(self):
         return CephFS.list_filesystems()
 
     @Endpoint('GET', '/rgw/buckets')
+    @ReadPermission
     def buckets(self, user_id=None):
         return RgwClient.instance(user_id).get_buckets()
 
     @Endpoint('GET', '/clusters')
+    @ReadPermission
     def clusters(self):
         return Ganesha.get_ganesha_clusters()

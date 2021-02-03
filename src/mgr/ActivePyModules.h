@@ -33,11 +33,16 @@
 
 class health_check_map_t;
 class DaemonServer;
+class MgrSession;
+class ModuleCommand;
 class PyModuleRegistry;
 
 class ActivePyModules
 {
-  std::map<std::string, std::unique_ptr<ActivePyModule>> modules;
+  // module class instances not yet created
+  std::set<std::string, std::less<>> pending_modules;
+  // module class instances already created
+  std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
   std::map<std::string, std::string> store_cache;
   DaemonStateIndex &daemon_state;
@@ -99,11 +104,17 @@ public:
       const std::string &svc_id,
       const std::string &path) const;
 
-  OSDPerfMetricQueryID add_osd_perf_query(
+  MetricQueryID add_osd_perf_query(
       const OSDPerfMetricQuery &query,
       const std::optional<OSDPerfMetricLimit> &limit);
-  void remove_osd_perf_query(OSDPerfMetricQueryID query_id);
-  PyObject *get_osd_perf_counters(OSDPerfMetricQueryID query_id);
+  void remove_osd_perf_query(MetricQueryID query_id);
+  PyObject *get_osd_perf_counters(MetricQueryID query_id);
+
+  MetricQueryID add_mds_perf_query(
+      const MDSPerfMetricQuery &query,
+      const std::optional<MDSPerfMetricLimit> &limit);
+  void remove_mds_perf_query(MetricQueryID query_id);
+  PyObject *get_mds_perf_counters(MetricQueryID query_id);
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
@@ -127,17 +138,22 @@ public:
 
   void update_progress_event(const std::string& evid,
 			     const std::string& desc,
-			     float progress);
+			     float progress,
+			     bool add_to_ceph_s);
   void complete_progress_event(const std::string& evid);
   void clear_all_progress_events();
   void get_progress_events(std::map<std::string,ProgressEvent>* events);
+
+  void register_client(std::string_view name, std::string addrs);
+  void unregister_client(std::string_view name, std::string addrs);
 
   void config_notify();
 
   void set_uri(const std::string& module_name, const std::string &uri);
 
   int handle_command(
-    const std::string &module_name,
+    const ModuleCommand& module_command,
+    const MgrSession& session,
     const cmdmap_t &cmdmap,
     const bufferlist &inbuf,
     std::stringstream *ds,
@@ -152,6 +168,9 @@ public:
                   const std::string &notify_id);
   void notify_all(const LogEntry &log_entry);
 
+  bool is_pending(std::string_view name) const {
+    return pending_modules.count(name) > 0;
+  }
   bool module_exists(const std::string &name) const
   {
     return modules.count(name) > 0;

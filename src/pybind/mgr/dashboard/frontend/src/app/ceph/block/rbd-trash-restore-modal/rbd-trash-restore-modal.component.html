@@ -1,4 +1,4 @@
-<cd-modal>
+<cd-modal [modalRef]="activeModal">
   <ng-container i18n
                 class="modal-title">Restore Image</ng-container>
 
@@ -11,7 +11,7 @@
       <div class="modal-body">
         <p>
           <ng-container i18n>To restore</ng-container>&nbsp;
-          <kbd>{{ poolName }}/{{ imageName }}@{{ imageId }}</kbd>,&nbsp;
+          <kbd>{{ imageSpec }}@{{ imageId }}</kbd>,&nbsp;
           <ng-container i18n>type the image's new name and click</ng-container>&nbsp;
           <kbd i18n>Restore Image</kbd>.
         </p>
@@ -34,15 +34,9 @@
       </div>
 
       <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button [form]="restoreForm"
-                            (submitAction)="restore()"
-                            i18n>Restore Image</cd-submit-button>
-          <cd-back-button [back]="modalRef.hide"
-                          name="Cancel"
-                          i18n-name>
-          </cd-back-button>
-        </div>
+        <cd-form-button-panel (submitActionEvent)="restore()"
+                              [form]="restoreForm"
+                              [submitText]="actionLabels.RESTORE"></cd-form-button-panel>
       </div>
     </form>
   </ng-container>

@@ -9,6 +9,8 @@
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_cr_rados.h"
 
+#include "auth/AuthRegistry.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 RGWSI_RADOS::RGWSI_RADOS(CephContext *cct) : RGWServiceInstance(cct)
@@ -19,7 +21,7 @@ RGWSI_RADOS::~RGWSI_RADOS()
 {
 }
 
-int RGWSI_RADOS::do_start()
+int RGWSI_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   int ret = rados.init_with_context(cct);
   if (ret < 0) {
@@ -117,15 +119,15 @@ int RGWSI_RADOS::Obj::open()
 }
 
 int RGWSI_RADOS::Obj::operate(librados::ObjectWriteOperation *op,
-                              optional_yield y)
+                              optional_yield y, int flags)
 {
-  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, y);
+  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, y, flags);
 }
 
-int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op, bufferlist *pbl,
-                              optional_yield y)
+int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op,
+			      bufferlist *pbl, optional_yield y, int flags)
 {
-  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, pbl, y);
+  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, pbl, y, flags);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
@@ -350,6 +352,15 @@ int RGWSI_RADOS::Handle::watch_flush()
   return rad->watch_flush();
 }
 
+int RGWSI_RADOS::Handle::mon_command(std::string cmd,
+                                     const bufferlist& inbl,
+                                     bufferlist *outbl,
+                                     std::string *outs)
+{
+  librados::Rados *rad = rados_svc->get_rados_handle();
+  return rad->mon_command(cmd, inbl, outbl, outs);
+}
+
 int RGWSI_RADOS::Pool::List::get_marker(string *marker)
 {
   if (!ctx.initialized) {
@@ -358,5 +369,48 @@ int RGWSI_RADOS::Pool::List::get_marker(string *marker)
 
   *marker = ctx.iter.get_cursor().to_str();
   return 0;
+}
+
+int RGWSI_RADOS::clog_warn(const string& msg)
+{
+  string cmd =
+    "{"
+      "\"prefix\": \"log\", "
+      "\"level\": \"warn\", "
+      "\"logtext\": [\"" + msg + "\"]"
+    "}";
+
+  bufferlist inbl;
+  auto h = handle();
+  return h.mon_command(cmd, inbl, nullptr, nullptr);
+}
+
+bool RGWSI_RADOS::check_secure_mon_conn() const
+{
+  AuthRegistry reg(cct);
+
+  reg.refresh_config();
+
+  std::vector<uint32_t> methods;
+  std::vector<uint32_t> modes;
+
+  reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
+  ldout(cct, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+
+  for (auto method : methods) {
+    if (!reg.is_secure_method(method)) {
+      ldout(cct, 20) << __func__ << "(): method " << method << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  for (auto mode : modes) {
+    if (!reg.is_secure_mode(mode)) {
+      ldout(cct, 20) << __func__ << "(): mode " << mode << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  return true;
 }
 

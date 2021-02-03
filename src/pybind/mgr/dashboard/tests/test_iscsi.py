@@ -1,32 +1,30 @@
-# pylint: disable=too-many-public-methods
+# pylint: disable=too-many-public-methods, too-many-lines
 
 import copy
 import errno
 import json
+import unittest
 
 try:
     import mock
 except ImportError:
     import unittest.mock as mock
 
-from . import CmdException, ControllerTestCase, CLICommandTestMixin
+from mgr_module import ERROR_MSG_NO_INPUT_FILE
+
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
+from ..rest_client import RequestException
 from ..services.iscsi_client import IscsiClient
 from ..services.orchestrator import OrchClient
-from ..rest_client import RequestException
+from ..tools import NotificationQueue, TaskManager
+from . import CLICommandTestMixin  # pylint: disable=no-name-in-module
+from . import CmdException  # pylint: disable=no-name-in-module
+from . import ControllerTestCase  # pylint: disable=no-name-in-module
+from . import KVStoreMockMixin  # pylint: disable=no-name-in-module
 
 
-class IscsiTest(ControllerTestCase, CLICommandTestMixin):
-
-    @classmethod
-    def setup_server(cls):
-        OrchClient.instance().available = lambda: False
-        mgr.rados.side_effect = None
-        # pylint: disable=protected-access
-        Iscsi._cp_config['tools.authenticate.on'] = False
-        IscsiTarget._cp_config['tools.authenticate.on'] = False
-        cls.setup_controllers([Iscsi, IscsiTarget])
+class IscsiTestCli(unittest.TestCase, CLICommandTestMixin):
 
     def setUp(self):
         self.mock_kv_store()
@@ -37,18 +35,26 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
     def test_cli_add_gateway_invalid_url(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('iscsi-gateway-add', name='node1',
-                          service_url='http:/hello.com')
+                          inbuf='http:/hello.com')
 
         self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
         self.assertEqual(str(ctx.exception),
                          "Invalid service URL 'http:/hello.com'. Valid format: "
                          "'<scheme>://<username>:<password>@<host>[:port]'.")
 
+    def test_cli_add_gateway_empty_url(self):
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('iscsi-gateway-add', name='node1',
+                          inbuf='')
+
+        self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
+        self.assertEqual(str(ctx.exception), ERROR_MSG_NO_INPUT_FILE)
+
     def test_cli_add_gateway(self):
         self.exec_cmd('iscsi-gateway-add', name='node1',
-                      service_url='https://admin:admin@10.17.5.1:5001')
+                      inbuf='https://admin:admin@10.17.5.1:5001')
         self.exec_cmd('iscsi-gateway-add', name='node2',
-                      service_url='https://admin:admin@10.17.5.2:5001')
+                      inbuf='https://admin:admin@10.17.5.2:5001')
         iscsi_config = json.loads(self.get_key("_iscsi_config"))
         self.assertEqual(iscsi_config['gateways'], {
             'node1': {
@@ -69,6 +75,42 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
             }
         })
 
+
+class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
+
+    @classmethod
+    def setup_server(cls):
+        NotificationQueue.start_queue()
+        TaskManager.init()
+        OrchClient.instance().available = lambda: False
+        mgr.rados.side_effect = None
+        # pylint: disable=protected-access
+        Iscsi._cp_config['tools.authenticate.on'] = False
+        IscsiTarget._cp_config['tools.authenticate.on'] = False
+        cls.setup_controllers([Iscsi, IscsiTarget])
+
+    @classmethod
+    def tearDownClass(cls):
+        NotificationQueue.stop()
+
+    def setUp(self):
+        self.mock_kv_store()
+        self.CONFIG_KEY_DICT['_iscsi_config'] = '''
+            {
+                "gateways": {
+                    "node1": {
+                        "service_url": "https://admin:admin@10.17.5.1:5001"
+                    },
+                    "node2": {
+                        "service_url": "https://admin:admin@10.17.5.2:5001"
+                    }
+                }
+            }
+        '''
+        # pylint: disable=protected-access
+        IscsiClientMock._instance = IscsiClientMock()
+        IscsiClient.instance = IscsiClientMock.instance
+
     def test_enable_discoveryauth(self):
         discoveryauth = {
             'user': 'myiscsiusername',
@@ -82,6 +124,31 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         self._get('/api/iscsi/discoveryauth')
         self.assertStatus(200)
         self.assertJsonBody(discoveryauth)
+
+    def test_bad_discoveryauth(self):
+        discoveryauth = {
+            'user': 'myiscsiusername',
+            'password': 'myiscsipasswordmyiscsipasswordmyiscsipassword',
+            'mutual_user': '',
+            'mutual_password': ''
+        }
+        put_response = {
+            'detail': 'Bad authentication',
+            'code': 'target_bad_auth',
+            'component': 'iscsi'
+        }
+        get_response = {
+            'user': '',
+            'password': '',
+            'mutual_user': '',
+            'mutual_password': ''
+        }
+        self._put('/api/iscsi/discoveryauth', discoveryauth)
+        self.assertStatus(400)
+        self.assertJsonBody(put_response)
+        self._get('/api/iscsi/discoveryauth')
+        self.assertStatus(200)
+        self.assertJsonBody(get_response)
 
     def test_disable_discoveryauth(self):
         discoveryauth = {
@@ -107,7 +174,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw1"
         request = copy.deepcopy(iscsi_target_request)
         request['target_iqn'] = target_iqn
-        self._post('/api/iscsi/target', request)
+        self._task_post('/api/iscsi/target', request)
         self.assertStatus(201)
         self._get('/api/iscsi/target')
         self.assertStatus(200)
@@ -120,7 +187,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw2"
         request = copy.deepcopy(iscsi_target_request)
         request['target_iqn'] = target_iqn
-        self._post('/api/iscsi/target', request)
+        self._task_post('/api/iscsi/target', request)
         self.assertStatus(201)
         self._get('/api/iscsi/target/{}'.format(request['target_iqn']))
         self.assertStatus(200)
@@ -133,9 +200,9 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw3"
         request = copy.deepcopy(iscsi_target_request)
         request['target_iqn'] = target_iqn
-        self._post('/api/iscsi/target', request)
+        self._task_post('/api/iscsi/target', request)
         self.assertStatus(201)
-        self._delete('/api/iscsi/target/{}'.format(request['target_iqn']))
+        self._task_delete('/api/iscsi/target/{}'.format(request['target_iqn']))
         self.assertStatus(204)
         self._get('/api/iscsi/target')
         self.assertStatus(200)
@@ -175,7 +242,35 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                     "state": {}
                 }
             })
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_add_bad_client(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw4"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'].append(
+            {
+                "luns": [{"image": "lun1", "pool": "rbd"}],
+                "client_iqn": "iqn.1994-05.com.redhat:rh7-client4",
+                "auth": {
+                    "password": "myiscsipassword7myiscsipassword7myiscsipasswo",
+                    "user": "myiscsiusername7",
+                    "mutual_password": "myiscsipassword8",
+                    "mutual_user": "myiscsiusername8"}
+            })
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+
+        self._task_post('/api/iscsi/target', create_request)
+        self.assertStatus(201)
+        self._task_put('/api/iscsi/target/{}'.format(create_request['target_iqn']), update_request)
+        self.assertStatus(400)
+        self._get('/api/iscsi/target/{}'.format(update_request['new_target_iqn']))
+        self.assertStatus(200)
+        self.assertJsonBody(response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_change_client_password(self, _validate_image_mock):
@@ -184,11 +279,11 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         create_request['target_iqn'] = target_iqn
         update_request = copy.deepcopy(create_request)
         update_request['new_target_iqn'] = target_iqn
-        update_request['clients'][0]['auth']['password'] = 'mynewiscsipassword'
+        update_request['clients'][0]['auth']['password'] = 'MyNewPassword'
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = target_iqn
-        response['clients'][0]['auth']['password'] = 'mynewiscsipassword'
-        self._update_iscsi_target(create_request, update_request, response)
+        response['clients'][0]['auth']['password'] = 'MyNewPassword'
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_rename_client(self, _validate_image_mock):
@@ -201,7 +296,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = target_iqn
         response['clients'][0]['client_iqn'] = 'iqn.1994-05.com.redhat:rh7-client0'
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_add_disk(self, _validate_image_mock):
@@ -225,10 +320,13 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                 "image": "lun3",
                 "pool": "rbd",
                 "controls": {},
-                "backstore": "user:rbd"
+                "backstore": "user:rbd",
+                "wwn": "64af6678-9694-4367-bacc-f8eb0baa2",
+                "lun": 2
+
             })
         response['clients'][0]['luns'].append({"image": "lun3", "pool": "rbd"})
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_change_disk_image(self, _validate_image_mock):
@@ -243,7 +341,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         response['target_iqn'] = target_iqn
         response['disks'][0]['image'] = 'lun0'
         response['clients'][0]['luns'][0]['image'] = 'lun0'
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_change_disk_controls(self, _validate_image_mock):
@@ -256,7 +354,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = target_iqn
         response['disks'][0]['controls'] = {"qfull_timeout": 15}
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_rename_target(self, _validate_image_mock):
@@ -268,7 +366,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         update_request['new_target_iqn'] = new_target_iqn
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = new_target_iqn
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_rename_group(self, _validate_image_mock):
@@ -281,7 +379,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = target_iqn
         response['groups'][0]['group_id'] = 'mygroup0'
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_add_client_to_group(self, _validate_image_mock):
@@ -319,7 +417,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                 }
             })
         response['groups'][0]['members'].append('iqn.1994-05.com.redhat:rh7-client3')
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_remove_client_from_group(self, _validate_image_mock):
@@ -332,7 +430,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = target_iqn
         response['groups'][0]['members'].remove('iqn.1994-05.com.redhat:rh7-client2')
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_remove_groups(self, _validate_image_mock):
@@ -345,7 +443,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         response = copy.deepcopy(iscsi_target_response)
         response['target_iqn'] = target_iqn
         response['groups'] = []
-        self._update_iscsi_target(create_request, update_request, response)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_add_client_to_multiple_groups(self, _validate_image_mock):
@@ -354,7 +452,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
         create_request['target_iqn'] = target_iqn
         create_request['groups'].append(copy.deepcopy(create_request['groups'][0]))
         create_request['groups'][1]['group_id'] = 'mygroup2'
-        self._post('/api/iscsi/target', create_request)
+        self._task_post('/api/iscsi/target', create_request)
         self.assertStatus(400)
         self.assertJsonBody({
             'detail': 'Each initiator can only be part of 1 group at a time',
@@ -362,12 +460,161 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
             'component': 'iscsi'
         })
 
-    def _update_iscsi_target(self, create_request, update_request, response):
-        self._post('/api/iscsi/target', create_request)
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_remove_client_lun(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw17"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        create_request['clients'][0]['luns'] = [
+            {"image": "lun1", "pool": "rbd"},
+            {"image": "lun2", "pool": "rbd"},
+            {"image": "lun3", "pool": "rbd"}
+        ]
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'][0]['luns'] = [
+            {"image": "lun1", "pool": "rbd"},
+            {"image": "lun3", "pool": "rbd"}
+        ]
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['clients'][0]['luns'] = [
+            {"image": "lun1", "pool": "rbd"},
+            {"image": "lun3", "pool": "rbd"}
+        ]
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_change_client_auth(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw18"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'][0]['auth']['password'] = 'myiscsipasswordX'
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['clients'][0]['auth']['password'] = 'myiscsipasswordX'
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_remove_client_logged_in(self, _validate_image_mock):
+        client_info = {
+            'alias': '',
+            'ip_address': [],
+            'state': {'LOGGED_IN': ['node1']}
+        }
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.clientinfo = client_info
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw19"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'].pop(0)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        for client in response['clients']:
+            client['info'] = client_info
+        update_response = {
+            'detail': "Client 'iqn.1994-05.com.redhat:rh7-client' cannot be deleted until it's "
+                      "logged out",
+            'code': 'client_logged_in',
+            'component': 'iscsi'
+        }
+        self._update_iscsi_target(create_request, update_request, 400, update_response, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_remove_client(self, _validate_image_mock):
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw20"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'].pop(0)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['clients'].pop(0)
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_add_image_to_group_with_client_logged_in(self, _validate_image_mock):
+        client_info = {
+            'alias': '',
+            'ip_address': [],
+            'state': {'LOGGED_IN': ['node1']}
+        }
+        new_disk = {"pool": "rbd", "image": "lun1"}
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.clientinfo = client_info
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw21"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['groups'][0]['disks'].append(new_disk)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['groups'][0]['disks'].insert(0, new_disk)
+        for client in response['clients']:
+            client['info'] = client_info
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_add_image_to_initiator_with_client_logged_in(self, _validate_image_mock):
+        client_info = {
+            'alias': '',
+            'ip_address': [],
+            'state': {'LOGGED_IN': ['node1']}
+        }
+        new_disk = {"pool": "rbd", "image": "lun2"}
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.clientinfo = client_info
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw22"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['clients'][0]['luns'].append(new_disk)
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['clients'][0]['luns'].append(new_disk)
+        for client in response['clients']:
+            client['info'] = client_info
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
+    def test_remove_image_from_group_with_client_logged_in(self, _validate_image_mock):
+        client_info = {
+            'alias': '',
+            'ip_address': [],
+            'state': {'LOGGED_IN': ['node1']}
+        }
+        # pylint: disable=protected-access
+        IscsiClientMock._instance.clientinfo = client_info
+        target_iqn = "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw23"
+        create_request = copy.deepcopy(iscsi_target_request)
+        create_request['target_iqn'] = target_iqn
+        update_request = copy.deepcopy(create_request)
+        update_request['new_target_iqn'] = target_iqn
+        update_request['groups'][0]['disks'] = []
+        response = copy.deepcopy(iscsi_target_response)
+        response['target_iqn'] = target_iqn
+        response['groups'][0]['disks'] = []
+        for client in response['clients']:
+            client['info'] = client_info
+        self._update_iscsi_target(create_request, update_request, 200, None, response)
+
+    def _update_iscsi_target(self, create_request, update_request, update_response_code,
+                             update_response, response):
+        self._task_post('/api/iscsi/target', create_request)
         self.assertStatus(201)
-        self._put('/api/iscsi/target/{}'.format(create_request['target_iqn']), update_request)
-        self.assertStatus(200)
-        self._get('/api/iscsi/target/{}'.format(update_request['new_target_iqn']))
+        self._task_put(
+            '/api/iscsi/target/{}'.format(create_request['target_iqn']), update_request)
+        self.assertStatus(update_response_code)
+        self.assertJsonBody(update_response)
+        self._get(
+            '/api/iscsi/target/{}'.format(update_request['new_target_iqn']))
         self.assertStatus(200)
         self.assertJsonBody(response)
 
@@ -407,6 +654,11 @@ iscsi_target_request = {
         }
     ],
     "acl_enabled": True,
+    "auth": {
+        "password": "",
+        "user": "",
+        "mutual_password": "",
+        "mutual_user": ""},
     "target_controls": {},
     "groups": [
         {
@@ -426,8 +678,10 @@ iscsi_target_response = {
     ],
     'disks': [
         {'pool': 'rbd', 'image': 'lun1', 'backstore': 'user:rbd',
+         'wwn': '64af6678-9694-4367-bacc-f8eb0baa0', 'lun': 0,
          'controls': {'max_data_area_mb': 128}},
         {'pool': 'rbd', 'image': 'lun2', 'backstore': 'user:rbd',
+         'wwn': '64af6678-9694-4367-bacc-f8eb0baa1', 'lun': 1,
          'controls': {'max_data_area_mb': 128}}
     ],
     'clients': [
@@ -463,6 +717,11 @@ iscsi_target_response = {
         }
     ],
     "acl_enabled": True,
+    "auth": {
+        "password": "",
+        "user": "",
+        "mutual_password": "",
+        "mutual_user": ""},
     'groups': [
         {
             'group_id': 'mygroup',
@@ -499,7 +758,12 @@ class IscsiClientMock(object):
             "gateways": {},
             "targets": {},
             "updated": "",
-            "version": 9
+            "version": 11
+        }
+        self.clientinfo = {
+            'alias': '',
+            'ip_address': [],
+            'state': {}
         }
 
     @classmethod
@@ -516,6 +780,7 @@ class IscsiClientMock(object):
 
     def get_settings(self):
         return {
+            "api_version": 2,
             "backstores": [
                 "user:rbd"
             ],
@@ -555,15 +820,23 @@ class IscsiClientMock(object):
         }
 
     def get_config(self):
-        return self.config
+        return copy.deepcopy(self.config)
 
     def create_target(self, target_iqn, target_controls):
         self.config['targets'][target_iqn] = {
             "clients": {},
             "acl_enabled": True,
+            "auth": {
+                "username": "",
+                "password": "",
+                "password_encryption_enabled": False,
+                "mutual_username": "",
+                "mutual_password": "",
+                "mutual_password_encryption_enabled": False
+            },
             "controls": target_controls,
             "created": "2019/01/17 09:22:34",
-            "disks": [],
+            "disks": {},
             "groups": {},
             "portals": {}
         }
@@ -584,23 +857,37 @@ class IscsiClientMock(object):
             target_config['ip_list'].remove(ip)
         target_config['portals'].pop(gateway_name)
 
-    def create_disk(self, pool, image, backstore):
+    def create_disk(self, pool, image, backstore, wwn):
+        if wwn is None:
+            wwn = '64af6678-9694-4367-bacc-f8eb0baa' + str(len(self.config['disks']))
         image_id = '{}/{}'.format(pool, image)
         self.config['disks'][image_id] = {
             "pool": pool,
             "image": image,
             "backstore": backstore,
-            "controls": {}
+            "controls": {},
+            "wwn": wwn
         }
 
-    def create_target_lun(self, target_iqn, image_id):
+    def create_target_lun(self, target_iqn, image_id, lun):
         target_config = self.config['targets'][target_iqn]
-        target_config['disks'].append(image_id)
+        if lun is None:
+            lun = len(target_config['disks'])
+        target_config['disks'][image_id] = {
+            "lun_id": lun
+        }
         self.config['disks'][image_id]['owner'] = list(target_config['portals'].keys())[0]
 
     def reconfigure_disk(self, pool, image, controls):
         image_id = '{}/{}'.format(pool, image)
-        self.config['disks'][image_id]['controls'] = controls
+        settings = self.get_settings()
+        backstore = self.config['disks'][image_id]['backstore']
+        disk_default_controls = settings['disk_default_controls'][backstore]
+        new_controls = {}
+        for control_k, control_v in controls.items():
+            if control_v != disk_default_controls[control_k]:
+                new_controls[control_k] = control_v
+        self.config['disks'][image_id]['controls'] = new_controls
 
     def create_client(self, target_iqn, client_iqn):
         target_config = self.config['targets'][target_iqn]
@@ -621,6 +908,10 @@ class IscsiClientMock(object):
         target_config = self.config['targets'][target_iqn]
         target_config['clients'][client_iqn]['luns'][image_id] = {}
 
+    def delete_client_lun(self, target_iqn, client_iqn, image_id):
+        target_config = self.config['targets'][target_iqn]
+        del target_config['clients'][client_iqn]['luns'][image_id]
+
     def create_client_auth(self, target_iqn, client_iqn, user, password, m_user, m_password):
         target_config = self.config['targets'][target_iqn]
         target_config['clients'][client_iqn]['auth']['username'] = user
@@ -638,6 +929,26 @@ class IscsiClientMock(object):
             target_config['groups'][group_name]['disks'][image_id] = {}
         target_config['groups'][group_name]['members'] = members
 
+    def update_group(self, target_iqn, group_name, members, image_ids):
+        target_config = self.config['targets'][target_iqn]
+        group = target_config['groups'][group_name]
+        old_members = group['members']
+        disks = group['disks']
+        target_config['groups'][group_name] = {
+            "disks": {},
+            "members": []
+        }
+
+        for image_id in disks.keys():
+            if image_id not in image_ids:
+                target_config['groups'][group_name]['disks'][image_id] = {}
+
+        new_members = []
+        for member_iqn in old_members:
+            if member_iqn not in members:
+                new_members.append(member_iqn)
+        target_config['groups'][group_name]['members'] = new_members
+
     def delete_group(self, target_iqn, group_name):
         target_config = self.config['targets'][target_iqn]
         del target_config['groups'][group_name]
@@ -648,7 +959,7 @@ class IscsiClientMock(object):
 
     def delete_target_lun(self, target_iqn, image_id):
         target_config = self.config['targets'][target_iqn]
-        target_config['disks'].remove(image_id)
+        target_config['disks'].pop(image_id)
         del self.config['disks'][image_id]['owner']
 
     def delete_disk(self, pool, image):
@@ -682,8 +993,15 @@ class IscsiClientMock(object):
         self.config['discovery_auth']['mutual_username'] = mutual_user
         self.config['discovery_auth']['mutual_password'] = mutual_password
 
-    def update_targetauth(self, target_iqn, action):
+    def update_targetacl(self, target_iqn, action):
         self.config['targets'][target_iqn]['acl_enabled'] = (action == 'enable_acl')
+
+    def update_targetauth(self, target_iqn, user, password, mutual_user, mutual_password):
+        target_config = self.config['targets'][target_iqn]
+        target_config['auth']['username'] = user
+        target_config['auth']['password'] = password
+        target_config['auth']['mutual_username'] = mutual_user
+        target_config['auth']['mutual_password'] = mutual_password
 
     def get_targetinfo(self, target_iqn):
         # pylint: disable=unused-argument
@@ -693,8 +1011,4 @@ class IscsiClientMock(object):
 
     def get_clientinfo(self, target_iqn, client_iqn):
         # pylint: disable=unused-argument
-        return {
-            'alias': '',
-            'ip_address': [],
-            'state': {}
-        }
+        return self.clientinfo
