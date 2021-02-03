@@ -15,6 +15,7 @@
 #include "include/compat.h"
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
+#include "mds/mdstypes.h"
 #include "include/stat.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -2500,6 +2501,77 @@ TEST(LibCephFS, SnapInfo) {
   ceph_free_snap_info_buffer(&info);
 
   ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, LookupVino) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snapdir_path[128];
+  char snap_path[256];
+  char file_path[PATH_MAX];
+  char snap_file[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d", getpid());
+  sprintf(snap_name, "snap0_%d", getpid());
+  sprintf(file_path, "%s/file_%d", dir_path, getpid());
+  sprintf(snapdir_path, "%s/.snap", dir_path);
+  sprintf(snap_path, "%s/%s", snapdir_path, snap_name);
+  sprintf(snap_file, "%s/file_%d", snap_path, getpid());
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  int fd = ceph_open(cmount, file_path, O_WRONLY|O_CREAT, 0666);
+  ASSERT_LE(0, fd);
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, nullptr, 0));
+
+  // record vinos for all of them
+  struct ceph_statx stx;
+  ASSERT_EQ(0, ceph_statx(cmount, dir_path, &stx, CEPH_STATX_INO, 0));
+  vinodeno_t dir_vino(stx.stx_ino, stx.stx_dev);
+
+  ASSERT_EQ(0, ceph_statx(cmount, file_path, &stx, CEPH_STATX_INO, 0));
+  vinodeno_t file_vino(stx.stx_ino, stx.stx_dev);
+
+  ASSERT_EQ(0, ceph_statx(cmount, snapdir_path, &stx, CEPH_STATX_INO, 0));
+  vinodeno_t snapdir_vino(stx.stx_ino, stx.stx_dev);
+
+  ASSERT_EQ(0, ceph_statx(cmount, snap_path, &stx, CEPH_STATX_INO, 0));
+  vinodeno_t snap_vino(stx.stx_ino, stx.stx_dev);
+
+  ASSERT_EQ(0, ceph_statx(cmount, snap_file, &stx, CEPH_STATX_INO, 0));
+  vinodeno_t snap_file_vino(stx.stx_ino, stx.stx_dev);
+
+  // Remount
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  // Find them all
+  Inode *inode;
+  ASSERT_EQ(0, ceph_ll_lookup_vino(cmount, dir_vino, &inode));
+  ceph_ll_put(cmount, inode);
+  ASSERT_EQ(0, ceph_ll_lookup_vino(cmount, file_vino, &inode));
+  ceph_ll_put(cmount, inode);
+  ASSERT_EQ(0, ceph_ll_lookup_vino(cmount, snapdir_vino, &inode));
+  ceph_ll_put(cmount, inode);
+  ASSERT_EQ(0, ceph_ll_lookup_vino(cmount, snap_vino, &inode));
+  ceph_ll_put(cmount, inode);
+  ASSERT_EQ(0, ceph_ll_lookup_vino(cmount, snap_file_vino, &inode));
+  ceph_ll_put(cmount, inode);
+
+  // cleanup
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path));
   ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
 
   ceph_shutdown(cmount);
