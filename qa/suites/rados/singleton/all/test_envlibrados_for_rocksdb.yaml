@@ -5,6 +5,7 @@ overrides:
       global:
         osd max object name len: 460
         osd max object namespace len: 64
+        osd client message cap: 5000
 roles:
 - [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
 tasks:
