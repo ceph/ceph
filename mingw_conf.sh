@@ -16,6 +16,7 @@ MINGW_CPP="${MINGW_BASE}-c++"
 MINGW_DLLTOOL="${MINGW_BASE}-dlltool"
 MINGW_WINDRES="${MINGW_BASE}-windres"
 MINGW_STRIP="${MINGW_BASE}-strip"
+MINGW_OBJCOPY="${MINGW_BASE}-objcopy"
 # -Distribution specific mingw settings-
 case "$OS" in
     ubuntu)
