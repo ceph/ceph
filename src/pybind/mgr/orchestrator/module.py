@@ -1353,30 +1353,27 @@ Usage:
         if o is None:
             raise NoOrchestrator()
 
-        avail, msg = self.available()
+        avail, why, module_details = self.available()
         result: Dict[str, Any] = {
+            "available": avail,
             "backend": o,
-            "paused": self.is_paused(),
         }
 
-        if avail is not None:
-            result['available'] = avail
-            if avail:
-                if o == "cephadm" and detail:
-                    result['workers'] = msg
-            else:
-                result['reason'] = msg
+        if avail:
+            result.update(module_details)
+        else:
+            result['reason'] = why
 
         if format != Format.plain:
             output = to_format(result, format, many=False, cls=None)
         else:
             output = "Backend: {0}".format(result['backend'])
-            if 'available' in result:
-                output += f"\nAvailable: {'Yes' if result['available'] else 'No'}"
-                if 'reason' in result:
-                    output += ' ({0})'.format(result['reason'])
-            output += f"\nPaused: {'Yes' if result['paused'] else 'No'}"
-            if 'workers' in result:
+            output += f"\nAvailable: {'Yes' if result['available'] else 'No'}"
+            if 'reason' in result:
+                output += ' ({0})'.format(result['reason'])
+            if 'paused' in result:
+                output += f"\nPaused: {'Yes' if result['paused'] else 'No'}"
+            if 'workers' in result and detail:
                 output += f"\nHost Parallelism: {result['workers']}"
         return HandleCommandResult(stdout=output)
 

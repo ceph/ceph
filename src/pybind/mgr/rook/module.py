@@ -8,7 +8,7 @@ from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
 
 try:
-    from typing import List, Dict, Optional, Callable, Any
+    from typing import List, Dict, Optional, Callable, Any, Tuple
     from ceph.deployment.drive_group import DriveGroupSpec
 except ImportError:
     pass  # just for type checking
@@ -117,18 +117,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return False, "Rook version unsupported."
         return True, ''
 
-    def available(self):
+    def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         if not kubernetes_imported:
-            return False, "`kubernetes` python module not found"
+            return False, "`kubernetes` python module not found", {}
         elif not self._rook_env.has_namespace():
-            return False, "ceph-mgr not running in Rook cluster"
+            return False, "ceph-mgr not running in Rook cluster", {}
 
         try:
             self.k8s.list_namespaced_pod(self._rook_env.namespace)
         except ApiException as e:
-            return False, "Cannot reach Kubernetes API: {}".format(e)
+            return False, "Cannot reach Kubernetes API: {}".format(e), {}
         else:
-            return True, ""
+            return True, "", {}
 
     def __init__(self, *args, **kwargs):
         super(RookOrchestrator, self).__init__(*args, **kwargs)
