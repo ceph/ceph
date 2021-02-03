@@ -80,6 +80,8 @@ public:
       return new GetNextStageCR(this, sid, next_sid);
     }
   };
+
+  virtual RGWCoroutine *list_cr(std::vector<std::string> *providers) = 0;
 };
 
 class RGWAsyncRadosProcessor;
@@ -93,16 +95,26 @@ class SIProviderCRMgr_Local : public SIProviderCRMgr
     RGWSI_SIP_Marker *sip_marker;
   } svc;
 
+  struct {
+    struct {
+        RGWSIPManager *mgr;
+    } si;
+  } ctl;
+
   RGWAsyncRadosProcessor *async_rados;
 public:
   SIProviderCRMgr_Local(const DoutPrefixProvider *_dpp,
                         RGWSI_SIP_Marker *_sip_marker_svc,
+                        RGWSIPManager *_si_mgr,
                         RGWAsyncRadosProcessor *_async_rados) : SIProviderCRMgr(_dpp),
                                                                 async_rados(_async_rados) {
     svc.sip_marker = _sip_marker_svc;
+    ctl.si.mgr = _si_mgr;
   }
 
   SIProviderCRMgrInstance_Local *alloc_instance(SIProviderRef& _provider);
+
+  RGWCoroutine *list_cr(std::vector<std::string> *providers) override;
 };
 
 class SIProviderCRMgrInstance_Local : public SIProviderCRMgr::Instance
@@ -142,6 +154,7 @@ class SIProviderCRMgrInstance_REST;
 class SIProviderCRMgr_REST : public SIProviderCRMgr
 {
   friend class SIProviderCRMgrInstance_REST;
+  friend struct SIProviderRESTCRs;
 
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
@@ -154,7 +167,6 @@ public:
                                                           conn(_conn),
                                                           http_manager(_http_manager) {}
 
-
   SIProviderCRMgrInstance_REST *alloc_instance(const string& remote_provider_name,
                                                SIProvider::TypeHandlerProvider *type_provider,
                                                std::optional<string> instance);
@@ -162,6 +174,8 @@ public:
                                                SIProvider::StageType stage_type,
                                                SIProvider::TypeHandlerProvider *type_provider,
                                                std::optional<string> instance);
+
+  RGWCoroutine *list_cr(std::vector<std::string> *providers) override;
 };
 
 class SIProviderCRMgrInstance_REST : public SIProviderCRMgr::Instance

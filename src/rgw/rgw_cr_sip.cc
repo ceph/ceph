@@ -214,6 +214,12 @@ SIProviderCRMgrInstance_Local *SIProviderCRMgr_Local::alloc_instance(SIProviderR
   return new SIProviderCRMgrInstance_Local(this, _provider);
 }
 
+RGWCoroutine *SIProviderCRMgr_Local::list_cr(std::vector<std::string> *providers)
+{
+   *providers = ctl.si.mgr->list_sip();
+   return nullptr;
+}
+
 SIProviderCRMgrInstance_Local::SIProviderCRMgrInstance_Local(SIProviderCRMgr_Local *_mgr,
                                                              SIProviderRef& _provider) : SIProviderCRMgr::Instance(_mgr->get_dpp()),
                                                                          mgr(_mgr),
@@ -382,25 +388,25 @@ SIProviderCRMgrInstance_REST *SIProviderCRMgr_REST::alloc_instance(const string&
 
 struct SIProviderRESTCRs {
   class ListProvidersCR : public RGWCoroutine {
-    SIProviderCRMgrInstance_REST *mgri;
+    SIProviderCRMgr_REST *mgr;
 
     string path;
     std::vector<std::string> *providers;
   public:
-    ListProvidersCR(SIProviderCRMgrInstance_REST *_mgri,
-                    std::vector<std::string> *_providers) : RGWCoroutine(_mgri->ctx()),
-                                                            mgri(_mgri),
+    ListProvidersCR(SIProviderCRMgr_REST *_mgr,
+                    std::vector<std::string> *_providers) : RGWCoroutine(_mgr->ctx()),
+                                                            mgr(_mgr),
                                                             providers(_providers) {
-      path = mgri->path_prefix;
+      path = mgr->path_prefix;
     }
 
     int operate() override {
       reenter(this) {
         yield {
           rgw_http_param_pair pairs[] = { { nullptr, nullptr } };
-          call(new RGWReadRESTResourceCR(mgri->ctx(),
-                                         mgri->conn,
-                                         mgri->http_manager,
+          call(new RGWReadRESTResourceCR(mgr->ctx(),
+                                         mgr->conn,
+                                         mgr->http_manager,
                                          path,
                                          pairs,
                                          providers));
@@ -812,6 +818,11 @@ struct SIProviderRESTCRs {
     }
   };
 };
+
+RGWCoroutine *SIProviderCRMgr_REST::list_cr(std::vector<std::string> *providers)
+{
+   return new SIProviderRESTCRs::ListProvidersCR(this, providers);
+}
 
 RGWCoroutine *SIProviderCRMgrInstance_REST::init_cr()
 {

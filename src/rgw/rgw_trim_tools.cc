@@ -50,6 +50,7 @@ class RGWTrimSIPMgrImpl : public RGWTrimSIPMgr
         }
         mgr->sip_cr_mgr.emplace(dpp,
                                 store->svc()->sip_marker,
+                                store->ctl()->si.mgr,
                                 store->svc()->rados->get_async_processor());
         mgr->sip_cr.reset(mgr->sip_cr_mgr->alloc_instance(mgr->sip));
 

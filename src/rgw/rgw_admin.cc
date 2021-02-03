@@ -35,6 +35,7 @@ extern "C" {
 
 #include "rgw_user.h"
 #include "rgw_bucket.h"
+#include "rgw_cr_sip.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
@@ -3428,6 +3429,43 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
     opt_var = var;
   }
 }
+
+class SIPCRMgr : public RGWCoroutinesManager {
+  CephContext *cct;
+  RGWHTTPManager http_manager;
+  RGWCoroutinesManagerRegistry *cr_registry;
+
+  struct {
+    RGWRemoteCtl *remote;
+  } ctl;
+
+public:
+  SIPCRMgr(CephContext *_cct,
+           RGWRemoteCtl *_remote_ctl,
+           RGWCoroutinesManagerRegistry *_cr_registry) : RGWCoroutinesManager(_cct, _cr_registry),
+                                                         cct(_cct),
+                                                         http_manager(_cct, completion_mgr) {
+    ctl.remote = _remote_ctl;
+    http_manager.start();
+  }
+
+  SIProviderCRMgr *create(std::optional<rgw_zone_id> zid) {
+    if (!zid) {
+      return new SIProviderCRMgr_Local(dpp(),
+                                       static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->sip_marker,
+                                       static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->si.mgr,
+                                       static_cast<rgw::sal::RGWRadosStore*>(store)->svc()->rados->get_async_processor());
+    }
+
+    auto c = ctl.remote->zone_conns(*zid);
+    if (!c) {
+      lderr(cct) << "ERROR: couldn't find connection to zone " << *zid << dendl;
+      return nullptr;
+    }
+
+    return new SIProviderCRMgr_REST(dpp(), c->sip, &http_manager);
+  }
+};
 
 class SIPRESTMgr : public RGWCoroutinesManager {
   CephContext *cct;
@@ -10602,7 +10640,22 @@ next:
   }
 
  if (opt_cmd == OPT::SI_PROVIDER_LIST) {
-   auto providers = store->ctl()->si.mgr->list_sip();
+   SIPCRMgr sip_cr_mgr(cct.get(),
+                       static_cast<rgw::sal::RGWRadosStore*>(store)->ctl()->remote,
+                       static_cast<rgw::sal::RGWRadosStore*>(store)->getRados()->get_cr_registry());
+
+   auto mgr = sip_cr_mgr.create(opt_zone_id);
+   if (!mgr) {
+     return EIO;
+   }
+
+   std::vector<string> providers;
+   int r = sip_cr_mgr.run(mgr->list_cr(&providers));
+   if (r < 0) {
+     lderr(cct) << "ERROR: failed to list providers: " << cpp_strerror(-r) << dendl;
+     return -r;
+   }
+
    {
      Formatter::ObjectSection top_section(*formatter, "result");
      encode_json("providers", providers, formatter.get());
