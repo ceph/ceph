@@ -3186,7 +3186,31 @@ def get_image_info_from_inspect(out, image):
 
 
 ##################################
+def check_subnet(subnets:str) -> Tuple[int, List[int], str]:
+    """Determine whether the given string is a valid subnet
 
+    :param subnets: subnet string, a single definition or comma separated list of CIDR subnets
+    :returns: return code, IP version list of the subnets and msg describing any errors validation errors
+    """
+
+    rc = 0
+    versions = set() 
+    errors = []
+    subnet_list = subnets.split(',')
+    for subnet in subnet_list:
+        # ensure the format of the string is as expected address/netmask
+        if not re.search(r'\/\d+$', subnet):
+            rc = 1
+            errors.append(f"{subnet} is not in CIDR format (address/netmask)")
+            continue
+        try:
+            v = ipaddress.ip_network(unicode(subnet)).version
+            versions.add(v)
+        except ValueError as e:
+            rc = 1
+            errors.append(f"{subnet} invalid: {str(e)}")
+    
+    return rc, list(versions), ", ".join(errors)
 
 def unwrap_ipv6(address):
     # type: (str) -> str
@@ -3283,8 +3307,27 @@ def prepare_mon_addresses(
         if not mon_network:
             raise Error('Failed to infer CIDR network for mon ip %s; pass '
                         '--skip-mon-network to configure it later' % base_ip)
-
+    
     return (addr_arg, ipv6, mon_network)
+
+
+def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
+    cluster_network = ""
+    ipv6_cluster_network = False
+    # the cluster network may not exist on this node, so all we can do is 
+    # validate that the address given is valid ipv4 or ipv6 subnet
+    if ctx.cluster_network:
+        rc, versions, err_msg = check_subnet(ctx.cluster_network)
+        if rc:
+            raise Error(f"Invalid --cluster-network parameter: {err_msg}")
+        cluster_network = ctx.cluster_network
+        ipv6_cluster_network = True if 6 in versions else False
+    else:
+        logger.info("- internal network (--cluster-network) has not "
+                       "been provided, OSD replication will default to "
+                       "the public_network")
+
+    return cluster_network, ipv6_cluster_network
 
 
 def create_initial_keys(
@@ -3645,7 +3688,8 @@ def finish_bootstrap_config(
     config: str,
     mon_id: str, mon_dir: str,
     mon_network: Optional[str], ipv6: bool,
-    cli: Callable
+    cli: Callable,
+    cluster_network: Optional[str], ipv6_cluster_network: bool
 
 ) -> None:
     if not ctx.no_minimize_config:
@@ -3674,11 +3718,15 @@ def finish_bootstrap_config(
         ])
 
     if mon_network:
-        logger.info('Setting mon public_network...')
+        logger.info(f"Setting mon public_network to {mon_network}")
         cli(['config', 'set', 'mon', 'public_network', mon_network])
+    
+    if cluster_network:
+        logger.info(f"Setting cluster_network to {cluster_network}")
+        cli(['config', 'set', 'global', 'cluster_network', cluster_network])
 
-    if ipv6:
-        logger.info('Enabling IPv6 (ms_bind_ipv6)')
+    if ipv6 or ipv6_cluster_network:
+        logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
 
 
@@ -3738,6 +3786,8 @@ def command_bootstrap(ctx):
     l.acquire()
 
     (addr_arg, ipv6, mon_network) = prepare_mon_addresses(ctx)
+    cluster_network, ipv6_cluster_network = prepare_cluster_network(ctx)
+
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
 
     logger.info('Extracting ceph user uid/gid from container image...')
@@ -3787,7 +3837,8 @@ def command_bootstrap(ctx):
     wait_for_mon(ctx, mon_id, mon_dir, admin_keyring.name, tmp_config.name)
 
     finish_bootstrap_config(ctx, fsid, config, mon_id, mon_dir,
-                            mon_network, ipv6, cli)
+                            mon_network, ipv6, cli,
+                            cluster_network, ipv6_cluster_network)
 
     # output files
     with open(ctx.output_keyring, 'w') as f:
@@ -7398,6 +7449,9 @@ def _get_parser():
         '--exporter-config',
         action=CustomValidation,
         help=f'Exporter configuration information in JSON format (providing: {", ".join(CephadmDaemon.config_requirements)}, port information)')
+    parser_bootstrap.add_argument(
+        '--cluster-network',
+        help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
