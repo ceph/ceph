@@ -23,6 +23,7 @@ tasks:
         - \(POOL_APP_NOT_ENABLED\)
         - \(OSDMAP_FLAGS\)
         - \(OSD_FLAGS\)
+        - \(TELEMETRY_CHANGED\)
         - pauserd,pausewr flag\(s\) set
         - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
         - evicting unresponsive client .+
