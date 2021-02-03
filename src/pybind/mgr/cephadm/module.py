@@ -5,14 +5,13 @@ import re
 import shlex
 from collections import defaultdict
 from configparser import ConfigParser
-from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory
 from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, Iterator, NamedTuple, Sequence
+    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence
 
 import datetime
 import os
@@ -25,19 +24,19 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
-    HostPlacementSpec, HA_RGWSpec
+    HostPlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult, Option
-from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
+from mgr_util import create_self_signed_cert
 import secrets
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, OrchestratorEvent, set_exception_subject, DaemonDescription
+    CLICommandMeta, DaemonDescription
 from orchestrator._interface import GenericSpec
-from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
+from orchestrator._interface import daemon_type_to_service
 
 from . import remotes
 from . import utils
@@ -48,7 +47,7 @@ from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.ha_rgw import HA_RGWService
 from .services.nfs import NFSService
-from .services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
+from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 from .schedule import HostAssignment
@@ -69,7 +68,6 @@ try:
         from remoto.backends import BaseConnection
         BaseConnection.has_connection = remoto_has_connection
     import remoto.process
-    import execnet.gateway_bootstrap
 except ImportError as e:
     remoto = None
     remoto_import_error = str(e)

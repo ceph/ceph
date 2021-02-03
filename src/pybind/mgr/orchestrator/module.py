@@ -13,14 +13,14 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.utils import datetime_now
 
-from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
+from mgr_util import to_pretty_timedelta, format_dimless
 from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
-    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, HA_RGWSpec, \
+    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec
+    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
