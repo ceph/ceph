@@ -24,47 +24,46 @@ account different package managers, package names or paths (e.g. mingw paths).
 
 The script accepts the following flags:
 
-=============  ===============================  ===============================
-Flag           Description                      Default value
-=============  ===============================  ===============================
-OS             Host OS distribution, for mingw  ubuntu (also valid: suse)
-               and other OS specific settings.
-CEPH_DIR       The Ceph source code directory.  The same as the script.
-BUILD_DIR      The directory where the          $CEPH_DIR/build
-               generated artifacts will be
-               placed.
-DEPS_DIR       The directory where the Ceph     $CEPH_DIR/build.deps
-               dependencies will be built.
-NUM_WORKERS    The number of workers to use     The number of vcpus
-               when building Ceph.              available
-CLEAN_BUILD    Clean the build directory.
-SKIP_BUILD     Run cmake without actually
-               performing the build.
-SKIP_TESTS     Skip building Ceph tests.
-BUILD_ZIP      Build a zip archive containing
-               the generated binaries.
-ZIP_DEST       Where to put a zip containing    $BUILD_DIR/ceph.zip
-               the generated binaries.
-STRIP_ZIPPED   If set, the zip will contain
-               stripped binaries.
-ENABLE_SHARED  Dynamically link Ceph libs.      False
-=============  ===============================  ===============================
+=================  ===============================  ===============================
+Flag               Description                      Default value
+=================  ===============================  ===============================
+OS                 Host OS distribution, for mingw  ubuntu (also valid: suse)
+                   and other OS specific settings.
+CEPH_DIR           The Ceph source code directory.  The same as the script.
+BUILD_DIR          The directory where the          $CEPH_DIR/build
+                   generated artifacts will be
+                   placed.
+DEPS_DIR           The directory where the Ceph     $CEPH_DIR/build.deps
+                   dependencies will be built.
+NUM_WORKERS        The number of workers to use     The number of vcpus
+                   when building Ceph.              available
+CLEAN_BUILD        Clean the build directory.
+SKIP_BUILD         Run cmake without actually
+                   performing the build.
+SKIP_TESTS         Skip building Ceph tests.
+SKIP_ZIP           If unset, we'll build a zip
+                   archive containing the
+                   generated binaries.
+ZIP_DEST           Where to put a zip containing    $BUILD_DIR/ceph.zip
+                   the generated binaries.
+EMBEDDED_DBG_SYM   By default, the generated
+                   archive will contain a .debug
+                   subfolder, having the debug
+                   symbols. If this flag is set,
+                   the debug symbols will remain
+                   embedded in the executables.
+ENABLE_SHARED      Dynamically link Ceph libs.      False
+=================  ===============================  ===============================
 
-In order to build debug binaries as well as an archive containing stripped
-binaries that may be easily moved around, one may use the following:
+The following command will build the binaries and add them to a zip archive
+along with all the required DLLs. By default, the debug symbols are extracted
+from the binaries and placed in the ".debug" folder of the archive.
 
 .. code:: bash
 
-    BUILD_ZIP=1 STRIP_ZIPPED=1 SKIP_TESTS=1 ./win32_build.sh
+    SKIP_TESTS=1 ./win32_build.sh
 
 In order to disable a flag, such as ``CLEAN_BUILD``, leave it undefined.
-
-Debug binaries can be quite large, the following parameters may be passed to
-``win32_build.sh`` to reduce the amount of debug information:
-
-.. code:: bash
-
-    CFLAGS="-g1" CXXFLAGS="-g1" CMAKE_BUILD_TYPE="Release"
 
 ``win32_build.sh`` will fetch dependencies using ``win32_deps_build.sh``. If
 all dependencies are successfully prepared, this potentially time consuming
