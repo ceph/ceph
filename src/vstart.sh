@@ -1036,7 +1036,7 @@ EOF
 	if [ "$new" -eq 1 ]; then
 		digest=$(curl -s \
 		https://registry.hub.docker.com/v2/repositories/ceph/daemon-base/tags/latest-master-devel \
-		| jq -r '.images[].digest')
+		| jq -r '.images[0].digest')
 		ceph_adm config set global container_image "docker.io/ceph/daemon-base@$digest"
 	fi
         ceph_adm config-key set mgr/cephadm/ssh_identity_key -i ~/.ssh/id_rsa

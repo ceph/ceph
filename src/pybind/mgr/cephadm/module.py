@@ -2210,8 +2210,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         'current_id': dd.container_image_id,
                         'current_version': dd.version,
                     }
-        if self.use_repo_digest:
-            r['target_digest'] = image_info.repo_digest
+        if self.use_repo_digest and image_info.repo_digests:
+            # FIXME: we assume the first digest is the best one to use
+            r['target_digest'] = image_info.repo_digests[0]
 
         return json.dumps(r, indent=4, sort_keys=True)
 
