@@ -3644,18 +3644,6 @@ int OSD::shutdown()
   }
 
   // note unmount epoch
-  dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
-  superblock.mounted = service.get_boot_epoch();
-  superblock.clean_thru = osdmap->get_epoch();
-  ObjectStore::Transaction t;
-  write_superblock(t);
-  int r = store->queue_transaction(service.meta_ch, std::move(t));
-  if (r) {
-    derr << "OSD::shutdown: error writing superblock: "
-	 << cpp_strerror(r) << dendl;
-  }
-
-
   service.shutdown_reserver();
 
   // Remove PGs
@@ -3735,7 +3723,7 @@ int OSD::shutdown()
   hb_front_server_messenger->shutdown();
   hb_back_server_messenger->shutdown();
 
-  return r;
+  return 0;
 }
 
 int OSD::mon_cmd_maybe_osd_create(string &cmd)
@@ -8014,7 +8002,12 @@ void OSD::handle_osd_map(MOSDMap *m)
     m->put();
     return;
   }
-
+	
+if (service.get_state() != OSDService::NOT_STOPPING) {
+    dout(0) << "ignoring osdmap when osd shutdown" << dendl;
+    m->put();
+    return;
+  }
   // share with the objecter
   if (!is_preboot())
     service.objecter->handle_osd_map(m);
