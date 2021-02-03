@@ -112,7 +112,7 @@ NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
 alert_metric = namedtuple('alert_metric', 'name description')
 HEALTH_CHECKS = [
-    alert_metric('SLOW_OPS', 'OSD or Monitor requests taking a long time to process' ),
+    alert_metric('SLOW_OPS', 'OSD or Monitor requests taking a long time to process'),
 ]
 
 
@@ -236,6 +236,7 @@ class MetricCollectionThread(threading.Thread):
     def stop(self):
         self.active = False
         self.event.set()
+
 
 class Module(MgrModule):
     COMMANDS = [
@@ -512,11 +513,14 @@ class Module(MgrModule):
                     v, err = 0, 0
 
                     if check.name == "SLOW_OPS":
-                        # 42 slow ops, oldest one blocked for 12 sec, daemons [osd.0, osd.3] have slow ops.
+                        # 42 slow ops, oldest one blocked for 12 sec, daemons [osd.0, osd.3] have
+                        # slow ops.
                         v, err = _get_value(message)
 
                     if err:
-                        self.log.error("healthcheck {} message format is incompatible and has been dropped".format(check.name))
+                        self.log.error(
+                            "healthcheck %s message format is incompatible and has been dropped",
+                            check.name)
                         # drop the metric, so it's no longer emitted
                         del self.metrics[path]
                         continue
@@ -615,7 +619,8 @@ class Module(MgrModule):
         all_mgrs = list(standbys)
         all_mgrs.append(active)
 
-        all_modules = {module.get('name'):module.get('can_run') for module in mgr_map['available_modules']}
+        all_modules = {module.get('name'): module.get('can_run')
+                       for module in mgr_map['available_modules']}
 
         for mgr in all_mgrs:
             host_version = servers.get((mgr, 'mgr'), ('', ''))
@@ -1271,7 +1276,8 @@ class Module(MgrModule):
         # Make the cache timeout for collecting configurable
         self.scrape_interval = cast(float, self.get_localized_module_option('scrape_interval'))
 
-        self.stale_cache_strategy = cast(str, self.get_localized_module_option('stale_cache_strategy'))
+        self.stale_cache_strategy = cast(
+            str, self.get_localized_module_option('stale_cache_strategy'))
         if self.stale_cache_strategy not in [self.STALE_CACHE_FAIL,
                                              self.STALE_CACHE_RETURN]:
             self.stale_cache_strategy = self.STALE_CACHE_FAIL

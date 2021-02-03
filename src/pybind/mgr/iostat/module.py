@@ -56,7 +56,7 @@ class Module(MgrModule):
             str(rd_ops),
             str(wr_ops),
             str(total_ops)
-            ]
+        ]
         ret += self.get_pretty_row(elems, width)
 
         return HandleCommandResult(stdout=ret)

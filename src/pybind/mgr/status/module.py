@@ -99,7 +99,8 @@ class Module(MgrModule):
                     activity = ""
 
                     if state == "active":
-                        rate = self.get_rate("mds", info['name'], "mds_server.handle_client_request")
+                        rate = self.get_rate("mds", info['name'],
+                                             "mds_server.handle_client_request")
                         if output_format not in ('json', 'json-pretty'):
                             activity = "Reqs: " + mgr_util.format_dimless(rate, 5) + "/s"
 
