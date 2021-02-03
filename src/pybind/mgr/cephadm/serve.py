@@ -584,7 +584,8 @@ class CephadmServe:
             daemon_ids = [d.daemon_id for d in remove_daemon_hosts]
             assert None not in daemon_ids
             # setting force flag retains previous behavior, should revisit later.
-            r = self.mgr.cephadm_services[service_type].ok_to_stop(cast(List[str], daemon_ids), force=True)
+            r = self.mgr.cephadm_services[service_type].ok_to_stop(
+                cast(List[str], daemon_ids), force=True)
             return not r.retval
 
         while remove_daemon_hosts and not _ok_to_stop(remove_daemon_hosts):
@@ -735,111 +736,114 @@ class CephadmServe:
                 hostname=daemon_spec.host,
         ).service_id(), overwrite=True):
 
-            image = ''
-            start_time = datetime_now()
-            ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
+            try:
+                image = ''
+                start_time = datetime_now()
+                ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
 
-            if daemon_spec.daemon_type == 'container':
-                spec: Optional[CustomContainerSpec] = daemon_spec.spec
-                if spec is None:
-                    # Exit here immediately because the required service
-                    # spec to create a daemon is not provided. This is only
-                    # provided when a service is applied via 'orch apply'
-                    # command.
-                    msg = "Failed to {} daemon {} on {}: Required " \
-                          "service specification not provided".format(
-                              'reconfigure' if reconfig else 'deploy',
-                              daemon_spec.name(), daemon_spec.host)
-                    self.log.info(msg)
-                    return msg
-                image = spec.image
-                if spec.ports:
-                    ports.extend(spec.ports)
-
-            if daemon_spec.daemon_type == 'cephadm-exporter':
-                if not reconfig:
-                    assert daemon_spec.host
-                    deploy_ok = self._deploy_cephadm_binary(daemon_spec.host)
-                    if not deploy_ok:
-                        msg = f"Unable to deploy the cephadm binary to {daemon_spec.host}"
-                        self.log.warning(msg)
+                if daemon_spec.daemon_type == 'container':
+                    spec: Optional[CustomContainerSpec] = daemon_spec.spec
+                    if spec is None:
+                        # Exit here immediately because the required service
+                        # spec to create a daemon is not provided. This is only
+                        # provided when a service is applied via 'orch apply'
+                        # command.
+                        msg = "Failed to {} daemon {} on {}: Required " \
+                              "service specification not provided".format(
+                                  'reconfigure' if reconfig else 'deploy',
+                                  daemon_spec.name(), daemon_spec.host)
+                        self.log.info(msg)
                         return msg
+                    image = spec.image
+                    if spec.ports:
+                        ports.extend(spec.ports)
 
-            if daemon_spec.daemon_type == 'haproxy':
-                haspec = cast(HA_RGWSpec, daemon_spec.spec)
-                if haspec.haproxy_container_image:
-                    image = haspec.haproxy_container_image
+                if daemon_spec.daemon_type == 'cephadm-exporter':
+                    if not reconfig:
+                        assert daemon_spec.host
+                        deploy_ok = self._deploy_cephadm_binary(daemon_spec.host)
+                        if not deploy_ok:
+                            msg = f"Unable to deploy the cephadm binary to {daemon_spec.host}"
+                            self.log.warning(msg)
+                            return msg
 
-            if daemon_spec.daemon_type == 'keepalived':
-                haspec = cast(HA_RGWSpec, daemon_spec.spec)
-                if haspec.keepalived_container_image:
-                    image = haspec.keepalived_container_image
+                if daemon_spec.daemon_type == 'haproxy':
+                    haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                    if haspec.haproxy_container_image:
+                        image = haspec.haproxy_container_image
 
-            cephadm_config, deps = self.mgr.cephadm_services[daemon_type_to_service(daemon_spec.daemon_type)].generate_config(
-                daemon_spec)
+                if daemon_spec.daemon_type == 'keepalived':
+                    haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                    if haspec.keepalived_container_image:
+                        image = haspec.keepalived_container_image
 
-            # TCP port to open in the host firewall
-            if len(ports) > 0:
-                daemon_spec.extra_args.extend([
-                    '--tcp-ports', ' '.join(map(str, ports))
-                ])
+                cephadm_config, deps = self.mgr.cephadm_services[daemon_type_to_service(daemon_spec.daemon_type)].generate_config(
+                    daemon_spec)
 
-            # osd deployments needs an --osd-uuid arg
-            if daemon_spec.daemon_type == 'osd':
-                if not osd_uuid_map:
-                    osd_uuid_map = self.mgr.get_osd_uuid_map()
-                osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
-                if not osd_uuid:
-                    raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
-                daemon_spec.extra_args.extend(['--osd-fsid', osd_uuid])
+                # TCP port to open in the host firewall
+                if len(ports) > 0:
+                    daemon_spec.extra_args.extend([
+                        '--tcp-ports', ' '.join(map(str, ports))
+                    ])
 
-            if reconfig:
-                daemon_spec.extra_args.append('--reconfig')
-            if self.mgr.allow_ptrace:
-                daemon_spec.extra_args.append('--allow-ptrace')
+                # osd deployments needs an --osd-uuid arg
+                if daemon_spec.daemon_type == 'osd':
+                    if not osd_uuid_map:
+                        osd_uuid_map = self.mgr.get_osd_uuid_map()
+                    osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
+                    if not osd_uuid:
+                        raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
+                    daemon_spec.extra_args.extend(['--osd-fsid', osd_uuid])
 
-            if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
-                self._registry_login(daemon_spec.host, self.mgr.registry_url,
-                                     self.mgr.registry_username, self.mgr.registry_password)
+                if reconfig:
+                    daemon_spec.extra_args.append('--reconfig')
+                if self.mgr.allow_ptrace:
+                    daemon_spec.extra_args.append('--allow-ptrace')
 
-            daemon_spec.extra_args.extend(['--config-json', '-'])
+                if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
+                    self._registry_login(daemon_spec.host, self.mgr.registry_url,
+                                         self.mgr.registry_username, self.mgr.registry_password)
 
-            self.log.info('%s daemon %s on %s' % (
-                'Reconfiguring' if reconfig else 'Deploying',
-                daemon_spec.name(), daemon_spec.host))
+                daemon_spec.extra_args.extend(['--config-json', '-'])
 
-            out, err, code = self._run_cephadm(
-                daemon_spec.host, daemon_spec.name(), 'deploy',
-                [
-                    '--name', daemon_spec.name(),
-                ] + daemon_spec.extra_args,
-                stdin=json.dumps(cephadm_config),
-                image=image)
-            if not code and daemon_spec.host in self.mgr.cache.daemons:
-                # prime cached service state with what we (should have)
-                # just created
-                sd = orchestrator.DaemonDescription()
-                sd.daemon_type = daemon_spec.daemon_type
-                sd.daemon_id = daemon_spec.daemon_id
-                sd.hostname = daemon_spec.host
-                sd.status = 1
-                sd.status_desc = 'starting'
-                self.mgr.cache.add_daemon(daemon_spec.host, sd)
-                if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
-                    self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
-            self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
-            self.mgr.cache.update_daemon_config_deps(
-                daemon_spec.host, daemon_spec.name(), deps, start_time)
-            self.mgr.cache.save_host(daemon_spec.host)
-            msg = "{} {} on host '{}'".format(
-                'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
-            if not code:
-                self.mgr.events.for_daemon(daemon_spec.name(), OrchestratorEvent.INFO, msg)
-            else:
-                what = 'reconfigure' if reconfig else 'deploy'
-                self.mgr.events.for_daemon(
-                    daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
-            return msg
+                self.log.info('%s daemon %s on %s' % (
+                    'Reconfiguring' if reconfig else 'Deploying',
+                    daemon_spec.name(), daemon_spec.host))
+
+                out, err, code = self._run_cephadm(
+                    daemon_spec.host, daemon_spec.name(), 'deploy',
+                    [
+                        '--name', daemon_spec.name(),
+                    ] + daemon_spec.extra_args,
+                    stdin=json.dumps(cephadm_config),
+                    image=image)
+                if not code and daemon_spec.host in self.mgr.cache.daemons:
+                    # prime cached service state with what we (should have)
+                    # just created
+                    sd = daemon_spec.to_daemon_description(1, 'starting')
+                    self.mgr.cache.add_daemon(daemon_spec.host, sd)
+                    if daemon_spec.daemon_type in ['grafana', 'iscsi', 'prometheus', 'alertmanager']:
+                        self.mgr.requires_post_actions.add(daemon_spec.daemon_type)
+                self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
+                self.mgr.cache.update_daemon_config_deps(
+                    daemon_spec.host, daemon_spec.name(), deps, start_time)
+                self.mgr.cache.save_host(daemon_spec.host)
+                msg = "{} {} on host '{}'".format(
+                    'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
+                if not code:
+                    self.mgr.events.for_daemon(daemon_spec.name(), OrchestratorEvent.INFO, msg)
+                else:
+                    what = 'reconfigure' if reconfig else 'deploy'
+                    self.mgr.events.for_daemon(
+                        daemon_spec.name(), OrchestratorEvent.ERROR, f'Failed to {what}: {err}')
+                return msg
+            except OrchestratorError:
+                if not reconfig:
+                    # we have to clean up the daemon. E.g. keyrings.
+                    servict_type = daemon_type_to_service(daemon_spec.daemon_type)
+                    dd = daemon_spec.to_daemon_description(-1, 'failed')
+                    self.mgr.cephadm_services[servict_type].post_remove(dd)
+                raise
 
     def _remove_daemon(self, name: str, host: str) -> str:
         """
