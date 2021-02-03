@@ -1,6 +1,6 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} 
+set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT}
     ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${CMAKE_DL_LIBS})
 
 add_library(unit-main OBJECT unit.cc)
@@ -141,7 +141,7 @@ target_link_libraries(ceph_bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAK
 add_executable(ceph_test_mutate
   test_mutate.cc
   )
-target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES} 
+target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
 # test_trans
@@ -592,6 +592,8 @@ if(WITH_MGR)
   set(MGR_ORCHESTRATOR_CLI_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-orchestrator_cli-virtualenv)
   list(APPEND env_vars_for_tox_tests MGR_ORCHESTRATOR_CLI_VIRTUALENV=${MGR_ORCHESTRATOR_CLI_VIRTUALENV})
 endif()
+
+add_ceph_test(run-promtool-unittests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-promtool-unittests.sh)
 
 set_property(
   TEST ${tox_tests}
