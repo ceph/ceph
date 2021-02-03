@@ -83,7 +83,8 @@ protected:
   void process_work() override;
   void schedule_append_ops(pwl::GenericLogOperations &ops) override;
   void append_scheduled_ops(void) override;
-  void reserve_cache(C_BlockIORequestT *req, bool &alloc_succeeds, bool &no_space) override;
+  void reserve_cache(C_BlockIORequestT *req,
+                     bool &alloc_succeeds, bool &no_space) override;
   void collect_read_extents(
       uint64_t read_buffer_offset, LogMapEntry<GenericWriteLogEntry> map_entry,
       std::vector<WriteLogCacheEntry*> &log_entries_to_read,
@@ -97,7 +98,8 @@ protected:
   bool alloc_resources(C_BlockIORequestT *req) override;
   void schedule_flush_and_append(pwl::GenericLogOperationsVector &ops) override;
   void setup_schedule_append(
-      pwl::GenericLogOperationsVector &ops, bool do_early_flush) override;
+      pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+      C_BlockIORequestT *req) override;
   Context *construct_flush_entry_ctx(
         const std::shared_ptr<pwl::GenericLogEntry> log_entry) override;
   void initialize_pool(Context *on_finish, pwl::DeferredContexts &later) override;

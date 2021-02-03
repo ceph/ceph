@@ -675,7 +675,8 @@ void WriteLog<I>::enlist_op_flusher()
 
 template <typename I>
 void WriteLog<I>::setup_schedule_append(
-    pwl::GenericLogOperationsVector &ops, bool do_early_flush) {
+    pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+    C_BlockIORequestT *req) {
   if (do_early_flush) {
     /* This caller is waiting for persist, so we'll use their thread to
      * expedite it */

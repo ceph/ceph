@@ -50,7 +50,8 @@ public:
 
   bool alloc_resources(C_BlockIORequestT *req) override;
   void setup_schedule_append(
-      pwl::GenericLogOperationsVector &ops, bool do_early_flush) override;
+      pwl::GenericLogOperationsVector &ops, bool do_early_flush,
+      C_BlockIORequestT *req) override;
   void complete_user_request(Context *&user_req, int r) override;
 
 protected:

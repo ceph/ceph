@@ -1250,6 +1250,11 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
     if (op->reserved_allocated()) {
       published_reserves++;
     }
+    {
+      std::lock_guard locker(m_lock);
+      m_unpublished_reserves -= published_reserves;
+      m_dirty_log_entries.splice(m_dirty_log_entries.end(), dirty_entries);
+    }
     op->complete(result);
     m_perfcounter->tinc(l_librbd_pwl_log_op_dis_to_app_t,
                         op->log_append_time - op->dispatch_time);
@@ -1263,13 +1268,9 @@ void AbstractWriteLog<I>::complete_op_log_entries(GenericLogOperations &&ops,
                       log_entry->ram_entry.write_bytes);
     m_perfcounter->tinc(l_librbd_pwl_log_op_app_to_cmp_t, now - op->log_append_time);
   }
-
+  // New entries may be flushable
   {
     std::lock_guard locker(m_lock);
-    m_unpublished_reserves -= published_reserves;
-    m_dirty_log_entries.splice(m_dirty_log_entries.end(), dirty_entries);
-
-    /* New entries may be flushable */
     wake_up();
   }
 }
