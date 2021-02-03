@@ -3,7 +3,7 @@ import random
 from typing import List, Optional, Callable, Iterable, TypeVar, Set
 
 import orchestrator
-from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
 

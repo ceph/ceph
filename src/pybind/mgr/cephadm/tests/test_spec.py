@@ -9,8 +9,7 @@ import pytest
 import yaml
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec, CustomContainerSpec, \
-    HA_RGWSpec
+    IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec, CustomContainerSpec
 
 from orchestrator import DaemonDescription, OrchestratorError
 

@@ -1,12 +1,10 @@
-import json
 import logging
 from typing import List, cast, Tuple, Dict, Any
 
 from ceph.deployment.service_spec import HA_RGWSpec
 
-from orchestrator import DaemonDescription, OrchestratorError
 from .cephadmservice import CephadmDaemonSpec, CephService
-from ..utils import CephadmNoImage, cephadmNoImage, resolve_ip
+from ..utils import resolve_ip
 
 logger = logging.getLogger(__name__)
 

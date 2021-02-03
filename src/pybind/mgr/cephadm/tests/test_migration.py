@@ -1,13 +1,10 @@
 import json
 
-import pytest
-
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
 from cephadm.inventory import SPEC_STORE_PREFIX
-from cephadm.tests.fixtures import _run_cephadm, cephadm_module, wait, with_host
-from orchestrator import OrchestratorError
+from cephadm.tests.fixtures import _run_cephadm, wait, with_host
 from cephadm.serve import CephadmServe
 from tests import mock
 

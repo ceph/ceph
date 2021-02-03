@@ -7,10 +7,9 @@ import pytest
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
 from cephadm.services.osd import OSD, OSDRemovalQueue
-from cephadm.utils import CephadmNoImage
 
 try:
-    from typing import Any, List
+    from typing import List
 except ImportError:
     pass
 
@@ -21,10 +20,10 @@ from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
-from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
+from orchestrator import DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
-from .fixtures import cephadm_module, wait, _run_cephadm, match_glob, with_host, \
+from .fixtures import wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, assert_rm_service, _deploy_cephadm_binary
 from cephadm.module import CephadmOrchestrator
 
