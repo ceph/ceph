@@ -23,7 +23,7 @@ from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
 
 # these items we use from ceph.py should probably eventually move elsewhere
-from tasks.ceph import get_mons, healthy
+from tasks.ceph import get_mons, healthy, cephfs_setup
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
@@ -1240,6 +1240,7 @@ def task(ctx, config):
             lambda: ceph_mgrs(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
+            lambda: cephfs_setup(ctx=ctx, config=config),
             lambda: ceph_rgw(ctx=ctx, config=config),
             lambda: ceph_iscsi(ctx=ctx, config=config),
             lambda: ceph_monitoring('prometheus', ctx=ctx, config=config),

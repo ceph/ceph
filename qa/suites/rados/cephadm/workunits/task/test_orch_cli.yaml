@@ -5,13 +5,11 @@ roles:
   - osd.2
   - mon.a
   - mgr.a
+  - mds.a
   - client.0
 tasks:
 - install:
 - cephadm:
-- cephadm.shell:
-    host.a:
-      - ceph orch apply mds a
 - cephfs_test_runner:
     modules:
       - tasks.cephfs.test_nfs
