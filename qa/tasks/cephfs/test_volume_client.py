@@ -876,7 +876,7 @@ vc.disconnect()
         volume_id = "volumeid"
 
         # Create auth_id
-        out = self.fs.mon_manager.raw_cluster_cmd(
+        self.fs.mon_manager.raw_cluster_cmd(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
@@ -938,7 +938,7 @@ vc.disconnect()
         volume_id = "volumeid"
 
         # Create auth_id
-        out = self.fs.mon_manager.raw_cluster_cmd(
+        self.fs.mon_manager.raw_cluster_cmd(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
