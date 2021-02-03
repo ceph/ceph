@@ -50,7 +50,7 @@ class OSDService(CephService):
                     drive_group.service_id))
                 return None
 
-            logger.info('Applying drive group %s on host %s...' % (
+            logger.info('Applying service osd.%s on host %s...' % (
                 drive_group.service_id, host
             ))
             start_ts = datetime_now()
