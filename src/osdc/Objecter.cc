@@ -2353,10 +2353,6 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 
   ceph_assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
-  if (pool_full_try) {
-    op->target.flags |= CEPH_OSD_FLAG_FULL_TRY;
-  }
-
   bool need_send = false;
   if (op->target.paused) {
     ldout(cct, 10) << " tid " << op->tid << " op " << op << " is paused"
