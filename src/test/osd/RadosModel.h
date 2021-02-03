@@ -65,7 +65,8 @@ enum TestOpType {
   TEST_OP_CHUNK_READ,
   TEST_OP_TIER_PROMOTE,
   TEST_OP_TIER_FLUSH,
-  TEST_OP_SET_CHUNK
+  TEST_OP_SET_CHUNK,
+  TEST_OP_TIER_EVICT
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -2744,6 +2745,72 @@ public:
   string getType() override
   {
     return "TierFlushOp";
+  }
+};
+
+class TierEvictOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectReadOperation op;
+  string oid;
+  std::shared_ptr<int> in_use;
+
+  TierEvictOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin() override
+  {
+    context->state_lock.lock();
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg,
+						      &write_callback);
+    context->state_lock.unlock();
+
+    op.cache_evict();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op, librados::OPERATION_IGNORE_CACHE,
+					NULL);
+    ceph_assert(!r);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    std::lock_guard state_locker{context->state_lock};
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
+
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      // ok
+    } else if (r == -EINVAL) {
+      // probably this is not manifest object 
+    } else if (r == -ENOENT) {
+      // may have raced with a remove?
+    } else {
+      ceph_abort_msg("shouldn't happen");
+    }
+    context->kick();
+    done = true;
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "TierEvictOp";
   }
 };
 
