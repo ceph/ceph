@@ -23,7 +23,7 @@ class OrchestratorAPI(OrchestratorClientMixin):
 
     def status(self):
         try:
-            status, message = super().available()
+            status, message, _module_details = super().available()
             logger.info("is orchestrator available: %s, %s", status, message)
             return dict(available=status, message=message)
         except (RuntimeError, OrchestratorError, ImportError) as e:
