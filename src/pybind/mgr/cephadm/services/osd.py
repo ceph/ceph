@@ -1,7 +1,7 @@
 import json
 import logging
 from threading import Lock
-from typing import List, Dict, Any, Set, Union, Tuple, cast, Optional, TYPE_CHECKING
+from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec

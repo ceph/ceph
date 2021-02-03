@@ -4,13 +4,9 @@ from typing import Dict, Tuple, Any, List, cast
 from ceph.deployment.service_spec import NFSServiceSpec
 import rados
 
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import DaemonDescription
 
-from cephadm import utils
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonSpec, CephService
-
-if TYPE_CHECKING:
-    from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 

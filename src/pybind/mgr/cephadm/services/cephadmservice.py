@@ -1,9 +1,7 @@
 import json
 import re
 import logging
-import secrets
 import subprocess
-import collections
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic, \
     Optional, Dict, Any, Tuple, NewType
@@ -13,9 +11,9 @@ from mgr_module import HandleCommandResult, MonCommandFailed
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
-from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
+from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
-from mgr_util import create_self_signed_cert, ServerConfigException, verify_tls
+from mgr_util import ServerConfigException, verify_tls
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
