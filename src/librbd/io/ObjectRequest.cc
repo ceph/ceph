@@ -807,9 +807,14 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
 
   bool initial_extents_written = false;
 
+  interval_set<uint64_t> object_interval;
+  for (auto& object_extent : m_object_extents) {
+    object_interval.insert(object_extent.first, object_extent.second);
+  }
+  ldout(cct, 20) << "object_interval=" << object_interval << dendl;
+
   // loop through all expected snapshots and build interval sets for
   // data and zeroed ranges for each snapshot
-  bool prev_exists = false;
   uint64_t prev_end_size = 0;
   interval_set<uint64_t> initial_written_extents;
   for (auto end_snap_id : m_snap_ids) {
@@ -851,81 +856,70 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
       }
     }
 
+    // clip diff to current object extent
+    interval_set<uint64_t> diff_interval;
+    diff_interval.intersection_of(object_interval, diff);
+
+    // clip diff to size of object (in case it was truncated)
+    interval_set<uint64_t> zero_interval;
+    if (end_size < prev_end_size) {
+      zero_interval.insert(end_size, prev_end_size - end_size);
+      zero_interval.intersection_of(object_interval);
+
+      interval_set<uint64_t> trunc_interval;
+      trunc_interval.intersection_of(zero_interval, diff_interval);
+      if (!trunc_interval.empty()) {
+        diff_interval.subtract(trunc_interval);
+        ldout(cct, 20) << "clearing truncate diff: " << trunc_interval << dendl;
+      }
+    }
+
     ldout(cct, 20) << "start_snap_id=" << start_snap_id << ", "
                    << "end_snap_id=" << end_snap_id << ", "
                    << "clone_end_snap_id=" << clone_end_snap_id << ", "
                    << "diff=" << diff << ", "
+                   << "diff_interval=" << diff_interval<< ", "
+                   << "zero_interval=" << zero_interval<< ", "
                    << "end_size=" << end_size << ", "
+                   << "prev_end_size=" << prev_end_size << ", "
                    << "exists=" << exists << ", "
                    << "whole_object=" << read_whole_object << dendl;
-    if (end_snap_id <= first_snap_id) {
-      // don't include deltas from the starting snapshots, but we iterate over
-      // it to track its existence and size
-      ldout(cct, 20) << "skipping prior snapshots" << dendl;
-    } else if (exists || prev_exists || !diff.empty()) {
-      // clip diff to size of object (in case it was truncated)
-      if (exists && end_size < prev_end_size) {
-        interval_set<uint64_t> trunc;
-        trunc.insert(end_size, prev_end_size - end_size);
-        trunc.intersection_of(diff);
-        diff.subtract(trunc);
-        ldout(cct, 20) << "clearing truncate diff: " << trunc << dendl;
-      }
 
-      bool maybe_whiteout_detected = (exists && start_snap_id == 0);
-      for (auto& object_extent : m_object_extents) {
-        interval_set<uint64_t> object_interval;
-        object_interval.insert(object_extent.first, object_extent.second);
-
-        // clip diff to current object extent
-        interval_set<uint64_t> diff_interval;
-        diff_interval.intersection_of(object_interval, diff);
-
-        interval_set<uint64_t> zero_interval;
-        if (end_size < prev_end_size) {
-          // insert zeroed object extent from truncation
-          auto zero_length = prev_end_size - end_size;
-          zero_interval.insert(end_size, zero_length);
-        }
-
-        if (exists) {
-          ldout(cct, 20) << "object_extent=" << object_extent.first << "~"
-                         << object_extent.second << ", "
-                         << "data_interval=" << diff_interval << dendl;
-          for (auto& interval : diff_interval) {
-            snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
-              interval.first, interval.second,
-              SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
-            if (maybe_whiteout_detected) {
-              initial_extents_written = true;
-            }
-          }
-        } else {
-          zero_interval.union_of(diff_interval);
-        }
-
-        zero_interval.intersection_of(object_interval);
-        if (!zero_interval.empty() &&
-            ((m_list_snaps_flags &
-                LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0)) {
-          ldout(cct, 20) << "object_extent=" << object_extent.first << "~"
-                         << object_extent.second << " "
-                         << "zero_interval=" << zero_interval << dendl;
-          for (auto& interval : zero_interval) {
-            snapshot_delta[{end_snap_id, end_snap_id}].insert(
-              interval.first, interval.second,
-              SparseExtent(SPARSE_EXTENT_STATE_ZEROED, interval.second));
-            if (maybe_whiteout_detected) {
-              initial_extents_written = true;
-            }
-          }
-        }
-      }
+    // check if object exists prior to start of incremental snap delta so that
+    // we don't DNE the object if no additional deltas exist
+    if (exists && start_snap_id == 0 &&
+        (!diff_interval.empty() || !zero_interval.empty())) {
+      ldout(cct, 20) << "object exists at snap id " << end_snap_id << dendl;
+      initial_extents_written = true;
     }
 
     prev_end_size = end_size;
-    prev_exists = exists;
     start_snap_id = end_snap_id;
+
+    if (end_snap_id <= first_snap_id) {
+      // don't include deltas from the starting snapshots, but we iterate over
+      // it to track its existence and size
+      ldout(cct, 20) << "skipping prior snapshot " << dendl;
+      continue;
+    }
+
+    if (exists) {
+      for (auto& interval : diff_interval) {
+        snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
+          interval.first, interval.second,
+          SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
+      }
+    } else {
+      zero_interval.union_of(diff_interval);
+    }
+
+    if ((m_list_snaps_flags & LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0) {
+      for (auto& interval : zero_interval) {
+        snapshot_delta[{end_snap_id, end_snap_id}].insert(
+          interval.first, interval.second,
+          SparseExtent(SPARSE_EXTENT_STATE_ZEROED, interval.second));
+      }
+    }
   }
 
   bool snapshot_delta_empty = snapshot_delta.empty();
@@ -994,8 +988,8 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
      m_list_snaps_flags | LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS);
 
   ImageListSnapsRequest<I> req(
-    *image_ctx->parent, aio_comp, std::move(parent_image_extents), {0,
-    image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
+    *image_ctx->parent, aio_comp, std::move(parent_image_extents),
+    {0, image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
     this->m_trace);
   req.send();
 }
