@@ -32,6 +32,15 @@ def available_clusters(mgr):
             if cluster.spec.service_id]
 
 
+def restart_nfs_service(mgr, cluster_id):
+    '''
+    This methods restarts the nfs daemons
+    '''
+    completion = mgr.service_action(action='restart',
+            service_name='nfs.'+cluster_id)
+    orchestrator.raise_if_exception(completion)
+
+
 def export_cluster_checker(func):
     def cluster_check(fs_export, *args, **kwargs):
         """
@@ -816,7 +825,10 @@ class FSExport(object):
                 # This happens when export is fetched by ID
                 old_export = self._fetch_export(old_export.pseudo)
             export_ls.remove(old_export)
+            restart_nfs_service(self.mgr, update_export.cluster_id)
             return 0, "Successfully updated export", ""
+        except NotImplementedError:
+            return 0, " Manual Restart of NFS PODS required for successful update of exports", ""
         except Exception as e:
             return getattr(e, 'errno', -1), '', f'Failed to update export: {e}'
 
@@ -855,11 +867,6 @@ class NFSCluster:
         NFSRados(self.mgr, self.pool_ns).remove_all_obj()
         log.info(f"Deleted {self._get_common_conf_obj_name()} object and all objects in "
                  f"{self.pool_ns}")
-
-    def _restart_nfs_service(self):
-        completion = self.mgr.service_action(action='restart',
-                                             service_name='nfs.'+self.cluster_id)
-        orchestrator.raise_if_exception(completion)
 
     @cluster_setter
     def create_nfs_cluster(self, export_type, cluster_id, placement):
@@ -975,9 +982,11 @@ class NFSCluster:
                     return 0, "", "NFS-Ganesha User Config already exists"
                 rados_obj.write_obj(nfs_config, self._get_user_conf_obj_name(),
                                     self._get_common_conf_obj_name())
-                self._restart_nfs_service()
+                restart_nfs_service(self.mgr, cluster_id)
                 return 0, "NFS-Ganesha Config Set Successfully", ""
             return -errno.ENOENT, "", "Cluster does not exist"
+        except NotImplementedError:
+            return 0, "NFS-Ganesha Config Added Successfully (Manual Restart of NFS PODS required)", ""
         except Exception as e:
             log.exception(f"Setting NFS-Ganesha Config failed for {cluster_id}")
             return getattr(e, 'errno', -1), "", str(e)
@@ -991,9 +1000,11 @@ class NFSCluster:
                     return 0, "", "NFS-Ganesha User Config does not exist"
                 rados_obj.remove_obj(self._get_user_conf_obj_name(),
                                      self._get_common_conf_obj_name())
-                self._restart_nfs_service()
+                restart_nfs_service(self.mgr, cluster_id)
                 return 0, "NFS-Ganesha Config Reset Successfully", ""
             return -errno.ENOENT, "", "Cluster does not exist"
+        except NotImplementedError:
+            return 0, "NFS-Ganesha Config Removed Successfully (Manual Restart of NFS PODS required)", ""
         except Exception as e:
             log.exception(f"Resetting NFS-Ganesha Config failed for {cluster_id}")
             return getattr(e, 'errno', -1), "", str(e)
