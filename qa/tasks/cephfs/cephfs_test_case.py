@@ -229,6 +229,9 @@ class CephFSTestCase(CephTestCase):
     def _session_by_id(self, session_ls):
         return dict([(s['id'], s) for s in session_ls])
 
+    def perf_dump(self, rank=0, status=None):
+        return self.fs.rank_asok(['perf', 'dump'], rank=rank, status=status)
+
     def wait_until_evicted(self, client_id, timeout=30):
         def is_client_evicted():
             ls = self._session_list()
