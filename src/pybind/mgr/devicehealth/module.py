@@ -502,7 +502,7 @@ class Module(MgrModule):
         health_warnings: Dict[str, List[str]] = {
             DEVICE_HEALTH: [],
             DEVICE_HEALTH_IN_USE: [],
-            }
+        }
         devs = self.get("devices")
         osds_in = {}
         osds_out = {}
@@ -580,7 +580,8 @@ class Module(MgrModule):
                         'severity': 'warning',
                         'summary': HEALTH_MESSAGES[DEVICE_HEALTH_TOOMANY],
                         'detail': [
-                            '%d OSDs with failing device(s) would bring "in" ratio to %f < mon_osd_min_in_ratio %f' % (num_bad - did, final_ratio, min_in_ratio)
+                            '%d OSDs with failing device(s) would bring "in" ratio to %f < mon_osd_min_in_ratio %f' % (
+                                num_bad - did, final_ratio, min_in_ratio)
                         ]
                     }
                     break

@@ -3,81 +3,64 @@
 A simple cluster health alerting module.
 """
 
-from mgr_module import MgrModule, HandleCommandResult
+from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule, Option
 from threading import Event
 from typing import Any, Optional, Dict, List, TYPE_CHECKING, Union
 import json
 import smtplib
 
-class Alerts(MgrModule):
-    COMMANDS = [
-        {
-            "cmd": "alerts send",
-            "desc": "(re)send alerts immediately",
-            "perm": "r"
-        },
-    ]
 
-    # ´# type: ignore` due to the introduction of the Option type.
-    MODULE_OPTIONS: List[Dict[str, Any]] = [  # type: ignore
-        {
-            'name': 'interval',
-            'type': 'secs',
-            'default': 60,
-            'desc': 'How frequently to reexamine health status',
-            'runtime': True,
-        },
+class Alerts(MgrModule):
+    MODULE_OPTIONS = [
+        Option(
+            name='interval',
+            type='secs',
+            default=60,
+            desc='How frequently to reexamine health status',
+            runtime=True),
         # smtp
-        {
-            'name': 'smtp_host',
-            'default': '',
-            'desc': 'SMTP server',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_destination',
-            'default': '',
-            'desc': 'Email address to send alerts to',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_port',
-            'type': 'int',
-            'default': 465,
-            'desc': 'SMTP port',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_ssl',
-            'type': 'bool',
-            'default': True,
-            'desc': 'Use SSL to connect to SMTP server',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_user',
-            'default': '',
-            'desc': 'User to authenticate as',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_password',
-            'default': '',
-            'desc': 'Password to authenticate with',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_sender',
-            'default': '',
-            'desc': 'SMTP envelope sender',
-            'runtime': True,
-        },
-        {
-            'name': 'smtp_from_name',
-            'default': 'Ceph',
-            'desc': 'Email From: name',
-            'runtime': True,
-        },
+        Option(
+            name='smtp_host',
+            default='',
+            desc='SMTP server',
+            runtime=True),
+        Option(
+            name='smtp_destination',
+            default='',
+            desc='Email address to send alerts to',
+            runtime=True),
+        Option(
+            name='smtp_port',
+            type='int',
+            default=465,
+            desc='SMTP port',
+            runtime=True),
+        Option(
+            name='smtp_ssl',
+            type='bool',
+            default=True,
+            desc='Use SSL to connect to SMTP server',
+            runtime=True),
+        Option(
+            name='smtp_user',
+            default='',
+            desc='User to authenticate as',
+            runtime=True),
+        Option(
+            name='smtp_password',
+            default='',
+            desc='Password to authenticate with',
+            runtime=True),
+        Option(
+            name='smtp_sender',
+            default='',
+            desc='SMTP envelope sender',
+            runtime=True),
+        Option(
+            name='smtp_from_name',
+            default='Ceph',
+            desc='Email From: name',
+            runtime=True)
     ]
 
     # These are "native" Ceph options that this module cares about.
@@ -127,17 +110,14 @@ class Alerts(MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
-    def handle_command(self, inbuf: Optional[str], cmd: Dict[str, Any]) -> HandleCommandResult:
-        ret = 0
-        out = ''
-        err = ''
-        if cmd['prefix'] == 'alerts send':
-            status = json.loads(self.get('health')['json'])
-            self._send_alert(status, {})
-        return HandleCommandResult(
-            retval=ret,   # exit code
-            stdout=out,   # stdout
-            stderr=err)
+    @CLIReadCommand('alerts send')
+    def send(self) -> HandleCommandResult:
+        """
+        (re)send alerts immediately
+        """
+        status = json.loads(self.get('health')['json'])
+        self._send_alert(status, {})
+        return HandleCommandResult()
 
     def _diff(self, last: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
