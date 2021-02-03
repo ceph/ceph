@@ -370,7 +370,7 @@ public:
     return events.empty() ? std::string_view() : std::string_view(events.rbegin()->str);
   }
 
-  void dump(utime_t now, ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
   void tracking_start() {
     if (tracker->register_inflight_op(this)) {

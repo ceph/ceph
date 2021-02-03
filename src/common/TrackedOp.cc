@@ -132,7 +132,7 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by
 	if (!i->second->filter_out(filters))
 	  continue;
 	f->open_object_section("op");
-	i->second->dump(now, f);
+	i->second->dump(f);
 	f->close_section();
       }
     };
@@ -203,7 +203,7 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
       if (!i->second->filter_out(filters))
         continue;
       f->open_object_section("Op");
-      i->second->dump(now, f);
+      i->second->dump(f);
       f->close_section();
     }
     f->close_section();
@@ -242,7 +242,7 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
       if (!op.filter_out(filters))
         continue;
       f->open_object_section("op");
-      op.dump(now, f);
+      op.dump(f);
       f->close_section(); // this TrackedOp
       total_ops_in_flight++;
     }
@@ -472,11 +472,12 @@ void TrackedOp::mark_event(std::string_view event, utime_t stamp)
   _event_marked();
 }
 
-void TrackedOp::dump(utime_t now, Formatter *f) const
+void TrackedOp::dump(Formatter *f) const
 {
   // Ignore if still in the constructor
   if (!state)
     return;
+  utime_t now = ceph_clock_now();
   f->dump_string("description", get_desc());
   f->dump_stream("initiated_at") << get_initiated();
   f->dump_float("age", now - get_initiated());
