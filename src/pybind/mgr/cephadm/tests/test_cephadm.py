@@ -584,6 +584,22 @@ class TestCephadm(object):
             with with_daemon(cephadm_module, spec, meth, 'test'):
                 pass
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_daemon_add_fail(self, _run_cephadm, cephadm_module):
+        _run_cephadm.return_value = '{}', '', 0
+        with with_host(cephadm_module, 'test'):
+            spec = ServiceSpec(
+                service_type='mgr',
+                placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1)
+            )
+            _run_cephadm.side_effect = OrchestratorError('fail')
+            with pytest.raises(OrchestratorError):
+                wait(cephadm_module, cephadm_module.add_mgr(spec))
+            cephadm_module.assert_issued_mon_command({
+                'prefix': 'auth rm',
+                'entity': 'mgr.x',
+            })
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.CephadmOrchestrator.rados", mock.MagicMock())
     def test_nfs(self, cephadm_module):
