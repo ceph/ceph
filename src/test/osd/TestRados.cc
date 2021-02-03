@@ -459,6 +459,11 @@ private:
 	return new SetChunkOp(m_op, &context, oid, rand_offset, rand_length, oid2, rand_offset, m_stats);
       }
 
+    case TEST_OP_TIER_EVICT:
+      oid = *(rand_choose(context.oid_not_in_use));
+      cout << m_op << ": " << "tier_evict oid " << oid << std::endl;
+      return new TierEvictOp(m_op, &context, oid, m_stats);
+
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       ceph_abort();
@@ -525,6 +530,7 @@ int main(int argc, char **argv)
     { TEST_OP_TIER_PROMOTE, "tier_promote", true },
     { TEST_OP_TIER_FLUSH, "tier_flush", true },
     { TEST_OP_SET_CHUNK, "set_chunk", true },
+    { TEST_OP_TIER_EVICT, "tier_evict", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
