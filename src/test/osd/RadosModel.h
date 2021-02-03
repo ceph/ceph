@@ -275,6 +275,30 @@ public:
 	rados.shutdown();
 	return r;
       }
+      r = rados.mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+	"\", \"var\": \"dedup_tier\", \"val\": \"" + low_tier_pool_name + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
+      r = rados.mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+	"\", \"var\": \"dedup_chunk_algorithm\", \"val\": \"" + "fastcdc" + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
+      r = rados.mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+	"\", \"var\": \"dedup_cdc_chunk_size\", \"val\": \"" + "1024" + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
     }
 
     char hostname_cstr[100];
