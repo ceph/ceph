@@ -122,8 +122,9 @@ private:
         auto state = snapshot_extent.get_val().state;
 
         // ignore DNE object (and parent)
-        if (key == io::WriteReadSnapIds{0, 0} &&
-            state != io::SPARSE_EXTENT_STATE_DATA) {
+        if ((state == io::SPARSE_EXTENT_STATE_DNE) ||
+            (key == io::INITIAL_WRITE_READ_SNAP_IDS &&
+             state == io::SPARSE_EXTENT_STATE_ZEROED)) {
           continue;
         }
 
