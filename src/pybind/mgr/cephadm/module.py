@@ -529,9 +529,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     # start the process
                     self._kick_serve_loop()
 
-    def is_paused(self) -> bool:
-        return self.paused
-
     def pause(self) -> None:
         if not self.paused:
             self.log.info('Paused')
@@ -678,17 +675,24 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return False, "loading remoto library:{}".format(
                 remoto_import_error)
 
-    def available(self) -> Tuple[bool, str]:
+    def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         """
         The cephadm orchestrator is always available.
         """
         ok, err = self.can_run()
         if not ok:
-            return ok, err
+            return ok, err, {}
         if not self.ssh_key or not self.ssh_pub:
-            return False, 'SSH keys not set. Use `ceph cephadm set-priv-key` and `ceph cephadm set-pub-key` or `ceph cephadm generate-key`'
+            return False, 'SSH keys not set. Use `ceph cephadm set-priv-key` and `ceph cephadm set-pub-key` or `ceph cephadm generate-key`', {}
 
-        return True, str(self._worker_pool._processes)  # type: ignore
+        # mypy is unable to determine type for _processes since it's private
+        worker_count: int = self._worker_pool._processes  # type: ignore
+        ret = {
+            "workers": worker_count,
+            "paused": self.paused,
+        }
+
+        return True, err, ret
 
     def process(self, completions: List[CephadmCompletion]) -> None:  # type: ignore
         """
