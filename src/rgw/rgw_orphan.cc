@@ -925,6 +925,8 @@ int RGWOrphanSearch::finish()
 
 
 int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
+				     std::string& bucket_name,
+				     rgw_obj_key& obj_key,
                                      std::set<string>& obj_oids)
 {
   obj_oids.clear();
@@ -948,6 +950,9 @@ int RGWRadosList::handle_stat_result(RGWRados::Object::Stat::Result& result,
       oid << "\"" << dendl;
     return 0;
   }
+
+  bucket_name = bucket.name;
+  obj_key = result.obj.key;
 
   if (!result.manifest) {
     /* a very very old object, or part of a multipart upload during upload */
@@ -1049,7 +1054,9 @@ int RGWRadosList::pop_and_handle_stat_op(
   RGWObjectCtx& obj_ctx,
   std::deque<RGWRados::Object::Stat>& ops)
 {
-  std::set<string> obj_oids;
+  std::string bucket_name;
+  rgw_obj_key obj_key;
+  std::set<std::string> obj_oids;
   RGWRados::Object::Stat& front_op = ops.front();
 
   int ret = front_op.wait();
@@ -1061,7 +1068,7 @@ int RGWRadosList::pop_and_handle_stat_op(
     goto done;
   }
 
-  ret = handle_stat_result(front_op.result, obj_oids);
+  ret = handle_stat_result(front_op.result, bucket_name, obj_key, obj_oids);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: handle_stat_result() returned error: " <<
       cpp_strerror(-ret) << dendl;
@@ -1069,7 +1076,14 @@ int RGWRadosList::pop_and_handle_stat_op(
 
   // output results
   for (const auto& o : obj_oids) {
-    std::cout << o << std::endl;
+    if (include_rgw_obj_name) {
+      std::cout << o <<
+	field_separator << bucket_name <<
+	field_separator << obj_key <<
+	std::endl;
+    } else {
+      std::cout << o << std::endl;
+    }
   }
 
 done:
@@ -1343,6 +1357,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
 {
   RGWSysObjectCtx sys_obj_ctx = store->svc()->sysobj->init_obj_ctx();
   RGWObjectCtx obj_ctx(store);
+  RGWBucketInfo bucket_info;
   int ret;
 
   add_bucket_entire(start_bucket_name);
@@ -1419,10 +1434,13 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
     }
   } // while (! bucket_process_map.empty())
 
+  if (include_rgw_obj_name) {
+    goto done;
+  }
+
   // now handle incomplete multipart uploads by going back to the
   // initial bucket
 
-  RGWBucketInfo bucket_info;
   ret = store->getRados()->get_bucket_info(store->svc(),
 					   tenant_name,
 					   start_bucket_name,
@@ -1445,6 +1463,8 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp, const std::string& start_bu
       ": ERROR: do_incomplete_multipart returned ret=" << ret << dendl;
     return ret;
   }
+
+done:
 
   return 0;
 } // RGWRadosList::run(string)
