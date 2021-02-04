@@ -42,6 +42,7 @@
 
 #include "global/global_init.h"
 
+#include "include/uuid.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
@@ -243,57 +244,152 @@ bool WNBDDiskIterator::get(Config *cfg)
   return false;
 }
 
-// Spawn a subprocess using the specified command line, which is expected
-// to be a "rbd-wnbd map" command. A pipe is passed to the child process,
+int get_exe_path(std::string& path) {
+  char buffer[MAX_PATH];
+  DWORD err = 0;
+
+  int ret = GetModuleFileNameA(NULL, buffer, MAX_PATH);
+  if (!ret || ret == MAX_PATH) {
+    err = GetLastError();
+    derr << "Could not retrieve executable path. "
+        << "Error: " << win32_strerror(err) << dendl;
+    return -EINVAL;
+  }
+
+  path = buffer;
+  return 0;
+}
+
+std::string get_cli_args() {
+  std::ostringstream cmdline;
+  for (int i=1; i<__argc; i++) {
+    if (i > 1)
+      cmdline << " ";
+    cmdline << std::quoted(__argv[i]);
+  }
+  return cmdline.str();
+}
+
+int send_map_request(std::string arguments) {
+  dout(15) << __func__ << ": command arguments: " << arguments << dendl;
+
+  BYTE request_buff[SERVICE_PIPE_BUFFSZ] = { 0 };
+  ServiceRequest* request = (ServiceRequest*) request_buff;
+  request->command = Connect;
+  arguments.copy(
+    (char*)request->arguments,
+    SERVICE_PIPE_BUFFSZ - FIELD_OFFSET(ServiceRequest, arguments));
+  ServiceReply reply = { 0 };
+
+  DWORD bytes_read = 0;
+  BOOL success = CallNamedPipe(
+    SERVICE_PIPE_NAME,
+    request_buff,
+    SERVICE_PIPE_BUFFSZ,
+    &reply,
+    sizeof(reply),
+    &bytes_read,
+    DEFAULT_MAP_TIMEOUT_MS);
+  if (!success) {
+    DWORD err = GetLastError();
+    derr << "Could not send device map request. "
+         << "Make sure that the ceph service is running. "
+         << "Error: " << win32_strerror(err) << dendl;
+    return -EINVAL;
+  }
+  if (reply.status) {
+    derr << "The ceph service failed to map the image. Error: "
+         << reply.status << dendl;
+  }
+
+  return reply.status;
+}
+
+// Spawn a subprocess using the specified "rbd-wnbd" command
+// arguments. A pipe is passed to the child process,
 // which will allow it to communicate the mapping status
-int map_device_using_suprocess(std::string command_line)
+int map_device_using_suprocess(std::string arguments, int timeout_ms)
 {
-  SECURITY_ATTRIBUTES sa;
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
-  HANDLE read_pipe = NULL, write_pipe = NULL;
-  char buffer[4096];
   char ch;
-  DWORD err = 0, ret = 0;
+  DWORD err = 0, status = 0;
   int exit_code = 0;
-
-  dout(5) << __func__ << ": command_line: " << command_line << dendl;
-
+  std::ostringstream command_line;
+  std::string exe_path;
+  // Windows async IO context
+  OVERLAPPED connect_o, read_o;
+  HANDLE connect_event = NULL, read_event = NULL;
+  // Used for waiting on multiple events that are going to be initialized later.
+  HANDLE wait_events[2] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE};
+  DWORD bytes_read = 0;
   // We may get a command line containing an old pipe handle when
-  // recreating mappings, so we'll have to remove it.
-  std::regex pattern("(--pipe-handle [\'\"]?\\d+[\'\"]?)");
-  command_line = std::regex_replace(command_line, pattern, "");
+  // recreating mappings, so we'll have to replace it.
+  std::regex pipe_pattern("([\'\"]?--pipe-name[\'\"]? +[\'\"]?[^ ]+[\'\"]?)");
 
-  // Set the security attribute such that a process created will
-  // inherit the pipe handles.
-  sa.nLength = sizeof(sa);
-  sa.lpSecurityDescriptor = NULL;
-  sa.bInheritHandle = TRUE;
+  uuid_d uuid;
+  uuid.generate_random();
+  std::ostringstream pipe_name;
+  pipe_name << "\\\\.\\pipe\\rbd-wnbd-" << uuid;
 
-  // Create an anonymous pipe to communicate with the child. */
-  if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
+  // Create an unique named pipe to communicate with the child. */
+  HANDLE pipe_handle = CreateNamedPipe(
+    pipe_name.str().c_str(),
+    PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE |
+      FILE_FLAG_OVERLAPPED,
+    PIPE_WAIT,
+    1, // Only accept one instance
+    SERVICE_PIPE_BUFFSZ,
+    SERVICE_PIPE_BUFFSZ,
+    SERVICE_PIPE_TIMEOUT_MS,
+    NULL);
+  if (pipe_handle == INVALID_HANDLE_VALUE) {
     err = GetLastError();
-    derr << "CreatePipe failed: " << win32_strerror(err) << dendl;
+    derr << "CreateNamedPipe failed: " << win32_strerror(err) << dendl;
     exit_code = -ECHILD;
     goto finally;
   }
+  connect_event = CreateEvent(0, TRUE, FALSE, NULL);
+  read_event = CreateEvent(0, TRUE, FALSE, NULL);
+  if (!connect_event || !read_event) {
+    err = GetLastError();
+    derr << "CreateEvent failed: " << win32_strerror(err) << dendl;
+    exit_code = -ECHILD;
+    goto finally;
+  }
+  connect_o.hEvent = connect_event;
+  read_o.hEvent = read_event;
 
-  GetStartupInfo(&si);
+  status = ConnectNamedPipe(pipe_handle, &connect_o);
+  err = GetLastError();
+  if (status || err != ERROR_IO_PENDING) {
+    if (status)
+      err = status;
+    derr << "ConnectNamedPipe failed: " << win32_strerror(err) << dendl;
+    exit_code = -ECHILD;
+    goto finally;
+  }
+  err = 0;
 
-  // Pass an extra argument '--pipe-handle <write_pipe>'
-  ret = snprintf(
-    buffer, sizeof(buffer), "%s %s %lld",
-    command_line.c_str(), "--pipe-handle",
-    (intptr_t)write_pipe);
-  if ((uint64_t) ret > sizeof(buffer))
-  {
-    derr << "Command too long: " << command_line.c_str() << dendl;
+  dout(5) << __func__ << ": command arguments: " << arguments << dendl;
+
+  // We'll avoid running arbitrary commands, instead using the executable
+  // path of this process (expected to be the full rbd-wnbd.exe path).
+  err = get_exe_path(exe_path);
+  if (err) {
     exit_code = -EINVAL;
     goto finally;
   }
+  command_line << std::quoted(exe_path)
+               << " " << std::regex_replace(arguments, pipe_pattern, "")
+               << " --pipe-name " << pipe_name.str();
 
+  dout(5) << __func__ << ": command line: " << command_line.str() << dendl;
+
+  GetStartupInfo(&si);
   // Create a detached child
-  if (!CreateProcess(NULL, buffer, NULL, NULL, TRUE, DETACHED_PROCESS,
+  if (!CreateProcess(NULL, (char*)command_line.str().c_str(),
+                     NULL, NULL, FALSE, DETACHED_PROCESS,
                      NULL, NULL, &si, &pi)) {
     err = GetLastError();
     derr << "CreateProcess failed: " << win32_strerror(err) << dendl;
@@ -301,23 +397,76 @@ int map_device_using_suprocess(std::string command_line)
     goto finally;
   }
 
-  // Close one end of the pipe in the parent.
-  CloseHandle(write_pipe);
-  write_pipe = NULL;
-
+  wait_events[0] = connect_event;
+  wait_events[1] = pi.hProcess;
+  status = WaitForMultipleObjects(2, wait_events, FALSE, timeout_ms);
+  switch(status) {
+    case WAIT_OBJECT_0:
+      if (!GetOverlappedResultEx(pipe_handle, &connect_o,
+                                 &bytes_read, timeout_ms, TRUE)) {
+        err = GetLastError();
+        derr << "Couln't establish a connection with the child process. "
+             << "Error: " << win32_strerror(err) << dendl;
+        exit_code = -ECHILD;
+        goto clean_process;
+      }
+      // We have an incoming connection.
+      break;
+    case WAIT_OBJECT_0 + 1:
+      // The process has exited prematurely.
+      goto clean_process;
+    case WAIT_TIMEOUT:
+      derr << "Timed out waiting for child process connection." << dendl;
+      goto clean_process;
+    default:
+      derr << "Failed waiting for child process. Status: " << status << dendl;
+      goto clean_process;
+  }
   // Block and wait for child to say it is ready.
   dout(5) << __func__ << ": waiting for child notification." << dendl;
-  if (!ReadFile(read_pipe, &ch, 1, NULL, NULL)) {
+  if (!ReadFile(pipe_handle, &ch, 1, NULL, &read_o)) {
     err = GetLastError();
-    derr << "Could not start RBD daemon. Receiving child process reply "
-            "failed with: " << win32_strerror(err) << dendl;
+    if (err != ERROR_IO_PENDING) {
+      derr << "Receiving child process reply failed with: "
+           << win32_strerror(err) << dendl;
+      exit_code = -ECHILD;
+      goto clean_process;
+    }
+  }
+  wait_events[0] = read_event;
+  wait_events[1] = pi.hProcess;
+  // The RBD daemon is expected to write back right after opening the
+  // pipe. We'll use the same timeout value for now.
+  status = WaitForMultipleObjects(2, wait_events, FALSE, timeout_ms);
+  switch(status) {
+    case WAIT_OBJECT_0:
+      if (!GetOverlappedResultEx(pipe_handle, &read_o,
+                                 &bytes_read, timeout_ms, TRUE)) {
+        err = GetLastError();
+        derr << "Receiving child process reply failed with: "
+             << win32_strerror(err) << dendl;
+        exit_code = -ECHILD;
+        goto clean_process;
+      }
+      break;
+    case WAIT_OBJECT_0 + 1:
+      // The process has exited prematurely.
+      goto clean_process;
+    case WAIT_TIMEOUT:
+      derr << "Timed out waiting for child process message." << dendl;
+      goto clean_process;
+    default:
+      derr << "Failed waiting for child process. Status: " << status << dendl;
+      goto clean_process;
+  }
 
-    // Give the child process a chance to exit so that we can retrieve the
-    // exit code.
-    WaitForSingleObject(pi.hProcess, 5000);
+  dout(5) << __func__ << ": received child notification." << dendl;
+  goto finally;
+
+  clean_process:
     if (!is_process_running(pi.dwProcessId)) {
-        GetExitCodeProcess(pi.hProcess, (PDWORD)&exit_code);
-        derr << "Daemon failed with: " << cpp_strerror(exit_code) << dendl;
+      GetExitCodeProcess(pi.hProcess, (PDWORD)&exit_code);
+      derr << "Daemon failed with: " << cpp_strerror(exit_code) << dendl;
     } else {
       // The process closed the pipe without notifying us or exiting.
       // This is quite unlikely, but we'll terminate the process.
@@ -325,15 +474,16 @@ int map_device_using_suprocess(std::string command_line)
       TerminateProcess(pi.hProcess, 1);
       exit_code = -EINVAL;
     }
-  } else {
-    dout(5) << __func__ << ": received child notification." << dendl;
-  }
 
   finally:
-    if (write_pipe)
-      CloseHandle(write_pipe);
-    if (read_pipe)
-      CloseHandle(read_pipe);
+    if (exit_code)
+      derr << "Could not start RBD daemon." << dendl;
+    if (pipe_handle)
+      CloseHandle(pipe_handle);
+    if (connect_event)
+      CloseHandle(connect_event);
+    if (read_event)
+      CloseHandle(read_event);
   return exit_code;
 }
 
@@ -370,7 +520,8 @@ int save_config_to_registry(Config* cfg)
       reg_key.set("nsname", cfg->nsname) ||
       reg_key.set("imgname", cfg->imgname) ||
       reg_key.set("snapname", cfg->snapname) ||
-      reg_key.set("command_line", GetCommandLine()) ||
+      reg_key.set("command_line", get_cli_args()) ||
+      reg_key.set("persistent", cfg->persistent) ||
       reg_key.set("admin_sock_path", g_conf()->admin_socket) ||
       reg_key.flush()) {
     ret_val = -EINVAL;
@@ -408,16 +559,27 @@ int load_mapping_config_from_registry(string devpath, Config* cfg)
   reg_key.get("imgname", cfg->imgname);
   reg_key.get("snapname", cfg->snapname);
   reg_key.get("command_line", cfg->command_line);
+  reg_key.get("persistent", cfg->persistent);
   reg_key.get("admin_sock_path", cfg->admin_sock_path);
 
   return 0;
 }
 
-int restart_registered_mappings(int worker_count)
+int restart_registered_mappings(
+  int worker_count,
+  int total_timeout,
+  int image_map_timeout)
 {
   Config cfg;
   WNBDDiskIterator iterator;
   int err = 0, r;
+
+  int total_timeout_ms = max(total_timeout, total_timeout * 1000);
+  int image_map_timeout_ms = max(image_map_timeout, image_map_timeout * 1000);
+
+  LARGE_INTEGER start_t, counter_freq;
+  QueryPerformanceFrequency(&counter_freq);
+  QueryPerformanceCounter(&start_t);
 
   boost::asio::thread_pool pool(worker_count);
   while (iterator.get(&cfg)) {
@@ -432,18 +594,44 @@ int restart_registered_mappings(int worker_count)
               << cfg.devpath << dendl;
       continue;
     }
+    if (!cfg.persistent) {
+      dout(5) << __func__ << ": cleaning up non-persistent mapping: "
+              << cfg.devpath << dendl;
+      r = remove_config_from_registry(&cfg);
+      if (r) {
+        derr << __func__ << ": could not clean up non-persistent mapping: "
+             << cfg.devpath << dendl;
+      }
+      continue;
+    }
 
     boost::asio::post(pool,
       [&, cfg]() mutable
       {
-        dout(5) << "Remapping: " << cfg.devpath << dendl;
+        LARGE_INTEGER curr_t, elapsed_ms;
+        QueryPerformanceCounter(&curr_t);
+        elapsed_ms.QuadPart = curr_t.QuadPart - start_t.QuadPart;
+        elapsed_ms.QuadPart *= 1000;
+        elapsed_ms.QuadPart /= counter_freq.QuadPart;
+
+        int time_left_ms = max(
+          0,
+          total_timeout_ms - (int)elapsed_ms.QuadPart);
+        time_left_ms = min(image_map_timeout_ms, time_left_ms);
+        if (!time_left_ms) {
+          err = -ETIMEDOUT;
+          return;
+        }
+
+        dout(5) << "Remapping: " << cfg.devpath
+                << ". Timeout: " << time_left_ms << " ms." << dendl;
 
         // We'll try to map all devices and return a non-zero value
         // if any of them fails.
-        r = map_device_using_suprocess(cfg.command_line);
+        r = map_device_using_suprocess(cfg.command_line, time_left_ms);
         if (r) {
           err = r;
-          derr << "Could not crecreate mapping: "
+          derr << "Could not create mapping: "
                << cfg.devpath << ". Error: " << r << dendl;
         } else {
           dout(5) << "Successfully remapped: " << cfg.devpath << dendl;
@@ -499,7 +687,7 @@ int disconnect_all_mappings(
 
         dout(5) << "Removing mapping: " << cfg.devpath
                 << ". Timeout: " << cfg.soft_disconnect_timeout
-                << "ms. Hard disconnect: " << cfg.hard_disconnect
+                << "s. Hard disconnect: " << cfg.hard_disconnect
                 << dendl;
 
         r = do_unmap(&cfg, unregister);
@@ -528,21 +716,182 @@ class RBDService : public ServiceBase {
     bool hard_disconnect;
     int soft_disconnect_timeout;
     int thread_count;
+    int service_start_timeout;
+    int image_map_timeout;
+    bool remap_failure_fatal;
 
   public:
     RBDService(bool _hard_disconnect,
                int _soft_disconnect_timeout,
-               int _thread_count)
+               int _thread_count,
+               int _service_start_timeout,
+               int _image_map_timeout,
+               bool _remap_failure_fatal)
       : ServiceBase(g_ceph_context)
       , hard_disconnect(_hard_disconnect)
       , soft_disconnect_timeout(_soft_disconnect_timeout)
       , thread_count(_thread_count)
+      , service_start_timeout(_service_start_timeout)
+      , image_map_timeout(_image_map_timeout)
+      , remap_failure_fatal(_remap_failure_fatal)
     {
     }
 
-    int run_hook() override {
-      return restart_registered_mappings(thread_count);
+    static int execute_command(ServiceRequest* request)
+    {
+      switch(request->command) {
+        case Connect:
+          dout(5) << "Received device connect request. Command line: "
+                  << (char*)request->arguments << dendl;
+          // TODO: use the configured service map timeout.
+          // TODO: add ceph.conf options.
+          return map_device_using_suprocess(
+            (char*)request->arguments, DEFAULT_MAP_TIMEOUT_MS);
+        default:
+          dout(5) << "Received unsupported command: "
+                  << request->command << dendl;
+          return -ENOSYS;
+      }
     }
+
+    static DWORD handle_connection(HANDLE pipe_handle)
+    {
+      PBYTE message[SERVICE_PIPE_BUFFSZ] = { 0 };
+      DWORD bytes_read = 0, bytes_written = 0;
+      DWORD err = 0;
+      DWORD reply_sz = 0;
+      ServiceReply reply = { 0 };
+
+      dout(20) << __func__ << ": Receiving message." << dendl;
+      BOOL success = ReadFile(
+        pipe_handle, message, SERVICE_PIPE_BUFFSZ,
+        &bytes_read, NULL);
+      if (!success || !bytes_read) {
+        err = GetLastError();
+        derr << "Could not read service command: "
+             << win32_strerror(err) << dendl;
+        goto exit;
+      }
+
+      dout(20) << __func__ << ": Executing command." << dendl;
+      reply.status = execute_command((ServiceRequest*) message);
+      reply_sz = sizeof(reply);
+
+      dout(20) << __func__ << ": Sending reply. Status: "
+               << reply.status << dendl;
+      success = WriteFile(
+        pipe_handle, &reply, reply_sz, &bytes_written, NULL);
+      if (!success || reply_sz != bytes_written) {
+        err = GetLastError();
+        derr << "Could not send service command result: "
+             << win32_strerror(err) << dendl;
+      }
+
+exit:
+      dout(20) << __func__ << ": Cleaning up connection." << dendl;
+      FlushFileBuffers(pipe_handle);
+      DisconnectNamedPipe(pipe_handle);
+      CloseHandle(pipe_handle);
+
+      return err;
+    }
+
+    // We have to support Windows server 2016. Unix sockets only work on
+    // WS 2019, so we can't use the Ceph admin socket abstraction.
+    // Getting the Ceph admin sockets to work with Windows named pipes
+    // would require quite a few changes.
+    static DWORD accept_pipe_connection() {
+      DWORD err = 0;
+      // We're currently using default ACLs, which grant full control to the
+      // LocalSystem account and administrator as well as the owner.
+      dout(20) << __func__ << ": opening new pipe instance" << dendl;
+      HANDLE pipe_handle = CreateNamedPipe(
+        SERVICE_PIPE_NAME,
+        PIPE_ACCESS_DUPLEX,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+        PIPE_UNLIMITED_INSTANCES,
+        SERVICE_PIPE_BUFFSZ,
+        SERVICE_PIPE_BUFFSZ,
+        SERVICE_PIPE_TIMEOUT_MS,
+        NULL);
+      if (pipe_handle == INVALID_HANDLE_VALUE) {
+        err = GetLastError();
+        derr << "CreatePipe failed: " << win32_strerror(err) << dendl;
+        return -EINVAL;
+      }
+
+      dout(20) << __func__ << ": waiting for connections." << dendl;
+      BOOL connected = ConnectNamedPipe(pipe_handle, NULL);
+      if (!connected) {
+        err = GetLastError();
+        if (err != ERROR_PIPE_CONNECTED) {
+          derr << "Pipe connection failed: " << win32_strerror(err) << dendl;
+
+          CloseHandle(pipe_handle);
+          return err;
+        }
+      }
+
+      dout(20) << __func__ << ": Connection received." << dendl;
+      // We'll handle the connection in a separate thread and at the same time
+      // accept a new connection.
+      HANDLE handler_thread = CreateThread(
+        NULL, 0, (LPTHREAD_START_ROUTINE) handle_connection, pipe_handle, 0, 0);
+      if (!handler_thread) {
+        err = GetLastError();
+        derr << "Could not start pipe connection handler thread: "
+             << win32_strerror(err) << dendl;
+        CloseHandle(pipe_handle);
+      } else {
+        CloseHandle(handler_thread);
+      }
+
+      return err;
+    }
+
+    static int pipe_server_loop(LPVOID arg)
+    {
+      dout(5) << "Accepting admin pipe connections." << dendl;
+      while (1) {
+        // This call will block until a connection is received, which will
+        // then be handled in a separate thread. The function returns, allowing
+        // us to accept another simultaneous connection.
+        accept_pipe_connection();
+      }
+      return 0;
+    }
+
+    int create_pipe_server() {
+      HANDLE handler_thread = CreateThread(
+        NULL, 0, (LPTHREAD_START_ROUTINE) pipe_server_loop, NULL, 0, 0);
+      DWORD err = 0;
+
+      if (!handler_thread) {
+        err = GetLastError();
+        derr << "Could not start pipe server: " << win32_strerror(err) << dendl;
+      } else {
+        CloseHandle(handler_thread);
+      }
+
+      return err;
+    }
+
+    int run_hook() override {
+      // Restart registered mappings before accepting new ones.
+      int r = restart_registered_mappings(
+        thread_count, service_start_timeout, image_map_timeout);
+      if (r) {
+        if (remap_failure_fatal) {
+          derr << "Couldn't remap all images. Cleaning up." << dendl;
+          return r;
+        } else {
+          dout(0) << "Ignoring image remap failure." << dendl;
+        }
+      }
+
+      return create_pipe_server();
+    }
+
     // Invoked when the service is requested to stop.
     int stop_hook() override {
       return disconnect_all_mappings(
@@ -569,6 +918,8 @@ Map options:
   --device <device path>  Optional mapping unique identifier
   --exclusive             Forbid writes by other clients
   --read-only             Map read-only
+  --non-persistent        Do not recreate the mapping when the Ceph service
+                          restarts. By default, mappings are persistent
   --io-req-workers        The number of workers that dispatch IO requests.
                           Default: 4
   --io-reply-workers      The number of workers that dispatch IO replies.
@@ -593,6 +944,11 @@ Service options:
                               disconnect will be issued when hitting the timeout
   --service-thread-count      The number of workers used when mapping or
                               unmapping images. Default: 8
+  --start-timeout             The service start timeout in seconds. Default: 120
+  --map-timeout               Individual image map timeout in seconds. Default: 20
+  --remap-failure-fatal       If set, the service will stop when failing to remap
+                              an image at start time, unmapping images that have
+                              been mapped so far.
 
 Show|List options:
   --format plain|json|xml Output format (default: plain)
@@ -669,7 +1025,7 @@ boost::intrusive_ptr<CephContext> do_global_init(
   global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, code_env, flags);
   // Avoid cluttering the console when spawning a mapping that will run
   // in the background.
-  if (g_conf()->daemonize && !cfg->parent_pipe) {
+  if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
     flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
   }
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
@@ -691,9 +1047,11 @@ static int do_map(Config *cfg)
   librados::IoCtx io_ctx;
   librbd::Image image;
   librbd::image_info_t info;
+  HANDLE parent_pipe_handle = INVALID_HANDLE_VALUE;
+  int err = 0;
 
-  if (g_conf()->daemonize && !cfg->parent_pipe) {
-    return map_device_using_suprocess(GetCommandLine());
+  if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
+    return send_map_request(get_cli_args());
   }
 
   dout(0) << "Mapping RBD image: " << cfg->devpath << dendl;
@@ -757,6 +1115,11 @@ static int do_map(Config *cfg)
     goto close_ret;
   }
 
+  // We're storing mapping details in the registry even for non-persistent
+  // mappings. This allows us to easily retrieve mapping details such
+  // as the rbd pool or admin socket path.
+  // We're cleaning up the registry entry when the non-persistent mapping
+  // gets disconnected or when the ceph service restarts.
   r = save_config_to_registry(cfg);
   if (r < 0)
     goto close_ret;
@@ -768,26 +1131,49 @@ static int do_map(Config *cfg)
                             g_conf().get_val<bool>("rbd_cache"),
                             cfg->io_req_workers,
                             cfg->io_reply_workers);
-  handler->start();
+  r = handler->start();
+  if (r) {
+    r = r == ERROR_ALREADY_EXISTS ? -EEXIST : -EINVAL;
+    goto close_ret;
+  }
 
   // We're informing the parent processes that the initialization
   // was successful.
-  if (cfg->parent_pipe) {
-    if (!WriteFile((HANDLE)cfg->parent_pipe, "a", 1, NULL, NULL)) {
+  if (!cfg->parent_pipe.empty()) {
+    parent_pipe_handle = CreateFile(
+      cfg->parent_pipe.c_str(), GENERIC_WRITE, 0, NULL,
+      OPEN_EXISTING, 0, NULL);
+    if (parent_pipe_handle == INVALID_HANDLE_VALUE) {
+      derr << "Could not open parent pipe: " << win32_strerror(err) << dendl;
+    } else if (!WriteFile(parent_pipe_handle, "a", 1, NULL, NULL)) {
       // TODO: consider exiting in this case. The parent didn't wait for us,
       // maybe it was killed after a timeout.
-      int err = GetLastError();
+      err = GetLastError();
       derr << "Failed to communicate with the parent: "
            << win32_strerror(err) << dendl;
     } else {
       dout(5) << __func__ << ": submitted parent notification." << dendl;
     }
 
+    if (parent_pipe_handle != INVALID_HANDLE_VALUE)
+      CloseHandle(parent_pipe_handle);
+
     global_init_postfork_finish(g_ceph_context);
   }
 
   handler->wait();
   handler->shutdown();
+
+  // The registry record shouldn't be removed for (already) running mappings.
+  if (!cfg->persistent) {
+    dout(5) << __func__ << ": cleaning up non-persistent mapping: "
+            << cfg->devpath << dendl;
+    r = remove_config_from_registry(cfg);
+    if (r) {
+      derr << __func__ << ": could not clean up non-persistent mapping: "
+           << cfg->devpath << dendl;
+    }
+  }
 
 close_ret:
   std::unique_lock l{shutdown_lock};
@@ -966,6 +1352,7 @@ static int do_show_mapped_device(std::string format, bool pretty_format,
   f->dump_string("namespace", cfg.nsname);
   f->dump_string("image", cfg.imgname);
   f->dump_string("snap", cfg.snapname);
+  f->dump_int("persistent", cfg.persistent);
   f->dump_int("disk_number", conn_info.DiskNumber ? conn_info.DiskNumber : -1);
   f->dump_string("status", cfg.active ? WNBD_STATUS_ACTIVE : WNBD_STATUS_INACTIVE);
   f->dump_string("pnp_device_id", to_string(conn_info.PNPDeviceID));
@@ -1050,16 +1437,16 @@ static int parse_args(std::vector<const char*>& args,
       cfg->readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       cfg->exclusive = true;
+    } else if (ceph_argparse_flag(args, i, "--non-persistent", (char *)NULL)) {
+      cfg->persistent = false;
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
+    } else if (ceph_argparse_flag(args, i, "--remap-failure-fatal", (char *)NULL)) {
+      cfg->remap_failure_fatal = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->parent_pipe, err,
-                                     "--pipe-handle", (char *)NULL)) {
+                                     "--pipe-name", (char *)NULL)) {
       if (!err.str().empty()) {
         *err_msg << "rbd-wnbd: " << err.str();
-        return -EINVAL;
-      }
-      if (cfg->parent_pipe < 0) {
-        *err_msg << "rbd-wnbd: Invalid argument for pipe-handle!";
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->wnbd_log_level,
@@ -1117,6 +1504,30 @@ static int parse_args(std::vector<const char*>& args,
       }
       if (cfg->soft_disconnect_timeout < 0) {
         *err_msg << "rbd-nbd: Invalid argument for soft-disconnect-timeout";
+        return -EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i,
+                                     (int*)&cfg->service_start_timeout,
+                                     err, "--start-timeout",
+                                     (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->service_start_timeout <= 0) {
+        *err_msg << "rbd-nbd: Invalid argument for start-timeout";
+        return -EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i,
+                                     (int*)&cfg->image_map_timeout,
+                                     err, "--map-timeout",
+                                     (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->image_map_timeout <= 0) {
+        *err_msg << "rbd-nbd: Invalid argument for map-timeout";
         return -EINVAL;
       }
     } else {
@@ -1244,7 +1655,10 @@ static int rbd_wnbd(int argc, const char *argv[])
     case Service:
     {
       RBDService service(cfg.hard_disconnect, cfg.soft_disconnect_timeout,
-                         cfg.service_thread_count);
+                         cfg.service_thread_count,
+                         cfg.service_start_timeout,
+                         cfg.image_map_timeout,
+                         cfg.remap_failure_fatal);
       // This call will block until the service stops.
       r = RBDService::initialize(&service);
       if (r < 0)

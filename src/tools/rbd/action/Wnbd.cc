@@ -53,9 +53,11 @@ static int call_wnbd_cmd(const po::variables_map &vm,
   if (process.spawn()) {
     std::cerr << "rbd: failed to run rbd-wnbd: " << process.err() << std::endl;
     return -EINVAL;
-  } else if (process.join()) {
+  }
+  int exit_code = process.join();
+  if (exit_code) {
     std::cerr << "rbd: rbd-wnbd failed with error: " << process.err() << std::endl;
-    return -EINVAL;
+    return exit_code;
   }
 
   return 0;

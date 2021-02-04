@@ -22,13 +22,16 @@ SKIP_TESTS=${SKIP_TESTS:-}
 SKIP_BINDIR_CLEAN=${SKIP_BINDIR_CLEAN:-}
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
 DEV_BUILD=${DEV_BUILD:-}
-BUILD_ZIP=${BUILD_ZIP:-}
-# By default, we'll build release binaries with debug symbols attached.
-# If BUILD_ZIP and STRIP_ZIPPED are enabled, we'll strip the binaries
-# that we're going to archive.
+# Unless SKIP_ZIP is set, we're preparing an archive that contains the Ceph
+# binaries, debug symbols as well as the required DLLs.
+SKIP_ZIP=${SKIP_ZIP:-}
+# By default, we'll move the debug symbols to separate files located in the
+# ".debug" directory. If "EMBEDDED_DBG_SYM" is set, the debug symbols will
+# remain embedded in the binaries.
+#
 # Unfortunately we cannot use pdb symbols when cross compiling. cv2pdb
 # well as llvm rely on mspdb*.dll in order to support this proprietary format.
-STRIP_ZIPPED=${STRIP_ZIPPED:-}
+EMBEDDED_DBG_SYM=${EMBEDDED_DBG_SYM:-}
 # Allow for OS specific customizations through the OS flag.
 # Valid options are currently "ubuntu" and "suse".
 
@@ -54,13 +57,23 @@ ALLOCATOR=${ALLOCATOR:-libc}
 # Debug builds don't work with MINGW for the time being, failing with
 # can't close <file>: File too big
 # -Wa,-mbig-obj does not help.
-CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-RelWithDebInfo}
+CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-}
+if [[ -z $CMAKE_BUILD_TYPE ]]; then
+  # By default, we're building release binaries with minimal debug information.
+  export CFLAGS="$CFLAGS -g1"
+  export CXXFLAGS="$CXXFLAGS -g1"
+  CMAKE_BUILD_TYPE=Release
+fi
+
 # Some tests can't use shared libraries yet due to unspecified dependencies.
 # We'll do a static build by default for now.
 ENABLE_SHARED=${ENABLE_SHARED:-OFF}
 
 binDir="$BUILD_DIR/bin"
 strippedBinDir="$BUILD_DIR/bin_stripped"
+# GDB will look for this directory by default.
+dbgDirname=".debug"
+dbgSymbolDir="$strippedBinDir/${dbgDirname}"
 depsSrcDir="$DEPS_DIR/src"
 depsToolsetDir="$DEPS_DIR/mingw"
 
@@ -193,15 +206,24 @@ if [[ -z $SKIP_DLL_COPY ]]; then
     cp ${required_dlls[@]} $binDir
 fi
 
-if [[ -n $BUILD_ZIP ]]; then
+if [[ -z $SKIP_ZIP ]]; then
     # Use a temp directory, in order to create a clean zip file
     ZIP_TMPDIR=$(mktemp -d win_binaries.XXXXX)
-    if [[ -n $STRIP_ZIPPED ]]; then
-        echo "Stripping debug symbols from binaries."
+    if [[ -z $EMBEDDED_DBG_SYM ]]; then
+        echo "Extracting debug symbols from binaries."
         rm -rf $strippedBinDir; mkdir $strippedBinDir
+        rm -rf $dbgSymbolDir; mkdir $dbgSymbolDir
         # Strip files individually, to save time and space
         for file in $binDir/*.exe $binDir/*.dll; do
-            $MINGW_STRIP -o $strippedBinDir/$(basename $file) $file
+            dbgFilename=$(basename $file).debug
+            dbgFile="$dbgSymbolDir/$dbgFilename"
+            strippedFile="$strippedBinDir/$(basename $file)"
+
+            echo "Copying debug symbols: $dbgFile"
+            $MINGW_OBJCOPY --only-keep-debug $file $dbgFile
+            $MINGW_STRIP --strip-debug --strip-unneeded -o $strippedFile $file
+            $MINGW_OBJCOPY --remove-section .gnu_debuglink $strippedFile
+            $MINGW_OBJCOPY --add-gnu-debuglink=$dbgFile $strippedFile
         done
         # Copy any remaining files to the stripped directory
         for file in $binDir/*; do
