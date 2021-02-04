@@ -153,6 +153,18 @@ Context* SafeTimer::add_event_at(SafeTimer::clock_t::time_point when, Context *c
   return callback;
 }
 
+Context* SafeTimer::add_event_at(ceph::real_clock::time_point when, Context *callback)
+{
+  ceph_assert(ceph_mutex_is_locked(lock));
+  // convert from real_clock to mono_clock
+  auto mono_now = ceph::mono_clock::now();
+  auto real_now = ceph::real_clock::now();
+  const auto delta = when - real_now;
+  const auto mono_atime = (mono_now +
+			   std::chrono::ceil<clock_t::duration>(delta));
+  return add_event_at(mono_atime, callback);
+}
+
 bool SafeTimer::cancel_event(Context *callback)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
