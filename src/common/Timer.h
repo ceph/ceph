@@ -77,7 +77,7 @@ public:
   Context* add_event_after(ceph::timespan duration, Context *callback);
   Context* add_event_after(double seconds, Context *callback);
   Context* add_event_at(clock_t::time_point when, Context *callback);
-
+  Context* add_event_at(ceph::real_clock::time_point when, Context *callback);
   /* Cancel an event.
    * Call with the event_lock LOCKED
    *
