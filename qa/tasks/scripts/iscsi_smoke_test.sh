@@ -74,7 +74,7 @@ sleep 5
 
 ls -l /dev/disk/by-path
 ls -l /dev/disk/by-*id
-iscsi_dev=/dev/disk/by-path/*${my_ip}*iscsi*
+iscsi_dev=/dev/disk/by-path/*${my_ip}:*iscsi*
 if ( mkfs -t xfs $iscsi_dev ) ; then
     :
 else
