@@ -2377,6 +2377,9 @@ public:
       if ((r = comp->get_return_value())) {
 	if (r == -ENOENT && src_value.deleted()) {
 	  cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	} else if (r == -ENOENT && context->oid_set_chunk_tgt_pool.find(oid_tgt) != 
+		  context->oid_set_chunk_tgt_pool.end()) {
+	  cout << num << ": get expected ENOENT tgt oid " << oid_tgt << std::endl;
 	} else if (r == -EOPNOTSUPP) {
 	  bool is_overlapped = false;
 	  interval_set<uint64_t> chunk;
