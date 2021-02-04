@@ -607,7 +607,7 @@ class RgwService(CephService):
             'entity': self.get_auth_entity(rgw_id),
             'caps': ['mon', 'allow *',
                      'mgr', 'allow rw',
-                     'osd', 'allow rwx tag rgw'],
+                     'osd', 'allow rwx tag rgw *=*'],
         })
         return keyring
 
