@@ -165,6 +165,22 @@ struct staged_position_t {
   bool operator==(const me_t& o) const { return cmp(o) == 0; }
   bool operator!=(const me_t& o) const { return cmp(o) != 0; }
 
+  void assert_next_to(const me_t& prv) const {
+#ifndef NDEBUG
+    if (is_end()) {
+      assert(!prv.is_end());
+    } else if (index == prv.index) {
+      assert(!nxt.is_end());
+      nxt.assert_next_to(prv.nxt);
+    } else if (index == prv.index + 1) {
+      assert(!prv.nxt.is_end());
+      assert(nxt == nxt_t::begin());
+    } else {
+      assert(false);
+    }
+#endif
+  }
+
   me_t& operator-=(const me_t& o) {
     assert(is_valid_index(o.index));
     assert(index >= o.index);
@@ -251,6 +267,16 @@ struct staged_position_t<STAGE_BOTTOM> {
       index -= o.index;
     }
     return *this;
+  }
+
+  void assert_next_to(const me_t& prv) const {
+#ifndef NDEBUG
+    if (is_end()) {
+      assert(!prv.is_end());
+    } else {
+      assert(index == prv.index + 1);
+    }
+#endif
   }
 
   void encode(ceph::bufferlist& encoded) const {

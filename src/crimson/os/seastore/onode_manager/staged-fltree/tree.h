@@ -96,14 +96,15 @@ class Btree {
       return !(*this == x);
     }
 
-    Cursor& operator++() {
-      // TODO
-      return *this;
-    }
-    Cursor operator++(int) {
-      Cursor tmp = *this;
-      ++*this;
-      return tmp;
+    btree_future<Cursor> get_next(Transaction& t) {
+      assert(!is_end());
+      auto this_obj = *this;
+      return p_cursor->get_next(p_tree->get_context(t)
+      ).safe_then([this_obj] (Ref<tree_cursor_t> next_cursor) {
+        next_cursor->assert_next_to(
+            *this_obj.p_cursor, this_obj.p_tree->value_builder.get_header_magic());
+        return Cursor{this_obj.p_tree, next_cursor};
+      });
     }
 
    private:
