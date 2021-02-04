@@ -137,6 +137,19 @@ class tree_cursor_t final
   void update_cache(LeafNode&, const key_view_t&, const value_header_t*) const;
   void maybe_update_cache(value_magic_t magic) const;
 
+  static Ref<tree_cursor_t> create(Ref<LeafNode> node, const search_position_t& pos) {
+    return new tree_cursor_t(node, pos);
+  }
+
+  static Ref<tree_cursor_t> create(Ref<LeafNode> node, const search_position_t& pos,
+                                   const key_view_t& key, const value_header_t* p_header) {
+    return new tree_cursor_t(node, pos, key, p_header);
+  }
+
+  static Ref<tree_cursor_t> create_end(Ref<LeafNode> node) {
+    return new tree_cursor_t(node);
+  }
+
   /**
    * Reversed resource management (tree_cursor_t)
    *

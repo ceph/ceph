@@ -758,7 +758,7 @@ LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
   if (next_pos.is_end()) {
     if (unlikely(is_level_tail())) {
       return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
-          new tree_cursor_t(this));
+          tree_cursor_t::create_end(this));
     } else {
       return get_next_cursor_from_parent(c);
     }
@@ -796,7 +796,7 @@ LeafNode::lookup_smallest(context_t)
   if (unlikely(impl->is_empty())) {
     assert(is_root());
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
-        new tree_cursor_t(this));
+        tree_cursor_t::create_end(this));
   }
   auto pos = search_position_t::begin();
   key_view_t index_key;
@@ -811,7 +811,7 @@ LeafNode::lookup_largest(context_t)
   if (unlikely(impl->is_empty())) {
     assert(is_root());
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
-        new tree_cursor_t(this));
+        tree_cursor_t::create_end(this));
   }
   search_position_t pos;
   const value_header_t* p_value_header = nullptr;
@@ -830,7 +830,7 @@ LeafNode::lower_bound_tracked(
   Ref<tree_cursor_t> cursor;
   if (result.position.is_end()) {
     assert(!result.p_value);
-    cursor = new tree_cursor_t(this);
+    cursor = tree_cursor_t::create_end(this);
   } else {
     cursor = get_or_track_cursor(result.position, index_key, result.p_value);
   }
@@ -955,7 +955,7 @@ Ref<tree_cursor_t> LeafNode::get_or_track_cursor(
   Ref<tree_cursor_t> p_cursor;
   auto found = tracked_cursors.find(position);
   if (found == tracked_cursors.end()) {
-    p_cursor = new tree_cursor_t(this, position, key, p_value_header);
+    p_cursor = tree_cursor_t::create(this, position, key, p_value_header);
   } else {
     p_cursor = found->second;
     assert(p_cursor->get_leaf_node() == this);
@@ -1000,7 +1000,7 @@ Ref<tree_cursor_t> LeafNode::track_insert(
   // track insert
   // TODO: getting key_view_t from stage::proceed_insert() and
   // stage::append_insert() has not supported yet
-  return new tree_cursor_t(this, insert_pos);
+  return tree_cursor_t::create(this, insert_pos);
 }
 
 void LeafNode::track_split(
