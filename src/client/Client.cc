@@ -1918,6 +1918,7 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
     rel.item.dname_len = dn->name.length();
     rel.item.dname_seq = dn->lease_seq;
     rel.dname = dn->name;
+    dn->lease_mds = -1;
   }
   ldout(cct, 25) << __func__ << " exit(dn:"
 	   << dn << ")" << dendl;
