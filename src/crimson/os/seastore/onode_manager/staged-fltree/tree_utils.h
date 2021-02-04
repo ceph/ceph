@@ -330,6 +330,7 @@ class TreeBuilder {
   }
 
   future<> validate(Transaction& t) {
+    return seastar::async([this, &t] {
       logger().info("Verifing insertion ...");
       auto iter = kvs.begin();
       while (!iter.is_end()) {
@@ -338,6 +339,19 @@ class TreeBuilder {
         Values::validate_cursor(cursor, k, v);
         ++iter;
       }
+
+      logger().info("Verifing range query ...");
+      iter = kvs.begin();
+      auto cursor = tree->begin(t).unsafe_get0();
+      while (!iter.is_end()) {
+        assert(!cursor.is_end());
+        auto [k, v] = iter.get_kv();
+        Values::validate_cursor(cursor, k, v);
+        cursor = cursor.get_next(t).unsafe_get0();
+        ++iter;
+      }
+      assert(cursor.is_end());
+
       logger().info("Verify done!");
     });
   }
