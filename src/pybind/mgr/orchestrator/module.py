@@ -883,9 +883,10 @@ Usage:
                 raise OrchestratorValidationError(usage)
             spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
         else:
-            spec = PlacementSpec.from_string(placement)
-            assert daemon_type
-            spec = ServiceSpec(daemon_type.value, placement=spec)
+            if not placement or not daemon_type:
+                raise OrchestratorValidationError(usage)
+            placement_spec = PlacementSpec.from_string(placement)
+            spec = ServiceSpec(daemon_type.value, placement=placement_spec)
 
         if daemon_type == ServiceType.mon:
             completion = self.add_mon(spec)
@@ -906,11 +907,11 @@ Usage:
         elif daemon_type == ServiceType.mds:
             completion = self.add_mds(spec)
         elif daemon_type == ServiceType.rgw:
-            completion = self.add_rgw(spec)
+            completion = self.add_rgw(cast(RGWSpec, spec))
         elif daemon_type == ServiceType.nfs:
-            completion = self.add_nfs(spec)
+            completion = self.add_nfs(cast(NFSServiceSpec, spec))
         elif daemon_type == ServiceType.iscsi:
-            completion = self.add_iscsi(spec)
+            completion = self.add_iscsi(cast(IscsiServiceSpec, spec))
         elif daemon_type == ServiceType.cephadm_exporter:
             completion = self.add_cephadm_exporter(spec)
         else:
