@@ -89,12 +89,12 @@ class Btree {
           *p_tree->nm, p_tree->value_builder, p_cursor);
     }
 
-    bool operator==(const Cursor& x) const {
-      return p_cursor == x.p_cursor;
-    }
-    bool operator!=(const Cursor& x) const {
-      return !(*this == x);
-    }
+    bool operator>(const Cursor& o) const { return (int)compare_to(o) > 0; }
+    bool operator>=(const Cursor& o) const { return (int)compare_to(o) >= 0; }
+    bool operator<(const Cursor& o) const { return (int)compare_to(o) < 0; }
+    bool operator<=(const Cursor& o) const { return (int)compare_to(o) <= 0; }
+    bool operator==(const Cursor& o) const { return (int)compare_to(o) != 0; }
+    bool operator!=(const Cursor& o) const { return (int)compare_to(o) == 0; }
 
     btree_future<Cursor> get_next(Transaction& t) {
       assert(!is_end());
@@ -103,7 +103,9 @@ class Btree {
       ).safe_then([this_obj] (Ref<tree_cursor_t> next_cursor) {
         next_cursor->assert_next_to(
             *this_obj.p_cursor, this_obj.p_tree->value_builder.get_header_magic());
-        return Cursor{this_obj.p_tree, next_cursor};
+        auto ret = Cursor{this_obj.p_tree, next_cursor};
+        assert(this_obj < ret);
+        return ret;
       });
     }
 
@@ -116,6 +118,20 @@ class Btree {
       }
     }
     Cursor(Btree* p_tree) : p_tree{p_tree} {}
+
+    MatchKindCMP compare_to(const Cursor& o) const {
+      assert(p_tree == o.p_tree);
+      if (p_cursor && o.p_cursor) {
+        return p_cursor->compare_to(
+            *o.p_cursor, p_tree->value_builder.get_header_magic());
+      } else if (!p_cursor && !o.p_cursor) {
+        return MatchKindCMP::EQ;
+      } else if (!p_cursor) {
+        return MatchKindCMP::GT;
+      } else { // !o.p_cursor
+        return MatchKindCMP::LT;
+      }
+    }
 
     static Cursor make_end(Btree* p_tree) {
       return {p_tree};
