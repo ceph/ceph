@@ -385,6 +385,7 @@ set(libcommon_files
   osdc/Objecter.cc
   osdc/error_code.cc
   librbd/Features.cc
+  librbd/io/IoOperations.cc
   ${mds_files})
 if(WITH_JAEGER)
   list(APPEND libcommon_files common/tracer.cc)
