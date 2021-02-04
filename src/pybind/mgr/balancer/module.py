@@ -17,6 +17,7 @@ import datetime
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
+
 class MappingState:
     def __init__(self, osdmap, raw_pg_stats, raw_pool_stats, desc=''):
         self.desc = desc
@@ -36,7 +37,7 @@ class MappingState:
         self.pg_up_by_poolid = {}
         for poolid in self.poolids:
             self.pg_up_by_poolid[poolid] = osdmap.map_pool_pgs_up(poolid)
-            for a,b in self.pg_up_by_poolid[poolid].items():
+            for a, b in self.pg_up_by_poolid[poolid].items():
                 self.pg_up[a] = b
 
     def calc_misplaced_from(self, other_ms):
@@ -79,6 +80,7 @@ class MsPlan(Plan):
     """
     Plan with a preloaded MappingState member.
     """
+
     def __init__(self, name: str, mode: str, ms: MappingState, pools: List[str]) -> None:
         super(MsPlan, self).__init__(name, mode, ms.osdmap, pools)
         self.initial = ms
@@ -223,6 +225,7 @@ class Eval:
             }
         return r
 
+
 class Module(MgrModule):
     MODULE_OPTIONS = [
         Option(name='active',
@@ -350,7 +353,7 @@ class Module(MgrModule):
         """
         if mode == Mode.upmap:
             min_compat_client = self.get_osdmap().dump().get('require_min_compat_client', '')
-            if min_compat_client < 'luminous': # works well because version is alphabetized..
+            if min_compat_client < 'luminous':  # works well because version is alphabetized..
                 warn = ('min_compat_client "%s" '
                         '< "luminous", which is required for pg-upmap. '
                         'Try "ceph osd set-require-min-compat-client luminous" '
@@ -361,7 +364,7 @@ class Module(MgrModule):
                               self.get("pg_stats"),
                               self.get("pool_stats"),
                               'initialize compat weight-set')
-            self.get_compat_weight_set_weights(ms) # ignore error
+            self.get_compat_weight_set_weights(ms)  # ignore error
         self.set_module_option('mode', mode.value)
         return (0, '', '')
 
@@ -399,7 +402,8 @@ class Module(MgrModule):
         if pool_ids == '':
             return (0, '', '')
         pool_ids = [int(p) for p in pool_ids.split(',')]
-        pool_name_by_id = dict((p['pool'], p['pool_name']) for p in self.get_osdmap().dump().get('pools', []))
+        pool_name_by_id = dict((p['pool'], p['pool_name'])
+                               for p in self.get_osdmap().dump().get('pools', []))
         should_prune = False
         final_ids: List[int] = []
         final_names = []
@@ -409,7 +413,7 @@ class Module(MgrModule):
                 final_names.append(pool_name_by_id[p])
             else:
                 should_prune = True
-        if should_prune: # some pools were gone, prune
+        if should_prune:  # some pools were gone, prune
             self.set_module_option('pool_ids', ','.join(str(p) for p in final_ids))
         return (0, json.dumps(sorted(final_names), indent=4, sort_keys=True), '')
 
@@ -438,7 +442,7 @@ class Module(MgrModule):
         """
         raw_names = pools
         existing = cast(str, self.get_module_option('pool_ids'))
-        if existing == '': # for idempotence
+        if existing == '':  # for idempotence
             return (0, '', '')
         existing = existing.split(',')
         osdmap = self.get_osdmap()
@@ -490,7 +494,8 @@ class Module(MgrModule):
     @CLIReadCommand('balancer eval-verbose')
     def plan_eval_verbose(self, option: Optional[str] = None):
         """
-        Evaluate data distribution for the current cluster or specific pool or specific plan (verbosely)
+        Evaluate data distribution for the current cluster or specific pool or specific
+        plan (verbosely)
         """
         try:
             ms, pools = self._state_from_option(option)
@@ -612,7 +617,7 @@ class Module(MgrModule):
     def time_permit(self) -> bool:
         local_time = time.localtime()
         time_of_day = time.strftime('%H%M', local_time)
-        weekday = (local_time.tm_wday + 1) % 7 # be compatible with C
+        weekday = (local_time.tm_wday + 1) % 7  # be compatible with C
         permit = False
 
         begin_time = cast(str, self.get_module_option('begin_time'))
@@ -661,7 +666,7 @@ class Module(MgrModule):
                     pools = osdmap.dump().get('pools', [])
                     valid = [p['pool'] for p in pools]
                     ids = set(allow) & set(valid)
-                    if set(allow) - set(valid): # some pools were gone, prune
+                    if set(allow) - set(valid):  # some pools were gone, prune
                         self.set_module_option('pool_ids', ','.join(str(p) for p in ids))
                     pool_name_by_id = dict((p['pool'], p['pool_name']) for p in pools)
                     final = [pool_name_by_id[p] for p in ids if p in pool_name_by_id]
@@ -705,7 +710,7 @@ class Module(MgrModule):
         pe = Eval(ms)
         pool_rule = {}
         pool_info = {}
-        for p in ms.osdmap_dump.get('pools',[]):
+        for p in ms.osdmap_dump.get('pools', []):
             if len(pools) and p['pool_name'] not in pools:
                 continue
             # skip dead or not-yet-ready pools too
@@ -723,8 +728,8 @@ class Module(MgrModule):
         self.log.debug('pools %s' % pools)
         self.log.debug('pool_rule %s' % pool_rule)
 
-        osd_weight = { a['osd']: a['weight']
-                       for a in ms.osdmap_dump.get('osds',[]) if a['weight'] > 0 }
+        osd_weight = {a['osd']: a['weight']
+                      for a in ms.osdmap_dump.get('osds', []) if a['weight'] > 0}
 
         # get expected distributions by root
         actual_by_root: Dict[str, Dict[str, dict]] = {}
@@ -749,12 +754,12 @@ class Module(MgrModule):
             weight_map = ms.crush.get_take_weight_osd_map(rootid)
             adjusted_map = {
                 osd: cw * osd_weight[osd]
-                for osd,cw in weight_map.items() if osd in osd_weight and cw > 0
+                for osd, cw in weight_map.items() if osd in osd_weight and cw > 0
             }
             sum_w = sum(adjusted_map.values())
             assert len(adjusted_map) == 0 or sum_w > 0
-            pe.target_by_root[root] = { osd: w / sum_w
-                                        for osd,w in adjusted_map.items() }
+            pe.target_by_root[root] = {osd: w / sum_w
+                                       for osd, w in adjusted_map.items()}
             actual_by_root[root] = {
                 'pgs': {},
                 'objects': {},
@@ -885,7 +890,7 @@ class Module(MgrModule):
         }
         self.log.debug('stats_by_root %s' % pe.stats_by_root)
 
-	# the scores are already normalized
+        # the scores are already normalized
         pe.score_by_root = {
             r: {
                 'pgs': pe.stats_by_root[r]['pgs']['score'],
@@ -964,8 +969,8 @@ class Module(MgrModule):
 
         if len(plan.pools):
             pools = plan.pools
-        else: # all
-            pools = [str(i['pool_name']) for i in osdmap_dump.get('pools',[])]
+        else:  # all
+            pools = [str(i['pool_name']) for i in osdmap_dump.get('pools', [])]
         if len(pools) == 0:
             detail = 'No pools available'
             self.log.info(detail)
@@ -980,7 +985,8 @@ class Module(MgrModule):
         left = max_optimizations
         pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
                                if p['pg_num'] > p['pg_num_target']]
-        crush_rule_by_pool_name = dict((p['pool_name'], p['crush_rule']) for p in osdmap_dump.get('pools', []))
+        crush_rule_by_pool_name = dict((p['pool_name'], p['crush_rule'])
+                                       for p in osdmap_dump.get('pools', []))
         for pool in pools:
             if pool not in crush_rule_by_pool_name:
                 self.log.info('pool %s does not exist' % pool)
@@ -1048,16 +1054,16 @@ class Module(MgrModule):
             return -errno.EALREADY, detail
 
         # get current osd reweights
-        orig_osd_weight = { a['osd']: a['weight']
-                            for a in ms.osdmap_dump.get('osds',[]) }
-        reweighted_osds = [ a for a,b in orig_osd_weight.items()
-                            if b < 1.0 and b > 0.0 ]
+        orig_osd_weight = {a['osd']: a['weight']
+                           for a in ms.osdmap_dump.get('osds', [])}
+        reweighted_osds = [a for a, b in orig_osd_weight.items()
+                           if b < 1.0 and b > 0.0]
 
         # get current compat weight-set weights
         orig_ws = self.get_compat_weight_set_weights(ms)
         if not orig_ws:
             return -errno.EAGAIN, 'compat weight-set not available'
-        orig_ws = { a: b for a, b in orig_ws.items() if a >= 0 }
+        orig_ws = {a: b for a, b in orig_ws.items() if a >= 0}
 
         # Make sure roots don't overlap their devices.  If so, we
         # can't proceed.
@@ -1070,7 +1076,7 @@ class Module(MgrModule):
             for osd in wm:
                 if osd in visited:
                     if osd not in overlap:
-                        overlap[osd] = [ visited[osd] ]
+                        overlap[osd] = [visited[osd]]
                     overlap[osd].append(root)
                 visited[osd] = root
         if len(overlap) > 0:
@@ -1081,7 +1087,7 @@ class Module(MgrModule):
 
         # rebalance by pgs, objects, or bytes
         metrics = cast(str, self.get_module_option('crush_compat_metrics')).split(',')
-        key = metrics[0] # balancing using the first score metric
+        key = metrics[0]  # balancing using the first score metric
         if key not in ['pgs', 'bytes', 'objects']:
             self.log.warning("Invalid crush_compat balancing key %s. Using 'pgs'." % key)
             key = 'pgs'
@@ -1147,7 +1153,7 @@ class Module(MgrModule):
 
                 # normalize weights under this root
                 root_weight = crush.get_item_weight(pe.root_ids[root])
-                root_sum = sum(b for a,b in next_ws.items()
+                root_sum = sum(b for a, b in next_ws.items()
                                if a in target.keys())
                 if root_sum > 0 and root_weight > 0:
                     factor = root_sum / root_weight
@@ -1241,7 +1247,7 @@ class Module(MgrModule):
                 return
             try:
                 crushmap = json.loads(outb)
-            except:
+            except json.JSONDecodeError:
                 raise RuntimeError('unable to parse crush map')
         else:
             crushmap = ms.crush_dump
