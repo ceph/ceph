@@ -665,7 +665,6 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       new_info.mds_features = m->get_mds_features();
       new_info.state = MDSMap::STATE_STANDBY;
       new_info.state_seq = seq;
-      pending.insert(new_info);
       if (m->get_fs().size()) {
 	fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
 	auto f = pending.get_filesystem(m->get_fs());
@@ -674,6 +673,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 	}
         new_info.join_fscid = fscid;
       }
+      pending.insert(new_info);
     }
 
     // initialize the beacon timer
