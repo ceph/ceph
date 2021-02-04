@@ -799,7 +799,10 @@ int DataLogBackends::trim_entries(int shard_id, std::string_view marker)
     l.unlock();
     auto c = be->gen_id == target_gen ? cursor : be->max_marker();
     r = be->trim(shard_id, c);
-    if (r == -ENODATA && be->gen_id < target_gen) r = 0;
+    if (r == -ENOENT)
+      r = -ENODATA;
+    if (r == -ENODATA && be->gen_id < target_gen)
+      r = 0;
     l.lock();
   };
   return r;
@@ -821,8 +824,8 @@ public:
   const uint64_t tail_gen;
   boost::intrusive_ptr<RGWDataChangesBE> be;
 
-  GenTrim(DataLogBackends* bes, int shard_id, uint64_t target_gen, std::string cursor,
-	  uint64_t head_gen, uint64_t tail_gen,
+  GenTrim(DataLogBackends* bes, int shard_id, uint64_t target_gen,
+	  std::string cursor, uint64_t head_gen, uint64_t tail_gen,
 	  boost::intrusive_ptr<RGWDataChangesBE> be,
 	  lr::AioCompletion* super)
     : Completion(super), bes(bes), shard_id(shard_id), target_gen(target_gen),
@@ -832,8 +835,9 @@ public:
   void handle(Ptr&& p, int r) {
     auto gen_id = be->gen_id;
     be.reset();
-    if (r == -ENOENT) r = -ENODATA;
-    if (r == -ENODATA && gen_id < target_gen) r = 0;
+    if (r == -ENOENT)
+      r = -ENODATA;
+    if (r == -ENODATA && gen_id < target_gen)
       r = 0;
     if (r < 0) {
       complete(std::move(p), r);
@@ -845,7 +849,7 @@ public:
       auto i = bes->upper_bound(gen_id);
       if (i == bes->end() || i->first > target_gen || i->first > head_gen) {
 	l.unlock();
-	complete(std::move(p), r);
+	complete(std::move(p), -ENODATA);
 	return;
       }
       be = i->second;
