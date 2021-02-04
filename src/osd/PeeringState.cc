@@ -5016,6 +5016,24 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
 
   DECLARE_LOCALS;
   ps->backfill_reserved = true;
+  for (auto it = ps->backfill_targets.begin();
+       it != ps->backfill_targets.end();
+       ++it) {
+  pg_shard_t peer = *it;
+  ceph_assert(peer != ps->pg_whoami);
+  auto &rctx = context<PeeringMachine>().get_recovery_ctx();
+  const pg_info_t& pi = ps->peer_info[peer];
+  if (!pi.is_empty() && (pi.last_update == ps->info.last_update)) {
+  rctx.send_info(
+	peer.osd,
+	spg_t(ps->info.pgid.pgid, peer.shard),
+	ps->get_osdmap_epoch(),
+	ps->get_osdmap_epoch(),
+	ps->info,
+	ps->get_lease());
+  psdout(10) << "Starting Backfilling " << peer  << " send_info" << dendl;
+    }
+   }
   pl->on_backfill_reserved();
   ps->state_clear(PG_STATE_BACKFILL_TOOFULL);
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
@@ -5167,22 +5185,6 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
       ps->get_osdmap_epoch());
     ++backfill_osd_it;
   } else {
-    auto &rctx = context<PeeringMachine>().get_recovery_ctx();
-    auto peer = ps->pg_whoami;
-    auto epoch = ps->get_osdmap_epoch();
-    auto info = ps->info;
-    const pg_info_t& pi = ps->peer_info[peer];
-    if (!pi.is_empty()) {
-      rctx.send_info(
-	peer.osd,
-	spg_t(ps->info.pgid.pgid, peer.shard),
-	epoch,
-	epoch,
-	info,
-	ps->get_lease());
-      psdout(10) << "AllBackfillsReserved " << peer
-      << " send_info" << dendl;
-    }
     ps->peer_bytes.clear();
     post_event(AllBackfillsReserved());
   }
@@ -6092,7 +6094,7 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     pg_shard_t auth_log_shard;
     bool history_les_bound = false;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
-    ps->choose_acting(auth_log_shard, false, &history_les_bound, true);
+    ceph_assert(ps->choose_acting(auth_log_shard, false, &history_les_bound, true));
     if (!ps->want_acting.empty() && ps->want_acting != ps->acting) {
       psdout(10) << "Active: got notify from previous acting member "
                  << notevt.from << ", requesting pg_temp change"
