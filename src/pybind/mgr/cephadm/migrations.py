@@ -109,8 +109,7 @@ class Migrations:
                     return HostPlacementSpec(d.hostname, '', '')
 
             old_hosts = {h.hostname: h for h in spec.placement.hosts}
-            new_hosts = [to_hostname(d) for d in existing_daemons
-            ]
+            new_hosts = [to_hostname(d) for d in existing_daemons]
 
             new_placement = PlacementSpec(
                 hosts=new_hosts,
