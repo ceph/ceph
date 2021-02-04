@@ -168,6 +168,7 @@ def start_rgw(ctx, config, clients):
         ctx.daemons.add_daemon(
             remote, 'rgw', client_with_id,
             cluster=cluster_name,
+            fsid=ctx.ceph[cluster_name].fsid,
             args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,
