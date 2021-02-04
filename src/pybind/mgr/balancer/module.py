@@ -68,6 +68,13 @@ class Plan(object):
         self.inc = osdmap.new_incremental()
         self.pg_status = {}
 
+    def dump(self) -> str:
+        return json.dumps(self.inc.dump(), indent=4, sort_keys=True)
+
+    def show(self) -> str:
+        return 'upmap plan'
+
+
 class MsPlan(Plan):
     """
     Plan with a preloaded MappingState member.
@@ -83,9 +90,6 @@ class MsPlan(Plan):
                             self.initial.raw_pg_stats,
                             self.initial.raw_pool_stats,
                             'plan %s final' % self.name)
-
-    def dump(self) -> str:
-        return json.dumps(self.inc.dump(), indent=4, sort_keys=True)
 
     def show(self) -> str:
         ls = []
