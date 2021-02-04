@@ -8,6 +8,15 @@ tasks:
       a_gateway.0:
       - src/test/cli-integration/rbd/gwcli_create.t
       b_client.0:
-      - src/test/cli-integration/rbd/gwcli_client.t
+      - src/test/cli-integration/rbd/iscsi_client.t
       c_gateway.1:
       - src/test/cli-integration/rbd/gwcli_delete.t
+- cram:
+    parallel: False
+    clients:
+      a_gateway.0:
+      - src/test/cli-integration/rbd/rest_api_create.t
+      b_client.0:
+      - src/test/cli-integration/rbd/iscsi_client.t
+      c_gateway.1:
+      - src/test/cli-integration/rbd/rest_api_delete.t
