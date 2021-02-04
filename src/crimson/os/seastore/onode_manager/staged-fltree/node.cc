@@ -145,7 +145,7 @@ void tree_cursor_t::Cache::validate_is_latest(const LeafNode& node,
   assert(is_latest());
 #ifndef NDEBUG
   auto [_key_view, _p_value_header] = node.get_kv(pos);
-  assert(*key_view == _key_view);
+  assert(key_view->compare_to(_key_view) == MatchKindCMP::EQ);
   assert(p_value_header == _p_value_header);
 #endif
 }
@@ -634,7 +634,8 @@ void InternalNode::validate_child(const Node& child) const
     assert(child.impl->is_level_tail());
   } else {
     assert(!child.impl->is_level_tail());
-    assert(impl->get_key_view(child_pos) == child.impl->get_largest_key_view());
+    assert(impl->get_key_view(child_pos).compare_to(
+           child.impl->get_largest_key_view()) == MatchKindCMP::EQ);
   }
   // XXX(multi-type)
   assert(impl->field_type() <= child.impl->field_type());
@@ -874,7 +875,7 @@ void LeafNode::validate_cursor(const tree_cursor_t& cursor) const
   assert(!cursor.is_end());
   auto [key, p_value_header] = get_kv(cursor.get_position());
   auto magic = p_value_header->magic;
-  assert(key == cursor.get_key_view(magic));
+  assert(key.compare_to(cursor.get_key_view(magic)) == MatchKindCMP::EQ);
   assert(p_value_header == cursor.read_value_header(magic));
 #endif
 }

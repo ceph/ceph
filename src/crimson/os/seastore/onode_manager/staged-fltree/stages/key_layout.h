@@ -487,14 +487,8 @@ class key_hobj_t {
     return ghobj.generation;
   }
 
-  bool operator==(const full_key_t<KeyT::VIEW>& o) const;
-  bool operator==(const full_key_t<KeyT::HOBJ>& o) const;
-  bool operator!=(const full_key_t<KeyT::VIEW>& o) const {
-    return !operator==(o);
-  }
-  bool operator!=(const full_key_t<KeyT::HOBJ>& o) const {
-    return !operator==(o);
-  }
+  MatchKindCMP compare_to(const full_key_t<KeyT::VIEW>&) const;
+  MatchKindCMP compare_to(const full_key_t<KeyT::HOBJ>&) const;
 
   std::ostream& dump(std::ostream& os) const {
     os << "key_hobj(" << (unsigned)shard() << ","
@@ -582,14 +576,8 @@ class key_view_t {
     return snap_gen_packed().gen;
   }
 
-  bool operator==(const full_key_t<KeyT::VIEW>& o) const;
-  bool operator==(const full_key_t<KeyT::HOBJ>& o) const;
-  bool operator!=(const full_key_t<KeyT::VIEW>& o) const {
-    return !operator==(o);
-  }
-  bool operator!=(const full_key_t<KeyT::HOBJ>& o) const {
-    return !operator==(o);
-  }
+  MatchKindCMP compare_to(const full_key_t<KeyT::VIEW>&) const;
+  MatchKindCMP compare_to(const full_key_t<KeyT::HOBJ>&) const;
 
   /**
    * key_view_t specific interfaces
@@ -700,38 +688,44 @@ void encode_key(const full_key_t<KT>& key, ceph::bufferlist& bl) {
   ceph::encode(key.gen(), bl);
 }
 
-inline MatchKindCMP compare_to(std::string_view l, std::string_view r) {
-  return toMatchKindCMP(l, r);
-}
 template <KeyT TypeL, KeyT TypeR>
-bool compare_full_key(const full_key_t<TypeL>& l, const full_key_t<TypeR>& r) {
-  if (l.shard() != r.shard())
-    return false;
-  if (l.pool() != r.pool())
-    return false;
-  if (l.crush() != r.crush())
-    return false;
-  if (compare_to(l.nspace(), r.nspace()) != MatchKindCMP::EQ)
-    return false;
-  if (compare_to(l.oid(), r.oid()) != MatchKindCMP::EQ)
-    return false;
-  if (l.snap() != r.snap())
-    return false;
-  if (l.gen() != r.gen())
-    return false;
-  return true;
+MatchKindCMP compare_full_key(
+    const full_key_t<TypeL>& l, const full_key_t<TypeR>& r) {
+  auto ret = toMatchKindCMP(l.shard(), r.shard());
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  ret = toMatchKindCMP(l.pool(), r.pool());
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  ret = toMatchKindCMP(l.crush() != r.crush());
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  ret = toMatchKindCMP(l.nspace(), r.nspace());
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  ret = toMatchKindCMP(l.oid(), r.oid());
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  ret = toMatchKindCMP(l.snap(), r.snap());
+  if (ret != MatchKindCMP::EQ)
+    return ret;
+  return toMatchKindCMP(l.gen(), r.gen());
 }
 
-inline bool key_hobj_t::operator==(const full_key_t<KeyT::VIEW>& o) const {
+inline MatchKindCMP key_hobj_t::compare_to(
+    const full_key_t<KeyT::VIEW>& o) const {
   return compare_full_key<KeyT::HOBJ, KeyT::VIEW>(*this, o);
 }
-inline bool key_hobj_t::operator==(const full_key_t<KeyT::HOBJ>& o) const {
+inline MatchKindCMP key_hobj_t::compare_to(
+    const full_key_t<KeyT::HOBJ>& o) const {
   return compare_full_key<KeyT::HOBJ, KeyT::HOBJ>(*this, o);
 }
-inline bool key_view_t::operator==(const full_key_t<KeyT::VIEW>& o) const {
+inline MatchKindCMP key_view_t::compare_to(
+    const full_key_t<KeyT::VIEW>& o) const {
   return compare_full_key<KeyT::VIEW, KeyT::VIEW>(*this, o);
 }
-inline bool key_view_t::operator==(const full_key_t<KeyT::HOBJ>& o) const {
+inline MatchKindCMP key_view_t::compare_to(
+    const full_key_t<KeyT::HOBJ>& o) const {
   return compare_full_key<KeyT::VIEW, KeyT::HOBJ>(*this, o);
 }
 
