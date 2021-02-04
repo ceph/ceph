@@ -197,6 +197,8 @@ public:
   int snapname_num;
   map<string,string > redirect_objs;
   bool enable_dedup;
+  string chunk_algo;
+  string chunk_size;
 
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
@@ -209,6 +211,8 @@ public:
 		   bool write_fadvise_dontneed,
 		   const string &low_tier_pool_name,
 		   bool enable_dedup,
+		   string chunk_algo,
+		   string chunk_size,
 		   const char *id = 0) :
     pool_obj_cont(),
     current_snap(0),
@@ -227,7 +231,9 @@ public:
     write_fadvise_dontneed(write_fadvise_dontneed),
     low_tier_pool_name(low_tier_pool_name),
     snapname_num(0),
-    enable_dedup(enable_dedup)
+    enable_dedup(enable_dedup),
+    chunk_algo(chunk_algo),
+    chunk_size(chunk_size)
   {
   }
 
@@ -285,7 +291,7 @@ public:
       }
       r = rados.mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
-	"\", \"var\": \"dedup_chunk_algorithm\", \"val\": \"" + "fastcdc" + "\"}",
+	"\", \"var\": \"dedup_chunk_algorithm\", \"val\": \"" + chunk_algo  + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
 	rados.shutdown();
@@ -293,7 +299,7 @@ public:
       }
       r = rados.mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
-	"\", \"var\": \"dedup_cdc_chunk_size\", \"val\": \"" + "1024" + "\"}",
+	"\", \"var\": \"dedup_cdc_chunk_size\", \"val\": \"" + chunk_size + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
 	rados.shutdown();

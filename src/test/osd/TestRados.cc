@@ -534,6 +534,13 @@ int main(int argc, char **argv)
     { TEST_OP_READ /* grr */, NULL },
   };
 
+  struct {
+    const char *name;
+  } chunk_algo_types[] = {
+    { "fastcdc" },
+    { "fixcdc" },
+  };
+
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "rbd";
   string low_tier_pool_name = "";
@@ -545,6 +552,9 @@ int main(int argc, char **argv)
   bool set_redirect = false;
   bool set_chunk = false;
   bool enable_dedup = false;
+  string chunk_algo = "";
+  string chunk_size = "";
+
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -629,6 +639,25 @@ int main(int argc, char **argv)
       low_tier_pool_name = argv[++i];
     } else if (strcmp(argv[i], "--enable_dedup") == 0) {
       enable_dedup = true;
+    } else if (strcmp(argv[i], "--dedup_chunk_algo") == 0) {
+      i++;
+      if (i == argc) {
+        cerr << "Missing chunking algorithm after --dedup_chunk_algo" << std::endl;
+        return 1;
+      }
+      int j;
+      for (j = 0; chunk_algo_types[j].name; ++j) {
+	if (strcmp(chunk_algo_types[j].name, argv[i]) == 0) {
+	  break;
+	}
+      }
+      if (!chunk_algo_types[j].name) {
+	cerr << "unknown op " << argv[i] << std::endl;
+	exit(1);
+      }
+      chunk_algo = chunk_algo_types[j].name;
+    } else if (strcmp(argv[i], "--dedup_chunk_size") == 0) {
+      chunk_size = argv[++i];
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       exit(1);
@@ -638,6 +667,14 @@ int main(int argc, char **argv)
   if (set_redirect || set_chunk) {
     if (low_tier_pool_name == "") {
       cerr << "low_tier_pool is needed" << std::endl;
+      exit(1);
+    }
+  }
+
+  if (enable_dedup) {
+    if (chunk_algo == "" || chunk_size == "") {
+      cerr << "Missing chunking algorithm: " << chunk_algo 
+	   << " or chunking size: " << chunk_size << std::endl;
       exit(1);
     }
   }
@@ -692,6 +729,8 @@ int main(int argc, char **argv)
     write_fadvise_dontneed,
     low_tier_pool_name,
     enable_dedup,
+    chunk_algo,
+    chunk_size,
     id);
 
   TestOpStat stats;
