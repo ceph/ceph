@@ -1,2 +1,7 @@
 os_type: ubuntu
 os_version: "20.04"
+
+tasks:
+- exec:
+    all:
+      - sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
