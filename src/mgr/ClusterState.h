@@ -74,24 +74,24 @@ public:
   }
 
   template<typename Callback, typename...Args>
-  void with_servicemap(Callback&& cb, Args&&...args) const
+  auto with_servicemap(Callback&& cb, Args&&...args) const
   {
     std::lock_guard l(lock);
-    std::forward<Callback>(cb)(servicemap, std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(servicemap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
-  void with_fsmap(Callback&& cb, Args&&...args) const
+  auto with_fsmap(Callback&& cb, Args&&...args) const
   {
     std::lock_guard l(lock);
-    std::forward<Callback>(cb)(fsmap, std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(fsmap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
-  void with_mgrmap(Callback&& cb, Args&&...args) const
+  auto with_mgrmap(Callback&& cb, Args&&...args) const
   {
     std::lock_guard l(lock);
-    std::forward<Callback>(cb)(mgr_map, std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(mgr_map, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
@@ -111,11 +111,11 @@ public:
   }
 
   template<typename... Args>
-  void with_monmap(Args &&... args) const
+  auto with_monmap(Args &&... args) const
   {
     std::lock_guard l(lock);
     ceph_assert(monc != nullptr);
-    monc->with_monmap(std::forward<Args>(args)...);
+    return monc->with_monmap(std::forward<Args>(args)...);
   }
 
   template<typename... Args>
@@ -138,17 +138,17 @@ public:
   }
 
   template<typename Callback, typename...Args>
-  void with_health(Callback&& cb, Args&&...args) const
+  auto with_health(Callback&& cb, Args&&...args) const
   {
     std::lock_guard l(lock);
-    std::forward<Callback>(cb)(health_json, std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(health_json, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
-  void with_mon_status(Callback&& cb, Args&&...args) const
+  auto with_mon_status(Callback&& cb, Args&&...args) const
   {
     std::lock_guard l(lock);
-    std::forward<Callback>(cb)(mon_status_json, std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(mon_status_json, std::forward<Args>(args)...);
   }
 
   void final_init();
