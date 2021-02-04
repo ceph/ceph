@@ -237,7 +237,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       if (!result_raw.is_end()) {
         full_key_t<KeyT::VIEW> index;
         STAGE_T::get_key_view(node_stage, result_raw.position, index);
-        assert(index == *index_key);
+        assert(index.compare_to(*index_key) == MatchKindCMP::EQ);
       }
 #endif
     } else {
@@ -304,7 +304,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       logger().trace("OTree::Layout::Insert: -- dump\n{}", sos.str());
     }
     validate_layout();
-    assert(get_key_view(insert_pos) == key);
+    assert(get_key_view(insert_pos).compare_to(key) == MatchKindCMP::EQ);
     return ret;
   }
 
@@ -474,10 +474,10 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
                      insert_pos, insert_stage);
       p_value = extent.template split_insert_replayable<KEY_TYPE>(
           split_at, key, value, insert_pos, insert_stage, insert_size);
-      assert(get_key_view(_insert_pos) == key);
+      assert(get_key_view(_insert_pos).compare_to(key) == MatchKindCMP::EQ);
     } else {
       logger().debug("OTree::Layout::Split: -- left trim ...");
-      assert(right_impl.get_key_view(_insert_pos) == key);
+      assert(right_impl.get_key_view(_insert_pos).compare_to(key) == MatchKindCMP::EQ);
       extent.split_replayable(split_at);
     }
     if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
