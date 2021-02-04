@@ -134,7 +134,10 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
                         abs_size,
                     ))
                 exit(1)
-        while abs_size <= free_size and len(ret) < new_osds and occupied_slots < fast_slots_per_device:
+
+        # if requested_size is specified, slots check could be ignored
+        while abs_size <= free_size and len(ret) < new_osds and \
+                (requested_size or occupied_slots < fast_slots_per_device):
             free_size -= abs_size.b
             occupied_slots += 1
             ret.append((dev.path, relative_size, abs_size, requested_slots))
