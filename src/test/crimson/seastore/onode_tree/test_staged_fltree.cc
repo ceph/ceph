@@ -345,11 +345,28 @@ TEST_F(b_dummy_tree_test_t, 3_random_insert_leaf_node)
       Values::validate_cursor(cursor, largest_key, largest_value);
     }
 
+    // validate range query
+    {
+      kvs.clear();
+      for (auto& [k, v, c] : insert_history) {
+        kvs.emplace_back(k, v);
+      }
+      insert_history.clear();
+      std::sort(kvs.begin(), kvs.end(), [](auto& l, auto& r) {
+        return l.first < r.first;
+      });
+      auto cursor = tree.begin(t).unsafe_get0();
+      for (auto& [k, v] : kvs) {
+        ASSERT_FALSE(cursor.is_end());
+        Values::validate_cursor(cursor, k, v);
+        cursor = cursor.get_next(t).unsafe_get0();
+      }
+      ASSERT_TRUE(cursor.is_end());
+    }
+
     std::ostringstream oss;
     tree.dump(t, oss);
     logger().info("\n{}\n", oss.str());
-
-    insert_history.clear();
   });
 }
 
