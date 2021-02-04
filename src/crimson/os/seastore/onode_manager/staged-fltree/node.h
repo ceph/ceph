@@ -100,6 +100,8 @@ class tree_cursor_t final
   /// Check that this is next to prv
   void assert_next_to(const tree_cursor_t&, value_magic_t) const;
 
+  MatchKindCMP compare_to(const tree_cursor_t&, value_magic_t) const;
+
   // public to Value
 
   /// Get the latest value_header_t pointer for read.

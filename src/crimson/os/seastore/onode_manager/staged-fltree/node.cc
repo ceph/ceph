@@ -91,6 +91,26 @@ void tree_cursor_t::assert_next_to(
 #endif
 }
 
+MatchKindCMP tree_cursor_t::compare_to(
+    const tree_cursor_t& o, value_magic_t magic) const
+{
+  // singleton
+  if (this == &o) {
+    return MatchKindCMP::EQ;
+  }
+
+  MatchKindCMP ret;
+  if (ref_leaf_node == o.ref_leaf_node) {
+    ret = position.compare_to(o.position);
+  } else {
+    auto key = get_key_view(magic);
+    auto o_key = o.get_key_view(magic);
+    ret = key.compare_to(o_key);
+  }
+  assert(ret != MatchKindCMP::EQ);
+  return ret;
+}
+
 tree_cursor_t::future<>
 tree_cursor_t::extend_value(context_t c, value_size_t extend_size)
 {
