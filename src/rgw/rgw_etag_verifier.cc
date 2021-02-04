@@ -161,8 +161,12 @@ done:
 
 void ETagVerifier_MPU::calculate_etag()
 {
+  const uint32_t parts = part_ofs.size();
+  constexpr auto digits10 = std::numeric_limits<uint32_t>::digits10;
+  constexpr auto extra = 2 + digits10; // add "-%u\0" at the end
+
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE], mpu_m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + extra];
 
   /* Return early if ETag has already been calculated */
   if (!calculated_etag.empty())
@@ -176,7 +180,7 @@ void ETagVerifier_MPU::calculate_etag()
   buf_to_hex(mpu_m, CEPH_CRYPTO_MD5_DIGESTSIZE, final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
            sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)(part_ofs.size()));
+           "-%u", parts);
 
   calculated_etag = final_etag_str;
   ldout(cct, 20) << "MPU calculated ETag:" << calculated_etag << dendl;
