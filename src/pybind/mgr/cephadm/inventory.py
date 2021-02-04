@@ -33,6 +33,10 @@ class Inventory:
         i = self.mgr.get_store('inventory')
         if i:
             self._inventory: Dict[str, dict] = json.loads(i)
+            # handle old clusters missing 'hostname' key from hostspec
+            for k, v in self._inventory.items():
+                if 'hostname' not in v:
+                    v['hostname'] = k
         else:
             self._inventory = dict()
         logger.debug('Loaded inventory %s' % self._inventory)
