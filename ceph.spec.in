@@ -159,7 +159,7 @@ BuildRequires:	gcc-c++
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 %if 0%{?fedora} || 0%{?rhel}
-BuildRequires:	gperftools-devel >= 2.6.1
+BuildRequires:	gperftools-devel >= 2.8.1
 %endif
 %if 0%{?suse_version}
 BuildRequires:	gperftools-devel >= 2.4
@@ -407,7 +407,7 @@ Requires:      which
 # The following is necessary due to tracker 36508 and can be removed once the
 # associated upstream bugs are resolved.
 %if 0%{with tcmalloc}
-Requires:      gperftools-libs >= 2.6.1
+Requires:      gperftools-libs >= 2.8.1
 %endif
 %endif
 %if 0%{?weak_deps}
