@@ -973,7 +973,9 @@ bool RGWCoroutine::drain_children(int num_cr_left,
       yield wait_for_child();
       int ret;
       uint64_t stack_id;
-      while (collect(&ret, skip_stack, &stack_id)) {
+      bool again = false;
+      do {
+        again = collect(&ret, skip_stack, &stack_id);
         if (ret < 0) {
             ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
             /* we should have reported this error */
@@ -982,7 +984,7 @@ bool RGWCoroutine::drain_children(int num_cr_left,
         if (cb) {
           (*cb)(stack_id, ret);
         }
-      }
+      } while (again);
     }
     done = true;
   }
@@ -1000,7 +1002,9 @@ bool RGWCoroutine::drain_children(int num_cr_left,
       yield wait_for_child();
       int ret;
       uint64_t stack_id;
-      while (collect(&ret, nullptr, &stack_id)) {
+      bool again = false;
+      do {
+        again = collect(&ret, nullptr, &stack_id);
         if (ret < 0) {
           ldout(cct, 10) << "collect() returned ret=" << ret << dendl;
           /* we should have reported this error */
@@ -1010,10 +1014,11 @@ bool RGWCoroutine::drain_children(int num_cr_left,
           int r = (*cb)(stack_id, ret);
           if (r < 0) {
             drain_status.ret = r;
+            drain_status.should_exit = true;
             num_cr_left = 0; /* need to drain all */
           }
         }
-      }
+      } while (again);
     }
     done = true;
   }
