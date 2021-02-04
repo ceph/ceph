@@ -882,7 +882,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def apply(self, specs: List["GenericSpec"]) -> Completion[List[str]]:
+    def apply(self, specs: Sequence["GenericSpec"]) -> Completion[List[str]]:
         """
         Applies any spec
         """
@@ -921,7 +921,7 @@ class Orchestrator(object):
             completion = completion.then(next)
         return completion
 
-    def plan(self, spec: List["GenericSpec"]) -> Completion[List]:
+    def plan(self, spec: Sequence["GenericSpec"]) -> Completion[List]:
         """
         Plan (Dry-run, Preview) a List of Specs.
         """

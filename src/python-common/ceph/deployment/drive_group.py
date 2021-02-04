@@ -107,7 +107,7 @@ class DeviceSelection(object):
 
         return ret
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         keys = [
             key for key in self._supported_filters + ['limit'] if getattr(self, key) is not None
         ]
@@ -117,7 +117,7 @@ class DeviceSelection(object):
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return repr(self) == repr(other)
 
 
@@ -127,7 +127,7 @@ class DriveGroupValidationError(ServiceSpecValidationError):
     if it was raised in a different mgr module.
     """
 
-    def __init__(self, msg):
+    def __init__(self, msg: str):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
 
 
@@ -147,7 +147,7 @@ class DriveGroupSpec(ServiceSpec):
 
     def __init__(self,
                  placement=None,  # type: Optional[PlacementSpec]
-                 service_id=None,  # type: str
+                 service_id=None,  # type: Optional[str]
                  data_devices=None,  # type: Optional[DeviceSelection]
                  db_devices=None,  # type: Optional[DeviceSelection]
                  wal_devices=None,  # type: Optional[DeviceSelection]
@@ -233,7 +233,7 @@ class DriveGroupSpec(ServiceSpec):
         :param json_drive_group: A valid json string with a Drive Group
                specification
         """
-        args = {}
+        args: Dict[str, Any] = {}
         # legacy json (pre Octopus)
         if 'host_pattern' in json_drive_group and 'placement' not in json_drive_group:
             json_drive_group['placement'] = {'host_pattern': json_drive_group['host_pattern']}
@@ -307,7 +307,7 @@ class DriveGroupSpec(ServiceSpec):
         if self.filter_logic not in ['AND', 'OR']:
             raise DriveGroupValidationError('filter_logic must be either <AND> or <OR>')
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         keys = [
             key for key in self._supported_features if getattr(self, key) is not None
         ]
@@ -320,7 +320,7 @@ class DriveGroupSpec(ServiceSpec):
             ', '.join('{}={}'.format(key, repr(getattr(self, key))) for key in keys)
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return repr(self) == repr(other)
 
 
