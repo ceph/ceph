@@ -19,6 +19,5 @@ Contributing to Ceph: A Guide for Developers
    Tests: Unit Tests <tests-unit-tests>
    Tests: Integration Tests <testing_integration_tests/index>
    Tests: Running Tests (Locally) <running-tests-locally>
-   Tests: Running Tests in the Cloud <running-tests-in-cloud>
    Ceph Dashboard Developer Documentation (formerly HACKING.rst) <dash-devel>
    cephadm Developer Documentation  <../cephadm/index>
