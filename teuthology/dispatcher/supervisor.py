@@ -215,10 +215,17 @@ def run_with_watchdog(process, job_config):
         if total_seconds > teuth_config.max_job_time:
             log.warning("Job ran longer than {max}s. Killing...".format(
                 max=teuth_config.max_job_time))
-            transfer_archives(job_info['name'], job_info['job_id'],
-                              teuth_config.archive_base, job_config)
-            kill_job(job_info['name'], job_info['job_id'],
-                     teuth_config.archive_base, job_config['owner'])
+            try:
+                transfer_archives(job_info['name'], job_info['job_id'],
+                                  teuth_config.archive_base, job_config)
+            except Exception:
+                log.exception('Could not save logs')
+
+            try:
+                kill_job(job_info['name'], job_info['job_id'],
+                         teuth_config.archive_base, job_config['owner'])
+            except Exception:
+                log.exception('Failed to kill job')
 
         # calling this without a status just updates the jobs updated time
         report.try_push_job_info(job_info)
