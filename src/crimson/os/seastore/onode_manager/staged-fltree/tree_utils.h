@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include <seastar/core/thread.hh>
+
 #include "crimson/common/log.h"
 #include "stages/key_layout.h"
 #include "tree.h"
@@ -328,22 +330,15 @@ class TreeBuilder {
   }
 
   future<> validate(Transaction& t) {
-    logger().info("Verifing insertion ...");
-    return seastar::do_with(
-        kvs.begin(), [&t, this] (auto& kvs_iter) {
-      return crimson::do_until([&t, this, &kvs_iter]() -> future<bool> {
-        if (kvs_iter.is_end()) {
-          logger().info("Verify done!");
-          return ertr::make_ready_future<bool>(true);
-        }
-        auto [k, v] = kvs_iter.get_kv();
-        return tree->lower_bound(t, k
-        ).safe_then([&kvs_iter, k=k, v=v] (auto cursor) {
-          Values::validate_cursor(cursor, k, v);
-          ++kvs_iter;
-          return ertr::make_ready_future<bool>(false);
-        });
-      });
+      logger().info("Verifing insertion ...");
+      auto iter = kvs.begin();
+      while (!iter.is_end()) {
+        auto [k, v] = iter.get_kv();
+        auto cursor = tree->lower_bound(t, k).unsafe_get0();
+        Values::validate_cursor(cursor, k, v);
+        ++iter;
+      }
+      logger().info("Verify done!");
     });
   }
 
