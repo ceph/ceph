@@ -1469,8 +1469,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         osd_count = 0
         for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
-                assert dd.hostname is not None
-                assert dd.daemon_type is not None
+                assert dd.hostname is not None, f'no hostname for {dd!r}'
+                assert dd.daemon_type is not None, f'no daemon_type for {dd!r}'
 
                 if service_type and service_type != dd.daemon_type:
                     continue
