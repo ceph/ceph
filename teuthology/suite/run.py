@@ -508,7 +508,9 @@ class Run(object):
 
     def check_priority(self, jobs_to_schedule):
         priority = self.args.priority
-        msg='''Use the following testing priority
+        msg=f'''Unable to schedule {jobs_to_schedule} jobs with priority {priority}.
+
+Use the following testing priority
 10 to 49: Tests which are urgent and blocking other important development.
 50 to 74: Testing a particular feature/fix with less than 25 jobs and can also be used for urgent release testing.
 75 to 99: Tech Leads usually schedule integration tests with this priority to verify pull requests against master.
