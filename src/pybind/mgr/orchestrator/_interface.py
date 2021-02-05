@@ -1286,7 +1286,11 @@ class DaemonDescription(object):
                  osdspec_affinity: Optional[str] = None,
                  last_deployed: Optional[datetime.datetime] = None,
                  events: Optional[List['OrchestratorEvent']] = None,
-                 is_active: bool = False) -> None:
+                 is_active: bool = False,
+                 memory_usage: Optional[int] = None,
+                 memory_request: Optional[int] = None,
+                 memory_limit: Optional[int] = None,
+                 ) -> None:
 
         # Host is at the same granularity as InventoryHost
         self.hostname: Optional[str] = hostname
@@ -1331,6 +1335,10 @@ class DaemonDescription(object):
         self.osdspec_affinity: Optional[str] = osdspec_affinity
 
         self.events: List[OrchestratorEvent] = events or []
+
+        self.memory_usage: Optional[int] = memory_usage
+        self.memory_request: Optional[int] = memory_request
+        self.memory_limit: Optional[int] = memory_limit
 
         self.is_active = is_active
 
@@ -1415,6 +1423,9 @@ class DaemonDescription(object):
         out['container_image_id'] = self.container_image_id
         out['container_image_name'] = self.container_image_name
         out['container_image_digests'] = self.container_image_digests
+        out['memory_usage'] = self.memory_usage
+        out['memory_request'] = self.memory_request
+        out['memory_limit'] = self.memory_limit
         out['version'] = self.version
         out['status'] = self.status
         out['status_desc'] = self.status_desc
