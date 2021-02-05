@@ -624,7 +624,7 @@ class HostCache():
         created = self.mgr.spec_store.get_created(spec)
         if created and created > self.last_device_change[host]:
             return True
-        return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host];
+        return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host]
 
     def update_last_etc_ceph_ceph_conf(self, host: str) -> None:
         if not self.mgr.last_monmap:
