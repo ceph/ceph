@@ -632,41 +632,6 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
                       m_src_image_ctx->parent != nullptr);
   m_src_image_ctx->image_lock.unlock_shared();
 
-  // collect all known zeroed extents from the snapshot delta
-  for (auto& [write_read_snap_ids, image_intervals] : m_snapshot_delta) {
-    auto src_snap_seq = write_read_snap_ids.first;
-    for (auto& image_interval : image_intervals) {
-      auto state = image_interval.get_val().state;
-      switch (state) {
-      case io::SPARSE_EXTENT_STATE_ZEROED:
-        if (write_read_snap_ids.first > m_src_snap_id_start) {
-          ldout(m_cct, 20) << "zeroed extent: "
-                           << "src_snap_seq=" << src_snap_seq << " "
-                           << image_interval.get_off() << "~"
-                           << image_interval.get_len() << dendl;
-          m_dst_zero_interval[src_snap_seq].union_insert(
-            image_interval.get_off(), image_interval.get_len());
-        } else if (write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS &&
-                   hide_parent) {
-          auto first_src_snap_id = m_snap_map.begin()->first;
-          ldout(m_cct, 20) << "zeroed (hide parent) extent: "
-                           << "src_snap_seq=" << first_src_snap_id << "  "
-                           << image_interval.get_off() << "~"
-                           << image_interval.get_len() << dendl;
-          m_dst_zero_interval[first_src_snap_id].union_insert(
-            image_interval.get_off(), image_interval.get_len());
-        }
-        break;
-      case io::SPARSE_EXTENT_STATE_DNE:
-      case io::SPARSE_EXTENT_STATE_DATA:
-        break;
-      default:
-        ceph_abort();
-        break;
-      }
-    }
-  }
-
   // ensure we have a zeroed interval for each snapshot
   for (auto& [src_snap_seq, _] : m_snap_map) {
     if (m_src_snap_id_start < src_snap_seq) {
@@ -686,12 +651,6 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
     auto &zero_interval = it.second;
-
-    // subtract any data intervals from our zero intervals
-    auto& data_interval = m_dst_data_interval[src_snap_seq];
-    interval_set<uint64_t> intersection;
-    intersection.intersection_of(zero_interval, data_interval);
-    zero_interval.subtract(intersection);
 
     auto snap_map_it = m_snap_map.find(src_snap_seq);
     ceph_assert(snap_map_it != m_snap_map.end());
@@ -731,6 +690,55 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
         }
       }
     }
+
+    // collect known zeroed extents from the snapshot delta for the current
+    // src snapshot. If this is the first snapshot, we might need to handle
+    // the whiteout case if it overlaps with the parent
+    auto first_src_snap_id = m_snap_map.begin()->first;
+    auto snapshot_delta_it = m_snapshot_delta.lower_bound(
+      {(hide_parent && src_snap_seq == first_src_snap_id ?
+         0 : src_snap_seq), 0});
+    for (; snapshot_delta_it != m_snapshot_delta.end() &&
+           snapshot_delta_it->first.first <= src_snap_seq;
+         ++snapshot_delta_it) {
+      auto& write_read_snap_ids = snapshot_delta_it->first;
+      auto& image_intervals = snapshot_delta_it->second;
+      for (auto& image_interval : image_intervals) {
+        auto state = image_interval.get_val().state;
+        switch (state) {
+        case io::SPARSE_EXTENT_STATE_ZEROED:
+          if (write_read_snap_ids != io::INITIAL_WRITE_READ_SNAP_IDS) {
+            ldout(m_cct, 20) << "zeroed extent: "
+                             << "src_snap_seq=" << src_snap_seq << " "
+                             << image_interval.get_off() << "~"
+                             << image_interval.get_len() << dendl;
+            zero_interval.union_insert(
+              image_interval.get_off(), image_interval.get_len());
+          } else if (hide_parent &&
+                     write_read_snap_ids == io::INITIAL_WRITE_READ_SNAP_IDS) {
+            ldout(m_cct, 20) << "zeroed (hide parent) extent: "
+                             << "src_snap_seq=" << src_snap_seq << "  "
+                             << image_interval.get_off() << "~"
+                             << image_interval.get_len() << dendl;
+            zero_interval.union_insert(
+              image_interval.get_off(), image_interval.get_len());
+          }
+          break;
+        case io::SPARSE_EXTENT_STATE_DNE:
+        case io::SPARSE_EXTENT_STATE_DATA:
+          break;
+        default:
+          ceph_abort();
+          break;
+        }
+      }
+    }
+
+    // subtract any data intervals from our zero intervals
+    auto& data_interval = m_dst_data_interval[src_snap_seq];
+    interval_set<uint64_t> intersection;
+    intersection.intersection_of(zero_interval, data_interval);
+    zero_interval.subtract(intersection);
 
     // update end_size if there are writes into higher offsets
     uint64_t end_size = prev_end_size;
