@@ -357,12 +357,13 @@ void Node::as_child(const search_position_t& pos, Ref<InternalNode> parent_node)
 template void Node::as_child<true>(const search_position_t&, Ref<InternalNode>);
 template void Node::as_child<false>(const search_position_t&, Ref<InternalNode>);
 
-node_future<> Node::insert_parent(context_t c, Ref<Node> right_node)
+node_future<> Node::insert_parent(
+    context_t c, const key_view_t& pivot_index, Ref<Node> right_node)
 {
   assert(!is_root());
   // TODO(cross-node string dedup)
   return parent_info().ptr->apply_child_split(
-      c, parent_info().position, this, right_node);
+      c, parent_info().position, pivot_index, this, right_node);
 }
 
 node_future<Ref<tree_cursor_t>>
@@ -429,23 +430,31 @@ InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
 }
 
 node_future<> InternalNode::apply_child_split(
-    context_t c, const search_position_t& pos,
+    context_t c, const search_position_t& pos, const key_view_t& left_key,
     Ref<Node> left_child, Ref<Node> right_child)
 {
 #ifndef NDEBUG
   if (pos.is_end()) {
     assert(impl->is_level_tail());
+    assert(right_child->impl->is_level_tail());
   }
+  auto _left_key = *left_child->impl->get_pivot_index();
+  assert(left_key.compare_to(_left_key) == MatchKindCMP::EQ);
 #endif
   impl->prepare_mutate(c);
 
-  auto left_key = left_child->impl->get_largest_key_view();
   auto left_child_addr = left_child->impl->laddr();
-  auto right_key = right_child->impl->get_largest_key_view();
   auto right_child_addr = right_child->impl->laddr();
-  logger().debug("OTree::Internal::Insert: "
-                 "pos({}), left_child({}, {:#x}), right_child({}, {:#x}) ...",
-                 pos, left_key, left_child_addr, right_key, right_child_addr);
+  auto right_key = right_child->impl->get_pivot_index();
+  if (right_key.has_value()) {
+    logger().debug("OTree::Internal::Insert: "
+                   "pos({}), left_child({}, {:#x}), right_child({}, {:#x}) ...",
+                   pos, left_key, left_child_addr, *right_key, right_child_addr);
+  } else {
+    logger().debug("OTree::Internal::Insert: "
+                   "pos({}), left_child({}, {:#x}), right_child(N/A, {:#x}) ...",
+                   pos, left_key, left_child_addr, right_child_addr);
+  }
   // update pos => left_child to pos => right_child
   impl->replace_child_addr(pos, right_child_addr, left_child_addr);
   replace_track(pos, right_child, left_child);
@@ -489,7 +498,10 @@ node_future<> InternalNode::apply_child_split(
     right_node->validate_tracked_children();
 
     // propagate index to parent
-    return insert_parent(c, right_node);
+    // TODO: get from trim()
+    key_view_t pivot_index;
+    impl->get_largest_slot(nullptr, &pivot_index, nullptr);
+    return insert_parent(c, pivot_index, right_node);
     // TODO (optimize)
     // try to acquire space from siblings before split... see btrfs
   });
@@ -503,7 +515,8 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
   ).safe_then([c, old_root_addr,
                super = std::move(super)](auto fresh_node) mutable {
     auto root = fresh_node.node;
-    auto p_value = root->impl->get_p_value(search_position_t::end());
+    assert(root->impl->is_empty());
+    auto p_value = root->impl->get_tail_value();
     fresh_node.mut.copy_in_absolute(
         const_cast<laddr_packed_t*>(p_value), old_root_addr);
     root->make_root_from(c, std::move(super), old_root_addr);
@@ -514,9 +527,11 @@ node_future<Ref<InternalNode>> InternalNode::allocate_root(
 node_future<Ref<tree_cursor_t>>
 InternalNode::lookup_smallest(context_t c)
 {
+  assert(!impl->is_empty());
   auto position = search_position_t::begin();
-  laddr_t child_addr = impl->get_p_value(position)->value;
-  return get_or_track_child(c, position, child_addr
+  const laddr_packed_t* p_child_addr;
+  impl->get_slot(position, nullptr, &p_child_addr);
+  return get_or_track_child(c, position, p_child_addr->value
   ).safe_then([c](auto child) {
     return child->lookup_smallest(c);
   });
@@ -527,9 +542,11 @@ InternalNode::lookup_largest(context_t c)
 {
   // NOTE: unlike LeafNode::lookup_largest(), this only works for the tail
   // internal node to return the tail child address.
-  auto position = search_position_t::end();
-  laddr_t child_addr = impl->get_p_value(position)->value;
-  return get_or_track_child(c, position, child_addr).safe_then([c](auto child) {
+  assert(!impl->is_empty());
+  assert(impl->is_level_tail());
+  auto p_child_addr = impl->get_tail_value();
+  return get_or_track_child(c, search_position_t::end(), p_child_addr->value
+  ).safe_then([c](auto child) {
     return child->lookup_largest(c);
   });
 }
@@ -713,14 +730,17 @@ void InternalNode::validate_child(const Node& child) const
   assert(impl->level() - 1 == child.impl->level());
   assert(this == child.parent_info().ptr);
   auto& child_pos = child.parent_info().position;
-  assert(impl->get_p_value(child_pos)->value == child.impl->laddr());
   if (child_pos.is_end()) {
     assert(impl->is_level_tail());
     assert(child.impl->is_level_tail());
+    assert(impl->get_tail_value()->value == child.impl->laddr());
   } else {
     assert(!child.impl->is_level_tail());
-    assert(impl->get_key_view(child_pos).compare_to(
-           child.impl->get_largest_key_view()) == MatchKindCMP::EQ);
+    key_view_t index_key;
+    const laddr_packed_t* p_child_addr;
+    impl->get_slot(child_pos, &index_key, &p_child_addr);
+    assert(index_key.compare_to(*child.impl->get_pivot_index()) == MatchKindCMP::EQ);
+    assert(p_child_addr->value == child.impl->laddr());
   }
   // XXX(multi-type)
   assert(impl->field_type() <= child.impl->field_type());
@@ -754,7 +774,8 @@ std::tuple<key_view_t, const value_header_t*>
 LeafNode::get_kv(const search_position_t& pos) const
 {
   key_view_t key_view;
-  auto p_value_header = impl->get_p_value(pos, &key_view);
+  const value_header_t* p_value_header;
+  impl->get_slot(pos, &key_view, &p_value_header);
   return {key_view, p_value_header};
 }
 
@@ -809,7 +830,8 @@ LeafNode::lookup_smallest(context_t)
   }
   auto pos = search_position_t::begin();
   key_view_t index_key;
-  auto p_value_header = impl->get_p_value(pos, &index_key);
+  const value_header_t* p_value_header;
+  impl->get_slot(pos, &index_key, &p_value_header);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
       get_or_track_cursor(pos, index_key, p_value_header));
 }
@@ -823,9 +845,9 @@ LeafNode::lookup_largest(context_t)
         tree_cursor_t::create_end(this));
   }
   search_position_t pos;
-  const value_header_t* p_value_header = nullptr;
   key_view_t index_key;
-  impl->get_largest_slot(pos, index_key, &p_value_header);
+  const value_header_t* p_value_header = nullptr;
+  impl->get_largest_slot(&pos, &index_key, &p_value_header);
   return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
       get_or_track_cursor(pos, index_key, p_value_header));
 }
@@ -933,7 +955,10 @@ node_future<Ref<tree_cursor_t>> LeafNode::insert_value(
     right_node->validate_tracked_cursors();
 
     // propagate insert to parent
-    return insert_parent(c, right_node).safe_then([ret] {
+    // TODO: get from trim()
+    key_view_t pivot_index;
+    impl->get_largest_slot(nullptr, &pivot_index, nullptr);
+    return insert_parent(c, pivot_index, right_node).safe_then([ret] {
       return ret;
     });
     // TODO (optimize)

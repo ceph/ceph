@@ -350,7 +350,7 @@ class Node
     Ref<InternalNode> ptr;
   };
   const parent_info_t& parent_info() const { return *_parent_info; }
-  node_future<> insert_parent(context_t, Ref<Node> right_node);
+  node_future<> insert_parent(context_t, const key_view_t&, Ref<Node> right_node);
   node_future<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);
 
  private:
@@ -398,7 +398,8 @@ class InternalNode final : public Node {
   node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
 
   node_future<> apply_child_split(
-      context_t, const search_position_t&, Ref<Node> left, Ref<Node> right);
+      context_t, const search_position_t&, const key_view_t& left_key,
+      Ref<Node> left, Ref<Node> right);
 
   template <bool VALIDATE>
   void do_track_child(Node& child) {
