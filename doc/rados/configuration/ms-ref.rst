@@ -29,14 +29,6 @@ General Settings
 :Default: ``15.0``
 
 
-``ms_nocrc``
-
-:Description: Disables CRC on network messages.  May increase performance if CPU limited.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
 ``ms_die_on_bad_msg``
 
 :Description: Debug option; do not configure.
@@ -59,22 +51,6 @@ General Settings
 :Type: Boolean
 :Required: No
 :Default: ``false``
-
-
-``ms_rwthread_stack_bytes``
-
-:Description: Debug option for stack size; do not configure.
-:Type: 64-bit Unsigned Integer
-:Required: No
-:Default: ``1024 << 10``
-
-
-``ms_tcp_read_timeout``
-
-:Description: Controls how long (in seconds) the messenger will wait before closing an idle connection.
-:Type: 64-bit Unsigned Integer
-:Required: No
-:Default: ``900``
 
 
 ``ms_inject_socket_failures``
@@ -118,16 +94,3 @@ Async messenger options
 :Type: 64-bit Unsigned Integer
 :Required: No
 :Default: ``5``
-
-
-``ms_async_send_inline``
-
-:Description: Send messages directly from the thread that generated them instead of
-              queuing and sending from Async Messenger thread. This option is known
-              to decrease performance on systems with a lot of CPU cores, so it's
-              disabled by default.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
