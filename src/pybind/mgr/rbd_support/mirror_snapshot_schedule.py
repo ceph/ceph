@@ -139,7 +139,7 @@ class Watchers:
                     continue
 
             self.log.debug("{}/{}/{} watcher {} stale".format(
-                pool_id, namespace, MIRRORING_OID, watch_id))
+                pool_id, namespace, MIRRORING_OID, watch.get_id()))
 
             self.unregister(pool_id, namespace)
 
