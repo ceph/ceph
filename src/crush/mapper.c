@@ -700,6 +700,7 @@ static void crush_choose_indep(const struct crush_map *map,
 			dprintk("\n");
 		}
 #endif
+		int rechoose_bucket = 0;
 		for (rep = outpos; rep < endpos; rep++) {
 			if (out[rep] != CRUSH_ITEM_UNDEF)
 				continue;
@@ -804,8 +805,10 @@ static void crush_choose_indep(const struct crush_map *map,
 
 				/* out? */
 				if (itemtype == 0 &&
-				    is_out(map, weight, weight_max, item, x))
+				    is_out(map, weight, weight_max, item, x)) {
+				        rechoose_bucket = 1;
 					break;
+                                }
 
 				/* yay! */
 				out[rep] = item;
@@ -813,6 +816,8 @@ static void crush_choose_indep(const struct crush_map *map,
 				break;
 			}
 		}
+		if (rechoose_bucket == 1)
+                        break;
 	}
 	for (rep = outpos; rep < endpos; rep++) {
 		if (out[rep] == CRUSH_ITEM_UNDEF) {
