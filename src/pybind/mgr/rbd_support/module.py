@@ -11,7 +11,7 @@ import rbd
 import traceback
 from typing import cast, Any, Callable, Optional, Tuple, TypeVar
 
-from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule
+from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule, Option
 
 from .common import NotAuthorizedError
 from .mirror_snapshot_schedule import image_validator, namespace_validator, \
@@ -66,9 +66,11 @@ def with_latest_osdmap(func: FuncT) -> FuncT:
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {'name': MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME},
-        {'name': MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME_MAX_CONCURRENT_SNAP_CREATE, 'type': 'int', 'default': 10},
-        {'name': TrashPurgeScheduleHandler.MODULE_OPTION_NAME},
+        Option(name=MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME),
+        Option(name=MirrorSnapshotScheduleHandler.MODULE_OPTION_NAME_MAX_CONCURRENT_SNAP_CREATE,
+               type='int',
+               default=10),
+        Option(name=TrashPurgeScheduleHandler.MODULE_OPTION_NAME),
     ]
 
     mirror_snapshot_schedule = None
