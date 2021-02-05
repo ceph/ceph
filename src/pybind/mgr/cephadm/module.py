@@ -1902,8 +1902,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _add_daemon(self,
                     daemon_type: str,
                     spec: ServiceSpec,
-                    create_func: Callable[..., CephadmDaemonSpec],
-                    config_func: Optional[Callable] = None) -> List[str]:
+                    create_func: Callable[..., CephadmDaemonSpec]) -> List[str]:
         """
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
@@ -1920,7 +1919,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         daemons = self.cache.get_daemons_by_service(spec.service_name())
         return self._create_daemons(daemon_type, spec, daemons,
                                     spec.placement.hosts, count,
-                                    create_func, config_func)
+                                    create_func)
 
     def _create_daemons(self,
                         daemon_type: str,
@@ -1928,13 +1927,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         daemons: List[DaemonDescription],
                         hosts: List[HostPlacementSpec],
                         count: int,
-                        create_func: Callable[..., CephadmDaemonSpec],
-                        config_func: Optional[Callable] = None) -> List[str]:
+                        create_func: Callable[..., CephadmDaemonSpec]) -> List[str]:
         if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
 
         did_config = False
+        service_type = daemon_type_to_service(daemon_type)
 
         args = []  # type: List[CephadmDaemonSpec]
         for host, network, name in hosts:
@@ -1942,11 +1941,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                              prefix=spec.service_id,
                                              forcename=name)
 
-            if not did_config and config_func:
-                config_func(spec, daemon_id)
+            if not did_config:
+                self.cephadm_services[service_type].config(spec, daemon_id)
                 did_config = True
 
-            daemon_spec = self.cephadm_services[daemon_type_to_service(daemon_type)].make_daemon_spec(
+            daemon_spec = self.cephadm_services[service_type].make_daemon_spec(
                 host, daemon_id, network, spec)
             self.log.debug('Placing %s.%s on host %s' % (
                 daemon_type, daemon_id, host))
@@ -2080,7 +2079,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_mds(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('mds', spec, self.mds_service.prepare_create, self.mds_service.config)
+        return self._add_daemon('mds', spec, self.mds_service.prepare_create)
 
     @trivial_completion
     def apply_mds(self, spec: ServiceSpec) -> str:
@@ -2088,7 +2087,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_rgw(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('rgw', spec, self.rgw_service.prepare_create, self.rgw_service.config)
+        return self._add_daemon('rgw', spec, self.rgw_service.prepare_create)
 
     @trivial_completion
     def apply_rgw(self, spec: ServiceSpec) -> str:
@@ -2101,7 +2100,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def add_iscsi(self, spec):
         # type: (ServiceSpec) -> List[str]
-        return self._add_daemon('iscsi', spec, self.iscsi_service.prepare_create, self.iscsi_service.config)
+        return self._add_daemon('iscsi', spec, self.iscsi_service.prepare_create)
 
     @trivial_completion
     def apply_iscsi(self, spec: ServiceSpec) -> str:
@@ -2117,7 +2116,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @trivial_completion
     def add_nfs(self, spec: ServiceSpec) -> List[str]:
-        return self._add_daemon('nfs', spec, self.nfs_service.prepare_create, self.nfs_service.config)
+        return self._add_daemon('nfs', spec, self.nfs_service.prepare_create)
 
     @trivial_completion
     def apply_nfs(self, spec: ServiceSpec) -> str:
