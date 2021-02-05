@@ -405,18 +405,23 @@ InternalNode::InternalNode(InternalNodeImpl* impl, NodeImplURef&& impl_ref)
 node_future<Ref<tree_cursor_t>>
 InternalNode::get_next_cursor(context_t c, const search_position_t& pos)
 {
+  assert(!impl->is_empty());
   if (pos.is_end()) {
     assert(impl->is_level_tail());
     return get_next_cursor_from_parent(c);
   }
 
   search_position_t next_pos = pos;
-  impl->next_position(next_pos);
+  const laddr_packed_t* p_child_addr = nullptr;
+  impl->get_next_slot(next_pos, nullptr, &p_child_addr);
   if (next_pos.is_end() && !impl->is_level_tail()) {
     return get_next_cursor_from_parent(c);
   } else {
-    laddr_t child_addr = impl->get_p_value(next_pos)->value;
-    return get_or_track_child(c, next_pos, child_addr
+    if (next_pos.is_end()) {
+      p_child_addr = impl->get_tail_value();
+    }
+    assert(p_child_addr);
+    return get_or_track_child(c, next_pos, p_child_addr->value
     ).safe_then([c](auto child) {
       return child->lookup_smallest(c);
     });
@@ -544,6 +549,7 @@ InternalNode::lower_bound_tracked(
 node_future<> InternalNode::do_get_tree_stats(
     context_t c, tree_stats_t& stats)
 {
+  assert(!impl->is_empty());
   auto nstats = impl->get_stats();
   stats.size_persistent_internal += nstats.size_persistent;
   stats.size_filled_internal += nstats.size_filled;
@@ -555,21 +561,23 @@ node_future<> InternalNode::do_get_tree_stats(
 
   Ref<const InternalNode> this_ref = this;
   return seastar::do_with(
-    search_position_t(), [this, this_ref, c, &stats](auto& pos) {
+    search_position_t(), (const laddr_packed_t*)(nullptr),
+    [this, this_ref, c, &stats](auto& pos, auto& p_child_addr) {
       pos = search_position_t::begin();
+      impl->get_slot(pos, nullptr, &p_child_addr);
       return crimson::do_until(
-          [this, this_ref, c, &stats, &pos]() -> node_future<bool> {
-        auto child_addr = impl->get_p_value(pos)->value;
-        return get_or_track_child(c, pos, child_addr
+          [this, this_ref, c, &stats, &pos, &p_child_addr]() -> node_future<bool> {
+        return get_or_track_child(c, pos, p_child_addr->value
         ).safe_then([c, &stats](auto child) {
           return child->do_get_tree_stats(c, stats);
-        }).safe_then([this, this_ref, &pos] {
+        }).safe_then([this, this_ref, &pos, &p_child_addr] {
           if (pos.is_end()) {
             return node_ertr::make_ready_future<bool>(true);
           } else {
-            impl->next_position(pos);
+            impl->get_next_slot(pos, nullptr, &p_child_addr);
             if (pos.is_end()) {
               if (impl->is_level_tail()) {
+                p_child_addr = impl->get_tail_value();
                 return node_ertr::make_ready_future<bool>(false);
               } else {
                 return node_ertr::make_ready_future<bool>(true);
@@ -753,8 +761,11 @@ LeafNode::get_kv(const search_position_t& pos) const
 node_future<Ref<tree_cursor_t>>
 LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
 {
+  assert(!impl->is_empty());
   search_position_t next_pos = pos;
-  impl->next_position(next_pos);
+  key_view_t index_key;
+  const value_header_t* p_value_header = nullptr;
+  impl->get_next_slot(next_pos, &index_key, &p_value_header);
   if (next_pos.is_end()) {
     if (unlikely(is_level_tail())) {
       return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
@@ -763,8 +774,6 @@ LeafNode::get_next_cursor(context_t c, const search_position_t& pos)
       return get_next_cursor_from_parent(c);
     }
   } else {
-    key_view_t index_key;
-    auto p_value_header = impl->get_p_value(next_pos, &index_key);
     return node_ertr::make_ready_future<Ref<tree_cursor_t>>(
         get_or_track_cursor(next_pos, index_key, p_value_header));
   }

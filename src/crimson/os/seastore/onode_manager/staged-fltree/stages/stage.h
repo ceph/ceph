@@ -943,6 +943,36 @@ struct staged {
     }
   }
 
+  template <bool GET_KEY, bool GET_VAL>
+  static void get_slot(
+      const container_t& container,        // IN
+      const position_t& pos,               // IN
+      full_key_t<KeyT::VIEW>* p_index_key, // OUT
+      const value_t** pp_value) {          // OUT
+    auto iter = iterator_t(container);
+    iter.seek_at(pos.index);
+
+    if constexpr (GET_KEY) {
+      assert(p_index_key);
+      p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
+    }
+
+    if constexpr (!IS_BOTTOM) {
+      auto nxt_container = iter.get_nxt_container();
+      NXT_STAGE_T::template get_slot<GET_KEY, GET_VAL>(
+          nxt_container, pos.nxt, p_index_key, pp_value);
+    } else {
+      if constexpr (GET_VAL) {
+        assert(pp_value);
+        *pp_value = iter.get_p_value();
+      } else {
+        assert(!pp_value);
+      }
+    }
+  }
+
   static void get_key_view(
       const container_t& container,
       const position_t& position,
@@ -1424,17 +1454,24 @@ struct staged {
     } while (true);
   }
 
-  static bool next_position(const container_t& container, position_t& pos) {
+  template <bool GET_KEY, bool GET_VAL>
+  static bool get_next_slot(
+      const container_t& container,         // IN
+      position_t& pos,                      // IN&OUT
+      full_key_t<KeyT::VIEW>* p_index_key,  // OUT
+      const value_t** pp_value) {           // OUT
     auto iter = iterator_t(container);
     assert(!iter.is_end());
     iter.seek_at(pos.index);
     bool find_next;
     if constexpr (!IS_BOTTOM) {
       auto nxt_container = iter.get_nxt_container();
-      find_next = NXT_STAGE_T::next_position(nxt_container, pos.nxt);
+      find_next = NXT_STAGE_T::template get_next_slot<GET_KEY, GET_VAL>(
+          nxt_container, pos.nxt, p_index_key, pp_value);
     } else {
       find_next = true;
     }
+
     if (find_next) {
       if (iter.is_last()) {
         return true;
@@ -1443,9 +1480,17 @@ struct staged {
         if constexpr (!IS_BOTTOM) {
           pos.nxt = NXT_STAGE_T::position_t::begin();
         }
+        get_slot<GET_KEY, GET_VAL>(
+            container, pos, p_index_key, pp_value);
         return false;
       }
-    } else {
+    } else { // !find_next && !IS_BOTTOM
+      if constexpr (GET_KEY) {
+        assert(p_index_key);
+        p_index_key->set(iter.get_key());
+      } else {
+        assert(!p_index_key);
+      }
       return false;
     }
   }

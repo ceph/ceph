@@ -76,7 +76,6 @@ class NodeImpl {
   virtual node_offset_t free_size() const = 0;
   virtual key_view_t get_key_view(const search_position_t&) const = 0;
   virtual key_view_t get_largest_key_view() const = 0;
-  virtual void next_position(search_position_t&) const = 0;
 
   virtual node_stats_t get_stats() const = 0;
   virtual std::ostream& dump(std::ostream&) const = 0;
@@ -101,6 +100,20 @@ class InternalNodeImpl : public NodeImpl {
   virtual ~InternalNodeImpl() = default;
 
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
+  virtual void get_slot(const search_position_t&,                 // IN
+                        key_view_t* = nullptr,                    // OUT
+                        const laddr_packed_t** = nullptr) const { // OUT
+    ceph_abort("impossible path");
+  }
+
+  #pragma GCC diagnostic ignored "-Woverloaded-virtual"
+  virtual void get_next_slot(search_position_t&,                       // IN&OUT
+                             key_view_t* = nullptr,                    // OUT
+                             const laddr_packed_t** = nullptr) const { // OUT
+    ceph_abort("impossible path");
+  }
+
+  #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const laddr_packed_t* get_p_value(
       const search_position_t&,
       key_view_t* = nullptr, internal_marker_t = {}) const {
@@ -123,6 +136,8 @@ class InternalNodeImpl : public NodeImpl {
       search_position_t&, match_stage_t&, node_offset_t&) {
     ceph_abort("impossible path");
   }
+
+  virtual const laddr_packed_t* get_tail_value() const = 0;
 
   virtual void replace_child_addr(const search_position_t&, laddr_t dst, laddr_t src) = 0;
   virtual std::tuple<match_stage_t, node_offset_t> evaluate_insert(
@@ -151,6 +166,20 @@ class LeafNodeImpl : public NodeImpl {
  public:
   struct leaf_marker_t {};
   virtual ~LeafNodeImpl() = default;
+
+  #pragma GCC diagnostic ignored "-Woverloaded-virtual"
+  virtual void get_slot(const search_position_t&,                 // IN
+                        key_view_t* = nullptr,                    // OUT
+                        const value_header_t** = nullptr) const { // OUT
+    ceph_abort("impossible path");
+  }
+
+  #pragma GCC diagnostic ignored "-Woverloaded-virtual"
+  virtual void get_next_slot(search_position_t&,                       // IN&OUT
+                             key_view_t* = nullptr,                    // OUT
+                             const value_header_t** = nullptr) const { // OUT
+    ceph_abort("impossible path");
+  }
 
   #pragma GCC diagnostic ignored "-Woverloaded-virtual"
   virtual const value_header_t* get_p_value(

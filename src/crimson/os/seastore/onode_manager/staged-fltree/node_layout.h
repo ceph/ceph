@@ -107,14 +107,6 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return index_key;
   }
 
-  void next_position(search_position_t& pos) const override {
-    assert(!pos.is_end());
-    bool find_next = STAGE_T::next_position(extent.read(), cast_down<STAGE>(pos));
-    if (find_next) {
-      pos = search_position_t::end();
-    }
-  }
-
   node_stats_t get_stats() const override {
     node_stats_t stats;
     auto& node_stage = extent.read();
@@ -198,6 +190,39 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * Common
    */
+  void get_slot(const search_position_t& pos,
+                key_view_t* p_index_key = nullptr,
+                const value_t** pp_value = nullptr) const override {
+    assert(!is_empty());
+    assert(!pos.is_end());
+    if (!p_index_key && pp_value) {
+      STAGE_T::template get_slot<false, true>(
+          extent.read(), cast_down<STAGE>(pos), nullptr, pp_value);
+    } else {
+      ceph_abort("not implemented");
+    }
+  }
+
+  void get_next_slot(search_position_t& pos,
+                     key_view_t* p_index_key = nullptr,
+                     const value_t** pp_value = nullptr) const override {
+    assert(!is_empty());
+    assert(!pos.is_end());
+    bool find_next;
+    if (p_index_key && pp_value) {
+      find_next = STAGE_T::template get_next_slot<true, true>(
+          extent.read(), cast_down<STAGE>(pos), p_index_key, pp_value);
+    } else if (!p_index_key && pp_value) {
+      find_next = STAGE_T::template get_next_slot<false, true>(
+          extent.read(), cast_down<STAGE>(pos), nullptr, pp_value);
+    } else {
+      ceph_abort("not implemented");
+    }
+    if (find_next) {
+      pos = search_position_t::end();
+    }
+  }
+
   const value_t* get_p_value(const search_position_t& position,
                              key_view_t* index_key=nullptr, marker_t={}) const override {
     auto& node_stage = extent.read();
@@ -522,6 +547,15 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * InternalNodeImpl
    */
+  const laddr_packed_t* get_tail_value() const override {
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      assert(is_level_tail());
+      return extent.read().get_end_p_laddr();
+    } else {
+      ceph_abort("impossible path");
+    }
+  }
+
   void replace_child_addr(
       const search_position_t& pos, laddr_t dst, laddr_t src) override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
