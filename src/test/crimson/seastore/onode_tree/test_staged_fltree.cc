@@ -716,8 +716,6 @@ class DummyChildPool {
       ceph_abort("impossible path"); }
     key_view_t get_key_view(const search_position_t&) const override {
       ceph_abort("impossible path"); }
-    void next_position(search_position_t&) const override {
-      ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
       ceph_abort("impossible path"); }
     std::ostream& dump(std::ostream&) const override {
