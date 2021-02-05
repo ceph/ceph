@@ -41,7 +41,7 @@ def main(args):
     log.setLevel(loglevel)
 
     log_file_path = os.path.join(job_config['archive_path'],
-                                 f"supervisor.{job_config['job_id']}")
+                                 f"supervisor.{job_config['job_id']}.log")
     setup_log_file(log_file_path)
     install_except_hook()
 
