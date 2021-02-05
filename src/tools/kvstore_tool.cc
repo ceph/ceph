@@ -7,8 +7,10 @@
 
 #include "common/errno.h"
 #include "common/url_escape.h"
+#include "common/pretty_binary.h"
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
+#include "kv/KeyValueHistogram.h"
 
 StoreTool::StoreTool(const string& type,
 		     const string& path,
@@ -226,6 +228,66 @@ int StoreTool::print_stats() const
   std::cout <<  ostr.str() << std::endl;
   delete f;
   return ret;
+}
+
+//Itrerates through the db and collects the stats
+int StoreTool::build_size_histogram(const string& prefix0) const
+{
+  ostringstream ostr;
+  Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+
+  const size_t MAX_PREFIX = 256;
+  uint64_t num[MAX_PREFIX] = {0};
+
+  size_t max_key_size = 0, max_value_size = 0;
+  uint64_t total_key_size = 0, total_value_size = 0;
+  size_t key_size = 0, value_size = 0;
+  KeyValueHistogram hist;
+
+  auto start = coarse_mono_clock::now();
+
+  auto iter = db->get_iterator(prefix0, KeyValueDB::ITERATOR_NOCACHE);
+  iter->seek_to_first();
+  while (iter->valid()) {
+    pair<string, string> key(iter->raw_key());
+    key_size = key.first.size() + key.second.size();
+    value_size = iter->value().length();
+    hist.value_hist[hist.get_value_slab(value_size)]++;
+    max_key_size = std::max(max_key_size, key_size);
+    max_value_size = std::max(max_value_size, value_size);
+    total_key_size += key_size;
+    total_value_size += value_size;
+
+
+    unsigned prefix = key.first[0];
+    ceph_assert(prefix < MAX_PREFIX);
+    num[prefix]++;
+    hist.update_hist_entry(hist.key_hist, key.first, key_size, value_size);
+    iter->next();
+  }
+
+  ceph::timespan duration = coarse_mono_clock::now() - start;
+  f->open_object_section("rocksdb_key_value_stats");
+  for (size_t i = 0; i < MAX_PREFIX; ++i) {
+    if (num[i]) {
+      string key = "Records for prefix: ";
+      key += pretty_binary_string(string(1, char(i)));
+      f->dump_unsigned(key, num[i]);
+    }
+  }
+  f->dump_unsigned("max_key_size", max_key_size);
+  f->dump_unsigned("max_value_size", max_value_size);
+  f->dump_unsigned("total_key_size", total_key_size);
+  f->dump_unsigned("total_value_size", total_value_size);
+  hist.dump(f);
+  f->close_section();
+
+  f->flush(ostr);
+  delete f;
+
+  std::cout << ostr.str() << std::endl;
+  std::cout << __func__ << " finished in " << duration << " seconds" << std::endl;
+  return 0;
 }
 
 int StoreTool::copy_store_to(const string& type, const string& other_path,

@@ -85,6 +85,9 @@ which are as follows:
     Format and information content may vary between releases. For RocksDB information includes
     compactions stats, performance counters, memory usage and internal RocksDB stats. 
 
+:command:`histogram`
+    Presents key-value sizes distribution statistics from the underlying KV database.
+
 Availability
 ============
 
