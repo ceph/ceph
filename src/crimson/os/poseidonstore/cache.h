@@ -16,18 +16,78 @@
 namespace crimson::os::poseidonstore {
 
 /** 
+ * Cache
  *
- * As initail step, we borrow seastore's data structure to read/write the data to the cache.
+ * The cache component in PoseidonStore is an extent cache that 
+ * is responsible for buffer management, including transaction lifecycle.
+ *
+ * Our design considerations for cache are as follows:
+ * 1) Sharding Granularity (Per-OSD Shard vs. Per-Collection):
+ *    Fine-grained sharding is known to be helpful for achieving scalability
+ *    while it can result in inefficient utilization of memory. 
+ *    Therefore, choosing the right sharding granularity is important.
+ *    Fortunately, we don't have to sacrifice scalability for memory efficiency 
+ *    in Crimson's architecture where one reactor thread is reponsible for 
+ *    a set of collections (PGs). Since the data structures in OSD shard is 
+ *    guaranteed to be accessed by only a single reactor thread at a time 
+ *    without lock primitives, per-OSD shard is the most coarse-grained level
+ *    that provides the best possible scalability.
+ *    Extent cache map is also on a per-OSD shard basis, so that object clone 
+ *    and collection split operations can be efficiently handled (no need 
+ *    of copying extent cache map).
+ * 
+ * 2) Cache Replacement Policy:
+ *    Efficient cache replacement policy is required to provide low-latency 
+ *    access to hot cache entries while efficiently choosing a cache entry
+ *    for eviction. Traditional cache replacement policies like LRU or 2Q 
+ *    incur additional works for every page access (e.g., insertion and 
+ *    deletion in a LRU list). However, for frequently accessed pages
+ *    this might be too expensive, especially when memory is sufficient 
+ *    and all the data can be cached in memory.
+ *
+ *    To this end, we use a frequency-aware replacement strategy borrowed from 
+ *    LeanStore(ICDE'18), which is a storage engine for disk-based database 
+ *    systems and provides a comparable performance to in-memory systems for
+ *    in-memory situations. To do so, it identifies infrequently accessed 
+ *    pages rather than making an effort in tracking the frequently accessed 
+ *    pages. 
+ *
+ *    In detail, it consists of two pools, each of which uses different 
+ *    replacement policies.
+ *      a) The first pool is for hot data. In the hot pool, it randomly picks 
+ *         candidate pages and moves it into the second pool, so that 
+ *         they have a grace period before being evicted from memory.
+ *      b) The second pool is for cool data. The cool pool is maintained by 
+ *         a FIFO queue. The evicted page from the hot pool is inserted at the
+ *         head of the queue. The pages at the tail are evicted from memory.
+ *         When the pages in the cool pool are accessed, they are moved to the
+ *         hot pool.
+ *    By this approach, access to the hot pages does not require any additional
+ *    works, such as list manipulation. Also, it prevents hot pages from 
+ *    accidentally being evicted. The size of pools can be configured either 
+ *    at runtime or at configuration time. We may implement an automatic pool 
+ *    sizing.
+ * 
+ * 3) Cache Index Implementation:
+ *    There are many data structures for indexing. Hash-based approaches 
+ *    consume too much CPU overhead as the data set size increases (because of
+ *    the time to grow the hash table or the long search/insertion time O(n)
+ *    for the worst case scenario. On the other hand, the red-black tree is
+ *    known to be bad for CPUs.
+ *
+ *    For CPU-efficient index data structure with no latency spike,
+ *    we conclude that B-tree is the best, which is aligned with the design 
+ *    decision of KVell (SOSP'19).
+ *
+ *
+ * As initail step, we borrow seastore's data structure to read/write 
+ * the data to the cache.
  * Similar to seastore, Cache will maintain general info for entire cache.
- * CacheExtent is a cache entry and any cache contents such as TestBlock, Onode and Block
- * can be created inherited from CacheExtent.
- * But, in PoseidonStore, extent_map in the onode will manage CacheExtents it owns. 
- * Plus, shared_block_list will manage shared cache extent based on laddr_t.
+ * CacheExtent is a cache entry and any cache contents such as TestBlock, 
+ * Onode and Block can be created inherited from CacheExtent.
  *
  *
- * TODO: Cache should be sharded.
- *       Managing cache entries (e.g., shrink, memory pool).
- *
+  *
  */
 class Transaction;
 class CachedExtent;
