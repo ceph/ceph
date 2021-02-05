@@ -1897,8 +1897,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   unique_ptr<Formatter> formatter = nullptr;
   bool pretty_format = false;
   const char *output = NULL;
-  bool omap_key_valid = false;
-  std::string omap_key;
+  std::optional<std::string> omap_key;
   std::optional<std::string> obj_name;
   std::string input_file;
   bool with_reference = false;
@@ -2112,8 +2111,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << err << std::endl;
       return 1;
     }
-
-    omap_key_valid = true;
     omap_key = std::string(indata.c_str(), indata.length());
   }
   i = opts.find("obj-name-file");
@@ -2828,14 +2825,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = 0;
     }
   } else if (strcmp(nargs[0], "setomapval") == 0) {
-    uint32_t min_args = (omap_key_valid ? 2 : 3);
+    uint32_t min_args = (omap_key ? 2 : 3);
     if (!pool_name || nargs.size() < min_args || nargs.size() > min_args + 1) {
       usage(cerr);
       return 1;
     }
 
     string oid(nargs[1]);
-    if (!omap_key_valid) {
+    if (!omap_key) {
       omap_key = nargs[2];
     }
 
@@ -2860,30 +2857,30 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     map<string, bufferlist> values;
-    values[omap_key] = bl;
+    values[*omap_key] = bl;
 
     ret = io_ctx.omap_set(oid, values);
     if (ret < 0) {
       cerr << "error setting omap value " << pool_name << "/" << oid << "/"
-           << prettify(omap_key) << ": " << cpp_strerror(ret) << std::endl;
+           << prettify(*omap_key) << ": " << cpp_strerror(ret) << std::endl;
       return 1;
     } else {
       ret = 0;
     }
   } else if (strcmp(nargs[0], "getomapval") == 0) {
-    uint32_t min_args = (omap_key_valid ? (obj_name ? 1 : 2)
-					: (obj_name ? 2 : 3));
+    uint32_t min_args = (omap_key ? (obj_name ? 1 : 2)
+				  : (obj_name ? 2 : 3));
     if (!pool_name || nargs.size() < min_args || nargs.size() > min_args + 1) {
       usage(cerr);
       return 1;
     }
 
-    if (!omap_key_valid) {
+    if (!omap_key) {
       omap_key = nargs[obj_name ? 1 : 2];
     }
 
     set<string> keys;
-    keys.insert(omap_key);
+    keys.insert(*omap_key);
 
     std::string outfile;
     if (nargs.size() > min_args) {
@@ -2897,13 +2894,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = io_ctx.omap_get_vals_by_keys(*obj_name, keys, &values);
     if (ret < 0) {
       cerr << "error getting omap value " << pool_name << "/" << prettify(*obj_name) << "/"
-	   << prettify(omap_key) << ": " << cpp_strerror(ret) << std::endl;
+	   << prettify(*omap_key) << ": " << cpp_strerror(ret) << std::endl;
       return 1;
     } else {
       ret = 0;
     }
 
-    if (values.size() && values.begin()->first == omap_key) {
+    if (values.size() && values.begin()->first == *omap_key) {
       if (!outfile.empty()) {
 	cerr << "Writing to " << outfile << std::endl;
 	dump_data(outfile, values.begin()->second);
@@ -2915,30 +2912,30 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = 0;
     } else {
       cout << "No such key: " << pool_name << "/" << prettify(*obj_name) << "/"
-           << prettify(omap_key) << std::endl;
+           << prettify(*omap_key) << std::endl;
       return 1;
     }
   } else if (strcmp(nargs[0], "rmomapkey") == 0) {
-    uint32_t num_args = (omap_key_valid ? (obj_name ? 1 : 2)
-					: (obj_name ? 2 : 3));
+    uint32_t num_args = (omap_key ? (obj_name ? 1 : 2)
+				  : (obj_name ? 2 : 3));
     if (!pool_name || nargs.size() != num_args) {
       usage(cerr);
       return 1;
     }
 
-    if (!omap_key_valid) {
+    if (!omap_key) {
       omap_key = nargs[obj_name ? 1 : 2];
     }
     if (!obj_name) {
       obj_name = nargs[1];
     }
     set<string> keys;
-    keys.insert(omap_key);
+    keys.insert(*omap_key);
 
     ret = io_ctx.omap_rm_keys(*obj_name, keys);
     if (ret < 0) {
       cerr << "error removing omap key " << pool_name << "/" << prettify(*obj_name) << "/"
-	   << prettify(omap_key) << ": " << cpp_strerror(ret) << std::endl;
+	   << prettify(*omap_key) << ": " << cpp_strerror(ret) << std::endl;
       return 1;
     } else {
       ret = 0;
