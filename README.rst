@@ -4,7 +4,7 @@
 
 
 Welcome! Teuthology's documentation is primarily hosted at `docs.ceph.com
-<http://docs.ceph.com/teuthology/docs/>`__.
+<https://docs.ceph.com/projects/teuthology/>`__.
 
 You can also look at docs `inside this repository <docs/>`__, but note that
 GitHub's `RST <http://docutils.sourceforge.net/rst.html>`__ rendering is quite
