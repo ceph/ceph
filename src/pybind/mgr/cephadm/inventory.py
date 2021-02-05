@@ -174,6 +174,9 @@ class SpecStore():
             service_name, specs))
         return specs
 
+    def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
+        return self.spec_created.get(spec.service_name())
+
 
 class HostCache():
     """
@@ -215,8 +218,10 @@ class HostCache():
         self.facts = {}                # type: Dict[str, Dict[str, Any]]
         self.last_facts_update = {}    # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
+        self.osdspec_last_applied = {} # type: Dict[str, Dict[str, datetime.datetime]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
+        self.last_device_change = {}   # type: Dict[str, datetime.datetime]
         self.daemon_refresh_queue = []  # type: List[str]
         self.device_refresh_queue = []  # type: List[str]
         self.osdspec_previews_refresh_queue = []  # type: List[str]
@@ -244,11 +249,14 @@ class HostCache():
                     self.last_device_update[host] = str_to_datetime(j['last_device_update'])
                 else:
                     self.device_refresh_queue.append(host)
+                if 'last_device_change' in j:
+                    self.last_device_change[host] = str_to_datetime(j['last_device_change'])
                 # for services, we ignore the persisted last_*_update
                 # and always trigger a new scrape on mgr restart.
                 self.daemon_refresh_queue.append(host)
                 self.daemons[host] = {}
                 self.osdspec_previews[host] = []
+                self.osdspec_last_applied[host] = {}
                 self.devices[host] = []
                 self.networks[host] = {}
                 self.daemon_config_deps[host] = {}
@@ -259,6 +267,8 @@ class HostCache():
                     self.devices[host].append(inventory.Device.from_json(d))
                 self.networks[host] = j.get('networks', {})
                 self.osdspec_previews[host] = j.get('osdspec_previews', {})
+                for name, ts in j.get('osdspec_last_applied', {}).items():
+                    self.osdspec_last_applied[host][name] = str_to_datetime(ts)
 
                 for name, d in j.get('daemon_config_deps', {}).items():
                     self.daemon_config_deps[host][name] = {
@@ -291,13 +301,30 @@ class HostCache():
     def update_host_facts(self, host, facts):
         # type: (str, Dict[str, Dict[str, Any]]) -> None
         self.facts[host] = facts
-        self.last_facts_update[host] = datetime.datetime.utcnow()
+        self.last_facts_update[host] = datetime_now()
+
+    def devices_changed(self, host: str, b: List[inventory.Device]) -> bool:
+        a = self.devices[host]
+        if len(a) != len(b):
+            return True
+        aj = {d.path: d.to_json() for d in a}
+        bj = {d.path: d.to_json() for d in b}
+        if aj != bj:
+            self.mgr.log.info("Detected new or changed devices on %s" % host)
+            return True
+        return False
 
     def update_host_devices_networks(self, host, dls, nets):
         # type: (str, List[inventory.Device], Dict[str,List[str]]) -> None
+        if (
+                host not in self.devices
+                or host not in self.last_device_change
+                or self.devices_changed(host, dls)
+        ):
+            self.last_device_change[host] = datetime_now()
+        self.last_device_update[host] = datetime_now()
         self.devices[host] = dls
         self.networks[host] = nets
-        self.last_device_update[host] = datetime_now()
 
     def update_daemon_config_deps(self, host: str, name: str, deps: List[str], stamp: datetime.datetime) -> None:
         self.daemon_config_deps[host][name] = {
@@ -309,6 +336,10 @@ class HostCache():
         # type: (str) -> None
         self.last_host_check[host] = datetime_now()
 
+    def update_osdspec_last_applied(self, host, service_name, ts):
+        # type: (str, str, datetime.datetime) -> None
+        self.osdspec_last_applied[host][service_name] = ts
+
     def prime_empty_host(self, host):
         # type: (str) -> None
         """
@@ -318,6 +349,7 @@ class HostCache():
         self.devices[host] = []
         self.networks[host] = {}
         self.osdspec_previews[host] = []
+        self.osdspec_last_applied[host] = {}
         self.daemon_config_deps[host] = {}
         self.daemon_refresh_queue.append(host)
         self.device_refresh_queue.append(host)
@@ -346,12 +378,15 @@ class HostCache():
             'daemons': {},
             'devices': [],
             'osdspec_previews': [],
+            'osdspec_last_applied': {},
             'daemon_config_deps': {},
         }
         if host in self.last_daemon_update:
             j['last_daemon_update'] = datetime_to_str(self.last_daemon_update[host])
         if host in self.last_device_update:
             j['last_device_update'] = datetime_to_str(self.last_device_update[host])
+        if host in self.last_device_change:
+            j['last_device_change'] = datetime_to_str(self.last_device_change[host])
         if host in self.daemons:
             for name, dd in self.daemons[host].items():
                 j['daemons'][name] = dd.to_json()
@@ -368,6 +403,9 @@ class HostCache():
                 }
         if host in self.osdspec_previews and self.osdspec_previews[host]:
             j['osdspec_previews'] = self.osdspec_previews[host]
+        if host in self.osdspec_last_applied:
+            for name, ts in self.osdspec_last_applied[host].items():
+                j['osdspec_last_applied'][name] = datetime_to_str(ts)
 
         if host in self.last_host_check:
             j['last_host_check'] = datetime_to_str(self.last_host_check[host])
@@ -391,6 +429,8 @@ class HostCache():
             del self.last_facts_update[host]
         if host in self.osdspec_previews:
             del self.osdspec_previews[host]
+        if host in self.osdspec_last_applied:
+            del self.osdspec_last_applied[host]
         if host in self.loading_osdspec_preview:
             self.loading_osdspec_preview.remove(host)
         if host in self.networks:
@@ -399,6 +439,8 @@ class HostCache():
             del self.last_daemon_update[host]
         if host in self.last_device_update:
             del self.last_device_update[host]
+        if host in self.last_device_change:
+            del self.last_device_change[host]
         if host in self.daemon_config_deps:
             del self.daemon_config_deps[host]
         if host in self.scheduled_daemon_actions:
@@ -505,7 +547,7 @@ class HostCache():
         if host in self.mgr.offline_hosts:
             logger.debug(f'Host "{host}" marked as offline. Skipping gather facts refresh')
             return False
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+        cutoff = datetime_now() - datetime.timedelta(
             seconds=self.mgr.facts_cache_timeout)
         if host not in self.last_facts_update or self.last_facts_update[host] < cutoff:
             return True
@@ -569,6 +611,20 @@ class HostCache():
             return True
         # already up to date:
         return False
+
+    def osdspec_needs_apply(self, host: str, spec: ServiceSpec) -> bool:
+        if (
+            host not in self.devices
+            or host not in self.last_device_change
+            or host not in self.last_device_update
+            or host not in self.osdspec_last_applied
+            or spec.service_name() not in self.osdspec_last_applied[host]
+        ):
+            return True
+        created = self.mgr.spec_store.get_created(spec)
+        if created and created > self.last_device_change[host]:
+            return True
+        return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host];
 
     def update_last_etc_ceph_ceph_conf(self, host: str) -> None:
         if not self.mgr.last_monmap:
