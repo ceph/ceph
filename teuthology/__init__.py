@@ -32,7 +32,7 @@ monkey.patch_all()
 import logging
 import subprocess
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 # do our best, but if it fails, continue with above
 
