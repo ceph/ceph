@@ -12,7 +12,7 @@ from functools import partial, wraps
 from threading import Condition, Lock, Thread
 
 from .common import (authorize_request, extract_pool_key, get_rbd_pools,
-                     is_authorized)
+                     is_authorized, GLOBAL_POOL_KEY)
 
 
 RBD_TASK_OID = "rbd_task"
