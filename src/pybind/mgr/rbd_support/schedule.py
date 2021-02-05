@@ -302,6 +302,8 @@ class Schedule:
                 (int((now - start_time) / period) + 1) * period
             if schedule_time is None or time < schedule_time:
                 schedule_time = time
+        if schedule_time is None:
+            raise ValueError('no items is added')
         return datetime.datetime.strftime(schedule_time, "%Y-%m-%d %H:%M:00")
 
     def to_list(self):
