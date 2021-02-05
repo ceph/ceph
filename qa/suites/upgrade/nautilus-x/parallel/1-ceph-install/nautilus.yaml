@@ -26,6 +26,7 @@ tasks:
       - Monitor daemon marked osd
       - Behind on trimming
       - Manager daemon
+      - evicting unresponsive client
     conf:
       global:
         mon warn on pool no app: false
