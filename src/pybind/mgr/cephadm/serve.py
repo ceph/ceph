@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 from collections import defaultdict
-from typing import TYPE_CHECKING, Optional, List, Callable, cast, Set, Dict
+from typing import TYPE_CHECKING, Optional, List, Callable, cast, Set, Dict, Union, Any
 
 try:
     import remoto
@@ -17,7 +17,7 @@ from ceph.utils import str_to_datetime, datetime_now
 import orchestrator
 from cephadm.schedule import HostAssignment
 from cephadm.upgrade import CEPH_UPGRADE_ORDER
-from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest
+from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, CephadmNoImage
 from orchestrator import OrchestratorError
 
 if TYPE_CHECKING:
@@ -204,18 +204,9 @@ class CephadmServe:
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self.mgr._run_cephadm(
-                host, 'mon', 'ls', [], no_fsid=True)
-            if code:
-                return 'host %s cephadm ls returned %d: %s' % (
-                    host, code, err)
-            ls = json.loads(''.join(out))
-        except ValueError:
-            msg = 'host %s scrape failed: Cannot decode JSON' % host
-            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
-            return msg
-        except Exception as e:
-            return 'host %s scrape failed: %s' % (host, e)
+            ls = self._run_cephadm_json(host, 'mon', 'ls', [], no_fsid=True)
+        except OrchestratorError as e:
+            return str(e)
         dm = {}
         for d in ls:
             if not d['style'].startswith('cephadm'):
@@ -261,55 +252,34 @@ class CephadmServe:
 
     def _refresh_facts(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self.mgr._run_cephadm(
-                host, cephadmNoImage, 'gather-facts', [],
-                error_ok=True, no_fsid=True)
+            val = self._run_cephadm_json(host, cephadmNoImage, 'gather-facts', [], no_fsid=True)
+        except OrchestratorError as e:
+            return str(e)
 
-            if code:
-                return 'host %s gather-facts returned %d: %s' % (
-                    host, code, err)
-        except Exception as e:
-            return 'host %s gather facts failed: %s' % (host, e)
-        self.log.debug('Refreshed host %s facts' % (host))
-        self.mgr.cache.update_host_facts(host, json.loads(''.join(out)))
+        self.mgr.cache.update_host_facts(host, val)
+
         return None
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         try:
-            out, err, code = self.mgr._run_cephadm(
-                host, 'osd',
-                'ceph-volume',
-                ['--', 'inventory', '--format=json', '--filter-for-batch'])
-            if code:
-                return 'host %s ceph-volume inventory returned %d: %s' % (
-                    host, code, err)
-            devices = json.loads(''.join(out))
-        except ValueError:
-            msg = 'host %s scrape failed: Cannot decode JSON' % host
-            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
-            return msg
-        except Exception as e:
-            return 'host %s ceph-volume inventory failed: %s' % (host, e)
-        try:
-            out, err, code = self.mgr._run_cephadm(
-                host, 'mon',
-                'list-networks',
-                [],
-                no_fsid=True)
-            if code:
-                return 'host %s list-networks returned %d: %s' % (
-                    host, code, err)
-            networks = json.loads(''.join(out))
-        except ValueError:
-            msg = 'host %s scrape failed: Cannot decode JSON' % host
-            self.log.exception('%s: \'%s\'' % (msg, ''.join(out)))
-            return msg
-        except Exception as e:
-            return 'host %s list-networks failed: %s' % (host, e)
+            try:
+                devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                                                 ['--', 'inventory', '--format=json', '--filter-for-batch'])
+            except OrchestratorError as e:
+                if 'unrecognized arguments: --filter-for-batch' in str(e):
+                    devices = self._run_cephadm_json(host, 'osd', 'ceph-volume',
+                                                     ['--', 'inventory', '--format=json'])
+                else:
+                    raise
+
+            networks = self._run_cephadm_json(host, 'mon', 'list-networks', [], no_fsid=True)
+        except OrchestratorError as e:
+            return str(e)
+
         self.log.debug('Refreshed host %s devices (%d) networks (%s)' % (
             host, len(devices), len(networks)))
-        devices = inventory.Devices.from_json(devices)
-        self.mgr.cache.update_host_devices_networks(host, devices.devices, networks)
+        ret = inventory.Devices.from_json(devices)
+        self.mgr.cache.update_host_devices_networks(host, ret.devices, networks)
         self.update_osdspec_previews(host)
         self.mgr.cache.save_host(host)
         return None
@@ -668,3 +638,26 @@ class CephadmServe:
                 image_info = digests[container_image_ref]
                 if image_info.repo_digest:
                     self.mgr.set_container_image(entity, image_info.repo_digest)
+
+    def _run_cephadm_json(self,
+                          host: str,
+                          entity: Union[CephadmNoImage, str],
+                          command: str,
+                          args: List[str],
+                          no_fsid: Optional[bool] = False,
+                          image: Optional[str] = "",
+                          ) -> Any:
+        try:
+            out, err, code = self.mgr._run_cephadm(
+                host, entity, command, args, no_fsid=no_fsid, image=image)
+            if code:
+                raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
+        except Exception as e:
+            raise OrchestratorError(f'host {host} `cephadm {command}` failed: {e}')
+        try:
+            return json.loads(''.join(out))
+        except (ValueError, KeyError):
+            msg = f'host {host} `cephadm {command}` failed: Cannot decode JSON'
+            self.log.exception(f'{msg}: {"".join(out)}')
+            raise OrchestratorError(msg)
+
