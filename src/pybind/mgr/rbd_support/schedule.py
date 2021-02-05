@@ -407,8 +407,8 @@ class Schedules:
                                     image_validator)
                             except ValueError:
                                 self.handler.log.debug(
-                                    "Stail schedule key {} in pool".format(
-                                        k, pool_name))
+                                    "Stale schedule key %s in pool %s",
+                                    k, pool_name)
                                 stale_keys += (k,)
                                 continue
 
