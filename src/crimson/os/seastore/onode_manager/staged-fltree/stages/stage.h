@@ -858,17 +858,21 @@ struct staged {
 
   template <bool GET_KEY>
   static result_t smallest_result(
-      const iterator_t& iter, full_key_t<KeyT::VIEW>* index_key) {
+      const iterator_t& iter, full_key_t<KeyT::VIEW>* p_index_key) {
     static_assert(!IS_BOTTOM);
     assert(!iter.is_end());
-    auto pos_smallest = NXT_STAGE_T::position_t::begin();
     auto nxt_container = iter.get_nxt_container();
-    auto value_ptr = NXT_STAGE_T::template get_p_value<GET_KEY>(
-        nxt_container, pos_smallest, index_key);
+    auto pos_smallest = NXT_STAGE_T::position_t::begin();
+    const value_t* p_value;
+    NXT_STAGE_T::template get_slot<GET_KEY, true>(
+        nxt_container, pos_smallest, p_index_key, &p_value);
     if constexpr (GET_KEY) {
-      index_key->set(iter.get_key());
+      assert(p_index_key);
+      p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
     }
-    return result_t{{iter.index(), pos_smallest}, value_ptr, STAGE};
+    return result_t{{iter.index(), pos_smallest}, p_value, STAGE};
   }
 
   template <bool GET_KEY>
@@ -895,51 +899,41 @@ struct staged {
   }
 
   template <bool GET_POS, bool GET_KEY, bool GET_VAL>
-  static void lookup_largest_slot(
-      const container_t& container, position_t* p_position,
-      full_key_t<KeyT::VIEW>* p_index_key, const value_t** pp_value) {
+  static void get_largest_slot(
+      const container_t& container,        // IN
+      position_t* p_position,              // OUT
+      full_key_t<KeyT::VIEW>* p_index_key, // OUT
+      const value_t** pp_value) {          // OUT
     auto iter = iterator_t(container);
     iter.seek_last();
     if constexpr (GET_KEY) {
       assert(p_index_key);
       p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
     }
     if constexpr (GET_POS) {
       assert(p_position);
       p_position->index = iter.index();
+    } else {
+      assert(!p_position);
     }
     if constexpr (IS_BOTTOM) {
       if constexpr (GET_VAL) {
         assert(pp_value);
         *pp_value = iter.get_p_value();
+      } else {
+        assert(!pp_value);
       }
     } else {
       auto nxt_container = iter.get_nxt_container();
       if constexpr (GET_POS) {
-        NXT_STAGE_T::template lookup_largest_slot<true, GET_KEY, GET_VAL>(
+        NXT_STAGE_T::template get_largest_slot<true, GET_KEY, GET_VAL>(
             nxt_container, &p_position->nxt, p_index_key, pp_value);
       } else {
-        NXT_STAGE_T::template lookup_largest_slot<false, GET_KEY, GET_VAL>(
+        NXT_STAGE_T::template get_largest_slot<false, GET_KEY, GET_VAL>(
             nxt_container, nullptr, p_index_key, pp_value);
       }
-    }
-  }
-
-  template <bool GET_KEY = false>
-  static const value_t* get_p_value(
-      const container_t& container, const position_t& position,
-      full_key_t<KeyT::VIEW>* index_key = nullptr) {
-    auto iter = iterator_t(container);
-    iter.seek_at(position.index);
-    if constexpr (GET_KEY) {
-      index_key->set(iter.get_key());
-    }
-    if constexpr (!IS_BOTTOM) {
-      auto nxt_container = iter.get_nxt_container();
-      return NXT_STAGE_T::template get_p_value<GET_KEY>(
-          nxt_container, position.nxt, index_key);
-    } else {
-      return iter.get_p_value();
     }
   }
 
@@ -970,19 +964,6 @@ struct staged {
       } else {
         assert(!pp_value);
       }
-    }
-  }
-
-  static void get_key_view(
-      const container_t& container,
-      const position_t& position,
-      full_key_t<KeyT::VIEW>& index_key) {
-    auto iter = iterator_t(container);
-    iter.seek_at(position.index);
-    index_key.set(iter.get_key());
-    if constexpr (!IS_BOTTOM) {
-      auto nxt_container = iter.get_nxt_container();
-      return NXT_STAGE_T::get_key_view(nxt_container, position.nxt, index_key);
     }
   }
 

@@ -703,18 +703,17 @@ class DummyChildPool {
    public:
     laddr_t laddr() const override { return _laddr; }
     bool is_level_tail() const override { return _is_level_tail; }
+    std::optional<key_view_t> get_pivot_index() const override { return {key_view}; }
 
    protected:
+    node_type_t node_type() const override { return node_type_t::LEAF; }
     field_type_t field_type() const override { return field_type_t::N0; }
     level_t level() const override { return 0u; }
-    key_view_t get_largest_key_view() const override { return key_view; }
     void prepare_mutate(context_t) override {
       ceph_abort("impossible path"); }
     bool is_empty() const override {
       ceph_abort("impossible path"); }
     node_offset_t free_size() const override {
-      ceph_abort("impossible path"); }
-    key_view_t get_key_view(const search_position_t&) const override {
       ceph_abort("impossible path"); }
     node_stats_t get_stats() const override {
       ceph_abort("impossible path"); }
@@ -768,7 +767,7 @@ class DummyChildPool {
       if (right_child->can_split()) {
         splitable_nodes.insert(right_child);
       }
-      return insert_parent(c, right_child);
+      return insert_parent(c, *impl->get_pivot_index(), right_child);
     }
 
     node_future<> insert_and_split(
