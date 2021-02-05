@@ -43,10 +43,9 @@ def with_latest_osdmap(func: FuncT) -> FuncT:
                 return func(self, *args, **kwargs)
             except NotAuthorizedError:
                 raise
-            except Exception as ex:
+            except Exception:
                 # log the full traceback but don't send it to the CLI user
-                self.log.fatal("Fatal runtime error: {}\n{}".format(
-                    ex, traceback.format_exc()))
+                self.log.exception("Fatal runtime error: ")
                 raise
         except rados.Error as ex:
             return -ex.errno, "", str(ex)
