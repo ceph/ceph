@@ -1,9 +1,9 @@
+import datetime
 import json
 import rados
 import rbd
 import re
 
-from datetime import datetime, timedelta, time
 from dateutil.parser import parse
 
 from .common import get_rbd_pools
@@ -249,7 +249,7 @@ class Interval:
 class StartTime:
 
     def __init__(self, hour, minute, tzinfo):
-        self.time = time(hour, minute, tzinfo=tzinfo)
+        self.time = datetime.time(hour, minute, tzinfo=tzinfo)
         self.minutes = self.time.hour * 60 + self.time.minute
         if self.time.tzinfo:
             self.minutes += int(self.time.utcoffset().seconds / 60)
@@ -294,15 +294,15 @@ class Schedule:
     def next_run(self, now):
         schedule_time = None
         for item in self.items:
-            period = timedelta(minutes=item[0].minutes)
-            start_time = datetime(1970, 1, 1)
+            period = datetime.timedelta(minutes=item[0].minutes)
+            start_time = datetime.datetime(1970, 1, 1)
             if item[1]:
-                start_time += timedelta(minutes=item[1].minutes)
+                start_time += datetime.timedelta(minutes=item[1].minutes)
             time = start_time + \
                 (int((now - start_time) / period) + 1) * period
             if schedule_time is None or time < schedule_time:
                 schedule_time = time
-        return datetime.strftime(schedule_time, "%Y-%m-%d %H:%M:00")
+        return datetime.datetime.strftime(schedule_time, "%Y-%m-%d %H:%M:00")
 
     def to_list(self):
         return [{SCHEDULE_INTERVAL: i[0].to_string(),
