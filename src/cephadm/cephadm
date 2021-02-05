@@ -10,6 +10,7 @@ LOGROTATE_DIR = '/etc/logrotate.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
+CONTAINER_INIT=True
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 MIN_PODMAN_VERSION = (2, 0, 2)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
@@ -122,6 +123,7 @@ class BaseConfig:
         self.retry: int = DEFAULT_RETRY
         self.env: List[str] = []
 
+        self.container_init: bool = CONTAINER_INIT
         self.container_path: str = ""
 
     def set_from_args(self, args: argparse.Namespace):
@@ -2438,7 +2440,6 @@ def get_container(ctx: CephadmContext,
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
-        init=ctx.container_init,
         host_network=host_network,
     )
 
@@ -2961,7 +2962,7 @@ class CephContainer:
                  privileged: bool = False,
                  ptrace: bool = False,
                  bind_mounts: Optional[List[List[str]]] = None,
-                 init: bool = False,
+                 init: Optional[bool] = None,
                  host_network: bool = True,
                  ) -> None:
         self.ctx = ctx
@@ -2975,7 +2976,7 @@ class CephContainer:
         self.privileged = privileged
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
-        self.init = init
+        self.init = init if init else ctx.container_init
         self.host_network = host_network
 
     def run_cmd(self) -> List[str]:
@@ -3882,8 +3883,7 @@ def command_bootstrap(ctx):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', ctx.registry_username, '--force'])
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', ctx.registry_password, '--force'])
 
-    if ctx.container_init:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
+    cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
     if ctx.with_exporter:
         cli(['config-key', 'set', 'mgr/cephadm/exporter_enabled', 'true'])
@@ -3905,7 +3905,6 @@ def command_bootstrap(ctx):
         # deploy the service (commented out until the cephadm changes are in the ceph container build)
         logger.info('Deploying cephadm exporter service with default placement...')
         cli(['orch', 'apply', 'cephadm-exporter'])
-
 
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
@@ -7097,6 +7096,11 @@ def _get_parser():
         action='append',
         default=[],
         help='set environment variable')
+    parser.add_argument(
+        '--no-container-init',
+        action='store_true',
+        default=not CONTAINER_INIT,
+        help='Do not run podman/docker with `--init`')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
@@ -7165,7 +7169,8 @@ def _get_parser():
     parser_adopt.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -7459,7 +7464,8 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
     parser_bootstrap.add_argument(
         '--with-exporter',
         action='store_true',
@@ -7517,7 +7523,8 @@ def _get_parser():
     parser_deploy.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
@@ -7637,9 +7644,22 @@ def _get_parser():
 
 def _parse_args(av):
     parser = _get_parser()
+
     args = parser.parse_args(av)
     if 'command' in args and args.command and args.command[0] == "--":
         args.command.pop(0)
+
+    # workaround argparse to deprecate the subparser `--container-init` flag
+    # container_init and no_container_init must always be mutually exclusive
+    container_init_args = ('--container-init', '--no-container-init')
+    if set(container_init_args).issubset(av):
+        parser.error('argument %s: not allowed with argument %s' % (container_init_args))
+    elif '--container-init' in av:
+        args.no_container_init = not args.container_init
+    else:
+        args.container_init = not args.no_container_init
+    assert args.container_init is not args.no_container_init
+
     return args
 
 
