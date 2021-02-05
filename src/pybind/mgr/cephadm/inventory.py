@@ -218,7 +218,7 @@ class HostCache():
         self.facts = {}                # type: Dict[str, Dict[str, Any]]
         self.last_facts_update = {}    # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
-        self.osdspec_last_applied = {} # type: Dict[str, Dict[str, datetime.datetime]]
+        self.osdspec_last_applied = {}  # type: Dict[str, Dict[str, datetime.datetime]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
