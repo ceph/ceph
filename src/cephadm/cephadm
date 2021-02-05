@@ -985,6 +985,34 @@ def check_ip_port(ctx, ip, port):
         except OSError as e:
             raise Error(e)
 
+def _parse_ss_lpnt(data:str):
+    # ss doen't support json output. Thus we have to parse it.
+    # https://unix.stackexchange.com/questions/157823/list-ports-a-process-pid-is-listening-on-preferably-using-iproute2-tools
+    out = []
+    for line in data.splitlines():
+        if line.startswith('STATE'):
+            if ' '.join(line.split()) != 'State Recv-Q Send-Q Local Address:Port Peer Address:Port':
+                logger.warning('ss -lpnt: unable to parse header "{line}"')
+                return {}
+        if 'users:((' not in line:
+            continue
+        before, after = line.split('users:((')
+        data = dict(zip('State,Recv-Q,Send-Q,Local Address:Port,Peer Address:Port'.split(','), before.split()))
+
+        users = after.rstrip('))').split(',')
+        data.update(dict(zip('name pid'.split(), users[:2])))
+        out.append(data)
+    return out
+
+def port_in_use_by(ctx, port_num: int) -> str:
+    out, err, code = call(ctx, ['ss', '-l', '-p', '-n', '-t'])
+    data = _parse_ss_lpnt(out)
+    for item in data:
+        if f':{port_num}' in item['Local Address:Port']:
+            return f'{item["name"]} {item["pid"]}'
+    return ''
+
+
 ##################################
 
 # this is an abbreviated version of
@@ -2478,7 +2506,16 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
 
     ports = ports or []
     if any([port_in_use(ctx, port) for port in ports]):
-        raise Error("TCP Port(s) '{}' required for {} already in use".format(",".join(map(str, ports)), daemon_type))
+        if len(ports) == 1:
+            used_by = port_in_use_by(ctx, ports[0])
+            if used_by:
+                used_by = f'by {used_by}'
+            raise Error(f"TCP Port '{ports[0]}' required for {daemon_type} already in use {used_by}")
+        else:
+            used_bys = [port_in_use_by(ctx, port) for port in ports]
+            used_by = ', '.join(f'Port {p[0]} used by {p[1]}' for p in zip(ports, used_bys) if p[1])
+            raise Error(f"TCP Ports '{ports[0]}' required for {daemon_type} already in use ({used_by})")
+
 
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     if reconfig and not os.path.exists(data_dir):

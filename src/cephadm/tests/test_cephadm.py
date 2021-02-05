@@ -305,6 +305,138 @@ docker.io/ceph/daemon-base:octopus
         image = cd._filter_last_local_ceph_image(out)
         assert image == 'docker.io/ceph/ceph:v15.2.5'
 
+    def test_parse_ss_lpnt(self):
+        out = '''
+State    Recv-Q    Send-Q        Local Address:Port        Peer Address:Port
+LISTEN   0         128                 0.0.0.0:43309            0.0.0.0:*        users:(("rpc.mountd",pid=1287,fd=9))
+LISTEN   0         128               127.0.0.1:63342            0.0.0.0:*        users:(("java",pid=17507,fd=308))
+LISTEN   0         128                 0.0.0.0:43599            0.0.0.0:*        users:(("rpc.mountd",pid=1287,fd=13))
+LISTEN   0         128                 0.0.0.0:111              0.0.0.0:*        users:(("rpcbind",pid=1101,fd=8))
+LISTEN   0         50                  0.0.0.0:43793            0.0.0.0:*        users:(("java",pid=17507,fd=159))
+LISTEN   0         128           127.0.0.53%lo:53               0.0.0.0:*        users:(("systemd-resolve",pid=28617,fd=13))
+LISTEN   0         32            192.168.122.1:53               0.0.0.0:*        users:(("dnsmasq",pid=5060,fd=6))
+LISTEN   0         32               10.20.85.1:53               0.0.0.0:*        users:(("dnsmasq",pid=4804,fd=6))
+LISTEN   0         32               10.20.11.1:53               0.0.0.0:*        users:(("dnsmasq",pid=4476,fd=6))
+LISTEN   0         128                 0.0.0.0:22               0.0.0.0:*        users:(("sshd",pid=1286,fd=3))
+LISTEN   0         5                 127.0.0.1:631              0.0.0.0:*        users:(("cupsd",pid=1596,fd=7))
+LISTEN   0         128               127.0.0.1:5432             0.0.0.0:*        users:(("postgres",pid=1225,fd=6))
+LISTEN   0         128               127.0.0.1:41689            0.0.0.0:*        users:(("containerd",pid=1292,fd=6))
+LISTEN   0         128               127.0.0.1:5433             0.0.0.0:*        users:(("postgres",pid=1226,fd=8))
+LISTEN   0         128                 0.0.0.0:36219            0.0.0.0:*        users:(("rpc.mountd",pid=1287,fd=17))
+LISTEN   0         128               127.0.0.1:6942             0.0.0.0:*        users:(("java",pid=17507,fd=153))
+LISTEN   0         64                  0.0.0.0:37023            0.0.0.0:*
+LISTEN   0         50                  0.0.0.0:32961            0.0.0.0:*        users:(("java",pid=17507,fd=175))
+LISTEN   0         50                  0.0.0.0:42689            0.0.0.0:*        users:(("java",pid=17507,fd=160))
+LISTEN   0         50                127.0.0.1:33953            0.0.0.0:*        users:(("jetbrains-toolb",pid=6143,fd=17))
+LISTEN   0         64                  0.0.0.0:2049             0.0.0.0:*
+LISTEN   0         50                  0.0.0.0:39939            0.0.0.0:*        users:(("java",pid=17507,fd=157))
+LISTEN   0         50                  0.0.0.0:45927            0.0.0.0:*        users:(("java",pid=17507,fd=325))
+LISTEN   0         128                    [::]:111                 [::]:*        users:(("rpcbind",pid=1101,fd=11))
+LISTEN   0         50                        *:1716                   *:*        users:(("kdeconnectd",pid=5980,fd=14))
+LISTEN   0         128                    [::]:22                  [::]:*        users:(("sshd",pid=1286,fd=4))
+LISTEN   0         5                     [::1]:631                 [::]:*        users:(("cupsd",pid=1596,fd=6))
+LISTEN   0         128                   [::1]:5432                [::]:*        users:(("postgres",pid=1225,fd=3))
+LISTEN   0         128                   [::1]:5433                [::]:*        users:(("postgres",pid=1226,fd=7))
+LISTEN   0         64                     [::]:42779               [::]:*
+LISTEN   0         128                    [::]:53439               [::]:*        users:(("rpc.mountd",pid=1287,fd=11))
+LISTEN   0         64                     [::]:2049                [::]:*
+LISTEN   0         128                    [::]:55745               [::]:*        users:(("rpc.mountd",pid=1287,fd=15))
+LISTEN   0         128                    [::]:51299               [::]:*        users:(("rpc.mountd",pid=1287,fd=19))
+LISTEN   0         5                         *:6600                   *:*        users:(("mpd",pid=1279,fd=4),("systemd",pid=1,fd=118)) 
+'''
+        assert cd._parse_ss_lpnt(out) == [
+            {'Local Address:Port': '0.0.0.0:43309', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpc.mountd"',
+             'pid': 'pid=1287'},
+            {'Local Address:Port': '127.0.0.1:63342', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"java"',
+             'pid': 'pid=17507'},
+            {'Local Address:Port': '0.0.0.0:43599', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpc.mountd"',
+             'pid': 'pid=1287'},
+            {'Local Address:Port': '0.0.0.0:111', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpcbind"',
+             'pid': 'pid=1101'},
+            {'Local Address:Port': '0.0.0.0:43793', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '50', 'State': 'LISTEN', 'name': '"java"',
+             'pid': 'pid=17507'},
+            {'Local Address:Port': '127.0.0.53%lo:53', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"systemd-resolve"',
+             'pid': 'pid=28617'},
+            {'Local Address:Port': '192.168.122.1:53', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '32', 'State': 'LISTEN', 'name': '"dnsmasq"',
+             'pid': 'pid=5060'},
+            {'Local Address:Port': '10.20.85.1:53', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '32', 'State': 'LISTEN', 'name': '"dnsmasq"',
+             'pid': 'pid=4804'},
+            {'Local Address:Port': '10.20.11.1:53', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '32', 'State': 'LISTEN', 'name': '"dnsmasq"',
+             'pid': 'pid=4476'},
+            {'Local Address:Port': '0.0.0.0:22', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"sshd"',
+             'pid': 'pid=1286'},
+            {'Local Address:Port': '127.0.0.1:631', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '5', 'State': 'LISTEN', 'name': '"cupsd"', 'pid': 'pid=1596'},
+            {'Local Address:Port': '127.0.0.1:5432', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"postgres"',
+             'pid': 'pid=1225'},
+            {'Local Address:Port': '127.0.0.1:41689', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"containerd"',
+             'pid': 'pid=1292'},
+            {'Local Address:Port': '127.0.0.1:5433', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"postgres"',
+             'pid': 'pid=1226'},
+            {'Local Address:Port': '0.0.0.0:36219', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpc.mountd"',
+             'pid': 'pid=1287'},
+            {'Local Address:Port': '127.0.0.1:6942', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"java"',
+             'pid': 'pid=17507'},
+            {'Local Address:Port': '0.0.0.0:32961', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '50', 'State': 'LISTEN', 'name': '"java"',
+             'pid': 'pid=17507'},
+            {'Local Address:Port': '0.0.0.0:42689', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '50', 'State': 'LISTEN', 'name': '"java"',
+             'pid': 'pid=17507'},
+            {'Local Address:Port': '127.0.0.1:33953', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '50', 'State': 'LISTEN', 'name': '"jetbrains-toolb"',
+             'pid': 'pid=6143'},
+            {'Local Address:Port': '0.0.0.0:39939', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '50', 'State': 'LISTEN', 'name': '"java"',
+             'pid': 'pid=17507'},
+            {'Local Address:Port': '0.0.0.0:45927', 'Peer Address:Port': '0.0.0.0:*',
+             'Recv-Q': '0', 'Send-Q': '50', 'State': 'LISTEN', 'name': '"java"',
+             'pid': 'pid=17507'},
+            {'Local Address:Port': '[::]:111', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpcbind"',
+             'pid': 'pid=1101'},
+            {'Local Address:Port': '*:1716', 'Peer Address:Port': '*:*',
+             'Recv-Q': '0', 'Send-Q': '50', 'State': 'LISTEN', 'name': '"kdeconnectd"',
+             'pid': 'pid=5980'},
+            {'Local Address:Port': '[::]:22', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"sshd"',
+             'pid': 'pid=1286'},
+            {'Local Address:Port': '[::1]:631', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '5', 'State': 'LISTEN', 'name': '"cupsd"', 'pid': 'pid=1596'},
+            {'Local Address:Port': '[::1]:5432', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"postgres"',
+             'pid': 'pid=1225'},
+            {'Local Address:Port': '[::1]:5433', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"postgres"',
+             'pid': 'pid=1226'},
+            {'Local Address:Port': '[::]:53439', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpc.mountd"',
+             'pid': 'pid=1287'},
+            {'Local Address:Port': '[::]:55745', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpc.mountd"',
+             'pid': 'pid=1287'},
+            {'Local Address:Port': '[::]:51299', 'Peer Address:Port': '[::]:*',
+             'Recv-Q': '0', 'Send-Q': '128', 'State': 'LISTEN', 'name': '"rpc.mountd"',
+             'pid': 'pid=1287'},
+            {'Local Address:Port': '*:6600', 'Peer Address:Port': '*:*',
+             'Recv-Q': '0', 'Send-Q': '5', 'State': 'LISTEN', 'name': '"mpd"', 'pid': 'pid=1279'},
+        ]
+
 
 class TestCustomContainer(unittest.TestCase):
     cc: cd.CustomContainer
