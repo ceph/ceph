@@ -113,6 +113,8 @@ class BaseConfig:
         self.timeout: Optional[int] = DEFAULT_TIMEOUT
         self.retry: int = DEFAULT_RETRY
         self.env: List[str] = []
+        self.memory_request: Optional[int] = None
+        self.memory_limit: Optional[int] = None
 
         self.container_path: str = ""
 
@@ -2568,13 +2570,22 @@ def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, backgro
     file_obj.write(' '.join(container.run_cmd()) + (' &' if background else '') + '\n')
 
 
-def deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id, c,
-                        enable=True, start=True,
-                        osd_fsid=None):
-    # type: (CephadmContext, str, int, int, str, Union[int, str], CephContainer, bool, bool, Optional[str]) -> None
+def deploy_daemon_units(
+    ctx: CephadmContext,
+    fsid: str,
+    uid: int,
+    gid: int,
+    daemon_type: str,
+    daemon_id: Union[int, str],
+    c: 'CephContainer',
+    enable: bool = True,
+    start: bool = True,
+    osd_fsid: Optional[str] = None,
+) -> None:
     # cmd
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
-    with open(data_dir + '/unit.run.new', 'w') as f:
+    with open(data_dir + '/unit.run.new', 'w') as f, \
+         open(data_dir + '/unit.meta.new', 'w') as metaf:
         f.write('set -e\n')
 
         if daemon_type in Ceph.daemons:
@@ -2606,6 +2617,8 @@ def deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id, c,
                     volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
                     bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
                     cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
+                    memory_request=ctx.memory_request,
+                    memory_limit=ctx.memory_limit,
                 )
                 _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
         elif daemon_type == NFSGanesha.daemon_type:
@@ -2620,9 +2633,19 @@ def deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id, c,
             _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runnter container', background=True)
 
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
+
+        # some metadata about the deploy
+        metaf.write(json.dumps({
+            'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
+            'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
+        }, indent=4) + "\n")
+
         os.fchmod(f.fileno(), 0o600)
+        os.fchmod(metaf.fileno(), 0o600)
         os.rename(data_dir + '/unit.run.new',
                   data_dir + '/unit.run')
+        os.rename(data_dir + '/unit.meta.new',
+                  data_dir + '/unit.meta')
 
     # post-stop command(s)
     with open(data_dir + '/unit.poststop.new', 'w') as f:
@@ -2942,6 +2965,8 @@ class CephContainer:
                  bind_mounts: Optional[List[List[str]]] = None,
                  init: bool = False,
                  host_network: bool = True,
+                 memory_request: Optional[str] = None,
+                 memory_limit: Optional[str] = None,
                  ) -> None:
         self.ctx = ctx
         self.image = image
@@ -2956,6 +2981,8 @@ class CephContainer:
         self.bind_mounts = bind_mounts if bind_mounts else []
         self.init = init
         self.host_network = host_network
+        self.memory_request = memory_request
+        self.memory_limit = memory_limit
 
     def run_cmd(self) -> List[str]:
         cmd_args: List[str] = [
@@ -2975,6 +3002,12 @@ class CephContainer:
         ]
         vols: List[str] = []
         binds: List[str] = []
+
+        if self.memory_request:
+            cmd_args.extend(['-e', 'POD_MEMORY_REQUEST', str(self.memory_request)])
+        if self.memory_limit:
+            cmd_args.extend(['-e', 'POD_MEMORY_LIMIT', str(self.memory_limit)])
+            cmd_args.extend(['--memory', str(self.memory_limit)])
 
         if self.host_network:
             cmd_args.append('--net=host')
@@ -4637,6 +4670,16 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                     image_name = f.read().strip() or None
                             except IOError:
                                 pass
+
+                        # unit.meta?
+                        mfile = os.path.join(data_dir, fsid, j, 'unit.meta') # type: ignore
+                        try:
+                            with open(mfile, 'r') as f:
+                                meta = json.loads(f.read())
+                                val.update(meta)
+                        except IOError:
+                            pass
+
                         val['container_id'] = container_id
                         val['container_image_name'] = image_name
                         val['container_image_id'] = image_id
@@ -7555,6 +7598,14 @@ def _get_parser():
         '--container-init',
         action='store_true',
         help='Run podman/docker with `--init`')
+    parser_deploy.add_argument(
+        '--memory-request',
+        help='Container memory request/target'
+    )
+    parser_deploy.add_argument(
+        '--memory-limit',
+        help='Container memory hard limit'
+    )
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
