@@ -13,6 +13,7 @@
 #include "librbd/io/Types.h"
 #include <list>
 #include <map>
+#include <optional>
 #include <string>
 
 class Context;
@@ -172,6 +173,7 @@ private:
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_zero_interval;
   std::map<librados::snap_t, uint8_t> m_dst_object_state;
   std::map<librados::snap_t, bool> m_dst_object_may_exist;
+  std::optional<uint64_t> m_dst_object_size = std::nullopt;
   bufferlist m_read_from_parent_data;
 
   io::AsyncOperation* m_src_async_op = nullptr;
