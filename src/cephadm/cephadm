@@ -4420,6 +4420,27 @@ def command_ls(ctx):
     print(json.dumps(ls, indent=4))
 
 
+def with_units_to_int(v: str) -> int:
+    if v.endswith('iB'):
+        v = v[:-2]
+    elif v.endswith('B'):
+        v = v[:-1]
+    mult = 1
+    if v[-1].upper() == 'K':
+        mult = 1024
+        v = v[:-1]
+    elif v[-1].upper() == 'M':
+        mult = 1024 * 1024
+        v = v[:-1]
+    elif v[-1].upper() == 'G':
+        mult = 1024 * 1024 * 1024
+        v = v[:-1]
+    elif v[-1].upper() == 'T':
+        mult = 1024 * 1024 * 1024 * 1024
+        v = v[:-1]
+    return int(float(v) * mult)
+
+
 def list_daemons(ctx, detail=True, legacy_dir=None):
     # type: (CephadmContext, bool, Optional[str]) -> List[Dict[str, str]]
     host_version: Optional[str] = None
@@ -4435,6 +4456,22 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
 
     # keep track of image digests
     seen_digests = {}   # type: Dict[str, List[str]]
+
+    # keep track of memory usage we've seen
+    seen_memusage = {}  # type: Dict[str, int]
+    out, err, code = call(
+        ctx,
+        [container_path, 'stats', '--format', '{{.ID}},{{.MemUsage}}', '--no-stream'],
+        verbosity=CallVerbosity.DEBUG
+    )
+    seen_memusage_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, usage) = line.split(',')
+            (used, limit) = usage.split(' / ')
+            seen_memusage[cid] = with_units_to_int(used)
+            if not seen_memusage_cid_len:
+                seen_memusage_cid_len = len(cid)
 
     # /var/lib/ceph
     if os.path.exists(data_dir):
@@ -4593,6 +4630,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         val['container_image_name'] = image_name
                         val['container_image_id'] = image_id
                         val['container_image_digests'] = image_digests
+                        if container_id:
+                            val['memory_usage'] = seen_memusage.get(container_id[0:seen_memusage_cid_len])
                         val['version'] = version
                         val['started'] = start_stamp
                         val['created'] = get_file_timestamp(
