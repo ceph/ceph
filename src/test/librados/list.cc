@@ -38,6 +38,23 @@ TEST_F(LibRadosList, ListObjects) {
   rados_nobjects_list_close(ctx);
 }
 
+TEST_F(LibRadosList, ListObjectsZeroInName) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, "foo\0bar", buf, sizeof(buf), 0));
+  rados_list_ctx_t ctx;
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
+  const char *entry;
+  size_t entry_size;
+  bool foundit = false;
+  while (rados_nobjects_list_next2(ctx, &entry, NULL, NULL,
+				   &entry_size, NULL, NULL) != -ENOENT) {
+    foundit = true;
+    ASSERT_EQ(std::string(entry, entry_size), "foo\0bar");
+  }
+  ASSERT_TRUE(foundit);
+  rados_nobjects_list_close(ctx);
+}
 
 static void check_list(
   std::set<std::string>& myset,
