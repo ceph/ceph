@@ -316,7 +316,9 @@ class TaskHandler:
         task_json = task.to_json()
         omap_keys = (task.sequence_key, )
         omap_vals = (str.encode(task_json), )
-        self.log.info("adding task: {} {}".format(omap_keys[0], omap_vals[0]))
+        self.log.info("adding task: %s %s",
+                      omap_keys[0].decode(),
+                      omap_vals[0].decode())
 
         with rados.WriteOpCtx() as write_op:
             ioctx.set_omap(write_op, omap_keys, omap_vals)
