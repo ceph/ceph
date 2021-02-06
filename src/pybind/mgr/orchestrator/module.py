@@ -848,10 +848,10 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch daemon add')
-    def _daemon_add_misc(self,
-                         daemon_type: Optional[ServiceType] = None,
-                         placement: Optional[str] = None,
-                         inbuf: Optional[str] = None) -> HandleCommandResult:
+    def daemon_add_misc(self,
+                        daemon_type: Optional[ServiceType] = None,
+                        placement: Optional[str] = None,
+                        inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add daemon(s)"""
         usage = f"""Usage:
     ceph orch daemon add -i <json_file>
@@ -865,6 +865,11 @@ Usage:
                 raise OrchestratorValidationError(usage)
             placement_spec = PlacementSpec.from_string(placement)
             spec = ServiceSpec(daemon_type.value, placement=placement_spec)
+
+        return self._daemon_add_misc(spec)
+
+    def _daemon_add_misc(self, spec: ServiceSpec) -> HandleCommandResult:
+        daemon_type = ServiceType(spec.service_type)
 
         if daemon_type == ServiceType.mon:
             completion = self.add_mon(spec)
@@ -914,11 +919,7 @@ Usage:
             service_id=fs_name,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_mds(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add rgw')
     def _rgw_add(self,
@@ -941,11 +942,7 @@ Usage:
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_rgw(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add nfs')
     def _nfs_add(self,
@@ -964,11 +961,7 @@ Usage:
             namespace=namespace,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_nfs(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch daemon add iscsi')
     def _iscsi_add(self,
@@ -990,11 +983,7 @@ Usage:
             trusted_ip_list=trusted_ip_list,
             placement=PlacementSpec.from_string(placement),
         )
-
-        completion = self.add_iscsi(spec)
-        self._orchestrator_wait([completion])
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return self._daemon_add_misc(spec)
 
     @_cli_write_command('orch')
     def _service_action(self, action: ServiceAction, service_name: str) -> HandleCommandResult:
