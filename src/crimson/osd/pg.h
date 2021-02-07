@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 
 #pragma once
 
@@ -617,6 +617,9 @@ public:
   }
   const map<pg_shard_t, pg_missing_t> &get_shard_missing() const {
     return peering_state.get_peer_missing();
+  }
+  epoch_t get_interval_start_epoch() const {
+    return get_info().history.same_interval_since;
   }
   const pg_missing_const_i* get_shard_missing(pg_shard_t shard) const {
     if (shard == pg_whoami)
