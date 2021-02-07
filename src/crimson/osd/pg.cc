@@ -683,7 +683,23 @@ seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
   }, load_obc_ertr::assert_all{ "can't live with object state messed up" });
 }
 
-seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
+seastar::future<> PG::rep_repair_primary_object(
+  Ref<MOSDOp> m,
+  const hobject_t& oid,
+  eversion_t& v) 
+{
+  assert(is_primary());
+  logger().debug("{}: {} peers osd.{}", __func__, oid, get_acting_recovery_backfill());
+  // Add object to PG's missing set if it isn't there already
+  assert(!get_local_missing().is_missing(oid));
+  peering_state.force_object_missing(pg_whoami, oid, v);
+  auto [op, fut] = get_shard_services().start_operation<crimson::osd::UrgentRecovery>(
+		oid, v, this, get_shard_services(), m->get_min_epoch());
+  return std::move(fut);
+}
+
+PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> 
+PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
   const OpInfo &op_info)
@@ -740,7 +756,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
   }).safe_then([this,
                 m,
                 obc,
-                rvec = op_info.allows_returnvec()] {
+                rvec = op_info.allows_returnvec()]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
     // TODO: should stop at the first op which returns a negative retval,
     //       cmpext uses it for returning the index of first unmatched byte
     int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
@@ -758,19 +774,18 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(
       *m,
       obc->obs.oi.soid);
     return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }, osd_op_errorator::all_same_way([ox = ox.get(),
+  }, crimson::ct_error::object_corrupted::handle([m,
+                                     obc,
+                                     this] () {
+    return rep_repair_primary_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
+      return crimson::ct_error::eagain::make();
+    });
+  }), OpsExecuter::osd_op_errorator::all_same_way([ox = ox.get(),
                                      m,
                                      obc,
                                      this] (const std::error_code& e) {
     return handle_failed_op(e, std::move(obc), *ox, *m);
-  })).handle_exception_type([ox_deleter = std::move(ox),
-                             m,
-                             obc,
-                             this] (const crimson::osd::error& e) {
-    // we need this handler because throwing path which aren't errorated yet.
-    logger().debug("encountered the legacy error handling path!");
-    return handle_failed_op(e.code(), std::move(obc), *ox_deleter, *m);
-  });
+  }));
 }
 
 seastar::future<Ref<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
