@@ -1378,7 +1378,7 @@ int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& buc
     auto biter = bl.cbegin();
     decode(manifest, biter);
   } catch (buffer::error& err) {
-    ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
+    ldpp_dout(dpp(), 0) << "ERROR: failed to decode manifest" << dendl;
     return -EIO;
   }
 
@@ -2368,7 +2368,7 @@ static void get_hint_entities(const std::set<rgw_zone_id>& zones, const std::set
       rgw_bucket hint_bucket;
       int ret = init_bucket(b, hint_bucket_info, hint_bucket);
       if (ret < 0) {
-	ldout(store->ctx(), 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+	ldpp_dout(dpp(), 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
 	continue;
       }
 
@@ -2474,7 +2474,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
     RGWBucketSyncPolicyHandlerRef hint_bucket_handler;
     int r = store->ctl()->bucket->get_sync_policy_handler(zid, hint_bucket, &hint_bucket_handler, null_yield, dpp());
     if (r < 0) {
-      ldout(store->ctx(), 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
+      ldpp_dout(dpp(), 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
       continue;
     }
 
@@ -2770,7 +2770,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
                                pins[1].c_str());
       if (rc != OATH_INVALID_OTP) {
         *pofs = time_ofs - step_size + step_size * totp.window / 2;
-        ldout(cct, 20) << "found at time=" << start_time - time_ofs << " time_ofs=" << time_ofs << dendl;
+        ldpp_dout(dpp(), 20) << "found at time=" << start_time - time_ofs << " time_ofs=" << time_ofs << dendl;
         return 0;
       }
     }
@@ -6748,7 +6748,7 @@ next:
     if (min_rewrite_stripe_size > 0) {
       ret = check_min_obj_stripe_size(store, bucket_info, &obj, min_rewrite_stripe_size, &need_rewrite);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
+        ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
       }
     }
     if (need_rewrite) {
@@ -6758,7 +6758,7 @@ next:
         return -ret;
       }
     } else {
-      ldout(store->ctx(), 20) << "skipped object" << dendl;
+      ldpp_dout(dpp(), 20) << "skipped object" << dendl;
     }
   }
 
@@ -6877,7 +6877,7 @@ next:
           if (min_rewrite_stripe_size > 0) {
             r = check_min_obj_stripe_size(store, bucket_info, &obj, min_rewrite_stripe_size, &need_rewrite);
             if (r < 0) {
-              ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
+              ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
             }
           }
           if (!need_rewrite) {

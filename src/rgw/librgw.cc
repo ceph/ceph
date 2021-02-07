@@ -206,7 +206,7 @@ namespace rgw {
      */
     RGWOp *op = (req->op) ? req->op : dynamic_cast<RGWOp*>(req);
     if (! op) {
-      dout(1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
+      ldpp_dout(op, 1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
       return -EINVAL;
     }
 
@@ -242,7 +242,7 @@ namespace rgw {
     /* XXX and -then- stash req_state pointers everywhere they are needed */
     ret = req->init(rgw_env, &rados_ctx, io, s);
     if (ret < 0) {
-      dout(10) << "failed to initialize request" << dendl;
+      ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
       goto done;
     }
@@ -302,9 +302,9 @@ namespace rgw {
       ret = op->verify_permission(null_yield);
       if (ret < 0) {
 	if (s->system_request) {
-	  dout(2) << "overriding permissions due to system operation" << dendl;
+	  ldpp_dout(op, 2) << "overriding permissions due to system operation" << dendl;
 	} else if (s->auth.identity->is_admin_of(s->user->get_id())) {
-	  dout(2) << "overriding permissions due to admin operation" << dendl;
+	  ldpp_dout(op, 2) << "overriding permissions due to admin operation" << dendl;
 	} else {
 	  abort_req(s, op, ret);
 	  goto done;
@@ -344,7 +344,7 @@ namespace rgw {
 
     ldpp_dout(s, 2) << "http status=" << http_ret << dendl;
 
-    dout(1) << "====== " << __func__
+    ldpp_dout(op, 1) << "====== " << __func__
 	    << " req done req=" << hex << req << dec << " http_status="
 	    << http_ret
 	    << " ======" << dendl;
@@ -367,7 +367,7 @@ namespace rgw {
      */
     RGWOp *op = (req->op) ? req->op : dynamic_cast<RGWOp*>(req);
     if (! op) {
-      dout(1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
+      ldpp_dout(op, 1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
       return -EINVAL;
     }
 
@@ -380,7 +380,7 @@ namespace rgw {
 
     int ret = req->init(rgw_env, &rados_ctx, &io_ctx, s);
     if (ret < 0) {
-      dout(10) << "failed to initialize request" << dendl;
+      ldpp_dout(op, 10) << "failed to initialize request" << dendl;
       abort_req(s, op, ret);
       goto done;
     }
@@ -434,9 +434,9 @@ namespace rgw {
     ret = op->verify_permission(null_yield);
     if (ret < 0) {
       if (s->system_request) {
-	dout(2) << "overriding permissions due to system operation" << dendl;
+	ldpp_dout(op, 2) << "overriding permissions due to system operation" << dendl;
       } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
-	dout(2) << "overriding permissions due to admin operation" << dendl;
+	ldpp_dout(op, 2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
 	goto done;
@@ -465,7 +465,7 @@ namespace rgw {
       return -EINVAL;
     }
 
-    int ret = req->exec_finish(op);
+    int ret = req->exec_finish();
     int op_ret = op->get_ret();
 
     ldpp_dout(op, 1) << "====== " << __func__

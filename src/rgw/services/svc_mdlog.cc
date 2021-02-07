@@ -75,7 +75,7 @@ int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
     auto sysobj = obj_ctx.get_obj(obj);
     ret = sysobj.wop().remove(y);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
       return ret;
     }
     return -ENOENT;
@@ -84,7 +84,7 @@ int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
     auto p = bl.cbegin();
     state->decode(p);
   } catch (buffer::error& e) {
-    ldout(cct, 1) << "failed to decode the mdlog history: "
+    ldpp_dout(dpp, 1) << "failed to decode the mdlog history: "
         << e.what() << dendl;
     return -EIO;
   }

@@ -847,7 +847,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *d
   rgw_pubsub_sub_config sub_conf;
   int ret = get_conf(&sub_conf);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
     return ret;
   }
 
@@ -859,7 +859,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *d
     return 0;
   }
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
   }
 
@@ -873,7 +873,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *d
 
   ret = list_op.list_objects(dpp, max_events, &objs, nullptr, &list.is_truncated, null_yield);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to list bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to list bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
   }
   if (list.is_truncated) {
@@ -887,7 +887,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *d
     try {
       bl.decode_base64(bl64);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 1) << "ERROR: failed to event (not a valid base64)" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to event (not a valid base64)" << dendl;
       continue;
     }
     EventType event;
@@ -896,7 +896,7 @@ int RGWPubSub::SubWithEvents<EventType>::list_events(const DoutPrefixProvider *d
     try {
       decode(event, iter);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 1) << "ERROR: failed to decode event" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to decode event" << dendl;
       continue;
     };
 
@@ -912,7 +912,7 @@ int RGWPubSub::SubWithEvents<EventType>::remove_event(const DoutPrefixProvider *
   rgw_pubsub_sub_config sub_conf;
   int ret = get_conf(&sub_conf);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read sub config: ret=" << ret << dendl;
     return ret;
   }
 
@@ -920,7 +920,7 @@ int RGWPubSub::SubWithEvents<EventType>::remove_event(const DoutPrefixProvider *
   string tenant;
   ret = store->getRados()->get_bucket_info(store->svc(), tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, null_yield, nullptr);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
   }
 
@@ -939,7 +939,7 @@ int RGWPubSub::SubWithEvents<EventType>::remove_event(const DoutPrefixProvider *
 
   ret = del_op.delete_obj(null_yield, dpp);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
   }
   return 0;
 }
