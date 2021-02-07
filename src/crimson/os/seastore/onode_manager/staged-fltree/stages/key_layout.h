@@ -128,9 +128,9 @@ inline MatchKindCMP compare_to(const snap_gen_t& l, const snap_gen_t& r) {
  * The layout to store char array as an oid or an ns string which may be
  * compressed.
  *
- * If compressed, the physical block only stores an unsigned int of
- * string_size_t, with value 0 denoting Type::MIN, and value max() denoting
- * Type::MAX.
+ * (TODO) If compressed, the physical block only stores an unsigned
+ * int of string_size_t, with value MIN denoting Type::MIN, and value MAX
+ * denoting Type::MAX.
  *
  * If not compressed (Type::STR), the physical block stores the char array and
  * a valid string_size_t value.
@@ -140,9 +140,9 @@ struct string_key_view_t {
   // presumably the maximum string length is 2KiB
   using string_size_t = uint16_t;
   static constexpr auto MAX = std::numeric_limits<string_size_t>::max();
-  static constexpr auto MIN = string_size_t(0u);
-  static auto is_valid_size(size_t size) {
-    return (size > MIN && size < MAX);
+  static constexpr auto MIN = MAX - 1;
+  static bool is_valid_size(size_t size) {
+    return size < MIN;
   }
 
   string_key_view_t(const char* p_end) {
@@ -326,7 +326,8 @@ inline MatchKindCMP compare_to(const string_view_masked_t& l, const string_view_
   auto l_type = l.get_type();
   auto r_type = r.get_type();
   if (l_type == Type::STR && r_type == Type::STR) {
-    assert(l.size() && r.size());
+    assert(string_key_view_t::is_valid_size(l.size()));
+    assert(string_key_view_t::is_valid_size(r.size()));
     return toMatchKindCMP(l.to_string_view(), r.to_string_view());
   } else if (l_type == r_type) {
     return MatchKindCMP::EQ;
@@ -338,14 +339,14 @@ inline MatchKindCMP compare_to(const string_view_masked_t& l, const string_view_
 }
 inline MatchKindCMP compare_to(std::string_view l, const string_view_masked_t& r) {
   using Type = string_view_masked_t::Type;
-  assert(l.length());
+  assert(string_key_view_t::is_valid_size(l.size()));
   auto r_type = r.get_type();
   if (r_type == Type::MIN) {
     return MatchKindCMP::GT;
   } else if (r_type == Type::MAX) {
     return MatchKindCMP::LT;
   } else { // r_type == Type::STR
-    assert(r.size());
+    assert(string_key_view_t::is_valid_size(r.size()));
     return toMatchKindCMP(l, r.to_string_view());
   }
 }
