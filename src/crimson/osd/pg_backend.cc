@@ -125,7 +125,7 @@ PGBackend::mutate_object(
   std::set<pg_shard_t> pg_shards,
   crimson::osd::ObjectContextRef &&obc,
   ceph::os::Transaction&& txn,
-  const osd_op_params_t& osd_op_p,
+  osd_op_params_t&& osd_op_p,
   epoch_t min_epoch,
   epoch_t map_epoch,
   std::vector<pg_log_entry_t>&& log_entries)

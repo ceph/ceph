@@ -537,7 +537,7 @@ private:
   seastar::future<> submit_transaction(const OpInfo& op_info,
 				       ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
-				       const osd_op_params_t& oop);
+				       osd_op_params_t&& oop);
   seastar::future<> repair_object(Ref<MOSDOp> m,
                const hobject_t& oid,
                eversion_t& v);

@@ -569,7 +569,7 @@ seastar::future<> PG::WaitForActiveBlocker::stop()
 seastar::future<> PG::submit_transaction(const OpInfo& op_info,
 					 ObjectContextRef&& obc,
 					 ceph::os::Transaction&& txn,
-					 const osd_op_params_t& osd_op_p)
+					 osd_op_params_t&& osd_op_p)
 {
   if (__builtin_expect(stopping, false)) {
     return seastar::make_exception_future<>(
