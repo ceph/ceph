@@ -747,10 +747,7 @@ PG::do_osd_ops(
           std::move(txn),
           std::move(filled_osd_op_p));
       });
-  }).safe_then([this,
-                m,
-                obc,
-                rvec = op_info.allows_returnvec()]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
+  }).safe_then([this, m, obc, rvec = op_info.allows_returnvec()] {
     // TODO: should stop at the first op which returns a negative retval,
     //       cmpext uses it for returning the index of first unmatched byte
     int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
@@ -767,12 +764,12 @@ PG::do_osd_ops(
       "do_osd_ops: {} - object {} sending reply",
       *m,
       obc->obs.oi.soid);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }, crimson::ct_error::object_corrupted::handle([m,
-                                     obc,
-                                     this] () {
-    return repair_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
-      return crimson::ct_error::eagain::make();
+    return PG::do_osd_ops_ertr::make_ready_future<Ref<MOSDOpReply>>(
+      std::move(reply));
+  }, crimson::ct_error::object_corrupted::handle([m, obc, this] {
+    return repair_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([] {
+      return PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>>(
+      crimson::ct_error::eagain::make());
     });
   }), OpsExecuter::osd_op_errorator::all_same_way([ox = std::move(ox),
                                      m,
