@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 /*
  * Ceph - scalable distributed file system
  *
@@ -1643,20 +1643,21 @@ bool DaemonServer::_handle_command(
 	    continue;
 	  }
 	  touched_pgs++;
-	  if (!(q.second.state & PG_STATE_ACTIVE) ||
-	      (q.second.state & PG_STATE_DEGRADED)) {
-	    ++dangerous_pgs;
-	    continue;
-	  }
+
 	  const pg_pool_t *pi = osdmap.get_pg_pool(q.first.pool());
 	  if (!pi) {
 	    ++dangerous_pgs; // pool is creating or deleting
-	  } else {
-	    if (pg_acting.size() < pi->min_size) {
-	      ++dangerous_pgs;
-	    }
+            continue;
 	  }
-	}
+
+	  if (!(q.second.state & PG_STATE_ACTIVE)) {
+	    ++dangerous_pgs;
+	    continue;
+	  }
+          if (pg_acting.size() < pi->min_size) {
+            ++dangerous_pgs;
+          }
+        }
       });
     if (r) {
       cmdctx->reply(r, ss);
