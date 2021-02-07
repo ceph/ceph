@@ -728,13 +728,6 @@ PG::do_osd_ops(
       *m,
       obc->obs.oi.soid);
     return std::move(*ox).flush_changes(
-      [m] (auto&& obc) -> osd_op_errorator::future<> {
-	logger().debug(
-	  "do_osd_ops: {} - object {} txn is empty, bypassing mutate",
-	  *m,
-	  obc->obs.oi.soid);
-        return osd_op_errorator::now();
-      },
       [this, m, &op_info] (auto&& txn,
 			   auto&& obc,
 			   auto&& osd_op_p,

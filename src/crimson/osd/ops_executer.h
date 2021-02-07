@@ -180,8 +180,8 @@ public:
 
   osd_op_errorator::future<> execute_op(class OSDOp& osd_op);
 
-  template <typename Func, typename MutFunc>
-  osd_op_errorator::future<> flush_changes(Func&& func, MutFunc&& mut_func) &&;
+  template <typename MutFunc>
+  osd_op_errorator::future<> flush_changes(MutFunc&& mut_func) &&;
 
   const auto& get_message() const {
     return msg;
@@ -235,29 +235,25 @@ auto OpsExecuter::with_effect_on_obc(
   return std::forward<MainFunc>(main_func)(ctx_ref);
 }
 
-template <typename Func,
-          typename MutFunc>
+template <typename MutFunc>
 OpsExecuter::osd_op_errorator::future<> OpsExecuter::flush_changes(
-  Func&& func,
   MutFunc&& mut_func) &&
 {
   const bool want_mutate = !txn.empty();
   // osd_op_params are instantiated by every wr-like operation.
   assert(osd_op_params || !want_mutate);
   assert(obc);
+  auto maybe_mutated = osd_op_errorator::now();
+  if (want_mutate) {
+    maybe_mutated = std::forward<MutFunc>(mut_func)(std::move(txn),
+                                                    std::move(obc),
+                                                    std::move(*osd_op_params),
+                                                    user_modify);
+  }
   if (__builtin_expect(op_effects.empty(), true)) {
-    return want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
-                                                         std::move(obc),
-                                                         std::move(*osd_op_params),
-                                                         user_modify)
-                       : std::forward<Func>(func)(std::move(obc));
+    return maybe_mutated;
   } else {
-    return (want_mutate ? std::forward<MutFunc>(mut_func)(std::move(txn),
-                                                          std::move(obc),
-                                                          std::move(*osd_op_params),
-                                                          user_modify)
-                        : std::forward<Func>(func)(std::move(obc))
-    ).safe_then([this] {
+    return maybe_mutated.safe_then([this] {
       // let's do the cleaning of `op_effects` in destructor
       return crimson::do_for_each(op_effects, [] (auto& op_effect) {
         return op_effect->execute();
