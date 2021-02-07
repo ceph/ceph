@@ -212,7 +212,7 @@ void RGWListOIDCProviders::execute(optional_yield y)
     for (const auto& it : result) {
       s->formatter->open_object_section("Arn");
       auto& arn = it.get_arn();
-      ldout(s->cct, 0) << "ARN: " << arn << dendl;
+      ldpp_dout(s, 0) << "ARN: " << arn << dendl;
       s->formatter->dump_string("Arn", arn);
       s->formatter->close_section();
     }

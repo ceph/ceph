@@ -171,10 +171,10 @@ void RGWPSAckSubEventOp::execute(optional_yield y) {
   auto sub = ps->get_sub_with_events(sub_name);
   op_ret = sub->remove_event(s, event_id);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to ack event on subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully acked event on subscription '" << sub_name << "'" << dendl;
 }
 
 void RGWPSPullSubEventsOp::execute(optional_yield y) {
@@ -191,10 +191,10 @@ void RGWPSPullSubEventsOp::execute(optional_yield y) {
   }
   op_ret = sub->list_events(s, marker, max_entries);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get events from subscription '" << sub_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get events from subscription '" << sub_name << "', ret=" << op_ret << dendl;
     return;
   }
-  ldout(s->cct, 20) << "successfully got events from subscription '" << sub_name << "'" << dendl;
+  ldpp_dout(this, 20) << "successfully got events from subscription '" << sub_name << "'" << dendl;
 }
 
 

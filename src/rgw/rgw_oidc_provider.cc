@@ -70,11 +70,11 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   /* check to see the name is not used */
   ret = read_url(dpp, idp_url, tenant);
   if (exclusive && ret == 0) {
-    ldout(cct, 0) << "ERROR: url " << provider_url << " already in use"
+    ldpp_dout(dpp, 0) << "ERROR: url " << provider_url << " already in use"
                     << id << dendl;
     return -EEXIST;
   } else if ( ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "failed reading provider url  " << provider_url << ": "
+    ldpp_dout(dpp, 0) << "failed reading provider url  " << provider_url << ": "
                   << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -100,7 +100,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   auto& pool = svc->zone->get_zone_params().oidc_pool;
   ret = store_url(idp_url, exclusive, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
                   << provider_url << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -142,12 +142,12 @@ int RGWOIDCProvider::get(const DoutPrefixProvider *dpp)
   string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to parse arn" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to parse arn" << dendl;
     return -EINVAL;
   }
 
   if (this->tenant != tenant) {
-    ldout(cct, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
+    ldpp_dout(dpp, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
                   << tenant << ": " << dendl;
     return -EINVAL;
   }
@@ -204,7 +204,7 @@ int RGWOIDCProvider::read_url(const DoutPrefixProvider *dpp, const string& url, 
     auto iter = bl.cbegin();
     decode(*this, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
                   ": " << url << dendl;
     return -EIO;
   }
@@ -260,7 +260,7 @@ int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *stor
     list<string> oids;
     int r = store->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
     if (r < 0) {
-      ldout(ctl->cct, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
+      ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
                   << prefix << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
@@ -279,7 +279,7 @@ int RGWOIDCProvider::get_providers(const DoutPrefixProvider *dpp, RGWRados *stor
         auto iter = bl.cbegin();
         decode(provider, iter);
       } catch (buffer::error& err) {
-        ldout(ctl->cct, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
+        ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
                     ": " << iter << dendl;
         return -EIO;
       }

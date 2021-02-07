@@ -86,11 +86,11 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
   /* check to see the name is not used */
   ret = read_id(dpp, name, tenant, id, y);
   if (exclusive && ret == 0) {
-    ldout(cct, 0) << "ERROR: name " << name << " already in use for role id "
+    ldpp_dout(dpp, 0) << "ERROR: name " << name << " already in use for role id "
                     << id << dendl;
     return -EEXIST;
   } else if ( ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "failed reading role id  " << id << ": "
+    ldpp_dout(dpp, 0) << "failed reading role id  " << id << ": "
                   << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -123,21 +123,21 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
   auto& pool = svc->zone->get_zone_params().roles_pool;
   ret = store_info(exclusive, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
   ret = store_name(exclusive, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: storing role name in pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: storing role name in pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
 
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
     int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
     if (info_ret < 0) {
-      ldout(cct, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
     }
     return ret;
@@ -145,20 +145,20 @@ int RGWRole::create(const DoutPrefixProvider *dpp, bool exclusive, optional_yiel
 
   ret = store_path(exclusive, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: storing role path in pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: storing role path in pool: " << pool.name << ": "
                   << path << ": " << cpp_strerror(-ret) << dendl;
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
     int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
     if (info_ret < 0) {
-      ldout(cct, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
     }
     //Delete role name that was stored in previous call
     oid = tenant + get_names_oid_prefix() + name;
     int name_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
     if (name_ret < 0) {
-      ldout(cct, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
+      ldpp_dout(dpp, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-name_ret) << dendl;
     }
     return ret;
@@ -189,7 +189,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   string oid = get_info_oid_prefix() + id;
   ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: deleting role id from pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: deleting role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-ret) << dendl;
   }
 
@@ -197,7 +197,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   oid = tenant + get_names_oid_prefix() + name;
   ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: deleting role name from pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: deleting role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
   }
 
@@ -205,7 +205,7 @@ int RGWRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
   ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL, y);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
                   << path << ": " << cpp_strerror(-ret) << dendl;
   }
   return ret;
@@ -331,7 +331,7 @@ int RGWRole::read_id(const DoutPrefixProvider *dpp, const string& role_name, con
     using ceph::decode;
     decode(nameToId, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode role from pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode role from pool: " << pool.name << ": "
                   << role_name << dendl;
     return -EIO;
   }
@@ -349,7 +349,7 @@ int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
 
   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y, dpp);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed reading role info from pool: " << pool.name <<
+    ldpp_dout(dpp, 0) << "ERROR: failed reading role info from pool: " << pool.name <<
                   ": " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -359,7 +359,7 @@ int RGWRole::read_info(const DoutPrefixProvider *dpp, optional_yield y)
     auto iter = bl.cbegin();
     decode(*this, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
                   ": " << id << dendl;
     return -EIO;
   }
@@ -377,7 +377,7 @@ int RGWRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
 
   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL, y, dpp);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed reading role name from pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: failed reading role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -388,7 +388,7 @@ int RGWRole::read_name(const DoutPrefixProvider *dpp, optional_yield y)
     auto iter = bl.cbegin();
     decode(nameToId, iter);
   } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode role name from pool: " << pool.name << ": "
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode role name from pool: " << pool.name << ": "
                   << name << dendl;
     return -EIO;
   }
@@ -468,7 +468,7 @@ int RGWRole::get_roles_by_path_prefix(const DoutPrefixProvider *dpp,
     list<string> oids;
     int r = store->list_raw_objects(pool, prefix, 1000, ctx, oids, &is_truncated);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
+      ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: " << pool.name << ": "
                   << prefix << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
