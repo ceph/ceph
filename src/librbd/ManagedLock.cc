@@ -520,10 +520,10 @@ template <typename I>
 void ManagedLock<I>::handle_acquire_lock(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
-  if (r == -EBUSY || r == -EAGAIN) {
+  if (r == -EBUSY || r == -EAGAIN || r == -EROFS) {
     ldout(m_cct, 5) << "unable to acquire exclusive lock" << dendl;
   } else if (r < 0) {
-    lderr(m_cct) << "failed to acquire exclusive lock:" << cpp_strerror(r)
+    lderr(m_cct) << "failed to acquire exclusive lock: " << cpp_strerror(r)
                << dendl;
   } else {
     ldout(m_cct, 5) << "successfully acquired exclusive lock" << dendl;
