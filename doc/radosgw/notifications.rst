@@ -335,7 +335,7 @@ Response will have the following format:
 
 ::
 
-    <ListTopicdResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+    <ListTopicsResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
         <ListTopicsResult>
             <Topics>
                 <member>
