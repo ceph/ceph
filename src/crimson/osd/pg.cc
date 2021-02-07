@@ -567,7 +567,6 @@ seastar::future<> PG::WaitForActiveBlocker::stop()
 }
 
 seastar::future<> PG::submit_transaction(const OpInfo& op_info,
-					 const std::vector<OSDOp>& ops,
 					 ObjectContextRef&& obc,
 					 ceph::os::Transaction&& txn,
 					 const osd_op_params_t& osd_op_p)
@@ -584,6 +583,7 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
   }
 
   std::vector<pg_log_entry_t> log_entries;
+  const auto& ops = osd_op_p.req->ops;
   log_entries.emplace_back(obc->obs.exists ?
 		      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
 		    obc->obs.oi.soid, osd_op_p.at_version, obc->obs.oi.version,
@@ -738,7 +738,6 @@ PG::do_osd_ops(
         fill_op_params_bump_pg_version(osd_op_p, std::move(m), user_modify);
 	return submit_transaction(
           op_info,
-          osd_op_p.req->ops,
           std::move(obc),
           std::move(txn),
           std::move(osd_op_p));
