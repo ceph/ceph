@@ -7,6 +7,7 @@ from __future__ import absolute_import
 
 from collections import OrderedDict
 from functools import wraps
+from random import random
 from threading import RLock
 from time import time
 
@@ -16,7 +17,7 @@ except ImportError:
     pass  # For typing only
 
 
-def ttl_cache(ttl, maxsize=128, typed=False):
+def ttl_cache(ttl, maxsize=128, typed=False, ttl_spread=1.0):
     if typed is not False:
         raise NotImplementedError("typed caching not supported")
 
@@ -34,9 +35,8 @@ def ttl_cache(ttl, maxsize=128, typed=False):
             with rlock:
                 refresh = True
                 if key in cache:
-                    (ret, ts) = cache[key]
-                    del cache[key]
-                    if time() - ts < ttl:
+                    (ret, expires) = cache[key]
+                    if time() < expires:
                         refresh = False
                         stats[0] += 1
                     else:
@@ -44,12 +44,15 @@ def ttl_cache(ttl, maxsize=128, typed=False):
 
                 if refresh:
                     ret = function(*args, **kwargs)
-                    ts = time()
+                    expires = time() + ttl
+                    if ttl_spread:
+                        expires += ttl*ttl_spread*random()
+
                     if len(cache) == maxsize:
                         cache.popitem(last=False)
                     stats[1] += 1
 
-                cache[key] = (ret, ts)
+                    cache[key] = (ret, expires)
 
             return ret
 
