@@ -539,7 +539,7 @@ private:
 				       ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
 				       const osd_op_params_t& oop);
-  seastar::future<> rep_repair_primary_object(Ref<MOSDOp> m, 
+  seastar::future<> repair_object(Ref<MOSDOp> m,
                const hobject_t& oid,
                eversion_t& v);
 

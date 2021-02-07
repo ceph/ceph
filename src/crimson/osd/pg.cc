@@ -683,11 +683,12 @@ seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
   }, load_obc_ertr::assert_all{ "can't live with object state messed up" });
 }
 
-seastar::future<> PG::rep_repair_primary_object(
+seastar::future<> PG::repair_object(
   Ref<MOSDOp> m,
   const hobject_t& oid,
   eversion_t& v) 
 {
+  // see also PrimaryLogPG::rep_repair_primary_object()
   assert(is_primary());
   logger().debug("{}: {} peers osd.{}", __func__, oid, get_acting_recovery_backfill());
   // Add object to PG's missing set if it isn't there already
@@ -777,7 +778,7 @@ PG::do_osd_ops(
   }, crimson::ct_error::object_corrupted::handle([m,
                                      obc,
                                      this] () {
-    return rep_repair_primary_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
+    return repair_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
       return crimson::ct_error::eagain::make();
     });
   }), OpsExecuter::osd_op_errorator::all_same_way([ox = std::move(ox),
