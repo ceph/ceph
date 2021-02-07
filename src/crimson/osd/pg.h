@@ -518,8 +518,8 @@ private:
   void do_peering_event(
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
-  osd_op_params_t&& fill_op_params_bump_pg_version(
-    osd_op_params_t&& osd_op_p,
+  void fill_op_params_bump_pg_version(
+    osd_op_params_t& osd_op_p,
     Ref<MOSDOp> m,
     const bool user_modify);
   seastar::future<Ref<MOSDOpReply>> handle_failed_op(

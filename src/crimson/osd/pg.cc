@@ -620,8 +620,8 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
   });
 }
 
-osd_op_params_t&& PG::fill_op_params_bump_pg_version(
-  osd_op_params_t&& osd_op_p,
+void PG::fill_op_params_bump_pg_version(
+  osd_op_params_t& osd_op_p,
   Ref<MOSDOp> m,
   const bool user_modify)
 {
@@ -633,7 +633,6 @@ osd_op_params_t&& PG::fill_op_params_bump_pg_version(
   if (user_modify) {
     osd_op_p.user_at_version = osd_op_p.at_version.version;
   }
-  return std::move(osd_op_p);
 }
 
 seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
@@ -736,16 +735,13 @@ PG::do_osd_ops(
 	  "do_osd_ops: {} - object {} submitting txn",
 	  *m,
 	  obc->obs.oi.soid);
-        auto filled_osd_op_p = fill_op_params_bump_pg_version(
-          std::move(osd_op_p),
-          std::move(m),
-          user_modify);
+        fill_op_params_bump_pg_version(osd_op_p, std::move(m), user_modify);
 	return submit_transaction(
           op_info,
-          filled_osd_op_p.req->ops,
+          osd_op_p.req->ops,
           std::move(obc),
           std::move(txn),
-          std::move(filled_osd_op_p));
+          std::move(osd_op_p));
       });
   }).safe_then([this, m, obc, rvec = op_info.allows_returnvec()] {
     // TODO: should stop at the first op which returns a negative retval,
