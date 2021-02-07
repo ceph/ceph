@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
 /*
  * Ceph - scalable distributed file system
  *
@@ -1617,6 +1617,7 @@ bool DaemonServer::_handle_command(
 	}
 	for (const auto& q : pg_map.pg_stat) {
           set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
+	  set<int32_t> avail_no_missing;
 	  bool found = false;
 	  if (q.second.state & PG_STATE_DEGRADED) {
 	    for (auto& anm : q.second.avail_no_missing) {
@@ -1626,6 +1627,7 @@ bool DaemonServer::_handle_command(
 	      }
 	      if (anm.osd != CRUSH_ITEM_NONE) {
 		pg_acting.insert(anm.osd);
+		avail_no_missing.insert(anm.osd);
 	      }
 	    }
 	  } else {
@@ -1643,8 +1645,7 @@ bool DaemonServer::_handle_command(
 	    continue;
 	  }
 	  touched_pgs++;
-	  if (!(q.second.state & PG_STATE_ACTIVE) ||
-	      (q.second.state & PG_STATE_DEGRADED)) {
+	  if (!(q.second.state & PG_STATE_ACTIVE)) {
 	    ++dangerous_pgs;
 	    continue;
 	  }
@@ -1652,7 +1653,8 @@ bool DaemonServer::_handle_command(
 	  if (!pi) {
 	    ++dangerous_pgs; // pool is creating or deleting
 	  } else {
-	    if (pg_acting.size() < pi->min_size) {
+	    if (!avail_no_missing.size() ||
+		pg_acting.size() < pi->min_size) {
 	      ++dangerous_pgs;
 	    }
 	  }
