@@ -572,7 +572,8 @@ class CephadmUpgrade:
                 osd_min_name = osdmap.get("require_osd_release", "argonaut")
                 osd_min = ceph_release_to_major(osd_min_name)
                 if osd_min < int(target_major):
-                    logger.info(f'Upgrade: Setting require_osd_release to {target_major} {target_major_name}')
+                    logger.info(
+                        f'Upgrade: Setting require_osd_release to {target_major} {target_major_name}')
                     ret, _, err = self.mgr.check_mon_command({
                         'prefix': 'osd require-osd-release',
                         'release': target_major_name,
