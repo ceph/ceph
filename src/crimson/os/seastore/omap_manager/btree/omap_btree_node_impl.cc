@@ -130,7 +130,7 @@ OMapInnerNode::insert(omap_context_t oc, const std::string &key, const std::stri
   assert(child_pt != iter_end());
   auto laddr = child_pt->get_node_key().laddr;
   return omap_load_extent(oc, laddr, get_meta().depth - 1).safe_then(
-    [this, oc, child_pt, &key, &value] (auto extent) {
+    [oc, &key, &value] (auto extent) {
     return extent->insert(oc, key, value);
   }).safe_then([this, oc, child_pt] (auto mresult) {
     if (mresult.status == mutation_status_t::SUCCESS) {
@@ -338,7 +338,7 @@ OMapInnerNode::merge_entry(omap_context_t oc, internal_iterator_t iter, OMapNode
         journal_inner_remove(riter, maybe_get_delta_buffer());
         //retire extent
         std::vector<laddr_t> dec_laddrs {l->get_laddr(), r->get_laddr()};
-        return dec_ref(oc, dec_laddrs).safe_then([this, oc] {
+        return dec_ref(oc, dec_laddrs).safe_then([this] {
           if (extent_is_below_min()) {
             return merge_entry_ret(
                    merge_entry_ertr::ready_future_marker{},

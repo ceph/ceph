@@ -190,7 +190,7 @@ public:
 	return write_record(
 	  rsize, std::move(record),
 	  handle
-	).safe_then([this, rsize, seq](auto addr) {
+	).safe_then([rsize, seq](auto addr) {
 	  return std::make_pair(
 	    addr.add_offset(rsize.mdlength),
 	    journal_seq_t{seq, addr});
