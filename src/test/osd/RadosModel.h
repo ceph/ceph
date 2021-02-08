@@ -2399,23 +2399,9 @@ public:
 		  context->oid_set_chunk_tgt_pool.end()) {
 	  cout << num << ": get expected ENOENT tgt oid " << oid_tgt << std::endl;
 	} else if (r == -EOPNOTSUPP) {
-	  bool is_overlapped = false;
-	  interval_set<uint64_t> chunk;
-	  chunk.insert(offset, length);
-	  for (auto &p : src_value.chunk_info) {
-	    if (chunk.intersects(p.first, p.second.length)) {
-	      cout << " range is overlapped  offset: " << offset << " length: " << length
-		    << " chunk_info offset: " << p.second.offset << " length " 
-		    << p.second.length << std::endl;
-	      is_overlapped = true;
-	      context->update_object_version(oid, comp->get_version64());
-	    } 
-	  }
-	  if (!is_overlapped) {
-	    cerr << "Error: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
-		  << r << " offset: " << offset << " length: " << length <<  std::endl;
-	    ceph_abort();
-	  }
+	  cout << "Range is overlapped: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
+		<< r << " offset: " << offset << " length: " << length <<  std::endl;
+	  context->update_object_version(oid, comp->get_version64());
 	} else {
 	  cerr << "Error: oid " << oid << " set_chunk " << oid_tgt << " returned error code "
 	       << r << std::endl;
