@@ -76,7 +76,7 @@ protected:
 
   CommandTable<MgrCommand> command_table;
 
-  using clock_t = ceph::real_clock;
+  using clock_t = ceph::mono_clock;
   clock_t::time_point last_connect_attempt;
 
   uint64_t last_config_bl_version = 0;
