@@ -3132,6 +3132,12 @@ def get_image_info_from_inspect(out, image):
 
 
 ##################################
+def bootstrap_print_status(ctx: CephadmContext, msg: str):
+    if ctx.jsonlines:
+        print(json.dumps({'msg': msg}))
+    else:
+        logger.info(msg)
+
 def check_subnet(subnets:str) -> Tuple[int, List[int], str]:
     """Determine whether the given string is a valid subnet
 
@@ -3209,7 +3215,7 @@ def prepare_mon_addresses(
             elif port == 3300:
                 addr_arg = '[v2:%s]' % ctx.mon_ip
             else:
-                logger.warning('Using msgr2 protocol for unrecognized port %d' %
+                bootstrap_print_status(ctx, 'Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % ctx.mon_ip
             base_ip = ctx.mon_ip[0:-(len(str(port)))-1]
@@ -3247,7 +3253,7 @@ def prepare_mon_addresses(
             if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
                     [ipaddress.ip_address(ip) for ip in ips]:
                 mon_network = net
-                logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
+                bootstrap_print_status(ctx, 'Mon IP %s is in CIDR network %s' % (base_ip,
                                                                  mon_network))
                 break
         if not mon_network:
@@ -3269,7 +3275,7 @@ def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
         cluster_network = ctx.cluster_network
         ipv6_cluster_network = True if 6 in versions else False
     else:
-        logger.info("- internal network (--cluster-network) has not "
+        bootstrap_print_status(ctx, "internal network (--cluster-network) has not "
                        "been provided, OSD replication will default to "
                        "the public_network")
 
@@ -3285,7 +3291,7 @@ def create_initial_keys(
     _image = ctx.image
 
     # create some initial keys
-    logger.info('Creating initial keys...')
+    bootstrap_print_status(ctx, 'Creating initial keys...')
     mon_key = CephContainer(
         ctx,
         image=_image,
@@ -3337,7 +3343,7 @@ def create_initial_monmap(
     fsid: str,
     mon_id: str, mon_addr: str
 ) -> Any:
-    logger.info('Creating initial monmap...')
+    bootstrap_print_status(ctx, 'Creating initial monmap...')
     monmap = write_tmp('', 0, 0)
     out = CephContainer(
         ctx,
@@ -3367,7 +3373,7 @@ def prepare_create_mon(
     bootstrap_keyring_path: str,
     monmap_path: str
 ):
-    logger.info('Creating mon...')
+    bootstrap_print_status(ctx, 'Creating mon...')
     create_daemon_dirs(ctx, fsid, 'mon', mon_id, uid, gid)
     mon_dir = get_data_dir(fsid, ctx.data_dir, 'mon', mon_id)
     log_dir = get_log_dir(fsid, ctx.log_dir)
@@ -3408,7 +3414,7 @@ def wait_for_mon(
     mon_id: str, mon_dir: str,
     admin_keyring_path: str, config_path: str
 ):
-    logger.info('Waiting for mon to start...')
+    bootstrap_print_status(ctx, 'Waiting for mon to start...')
     c = CephContainer(
         ctx,
         image=ctx.image,
@@ -3440,7 +3446,7 @@ def create_mgr(
     fsid: str, mgr_id: str, mgr_key: str,
     config: str, clifunc: Callable
 ) -> None:
-    logger.info('Creating mgr...')
+    bootstrap_print_status(ctx, 'Creating mgr...')
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
     # Note:the default port used by the Prometheus node exporter is opened in fw
@@ -3448,7 +3454,7 @@ def create_mgr(
                   config=config, keyring=mgr_keyring, ports=[9283])
 
     # wait for the service to become available
-    logger.info('Waiting for mgr to start...')
+    bootstrap_print_status(ctx, 'Waiting for mgr to start...')
     def is_mgr_available():
         # type: () -> bool
         timeout=ctx.timeout if ctx.timeout else 60 # seconds
@@ -3469,22 +3475,22 @@ def prepare_ssh(
 
     cli(['config-key', 'set', 'mgr/cephadm/ssh_user', ctx.ssh_user])
 
-    logger.info('Enabling cephadm module...')
+    bootstrap_print_status(ctx, 'Enabling cephadm module...')
     cli(['mgr', 'module', 'enable', 'cephadm'])
     wait_for_mgr_restart()
 
-    logger.info('Setting orchestrator backend to cephadm...')
+    bootstrap_print_status(ctx, 'Setting orchestrator backend to cephadm...')
     cli(['orch', 'set', 'backend', 'cephadm'])
 
     if ctx.ssh_config:
-        logger.info('Using provided ssh config...')
+        bootstrap_print_status(ctx, 'Using provided ssh config...')
         mounts = {
             pathify(ctx.ssh_config.name): '/tmp/cephadm-ssh-config:z',
         }
         cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
 
     if ctx.ssh_private_key and ctx.ssh_public_key:
-        logger.info('Using provided ssh keys...')
+        bootstrap_print_status(ctx, 'Using provided ssh keys...')
         mounts = {
             pathify(ctx.ssh_private_key.name): '/tmp/cephadm-ssh-key:z',
             pathify(ctx.ssh_public_key.name): '/tmp/cephadm-ssh-key.pub:z'
@@ -3492,15 +3498,15 @@ def prepare_ssh(
         cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
         cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
     else:
-        logger.info('Generating ssh key...')
+        bootstrap_print_status(ctx, 'Generating ssh key...')
         cli(['cephadm', 'generate-key'])
         ssh_pub = cli(['cephadm', 'get-pub-key'])
 
         with open(ctx.output_pub_ssh_key, 'w') as f:
             f.write(ssh_pub)
-        logger.info('Wrote public SSH key to to %s' % ctx.output_pub_ssh_key)
+        bootstrap_print_status(ctx, 'Wrote public SSH key to to %s' % ctx.output_pub_ssh_key)
 
-        logger.info('Adding key to %s@localhost\'s authorized_keys...' % ctx.ssh_user)
+        bootstrap_print_status(ctx, 'Adding key to %s@localhost\'s authorized_keys...' % ctx.ssh_user)
         try:
             s_pwd = pwd.getpwnam(ctx.ssh_user)
         except KeyError as e:
@@ -3531,7 +3537,7 @@ def prepare_ssh(
             f.write(ssh_pub.strip() + '\n')
 
     host = get_hostname()
-    logger.info('Adding host %s...' % host)
+    bootstrap_print_status(ctx, 'Adding host %s...' % host)
     try:
         cli(['orch', 'host', 'add', host])
     except RuntimeError as e:
@@ -3539,14 +3545,14 @@ def prepare_ssh(
 
     if not ctx.orphan_initial_daemons:
         for t in ['mon', 'mgr', 'crash']:
-            logger.info('Deploying %s service with default placement...' % t)
+            bootstrap_print_status(ctx, 'Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
 
     if not ctx.skip_monitoring_stack:
-        logger.info('Enabling mgr prometheus module...')
+        bootstrap_print_status(ctx, 'Enabling mgr prometheus module...')
         cli(['mgr', 'module', 'enable', 'prometheus'])
         for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
-            logger.info('Deploying %s service with default placement...' % t)
+            bootstrap_print_status(ctx, 'Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])
 
 
@@ -3561,13 +3567,13 @@ def prepare_dashboard(
     cli(["config", "set",  "mgr", "mgr/dashboard/ssl_server_port" , str(ctx.ssl_dashboard_port)])
 
     # configuring dashboard parameters
-    logger.info('Enabling the dashboard module...')
+    bootstrap_print_status(ctx, 'Enabling the dashboard module...')
     cli(['mgr', 'module', 'enable', 'dashboard'])
     wait_for_mgr_restart()
 
     # dashboard crt and key
     if ctx.dashboard_key and ctx.dashboard_crt:
-        logger.info('Using provided dashboard certificate...')
+        bootstrap_print_status(ctx, 'Using provided dashboard certificate...')
         mounts = {
             pathify(ctx.dashboard_crt.name): '/tmp/dashboard.crt:z',
             pathify(ctx.dashboard_key.name): '/tmp/dashboard.key:z'
@@ -3575,17 +3581,17 @@ def prepare_dashboard(
         cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
         cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
     else:
-        logger.info('Generating a dashboard self-signed certificate...')
+        bootstrap_print_status(ctx, 'Generating a dashboard self-signed certificate...')
         cli(['dashboard', 'create-self-signed-cert'])
 
-    logger.info('Creating initial admin user...')
+        bootstrap_print_status(ctx, 'Creating initial admin user...')
     password = ctx.initial_dashboard_password or generate_password()
     tmp_password_file = write_tmp(password, uid, gid)
     cmd = ['dashboard', 'ac-user-create', ctx.initial_dashboard_user, '-i', '/tmp/dashboard.pw', 'administrator', '--force-password']
     if not ctx.dashboard_password_noupdate:
         cmd.append('--pwd-update-required')
     cli(cmd, extra_mounts={pathify(tmp_password_file.name): '/tmp/dashboard.pw:z'})
-    logger.info('Fetching dashboard port number...')
+    bootstrap_print_status(ctx, 'Fetching dashboard port number...')
     out = cli(['config', 'get', 'mgr', 'mgr/dashboard/ssl_server_port'])
     port = int(out)
 
@@ -3594,13 +3600,24 @@ def prepare_dashboard(
     fw.open_ports([port])
     fw.apply_rules()
 
-    logger.info('Ceph Dashboard is now available at:\n\n'
-                '\t     URL: https://%s:%s/\n'
-                '\t    User: %s\n'
-                '\tPassword: %s\n' % (
-                    get_fqdn(), port,
+    dashboard_url = f'https://{get_fqdn()}:{port}/'
+    dashboard_msg = """Ceph Dashboard is now available at:
+
+     URL: %s
+    User: %s
+Password: %s""" % (
+                    dashboard_url,
                     ctx.initial_dashboard_user,
-                    password))
+                    password)
+    if ctx.jsonlines:
+        print(json.dumps({
+            'msg': dashboard_msg,
+            'url': dashboard_url,
+            'user': ctx.initial_dashboard_user,
+            'password': password
+        }))
+    else:
+        logger.info(msg)
 
 
 def prepare_bootstrap_config(
@@ -3639,14 +3656,14 @@ def finish_bootstrap_config(
 
 ) -> None:
     if not ctx.no_minimize_config:
-        logger.info('Assimilating anything we can from ceph.conf...')
+        bootstrap_print_status(ctx, 'Assimilating anything we can from ceph.conf...')
         cli([
             'config', 'assimilate-conf',
             '-i', '/var/lib/ceph/mon/ceph-%s/config' % mon_id
         ], {
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % mon_id
         })
-        logger.info('Generating new minimal ceph.conf...')
+        bootstrap_print_status(ctx, 'Generating new minimal ceph.conf...')
         cli([
             'config', 'generate-minimal-conf',
             '-o', '/var/lib/ceph/mon/ceph-%s/config' % mon_id
@@ -3656,7 +3673,7 @@ def finish_bootstrap_config(
         # re-read our minimized config
         with open(mon_dir + '/config', 'r') as f:
             config = f.read()
-        logger.info('Restarting the monitor...')
+        bootstrap_print_status(ctx, 'Restarting the monitor...')
         call_throws(ctx, [
             'systemctl',
             'restart',
@@ -3664,21 +3681,21 @@ def finish_bootstrap_config(
         ])
 
     if mon_network:
-        logger.info(f"Setting mon public_network to {mon_network}")
+        bootstrap_print_status(ctx, f"Setting mon public_network to {mon_network}")
         cli(['config', 'set', 'mon', 'public_network', mon_network])
     
     if cluster_network:
-        logger.info(f"Setting cluster_network to {cluster_network}")
+        bootstrap_print_status(ctx, f"Setting cluster_network to {cluster_network}")
         cli(['config', 'set', 'global', 'cluster_network', cluster_network])
 
     if ipv6 or ipv6_cluster_network:
-        logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
+        bootstrap_print_status(ctx, 'Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
 
 
     with open(ctx.output_config, 'w') as f:
         f.write(config)
-    logger.info('Wrote config to %s' % ctx.output_config)
+    bootstrap_print_status(ctx, 'Wrote config to %s' % ctx.output_config)
     pass
 
 
@@ -3706,7 +3723,7 @@ def command_bootstrap(ctx):
         dirname = os.path.dirname(f)
         if dirname and not os.path.exists(dirname):
             fname = os.path.basename(f)
-            logger.info(f"Creating directory {dirname} for {fname}")
+            bootstrap_print_status(ctx, f"Creating directory {dirname} for {fname}")
             try:
                 # use makedirs to create intermediate missing dirs
                 os.makedirs(dirname, 0o755)
@@ -3717,7 +3734,7 @@ def command_bootstrap(ctx):
     if not ctx.skip_prepare_host:
         command_prepare_host(ctx)
     else:
-        logger.info('Skip prepare_host')
+        bootstrap_print_status(ctx, 'Skip prepare_host')
 
     # initial vars
     fsid = ctx.fsid or make_fsid()
@@ -3726,7 +3743,7 @@ def command_bootstrap(ctx):
         raise Error('hostname is a fully qualified domain name (%s); either fix (e.g., "sudo hostname %s" or similar) or pass --allow-fqdn-hostname' % (hostname, hostname.split('.')[0]))
     mon_id = ctx.mon_id or hostname
     mgr_id = ctx.mgr_id or generate_service_id()
-    logger.info('Cluster fsid: %s' % fsid)
+    bootstrap_print_status(ctx, 'Cluster fsid: %s' % fsid)
 
     l = FileLock(ctx, fsid)
     l.acquire()
@@ -3736,7 +3753,7 @@ def command_bootstrap(ctx):
 
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
 
-    logger.info('Extracting ceph user uid/gid from container image...')
+    bootstrap_print_status(ctx, 'Extracting ceph user uid/gid from container image...')
     (uid, gid) = extract_uid_gid(ctx)
 
     # create some initial keys
@@ -3791,7 +3808,7 @@ def command_bootstrap(ctx):
         os.fchmod(f.fileno(), 0o600)
         f.write('[client.admin]\n'
                 '\tkey = ' + admin_key + '\n')
-    logger.info('Wrote keyring to %s' % ctx.output_keyring)
+    bootstrap_print_status(ctx, 'Wrote keyring to %s' % ctx.output_keyring)
 
     # create mgr
     create_mgr(ctx, uid, gid, fsid, mgr_id, mgr_key, config, cli)
@@ -3808,7 +3825,7 @@ def command_bootstrap(ctx):
         j = json.loads(out)
         epoch = j['epoch']
         # wait for mgr to have it
-        logger.info('Waiting for the mgr to restart...')
+        bootstrap_print_status(ctx, 'Waiting for the mgr to restart...')
         def mgr_has_latest_epoch():
             # type: () -> bool
             try:
@@ -3836,7 +3853,7 @@ def command_bootstrap(ctx):
     if ctx.with_exporter:
         cli(['config-key', 'set', 'mgr/cephadm/exporter_enabled', 'true'])
         if ctx.exporter_config:
-            logger.info("Applying custom cephadm exporter settings")
+            bootstrap_print_status(ctx, "Applying custom cephadm exporter settings")
             # validated within the parser, so we can just apply to the store
             with tempfile.NamedTemporaryFile(buffering=0) as tmp:
                 tmp.write(json.dumps(ctx.exporter_config).encode('utf-8'))
@@ -3847,11 +3864,11 @@ def command_bootstrap(ctx):
             logger.info("-> Use ceph orch apply cephadm-exporter to deploy")
         else:
             # generate a default SSL configuration for the exporter(s)
-            logger.info("Generating a default cephadm exporter configuration (self-signed)")
+            bootstrap_print_status(ctx, "Generating a default cephadm exporter configuration (self-signed)")
             cli(['cephadm', 'generate-exporter-config'])
         #
         # deploy the service (commented out until the cephadm changes are in the ceph container build)
-        logger.info('Deploying cephadm exporter service with default placement...')
+        bootstrap_print_status(ctx, 'Deploying cephadm exporter service with default placement...')
         cli(['orch', 'apply', 'cephadm-exporter'])
 
 
@@ -3859,7 +3876,7 @@ def command_bootstrap(ctx):
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
     if ctx.apply_spec:
-        logger.info('Applying %s to cluster' % ctx.apply_spec)
+        bootstrap_print_status(ctx, 'Applying %s to cluster' % ctx.apply_spec)
 
         with open(ctx.apply_spec) as f:
             for line in f:
@@ -3867,7 +3884,7 @@ def command_bootstrap(ctx):
                     line = line.replace('\n', '')
                     split = line.split(': ')
                     if split[1] != host:
-                        logger.info('Adding ssh key to %s' % split[1])
+                        bootstrap_print_status(ctx, 'Adding ssh key to %s' % split[1])
 
                         ssh_key = '/etc/ceph/ceph.pub'
                         if ctx.ssh_public_key:
@@ -3878,19 +3895,19 @@ def command_bootstrap(ctx):
         mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:z'
 
         out = cli(['orch', 'apply', '-i', '/tmp/spec.yml'], extra_mounts=mounts)
-        logger.info(out)
+        bootstrap_print_status(ctx, out)
 
-    logger.info('You can access the Ceph CLI with:\n\n'
+    bootstrap_print_status(ctx, 'You can access the Ceph CLI with:\n\n'
                 '\tsudo %s shell --fsid %s -c %s -k %s\n' % (
                     sys.argv[0],
                     fsid,
                     ctx.output_config,
                     ctx.output_keyring))
-    logger.info('Please consider enabling telemetry to help improve Ceph:\n\n'
+    bootstrap_print_status(ctx, 'Please consider enabling telemetry to help improve Ceph:\n\n'
                 '\tceph telemetry on\n\n'
                 'For more information see:\n\n'
                 '\thttps://docs.ceph.com/docs/master/mgr/telemetry/\n')
-    logger.info('Bootstrap complete.')
+    bootstrap_print_status(ctx, 'Bootstrap complete.')
     return 0
 
 ##################################
@@ -7419,6 +7436,10 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--cluster-network',
         help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
+    parser_bootstrap.add_argument(
+        '--jsonlines',
+        action='store_true',
+        help='Print status messages as JSON lines')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

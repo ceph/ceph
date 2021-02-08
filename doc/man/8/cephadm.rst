@@ -78,7 +78,7 @@ Synopsis
 |                           [--registry-username REGISTRY_USERNAME]
 |                           [--registry-password REGISTRY_PASSWORD]
 |                           [--registry-json REGISTRY_JSON]
-|                           [--container-init]
+|                           [--container-init] [--jsonlines]
 
 
 
@@ -239,6 +239,7 @@ Arguments:
 * [--registry-password REGISTRY_PASSWORD] password of account to login to on custom registry
 * [--registry-json REGISTRY_JSON] JSON file containing registry login info (see registry-login command documentation)
 * [--container-init]              Run podman/docker with `--init`
+* [--jsonlines]                   Print status message as machine readable JSON lines
 
 
 ceph-volume
