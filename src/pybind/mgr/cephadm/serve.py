@@ -1,4 +1,3 @@
-import datetime
 import json
 import logging
 from collections import defaultdict
@@ -99,7 +98,7 @@ class CephadmServe:
     def _serve_sleep(self) -> None:
         sleep_interval = 600
         self.log.debug('Sleeping for %d seconds', sleep_interval)
-        ret = self.mgr.event.wait(sleep_interval)
+        self.mgr.event.wait(sleep_interval)
         self.mgr.event.clear()
 
     def _update_paused_health(self) -> None:
@@ -329,7 +328,7 @@ class CephadmServe:
         # query OSDSpecs for host <search host> and generate/get the preview
         # There can be multiple previews for one host due to multiple OSDSpecs.
         previews.extend(self.mgr.osd_service.get_previews(search_host))
-        self.log.debug(f"Loading OSDSpec previews to HostCache")
+        self.log.debug(f'Loading OSDSpec previews to HostCache for host <{search_host}>')
         self.mgr.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
         self.mgr.cache.loading_osdspec_preview.remove(search_host)

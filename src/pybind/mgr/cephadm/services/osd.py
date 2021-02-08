@@ -1,7 +1,7 @@
 import json
 import logging
 from threading import Lock
-from typing import List, Dict, Any, Set, Union, Tuple, cast, Optional, TYPE_CHECKING
+from typing import List, Dict, Any, Set, Tuple, cast, Optional, TYPE_CHECKING
 
 from ceph.deployment import translate
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -374,8 +374,8 @@ class RemoveUtil(object):
             osds = osds[len(osds) // 2:]
         return osds
 
-       # todo start draining
-       #  return all([osd.start_draining() for osd in osds])
+        # todo start draining
+        #  return all([osd.start_draining() for osd in osds])
 
     def ok_to_stop(self, osds: List["OSD"]) -> bool:
         cmd_args = {

@@ -3,10 +3,10 @@ import pytest
 from unittest.mock import MagicMock, call
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmService, AuthEntity, CephadmExporter
+    RbdMirrorService, CrashService, CephadmExporter
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
-from cephadm.services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
+from cephadm.services.osd import OSDService
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 from ceph.deployment.service_spec import IscsiServiceSpec
@@ -117,8 +117,8 @@ class TestCephadmService:
         assert "client.crash.host" == \
             cephadm_services["crash"].get_auth_entity("id1", "host")
         with pytest.raises(OrchestratorError):
-            t = cephadm_services["crash"].get_auth_entity("id1", "")
-            t = cephadm_services["crash"].get_auth_entity("id1")
+            cephadm_services["crash"].get_auth_entity("id1", "")
+            cephadm_services["crash"].get_auth_entity("id1")
 
         assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "host")
         assert "mon." == cephadm_services["mon"].get_auth_entity("id1", "")

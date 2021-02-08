@@ -7,10 +7,9 @@ import pytest
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
 from cephadm.services.osd import OSD, OSDRemovalQueue
-from cephadm.utils import CephadmNoImage
 
 try:
-    from typing import Any, List
+    from typing import List
 except ImportError:
     pass
 
@@ -21,10 +20,10 @@ from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now
-from orchestrator import ServiceDescription, DaemonDescription, InventoryHost, \
+from orchestrator import DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError
 from tests import mock
-from .fixtures import cephadm_module, wait, _run_cephadm, match_glob, with_host, \
+from .fixtures import wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, assert_rm_service, _deploy_cephadm_binary
 from cephadm.module import CephadmOrchestrator
 
@@ -386,7 +385,7 @@ class TestCephadm(object):
     def test_find_destroyed_osds_cmd_failure(self, _mon_cmd, cephadm_module):
         _mon_cmd.return_value = (1, "", "fail_msg")
         with pytest.raises(OrchestratorError):
-            out = cephadm_module.osd_service.find_destroyed_osds()
+            cephadm_module.osd_service.find_destroyed_osds()
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -417,7 +416,7 @@ class TestCephadm(object):
 
             _run_cephadm.return_value = (['{}'], '', 0)
 
-            assert CephadmServe(cephadm_module)._apply_all_services() == False
+            assert CephadmServe(cephadm_module)._apply_all_services() is False
 
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
@@ -851,13 +850,13 @@ class TestCephadm(object):
                 with with_host(cephadm_module, 'test', refresh_hosts=False):
                     code, out, err = cephadm_module.check_host('test')
                     # First should succeed.
-                    assert err is ''
+                    assert err == ''
 
                     # On second it should attempt to reuse the connection, where the
                     # connection is "down" so will recreate the connection. The old
                     # code will blow up here triggering the BOOM!
                     code, out, err = cephadm_module.check_host('test')
-                    assert err is ''
+                    assert err == ''
 
     @mock.patch("cephadm.module.CephadmOrchestrator._get_connection")
     @mock.patch("remoto.process.check")
@@ -873,7 +872,7 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'test'):
             cephadm_module.set_module_option('manage_etc_ceph_ceph_conf', True)
             cephadm_module.config_notify()
-            assert cephadm_module.manage_etc_ceph_ceph_conf == True
+            assert cephadm_module.manage_etc_ceph_ceph_conf is True
 
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _check.assert_called_with(ANY, ['dd', 'of=/etc/ceph/ceph.conf'], stdin=b'')

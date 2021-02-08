@@ -1,12 +1,10 @@
-import json
 import logging
 from typing import List, cast, Tuple, Dict, Any
 
 from ceph.deployment.service_spec import HA_RGWSpec
 
-from orchestrator import DaemonDescription, OrchestratorError
 from .cephadmservice import CephadmDaemonSpec, CephService
-from ..utils import CephadmNoImage, cephadmNoImage, resolve_ip
+from ..utils import resolve_ip
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +60,6 @@ class HA_RGWService(CephService):
 
     def haproxy_generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         daemon_id = daemon_spec.daemon_id
-        host = daemon_spec.host
 
         service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         # if no service spec, return empty config
