@@ -79,6 +79,15 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
 
         return files
 
+    def to_daemon_description(self, status: int, status_desc: str) -> DaemonDescription:
+        return DaemonDescription(
+            daemon_type=self.daemon_type,
+            daemon_id=self.daemon_id,
+            hostname=self.host,
+            status=status,
+            status_desc=status_desc
+        )
+
 
 class CephadmService(metaclass=ABCMeta):
     """
@@ -355,7 +364,7 @@ class CephService(CephadmService):
         entity = self.get_auth_entity(daemon_id, host=host)
 
         logger.info(f'Remove keyring: {entity}')
-        ret, out, err = self.mgr.check_mon_command({
+        ret, out, err = self.mgr.mon_command({
             'prefix': 'auth rm',
             'entity': entity,
         })
