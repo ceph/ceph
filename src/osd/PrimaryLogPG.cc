@@ -10086,16 +10086,14 @@ struct C_gather : public Context {
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
-    pg->lock();
+    std::scoped_lock locker{*pg};
     map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = pg->cls_gather_ops.find(oid);
     if (p == pg->cls_gather_ops.end()) {
       // op was cancelled
-      pg->unlock();
       return;
     }
     pg->cls_gather_set_result(p, r);
     pg->execute_ctx(ctx);
-    pg->unlock();
   }
 };
 
