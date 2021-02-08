@@ -449,14 +449,12 @@ private:
       {
 	ceph_assert(m_enable_dedup);
 	oid = *(rand_choose(context.oid_not_in_use));
-	/* The intention here is to mark the source object as a manifest object */
-	oid2 = *(rand_choose(context.oid_set_chunk_tgt_pool));
 	uint32_t rand_offset = 0, rand_length = 0;
 	get_rand_off_len(context, oid, rand_offset, rand_length);
 	cout << m_op << ": " << "set_chunk oid " << oid << " offset: " << rand_offset 
-	     << " length: " << rand_length <<  " target oid " << oid2 
+	     << " length: " << rand_length <<  " target oid " << ""
 	     << " tgt_offset: " << rand_offset << std::endl;
-	return new SetChunkOp(m_op, &context, oid, rand_offset, rand_length, oid2, rand_offset, m_stats);
+	return new SetChunkOp(m_op, &context, oid, rand_offset, rand_length, "", rand_offset, m_stats);
       }
 
     case TEST_OP_TIER_EVICT:
