@@ -18,6 +18,7 @@ DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
 SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
 SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
+DEFAULT_LOG_FORMAT='plain'
 
 """
 You can invoke cephadm in two ways:
@@ -107,6 +108,7 @@ class BaseConfig:
         self.timeout: Optional[int] = DEFAULT_TIMEOUT
         self.retry: int = DEFAULT_RETRY
         self.env: List[str] = []
+        self.formatter: str = DEFAULT_LOG_FORMAT
 
         self.container_init: bool = CONTAINER_INIT
         self.container_path: str = ""
@@ -7053,6 +7055,10 @@ def _get_parser():
         action='store_true',
         default=not CONTAINER_INIT,
         help='Do not run podman/docker with `--init`')
+    parser.add_argument(
+        '--formatter', '-f',
+        default=DEFAULT_LOG_FORMAT,
+        help='TODO:')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
@@ -7633,6 +7639,20 @@ def cephadm_init(args: List[str]) -> Optional[CephadmContext]:
         os.makedirs(LOG_DIR)
     dictConfig(logging_config)
     logger = logging.getLogger()
+
+    if ctx.formatter == 'json':
+        try:
+            from pythonjsonlogger import jsonlogger
+        except ModuleNotFoundError as e:
+            sys.stderr.write('ERROR: %s\n' % e)
+            sys.stderr.write('ERROR: Maybe try `pip install python-json-logger`?\n')
+            sys.exit(1)
+
+        logHandler = logging.StreamHandler()
+        formatter = jsonlogger.JsonFormatter()
+        for handler in logger.handlers:
+            if handler.name == "console":
+                handler.setFormatter(formatter)
 
     if ctx.verbose:
         for handler in logger.handlers:
