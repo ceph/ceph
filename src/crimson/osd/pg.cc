@@ -780,7 +780,7 @@ PG::do_osd_ops(
     return rep_repair_primary_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
       return crimson::ct_error::eagain::make();
     });
-  }), OpsExecuter::osd_op_errorator::all_same_way([ox = ox.get(),
+  }), OpsExecuter::osd_op_errorator::all_same_way([ox = std::move(ox),
                                      m,
                                      obc,
                                      this] (const std::error_code& e) {
