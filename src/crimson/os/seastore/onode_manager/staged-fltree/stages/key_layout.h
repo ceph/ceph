@@ -513,11 +513,11 @@ class key_hobj_t {
     crush_hash_t crush;
     ceph::decode(crush, delta);
     std::string nspace;
-    auto nspace_masked = string_view_masked_t::decode(nspace, delta);
+    [[maybe_unused]] auto nspace_masked = string_view_masked_t::decode(nspace, delta);
     // TODO(cross-node string dedup)
     assert(nspace_masked.get_type() == string_view_masked_t::Type::STR);
     std::string oid;
-    auto oid_masked = string_view_masked_t::decode(oid, delta);
+    [[maybe_unused]] auto oid_masked = string_view_masked_t::decode(oid, delta);
     // TODO(cross-node string dedup)
     assert(oid_masked.get_type() == string_view_masked_t::Type::STR);
     snap_t snap;
