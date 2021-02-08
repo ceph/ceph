@@ -266,7 +266,7 @@ public:
     int rval;
 
     CLSGatherOp(OpContext *ctx_, ObjectContextRef obc_, OpRequestRef op_)
-      : ctx(ctx_), obc(obc_), op(op_) {}
+      : ctx(ctx_), obc(obc_), op(op_)  {}
     CLSGatherOp() {}
     ~CLSGatherOp() {}
   };
@@ -1405,8 +1405,8 @@ protected:
 
   // -- cls_gather --
   std::map<hobject_t, CLSGatherOp> cls_gather_ops;
-  void cls_gather_set_result(hobject_t oid, int r);
-  void cancel_cls_gather(CLSGatherOp cgop, bool requeue, std::vector<ceph_tid_t> *tids);
+  void cls_gather_set_result(map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p, int r);
+  void cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
   // -- scrub --
