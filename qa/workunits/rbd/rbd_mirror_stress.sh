@@ -31,6 +31,7 @@ compare_image_snaps()
     local pool=$1
     local image=$2
     local snap_name=$3
+    local ret=0
 
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
@@ -38,8 +39,13 @@ compare_image_snaps()
     rm -f ${rmt_export} ${loc_export}
     rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
     rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
-    cmp ${rmt_export} ${loc_export}
+    if ! cmp ${rmt_export} ${loc_export}
+    then
+        show_diff ${rmt_export} ${loc_export}
+        ret=1
+    fi
     rm -f ${rmt_export} ${loc_export}
+    return ${ret}
 }
 
 wait_for_pool_images()
