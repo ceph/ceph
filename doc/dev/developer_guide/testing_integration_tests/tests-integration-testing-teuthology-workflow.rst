@@ -9,28 +9,37 @@ Scheduling Test Run
 Getting binaries
 ****************
 
-To run integration tests using teuthology, you need to have Ceph binaries
-built for your branch. Follow these steps to initiate the build process -
+Ceph binaries must be built for your branch before you can use teuthology to run integration tests on them. Follow these steps to build the Ceph binaries:
 
-#. Push the branch to `ceph-ci`_ repository. This triggers the process of
-   building the binaries on jenkins CI.
+#. Push the branch to the `ceph-ci`_ repository. This triggers the process of
+   building the binaries on the Jenkins CI.
 
-#. To confirm that the build process has been initiated, spot the branch name
-   at `Shaman`_. Little after the build process has been initiated, the single
-   entry with your branch name would multiply, each new entry for a different
-   combination of distro and flavour.
+#. To ensure that the build process has been initiated, confirm that the branch
+   name has appeared in the list of "Latest Builds Available" at `Shaman`_.
+   Soon after you start the build process, the testing infrastructrure adds
+   other, similarly-named builds to the list of "Latest Builds Available".
+   The names of these new builds will contain the names of various Linux
+   distributions of Linux and will be used to test your build against those
+   Linux distributions. 
 
-#. Wait until the packages are built and uploaded to `Chacra`_, and the
-   repository offering them are created. This is marked by colouring the entries
-   for the branch name green. Preferably, wait until each entry is coloured
-   green. Usually, it takes around 2-3 hours depending on the availability of
-   the machines.
+#. Wait for the packages to be built and uploaded to `Chacra`_, and wait for
+   the repositories offering the packages to be created. The entries for the
+   branch names in the list of "Latest Builds Available" on `Shaman`_ will turn
+   green to indicate that the packages have been uploaded to `Chacra`_ and to
+   indicate that their repositories have been created.  Wait until each entry
+   is coloured green. This usually takes between two and three hours depending
+   on the availability of the machines.
+   
+   The Chacra URL for a particular build can be queried from `the Chacra site`_.
 
-.. note:: Branch to be pushed on ceph-ci can be any branch, it shouldn't
-   necessarily be a PR branch.
+.. note:: The branch to be pushed on ceph-ci can be any branch. The branch does
+   not have to be a PR branch.
 
-.. note:: In case you are pushing master or any other standard branch, check
-   `Shaman`_ beforehand since it already might have builds ready for it.
+.. note:: If you intend to push master or any other standard branch, check
+   `Shaman`_ beforehand since it might already have completed builds for it.
+
+.. _the Chacra site: https://shaman.ceph.com/api/search/?status=ready&project=ceph
+
 
 Triggering Tests
 ****************
