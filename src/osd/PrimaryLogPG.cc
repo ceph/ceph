@@ -10144,7 +10144,7 @@ int PrimaryLogPG::finish_cls_gather(OpContext *ctx)
   map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = cls_gather_ops.find(soid);
   ceph_assert(p != cls_gather_ops.end());
   int r = p->second.rval;
-  cls_gather_ops.erase(soid);
+  cls_gather_ops.erase(p);
   return r;
 }
 
