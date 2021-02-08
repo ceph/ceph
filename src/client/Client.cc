@@ -10944,7 +10944,7 @@ int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *sna
     return -ENOTCONN;
   }
 
-  std::unique_lock locker(client_lock);
+  std::scoped_lock lock(client_lock);
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true);
   if (r < 0) {
