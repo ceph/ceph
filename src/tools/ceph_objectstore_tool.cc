@@ -84,6 +84,7 @@ struct action_on_object_t {
 int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
 {
   auto ch = store->open_collection(coll);
+
   unsigned LIST_AT_A_TIME = 100;
   ghobject_t next;
   while (!next.is_max()) {
@@ -102,8 +103,6 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
     for (vector<ghobject_t>::iterator obj = list.begin();
 	 obj != list.end();
 	 ++obj) {
-      if (obj->is_pgmeta())
-	continue;
       object_info_t oi;
       if (coll != coll_t::meta()) {
         bufferlist attr;
@@ -136,6 +135,7 @@ int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_ob
   int r = 0;
   vector<coll_t> colls_to_check;
   vector<coll_t> candidates;
+
   r = store->list_collections(candidates);
   if (r < 0) {
     cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
@@ -146,6 +146,10 @@ int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_ob
        i != candidates.end();
        ++i) {
     spg_t cand_pgid;
+    if (i->is_meta() && pgidstr == "meta") {
+      colls_to_check.push_back(*i);
+      continue;
+    }
     if (!i->is_pg(&cand_pgid))
       continue;
 
@@ -3490,7 +3494,7 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
+  if (pgidstr.length() && pgidstr != "meta" && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
     return 1;
   }
@@ -3686,7 +3690,9 @@ int main(int argc, char **argv)
         if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
 	  head = true;
 	lookup_ghobject lookup(object, nspace, head);
-	if (pgidstr.length())
+	if (pgidstr == "meta")
+	  ret = action_on_all_objects_in_exact_pg(fs, coll_t::meta(), lookup, debug);
+	else if (pgidstr.length())
 	  ret = action_on_all_objects_in_exact_pg(fs, coll_t(pgid), lookup, debug);
 	else
 	  ret = action_on_all_objects(fs, lookup, debug);
