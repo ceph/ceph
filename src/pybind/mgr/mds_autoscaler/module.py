@@ -25,7 +25,6 @@ class MDSAutoscaler(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.describe_service(service_type='mds',
                                            service_name=service,
                                            refresh=True)
-        self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         if completion.result:
             return completion.result[0]
@@ -80,7 +79,6 @@ class MDSAutoscaler(orchestrator.OrchestratorClientMixin, MgrModule):
             self.log.info(f"fs {fs_name}: adjusting daemon count from {svc.spec.placement.count} to {want}")
             newspec = self.update_daemon_count(svc.spec, fs_name, want)
             completion = self.apply_mds(newspec)
-            self._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except orchestrator.OrchestratorError as e:
             self.log.exception(f"fs {fs_name}: exception while updating service: {e}")
