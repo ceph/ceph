@@ -105,7 +105,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
     # misuse lambda to copy `wrapper`
-    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
     wrapper_copy._prefix = prefix  # type: ignore
     wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
     wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
@@ -115,7 +115,8 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
 
 
 class InnerCliCommandCallable(Protocol):
-    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]: ...
+    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]:
+        ...
 
 
 def _cli_command(perm: str) -> InnerCliCommandCallable:
@@ -248,8 +249,8 @@ class _Promise(object):
         val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
         prefix = {
             self.INITIALIZED: '      ',
-            self.RUNNING:     '   >>>',
-            self.FINISHED:    '(done)'
+            self.RUNNING:     '   >>>',  # noqa: E241
+            self.FINISHED:    '(done)',  # noqa: E241
         }[self._state]
         return '{} {}({}),'.format(prefix, name, val)
 
@@ -888,7 +889,7 @@ class Orchestrator(object):
         """
         Applies any spec
         """
-        fns: Dict[str, function] = {
+        fns: Dict[str, Callable] = {
             'alertmanager': self.apply_alertmanager,
             'crash': self.apply_crash,
             'grafana': self.apply_grafana,

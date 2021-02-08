@@ -9,8 +9,7 @@ import pytest
 import yaml
 
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec, CustomContainerSpec, \
-    HA_RGWSpec
+    IscsiServiceSpec, AlertManagerSpec, HostPlacementSpec, CustomContainerSpec
 
 from orchestrator import DaemonDescription, OrchestratorError
 
@@ -101,6 +100,7 @@ def test_spec_octopus(spec_json):
     # Please do not modify those JSON values.
 
     spec = ServiceSpec.from_json(spec_json)
+
     # just some verification that we can sill read old octopus specs
     def convert_to_old_style_json(j):
         j_c = dict(j.copy())
@@ -121,6 +121,7 @@ def test_spec_octopus(spec_json):
         j_c.pop('objectstore', None)
         j_c.pop('filter_logic', None)
         return j_c
+
     assert spec_json == convert_to_old_style_json(spec.to_json())
 
 
@@ -291,7 +292,7 @@ def test_dd_octopus(dd_json):
 
 
 @pytest.mark.parametrize("spec,dd,valid",
-[
+[   # noqa: E128
     # https://tracker.ceph.com/issues/44934
     (
         RGWSpec(
@@ -661,8 +662,9 @@ def test_custom_container_spec_config_json():
     for key in ['entrypoint', 'uid', 'gid', 'bind_mounts', 'dirs']:
         assert key not in config_json
 
+
 def test_HA_RGW_spec():
-    yaml_str ="""service_type: ha-rgw
+    yaml_str = """service_type: ha-rgw
 service_id: haproxy_for_rgw
 placement:
   hosts:
@@ -689,9 +691,9 @@ spec:
     assert spec.virtual_ip_address == "192.168.20.1/24"
     assert spec.frontend_port == 8080
     assert spec.ha_proxy_port == 1967
-    assert spec.ha_proxy_stats_enabled == True
+    assert spec.ha_proxy_stats_enabled is True
     assert spec.ha_proxy_stats_user == "admin"
     assert spec.ha_proxy_stats_password == "admin"
-    assert spec.ha_proxy_enable_prometheus_exporter == True
+    assert spec.ha_proxy_enable_prometheus_exporter is True
     assert spec.ha_proxy_monitor_uri == "/haproxy_health"
     assert spec.keepalived_password == "admin"

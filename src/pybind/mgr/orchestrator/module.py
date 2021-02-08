@@ -13,14 +13,14 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.utils import datetime_now
 
-from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
+from mgr_util import to_pretty_timedelta, format_dimless
 from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
-    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, HA_RGWSpec, \
+    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec
+    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -240,7 +240,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _get_device_locations(self, dev_id):
         # type: (str) -> List[DeviceLightLoc]
         locs = [d['location'] for d in self.get('devices')['devices'] if d['devid'] == dev_id]
-        return [DeviceLightLoc(**l) for l in sum(locs, [])]
+        return [DeviceLightLoc(**loc) for loc in sum(locs, [])]
 
     @_cli_read_command(prefix='device ls-lights')
     def _device_ls(self) -> HandleCommandResult:
@@ -284,7 +284,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 self._refresh_health()
             return HandleCommandResult(stdout=str(completion.result))
 
-        except:
+        except Exception:
             # There are several reasons the try: block might fail:
             # 1. the device no longer exist
             # 2. the device is no longer known to Ceph

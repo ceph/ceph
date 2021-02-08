@@ -5,14 +5,13 @@ import re
 import shlex
 from collections import defaultdict
 from configparser import ConfigParser
-from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory
 from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, Iterator, NamedTuple, Sequence
+    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence
 
 import datetime
 import os
@@ -25,19 +24,19 @@ from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import \
     NFSServiceSpec, ServiceSpec, PlacementSpec, assert_valid_host, \
-    HostPlacementSpec, HA_RGWSpec
+    HostPlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonSpec
 
 from mgr_module import MgrModule, HandleCommandResult, Option
-from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException
+from mgr_util import create_self_signed_cert
 import secrets
 import orchestrator
 from orchestrator import OrchestratorError, OrchestratorValidationError, HostSpec, \
-    CLICommandMeta, OrchestratorEvent, set_exception_subject, DaemonDescription
+    CLICommandMeta, DaemonDescription
 from orchestrator._interface import GenericSpec
-from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
+from orchestrator._interface import daemon_type_to_service
 
 from . import remotes
 from . import utils
@@ -48,7 +47,7 @@ from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.ha_rgw import HA_RGWService
 from .services.nfs import NFSService
-from .services.osd import RemoveUtil, OSDRemovalQueue, OSDService, OSD, NotFoundError
+from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService
 from .schedule import HostAssignment
@@ -69,15 +68,9 @@ try:
         from remoto.backends import BaseConnection
         BaseConnection.has_connection = remoto_has_connection
     import remoto.process
-    import execnet.gateway_bootstrap
 except ImportError as e:
     remoto = None
     remoto_import_error = str(e)
-
-try:
-    from typing import List
-except ImportError:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -524,7 +517,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 # if _ANY_ osd that is currently in the queue appears to be empty,
                 # start the removal process
                 if int(osd.get('osd')) in self.to_remove_osds.as_osd_ids():
-                    self.log.debug(f"Found empty osd. Starting removal process")
+                    self.log.debug('Found empty osd. Starting removal process')
                     # if the osd that is now empty is also part of the removal queue
                     # start the process
                     self._kick_serve_loop()
@@ -637,10 +630,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         if ssh_config is None or len(ssh_config.strip()) == 0:
             raise OrchestratorValidationError('ssh_config cannot be empty')
         # StrictHostKeyChecking is [yes|no] ?
-        l = re.findall(r'StrictHostKeyChecking\s+.*', ssh_config)
-        if not l:
+        res = re.findall(r'StrictHostKeyChecking\s+.*', ssh_config)
+        if not res:
             raise OrchestratorValidationError('ssh_config requires StrictHostKeyChecking')
-        for s in l:
+        for s in res:
             if 'ask' in s.lower():
                 raise OrchestratorValidationError(f'ssh_config cannot contain: \'{s}\'')
 
@@ -913,10 +906,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                                                              error_ok=True, no_fsid=True)
             if code:
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
-        except OrchestratorError as e:
+        except OrchestratorError:
             self.log.exception(f"check-host failed for '{host}'")
-            return 1, '', ('check-host failed:\n' +
-                           f"Host '{host}' not found. Use 'ceph orch host ls' to see all managed hosts.")
+            return 1, '', ('check-host failed:\n'
+                           + f"Host '{host}' not found. Use 'ceph orch host ls' to see all managed hosts.")
         # if we have an outstanding health alert for this host, give the
         # serve thread a kick
         if 'CEPHADM_HOST_CHECK_FAILED' in self.health_checks:
@@ -1184,8 +1177,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """
         return [
             h for h in self.inventory.all_specs()
-            if self.cache.host_had_daemon_refresh(h.hostname) and
-            h.status.lower() not in ['maintenance', 'offline']
+            if self.cache.host_had_daemon_refresh(h.hostname)
+            and h.status.lower() not in ['maintenance', 'offline']
         ]
 
     def _add_host(self, spec):
@@ -1295,8 +1288,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return 1, '\n'.join(error_notifications)
 
         if notifications:
-            return 0, (f'It is presumed safe to stop host {hostname}. ' +
-                       'Note the following:\n\n' + '\n'.join(notifications))
+            return 0, (f'It is presumed safe to stop host {hostname}. '
+                       + 'Note the following:\n\n' + '\n'.join(notifications))
         return 0, f'It is presumed safe to stop host {hostname}'
 
     @trivial_completion
@@ -1333,7 +1326,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         Placing a host into maintenance disables the cluster's ceph target in systemd
         and stops all ceph daemons. If the host is an osd host we apply the noout flag
-        for the host subtree in crush to prevent data movement during a host maintenance 
+        for the host subtree in crush to prevent data movement during a host maintenance
         window.
 
         :param hostname: (str) name of the host (must match an inventory hostname)
@@ -1341,7 +1334,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         :raises OrchestratorError: Hostname is invalid, host is already in maintenance
         """
         if len(self.cache.get_hosts()) == 1:
-            raise OrchestratorError(f"Maintenance feature is not supported on single node clusters")
+            raise OrchestratorError("Maintenance feature is not supported on single node clusters")
 
         # if upgrade is active, deny
         if self.upgrade.upgrade_state:
@@ -1402,7 +1395,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         """Exit maintenance mode and return a host to an operational state
 
         Returning from maintnenance will enable the clusters systemd target and
-        start it, and remove any noout that has been added for the host if the 
+        start it, and remove any noout that has been added for the host if the
         host has osd daemons
 
         :param hostname: (str) host name
@@ -1541,7 +1534,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     sm[n].container_image_name = 'mix'
                 if dd.daemon_type == 'haproxy' or dd.daemon_type == 'keepalived':
                     # ha-rgw has 2 daemons running per host
-                    sm[n].size = sm[n].size*2
+                    sm[n].size = sm[n].size * 2
         for n, spec in self.spec_store.specs.items():
             if n in sm:
                 continue
@@ -1560,7 +1553,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 sm[n].rados_config_location = spec.rados_config_location()
             if spec.service_type == 'ha-rgw':
                 # ha-rgw has 2 daemons running per host
-                sm[n].size = sm[n].size*2
+                sm[n].size = sm[n].size * 2
         return list(sm.values())
 
     @trivial_completion

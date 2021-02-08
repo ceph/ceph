@@ -27,5 +27,5 @@ def choose_python():
 
 
 if __name__ == '__channelexec__':
-    for item in channel:  # type: ignore
-        channel.send(eval(item))  # type: ignore
+    for item in channel:  # type: ignore # noqa: F821
+        channel.send(eval(item))  # type: ignore # noqa: F821

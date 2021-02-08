@@ -1,17 +1,6 @@
-import sys
-import time
-
-
-try:
-    from typing import Any
-except ImportError:
-    pass
-
 import pytest
 
-
-from tests import mock
-from .fixtures import cephadm_module, wait
+from .fixtures import wait
 from ..module import trivial_completion, forall_hosts
 
 
@@ -20,7 +9,7 @@ class TestCompletion(object):
     def test_trivial(self, cephadm_module):
         @trivial_completion
         def run(x):
-            return x+1
+            return x + 1
         assert wait(cephadm_module, run(1)) == 2
 
     def test_exception(self, cephadm_module):

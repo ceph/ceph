@@ -10,10 +10,8 @@ try:
     from typing import Any, Iterator, List
 except ImportError:
     pass
-import pytest
 
 from cephadm import CephadmOrchestrator
-from cephadm.services.osd import RemoveUtil, OSD
 from orchestrator import raise_if_exception, Completion, HostSpec
 from tests import mock
 
@@ -65,33 +63,13 @@ def with_cephadm_module(module_options=None, store=None):
         yield m
 
 
-@pytest.fixture()
-def cephadm_module():
-    with with_cephadm_module({}) as m:
-        yield m
-
-
-@pytest.fixture()
-def rm_util():
-    with with_cephadm_module({}) as m:
-        r = RemoveUtil.__new__(RemoveUtil)
-        r.__init__(m)
-        yield r
-
-
-@pytest.fixture()
-def osd_obj():
-    with mock.patch("cephadm.services.osd.RemoveUtil"):
-        o = OSD(0, mock.MagicMock())
-        yield o
-
-
 def wait(m, c):
     # type: (CephadmOrchestrator, Completion) -> Any
     m.process([c])
 
     try:
-        import pydevd  # if in debugger
+        # if in debugger
+        import pydevd  # noqa: F401
         in_debug = True
     except ImportError:
         in_debug = False

@@ -7,7 +7,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import CephadmUpgrade
 from cephadm.serve import CephadmServe
-from .fixtures import _run_cephadm, wait, cephadm_module, with_host, with_service
+from .fixtures import _run_cephadm, wait, with_host, with_service
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))

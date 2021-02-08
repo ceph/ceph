@@ -199,14 +199,14 @@ class HostCache():
 
     4. `last_etc_ceph_ceph_conf` O(hosts)
 
-    Stores the last refresh time for the /etc/ceph/ceph.conf. Used 
+    Stores the last refresh time for the /etc/ceph/ceph.conf. Used
     to avoid deploying new configs when failing over to a new mgr.
 
     5. `scheduled_daemon_actions`: O(daemons)
 
     Used to run daemon actions after deploying a daemon. We need to
     store it persistently, in order to stay consistent across
-    MGR failovers.   
+    MGR failovers.
     """
 
     def __init__(self, mgr):
@@ -218,7 +218,7 @@ class HostCache():
         self.facts = {}                # type: Dict[str, Dict[str, Any]]
         self.last_facts_update = {}    # type: Dict[str, datetime.datetime]
         self.osdspec_previews = {}     # type: Dict[str, List[Dict[str, Any]]]
-        self.osdspec_last_applied = {} # type: Dict[str, Dict[str, datetime.datetime]]
+        self.osdspec_last_applied = {}  # type: Dict[str, Dict[str, datetime.datetime]]
         self.networks = {}             # type: Dict[str, Dict[str, List[str]]]
         self.last_device_update = {}   # type: Dict[str, datetime.datetime]
         self.last_device_change = {}   # type: Dict[str, datetime.datetime]
@@ -624,7 +624,7 @@ class HostCache():
         created = self.mgr.spec_store.get_created(spec)
         if created and created > self.last_device_change[host]:
             return True
-        return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host];
+        return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host]
 
     def update_last_etc_ceph_ceph_conf(self, host: str) -> None:
         if not self.mgr.last_monmap:
