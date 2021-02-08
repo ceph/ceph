@@ -94,6 +94,14 @@ class tree_cursor_t final
     return cache.get_key_view();
   }
 
+  /// Returns the next tree_cursor_t in tree, can be end if there's no next.
+  future<Ref<tree_cursor_t>> get_next(context_t);
+
+  /// Check that this is next to prv
+  void assert_next_to(const tree_cursor_t&, value_magic_t) const;
+
+  MatchKindCMP compare_to(const tree_cursor_t&, value_magic_t) const;
+
   // public to Value
 
   /// Get the latest value_header_t pointer for read.
@@ -128,6 +136,19 @@ class tree_cursor_t final
   void update_track(Ref<LeafNode>, const search_position_t&);
   void update_cache(LeafNode&, const key_view_t&, const value_header_t*) const;
   void maybe_update_cache(value_magic_t magic) const;
+
+  static Ref<tree_cursor_t> create(Ref<LeafNode> node, const search_position_t& pos) {
+    return new tree_cursor_t(node, pos);
+  }
+
+  static Ref<tree_cursor_t> create(Ref<LeafNode> node, const search_position_t& pos,
+                                   const key_view_t& key, const value_header_t* p_header) {
+    return new tree_cursor_t(node, pos, key, p_header);
+  }
+
+  static Ref<tree_cursor_t> create_end(Ref<LeafNode> node) {
+    return new tree_cursor_t(node);
+  }
 
   /**
    * Reversed resource management (tree_cursor_t)
@@ -329,7 +350,8 @@ class Node
     Ref<InternalNode> ptr;
   };
   const parent_info_t& parent_info() const { return *_parent_info; }
-  node_future<> insert_parent(context_t, Ref<Node> right_node);
+  node_future<> insert_parent(context_t, const key_view_t&, Ref<Node> right_node);
+  node_future<Ref<tree_cursor_t>> get_next_cursor_from_parent(context_t);
 
  private:
   /**
@@ -373,8 +395,12 @@ class InternalNode final : public Node {
   InternalNode& operator=(const InternalNode&) = delete;
   InternalNode& operator=(InternalNode&&) = delete;
 
+  node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
+
   node_future<> apply_child_split(
-      context_t, const search_position_t&, Ref<Node> left, Ref<Node> right);
+      context_t, const search_position_t&, const key_view_t& left_key,
+      Ref<Node> left, Ref<Node> right);
+
   template <bool VALIDATE>
   void do_track_child(Node& child) {
     if constexpr (VALIDATE) {
@@ -384,6 +410,7 @@ class InternalNode final : public Node {
     assert(tracked_child_nodes.find(child_pos) == tracked_child_nodes.end());
     tracked_child_nodes[child_pos] = &child;
   }
+
   void do_untrack_child(const Node& child) {
     auto& child_pos = child.parent_info().position;
     assert(tracked_child_nodes.find(child_pos)->second == &child);
@@ -461,6 +488,7 @@ class LeafNode final : public Node {
   bool is_level_tail() const;
   layout_version_t get_layout_version() const { return layout_version; }
   std::tuple<key_view_t, const value_header_t*> get_kv(const search_position_t&) const;
+  node_future<Ref<tree_cursor_t>> get_next_cursor(context_t, const search_position_t&);
 
   template <bool VALIDATE>
   void do_track_cursor(tree_cursor_t& cursor) {

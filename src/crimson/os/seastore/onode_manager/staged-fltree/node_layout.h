@@ -86,6 +86,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * NodeImpl
    */
+  node_type_t node_type() const override { return NODE_TYPE; }
   field_type_t field_type() const override { return FIELD_TYPE; }
   laddr_t laddr() const override { return extent.get_laddr(); }
   void prepare_mutate(context_t c) override { return extent.prepare_mutate(c); }
@@ -94,25 +95,16 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   level_t level() const override { return extent.read().level(); }
   node_offset_t free_size() const override { return extent.read().free_size(); }
 
-  key_view_t get_key_view(const search_position_t& position) const override {
-    key_view_t ret;
-    STAGE_T::get_key_view(extent.read(), cast_down<STAGE>(position), ret);
-    return ret;
-  }
-
-  key_view_t get_largest_key_view() const override {
-    key_view_t index_key;
-    STAGE_T::template lookup_largest_slot<false, true, false>(
-        extent.read(), nullptr, &index_key, nullptr);
-    return index_key;
-  }
-
-  void next_position(search_position_t& pos) const override {
-    assert(!pos.is_end());
-    bool find_next = STAGE_T::next_position(extent.read(), cast_down<STAGE>(pos));
-    if (find_next) {
-      pos = search_position_t::end();
+  std::optional<key_view_t> get_pivot_index() const override {
+    assert(!is_empty());
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      if (is_level_tail()) {
+        return std::nullopt;
+      }
     }
+    key_view_t pivot_index;
+    get_largest_slot(nullptr, &pivot_index, nullptr);
+    return {pivot_index};
   }
 
   node_stats_t get_stats() const override {
@@ -198,25 +190,63 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * Common
    */
-  const value_t* get_p_value(const search_position_t& position,
-                             key_view_t* index_key=nullptr, marker_t={}) const override {
-    auto& node_stage = extent.read();
-    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      assert(!index_key);
-      if (position.is_end()) {
-        assert(is_level_tail());
-        return node_stage.get_end_p_laddr();
-      }
+  void get_slot(const search_position_t& pos,
+                key_view_t* p_index_key = nullptr,
+                const value_t** pp_value = nullptr) const override {
+    assert(!is_empty());
+    assert(!pos.is_end());
+    if (p_index_key && pp_value) {
+      STAGE_T::template get_slot<true, true>(
+          extent.read(), cast_down<STAGE>(pos), p_index_key, pp_value);
+    } else if (!p_index_key && pp_value) {
+      STAGE_T::template get_slot<false, true>(
+          extent.read(), cast_down<STAGE>(pos), nullptr, pp_value);
+    } else if (p_index_key && !pp_value) {
+      STAGE_T::template get_slot<true, false>(
+          extent.read(), cast_down<STAGE>(pos), p_index_key, nullptr);
     } else {
-      assert(!position.is_end());
-    }
-    if (index_key) {
-      return STAGE_T::template get_p_value<true>(
-          node_stage, cast_down<STAGE>(position), index_key);
-    } else {
-      return STAGE_T::get_p_value(node_stage, cast_down<STAGE>(position));
+      ceph_abort("impossible path");
     }
   }
+
+  void get_next_slot(search_position_t& pos,
+                     key_view_t* p_index_key = nullptr,
+                     const value_t** pp_value = nullptr) const override {
+    assert(!is_empty());
+    assert(!pos.is_end());
+    bool find_next;
+    if (p_index_key && pp_value) {
+      find_next = STAGE_T::template get_next_slot<true, true>(
+          extent.read(), cast_down<STAGE>(pos), p_index_key, pp_value);
+    } else if (!p_index_key && pp_value) {
+      find_next = STAGE_T::template get_next_slot<false, true>(
+          extent.read(), cast_down<STAGE>(pos), nullptr, pp_value);
+    } else {
+      ceph_abort("not implemented");
+    }
+    if (find_next) {
+      pos = search_position_t::end();
+    }
+  }
+
+  void get_largest_slot(search_position_t* p_pos = nullptr,
+                        key_view_t* p_index_key = nullptr,
+                        const value_t** pp_value = nullptr) const override {
+    assert(!is_empty());
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      assert(!is_level_tail());
+    }
+    if (p_pos && p_index_key && pp_value) {
+      STAGE_T::template get_largest_slot<true, true, true>(
+          extent.read(), &cast_down_fill_0<STAGE>(*p_pos), p_index_key, pp_value);
+    } else if (!p_pos && p_index_key && !pp_value) {
+      STAGE_T::template get_largest_slot<false, true, false>(
+          extent.read(), nullptr, p_index_key, nullptr);
+    } else {
+      ceph_abort("not implemented");
+    }
+  }
+
 
   lookup_result_t<NODE_TYPE> lower_bound(
       const key_hobj_t& key, MatchHistory& history,
@@ -236,8 +266,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
 #ifndef NDEBUG
       if (!result_raw.is_end()) {
         full_key_t<KeyT::VIEW> index;
-        STAGE_T::get_key_view(node_stage, result_raw.position, index);
-        assert(index == *index_key);
+        STAGE_T::template get_slot<true, false>(
+            node_stage, result_raw.position, &index, nullptr);
+        assert(index.compare_to(*index_key) == MatchKindCMP::EQ);
       }
 #endif
     } else {
@@ -248,7 +279,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       assert(result_raw.mstat == MSTAT_END);
     } else {
       full_key_t<KeyT::VIEW> index;
-      STAGE_T::get_key_view(node_stage, result_raw.position, index);
+      STAGE_T::template get_slot<true, false>(
+          node_stage, result_raw.position, &index, nullptr);
       assert_mstat(key, index, result_raw.mstat);
     }
 #endif
@@ -304,15 +336,22 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       logger().trace("OTree::Layout::Insert: -- dump\n{}", sos.str());
     }
     validate_layout();
-    assert(get_key_view(insert_pos) == key);
+#ifndef NDEBUG
+    full_key_t<KeyT::VIEW> index;
+    get_slot(insert_pos, &index, nullptr);
+    assert(index.compare_to(key) == MatchKindCMP::EQ);
+#endif
     return ret;
   }
 
   std::tuple<search_position_t, bool, const value_t*> split_insert(
-      NodeExtentMutable& right_mut, NodeImpl& right_impl,
+      NodeExtentMutable& right_mut, NodeImpl& _right_impl,
       const full_key_t<KEY_TYPE>& key, const value_input_t& value,
       search_position_t& _insert_pos, match_stage_t& insert_stage,
       node_offset_t& insert_size) override {
+    assert(_right_impl.node_type() == NODE_TYPE);
+    assert(_right_impl.field_type() == FIELD_TYPE);
+    auto& right_impl = dynamic_cast<NodeLayoutT&>(_right_impl);
     logger().info("OTree::Layout::Split: begin at "
                   "insert_pos({}), insert_stage={}, insert_size={}B, "
                   "{:#x}=>{:#x} ...",
@@ -474,10 +513,18 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
                      insert_pos, insert_stage);
       p_value = extent.template split_insert_replayable<KEY_TYPE>(
           split_at, key, value, insert_pos, insert_stage, insert_size);
-      assert(get_key_view(_insert_pos) == key);
+#ifndef NDEBUG
+      full_key_t<KeyT::VIEW> index;
+      get_slot(_insert_pos, &index, nullptr);
+      assert(index.compare_to(key) == MatchKindCMP::EQ);
+#endif
     } else {
       logger().debug("OTree::Layout::Split: -- left trim ...");
-      assert(right_impl.get_key_view(_insert_pos) == key);
+#ifndef NDEBUG
+      full_key_t<KeyT::VIEW> index;
+      right_impl.get_slot(_insert_pos, &index, nullptr);
+      assert(index.compare_to(key) == MatchKindCMP::EQ);
+#endif
       extent.split_replayable(split_at);
     }
     if (unlikely(logger().is_enabled(seastar::log_level::debug))) {
@@ -500,11 +547,11 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     InsertType insert_type;
     search_position_t last_pos;
     if (is_insert_left) {
-      STAGE_T::template lookup_largest_slot<true, false, false>(
+      STAGE_T::template get_largest_slot<true, false, false>(
           extent.read(), &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     } else {
       node_stage_t right_stage{reinterpret_cast<FieldType*>(right_mut.get_write())};
-      STAGE_T::template lookup_largest_slot<true, false, false>(
+      STAGE_T::template get_largest_slot<true, false, false>(
           right_stage, &cast_down_fill_0<STAGE>(last_pos), nullptr, nullptr);
     }
     if (_insert_pos == search_position_t::begin()) {
@@ -522,10 +569,25 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * InternalNodeImpl
    */
+  const laddr_packed_t* get_tail_value() const override {
+    if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
+      assert(is_level_tail());
+      return extent.read().get_end_p_laddr();
+    } else {
+      ceph_abort("impossible path");
+    }
+  }
+
   void replace_child_addr(
       const search_position_t& pos, laddr_t dst, laddr_t src) override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
-      const laddr_packed_t* p_value = get_p_value(pos);
+      const laddr_packed_t* p_value;
+      if (pos.is_end()) {
+        assert(is_level_tail());
+        p_value = get_tail_value();
+      } else {
+        get_slot(pos, nullptr, &p_value);
+      }
       assert(p_value->value == src);
       extent.update_child_addr_replayable(dst, const_cast<laddr_packed_t*>(p_value));
     } else {
@@ -557,17 +619,6 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
   /*
    * LeafNodeImpl
    */
-  void get_largest_slot(search_position_t& pos,
-                        key_view_t& index_key,
-                        const value_header_t** pp_value) const override {
-    if constexpr (NODE_TYPE == node_type_t::LEAF) {
-      STAGE_T::template lookup_largest_slot<true, true, true>(
-          extent.read(), &cast_down_fill_0<STAGE>(pos), &index_key, pp_value);
-    } else {
-      ceph_abort("impossible path");
-    }
-  }
-
   std::tuple<match_stage_t, node_offset_t> evaluate_insert(
       const key_hobj_t& key, const value_config_t& value,
       const MatchHistory& history, match_stat_t mstat,
