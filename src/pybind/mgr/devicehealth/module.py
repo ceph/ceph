@@ -25,6 +25,29 @@ HEALTH_MESSAGES = {
 MAX_SAMPLES = 500
 
 
+def get_ata_wear_level(data: Dict[Any,Any]) -> Optional[float]:
+    """
+    Extract wear level (as float) from smartctl -x --json output for SATA SSD
+    """
+    for page in data.get("ata_device_statistics", {}).get("pages", []):
+        if page.get("number") != 7:
+            continue
+        for item in page.get("table", []):
+            if item["offset"] == 8:
+                return item["value"] / 100.0
+    return None
+
+
+def get_nvme_wear_level(data: Dict[Any,Any]) -> Optional[float]:
+    """
+    Extract wear level (as float) from smartctl -x --json output for NVME SSD
+    """
+    pct_used = data.get("nvme_smart_health_information_log", {}).get("percentage_used")
+    if pct_used is None:
+        return None
+    return pct_used / 100.0
+
+
 class Module(MgrModule):
     MODULE_OPTIONS = [
         Option(
@@ -449,6 +472,22 @@ class Module(MgrModule):
             if len(erase):
                 ioctx.remove_omap_keys(op, tuple(erase))
             ioctx.operate_write_op(op, devid)
+
+        # extract wear level?
+        wear_level = get_ata_wear_level(data)
+        if wear_level is None:
+            wear_level = get_nvme_wear_level(data)
+        dev_data = self.get(f"device {devid}") or {}
+        if wear_level is not None:
+            if dev_data.get(wear_level) != str(wear_level):
+                dev_data["wear_level"] = str(wear_level)
+                self.log.debug(f"updating {devid} wear level to {wear_level}")
+                self.set_device_wear_level(devid, wear_level)
+        else:
+            if "wear_level" in dev_data:
+                del dev_data["wear_level"]
+                self.log.debug(f"removing {devid} wear level")
+                self.set_device_wear_level(devid, -1.0)
 
     def _get_device_metrics(self, devid: str,
                             sample: Optional[str] = None,
