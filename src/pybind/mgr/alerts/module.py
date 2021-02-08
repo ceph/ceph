@@ -127,8 +127,8 @@ class Alerts(MgrModule):
                 if 'new' not in d:
                     d['new'] = {}
                 d['new'][code] = alert
-            elif alert['summary'].get('count', 0) > \
-                 last['checks'][code]['summary'].get('count', 0):
+            elif (alert['summary'].get('count', 0) >
+                  last['checks'][code]['summary'].get('count', 0)):
                 if 'updated' not in d:
                     d['updated'] = {}
                 d['updated'][code] = alert
@@ -172,7 +172,7 @@ class Alerts(MgrModule):
                 last_status = new_status
 
             self.log.debug('Sleeping for %s seconds', self.interval)
-            ret = self.event.wait(self.interval or 60)
+            self.event.wait(self.interval or 60)
             self.event.clear()
 
     def shutdown(self) -> None:
@@ -195,7 +195,9 @@ class Alerts(MgrModule):
                 message=detail['message'])
         return r
 
-    def _send_alert_smtp(self, status: Dict[str, Any], diff: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _send_alert_smtp(self,
+                         status: Dict[str, Any],
+                         diff: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         # message
         self.log.debug('_send_alert_smtp')
         message = ('From: {from_name} <{sender}>\n'
@@ -224,13 +226,14 @@ class Alerts(MgrModule):
         message += ('\n\n=== Full health status ===\n')
         for code, alert in status['checks'].items():
             message += self._smtp_format_alert(code, alert)
-            
+
         self.log.debug('message: %s' % message)
 
         # send
         try:
             if self.smtp_ssl:
-                server: Union[smtplib.SMTP_SSL, smtplib.SMTP] = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
+                server: Union[smtplib.SMTP_SSL, smtplib.SMTP] = \
+                    smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
             else:
                 server = smtplib.SMTP(self.smtp_host, self.smtp_port)
             if self.smtp_password:
@@ -243,7 +246,7 @@ class Alerts(MgrModule):
                     'severity': 'warning',
                     'summary': 'unable to send alert email',
                     'count': 1,
-                    'detail': [ str(e) ]
+                    'detail': [str(e)]
                 }
             }
         self.log.debug('Sent email to %s' % self.smtp_destination)
