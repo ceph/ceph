@@ -5,6 +5,7 @@
 
 #include "osd/osd_op_util.h"
 #include "crimson/net/Connection.h"
+#include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDOp.h"
@@ -60,10 +61,13 @@ public:
   seastar::future<> start();
 
 private:
-  seastar::future<> process_pg_op(
-    Ref<PG> &pg);
-  seastar::future<> process_op(
-    Ref<PG> &pg);
+  seastar::future<> process_pg_op(Ref<PG>& pg);
+  seastar::future<> process_op(Ref<PG>& pg);
+  seastar::future<> do_recover_missing(Ref<PG>& pgref);
+  seastar::future<> do_process(
+      Ref<PG>& pg,
+      crimson::osd::ObjectContextRef obc);
+
   bool is_pg_op() const;
 
   ConnectionPipeline &cp();
