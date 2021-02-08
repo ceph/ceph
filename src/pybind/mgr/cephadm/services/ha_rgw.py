@@ -19,6 +19,13 @@ class HA_RGWService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[HA_RGWSpec]) -> CephadmDaemonSpec:
         assert daemon_spec.daemon_type == 'haproxy' or daemon_spec.daemon_type == 'keepalived'
+        # if spec is not attached to daemon_spec it is likely a redeploy or reconfig and
+        # spec should be in spec store
+        if not daemon_spec.spec:
+            service_name: str = "ha-rgw." + daemon_spec.daemon_id.split('.')[0]
+            if service_name in self.mgr.spec_store.specs:
+                daemon_spec.spec = cast(
+                    HA_RGWSpec, self.mgr.spec_store.specs.get(service_name))
         assert daemon_spec.spec
 
         if daemon_spec.daemon_type == 'haproxy':
@@ -44,6 +51,9 @@ class HA_RGWService(CephService):
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
+
+        daemon_spec.final_config, daemon_spec.deps = self.haproxy_generate_config(daemon_spec)
+
         return daemon_spec
 
     def keepalived_prepare_create(self, daemon_spec: CephadmDaemonSpec[HA_RGWSpec]) -> CephadmDaemonSpec:
@@ -56,6 +66,9 @@ class HA_RGWService(CephService):
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
+
+        daemon_spec.final_config, daemon_spec.deps = self.keepalived_generate_config(daemon_spec)
+
         return daemon_spec
 
     def haproxy_generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
