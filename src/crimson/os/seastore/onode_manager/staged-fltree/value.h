@@ -167,8 +167,8 @@ class Value {
   virtual ~Value();
   Value(const Value&) = default;
   Value(Value&&) = default;
-  Value& operator=(const Value&) = default;
-  Value& operator=(Value&&) = default;
+  Value& operator=(const Value&) = delete;
+  Value& operator=(Value&&) = delete;
 
   /// Returns the value payload size.
   value_size_t get_payload_size() const {
