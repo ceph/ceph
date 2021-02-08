@@ -1345,29 +1345,36 @@ Usage:
         return HandleCommandResult()
 
     @_cli_read_command('orch status')
-    def _status(self, format: Format = Format.plain) -> HandleCommandResult:
+    def _status(self,
+                detail: bool = False,
+                format: Format = Format.plain) -> HandleCommandResult:
         """Report configured backend and its status"""
         o = self._select_orchestrator()
         if o is None:
             raise NoOrchestrator()
 
-        avail, why = self.available()
+        avail, why, module_details = self.available()
         result: Dict[str, Any] = {
-            "backend": o
+            "available": avail,
+            "backend": o,
         }
-        if avail is not None:
-            result['available'] = avail
-            if not avail:
-                result['reason'] = why
+
+        if avail:
+            result.update(module_details)
+        else:
+            result['reason'] = why
 
         if format != Format.plain:
             output = to_format(result, format, many=False, cls=None)
         else:
             output = "Backend: {0}".format(result['backend'])
-            if 'available' in result:
-                output += "\nAvailable: {0}".format(result['available'])
-                if 'reason' in result:
-                    output += ' ({0})'.format(result['reason'])
+            output += f"\nAvailable: {'Yes' if result['available'] else 'No'}"
+            if 'reason' in result:
+                output += ' ({0})'.format(result['reason'])
+            if 'paused' in result:
+                output += f"\nPaused: {'Yes' if result['paused'] else 'No'}"
+            if 'workers' in result and detail:
+                output += f"\nHost Parallelism: {result['workers']}"
         return HandleCommandResult(stdout=output)
 
     def self_test(self) -> None:

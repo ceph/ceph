@@ -125,18 +125,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return False, "Rook version unsupported."
         return True, ''
 
-    def available(self) -> Tuple[bool, str]:
+    def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         if not kubernetes_imported:
-            return False, "`kubernetes` python module not found"
+            return False, "`kubernetes` python module not found", {}
         elif not self._rook_env.has_namespace():
-            return False, "ceph-mgr not running in Rook cluster"
+            return False, "ceph-mgr not running in Rook cluster", {}
 
         try:
             self.k8s.list_namespaced_pod(self._rook_env.namespace)
         except ApiException as e:
-            return False, "Cannot reach Kubernetes API: {}".format(e)
+            return False, "Cannot reach Kubernetes API: {}".format(e), {}
         else:
-            return True, ""
+            return True, "", {}
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(RookOrchestrator, self).__init__(*args, **kwargs)

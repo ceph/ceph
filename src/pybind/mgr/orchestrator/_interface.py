@@ -703,7 +703,7 @@ class Orchestrator(object):
         return True
 
     @_hide_in_features
-    def available(self) -> Tuple[bool, str]:
+    def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Report whether we can talk to the orchestrator.  This is the
         place to give the user a meaningful message if the orchestrator
@@ -724,7 +724,9 @@ class Orchestrator(object):
                 ... if OrchestratorClientMixin().available()[0]:  # wrong.
                 ...     OrchestratorClientMixin().get_hosts()
 
-        :return: two-tuple of boolean, string
+        :return: boolean representing whether the module is available/usable
+        :return: string describing any error 
+        :return: dict containing any module specific information
         """
         raise NotImplementedError()
 
