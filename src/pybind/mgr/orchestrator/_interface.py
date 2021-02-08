@@ -726,7 +726,7 @@ class Orchestrator(object):
                 ...     OrchestratorClientMixin().get_hosts()
 
         :return: boolean representing whether the module is available/usable
-        :return: string describing any error 
+        :return: string describing any error
         :return: dict containing any module specific information
         """
         raise NotImplementedError()
