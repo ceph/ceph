@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple, Any, List
+from typing import Dict, Tuple, Any, List, cast
 
 from ceph.deployment.service_spec import NFSServiceSpec
 import rados
@@ -25,11 +25,20 @@ class NFSService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
+        # if spec is not attached to daemon_spec it is likely a redeploy or reconfig and
+        # spec should be in spec store
+        if not daemon_spec.spec:
+            service_name: str = "nfs." + daemon_spec.daemon_id.split('.')[0]
+            if service_name in self.mgr.spec_store.specs:
+                daemon_spec.spec = cast(
+                    NFSServiceSpec, self.mgr.spec_store.specs.get(service_name))
         assert daemon_spec.spec
 
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = daemon_spec.spec
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
