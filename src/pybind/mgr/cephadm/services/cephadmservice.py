@@ -68,6 +68,11 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
         # TCP ports used by the daemon
         self.ports:  List[int] = ports or []
 
+        # values to be populated during generate_config calls
+        # and then used in _run_cephadm
+        self.final_config: Dict[str, Any] = {}
+        self.deps: List[str] = []
+
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
 
@@ -404,6 +409,8 @@ class MonService(CephService):
         daemon_spec.ceph_conf = extra_config
         daemon_spec.keyring = keyring
 
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+
         return daemon_spec
 
     def _check_safe_to_destroy(self, mon_id: str) -> None:
@@ -486,6 +493,8 @@ class MgrService(CephService):
 
         daemon_spec.keyring = keyring
 
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+
         return daemon_spec
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
@@ -550,6 +559,8 @@ class MdsService(CephService):
                      'mds', 'allow'],
         })
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
@@ -639,6 +650,8 @@ class RgwService(CephService):
         keyring = self.get_keyring(rgw_id)
 
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
@@ -785,6 +798,8 @@ class RbdMirrorService(CephService):
 
         daemon_spec.keyring = keyring
 
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+
         return daemon_spec
 
 
@@ -803,6 +818,8 @@ class CrashService(CephService):
         })
 
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 

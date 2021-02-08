@@ -108,6 +108,7 @@ class OSDService(CephService):
                     host=host,
                     daemon_type='osd',
                 )
+                daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
                 CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)

@@ -4032,8 +4032,12 @@ def command_deploy(ctx):
 
     # Get and check ports explicitly required to be opened
     daemon_ports = [] # type: List[int]
-    if ctx.tcp_ports:
-        daemon_ports = list(map(int, ctx.tcp_ports.split()))
+
+    # only check port in use if not reconfig or redeploy since service
+    # we are redeploying/reconfiguring will already be using the port
+    if not ctx.reconfig and not redeploy:
+        if ctx.tcp_ports:
+            daemon_ports = list(map(int, ctx.tcp_ports.split()))
 
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring(ctx)
