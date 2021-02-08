@@ -1623,8 +1623,7 @@ void ReplicatedBackend::submit_push_data(
     if (!complete) {
       t->remove(coll, ghobject_t(target_oid));
       t->touch(coll, ghobject_t(target_oid));
-      bufferlist bv = attrs.at(OI_ATTR);
-      object_info_t oi(bv);
+      object_info_t oi(attrs.at(OI_ATTR));
       t->set_alloc_hint(coll, ghobject_t(target_oid),
 		        oi.expected_object_size,
 		        oi.expected_write_size,
@@ -1633,8 +1632,7 @@ void ReplicatedBackend::submit_push_data(
         if (!recovery_info.object_exist) {
 	  t->remove(coll, ghobject_t(target_oid));
           t->touch(coll, ghobject_t(target_oid));
-          bufferlist bv = attrs.at(OI_ATTR);
-          object_info_t oi(bv);
+          object_info_t oi(attrs.at(OI_ATTR));
           t->set_alloc_hint(coll, ghobject_t(target_oid),
                             oi.expected_object_size,
                             oi.expected_write_size,
@@ -2048,10 +2046,8 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     }
 
     // Debug
-    bufferlist bv = out_op->attrset[OI_ATTR];
     try {
-     auto bliter = bv.cbegin();
-     decode(oi, bliter);
+     oi.decode(out_op->attrset[OI_ATTR]);
     } catch (...) {
       dout(0) << __func__ << ": bad object_info_t: " << recovery_info.soid << dendl;
       return -EINVAL;

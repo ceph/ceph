@@ -63,7 +63,7 @@ protected:
   ///          recovery @c pop.soid
   seastar::future<bool> _handle_pull_response(
     pg_shard_t from,
-    const PushOp& pop,
+    PushOp& pop,
     PullOp* response,
     ceph::os::Transaction* t);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
@@ -75,19 +75,19 @@ protected:
     bool first,
     bool complete,
     bool clear_omap,
-    interval_set<uint64_t> data_zeros,
-    const interval_set<uint64_t> &intervals_included,
-    ceph::bufferlist data_included,
-    ceph::bufferlist omap_header,
+    interval_set<uint64_t>&& data_zeros,
+    interval_set<uint64_t>&& intervals_included,
+    ceph::bufferlist&& data_included,
+    ceph::bufferlist&& omap_header,
     const std::map<string, bufferlist> &attrs,
-    const std::map<string, bufferlist> &omap_entries,
+    std::map<string, bufferlist>&& omap_entries,
     ceph::os::Transaction *t);
   void submit_push_complete(
     const ObjectRecoveryInfo &recovery_info,
     ObjectStore::Transaction *t);
   seastar::future<> _handle_push(
     pg_shard_t from,
-    const PushOp &pop,
+    PushOp& pop,
     PushReplyOp *response,
     ceph::os::Transaction *t);
   seastar::future<std::optional<PushOp>> _handle_push_reply(
@@ -148,4 +148,12 @@ private:
     ObjectRecoveryProgress& new_progress,
     uint64_t* max_len,
     PushOp* push_op);
+  seastar::future<hobject_t> prep_push_target(
+    const ObjectRecoveryInfo &recovery_info,
+    bool first,
+    bool complete,
+    bool clear_omap,
+    ObjectStore::Transaction* t,
+    const map<string, bufferlist> &attrs,
+    bufferlist&& omap_header);
 };
