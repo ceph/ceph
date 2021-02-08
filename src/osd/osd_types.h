@@ -5896,7 +5896,7 @@ struct object_info_t {
       alloc_hint_flags(0)
   {}
 
-  explicit object_info_t(ceph::buffer::list& bl) {
+  explicit object_info_t(const ceph::buffer::list& bl) {
     decode(bl);
   }
 };
