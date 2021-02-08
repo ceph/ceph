@@ -34,6 +34,12 @@ public:
         &outbl, &outs, &cond);
   }
 
+  void run(MonClient *monc, const std::string &command, const ceph::buffer::list &inbl)
+  {
+    monc->start_mon_command({command}, inbl,
+        &outbl, &outs, &cond);
+  }
+
   virtual void wait()
   {
     r = cond.wait();
