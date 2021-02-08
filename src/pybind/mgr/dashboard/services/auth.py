@@ -63,12 +63,20 @@ class JwtManager(object):
 
     @classmethod
     def get_token_from_header(cls):
-        auth_header = cherrypy.request.headers.get('authorization')
-        if auth_header is not None:
-            scheme, params = auth_header.split(' ', 1)
-            if scheme.lower() == 'bearer':
-                return params
-        return None
+        auth_cookie_name = 'token'
+        try:
+            # use cookie
+            return cherrypy.request.cookie[auth_cookie_name].value
+        except KeyError:
+            try:
+                # fall-back: use Authorization header
+                auth_header = cherrypy.request.headers.get('authorization')
+                if auth_header is not None:
+                    scheme, params = auth_header.split(' ', 1)
+                    if scheme.lower() == 'bearer':
+                        return params
+            except IndexError:
+                return None
 
     @classmethod
     def set_user(cls, username):

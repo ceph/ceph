@@ -3,7 +3,6 @@ import { Component, OnInit, ViewChild } from '@angular/core';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { Icons } from '../../../shared/enum/icons.enum';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { DocService } from '../../../shared/services/doc.service';
 import { AboutComponent } from '../about/about.component';
 
@@ -19,11 +18,7 @@ export class DashboardHelpComponent implements OnInit {
   modalRef: BsModalRef;
   icons = Icons;
 
-  constructor(
-    private modalService: BsModalService,
-    private authStorageService: AuthStorageService,
-    private docService: DocService
-  ) {}
+  constructor(private modalService: BsModalService, private docService: DocService) {}
 
   ngOnInit() {
     this.docService.subscribeOnce('dashboard', (url: string) => {
@@ -37,8 +32,6 @@ export class DashboardHelpComponent implements OnInit {
   }
 
   goToApiDocs() {
-    const tokenInput = this.docsFormElement.nativeElement.children[0];
-    tokenInput.value = this.authStorageService.getToken();
     this.docsFormElement.nativeElement.submit();
   }
 }

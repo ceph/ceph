@@ -85,7 +85,6 @@
     "@angular/platform-browser": "8.2.14",
     "@angular/platform-browser-dynamic": "8.2.14",
     "@angular/router": "8.2.14",
-    "@auth0/angular-jwt": "2.1.1",
     "@ngx-translate/i18n-polyfill": "1.0.0",
     "@swimlane/ngx-datatable": "16.0.3",
     "@types/file-saver": "^2.0.1",

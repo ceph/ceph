@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import http.cookies
 import logging
-import cherrypy
+import sys
 
 from . import ApiController, RESTController, \
-    allow_empty_body
+    allow_empty_body, set_cookies
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
 from ..services.auth import AuthManager, JwtManager
 from ..settings import Settings
 
+# Python 3.8 introduced `samesite` attribute:
+# https://docs.python.org/3/library/http.cookies.html#morsel-objects
+if sys.version_info < (3, 8):
+    http.cookies.Morsel._reserved["samesite"] = "SameSite"  # type: ignore  # pylint: disable=W0212
 
 logger = logging.getLogger('controllers.auth')
 
@@ -31,12 +36,13 @@ class Auth(RESTController):
                 pwd_update_required = user_data.get('pwdUpdateRequired', False)
 
             if user_perms is not None:
+                url_prefix = 'https' if mgr.get_localized_module_option('ssl') else 'http'
                 logger.info('Login successful: %s', username)
                 mgr.ACCESS_CTRL_DB.reset_attempt(username)
                 mgr.ACCESS_CTRL_DB.save()
                 token = JwtManager.gen_token(username)
                 token = token.decode('utf-8')
-                cherrypy.response.headers['Authorization'] = "Bearer: {}".format(token)
+                set_cookies(url_prefix, token)
                 return {
                     'token': token,
                     'username': username,
