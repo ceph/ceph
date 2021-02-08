@@ -76,28 +76,13 @@ from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, 
 import re
 import uuid
 
+from configparser import ConfigParser
 from functools import wraps
 from glob import glob
+from io import StringIO
 from threading import Thread, RLock
-
-if sys.version_info >= (3, 0):
-    from io import StringIO
-else:
-    from StringIO import StringIO
-
-if sys.version_info >= (3, 2):
-    from configparser import ConfigParser
-else:
-    from ConfigParser import SafeConfigParser
-
-if sys.version_info >= (3, 0):
-    from urllib.request import urlopen
-    from urllib.error import HTTPError
-else:
-    from urllib2 import urlopen, HTTPError
-
-if sys.version_info > (3, 0):
-    unicode = str
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
 cached_stdin = None
 
@@ -1391,32 +1376,10 @@ def call_timeout(ctx, command, timeout):
         logger.debug(msg)
         raise TimeoutExpired(msg)
 
-    def call_timeout_py2(command, timeout):
-        # type: (List[str], int) -> int
-        proc = subprocess.Popen(command)
-        thread = Thread(target=proc.wait)
-        thread.start()
-        thread.join(timeout)
-        if thread.is_alive():
-            proc.kill()
-            thread.join()
-            raise_timeout(command, timeout)
-        return proc.returncode
-
-    def call_timeout_py3(command, timeout):
-        # type: (List[str], int) -> int
-        try:
-            return subprocess.call(command, timeout=timeout)
-        except subprocess.TimeoutExpired as e:
-            raise_timeout(command, timeout)
-
-    ret = 1
-    if sys.version_info >= (3, 3):
-        ret = call_timeout_py3(command, timeout)
-    else:
-        # py2 subprocess has no timeout arg
-        ret = call_timeout_py2(command, timeout)
-    return ret
+    try:
+        return subprocess.call(command, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise_timeout(command, timeout)
 
 ##################################
 
@@ -1450,24 +1413,9 @@ def is_available(ctx, what, func):
 
 def read_config(fn):
     # type: (Optional[str]) -> ConfigParser
-    # bend over backwards here because py2's ConfigParser doesn't like
-    # whitespace before config option names (e.g., '\n foo = bar\n').
-    # Yeesh!
-    if sys.version_info >= (3, 2):
-        cp = ConfigParser()
-    else:
-        cp = SafeConfigParser()
-
+    cp = ConfigParser()
     if fn:
-        with open(fn, 'r') as f:
-            raw_conf = f.read()
-        nice_conf = re.sub(r'\n(\s)+', r'\n', raw_conf)
-        s_io = StringIO(nice_conf)
-        if sys.version_info >= (3, 2):
-            cp.read_file(s_io)
-        else:
-            cp.readfp(s_io)
-
+        cp.read(fn)
     return cp
 
 
@@ -3224,7 +3172,7 @@ def wrap_ipv6(address):
     # it's already wrapped it'll not pass (like if it's a hostname) and trigger
     # the ValueError
     try:
-        if ipaddress.ip_address(unicode(address)).version == 6:
+        if ipaddress.ip_address(address).version == 6:
             return f"[{address}]"
     except ValueError:
         pass
@@ -3236,7 +3184,7 @@ def is_ipv6(address):
     # type: (str) -> bool
     address = unwrap_ipv6(address)
     try:
-        return ipaddress.ip_address(unicode(address)).version == 6
+        return ipaddress.ip_address(address).version == 6
     except ValueError:
         logger.warning("Address: {} isn't a valid IP address".format(address))
         return False
@@ -3296,8 +3244,8 @@ def prepare_mon_addresses(
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         for net, ips in list_networks(ctx).items():
-            if ipaddress.ip_address(unicode(unwrap_ipv6(base_ip))) in \
-                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
+            if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
+                    [ipaddress.ip_address(ip) for ip in ips]:
                 mon_network = net
                 logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
                                                                  mon_network))
@@ -4416,7 +4364,7 @@ def _parse_ipv6_route(routes, ips):
         ip = m[0][0]
         # find the network it belongs to
         net = [n for n in r.keys()
-               if ipaddress.ip_address(unicode(ip)) in ipaddress.ip_network(unicode(n))]
+               if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net:
             r[net[0]].append(ip)
 
