@@ -333,7 +333,8 @@ OMapInnerNode::merge_entry(omap_context_t oc, internal_iterator_t iter, OMapNode
     if (donor->extent_is_below_min()) {
       logger().debug("{}::merge_entry make_full_merge l {} r {}", __func__, *l, *r);
       assert(entry->extent_is_below_min());
-      return l->make_full_merge(oc, r).safe_then([=] (auto &&replacement){
+      return l->make_full_merge(oc, r).safe_then([liter=liter, riter=riter,
+                                                  l=l, r=r, oc, this] (auto &&replacement){
         journal_inner_update(liter, replacement->get_laddr(), maybe_get_delta_buffer());
         journal_inner_remove(riter, maybe_get_delta_buffer());
         //retire extent
@@ -353,7 +354,8 @@ OMapInnerNode::merge_entry(omap_context_t oc, internal_iterator_t iter, OMapNode
       });
     } else {
       logger().debug("{}::merge_entry balanced l {} r {}", __func__, *l, *r);
-      return l->make_balanced(oc, r).safe_then([=] (auto tuple) {
+      return l->make_balanced(oc, r).safe_then([liter=liter, riter=riter,
+                                                l=l, r=r, oc, this] (auto tuple) {
         auto [replacement_l, replacement_r, replacement_pivot] = tuple;
         //update operation will not cuase node overflow, so we can do it first
         journal_inner_update(liter, replacement_l->get_laddr(), maybe_get_delta_buffer());
