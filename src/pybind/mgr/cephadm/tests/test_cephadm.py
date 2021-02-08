@@ -291,7 +291,8 @@ class TestCephadm(object):
 
                 _run_cephadm.assert_called_with('test', 'mon.test', 'deploy', [
                                                 '--name', 'mon.test', '--reconfig', '--config-json', '-'],
-                                                stdin='{"config": "\\n\\n[mon]\\nk=v\\n", "keyring": ""}',
+                                                stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
+                                                + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
                                                 image='')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
