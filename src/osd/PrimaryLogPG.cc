@@ -10099,7 +10099,7 @@ struct C_gather : public Context {
   }
 };
 
-int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs, const std::string& pool,
+int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_obj_buffs, const std::string& pool,
 				   const char *cls, const char *method, bufferlist& inbl)
 {
   OpRequestRef op = ctx->op;
