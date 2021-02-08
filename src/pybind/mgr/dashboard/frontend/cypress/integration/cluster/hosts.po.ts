@@ -104,9 +104,9 @@ export class HostsPageHelper extends PageHelper {
     // First find row with hostname, then find labels in the row
     this.getTableCell(this.columnIndex.hostname, hostname)
       .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.labels})`)
+      .find(`datatable-body-cell:nth-child(${this.columnIndex.labels}) .badge`)
       .should(($ele) => {
-        const newLabels = $ele.text().split(', ');
+        const newLabels = $ele.toArray().map((v) => v.innerText);
         for (const label of labels) {
           if (add) {
             expect(newLabels).to.include(label);
