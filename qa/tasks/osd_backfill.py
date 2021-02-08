@@ -2,8 +2,8 @@
 Osd backfill test
 """
 import logging
-import ceph_manager
 import time
+from tasks import ceph_manager
 from teuthology import misc as teuthology
 
 
@@ -38,7 +38,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'thrashosds task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
     log.info('num_osds is %s' % num_osds)
@@ -52,9 +52,7 @@ def task(ctx, config):
 
     while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2])
     manager.wait_for_clean()
 
     # write some data
@@ -71,8 +69,7 @@ def task(ctx, config):
     manager.mark_down_osd(0)
 
     # wait for everything to peer and be happy...
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([1, 2])
     manager.wait_for_recovery()
 
     # write some new data
@@ -96,14 +93,12 @@ def task(ctx, config):
     manager.wait_till_osd_is_up(2)
 
     # cluster must recover
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([1, 2])
     manager.wait_for_recovery()
 
     # re-add osd.0
     manager.revive_osd(0)
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([1, 2])
     manager.wait_for_clean()
 
 

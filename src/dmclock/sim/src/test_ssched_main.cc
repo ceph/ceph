@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -34,23 +41,26 @@ namespace crimson {
 		     int head_w, int data_w, int data_prec);
   } // namespace test_simple
 } // namespace crimson
+
+
+using Cost = uint32_t;
     
 
 int main(int argc, char* argv[]) {
   // server params
 
-  const uint server_count = 100;
-  const uint server_iops = 40;
-  const uint server_threads = 1;
+  const unsigned server_count = 100;
+  const unsigned server_iops = 40;
+  const unsigned server_threads = 1;
 
   // client params
 
-  const uint client_total_ops = 1000;
-  const uint client_count = 100;
-  const uint client_server_select_range = 10;
-  const uint client_wait_count = 1;
-  const uint client_iops_goal = 50;
-  const uint client_outstanding_ops = 100;
+  const unsigned client_total_ops = 1000;
+  const unsigned client_count = 100;
+  const unsigned client_server_select_range = 10;
+  const unsigned client_wait_count = 1;
+  const unsigned client_iops_goal = 50;
+  const unsigned client_outstanding_ops = 100;
   const std::chrono::seconds client_wait(10);
 
   auto client_disp_filter = [=] (const ClientId& i) -> bool {
@@ -67,11 +77,11 @@ int main(int argc, char* argv[]) {
   // lambda to post a request to the identified server; called by client
   test::SubmitFunc server_post_f =
     [&simulation](const ServerId& server_id,
-		  const sim::TestRequest& request,
+		  sim::TestRequest&& request,
 		  const ClientId& client_id,
 		  const ssched::ReqParams& req_params) {
     auto& server = simulation->get_server(server_id);
-    server.post(request, client_id, req_params);
+    server.post(std::move(request), client_id, req_params, 1u);
   };
 
   static std::vector<sim::CliInst> no_wait =
@@ -97,10 +107,12 @@ int main(int argc, char* argv[]) {
     [&simulation](ClientId client_id,
 		  const sim::TestResponse& resp,
 		  const ServerId& server_id,
-		  const ssched::NullData& resp_params) {
+		  const ssched::NullData& resp_params,
+		  Cost request_cost) {
     simulation->get_client(client_id).receive_response(resp,
 						       server_id,
-						       resp_params);
+						       resp_params,
+						       request_cost);
   };
 
   test::CreateQueueF create_queue_f =
@@ -150,7 +162,7 @@ void test::server_data(std::ostream& out,
 		       int head_w, int data_w, int data_prec) {
   out << std::setw(head_w) << "requests:";
   int total_req = 0;
-  for (uint i = 0; i < sim->get_server_count(); ++i) {
+  for (unsigned i = 0; i < sim->get_server_count(); ++i) {
     const auto& server = sim->get_server(i);
     auto req_count = server.get_accumulator().request_count;
     total_req += req_count;
@@ -163,7 +175,7 @@ void test::server_data(std::ostream& out,
 #ifdef PROFILE
     crimson::ProfileCombiner<std::chrono::nanoseconds> art_combiner;
     crimson::ProfileCombiner<std::chrono::nanoseconds> rct_combiner;
-    for (uint i = 0; i < sim->get_server_count(); ++i) {
+    for (unsigned i = 0; i < sim->get_server_count(); ++i) {
       const auto& q = sim->get_server(i).get_priority_queue();
       const auto& art = q.add_request_timer;
       art_combiner.combine(art);

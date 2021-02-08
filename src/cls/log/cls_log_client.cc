@@ -1,10 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include <errno.h>
 
-#include "include/types.h"
 #include "cls/log/cls_log_ops.h"
 #include "include/rados/librados.hpp"
 #include "include/compat.h"
 
+
+using std::list;
+using std::string;
+
+using ceph::bufferlist;
 
 using namespace librados;
 
@@ -15,7 +21,7 @@ void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entrie
   bufferlist in;
   cls_log_add_op call;
   call.entries = entries;
-  ::encode(call, in);
+  encode(call, in);
   op.exec("log", "add", in);
 }
 
@@ -24,7 +30,7 @@ void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry)
   bufferlist in;
   cls_log_add_op call;
   call.entries.push_back(entry);
-  ::encode(call, in);
+  encode(call, in);
   op.exec("log", "add", in);
 }
 
@@ -55,7 +61,7 @@ void cls_log_trim(librados::ObjectWriteOperation& op, const utime_t& from_time, 
   call.to_time = to_time;
   call.from_marker = from_marker;
   call.to_marker = to_marker;
-  ::encode(call, in);
+  encode(call, in);
   op.exec("log", "trim", in);
 }
 
@@ -92,15 +98,15 @@ public:
     if (r >= 0) {
       cls_log_list_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
-        ::decode(ret, iter);
+        auto iter = outbl.cbegin();
+        decode(ret, iter);
         if (entries)
-	  *entries = ret.entries;
+          *entries = std::move(ret.entries);
         if (truncated)
           *truncated = ret.truncated;
         if (marker)
-          *marker = ret.marker;
-      } catch (buffer::error& err) {
+          *marker = std::move(ret.marker);
+      } catch (ceph::buffer::error& err) {
         // nothing we can do about it atm
       }
     }
@@ -119,7 +125,7 @@ void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
   call.marker = in_marker;
   call.max_entries = max_entries;
 
-  ::encode(call, inbl);
+  encode(call, inbl);
 
   op.exec("log", "list", inbl, new LogListCtx(&entries, out_marker, truncated));
 }
@@ -132,11 +138,11 @@ public:
     if (r >= 0) {
       cls_log_info_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
-        ::decode(ret, iter);
+        auto iter = outbl.cbegin();
+        decode(ret, iter);
         if (header)
 	  *header = ret.header;
-      } catch (buffer::error& err) {
+      } catch (ceph::buffer::error& err) {
         // nothing we can do about it atm
       }
     }
@@ -148,8 +154,7 @@ void cls_log_info(librados::ObjectReadOperation& op, cls_log_header *header)
   bufferlist inbl;
   cls_log_info_op call;
 
-  ::encode(call, inbl);
+  encode(call, inbl);
 
   op.exec("log", "info", inbl, new LogInfoCtx(header));
 }
-

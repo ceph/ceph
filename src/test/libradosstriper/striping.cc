@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include "include/types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -165,13 +166,13 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
       << "_" << testData.size;
   std::string soid = oss.str();
   // writing striped data
-  char* buf1;
+  std::unique_ptr<char[]> buf1;
   bufferlist bl1;
   {
     SCOPED_TRACE("Writing initial object"); 
-    buf1 = (char*) calloc(1, testData.size);
+    buf1 = std::make_unique<char[]>(testData.size);
     for (unsigned int i = 0; i < testData.size; i++) buf1[i] = 13*((unsigned char)i);
-    bl1.append(buf1, testData.size);
+    bl1.append(buf1.get(), testData.size);
     ASSERT_EQ(0, striper.write(soid, bl1, testData.size, 0));
     // checking object state from Rados point of view
     ASSERT_NO_FATAL_FAILURE(checkObjectFromRados(soid, bl1, testData.stripe_unit,
@@ -179,15 +180,15 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
                                                  testData.size));
   }
   // adding more data to object and checking again
-  char* buf2;
+  std::unique_ptr<char[]> buf2;
   bufferlist bl2;
   {
     SCOPED_TRACE("Testing append");
-    buf2 = (char*) calloc(1, testData.size);
+    buf2 = std::make_unique<char[]>(testData.size);
     for (unsigned int i = 0; i < testData.size; i++) buf2[i] = 17*((unsigned char)i);
-    bl2.append(buf2, testData.size);
+    bl2.append(buf2.get(), testData.size);
     ASSERT_EQ(0, striper.append(soid, bl2, testData.size));
-    bl1.append(buf2, testData.size);
+    bl1.append(buf2.get(), testData.size);
     ASSERT_NO_FATAL_FAILURE(checkObjectFromRados(soid, bl1, testData.stripe_unit,
                                                  testData.stripe_count, testData.object_size,
                                                  testData.size*2));
@@ -257,8 +258,6 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
       free(oid);
     }
   }
-  free(buf1);
-  free(buf2);
 }
 
 const TestData simple_stripe_schemes[] = {
@@ -325,6 +324,6 @@ const TestData simple_stripe_schemes[] = {
   {CEPH_MIN_STRIPE_UNIT, 50,           3*CEPH_MIN_STRIPE_UNIT, 45*CEPH_MIN_STRIPE_UNIT+100}
 };
 
-INSTANTIATE_TEST_CASE_P(SimpleStriping,
+INSTANTIATE_TEST_SUITE_P(SimpleStriping,
                         StriperTestRT,
                         ::testing::ValuesIn(simple_stripe_schemes));

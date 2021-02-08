@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef RGW_PERIOD_HISTORY_H
 #define RGW_PERIOD_HISTORY_H
@@ -8,8 +8,9 @@
 #include <mutex>
 #include <system_error>
 #include <boost/intrusive/avl_set.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/types.h"
+#include "common/async/yield_context.h"
 
 namespace bi = boost::intrusive;
 
@@ -41,7 +42,8 @@ class RGWPeriodHistory final {
    public:
     virtual ~Puller() = default;
 
-    virtual int pull(const std::string& period_id, RGWPeriod& period) = 0;
+    virtual int pull(const std::string& period_id, RGWPeriod& period,
+		     optional_yield y) = 0;
   };
 
   RGWPeriodHistory(CephContext* cct, Puller* puller,
@@ -98,7 +100,7 @@ class RGWPeriodHistory final {
   /// current_period and the given period, reading predecessor periods or
   /// fetching them from the master as necessary. returns a cursor at the
   /// given period that can be used to traverse the current_history
-  Cursor attach(RGWPeriod&& period);
+  Cursor attach(RGWPeriod&& period, optional_yield y);
 
   /// insert the given period into an existing history, or create a new
   /// unconnected history. similar to attach(), but it doesn't try to fetch

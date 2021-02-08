@@ -28,13 +28,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-
-#include <errno.h>
-#include <sys/time.h>
-
-#include "errno.h"
 #include "debug.h"
-#include "Initialize.h"
 #include "Cycles.h"
 
 double Cycles::cycles_per_sec = 0;
@@ -73,12 +67,12 @@ void Cycles::init()
   old_cycles = 0;
   while (1) {
     if (gettimeofday(&start_time, NULL) != 0) {
-      assert(0 == "couldn't read clock");
+      ceph_abort_msg("couldn't read clock");
     }
     uint64_t start_cycles = rdtsc();
     while (1) {
       if (gettimeofday(&stop_time, NULL) != 0) {
-        assert(0 == "couldn't read clock");
+        ceph_abort_msg("couldn't read clock");
       }
       uint64_t stop_cycles = rdtsc();
       micros = (stop_time.tv_usec - start_time.tv_usec) +

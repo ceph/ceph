@@ -11,22 +11,22 @@
 void ContDesc::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(objnum, bl);
-  ::encode(cursnap, bl);
-  ::encode(seqnum, bl);
-  ::encode(prefix, bl);
-  ::encode(oid, bl);
+  encode(objnum, bl);
+  encode(cursnap, bl);
+  encode(seqnum, bl);
+  encode(prefix, bl);
+  encode(oid, bl);
   ENCODE_FINISH(bl);
 }
 
-void ContDesc::decode(bufferlist::iterator &bl)
+void ContDesc::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(objnum, bl);
-  ::decode(cursnap, bl);
-  ::decode(seqnum, bl);
-  ::decode(prefix, bl);
-  ::decode(oid, bl);
+  decode(objnum, bl);
+  decode(cursnap, bl);
+  decode(seqnum, bl);
+  decode(prefix, bl);
+  decode(oid, bl);
   DECODE_FINISH(bl);
 }
 
@@ -35,7 +35,6 @@ std::ostream &operator<<(std::ostream &out, const ContDesc &rhs)
   return out << "(ObjNum " << rhs.objnum
 	     << " snap " << rhs.cursnap
 	     << " seq_num " << rhs.seqnum
-    //<< " prefix " << rhs.prefix
 	     << ")";
 }
 
@@ -48,12 +47,12 @@ void AppendGenerator::get_ranges_map(
     uint64_t segment_length = round_up(
       rand() % (max_append_size - min_append_size),
       alignment) + min_append_size;
-    assert(segment_length >= min_append_size);
+    ceph_assert(segment_length >= min_append_size);
     if (segment_length + pos > limit) {
       segment_length = limit - pos;
     }
     if (alignment)
-      assert(segment_length % alignment == 0);
+      ceph_assert(segment_length % alignment == 0);
     out.insert(std::pair<uint64_t, uint64_t>(pos, segment_length));
     pos += segment_length;
   }
@@ -67,8 +66,8 @@ void VarLenGenerator::get_ranges_map(
   bool include = false;
   while (pos < limit) {
     uint64_t segment_length = (rand() % (max_stride_size - min_stride_size)) + min_stride_size;
-    assert(segment_length < max_stride_size);
-    assert(segment_length >= min_stride_size);
+    ceph_assert(segment_length < max_stride_size);
+    ceph_assert(segment_length >= min_stride_size);
     if (segment_length + pos > limit) {
       segment_length = limit - pos;
     }
@@ -83,28 +82,23 @@ void VarLenGenerator::get_ranges_map(
 }
 
 void ObjectDesc::iterator::adjust_stack() {
-  while (!stack.empty() && pos >= stack.front().second.next) {
-    assert(pos == stack.front().second.next);
-    size = stack.front().second.size;
-    current = stack.front().first;
-    stack.pop_front();
+  while (!stack.empty() && pos >= stack.top().second.next) {
+    ceph_assert(pos == stack.top().second.next);
+    size = stack.top().second.size;
+    current = stack.top().first;
+    stack.pop();
   }
 
   if (stack.empty()) {
     cur_valid_till = std::numeric_limits<uint64_t>::max();
   } else {
-    cur_valid_till = stack.front().second.next;
+    cur_valid_till = stack.top().second.next;
   }
 
   while (current != layers.end() && !current->covers(pos)) {
     uint64_t next = current->next(pos);
     if (next < cur_valid_till) {
-      stack.push_front(
-	make_pair(
-	  current,
-	  StackState{next, size}
-	  )
-	);
+      stack.emplace(current, StackState{next, size});
       cur_valid_till = next;
     }
 
@@ -127,7 +121,7 @@ const ContDesc &ObjectDesc::most_recent() {
 }
 
 void ObjectDesc::update(ContentsGenerator *gen, const ContDesc &next) {
-  layers.push_front(std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(gen), next));
+  layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(gen), next));
   return;
 }
 
@@ -167,7 +161,7 @@ bool ObjectDesc::check_sparse(const std::map<uint64_t, uint64_t>& extents,
       }
     }
 
-    assert(off <= to_check.length());
+    ceph_assert(off <= to_check.length());
     pos = extiter.first;
     objiter.seek(pos);
 

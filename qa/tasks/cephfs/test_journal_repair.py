@@ -77,7 +77,7 @@ class TestJournalRepair(CephFSTestCase):
         self.assertEqual(self.fs.list_dirfrag(ROOT_INO), [])
 
         # Execute the dentry recovery, this should populate the backing store
-        self.fs.journal_tool(['event', 'recover_dentries', 'list'])
+        self.fs.journal_tool(['event', 'recover_dentries', 'list'], 0)
 
         # Dentries in ROOT_INO are present
         self.assertEqual(sorted(self.fs.list_dirfrag(ROOT_INO)), sorted(['rootfile_head', 'subdir_head', 'linkdir_head']))
@@ -87,13 +87,12 @@ class TestJournalRepair(CephFSTestCase):
 
         # Now check the MDS can read what we wrote: truncate the journal
         # and start the mds.
-        self.fs.journal_tool(['journal', 'reset'])
+        self.fs.journal_tool(['journal', 'reset'], 0)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         # List files
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         # First ls -R to populate MDCache, such that hardlinks will
         # resolve properly (recover_dentries does not create backtraces,
@@ -102,8 +101,7 @@ class TestJournalRepair(CephFSTestCase):
         # FIXME: hook in forward scrub here to regenerate backtraces
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.mount_a.umount_wait()  # remount to clear client cache before our second ls
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
 
         proc = self.mount_a.run_shell(['ls', '-R'])
         self.assertEqual(proc.stdout.getvalue().strip(),
@@ -160,39 +158,28 @@ class TestJournalRepair(CephFSTestCase):
         """
 
         # Set max_mds to 2
-        self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
-
-        # See that we have two active MDSs
-        self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
-                              reject_fn=lambda v: v > 2 or v < 1)
-        active_mds_names = self.fs.get_active_names()
+        status = self.fs.wait_for_daemons()
+        active_mds_names = self.fs.get_active_names(status=status)
 
         # Switch off any unneeded MDS daemons
         for unneeded_mds in set(self.mds_cluster.mds_ids) - set(active_mds_names):
             self.mds_cluster.mds_stop(unneeded_mds)
             self.mds_cluster.mds_fail(unneeded_mds)
 
-        # Do a bunch of I/O such that at least some will hit the second MDS: create
-        # lots of directories so that the balancer should find it easy to make a decision
-        # to allocate some of them to the second mds.
-        spammers = []
-        for n in range(0, 16):
-            dir_name = "spam_{0}".format(n)
-            spammers.append(self.mount_a.spam_dir_background(dir_name))
+        # Create a dir on each rank
+        self.mount_a.run_shell_payload("mkdir {alpha,bravo} && touch {alpha,bravo}/file")
+        self.mount_a.setfattr("alpha/", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("bravo/", "ceph.dir.pin", "1")
 
-        def subtrees_assigned():
-            got_subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=active_mds_names[0])
-            rank_1_count = len([s for s in got_subtrees if s['auth_first'] == 1])
+        # Ensure the pinning has taken effect and the /bravo dir is now
+        # migrated to rank 1.
+        self._wait_subtrees([('/bravo', 1), ('/alpha', 0)], rank=0, status=status)
 
-            # Greater than 1, because there is typically 1 for ~mds1, and once it
-            # has been assigned something in addition to that it means it has been
-            # assigned a "real" subtree.
-            return rank_1_count > 1
-
-        # We are waiting for the MDS to respond to hot directories, which
-        # is not guaranteed to happen at a particular time, so a lengthy timeout here.
-        self.wait_until_true(subtrees_assigned, 600)
+        # Do some IO (this should be split across ranks according to
+        # the rank-pinned dirs)
+        self.mount_a.create_n_files("alpha/file", 1000)
+        self.mount_a.create_n_files("bravo/file", 1000)
 
         # Flush the journals so that we have some backing store data
         # belonging to one MDS, and some to the other MDS.
@@ -229,16 +216,6 @@ class TestJournalRepair(CephFSTestCase):
             # killing the mount also means killing the node.
             pass
 
-        log.info("Terminating spammer processes...")
-        for spammer_proc in spammers:
-            spammer_proc.stdin.close()
-            try:
-                spammer_proc.wait()
-            except (CommandFailedError, ConnectionLostError):
-                # The ConnectionLostError case is for kernel client, where
-                # killing the mount also means killing the node.
-                pass
-
         # See that the second MDS will crash when it starts and tries to
         # acquire rank 1
         damaged_id = active_mds_names[1]
@@ -269,10 +246,10 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_stop(active_mds_names[0])
         self.fs.mds_fail(active_mds_names[0])
         # Invoke recover_dentries quietly, because otherwise log spews millions of lines
-        self.fs.journal_tool(["event", "recover_dentries", "summary"], rank=0, quiet=True)
-        self.fs.journal_tool(["event", "recover_dentries", "summary"], rank=1, quiet=True)
+        self.fs.journal_tool(["event", "recover_dentries", "summary"], 0, quiet=True)
+        self.fs.journal_tool(["event", "recover_dentries", "summary"], 1, quiet=True)
         self.fs.table_tool(["0", "reset", "session"])
-        self.fs.journal_tool(["journal", "reset"], rank=0)
+        self.fs.journal_tool(["journal", "reset"], 0)
         self.fs.erase_mds_objects(1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
                 '--yes-i-really-mean-it')
@@ -282,7 +259,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_fail_restart(active_mds_names[0])
         self.wait_until_equal(lambda: self.fs.get_active_names(), [active_mds_names[0]], 30,
                               reject_fn=lambda v: len(v) > 1)
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "-R"], wait=True)
 
     def test_table_tool(self):
@@ -319,14 +296,16 @@ class TestJournalRepair(CephFSTestCase):
         # Should see one session
         session_data = json.loads(self.fs.table_tool(
             ["all", "show", "session"]))
-        self.assertEqual(len(session_data["0"]["data"]["Sessions"]), 1)
+        self.assertEqual(len(session_data["0"]["data"]["sessions"]), 1)
         self.assertEqual(session_data["0"]["result"], 0)
 
         # Should see no snaps
         self.assertEqual(
             json.loads(self.fs.table_tool(["all", "show", "snap"])),
-            {"version": 0,
+            {"version": 1,
              "snapserver": {"last_snap": 1,
+                            "last_created": 1,
+                            "last_destroyed": 1,
                             "pending_noop": [],
                             "snaps": [],
                             "need_to_purge": {},
@@ -346,7 +325,7 @@ class TestJournalRepair(CephFSTestCase):
         # Should see 0 sessions
         session_data = json.loads(self.fs.table_tool(
             ["all", "show", "session"]))
-        self.assertEqual(len(session_data["0"]["data"]["Sessions"]), 0)
+        self.assertEqual(len(session_data["0"]["data"]["sessions"]), 0)
         self.assertEqual(session_data["0"]["result"], 0)
 
         # Should see entire inode range now marked free
@@ -367,6 +346,8 @@ class TestJournalRepair(CephFSTestCase):
             json.loads(self.fs.table_tool(["all", "show", "snap"])),
             {"version": 1,
              "snapserver": {"last_snap": 1,
+                            "last_created": 1,
+                            "last_destroyed": 1,
                             "pending_noop": [],
                             "snaps": [],
                             "need_to_purge": {},
@@ -434,7 +415,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 
-        self.mount_a.mount()
+        self.mount_a.mount_wait()
 
         # trivial sync moutn a
         workunit(self.ctx, {

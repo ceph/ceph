@@ -2,10 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/object_map/CreateRequest.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "osdc/Striper.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
@@ -32,10 +33,10 @@ void CreateRequest<I>::send() {
   uint64_t max_size = m_image_ctx->size;
 
   {
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    std::unique_lock image_locker{m_image_ctx->image_lock};
     m_snap_ids.push_back(CEPH_NOSNAP);
     for (auto it : m_image_ctx->snap_info) {
-      max_size = MAX(max_size, it.second.size);
+      max_size = std::max(max_size, it.second.size);
       m_snap_ids.push_back(it.first);
     }
 
@@ -69,7 +70,7 @@ void CreateRequest<I>::send_object_map_resize() {
     std::string oid(ObjectMap<>::object_map_name(m_image_ctx->id, snap_id));
     librados::AioCompletion *comp = create_rados_callback(gather_ctx->new_sub());
     int r = m_image_ctx->md_ctx.aio_operate(oid, comp, &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
   gather_ctx->activate();

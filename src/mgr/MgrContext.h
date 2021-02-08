@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "common/ceph_json.h"
+#include "common/Cond.h"
 #include "mon/MonClient.h"
 
 class Command
@@ -24,7 +25,7 @@ class Command
 protected:
   C_SaferCond cond;
 public:
-  bufferlist outbl;
+  ceph::buffer::list outbl;
   std::string outs;
   int r;
 

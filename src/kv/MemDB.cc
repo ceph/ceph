@@ -10,6 +10,13 @@
 #include <map>
 #include <string>
 #include <memory>
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -22,9 +29,11 @@
 #include "KeyValueDB.h"
 #include "MemDB.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/buffer.h"
+#include "include/buffer_raw.h"
 #include "include/compat.h"
 
 #define dout_context g_ceph_context
@@ -35,10 +44,20 @@
 #define dwarn dout(0)
 #define dinfo dout(0)
 
+using std::cerr;
+using std::ostream;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::bufferptr;
+using ceph::decode;
+using ceph::encode;
+
 static void split_key(const string& raw_key, string *prefix, string *key)
 {
   size_t pos = raw_key.find(KEY_DELIM, 0);
-  assert(pos != std::string::npos);
+  ceph_assert(pos != std::string::npos);
   *prefix = raw_key.substr(0, pos);
   *key = raw_key.substr(pos + 1, raw_key.length());
 }
@@ -53,8 +72,8 @@ static string make_key(const string &prefix, const string &value)
 
 void MemDB::_encode(mdb_iter_t iter, bufferlist &bl)
 {
-  ::encode(iter->first, bl);
-  ::encode(iter->second, bl);
+  encode(iter->first, bl);
+  encode(iter->second, bl);
 }
 
 std::string MemDB::_get_data_fn()
@@ -69,7 +88,7 @@ void MemDB::_save()
   dout(10) << __func__ << " Saving MemDB to file: "<< _get_data_fn().c_str() << dendl;
   int mode = 0644;
   int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(),
-                                     O_WRONLY|O_CREAT|O_TRUNC, mode));
+                                     O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, mode));
   if (fd < 0) {
     int err = errno;
     cerr << "write_file(" << _get_data_fn().c_str() << "): failed to open file: "
@@ -95,7 +114,7 @@ int MemDB::_load()
   /*
    * Open file and read it in single shot.
    */
-  int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(), O_RDONLY));
+  int fd = TEMP_FAILURE_RETRY(::open(_get_data_fn().c_str(), O_RDONLY|O_CLOEXEC));
   if (fd < 0) {
     int err = errno;
     cerr << "can't open " << _get_data_fn().c_str() << ": "
@@ -119,8 +138,8 @@ int MemDB::_load()
     string key;
     bufferptr datap;
 
-    bytes_done += ::decode_file(fd, key);
-    bytes_done += ::decode_file(fd, datap);
+    bytes_done += ceph::decode_file(fd, key);
+    bytes_done += ceph::decode_file(fd, datap);
 
     dout(10) << __func__ << " Key:"<< key << dendl;
     m_map[key] = datap;
@@ -132,21 +151,30 @@ int MemDB::_load()
 
 int MemDB::_init(bool create)
 {
-  int r;
+  int r = 0;
   dout(1) << __func__ << dendl;
   if (create) {
-    r = ::mkdir(m_db_path.c_str(), 0700);
-    if (r < 0) {
-      r = -errno;
-      if (r != -EEXIST) {
-        derr << __func__ << " mkdir failed: " << cpp_strerror(r) << dendl;
-        return r;
+    if (fs::exists(m_db_path)) {
+      r = 0; // ignore EEXIST
+    } else {
+      std::error_code ec;
+      if (!fs::create_directory(m_db_path, ec)) {
+	derr << __func__ << " mkdir failed: " << ec.message() << dendl;
+	return -ec.value();
       }
-      return 0; // ignore EEXIST
+      fs::permissions(m_db_path, fs::perms::owner_all);
     }
   } else {
     r = _load();
   }
+
+  PerfCountersBuilder plb(g_ceph_context, "memdb", l_memdb_first, l_memdb_last);
+  plb.add_u64_counter(l_memdb_gets, "get", "Gets");
+  plb.add_u64_counter(l_memdb_txns, "submit_transaction", "Submit transactions");
+  plb.add_time_avg(l_memdb_get_latency, "get_latency", "Get latency");
+  plb.add_time_avg(l_memdb_submit_latency, "submit_latency", "Submit Latency");
+  logger = plb.create_perf_counters();
+  m_cct->get_perfcounters_collection()->add(logger);
 
   return r;
 }
@@ -167,6 +195,20 @@ int MemDB::do_open(ostream &out, bool create)
   return _init(create);
 }
 
+int MemDB::open(ostream &out, const std::string& cfs) {
+  if (!cfs.empty()) {
+    ceph_abort_msg("Not implemented");
+  }
+  return do_open(out, false);
+}
+
+int MemDB::create_and_open(ostream &out, const std::string& cfs) {
+  if (!cfs.empty()) {
+    ceph_abort_msg("Not implemented");
+  }
+  return do_open(out, true);
+}
+
 MemDB::~MemDB()
 {
   close();
@@ -179,10 +221,14 @@ void MemDB::close()
    * Save whatever in memory btree.
    */
   _save();
+  if (logger)
+    m_cct->get_perfcounters_collection()->remove(logger);
 }
 
 int MemDB::submit_transaction(KeyValueDB::Transaction t)
 {
+  utime_t start = ceph_clock_now();
+
   MDBTransactionImpl* mt =  static_cast<MDBTransactionImpl*>(t.get());
 
   dtrace << __func__ << " " << mt->get_ops().size() << dendl;
@@ -195,10 +241,14 @@ int MemDB::submit_transaction(KeyValueDB::Transaction t)
       _merge(merge_op);
     } else {
       ms_op_t rm_op = op.second;
-      assert(op.first == MDBTransactionImpl::DELETE);
+      ceph_assert(op.first == MDBTransactionImpl::DELETE);
       _rmkey(rm_op);
     }
   }
+
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_memdb_txns);
+  logger->tinc(l_memdb_submit_latency, lat);
 
   return 0;
 }
@@ -277,7 +327,7 @@ int MemDB::_setkey(ms_op_t &op)
     /*
      * delete and free existing key.
      */
-    assert(m_total_bytes >= bl_old.length());
+    ceph_assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
     m_map.erase(key);
   }
@@ -294,7 +344,7 @@ int MemDB::_rmkey(ms_op_t &op)
 
   bufferlist bl_old;
   if (_get(op.first.first, op.first.second, &bl_old)) {
-    assert(m_total_bytes >= bl_old.length());
+    ceph_assert(m_total_bytes >= bl_old.length());
     m_total_bytes -= bl_old.length();
   }
   iterator_seq_no++;
@@ -304,7 +354,7 @@ int MemDB::_rmkey(ms_op_t &op)
   return m_map.erase(key);
 }
 
-std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(std::string prefix)
+std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(const std::string &prefix)
 {
   for (const auto& i : merge_ops) {
     if (i.first == prefix) {
@@ -329,7 +379,7 @@ int MemDB::_merge(ms_op_t &op)
    *  find the operator for this prefix
    */
   std::shared_ptr<MergeOperator> mop = _find_merge_op(prefix);
-  assert(mop);
+  ceph_assert(mop);
 
   /*
    * call the merge operator with value and non value
@@ -353,7 +403,7 @@ int MemDB::_merge(ms_op_t &op)
     bl_old.clear();
   }
 
-  assert((int64_t)m_total_bytes + bytes_adjusted >= 0);
+  ceph_assert((int64_t)m_total_bytes + bytes_adjusted >= 0);
   m_total_bytes += bytes_adjusted;
   iterator_seq_no++;
   return 0;
@@ -385,20 +435,36 @@ bool MemDB::_get_locked(const string &prefix, const string &k, bufferlist *out)
 int MemDB::get(const string &prefix, const std::string& key,
                  bufferlist *out)
 {
+  utime_t start = ceph_clock_now();
+  int ret;
+
   if (_get_locked(prefix, key, out)) {
-    return 0;
+    ret = 0;
+  } else {
+    ret = -ENOENT;
   }
-  return -ENOENT;
+
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_memdb_gets);
+  logger->tinc(l_memdb_get_latency, lat);
+
+  return ret;
 }
 
 int MemDB::get(const string &prefix, const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
+  utime_t start = ceph_clock_now();
+
   for (const auto& i : keys) {
     bufferlist bl;
     if (_get_locked(prefix, i, &bl))
       out->insert(make_pair(i, bl));
   }
+
+  utime_t lat = ceph_clock_now() - start;
+  logger->inc(l_memdb_gets);
+  logger->tinc(l_memdb_get_latency, lat);
 
   return 0;
 }
@@ -406,7 +472,7 @@ int MemDB::get(const string &prefix, const std::set<string> &keys,
 void MemDB::MDBWholeSpaceIteratorImpl::fill_current()
 {
   bufferlist bl;
-  bl.append(m_iter->second.clone());
+  bl.push_back(m_iter->second.clone());
   m_key_value = std::make_pair(m_iter->first, bl);
 }
 
@@ -422,7 +488,7 @@ bool MemDB::MDBWholeSpaceIteratorImpl::iterator_validate() {
 
   if (this_seq_no != *global_seq_no) {
     auto key = m_key_value.first;
-    assert(!key.empty());
+    ceph_assert(!key.empty());
 
     bool restart_iter = false;
     if (!m_using_btree) {
@@ -468,11 +534,11 @@ string MemDB::MDBWholeSpaceIteratorImpl::key()
   return key;
 }
 
-pair<string,string> MemDB::MDBWholeSpaceIteratorImpl::raw_key()
+std::pair<string,string> MemDB::MDBWholeSpaceIteratorImpl::raw_key()
 {
   string prefix, key;
   split_key(m_key_value.first, &prefix, &key);
-  return make_pair(prefix, key);
+  return { prefix, key };
 }
 
 bool MemDB::MDBWholeSpaceIteratorImpl::raw_key_is_prefixed(

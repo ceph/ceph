@@ -13,7 +13,11 @@
 // -----------------------------------------------------------------------------
 #include "xor_op.h"
 #include <stdio.h>
+#include <string.h>
 #include "arch/intel.h"
+
+#include "include/ceph_assert.h"
+
 // -----------------------------------------------------------------------------
 
 
@@ -37,9 +41,9 @@ vector_xor(vector_op_t* cw,
            vector_op_t* ew)
 // -----------------------------------------------------------------------------
 {
-  assert(is_aligned(cw, EC_ISA_VECTOR_OP_WORDSIZE));
-  assert(is_aligned(dw, EC_ISA_VECTOR_OP_WORDSIZE));
-  assert(is_aligned(ew, EC_ISA_VECTOR_OP_WORDSIZE));
+  ceph_assert(is_aligned(cw, EC_ISA_VECTOR_OP_WORDSIZE));
+  ceph_assert(is_aligned(dw, EC_ISA_VECTOR_OP_WORDSIZE));
+  ceph_assert(is_aligned(ew, EC_ISA_VECTOR_OP_WORDSIZE));
   while (cw < ew) {
     *dw++ ^= *cw++;
   }
@@ -138,7 +142,7 @@ region_sse2_xor(char** src,
 // -----------------------------------------------------------------------------
 {
 #ifdef __x86_64__
-  assert(!(size % EC_ISA_VECTOR_SSE2_WORDSIZE));
+  ceph_assert(!(size % EC_ISA_VECTOR_SSE2_WORDSIZE));
   unsigned char* p;
   int d, l;
   unsigned i;

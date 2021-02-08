@@ -22,7 +22,8 @@ There are two user types:
 - **Subuser:** The term 'subuser' reflects a user of the Swift interface. A subuser
   is associated to a user .
   
-.. ditaa:: +---------+
+.. ditaa::
+           +---------+
            |   User  |
            +----+----+  
                 |     
@@ -56,7 +57,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [],
     "keys": [
           { "user": "johndoe",
@@ -109,7 +109,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [
           { "id": "johndoe:swift",
             "permissions": "full-control"}],
@@ -150,9 +149,9 @@ email addresses, display names and access levels. For example::
 
 	radosgw-admin user modify --uid=johndoe --display-name="John E. Doe"
 
-To modify subuser values, specify ``subuser modify`` and the subuser ID. For example::
+To modify subuser values, specify ``subuser modify``, user ID and the subuser ID. For example::
 
-	radosgw-admin subuser modify --uid=johndoe:swift --access=full
+	radosgw-admin subuser modify --uid=johndoe --subuser=johndoe:swift --access=full
 
 
 User Enable/Suspend
@@ -224,8 +223,8 @@ also remove a key. Options include:
 - ``--key-type=<type>`` specifies the key type. The options are: s3, swift
 - ``--access-key=<key>`` manually specifies an S3 access key.
 - ``--secret-key=<key>`` manually specifies a S3 secret key or a Swift secret key.
-- ``--gen-access-key`` automatically generates a S3 key.
-- ``--gen-secret`` automatically generates a S3 secret key or a Swift secret key.
+- ``--gen-access-key`` automatically generates a random S3 access key.
+- ``--gen-secret`` automatically generates a random S3 secret key or a random Swift secret key.
 
 An example how to add a specified S3 key pair for a user. ::
 
@@ -293,7 +292,7 @@ To remove a S3 key pair, specify the access key. ::
 
 To remove the swift secret key. ::
 
-	radosgw-admin key rm -subuser=foo:bar --key-type=swift
+	radosgw-admin key rm --subuser=foo:bar --key-type=swift
 
 
 Add / Remove Admin Capabilities
@@ -417,6 +416,7 @@ the latest quota stats. ::
 
 	radosgw-admin user stats --uid=<uid> --sync-stats
 
+.. _rgw_user_usage_stats:
 
 Get User Usage Stats
 --------------------
@@ -437,6 +437,20 @@ relevant default quota is set in config, then that quota is set on the
 new user, and that quota is enabled.  See ``rgw bucket default quota max objects``,
 ``rgw bucket default quota max size``, ``rgw user default quota max objects``, and
 ``rgw user default quota max size`` in `Ceph Object Gateway Config Reference`_
+
+Quota Cache
+-----------
+
+Quota statistics are cached on each RGW instance.  If there are multiple
+instances, then the cache can keep quotas from being perfectly enforced, as
+each instance will have a different view of quotas.  The options that control
+this are ``rgw bucket quota ttl``, ``rgw user quota bucket sync interval`` and
+``rgw user quota sync interval``.  The higher these values are, the more
+efficient quota operations are, but the more out-of-sync multiple instances
+will be.  The lower these values are, the closer to perfect enforcement
+multiple instances will achieve.  If all three are 0, then quota caching is
+effectively disabled, and multiple instances will have perfect quota
+enforcement.  See `Ceph Object Gateway Config Reference`_
 
 Reading / Writing Global Quotas
 -------------------------------

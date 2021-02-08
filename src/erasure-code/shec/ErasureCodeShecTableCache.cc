@@ -19,9 +19,9 @@
 
 // -----------------------------------------------------------------------------
 #include "ErasureCodeShecTableCache.h"
-#include "ErasureCodeShec.h"
 #include "common/debug.h"
 // -----------------------------------------------------------------------------
+using namespace std;
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
@@ -41,7 +41,7 @@ _tc_prefix(std::ostream* _dout) {
 
 ErasureCodeShecTableCache::~ErasureCodeShecTableCache()
 {
-  Mutex::Locker lock(codec_tables_guard);
+  std::lock_guard lock{codec_tables_guard};
 
   // clean-up all allocated tables
   {
@@ -94,7 +94,7 @@ ErasureCodeShecTableCache::~ErasureCodeShecTableCache()
 ErasureCodeShecTableCache::lru_map_t*
 ErasureCodeShecTableCache::getDecodingTables(int technique) {
   // the caller must hold the guard mutex:
-  // => Mutex::Locker lock(codec_tables_guard);
+  // => std::lock_guard lock{codec_tables_guard};
 
   // create an lru_map if not yet allocated
   if (!decoding_tables[technique]) {
@@ -106,7 +106,7 @@ ErasureCodeShecTableCache::getDecodingTables(int technique) {
 ErasureCodeShecTableCache::lru_list_t*
 ErasureCodeShecTableCache::getDecodingTablesLru(int technique) {
   // the caller must hold the guard mutex:
-  // => Mutex::Locker lock(codec_tables_guard);
+  // => std::lock_guard lock{codec_tables_guard};
 
   // create an lru_list if not yet allocated
   if (!decoding_tables_lru[technique]) {
@@ -118,7 +118,7 @@ ErasureCodeShecTableCache::getDecodingTablesLru(int technique) {
 int**
 ErasureCodeShecTableCache::getEncodingTable(int technique, int k, int m, int c, int w)
 {
-  Mutex::Locker lock(codec_tables_guard);
+  std::lock_guard lock{codec_tables_guard};
   return getEncodingTableNoLock(technique,k,m,c,w);
 }
 
@@ -138,7 +138,7 @@ ErasureCodeShecTableCache::getEncodingTableNoLock(int technique, int k, int m, i
 int*
 ErasureCodeShecTableCache::setEncodingTable(int technique, int k, int m, int c, int w, int* ec_in_table)
 {
-  Mutex::Locker lock(codec_tables_guard);
+  std::lock_guard lock{codec_tables_guard};
   int** ec_out_table = getEncodingTableNoLock(technique, k, m, c, w);
   if (*ec_out_table) {
     // somebody might have deposited this table in the meanwhile, so clean
@@ -152,7 +152,7 @@ ErasureCodeShecTableCache::setEncodingTable(int technique, int k, int m, int c, 
   }
 }
 
-Mutex*
+ceph::mutex*
 ErasureCodeShecTableCache::getLock()
 {
   return &codec_tables_guard;
@@ -193,7 +193,7 @@ ErasureCodeShecTableCache::getDecodingTableFromCache(int* decoding_matrix,
   // --------------------------------------------------------------------------
 
   uint64_t signature = getDecodingCacheSignature(k, m, c, w, erased, avails);
-  Mutex::Locker lock(codec_tables_guard);
+  std::lock_guard lock{codec_tables_guard};
 
   dout(20) << "[ get table    ] = " << signature << dendl;
 
@@ -248,7 +248,7 @@ ErasureCodeShecTableCache::putDecodingTableToCache(int* decoding_matrix,
   // LRU decoding matrix cache
   // --------------------------------------------------------------------------
 
-  Mutex::Locker lock(codec_tables_guard);
+  std::lock_guard lock{codec_tables_guard};
 
   uint64_t signature = getDecodingCacheSignature(k, m, c, w, erased, avails);
   dout(20) << "[ put table    ] = " << signature << dendl;

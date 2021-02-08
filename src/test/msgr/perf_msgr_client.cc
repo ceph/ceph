@@ -22,13 +22,15 @@
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "common/Cycles.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
+#include "auth/DummyAuth.h"
+
+#include <atomic>
 
 class MessengerClient {
   class ClientThread;
@@ -55,11 +57,8 @@ class MessengerClient {
     bool ms_handle_reset(Connection *con) override { return true; }
     void ms_handle_remote_reset(Connection *con) override {}
     bool ms_handle_refused(Connection *con) override { return false; }
-    bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                              bufferlist& authorizer, bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key) override {
-      isvalid = true;
-      return true;
+    int ms_handle_authentication(Connection *con) override {
+      return 1;
     }
   };
 
@@ -67,7 +66,7 @@ class MessengerClient {
     Messenger *msgr;
     int concurrent;
     ConnectionRef conn;
-    atomic_t client_inc;
+    std::atomic<unsigned> client_inc = { 0 };
     object_t oid;
     object_locator_t oloc;
     pg_t pgid;
@@ -77,34 +76,35 @@ class MessengerClient {
     ClientDispatcher dispatcher;
 
    public:
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("MessengerBenchmark::ClientThread::lock");
+    ceph::condition_variable cond;
     uint64_t inflight;
 
     ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
-        msgr(m), concurrent(c), conn(con), client_inc(0), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
-        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock") {
+        msgr(m), concurrent(c), conn(con), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
+        dispatcher(think_time_us, this), inflight(0) {
       m->add_dispatcher_head(&dispatcher);
       bufferptr ptr(msg_len);
       memset(ptr.c_str(), 0, msg_len);
       data.append(ptr);
     }
     void *entry() override {
-      lock.Lock();
+      std::unique_lock locker{lock};
       for (int i = 0; i < ops; ++i) {
         if (inflight > uint64_t(concurrent)) {
-          cond.Wait(lock);
+	  cond.wait(locker);
         }
 	hobject_t hobj(oid, oloc.key, CEPH_NOSNAP, pgid.ps(), pgid.pool(),
 		       oloc.nspace);
 	spg_t spgid(pgid);
-        MOSDOp *m = new MOSDOp(client_inc.read(), 0, hobj, spgid, 0, 0, 0);
-        m->write(0, msg_len, data);
+        MOSDOp *m = new MOSDOp(client_inc, 0, hobj, spgid, 0, 0, 0);
+        bufferlist msg_data(data);
+        m->write(0, msg_len, msg_data);
         inflight++;
         conn->send_message(m);
         //cerr << __func__ << " send m=" << m << std::endl;
       }
-      lock.Unlock();
+      locker.unlock();
       msgr->shutdown();
       return 0;
     }
@@ -115,10 +115,12 @@ class MessengerClient {
   int think_time_us;
   vector<Messenger*> msgrs;
   vector<ClientThread*> clients;
+  DummyAuthClientServer dummy_auth;
 
  public:
-  MessengerClient(string t, string addr, int delay):
-      type(t), serveraddr(addr), think_time_us(delay) {
+  MessengerClient(const string &t, const string &addr, int delay):
+      type(t), serveraddr(addr), think_time_us(delay),
+      dummy_auth(g_ceph_context) {
   }
   ~MessengerClient() {
     for (uint64_t i = 0; i < clients.size(); ++i)
@@ -132,15 +134,17 @@ class MessengerClient {
     entity_addr_t addr;
     addr.parse(serveraddr.c_str());
     addr.set_nonce(0);
+    dummy_auth.auth_registry.refresh_config();
     for (int i = 0; i < jobs; ++i) {
-      Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i, 0);
+      Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i);
       msgr->set_default_policy(Messenger::Policy::lossless_client(0));
-      entity_inst_t inst(entity_name_t::OSD(0), addr);
-      ConnectionRef conn = msgr->get_connection(inst);
+      msgr->set_auth_client(&dummy_auth);
+      msgr->start();
+      entity_addrvec_t addrs(addr);
+      ConnectionRef conn = msgr->connect_to_osd(addrs);
       ClientThread *t = new ClientThread(msgr, c, conn, msg_len, ops, think_time_us);
       msgrs.push_back(msgr);
       clients.push_back(t);
-      msgr->start();
     }
     usleep(1000*1000);
   }
@@ -155,20 +159,20 @@ class MessengerClient {
 void MessengerClient::ClientDispatcher::ms_fast_dispatch(Message *m) {
   usleep(think_time);
   m->put();
-  Mutex::Locker l(thread->lock);
+  std::lock_guard l{thread->lock};
   thread->inflight--;
-  thread->cond.Signal();
+  thread->cond.notify_all();
 }
 
 
 void usage(const string &name) {
-  cerr << "Usage: " << name << " [server ip:port] [numjobs] [concurrency] [ios] [thinktime us] [msg length]" << std::endl;
-  cerr << "       [server ip:port]: connect to the ip:port pair" << std::endl;
-  cerr << "       [numjobs]: how much client threads spawned and do benchmark" << std::endl;
-  cerr << "       [concurrency]: the max inflight messages(like iodepth in fio)" << std::endl;
-  cerr << "       [ios]: how much messages sent for each client" << std::endl;
-  cerr << "       [thinktime]: sleep time when do fast dispatching(match client logic)" << std::endl;
-  cerr << "       [msg length]: message data bytes" << std::endl;
+  cout << "Usage: " << name << " [server ip:port] [numjobs] [concurrency] [ios] [thinktime us] [msg length]" << std::endl;
+  cout << "       [server ip:port]: connect to the ip:port pair" << std::endl;
+  cout << "       [numjobs]: how much client threads spawned and do benchmark" << std::endl;
+  cout << "       [concurrency]: the max inflight messages(like iodepth in fio)" << std::endl;
+  cout << "       [ios]: how much messages sent for each client" << std::endl;
+  cout << "       [thinktime]: sleep time when do fast dispatching(match client logic)" << std::endl;
+  cout << "       [msg length]: message data bytes" << std::endl;
 }
 
 int main(int argc, char **argv)
@@ -177,9 +181,10 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (args.size() < 6) {
     usage(argv[0]);
@@ -192,15 +197,15 @@ int main(int argc, char **argv)
   int think_time = atoi(args[4]);
   int len = atoi(args[5]);
 
-  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
+  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf.get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
 
-  cerr << " using ms-public-type " << public_msgr_type << std::endl;
-  cerr << "       server ip:port " << args[0] << std::endl;
-  cerr << "       numjobs " << numjobs << std::endl;
-  cerr << "       concurrency " << concurrent << std::endl;
-  cerr << "       ios " << ios << std::endl;
-  cerr << "       thinktime(us) " << think_time << std::endl;
-  cerr << "       message data bytes " << len << std::endl;
+  cout << " using ms-public-type " << public_msgr_type << std::endl;
+  cout << "       server ip:port " << args[0] << std::endl;
+  cout << "       numjobs " << numjobs << std::endl;
+  cout << "       concurrency " << concurrent << std::endl;
+  cout << "       ios " << ios << std::endl;
+  cout << "       thinktime(us) " << think_time << std::endl;
+  cout << "       message data bytes " << len << std::endl;
 
   MessengerClient client(public_msgr_type, args[0], think_time);
 
@@ -209,7 +214,7 @@ int main(int argc, char **argv)
   uint64_t start = Cycles::rdtsc();
   client.start();
   uint64_t stop = Cycles::rdtsc();
-  cerr << " Total op " << ios << " run time " << Cycles::to_microseconds(stop - start) << "us." << std::endl;
+  cout << " Total op " << (ios * numjobs) << " run time " << Cycles::to_microseconds(stop - start) << "us." << std::endl;
 
   return 0;
 }

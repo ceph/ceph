@@ -8,8 +8,7 @@
 #include "common/debug.h"
 #include "mdstypes.h"
 
-
-inline ostream& operator<<(ostream& out, const ceph_filelock& l) {
+inline std::ostream& operator<<(std::ostream& out, const ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
       << ", client: " << l.client << ", owner: " << l.owner
       << ", pid: " << l.pid << ", type: " << (int)l.type
@@ -70,17 +69,9 @@ inline bool operator!=(const ceph_filelock& l, const ceph_filelock& r) {
 }
 
 class ceph_lock_state_t {
-  CephContext *cct;
-  int type;
 public:
   explicit ceph_lock_state_t(CephContext *cct_, int type_) : cct(cct_), type(type_) {}
   ~ceph_lock_state_t();
-  multimap<uint64_t, ceph_filelock> held_locks;    // current locks
-  multimap<uint64_t, ceph_filelock> waiting_locks; // locks waiting for other locks
-  // both of the above are keyed by starting offset
-  map<client_t, int> client_held_lock_counts;
-  map<client_t, int> client_waiting_lock_counts;
-
   /**
    * Check if a lock is on the waiting_locks list.
    *
@@ -127,9 +118,32 @@ public:
    * @param activated_locks A return parameter, holding activated wait locks.
    */
   void remove_lock(const ceph_filelock removal_lock,
-                   list<ceph_filelock>& activated_locks);
+                   std::list<ceph_filelock>& activated_locks);
 
   bool remove_all_from(client_t client);
+
+  void encode(ceph::bufferlist& bl) const {
+    using ceph::encode;
+    encode(held_locks, bl);
+    encode(client_held_lock_counts, bl);
+  }
+  void decode(ceph::bufferlist::const_iterator& bl) {
+    using ceph::decode;
+    decode(held_locks, bl);
+    decode(client_held_lock_counts, bl);
+  }
+  bool empty() const {
+    return held_locks.empty() && waiting_locks.empty() &&
+	   client_held_lock_counts.empty() &&
+	   client_waiting_lock_counts.empty();
+  }
+
+  std::multimap<uint64_t, ceph_filelock> held_locks;    // current locks
+  std::multimap<uint64_t, ceph_filelock> waiting_locks; // locks waiting for other locks
+  // both of the above are keyed by starting offset
+  std::map<client_t, int> client_held_lock_counts;
+  std::map<client_t, int> client_waiting_lock_counts;
+
 private:
   static const unsigned MAX_DEADLK_DEPTH = 5;
 
@@ -142,8 +156,8 @@ private:
    * @depth recursion call depth
    */
   bool is_deadlock(const ceph_filelock& fl,
-		   list<multimap<uint64_t, ceph_filelock>::iterator>&
-		      overlapping_locks,
+		   std::list<std::multimap<uint64_t, ceph_filelock>::iterator>&
+		   overlapping_locks,
 		   const ceph_filelock *first_fl=NULL, unsigned depth=0) const;
 
   /**
@@ -172,19 +186,19 @@ private:
    * @param neighbor_locks locks owned by same process that neighbor new_lock on
    *    left or right side.
    */
-  void adjust_locks(list<multimap<uint64_t, ceph_filelock>::iterator> old_locks,
+  void adjust_locks(std::list<std::multimap<uint64_t, ceph_filelock>::iterator> old_locks,
                     ceph_filelock& new_lock,
-                    list<multimap<uint64_t, ceph_filelock>::iterator>
+                    std::list<std::multimap<uint64_t, ceph_filelock>::iterator>
                       neighbor_locks);
 
   //get last lock prior to start position
-  multimap<uint64_t, ceph_filelock>::iterator
+  std::multimap<uint64_t, ceph_filelock>::iterator
   get_lower_bound(uint64_t start,
-                  multimap<uint64_t, ceph_filelock>& lock_map);
+                  std::multimap<uint64_t, ceph_filelock>& lock_map);
   //get latest-starting lock that goes over the byte "end"
-  multimap<uint64_t, ceph_filelock>::iterator
+  std::multimap<uint64_t, ceph_filelock>::iterator
   get_last_before(uint64_t end,
-                  multimap<uint64_t, ceph_filelock>& lock_map);
+                  std::multimap<uint64_t, ceph_filelock>& lock_map);
 
   /*
    * See if an iterator's lock covers any of the same bounds as a given range
@@ -192,10 +206,10 @@ private:
    * byte is at start + length - 1.
    * If the length is 0, the lock covers from "start" to the end of the file.
    */
-  bool share_space(multimap<uint64_t, ceph_filelock>::iterator& iter,
+  bool share_space(std::multimap<uint64_t, ceph_filelock>::iterator& iter,
 		   uint64_t start, uint64_t end);
   
-  bool share_space(multimap<uint64_t, ceph_filelock>::iterator& iter,
+  bool share_space(std::multimap<uint64_t, ceph_filelock>::iterator& iter,
                    const ceph_filelock &lock) {
     uint64_t end = lock.start;
     if (lock.length) {
@@ -212,14 +226,14 @@ private:
    * Returns: true if at least one lock overlaps.
    */
   bool get_overlapping_locks(const ceph_filelock& lock,
-                             list<multimap<uint64_t,
+                             std::list<std::multimap<uint64_t,
                                  ceph_filelock>::iterator> & overlaps,
-                             list<multimap<uint64_t,
+                             std::list<std::multimap<uint64_t,
                                  ceph_filelock>::iterator> *self_neighbors);
 
   
   bool get_overlapping_locks(const ceph_filelock& lock,
-			     list<multimap<uint64_t, ceph_filelock>::iterator>& overlaps) {
+			     std::list<std::multimap<uint64_t, ceph_filelock>::iterator>& overlaps) {
     return get_overlapping_locks(lock, overlaps, NULL);
   }
 
@@ -230,7 +244,7 @@ private:
    * Returns: true if at least one waiting_lock overlaps
    */
   bool get_waiting_overlaps(const ceph_filelock& lock,
-                            list<multimap<uint64_t,
+                            std::list<std::multimap<uint64_t,
                                 ceph_filelock>::iterator>& overlaps);
   /*
    * split a list of locks up by whether they're owned by same
@@ -241,43 +255,20 @@ private:
    * owned_locks: an empty list, to be filled with the locks owned by owner
    */
   void split_by_owner(const ceph_filelock& owner,
-		      list<multimap<uint64_t,
+		      std::list<std::multimap<uint64_t,
 		          ceph_filelock>::iterator> & locks,
-		      list<multimap<uint64_t,
+		      std::list<std::multimap<uint64_t,
 		          ceph_filelock>::iterator> & owned_locks);
 
-  ceph_filelock *contains_exclusive_lock(list<multimap<uint64_t,
+  ceph_filelock *contains_exclusive_lock(std::list<std::multimap<uint64_t,
                                          ceph_filelock>::iterator>& locks);
 
-public:
-  void encode(bufferlist& bl) const {
-    ::encode(held_locks, bl);
-    ::encode(waiting_locks, bl);
-    ::encode(client_held_lock_counts, bl);
-    ::encode(client_waiting_lock_counts, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(held_locks, bl);
-    ::decode(waiting_locks, bl);
-    ::decode(client_held_lock_counts, bl);
-    ::decode(client_waiting_lock_counts, bl);
-  }
-  void clear() {
-    held_locks.clear();
-    waiting_locks.clear();
-    client_held_lock_counts.clear();
-    client_waiting_lock_counts.clear();
-  }
-  bool empty() const {
-    return held_locks.empty() && waiting_locks.empty() &&
-	   client_held_lock_counts.empty() &&
-	   client_waiting_lock_counts.empty();
-  }
+  CephContext *cct;
+  int type;
 };
 WRITE_CLASS_ENCODER(ceph_lock_state_t)
 
-
-inline ostream& operator<<(ostream &out, const ceph_lock_state_t &l) {
+inline std::ostream& operator<<(std::ostream &out, const ceph_lock_state_t &l) {
   out << "ceph_lock_state_t. held_locks.size()=" << l.held_locks.size()
       << ", waiting_locks.size()=" << l.waiting_locks.size()
       << ", client_held_lock_counts -- " << l.client_held_lock_counts

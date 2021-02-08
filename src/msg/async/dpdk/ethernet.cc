@@ -2,7 +2,7 @@
 
 #include "ethernet.h"
 
-std::ostream& operator<<(std::ostream& os, ethernet_address ea) {
+std::ostream& operator<<(std::ostream& os, const ethernet_address& ea) {
   auto& m = ea.mac;
   using u = uint32_t;
   os << std::hex << std::setw(2)

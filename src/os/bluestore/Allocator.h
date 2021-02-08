@@ -12,50 +12,86 @@
 #ifndef CEPH_OS_BLUESTORE_ALLOCATOR_H
 #define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
+#include <functional>
 #include <ostream>
-#include "include/assert.h"
-#include "os/bluestore/bluestore_types.h"
-
-class FreelistManager;
+#include "include/ceph_assert.h"
+#include "bluestore_types.h"
+#include "zoned_types.h"
 
 class Allocator {
 public:
-  virtual ~Allocator() {}
+  explicit Allocator(const std::string& name,
+                     int64_t _capacity,
+                     int64_t _block_size);
+  virtual ~Allocator();
 
-  virtual int reserve(uint64_t need) = 0;
-  virtual void unreserve(uint64_t unused) = 0;
+  /*
+  * returns allocator type name as per names in config
+  */
+  virtual const char* get_type() const = 0;
 
   /*
    * Allocate required number of blocks in n number of extents.
    * Min and Max number of extents are limited by:
    * a. alloc unit
    * b. max_alloc_size.
-   * as no extent can be lesser than alloc_unit and greater than max_alloc size.
+   * as no extent can be lesser than block_size and greater than max_alloc size.
    * Apart from that extents can vary between these lower and higher limits according
    * to free block search algorithm and availability of contiguous space.
    */
-  virtual int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
+  virtual int64_t allocate(uint64_t want_size, uint64_t block_size,
 			   uint64_t max_alloc_size, int64_t hint,
-			   AllocExtentVector *extents) = 0;
+			   PExtentVector *extents) = 0;
 
-  int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
-		   int64_t hint, AllocExtentVector *extents) {
-    return allocate(want_size, alloc_unit, want_size, hint, extents);
+  int64_t allocate(uint64_t want_size, uint64_t block_size,
+		   int64_t hint, PExtentVector *extents) {
+    return allocate(want_size, block_size, want_size, hint, extents);
   }
 
-  virtual void release(
-    uint64_t offset, uint64_t length) = 0;
+  /* Bulk release. Implementations may override this method to handle the whole
+   * set at once. This could save e.g. unnecessary mutex dance. */
+  virtual void release(const interval_set<uint64_t>& release_set) = 0;
+  void release(const PExtentVector& release_set);
 
   virtual void dump() = 0;
+  virtual void dump(std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
+
+  virtual void zoned_set_zone_states(std::vector<zone_state_t> &&_zone_states) {}
+  virtual bool zoned_get_zones_to_clean(std::deque<uint64_t> *zones_to_clean) {
+    return false;
+  }
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;
-
+  virtual double get_fragmentation()
+  {
+    return 0.0;
+  }
+  virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
-  static Allocator *create(CephContext* cct, string type, int64_t size,
-			   int64_t block_size);
+
+  static Allocator *create(CephContext* cct, std::string type, int64_t size,
+			   int64_t block_size, const std::string& name = "");
+
+
+  const string& get_name() const;
+  int64_t get_capacity() const
+  {
+    return capacity;
+  }
+  int64_t get_block_size() const
+  {
+    return block_size;
+  }
+
+private:
+  class SocketHook;
+  SocketHook* asok_hook = nullptr;
+
+  int64_t capacity = 0;
+  int64_t block_size = 0;
 };
 
 #endif

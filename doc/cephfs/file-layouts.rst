@@ -1,3 +1,4 @@
+.. _file-layouts:
 
 File layouts
 ============
@@ -19,10 +20,10 @@ Layout fields
 -------------
 
 pool
-    String, giving ID or name.  Which RADOS pool a file's data objects will be stored in.
+    String, giving ID or name. String can only have characters in the set [a-zA-Z0-9\_-.]. Which RADOS pool a file's data objects will be stored in.
 
 pool_namespace
-    String.  Within the data pool, which RADOS namespace the objects will
+    String with only characters in the set [a-zA-Z0-9\_-.].  Within the data pool, which RADOS namespace the objects will
     be written to.  Empty by default (i.e. default namespace).
 
 stripe_unit
@@ -33,6 +34,14 @@ stripe_count
 
 object_size
     Integer in bytes.  File data is chunked into RADOS objects of this size.
+
+.. tip::
+
+    RADOS enforces a configurable limit on object sizes: if you increase CephFS
+    object sizes beyond that limit then writes may not succeed.  The OSD
+    setting is ``osd_max_object_size``, which is 128MB by default.
+    Very large RADOS objects may prevent smooth operation of the cluster,
+    so increasing the object size limit past the default is not recommended.
 
 Reading layouts with ``getfattr``
 ---------------------------------
@@ -91,7 +100,9 @@ Layout fields are modified using ``setfattr``:
 .. code-block:: bash
 
     $ ceph osd lspools
-    0 rbd,1 cephfs_data,2 cephfs_metadata,
+    0 rbd
+    1 cephfs_data
+    2 cephfs_metadata
 
     $ setfattr -n ceph.file.layout.stripe_unit -v 1048576 file2
     $ setfattr -n ceph.file.layout.stripe_count -v 8 file2
@@ -119,7 +130,7 @@ Clearing layouts
 ----------------
 
 If you wish to remove an explicit layout from a directory, to revert to
-inherting the layout of its ancestor, you can do so:
+inheriting the layout of its ancestor, you can do so:
 
 .. code-block:: bash
 
@@ -191,17 +202,31 @@ directories do not have layouts set:
     # file: dir/childdir/grandchild
     ceph.file.layout="stripe_unit=4194304 stripe_count=4 object_size=4194304 pool=cephfs_data"
 
+
+.. _adding-data-pool-to-file-system:
     
-Adding a data pool to the MDS
----------------------------------
+Adding a data pool to the File System 
+-------------------------------------
 
 Before you can use a pool with CephFS you have to add it to the Metadata Servers.
 
 .. code-block:: bash
 
     $ ceph fs add_data_pool cephfs cephfs_data_ssd
-    # Pool should now show up
-    $ ceph fs ls
+    $ ceph fs ls  # Pool should now show up
     .... data pools: [cephfs_data cephfs_data_ssd ]
 
 Make sure that your cephx keys allows the client to access this new pool.
+
+You can then update the layout on a directory in CephFS to use the pool you added:
+
+.. code-block:: bash
+
+    $ mkdir /mnt/cephfs/myssddir
+    $ setfattr -n ceph.dir.layout.pool -v cephfs_data_ssd /mnt/cephfs/myssddir
+
+All new files created within that directory will now inherit its layout and place their data in your newly added pool. 
+
+You may notice that object counts in your primary data pool (the one passed to ``fs new``) continue to increase, even if files are being created in the pool you added.  This is normal: the file data is stored in the pool specified by the layout, but a small amount of metadata is kept in the primary data pool for all files.
+
+

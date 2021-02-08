@@ -1,21 +1,18 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <iostream>
-
-#include <string.h>
-#include <stdlib.h>
 #include <errno.h>
 
-#include "include/types.h"
-#include "include/utime.h"
 #include "objclass/objclass.h"
 
-#include "cls_timeindex_types.h"
 #include "cls_timeindex_ops.h"
 
-#include "global/global_context.h"
 #include "include/compat.h"
+
+using std::map;
+using std::string;
+
+using ceph::bufferlist;
 
 CLS_VER(1,0)
 CLS_NAME(timeindex)
@@ -64,17 +61,17 @@ static int cls_timeindex_add(cls_method_context_t hctx,
                              bufferlist * const in,
                              bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_add_op op;
   try {
-    ::decode(op, in_iter);
-  } catch (buffer::error& err) {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_add_op(): failed to decode op");
     return -EINVAL;
   }
 
-  for (list<cls_timeindex_entry>::iterator iter = op.entries.begin();
+  for (auto iter = op.entries.begin();
        iter != op.entries.end();
        ++iter) {
     cls_timeindex_entry& entry = *iter;
@@ -97,12 +94,12 @@ static int cls_timeindex_list(cls_method_context_t hctx,
                               bufferlist * const in,
                               bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_list_op op;
   try {
-    ::decode(op, in_iter);
-  } catch (buffer::error& err) {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_list_op(): failed to decode op");
     return -EINVAL;
   }
@@ -128,29 +125,27 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     max_entries = MAX_LIST_ENTRIES;
   }
 
+  cls_timeindex_list_ret ret;
+
   int rc = cls_cxx_map_get_vals(hctx, from_index, TIMEINDEX_PREFIX,
-          max_entries + 1, &keys);
+          max_entries, &keys, &ret.truncated);
   if (rc < 0) {
     return rc;
   }
 
-  cls_timeindex_list_ret ret;
+  auto& entries = ret.entries;
+  auto iter = keys.begin();
 
-  list<cls_timeindex_entry>& entries = ret.entries;
-  map<string, bufferlist>::iterator iter = keys.begin();
-
-  bool done = false;
   string marker;
 
-  for (size_t i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
+  for (; iter != keys.end(); ++iter) {
     const string& index = iter->first;
     bufferlist& bl = iter->second;
 
-    marker = index;
     if (use_time_boundary && index.compare(0, to_index.size(), to_index) >= 0) {
       CLS_LOG(20, "DEBUG: cls_timeindex_list: finishing on to_index=%s",
               to_index.c_str());
-      done = true;
+      ret.truncated = false;
       break;
     }
 
@@ -165,16 +160,12 @@ static int cls_timeindex_list(cls_method_context_t hctx,
       e.value = bl;
       entries.push_back(e);
     }
-  }
-
-  if (iter == keys.end()) {
-    done = true;
+    marker = index;
   }
 
   ret.marker = marker;
-  ret.truncated = !done;
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }
@@ -184,12 +175,12 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
                               bufferlist * const in,
                               bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_trim_op op;
   try {
-    ::decode(op, in_iter);
-  } catch (buffer::error& err) {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_trim: failed to decode entry");
     return -EINVAL;
   }
@@ -211,16 +202,18 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
     to_index = op.to_marker;
   }
 
+  bool more;
+
   int rc = cls_cxx_map_get_vals(hctx, from_index, TIMEINDEX_PREFIX,
-          MAX_TRIM_ENTRIES, &keys);
+          MAX_TRIM_ENTRIES, &keys, &more);
   if (rc < 0) {
     return rc;
   }
 
-  map<string, bufferlist>::iterator iter = keys.begin();
+  auto iter = keys.begin();
 
   bool removed = false;
-  for (size_t i = 0; i < MAX_TRIM_ENTRIES && iter != keys.end(); ++i, ++iter) {
+  for (; iter != keys.end(); ++iter) {
     const string& index = iter->first;
 
     CLS_LOG(20, "index=%s to_index=%s", index.c_str(), to_index.c_str());

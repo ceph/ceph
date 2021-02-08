@@ -4,35 +4,26 @@
 #ifndef CEPH_RBD_MIRROR_BASE_REQUEST_H
 #define CEPH_RBD_MIRROR_BASE_REQUEST_H
 
-#include "common/RefCountedObj.h"
+#include "include/Context.h"
 
 namespace rbd {
 namespace mirror {
 
-class BaseRequest : public RefCountedObject {
+class BaseRequest  {
 public:
-  BaseRequest(const std::string& name, CephContext *cct, Context *on_finish)
-    : RefCountedObject(cct, 1), m_name(name), m_cct(cct),
-      m_on_finish(on_finish) {
+  BaseRequest(Context *on_finish) : m_on_finish(on_finish) {
   }
+  virtual ~BaseRequest() {}
 
   virtual void send() = 0;
-  virtual void cancel() {}
 
 protected:
-  void finish(int r) {
-    if (m_cct) {
-      lsubdout(m_cct, rbd_mirror, 20) << m_name << "::finish: r=" << r << dendl;
-    }
-    if (m_on_finish) {
-      m_on_finish->complete(r);
-    }
-    put();
+  virtual void finish(int r) {
+    m_on_finish->complete(r);
+    delete this;
   }
 
 private:
-  const std::string m_name;
-  CephContext *m_cct;
   Context *m_on_finish;
 };
 

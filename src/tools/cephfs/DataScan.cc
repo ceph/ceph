@@ -12,12 +12,17 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include <fstream>
 #include "include/util.h"
 
+#include "mds/CDentry.h"
 #include "mds/CInode.h"
+#include "mds/CDentry.h"
+#include "mds/InoTable.h"
+#include "mds/SnapServer.h"
 #include "cls/cephfs/cls_cephfs_client.h"
 
 #include "PgFiles.h"
@@ -135,7 +140,7 @@ int DataScan::main(const std::vector<const char*> &args)
   // Parse args
   // ==========
   if (args.size() < 1) {
-    usage();
+    cerr << "missing position argument" << std::endl;
     return -EINVAL;
   }
 
@@ -212,7 +217,7 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
   auto fs =  fsmap->get_filesystem(fscid);
-  assert(fs != nullptr);
+  ceph_assert(fs != nullptr);
 
   // Default to output to metadata pool
   if (driver == NULL) {
@@ -247,7 +252,6 @@ int DataScan::main(const std::vector<const char*> &args)
       command == "cleanup") {
     if (data_pool_name.empty()) {
       std::cerr << "Data pool not specified" << std::endl;
-      usage();
       return -EINVAL;
     }
 
@@ -297,6 +301,8 @@ int DataScan::main(const std::vector<const char*> &args)
     if (r != 0) {
       return r;
     }
+
+    data_pools = fs->mds_map.get_data_pools();
   }
 
   // Finally, dispatch command
@@ -337,37 +343,43 @@ int MetadataDriver::inject_unlinked_inode(
   }
 
   // Compose
-  InodeStore inode;
-  inode.inode.ino = inono;
-  inode.inode.version = 1;
-  inode.inode.xattr_version = 1;
-  inode.inode.mode = 0500 | mode;
+  InodeStore inode_data;
+  auto inode = inode_data.get_inode();
+  inode->ino = inono;
+  inode->version = 1;
+  inode->xattr_version = 1;
+  inode->mode = 0500 | mode;
   // Fake dirstat.nfiles to 1, so that the directory doesn't appear to be empty
   // (we won't actually give the *correct* dirstat here though)
-  inode.inode.dirstat.nfiles = 1;
+  inode->dirstat.nfiles = 1;
 
-  inode.inode.ctime =
-    inode.inode.mtime = ceph_clock_now();
-  inode.inode.nlink = 1;
-  inode.inode.truncate_size = -1ull;
-  inode.inode.truncate_seq = 1;
-  inode.inode.uid = g_conf->mds_root_ino_uid;
-  inode.inode.gid = g_conf->mds_root_ino_gid;
+  inode->ctime = inode->mtime = ceph_clock_now();
+  inode->nlink = 1;
+  inode->truncate_size = -1ull;
+  inode->truncate_seq = 1;
+  inode->uid = g_conf()->mds_root_ino_uid;
+  inode->gid = g_conf()->mds_root_ino_gid;
 
   // Force layout to default: should we let users override this so that
   // they don't have to mount the filesystem to correct it?
-  inode.inode.layout = file_layout_t::get_default();
-  inode.inode.layout.pool_id = data_pool_id;
-  inode.inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+  inode->layout = file_layout_t::get_default();
+  inode->layout.pool_id = data_pool_id;
+  inode->dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
 
   // Assume that we will get our stats wrong, and that we may
   // be ignoring dirfrags that exist
-  inode.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS | DAMAGE_FRAGTREE);
+  inode_data.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS | DAMAGE_FRAGTREE);
+
+  if (inono == MDS_INO_ROOT || MDS_INO_IS_MDSDIR(inono)) {
+    sr_t srnode;
+    srnode.seq = 1;
+    encode(srnode, inode_data.snap_blob);
+  }
 
   // Serialize
   bufferlist inode_bl;
-  ::encode(std::string(CEPH_FS_ONDISK_MAGIC), inode_bl);
-  inode.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  encode(std::string(CEPH_FS_ONDISK_MAGIC), inode_bl);
+  inode_data.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write
   r = metadata_io.write_full(oid.name, inode_bl);
@@ -606,9 +618,9 @@ int DataScan::forall_objects(
         int r = ioctx.getxattr(oid, "scrub_tag", scrub_tag_bl);
         if (r >= 0) {
           std::string read_tag;
-          bufferlist::iterator q = scrub_tag_bl.begin();
+          auto q = scrub_tag_bl.cbegin();
           try {
-            ::decode(read_tag, q);
+            decode(read_tag, q);
             if (read_tag == filter_tag) {
               dout(20) << "skipping " << oid << " because it has the filter_tag"
                        << dendl;
@@ -622,7 +634,7 @@ int DataScan::forall_objects(
         }
 
       } else if (untagged_only) {
-        assert(obj_name_offset == 0);
+        ceph_assert(obj_name_offset == 0);
         dout(20) << "OSD matched oid " << oid << dendl;
       }
 
@@ -775,7 +787,7 @@ int DataScan::scan_inodes()
                 + (i % guessed_layout.stripe_count)
                 * guessed_layout.stripe_unit + (osize - 1)
                 % guessed_layout.stripe_unit + 1;
-              incomplete_size = MAX(incomplete_size, upper_size);
+              incomplete_size = std::max(incomplete_size, upper_size);
             }
           } else if (r == -ENOENT) {
             // Absent object, treat as size 0 and ignore.
@@ -897,8 +909,11 @@ int DataScan::scan_links()
     return -EINVAL;
   }
 
-  interval_set<inodeno_t> used_inos;
+  interval_set<uint64_t> used_inos;
   map<inodeno_t, int> remote_links;
+  map<snapid_t, SnapInfo> snaps;
+  snapid_t last_snap = 1;
+  snapid_t snaprealm_v2_since = 2;
 
   struct link_info_t {
     inodeno_t dirino;
@@ -907,16 +922,18 @@ int DataScan::scan_links()
     version_t version;
     int nlink;
     bool is_dir;
+    map<snapid_t, SnapInfo> snaps;
     link_info_t() : version(0), nlink(0), is_dir(false) {}
-    link_info_t(inodeno_t di, frag_t df, const string& n, const inode_t i) :
+    link_info_t(inodeno_t di, frag_t df, const string& n, const CInode::inode_const_ptr& i) :
       dirino(di), frag(df), name(n),
-      version(i.version), nlink(i.nlink), is_dir(S_IFDIR & i.mode) {}
+      version(i->version), nlink(i->nlink), is_dir(S_IFDIR & i->mode) {}
     dirfrag_t dirfrag() const {
       return dirfrag_t(dirino, frag);
     }
   };
   map<inodeno_t, list<link_info_t> > dup_primaries;
   map<inodeno_t, link_info_t> bad_nlink_inos;
+  map<inodeno_t, link_info_t> injected_inos;
 
   map<dirfrag_t, set<string> > to_remove;
 
@@ -938,7 +955,7 @@ int DataScan::scan_links()
 	continue;
       } else {
 	// parse_oid can only do 0 or -EINVAL
-	assert(r == 0);
+	ceph_assert(r == 0);
       }
 
       if (!valid_ino(dir_ino)) {
@@ -954,23 +971,40 @@ int DataScan::scan_links()
       }
 
       for (auto& p : items) {
-	bufferlist::iterator q = p.second.begin();
+	auto q = p.second.cbegin();
 	string dname;
 	snapid_t last;
 	dentry_key_t::decode_helper(p.first, dname, last);
 
-	if (last != CEPH_NOSNAP)
+	if (last != CEPH_NOSNAP) {
+	  if (last > last_snap)
+	    last_snap = last;
 	  continue;
+	}
 
 	try {
 	  snapid_t dnfirst;
-	  ::decode(dnfirst, q);
+	  decode(dnfirst, q);
+	  if (dnfirst <= CEPH_MAXSNAP) {
+	    if (dnfirst - 1 > last_snap)
+	      last_snap = dnfirst - 1;
+	  }
 	  char dentry_type;
-	  ::decode(dentry_type, q);
-	  if (dentry_type == 'I') {
+	  decode(dentry_type, q);
+	  mempool::mds_co::string alternate_name;
+	  if (dentry_type == 'I' || dentry_type == 'i') {
 	    InodeStore inode;
-	    inode.decode_bare(q);
-	    inodeno_t ino = inode.inode.ino;
+            if (dentry_type == 'i') {
+	      DECODE_START(2, q);
+              if (struct_v >= 2)
+                decode(alternate_name, q);
+	      inode.decode(q);
+	      DECODE_FINISH(q);
+	    } else {
+	      inode.decode_bare(q);
+	    }
+
+	    inodeno_t ino = inode.inode->ino;
 
 	    if (step == SCAN_INOS) {
 	      if (used_inos.contains(ino, 1)) {
@@ -979,9 +1013,34 @@ int DataScan::scan_links()
 		used_inos.insert(ino);
 	      }
 	    } else if (step == CHECK_LINK) {
+	      sr_t srnode;
+	      if (inode.snap_blob.length()) {
+		auto p = inode.snap_blob.cbegin();
+		decode(srnode, p);
+		for (auto it = srnode.snaps.begin();
+		     it != srnode.snaps.end(); ) {
+		  if (it->second.ino != ino ||
+		      it->second.snapid != it->first) {
+		    srnode.snaps.erase(it++);
+		  } else {
+		    ++it;
+		  }
+		}
+		if (!srnode.past_parents.empty()) {
+		  snapid_t last = srnode.past_parents.rbegin()->first;
+		  if (last + 1 > snaprealm_v2_since)
+		    snaprealm_v2_since = last + 1;
+		}
+	      }
+	      if (inode.old_inodes && !inode.old_inodes->empty()) {
+		auto _last_snap = inode.old_inodes->rbegin()->first;
+		if (_last_snap > last_snap)
+		  last_snap = _last_snap;
+	      }
 	      auto q = dup_primaries.find(ino);
 	      if (q != dup_primaries.end()) {
 		q->second.push_back(link_info_t(dir_ino, frag_id, dname, inode.inode));
+		q->second.back().snaps.swap(srnode.snaps);
 	      } else {
 		int nlink = 0;
 		auto r = remote_links.find(ino);
@@ -989,19 +1048,22 @@ int DataScan::scan_links()
 		  nlink = r->second;
 		if (!MDS_INO_IS_STRAY(dir_ino))
 		  nlink++;
-		if (inode.inode.nlink != nlink) {
+		if (inode.inode->nlink != nlink) {
 		  derr << "Bad nlink on " << ino << " expected " << nlink
-		       << " has " << inode.inode.nlink << dendl;
+		       << " has " << inode.inode->nlink << dendl;
 		  bad_nlink_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
 		  bad_nlink_inos[ino].nlink = nlink;
 		}
+		snaps.insert(make_move_iterator(begin(srnode.snaps)),
+			     make_move_iterator(end(srnode.snaps)));
 	      }
+	      if (dnfirst == CEPH_NOSNAP)
+		injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
 	    }
-	  } else if (dentry_type == 'L') {
+	  } else if (dentry_type == 'L' || dentry_type == 'l') {
 	    inodeno_t ino;
 	    unsigned char d_type;
-	    ::decode(ino, q);
-	    ::decode(d_type, q);
+            CDentry::decode_remote(dentry_type, ino, d_type, alternate_name, q);
 
 	    if (step == SCAN_INOS) {
 	      remote_links[ino]++;
@@ -1029,6 +1091,28 @@ int DataScan::scan_links()
       }
     }
   }
+
+  map<unsigned, uint64_t> max_ino_map;
+  {
+    auto prev_max_ino = (uint64_t)1 << 40;
+    for (auto p = used_inos.begin(); p != used_inos.end(); ++p) {
+      auto cur_max = p.get_start() + p.get_len() - 1;
+      if (cur_max < prev_max_ino)
+	continue; // system inodes
+
+      if ((prev_max_ino >> 40)  != (cur_max >> 40)) {
+	unsigned rank = (prev_max_ino >> 40) - 1;
+	max_ino_map[rank] = prev_max_ino;
+      } else if ((p.get_start() >> 40) != (cur_max >> 40)) {
+	unsigned rank = (p.get_start() >> 40) - 1;
+	max_ino_map[rank] = ((uint64_t)(rank + 2) << 40) - 1;
+      }
+      prev_max_ino = cur_max;
+    }
+    unsigned rank = (prev_max_ino >> 40) - 1;
+    max_ino_map[rank] = prev_max_ino;
+  }
+
   used_inos.clear();
 
   for (auto& p : dup_primaries) {
@@ -1045,8 +1129,11 @@ int DataScan::scan_links()
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
-      if (newest.dirino == q.dirino && newest.name == q.name)
+      if (newest.dirino == q.dirino && newest.name == q.name) {
+	snaps.insert(make_move_iterator(begin(q.snaps)),
+		     make_move_iterator(end(q.snaps)));
 	continue;
+      }
 
       std::string key;
       dentry_key_t dn_key(CEPH_NOSNAP, q.name.c_str());
@@ -1073,6 +1160,23 @@ int DataScan::scan_links()
   dup_primaries.clear();
   remote_links.clear();
 
+  {
+    objecter->with_osdmap([&](const OSDMap& o) {
+      for (auto p : data_pools) {
+	const pg_pool_t *pi = o.get_pg_pool(p);
+	if (!pi)
+	  continue;
+	if (pi->snap_seq > last_snap)
+	  last_snap = pi->snap_seq;
+      }
+    });
+
+    if (!snaps.empty()) {
+      if (snaps.rbegin()->first > last_snap)
+	last_snap = snaps.rbegin()->first;
+    }
+  }
+
   for (auto& p : to_remove) {
     object_t frag_oid = InodeStore::get_object_name(p.first.ino, p.first.frag, "");
 
@@ -1086,7 +1190,8 @@ int DataScan::scan_links()
 
   for (auto &p : bad_nlink_inos) {
     InodeStore inode;
-    int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode);
+    snapid_t first;
+    int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode, &first);
     if (r < 0) {
       derr << "Unexpected error reading dentry "
 	   << p.second.dirfrag() << "/" << p.second.name
@@ -1094,15 +1199,70 @@ int DataScan::scan_links()
       return r;
     }
 
-    if (inode.inode.ino != p.first || inode.inode.version != p.second.version)
+    if (inode.inode->ino != p.first || inode.inode->version != p.second.version)
       continue;
 
-    inode.inode.nlink = p.second.nlink;
-    r = metadata_driver->inject_linkage(p.second.dirino, p.second.name, p.second.frag, inode);
+    inode.get_inode()->nlink = p.second.nlink;
+    r = metadata_driver->inject_linkage(p.second.dirino, p.second.name, p.second.frag, inode, first);
     if (r < 0)
       return r;
   }
 
+  for (auto &p : injected_inos) {
+    InodeStore inode;
+    snapid_t first;
+    int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode, &first);
+    if (r < 0) {
+      derr << "Unexpected error reading dentry "
+	<< p.second.dirfrag() << "/" << p.second.name
+	<< ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    if (first != CEPH_NOSNAP)
+      continue;
+
+    first = last_snap + 1;
+    r = metadata_driver->inject_linkage(p.second.dirino, p.second.name, p.second.frag, inode, first);
+    if (r < 0)
+      return r;
+  }
+
+  for (auto& p : max_ino_map) {
+    InoTable inotable(nullptr);
+    inotable.set_rank(p.first);
+    bool dirty = false;
+    int r = metadata_driver->load_table(&inotable);
+    if (r < 0) {
+      inotable.reset_state();
+      dirty = true;
+    }
+    if (inotable.force_consume_to(p.second))
+      dirty = true;
+    if (dirty) {
+      r = metadata_driver->save_table(&inotable);
+      if (r < 0)
+	return r;
+    }
+  }
+
+  {
+    SnapServer snaptable;
+    snaptable.set_rank(0);
+    bool dirty = false;
+    int r = metadata_driver->load_table(&snaptable);
+    if (r < 0) {
+      snaptable.reset_state();
+      dirty = true;
+    }
+    if (snaptable.force_update(last_snap, snaprealm_v2_since, snaps))
+      dirty = true;
+    if (dirty) {
+      r = metadata_driver->save_table(&snaptable);
+      if (r < 0)
+	return r;
+    }
+  }
   return 0;
 }
 
@@ -1166,10 +1326,10 @@ int DataScan::scan_frags()
 
     if (parent_r != -ENODATA) {
       try {
-        bufferlist::iterator q = parent_bl.begin();
+        auto q = parent_bl.cbegin();
         backtrace.decode(q);
       } catch (buffer::error &e) {
-        dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
+        dout(4) << "Corrupt backtrace on '" << oid << "': " << e.what() << dendl;
         if (!force_corrupt) {
           return -EINVAL;
         } else {
@@ -1181,10 +1341,10 @@ int DataScan::scan_frags()
 
     if (layout_r != -ENODATA) {
       try {
-        bufferlist::iterator q = layout_bl.begin();
-        ::decode(loaded_layout, q);
+        auto q = layout_bl.cbegin();
+        decode(loaded_layout, q);
       } catch (buffer::error &e) {
-        dout(4) << "Corrupt layout on '" << oid << "': " << e << dendl;
+        dout(4) << "Corrupt layout on '" << oid << "': " << e.what() << dendl;
         if (!force_corrupt) {
           return -EINVAL;
         }
@@ -1270,7 +1430,7 @@ int MetadataTool::read_fnode(
     inodeno_t ino, frag_t frag, fnode_t *fnode,
     uint64_t *last_version)
 {
-  assert(fnode != NULL);
+  ceph_assert(fnode != NULL);
 
   object_t frag_oid = InodeStore::get_object_name(ino, frag, "");
   bufferlist fnode_bl;
@@ -1280,7 +1440,7 @@ int MetadataTool::read_fnode(
     return r;
   }
 
-  bufferlist::iterator old_fnode_iter = fnode_bl.begin();
+  auto old_fnode_iter = fnode_bl.cbegin();
   try {
     (*fnode).decode(old_fnode_iter);
   } catch (const buffer::error &err) {
@@ -1291,10 +1451,9 @@ int MetadataTool::read_fnode(
 }
 
 int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
-                const std::string &dname, InodeStore *inode)
+                const std::string &dname, InodeStore *inode, snapid_t *dnfirst)
 {
-  assert(inode != NULL);
-
+  ceph_assert(inode != NULL);
 
   std::string key;
   dentry_key_t dn_key(CEPH_NOSNAP, dname.c_str());
@@ -1319,25 +1478,78 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
   }
 
   try {
-    bufferlist::iterator q = vals[key].begin();
-    snapid_t dnfirst;
-    ::decode(dnfirst, q);
+    auto q = vals[key].cbegin();
+    snapid_t first;
+    decode(first, q);
     char dentry_type;
-    ::decode(dentry_type, q);
-    if (dentry_type == 'I') {
-      inode->decode_bare(q);
-      return 0;
+    decode(dentry_type, q);
+    if (dentry_type == 'I' || dentry_type == 'i') {
+      if (dentry_type == 'i') {
+        mempool::mds_co::string alternate_name;
+
+        DECODE_START(2, q);
+        if (struct_v >= 2)
+          decode(alternate_name, q);
+        inode->decode(q);
+        DECODE_FINISH(q);
+      } else {
+        inode->decode_bare(q);
+      }
     } else {
       dout(20) << "dentry type '" << dentry_type << "': cannot"
                   "read an inode out of that" << dendl;
       return -EINVAL;
     }
+    if (dnfirst)
+      *dnfirst = first;
   } catch (const buffer::error &err) {
     dout(20) << "encoding error in dentry 0x" << std::hex << parent_ino
              << std::dec << "/" << dname << dendl;
     return -EINVAL;
   }
 
+  return 0;
+}
+
+int MetadataDriver::load_table(MDSTable *table)
+{
+  object_t table_oid = table->get_object_name();
+
+  bufferlist table_bl;
+  int r = metadata_io.read(table_oid.name, table_bl, 0, 0);
+  if (r < 0) {
+    derr << "unable to read mds table '" << table_oid.name << "': "
+      << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  try {
+    version_t table_ver;
+    auto p = table_bl.cbegin();
+    decode(table_ver, p);
+    table->decode_state(p);
+    table->force_replay_version(table_ver);
+  } catch (const buffer::error &err) {
+    derr << "unable to decode mds table '" << table_oid.name << "': "
+      << err.what() << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+int MetadataDriver::save_table(MDSTable *table)
+{
+  object_t table_oid = table->get_object_name();
+
+  bufferlist table_bl;
+  encode(table->get_version(), table_bl);
+  table->encode_state(table_bl);
+  int r = metadata_io.write_full(table_oid.name, table_bl);
+  if (r != 0) {
+    derr << "error updating mds table " << table_oid.name
+      << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
   return 0;
 }
 
@@ -1372,7 +1584,7 @@ int MetadataDriver::inject_lost_and_found(
       return r;
     }
   } else {
-    if (!(lf_ino.inode.mode & S_IFDIR)) {
+    if (!(lf_ino.inode->mode & S_IFDIR)) {
       derr << "lost+found exists but is not a directory!" << dendl;
       // In this case we error out, and the user should do something about
       // this problem.
@@ -1385,13 +1597,10 @@ int MetadataDriver::inject_lost_and_found(
     return r;
   }
 
-  InodeStore recovered_ino;
-
-
   const std::string dname = lost_found_dname(ino);
 
   // Write dentry into lost+found dirfrag
-  return inject_linkage(lf_ino.inode.ino, dname, frag_t(), dentry);
+  return inject_linkage(lf_ino.inode->ino, dname, frag_t(), dentry);
 }
 
 
@@ -1421,11 +1630,12 @@ int MetadataDriver::get_frag_of(
   inode_backtrace_t backtrace;
   if (parent_bl.length()) {
     try {
-      bufferlist::iterator q = parent_bl.begin();
+      auto q = parent_bl.cbegin();
       backtrace.decode(q);
       have_backtrace = true;
     } catch (buffer::error &e) {
-      dout(4) << "Corrupt backtrace on '" << root_frag_oid << "': " << e << dendl;
+      dout(4) << "Corrupt backtrace on '" << root_frag_oid << "': "
+	      << e.what() << dendl;
     }
   }
 
@@ -1458,9 +1668,9 @@ int MetadataDriver::get_frag_of(
   r = read_dentry(parent_ino, frag_t(), parent_dname, &existing_dentry);
   if (r >= 0) {
     // Great, fast path: return the fragtree from here
-    if (existing_dentry.inode.ino != dirino) {
+    if (existing_dentry.inode->ino != dirino) {
       dout(4) << "Unexpected inode in dentry! 0x" << std::hex
-              << existing_dentry.inode.ino
+              << existing_dentry.inode->ino
               << " vs expected 0x" << dirino << std::dec << dendl;
       return -ENOENT;
     }
@@ -1602,7 +1812,7 @@ int MetadataDriver::inject_with_backtrace(
       break;
     } else {
       // Dentry already present, does it link to me?
-      if (existing_dentry.inode.ino == ino) {
+      if (existing_dentry.inode->ino == ino) {
         dout(20) << "Dentry 0x" << std::hex
           << parent_ino << std::dec << "/"
           << dname << " already exists and points to me" << dendl;
@@ -1610,7 +1820,7 @@ int MetadataDriver::inject_with_backtrace(
         derr << "Dentry 0x" << std::hex
           << parent_ino << std::dec << "/"
           << dname << " already exists but points to 0x"
-          << std::hex << existing_dentry.inode.ino << std::dec << dendl;
+          << std::hex << existing_dentry.inode->ino << std::dec << dendl;
         // Fall back to lost+found!
         return inject_lost_and_found(backtrace.ino, dentry);
       }
@@ -1624,28 +1834,29 @@ int MetadataDriver::inject_with_backtrace(
         // This is the linkage for the file of interest
         dout(10) << "Linking inode 0x" << std::hex << ino
           << " at 0x" << parent_ino << "/" << dname << std::dec
-          << " with size=" << dentry.inode.size << " bytes" << dendl;
+          << " with size=" << dentry.inode->size << " bytes" << dendl;
 
         r = inject_linkage(parent_ino, dname, fragment, dentry);
       } else {
         // This is the linkage for an ancestor directory
         InodeStore ancestor_dentry;
-        ancestor_dentry.inode.mode = 0755 | S_IFDIR;
+        auto inode = ancestor_dentry.get_inode();
+        inode->mode = 0755 | S_IFDIR;
 
         // Set nfiles to something non-zero, to fool any other code
         // that tries to ignore 'empty' directories.  This won't be
         // accurate, but it should avoid functional issues.
 
-        ancestor_dentry.inode.dirstat.nfiles = 1;
-        ancestor_dentry.inode.dir_layout.dl_dir_hash =
-                                               g_conf->mds_default_dir_hash;
+        inode->dirstat.nfiles = 1;
+        inode->dir_layout.dl_dir_hash =
+                               g_conf()->mds_default_dir_hash;
 
-        ancestor_dentry.inode.nlink = 1;
-        ancestor_dentry.inode.ino = ino;
-        ancestor_dentry.inode.uid = g_conf->mds_root_ino_uid;
-        ancestor_dentry.inode.gid = g_conf->mds_root_ino_gid;
-        ancestor_dentry.inode.version = 1;
-        ancestor_dentry.inode.backtrace_version = 1;
+        inode->nlink = 1;
+        inode->ino = ino;
+        inode->uid = g_conf()->mds_root_ino_uid;
+        inode->gid = g_conf()->mds_root_ino_gid;
+        inode->version = 1;
+        inode->backtrace_version = 1;
         r = inject_linkage(parent_ino, dname, fragment, ancestor_dentry);
       }
 
@@ -1677,7 +1888,7 @@ int MetadataDriver::find_or_create_dirfrag(
     frag_t fragment,
     bool *created)
 {
-  assert(created != NULL);
+  ceph_assert(created != NULL);
 
   fnode_t existing_fnode;
   *created = false;
@@ -1705,13 +1916,13 @@ int MetadataDriver::find_or_create_dirfrag(
     librados::ObjectWriteOperation op;
 
     if (read_version) {
-      assert(r == -EINVAL);
+      ceph_assert(r == -EINVAL);
       // Case A: We must assert that the version isn't changed since we saw the object
       // was unreadable, to avoid the possibility of two data-scan processes
       // both creating the frag.
       op.assert_version(read_version);
     } else {
-      assert(r == -ENOENT);
+      ceph_assert(r == -ENOENT);
       // Case B: The object didn't exist in read_fnode, so while creating it we must
       // use an exclusive create to correctly populate *creating with
       // whether we created it ourselves or someone beat us to it.
@@ -1752,21 +1963,17 @@ int MetadataDriver::find_or_create_dirfrag(
 
 int MetadataDriver::inject_linkage(
     inodeno_t dir_ino, const std::string &dname,
-    const frag_t fragment, const InodeStore &inode)
+    const frag_t fragment, const InodeStore &inode, const snapid_t dnfirst)
 {
-  // We have no information about snapshots, so everything goes
-  // in as CEPH_NOSNAP
-  snapid_t snap = CEPH_NOSNAP;
-
   object_t frag_oid = InodeStore::get_object_name(dir_ino, fragment, "");
 
   std::string key;
-  dentry_key_t dn_key(snap, dname.c_str());
+  dentry_key_t dn_key(CEPH_NOSNAP, dname.c_str());
   dn_key.encode(key);
 
   bufferlist dentry_bl;
-  ::encode(snap, dentry_bl);
-  ::encode('I', dentry_bl);
+  encode(dnfirst, dentry_bl);
+  encode('I', dentry_bl);
   inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write out
@@ -1781,7 +1988,7 @@ int MetadataDriver::inject_linkage(
   } else {
     dout(20) << "Injected dentry 0x" << std::hex
       << dir_ino << "/" << dname << " pointing to 0x"
-      << inode.inode.ino << std::dec << dendl;
+      << inode.inode->ino << std::dec << dendl;
     return 0;
   }
 }
@@ -1793,7 +2000,7 @@ int MetadataDriver::init(
 {
   if (metadata_pool_name.empty()) {
     auto fs =  fsmap->get_filesystem(fscid);
-    assert(fs != nullptr);
+    ceph_assert(fs != nullptr);
     int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
@@ -1877,8 +2084,8 @@ int LocalFileDriver::inject_with_backtrace(
     if (is_file) {
       // FIXME: inject_data won't cope with interesting (i.e. striped)
       // layouts (need a librados-compatible Filer to read these)
-      inject_data(path_builder, dentry.inode.size,
-		  dentry.inode.layout.object_size, bt.ino);
+      inject_data(path_builder, dentry.inode->size,
+		  dentry.inode->layout.object_size, bt.ino);
     } else {
       int r = mkdir(path_builder.c_str(), 0755);
       if (r != 0 && r != -EPERM) {
@@ -1905,8 +2112,8 @@ int LocalFileDriver::inject_lost_and_found(
   }
   
   std::string file_path = lf_path + "/" + lost_found_dname(ino);
-  return inject_data(file_path, dentry.inode.size,
-		     dentry.inode.layout.object_size, ino);
+  return inject_data(file_path, dentry.inode->size,
+		     dentry.inode->layout.object_size, ino);
 }
 
 int LocalFileDriver::init_roots(int64_t data_pool_id)
@@ -1948,55 +2155,57 @@ void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
     const file_layout_t &layout, InodeStore *out)
 {
-  assert(out != NULL);
+  ceph_assert(out != NULL);
 
-  out->inode.mode = 0500 | S_IFREG;
-  out->inode.size = file_size;
-  out->inode.max_size_ever = file_size;
-  out->inode.mtime.tv.tv_sec = file_mtime;
-  out->inode.atime.tv.tv_sec = file_mtime;
-  out->inode.ctime.tv.tv_sec = file_mtime;
+  auto inode = out->get_inode();
+  inode->mode = 0500 | S_IFREG;
+  inode->size = file_size;
+  inode->max_size_ever = file_size;
+  inode->mtime.tv.tv_sec = file_mtime;
+  inode->atime.tv.tv_sec = file_mtime;
+  inode->ctime.tv.tv_sec = file_mtime;
 
-  out->inode.layout = layout;
+  inode->layout = layout;
 
-  out->inode.truncate_seq = 1;
-  out->inode.truncate_size = -1ull;
+  inode->truncate_seq = 1;
+  inode->truncate_size = -1ull;
 
-  out->inode.inline_data.version = CEPH_INLINE_NONE;
+  inode->inline_data.version = CEPH_INLINE_NONE;
 
-  out->inode.nlink = 1;
-  out->inode.ino = ino;
-  out->inode.version = 1;
-  out->inode.backtrace_version = 1;
-  out->inode.uid = g_conf->mds_root_ino_uid;
-  out->inode.gid = g_conf->mds_root_ino_gid;
+  inode->nlink = 1;
+  inode->ino = ino;
+  inode->version = 1;
+  inode->backtrace_version = 1;
+  inode->uid = g_conf()->mds_root_ino_uid;
+  inode->gid = g_conf()->mds_root_ino_gid;
 }
 
 void MetadataTool::build_dir_dentry(
     inodeno_t ino, const frag_info_t &fragstat,
     const file_layout_t &layout, InodeStore *out)
 {
-  assert(out != NULL);
+  ceph_assert(out != NULL);
 
-  out->inode.mode = 0755 | S_IFDIR;
-  out->inode.dirstat = fragstat;
-  out->inode.mtime.tv.tv_sec = fragstat.mtime;
-  out->inode.atime.tv.tv_sec = fragstat.mtime;
-  out->inode.ctime.tv.tv_sec = fragstat.mtime;
+  auto inode = out->get_inode();
+  inode->mode = 0755 | S_IFDIR;
+  inode->dirstat = fragstat;
+  inode->mtime.tv.tv_sec = fragstat.mtime;
+  inode->atime.tv.tv_sec = fragstat.mtime;
+  inode->ctime.tv.tv_sec = fragstat.mtime;
 
-  out->inode.layout = layout;
-  out->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+  inode->layout = layout;
+  inode->dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
 
-  out->inode.truncate_seq = 1;
-  out->inode.truncate_size = -1ull;
+  inode->truncate_seq = 1;
+  inode->truncate_size = -1ull;
 
-  out->inode.inline_data.version = CEPH_INLINE_NONE;
+  inode->inline_data.version = CEPH_INLINE_NONE;
 
-  out->inode.nlink = 1;
-  out->inode.ino = ino;
-  out->inode.version = 1;
-  out->inode.backtrace_version = 1;
-  out->inode.uid = g_conf->mds_root_ino_uid;
-  out->inode.gid = g_conf->mds_root_ino_gid;
+  inode->nlink = 1;
+  inode->ino = ino;
+  inode->version = 1;
+  inode->backtrace_version = 1;
+  inode->uid = g_conf()->mds_root_ino_uid;
+  inode->gid = g_conf()->mds_root_ino_gid;
 }
 

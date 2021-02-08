@@ -14,10 +14,9 @@
 #ifndef OS_INDEXMANAGER_H
 #define OS_INDEXMANAGER_H
 
-#include "include/memory.h"
 #include "include/unordered_map.h"
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -42,7 +41,7 @@ struct Index {
  * Encapsulates mutual exclusion for CollectionIndexes.
  *
  * Allowing a modification (removal or addition of an object) to occur
- * while a read is occuring (lookup of an object's path and use of
+ * while a read is occurring (lookup of an object's path and use of
  * that path) may result in the path becoming invalid.  Thus, during
  * the lifetime of a CollectionIndex object and any paths returned
  * by it, no other concurrent accesses may be allowed.
@@ -50,7 +49,8 @@ struct Index {
  */
 class IndexManager {
   CephContext* cct;
-  RWLock lock; ///< Lock for Index Manager
+  /// Lock for Index Manager
+  ceph::shared_mutex lock = ceph::make_shared_mutex("IndexManager lock");
   bool upgrade;
   ceph::unordered_map<coll_t, CollectionIndex* > col_indices;
 
@@ -71,7 +71,6 @@ public:
   /// Constructor
   explicit IndexManager(CephContext* cct,
 			bool upgrade) : cct(cct),
-					lock("IndexManager lock"),
 					upgrade(upgrade) {}
 
   ~IndexManager();
@@ -84,7 +83,7 @@ public:
    * @param [out] index Index for c
    * @return error code
    */
-  int get_index(coll_t c, const string& baseDir, Index *index);
+  int get_index(coll_t c, const std::string& baseDir, Index *index);
 
   /**
    * Initialize index for collection c at path

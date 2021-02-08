@@ -5,8 +5,10 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/IndentStream.h"
 #include "tools/rbd/OptionPrinter.h"
+#include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "global/global_context.h"
+#include "global/global_init.h"
 #include "include/stringify.h"
 #include <algorithm>
 #include <iostream>
@@ -23,15 +25,69 @@ static const std::string APP_NAME("rbd");
 static const std::string HELP_SPEC("help");
 static const std::string BASH_COMPLETION_SPEC("bash-completion");
 
+boost::intrusive_ptr<CephContext> global_init(
+    int argc, const char **argv, std::vector<std::string> *command_args,
+    std::vector<std::string> *global_init_args) {
+  std::vector<const char*> cmd_args;
+  argv_to_vec(argc, argv, cmd_args);
+  std::vector<const char*> args(cmd_args);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_MON_CONFIG);
+
+  *command_args = {args.begin(), args.end()};
+
+  // Scan command line arguments for ceph global init args (those are
+  // filtered out from args vector by global_init).
+
+  auto cursor = args.begin();
+  for (auto &arg : cmd_args) {
+    auto iter = cursor;
+    for (; iter != args.end(); iter++) {
+      if (*iter == arg) {
+        break;
+      }
+    }
+    if (iter == args.end()) {
+      // filtered out by global_init
+      global_init_args->push_back(arg);
+    } else {
+      cursor = ++iter;
+    }
+  }
+
+  return cct;
+}
+
 std::string format_command_spec(const Shell::CommandSpec &spec) {
   return joinify<std::string>(spec.begin(), spec.end(), " ");
+}
+
+std::string format_alias_spec(const Shell::CommandSpec &spec,
+                              const Shell::CommandSpec &alias_spec) {
+    auto spec_it = spec.begin();
+    auto alias_it = alias_spec.begin();
+    int level = 0;
+    while (spec_it != spec.end() && alias_it != alias_spec.end() &&
+           *spec_it == *alias_it) {
+      spec_it++;
+      alias_it++;
+      level++;
+    }
+    ceph_assert(spec_it != spec.end() && alias_it != alias_spec.end());
+
+    if (level < 2) {
+      return joinify<std::string>(alias_spec.begin(), alias_spec.end(), " ");
+    } else {
+      return "... " + joinify<std::string>(alias_it, alias_spec.end(), " ");
+    }
 }
 
 std::string format_command_name(const Shell::CommandSpec &spec,
                                 const Shell::CommandSpec &alias_spec) {
   std::string name = format_command_spec(spec);
   if (!alias_spec.empty()) {
-    name += " (" + format_command_spec(alias_spec) + ")";
+    name += " (" + format_alias_spec(spec, alias_spec) + ")";
   }
   return name;
 }
@@ -66,10 +122,20 @@ std::set<std::string>& Shell::get_switch_arguments() {
   return switch_arguments;
 }
 
-int Shell::execute(const Arguments& cmdline_arguments) {
+void print_deprecated_warning(po::option_description option, std::string description) {
+  auto pos = description.find_first_of(":");
+  if (pos != std::string::npos) {
+  std::string param = description.substr(pos + 1, description.size() - pos - 2);
+  std::cerr << "rbd: " << option.format_name() << " is deprecated, use --"
+            << param << std::endl;
+  }
+}
 
-  std::vector<std::string> arguments(cmdline_arguments.begin(),
-                                     cmdline_arguments.end());
+int Shell::execute(int argc, const char **argv) {
+  std::vector<std::string> arguments;
+  std::vector<std::string> ceph_global_init_args;
+  auto cct = global_init(argc, argv, &arguments, &ceph_global_init_args);
+
   std::vector<std::string> command_spec;
   get_command_spec(arguments, &command_spec);
   bool is_alias = true;
@@ -127,13 +193,9 @@ int Shell::execute(const Arguments& cmdline_arguments) {
       positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), max_count);
     }
 
-    po::options_description global_opts;
-    get_global_options(&global_opts);
-
     po::options_description group_opts;
     group_opts.add(command_opts)
-              .add(argument_opts)
-              .add(global_opts);
+              .add(argument_opts);
 
     po::store(po::command_line_parser(arguments)
       .style(po::command_line_style::default_style &
@@ -148,7 +210,47 @@ int Shell::execute(const Arguments& cmdline_arguments) {
       return EXIT_FAILURE;
     }
 
-    int r = (*action->execute)(vm);
+    int r = (*action->execute)(vm, ceph_global_init_args);
+
+    if (vm.size() > 0) {
+      for (auto opt : vm) {
+        try {
+          auto option = command_opts.find(opt.first, false);
+          auto description = option.description();
+          auto result = boost::find_first(description, "deprecated");
+          if (!result.empty()) {
+            print_deprecated_warning(option, description);
+          }
+        } catch (exception& e) {
+          continue;
+        }
+      }
+    }
+
+    po::options_description global_opts;
+    get_global_options(&global_opts);
+    auto it = ceph_global_init_args.begin();
+    for ( ; it != ceph_global_init_args.end(); ++it) {
+      auto  pos = (*it).find_last_of("-");
+      auto prefix_style = po::command_line_style::allow_long;
+      if (pos == 0) {
+        prefix_style = po::command_line_style::allow_dash_for_short;
+      } else if (pos == std::string::npos) {
+        continue;
+      }
+
+      for (size_t i = 0; i < global_opts.options().size(); ++i) {
+        std::string param_name =  global_opts.options()[i]->canonical_display_name(
+                                  prefix_style);
+        auto description = global_opts.options()[i]->description();
+        auto result = boost::find_first(description, "deprecated");
+        if (!result.empty() && *it == param_name) {
+          print_deprecated_warning(*global_opts.options()[i], description);
+          break;
+        }
+      }
+    }
+
     if (r != 0) {
       return std::abs(r);
     }
@@ -237,10 +339,10 @@ void Shell::get_global_options(po::options_description *opts) {
     ((at::CONFIG_PATH + ",c").c_str(), po::value<std::string>(), "path to cluster configuration")
     ("cluster", po::value<std::string>(), "cluster name")
     ("id", po::value<std::string>(), "client id (without 'client.' prefix)")
-    ("user", po::value<std::string>(), "client id (without 'client.' prefix)")
+    ("user", po::value<std::string>(), "deprecated[:id]")
     ("name,n", po::value<std::string>(), "client name")
     ("mon_host,m", po::value<std::string>(), "monitor host")
-    ("secret", po::value<at::Secret>(), "path to secret key (deprecated)")
+    ("secret", po::value<at::Secret>(), "deprecated[:keyfile]")
     ("keyfile,K", po::value<std::string>(), "path to secret key")
     ("keyring,k", po::value<std::string>(), "path to keyring");
 }
@@ -290,9 +392,13 @@ void Shell::print_help() {
     }
   }
 
-  po::options_description global_opts(OptionPrinter::OPTIONAL_ARGUMENTS);
+  po::options_description global_opts;
   get_global_options(&global_opts);
-  std::cout << std::endl << global_opts << std::endl
+
+  std::cout << std::endl << OptionPrinter::OPTIONAL_ARGUMENTS << ":" << std::endl;
+  OptionPrinter::print_optional(global_opts, name_width, std::cout);
+
+  std::cout << std::endl
             << "See '" << APP_NAME << " help <command>' for help on a specific "
             << "command." << std::endl;
  }

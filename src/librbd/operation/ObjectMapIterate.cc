@@ -4,6 +4,7 @@
 #include "librbd/operation/ObjectMapIterate.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "osdc/Striper.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -68,7 +69,7 @@ private:
   std::atomic_flag *m_invalidate;
 
   librados::snap_set_t m_snap_set;
-  int m_snap_list_ret;
+  int m_snap_list_ret = 0;
 
   bool should_complete(int r) {
     I &image_ctx = this->m_image_ctx;
@@ -90,7 +91,7 @@ private:
 
   void send_list_snaps() {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
     ldout(image_ctx.cct, 5) << m_oid
 			    << " C_VerifyObjectCallback::send_list_snaps"
                             << dendl;
@@ -100,13 +101,13 @@ private:
 
     librados::AioCompletion *comp = util::create_rados_callback(this);
     int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
-    assert(r == 0);
+    ceph_assert(r == 0);
     comp->release();
   }
 
   uint8_t get_object_state() {
     I &image_ctx = this->m_image_ctx;
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    std::shared_lock image_locker{image_ctx.image_lock};
     for (std::vector<librados::clone_info_t>::const_iterator r =
            m_snap_set.clones.begin(); r != m_snap_set.clones.end(); ++r) {
       librados::snap_t from_snap_id;
@@ -136,7 +137,7 @@ private:
 
   uint64_t next_valid_snap_id(uint64_t snap_id) {
     I &image_ctx = this->m_image_ctx;
-    assert(image_ctx.snap_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_ctx.image_lock));
 
     std::map<librados::snap_t, SnapInfo>::iterator it =
       image_ctx.snap_info.lower_bound(snap_id);
@@ -149,18 +150,16 @@ private:
   bool object_map_action(uint8_t new_state) {
     I &image_ctx = this->m_image_ctx;
     CephContext *cct = image_ctx.cct;
-    RWLock::RLocker owner_locker(image_ctx.owner_lock);
+    std::shared_lock owner_locker{image_ctx.owner_lock};
 
     // should have been canceled prior to releasing lock
-    assert(image_ctx.exclusive_lock == nullptr ||
-           image_ctx.exclusive_lock->is_lock_owner());
+    ceph_assert(image_ctx.exclusive_lock == nullptr ||
+                image_ctx.exclusive_lock->is_lock_owner());
 
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    assert(image_ctx.object_map != nullptr);
+    std::shared_lock image_locker{image_ctx.image_lock};
+    ceph_assert(image_ctx.object_map != nullptr);
 
-    RWLock::WLocker l(image_ctx.object_map_lock);
     uint8_t state = (*image_ctx.object_map)[m_object_no];
-
     ldout(cct, 10) << "C_VerifyObjectCallback::object_map_action"
 		   << " object " << image_ctx.get_object_name(m_object_no)
 		   << " state " << (int)state
@@ -169,7 +168,7 @@ private:
     if (state != new_state) {
       int r = 0;
 
-      assert(m_handle_mismatch);
+      ceph_assert(m_handle_mismatch);
       r = m_handle_mismatch(image_ctx, m_object_no, state, new_state);
       if (r) {
 	lderr(cct) << "object map error: object "
@@ -193,6 +192,11 @@ private:
 
 template <typename I>
 void ObjectMapIterateRequest<I>::send() {
+  if (!m_image_ctx.data_ctx.is_valid()) {
+    this->async_complete(-ENODEV);
+    return;
+  }
+
   send_verify_objects();
 }
 
@@ -201,11 +205,22 @@ bool ObjectMapIterateRequest<I>::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
-  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  if (r == -ENODEV) {
+    lderr(cct) << "missing data pool" << dendl;
+    return true;
+  }
+
+  if (r < 0) {
+    lderr(cct) << "object map operation encountered an error: "
+	       << cpp_strerror(r) << dendl;
+  }
+
+  std::shared_lock owner_lock{m_image_ctx.owner_lock};
   switch (m_state) {
   case STATE_VERIFY_OBJECTS:
     if (m_invalidate.test_and_set()) {
       send_invalidate_object_map();
+      return false;
     } else if (r == 0) {
       return true;
     }
@@ -218,14 +233,11 @@ bool ObjectMapIterateRequest<I>::should_complete(int r) {
     break;
 
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
 
   if (r < 0) {
-    lderr(cct) << "object map operation encountered an error: "
-	       << cpp_strerror(r)
-               << dendl;
     return true;
   }
 
@@ -234,13 +246,13 @@ bool ObjectMapIterateRequest<I>::should_complete(int r) {
 
 template <typename I>
 void ObjectMapIterateRequest<I>::send_verify_objects() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
   uint64_t snap_id;
   uint64_t num_objects;
   {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
+    std::shared_lock l{m_image_ctx.image_lock};
     snap_id = m_image_ctx.snap_id;
     num_objects = Striper::get_num_objects(m_image_ctx.layout,
                                            m_image_ctx.get_image_size(snap_id));
@@ -256,12 +268,13 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, m_image_ctx, context_factory, this->create_callback_context(),
     &m_prog_ctx, 0, num_objects);
-  throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
+  throttle->start_ops(
+    m_image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }
 
 template <typename I>
 uint64_t ObjectMapIterateRequest<I>::get_image_size() const {
-  assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
     if (!m_image_ctx.resize_reqs.empty()) {
       return m_image_ctx.resize_reqs.front()->get_image_size();
@@ -284,8 +297,8 @@ void ObjectMapIterateRequest<I>::send_invalidate_object_map() {
 					     true,
 					     this->create_callback_context());
 
-  assert(m_image_ctx.owner_lock.is_locked());
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   req->send();
 }
 

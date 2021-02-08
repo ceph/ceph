@@ -18,14 +18,14 @@
 
 void libradosstriper::MultiAioCompletionImpl::complete_request(ssize_t r)
 {
-  lock.Lock();
+  lock.lock();
   if (rval >= 0) {
     if (r < 0 && r != -EEXIST)
       rval = r;
     else if (r > 0)
       rval += r;
   }
-  assert(pending_complete);
+  ceph_assert(pending_complete);
   int count = --pending_complete;
   if (!count && !building) {
     complete();
@@ -35,12 +35,12 @@ void libradosstriper::MultiAioCompletionImpl::complete_request(ssize_t r)
 
 void libradosstriper::MultiAioCompletionImpl::safe_request(ssize_t r)
 {
-  lock.Lock();
+  lock.lock();
   if (rval >= 0) {
     if (r < 0 && r != -EEXIST)
       rval = r;
   }
-  assert(pending_safe);
+  ceph_assert(pending_safe);
   int count = --pending_safe;
   if (!count && !building) {
     safe();
@@ -50,12 +50,11 @@ void libradosstriper::MultiAioCompletionImpl::safe_request(ssize_t r)
 
 void libradosstriper::MultiAioCompletionImpl::finish_adding_requests()
 {
-  lock.Lock();
-  assert(building);
+  std::scoped_lock l{lock};
+  ceph_assert(building);
   building = false;
   if (!pending_complete)
     complete();
   if (!pending_safe)
     safe();
-  lock.Unlock();
 }

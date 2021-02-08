@@ -17,12 +17,12 @@
 
 #include <stdint.h>
 #include <vector>
+#include <map>
 #include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "common/ceph_context.h"
 #include "common/code_environment.h"
 #include "common/common_init.h"
-
-class CephContext;
 
 /*
  * global_init is the first initialization function that
@@ -30,24 +30,19 @@ class CephContext;
  * initialization, including setting up g_ceph_context.
  */
 boost::intrusive_ptr<CephContext>
-     global_init(std::vector < const char * > *alt_def_args,
-		 std::vector < const char* >& args,
-		 uint32_t module_type,
-		 code_environment_t code_env,
-		 int flags,
-		 const char *data_dir_option = 0,
-		 bool run_pre_init = true);
-
-void intrusive_ptr_add_ref(CephContext* cct);
-void intrusive_ptr_release(CephContext* cct);
+global_init(
+  const std::map<std::string,std::string> *defaults,
+  std::vector < const char* >& args,
+  uint32_t module_type,
+  code_environment_t code_env,
+  int flags, bool run_pre_init = true);
 
 // just the first half; enough to get config parsed but doesn't start up the
 // cct or log.
-void global_pre_init(std::vector < const char * > *alt_def_args,
+void global_pre_init(const std::map<std::string,std::string> *defaults,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags,
-		     const char *data_dir_option = 0);
+		     int flags);
 
 /*
  * perform all of the steps that global_init_daemonize performs just prior
@@ -103,5 +98,4 @@ int global_init_preload_erasure_code(const CephContext *cct);
  * print daemon startup banner/warning
  */
 void global_print_banner(void);
-
 #endif

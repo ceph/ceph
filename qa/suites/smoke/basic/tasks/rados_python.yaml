@@ -1,9 +1,14 @@
 tasks:
 - install:
 - ceph:
-    fs: btrfs
     log-whitelist:
-      - wrongly marked me down
+    - but it is still running
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(PG_
+    - \(OSD_
+    - \(OBJECT_
+    - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse:
 - workunit:
     clients:

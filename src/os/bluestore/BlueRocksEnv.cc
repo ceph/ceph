@@ -5,6 +5,7 @@
 #include "BlueFS.h"
 #include "include/stringify.h"
 #include "kv/RocksDBStore.h"
+#include "string.h"
 
 rocksdb::Status err_to_status(int r)
 {
@@ -16,10 +17,13 @@ rocksdb::Status err_to_status(int r)
   case -EINVAL:
     return rocksdb::Status::InvalidArgument(rocksdb::Status::kNone);
   case -EIO:
+  case -EEXIST:
     return rocksdb::Status::IOError(rocksdb::Status::kNone);
+  case -ENOLCK:
+    return rocksdb::Status::IOError(strerror(r));
   default:
     // FIXME :(
-    assert(0 == "unrecognized error code");
+    ceph_abort_msg("unrecognized error code");
     return rocksdb::Status::NotSupported(rocksdb::Status::kNone);
   }
 }
@@ -43,8 +47,8 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   //
   // REQUIRES: External synchronization
   rocksdb::Status Read(size_t n, rocksdb::Slice* result, char* scratch) override {
-    int r = fs->read(h, &h->buf, h->buf.pos, n, NULL, scratch);
-    assert(r >= 0);
+    int64_t r = fs->read(h, h->buf.pos, n, NULL, scratch);
+    ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
   }
@@ -65,6 +69,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    h->buf.invalidate_cache(offset, length);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -91,21 +96,11 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
 		       char* scratch) const override {
-    int r = fs->read_random(h, offset, n, scratch);
-    assert(r >= 0);
+    int64_t r = fs->read_random(h, offset, n, scratch);
+    ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
   }
-
-  // Used by the file_reader_writer to decide if the ReadAhead wrapper
-  // should simply forward the call and do not enact buffering or locking.
-  bool ShouldForwardRawRequest() const override {
-    return false;
-  }
-
-  // For cases when read-ahead is implemented in the platform dependent
-  // layer
-  void EnableReadAhead() override {}
 
   // Tries to get an unique ID for this file that will be the same each time
   // the file is opened (and will stay the same while the file is open).
@@ -127,6 +122,12 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
 		    (unsigned long long)h->file->fnode.ino);
   };
 
+  // Readahead the file starting from offset by n bytes for caching.
+  rocksdb::Status Prefetch(uint64_t offset, size_t n) override {
+    fs->read(h, offset, n, nullptr, nullptr);
+    return rocksdb::Status::OK();
+  }
+
   //enum AccessPattern { NORMAL, RANDOM, SEQUENTIAL, WILLNEED, DONTNEED };
 
   void Hint(AccessPattern pattern) override {
@@ -140,6 +141,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // of this file. If the length is 0, then it refers to the end of file.
   // If the system is not caching the file contents, then this is a noop.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    h->buf.invalidate_cache(offset, length);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -172,6 +174,9 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
 
   rocksdb::Status Append(const rocksdb::Slice& data) override {
     h->append(data.data(), data.size());
+    // Avoid calling many time Append() and then calling Flush().
+    // Especially for buffer mode, flush much data will cause jitter.
+    fs->try_flush(h);
     return rocksdb::Status::OK();
   }
 
@@ -196,7 +201,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   }
 
   rocksdb::Status Close() override {
-    Flush();
+    fs->flush(h, true);
 
     // mimic posix env, here.  shrug.
     size_t block_size;
@@ -233,11 +238,15 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
     return false;
   }
 
+  void SetWriteLifeTimeHint(rocksdb::Env::WriteLifeTimeHint hint) override {
+    h->write_hint = (const int)hint;
+  }
+
   /*
    * Get the size of valid data in the file.
    */
   uint64_t GetFileSize() override {
-    return h->file->fnode.size + h->buffer.length();;
+    return h->file->fnode.size + h->get_buffer_length();;
   }
 
   // For documentation, refer to RandomAccessFile::GetUniqueId()
@@ -251,6 +260,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   // If the system is not caching the file contents, then this is a noop.
   // This call has no effect on dirty pages in the cache.
   rocksdb::Status InvalidateCache(size_t offset, size_t length) override {
+    fs->fsync(h);
     fs->invalidate_cache(h->file, offset, length);
     return rocksdb::Status::OK();
   }
@@ -295,7 +305,7 @@ class BlueRocksDirectory : public rocksdb::Directory {
   // Fsync directory. Can be called concurrently from multiple threads.
   rocksdb::Status Fsync() override {
     // it is sufficient to flush the log.
-    fs->sync_metadata();
+    fs->sync_metadata(false);
     return rocksdb::Status::OK();
   }
 };
@@ -397,7 +407,7 @@ rocksdb::Status BlueRocksEnv::NewDirectory(
   std::unique_ptr<rocksdb::Directory>* result)
 {
   if (!fs->dir_exists(name))
-    return rocksdb::Status::IOError(name, strerror(ENOENT));
+    return rocksdb::Status::NotFound(name, strerror(ENOENT));
   result->reset(new BlueRocksDirectory(fs));
   return rocksdb::Status::OK();
 }
@@ -417,9 +427,10 @@ rocksdb::Status BlueRocksEnv::GetChildren(
   const std::string& dir,
   std::vector<std::string>* result)
 {
+  result->clear();
   int r = fs->readdir(dir, result);
   if (r < 0)
-    return rocksdb::Status::IOError(dir, strerror(ENOENT));//    return err_to_status(r);
+    return rocksdb::Status::NotFound(dir, strerror(ENOENT));//    return err_to_status(r);
   return rocksdb::Status::OK();
 }
 
@@ -504,6 +515,29 @@ rocksdb::Status BlueRocksEnv::LinkFile(
   ceph_abort();
 }
 
+rocksdb::Status BlueRocksEnv::AreFilesSame(
+  const std::string& first,
+  const std::string& second, bool* res)
+{
+  for (auto& path : {first, second}) {
+    if (fs->dir_exists(path)) {
+      continue;
+    }
+    std::string dir, file;
+    split(path, &dir, &file);
+    int r = fs->stat(dir, file, nullptr, nullptr);
+    if (!r) {
+      continue;
+    } else if (r == -ENOENT) {
+      return rocksdb::Status::NotFound("AreFilesSame", path);
+    } else {
+      return err_to_status(r);
+    }
+  }
+  *res = (first == second);
+  return rocksdb::Status::OK();
+}
+
 rocksdb::Status BlueRocksEnv::LockFile(
   const std::string& fname,
   rocksdb::FileLock** lock)
@@ -525,6 +559,7 @@ rocksdb::Status BlueRocksEnv::UnlockFile(rocksdb::FileLock* lock)
   if (r < 0)
     return err_to_status(r);
   delete lock;
+  lock = nullptr;
   return rocksdb::Status::OK();
 }
 

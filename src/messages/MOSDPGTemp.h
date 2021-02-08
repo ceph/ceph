@@ -19,34 +19,51 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDPGTemp : public PaxosServiceMessage {
- public:
-  epoch_t map_epoch;
-  map<pg_t, vector<int32_t> > pg_temp;
+class MOSDPGTemp final : public PaxosServiceMessage {
+public:
+  epoch_t map_epoch = 0;
+  std::map<pg_t, std::vector<int32_t> > pg_temp;
+  bool forced = false;
 
-  MOSDPGTemp(epoch_t e) : PaxosServiceMessage(MSG_OSD_PGTEMP, e), map_epoch(e) { }
-  MOSDPGTemp() : PaxosServiceMessage(MSG_OSD_PGTEMP, 0) {}
+  MOSDPGTemp(epoch_t e)
+    : PaxosServiceMessage{MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION},
+      map_epoch(e)
+  {}
+  MOSDPGTemp()
+    : MOSDPGTemp(0)
+  {}
 private:
-  ~MOSDPGTemp() override {}
+  ~MOSDPGTemp() final {}
 
 public:
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(map_epoch, payload);
-    ::encode(pg_temp, payload);
+    encode(map_epoch, payload);
+    encode(pg_temp, payload);
+    encode(forced, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(map_epoch, p);
-    ::decode(pg_temp, p);
+    decode(map_epoch, p);
+    decode(pg_temp, p);
+    if (header.version >= 2) {
+      decode(forced, p);
+    }
   }
 
-  const char *get_type_name() const override { return "osd_pgtemp"; }
-  void print(ostream &out) const override {
+  std::string_view get_type_name() const override { return "osd_pgtemp"; }
+  void print(std::ostream &out) const override {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }
-  
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
+
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

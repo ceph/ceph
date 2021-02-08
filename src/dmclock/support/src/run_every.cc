@@ -1,11 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
- * Copyright (C) 2016 Red Hat Inc.
+ * Copyright (C) 2017 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
-
-#include <iostream>
 
 #include "run_every.h"
 
@@ -53,11 +59,26 @@ crimson::RunEvery& crimson::RunEvery::operator=(crimson::RunEvery&& other)
 
 
 crimson::RunEvery::~RunEvery() {
-  finishing = true;
-  cv.notify_all();
+  join();
+}
+
+
+void crimson::RunEvery::join() {
+  {
+    Guard l(mtx);
+    if (finishing) return;
+    finishing = true;
+    cv.notify_all();
+  }
   thd.join();
 }
 
+// mtx must be held by caller
+void crimson::RunEvery::try_update(milliseconds _wait_period) {
+  if (_wait_period != wait_period) {
+    wait_period = _wait_period;
+  }
+}
 
 void crimson::RunEvery::run() {
   Lock l(mtx);

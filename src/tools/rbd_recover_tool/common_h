@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # file: common_h
 #
 # Copyright (C) 2015 Ubuntu Kylin
@@ -65,7 +65,7 @@ function gen_md5()
 }
 
 # on each osd node
-# check ceph enviroment: ssh, ceph-kvstore-tool, osd_data_path 
+# check ceph environment: ssh, ceph-kvstore-tool, osd_data_path 
 function check_ceph_env()
 {
   local func="check_ceph_env"
@@ -309,7 +309,7 @@ function get_map_header_key()
   local keyword=$1
   local res=`cat $omap_list| grep $keyword`
   if [ "$res"x = ""x ];then
-    #echo "$func: map_header_key = $keyword not exisits"
+    #echo "$func: map_header_key = $keyword not exists"
     exit
   fi
   echo $res|awk -F ":" '{print $2}'

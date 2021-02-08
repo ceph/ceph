@@ -46,6 +46,10 @@ public:
 		     uint32_t bits,                            
 		     CollectionIndex* dest
 		     ) override { return 0; }
+  int _merge(
+		     uint32_t bits,
+		     CollectionIndex* dest
+		     ) override { return 0; }
 
   void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {
     const std::string mangled_name = lfn_generate_object_name(hoid);
@@ -281,7 +285,9 @@ TEST_F(TestLFNIndex, remove_object) {
     EXPECT_NE(std::string::npos, mangled_name_1.find("1_long"));
     EXPECT_EQ(0, exists);
     std::string pathname_1("PATH_1/" + mangled_name_1);
-    EXPECT_EQ(0, ::close(::creat(pathname_1.c_str(), 0600)));
+    auto retvalue = ::creat(pathname_1.c_str(), 0600);
+    ceph_assert(retvalue > 2);
+    EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname_1.c_str()));
 
     //
@@ -419,7 +425,9 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     //
     mangled_name.clear();
     exists = 666;
-    EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
+    auto retvalue = ::creat(pathname.c_str(), 0600);
+    ceph_assert(retvalue > 2);
+    EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname.c_str()));
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_NE(std::string::npos, mangled_name.find("0_long"));
@@ -452,6 +460,10 @@ TEST_F(TestLFNIndex, get_mangled_name) {
 
 int main(int argc, char **argv) {
   int fd = ::creat("detect", 0600);
+  if (fd < 0){
+    cerr << "failed to create file detect" << std::endl;
+    return EXIT_FAILURE;
+  }
   int ret = chain_fsetxattr(fd, "user.test", "A", 1);
   ::close(fd);
   ::unlink("detect");
@@ -462,7 +474,8 @@ int main(int argc, char **argv) {
     argv_to_vec(argc, (const char **)argv, args);
 
     auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			   CODE_ENVIRONMENT_UTILITY, 0);
+			   CODE_ENVIRONMENT_UTILITY,
+			   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
     common_init_finish(g_ceph_context);
 
     ::testing::InitGoogleTest(&argc, argv);

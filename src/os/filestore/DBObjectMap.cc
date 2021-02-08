@@ -7,7 +7,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <vector>
 
 #include "os/ObjectMap.h"
@@ -17,12 +16,22 @@
 
 #include "common/debug.h"
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "filestore "
+
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::bufferlist;
 
 const string DBObjectMap::USER_PREFIX = "_USER_";
 const string DBObjectMap::XATTR_PREFIX = "_AXATTR_";
@@ -55,9 +64,9 @@ static void append_escaped(const string &in, string *out)
   }
 }
 
-int DBObjectMap::check(std::ostream &out, bool repair)
+int DBObjectMap::check(std::ostream &out, bool repair, bool force)
 {
-  int errors = 0;
+  int errors = 0, comp_errors = 0;
   bool repaired = false;
   map<uint64_t, uint64_t> parent_to_num_children;
   map<uint64_t, uint64_t> parent_to_actual_num_children;
@@ -66,39 +75,42 @@ int DBObjectMap::check(std::ostream &out, bool repair)
     _Header header;
     bufferlist bl = iter->value();
     while (true) {
-      bufferlist::iterator bliter = bl.begin();
+      auto bliter = bl.cbegin();
       header.decode(bliter);
       if (header.seq != 0)
 	parent_to_actual_num_children[header.seq] = header.num_children;
 
-      // Check complete table
-      bool complete_error = false;
-      boost::optional<string> prev;
-      KeyValueDB::Iterator complete_iter = db->get_iterator(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
-      for (complete_iter->seek_to_first(); complete_iter->valid();
-           complete_iter->next()) {
-         if (prev && prev >= complete_iter->key()) {
-             out << "Bad complete for " << header.oid << std::endl;
-             complete_error = true;
-             break;
-         }
-         prev = string(complete_iter->value().c_str(), complete_iter->value().length() - 1);
-      }
-      if (complete_error) {
-        out << "Complete mapping for " << header.seq << " :" << std::endl;
-        for (complete_iter->seek_to_first(); complete_iter->valid();
-             complete_iter->next()) {
-          out << complete_iter->key() << " -> " << string(complete_iter->value().c_str(), complete_iter->value().length() - 1) << std::endl;
-        }
-        if (repair) {
-          repaired = true;
-          KeyValueDB::Transaction t = db->get_transaction();
-          t->rmkeys_by_prefix(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
-          db->submit_transaction(t);
-          out << "Cleared complete mapping to repair" << std::endl;
-        } else {
-          errors++;  // Only count when not repaired
-        }
+      if (state.v == 2 || force) {
+	// Check complete table
+	bool complete_error = false;
+	boost::optional<string> prev;
+	KeyValueDB::Iterator complete_iter = db->get_iterator(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
+	for (complete_iter->seek_to_first(); complete_iter->valid();
+	     complete_iter->next()) {
+	  if (prev && prev >= complete_iter->key()) {
+	     out << "Bad complete for " << header.oid << std::endl;
+	     complete_error = true;
+	     break;
+	  }
+	  prev = string(complete_iter->value().c_str(), complete_iter->value().length() - 1);
+	}
+	if (complete_error) {
+	  out << "Complete mapping for " << header.seq << " :" << std::endl;
+	  for (complete_iter->seek_to_first(); complete_iter->valid();
+	       complete_iter->next()) {
+	    out << complete_iter->key() << " -> " << string(complete_iter->value().c_str(), complete_iter->value().length() - 1) << std::endl;
+	  }
+	  if (repair) {
+	    repaired = true;
+	    KeyValueDB::Transaction t = db->get_transaction();
+	    t->rmkeys_by_prefix(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
+	    db->submit_transaction(t);
+	    out << "Cleared complete mapping to repair" << std::endl;
+	  } else {
+	    errors++;  // Only count when not repaired
+	    comp_errors++;  // Track errors here for version update
+	  }
+	}
       }
 
       if (header.parent == 0)
@@ -137,6 +149,17 @@ int DBObjectMap::check(std::ostream &out, bool repair)
     }
     parent_to_actual_num_children.erase(i->first);
   }
+
+  // Only advance the version from 2 to 3 here
+  // Mark as legacy because there are still older structures
+  // we don't update.  The value of legacy is only used
+  // for internal assertions.
+  if (comp_errors == 0 && state.v == 2 && repair) {
+    state.v = 3;
+    state.legacy = true;
+    set_state();
+  }
+
   if (errors == 0 && repaired)
     return -1;
   return errors;
@@ -264,7 +287,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
   if (ready) {
     return 0;
   }
-  assert(!parent_iter);
+  ceph_assert(!parent_iter);
   if (header->parent) {
     Header parent = map->lookup_parent(header);
     if (!parent) {
@@ -274,11 +297,11 @@ int DBObjectMap::DBObjectMapIteratorImpl::init()
     parent_iter = std::make_shared<DBObjectMapIteratorImpl>(map, parent);
   }
   key_iter = map->db->get_iterator(map->user_prefix(header));
-  assert(key_iter);
+  ceph_assert(key_iter);
   complete_iter = map->db->get_iterator(map->complete_prefix(header));
-  assert(complete_iter);
+  ceph_assert(complete_iter);
   cur_iter = key_iter;
-  assert(cur_iter);
+  ceph_assert(cur_iter);
   ready = true;
   return 0;
 }
@@ -377,7 +400,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::upper_bound(const string &after)
 bool DBObjectMap::DBObjectMapIteratorImpl::valid()
 {
   bool valid = !invalid && ready;
-  assert(!valid || cur_iter->valid());
+  ceph_assert(!valid || cur_iter->valid());
   return valid;
 }
 
@@ -389,10 +412,10 @@ bool DBObjectMap::DBObjectMapIteratorImpl::valid_parent()
   return false;
 }
 
-int DBObjectMap::DBObjectMapIteratorImpl::next(bool validate)
+int DBObjectMap::DBObjectMapIteratorImpl::next()
 {
-  assert(cur_iter->valid());
-  assert(valid());
+  ceph_assert(cur_iter->valid());
+  ceph_assert(valid());
   cur_iter->next();
   return adjust();
 }
@@ -403,7 +426,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::next_parent()
   if (r < 0)
     return r;
   while (parent_iter && parent_iter->valid() && !on_parent()) {
-    assert(valid());
+    ceph_assert(valid());
     r = lower_bound(parent_iter->key());
     if (r < 0)
       return r;
@@ -435,8 +458,8 @@ int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_te
       return false;
   }
 
-  assert(complete_iter->key() <= to_test);
-  assert(complete_iter->value().length() >= 1);
+  ceph_assert(complete_iter->key() <= to_test);
+  ceph_assert(complete_iter->value().length() >= 1);
   string _end(complete_iter->value().c_str(),
 	      complete_iter->value().length() - 1);
   if (_end.empty() || _end > to_test) {
@@ -447,7 +470,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_te
     return true;
   } else {
     complete_iter->next();
-    assert(!complete_iter->valid() || complete_iter->key() > to_test);
+    ceph_assert(!complete_iter->valid() || complete_iter->key() > to_test);
     return false;
   }
 }
@@ -481,7 +504,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::adjust()
   } else {
     invalid = true;
   }
-  assert(invalid || cur_iter->valid());
+  ceph_assert(invalid || cur_iter->valid());
   return 0;
 }
 
@@ -587,7 +610,7 @@ int DBObjectMap::clear(const ghobject_t &oid,
   if (check_spos(oid, header, spos))
     return 0;
   remove_map_header(hl, oid, header, t);
-  assert(header->num_children > 0);
+  ceph_assert(header->num_children > 0);
   header->num_children--;
   int r = _clear(header, t);
   if (r < 0)
@@ -610,7 +633,7 @@ int DBObjectMap::_clear(Header header,
     if (!parent) {
       return -EINVAL;
     }
-    assert(parent->num_children > 0);
+    ceph_assert(parent->num_children > 0);
     parent->num_children--;
     header.swap(parent);
   }
@@ -645,7 +668,7 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
     return db->submit_transaction(t);
   }
 
-  assert(state.v < 3);
+  ceph_assert(state.legacy);
 
   {
     // We only get here for legacy (v2) stores
@@ -698,7 +721,7 @@ int DBObjectMap::clear_keys_header(const ghobject_t &oid,
 
   // remove current header
   remove_map_header(hl, oid, header, t);
-  assert(header->num_children > 0);
+  ceph_assert(header->num_children > 0);
   header->num_children--;
   int r = _clear(header, t);
   if (r < 0)
@@ -852,7 +875,7 @@ int DBObjectMap::legacy_clone(const ghobject_t &oid,
 		       const ghobject_t &target,
 		       const SequencerPosition *spos)
 {
-  state.v = 2;
+  state.legacy = true;
 
   if (oid == target)
     return 0;
@@ -999,7 +1022,7 @@ int DBObjectMap::upgrade_to_v2()
       // decode header to get oid
       _Header hdr;
       bufferlist bl = iter->value();
-      bufferlist::iterator bliter = bl.begin();
+      auto bliter = bl.cbegin();
       hdr.decode(bliter);
 
       string newkey(ghobject_key(hdr.oid));
@@ -1021,15 +1044,22 @@ int DBObjectMap::upgrade_to_v2()
 
   state.v = 2;
 
-  Mutex::Locker l(header_lock);
-  KeyValueDB::Transaction t = db->get_transaction();
-  write_state(t);
-  db->submit_transaction_sync(t);
-  dout(1) << __func__ << " done" << dendl;
+  set_state();
   return 0;
 }
 
-int DBObjectMap::init(bool do_upgrade)
+void DBObjectMap::set_state()
+{
+  std::lock_guard l{header_lock};
+  KeyValueDB::Transaction t = db->get_transaction();
+  write_state(t);
+  int ret = db->submit_transaction_sync(t);
+  ceph_assert(ret == 0);
+  dout(1) << __func__ << " done" << dendl;
+  return;
+}
+
+int DBObjectMap::get_state()
 {
   map<string, bufferlist> result;
   set<string> to_get;
@@ -1038,30 +1068,38 @@ int DBObjectMap::init(bool do_upgrade)
   if (r < 0)
     return r;
   if (!result.empty()) {
-    bufferlist::iterator bliter = result.begin()->second.begin();
+    auto bliter = result.begin()->second.cbegin();
     state.decode(bliter);
-    if (state.v < 1) {
-      dout(1) << "DBObjectMap is *very* old; upgrade to an older version first"
-	      << dendl;
-      return -ENOTSUP;
-    }
-    if (state.v < 2) { // Needs upgrade
-      if (!do_upgrade) {
-	dout(1) << "DOBjbectMap requires an upgrade,"
-		<< " set filestore_update_to"
-		<< dendl;
-	return -ENOTSUP;
-      } else {
-	r = upgrade_to_v2();
-	if (r < 0)
-	  return r;
-      }
-    }
   } else {
     // New store
-    // Version 3 means that complete regions never used
-    state.v = 3;
+    state.v = State::CUR_VERSION;
     state.seq = 1;
+    state.legacy = false;
+  }
+  return 0;
+}
+
+int DBObjectMap::init(bool do_upgrade)
+{
+  int ret = get_state();
+  if (ret < 0)
+    return ret;
+  if (state.v < 1) {
+    dout(1) << "DBObjectMap is *very* old; upgrade to an older version first"
+	    << dendl;
+    return -ENOTSUP;
+  }
+  if (state.v < 2) { // Needs upgrade
+    if (!do_upgrade) {
+      dout(1) << "DOBjbectMap requires an upgrade,"
+	      << " set filestore_update_to"
+	      << dendl;
+      return -ENOTSUP;
+    } else {
+      int r = upgrade_to_v2();
+      if (r < 0)
+	return r;
+    }
   }
   ostringstream ss;
   int errors = check(ss, true);
@@ -1078,7 +1116,7 @@ int DBObjectMap::sync(const ghobject_t *oid,
 		      const SequencerPosition *spos) {
   KeyValueDB::Transaction t = db->get_transaction();
   if (oid) {
-    assert(spos);
+    ceph_assert(spos);
     MapHeaderLock hl(this, *oid);
     Header header = lookup_map_header(hl, *oid);
     if (header) {
@@ -1094,18 +1132,18 @@ int DBObjectMap::sync(const ghobject_t *oid,
      *
      * See 2b63dd25fc1c73fa42e52e9ea4ab5a45dd9422a0 and bug 9891.
      */
-    Mutex::Locker l(header_lock);
+    std::lock_guard l{header_lock};
     write_state(t);
     return db->submit_transaction_sync(t);
   } else {
-    Mutex::Locker l(header_lock);
+    std::lock_guard l{header_lock};
     write_state(t);
     return db->submit_transaction_sync(t);
   }
 }
 
 int DBObjectMap::write_state(KeyValueDB::Transaction _t) {
-  assert(header_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(header_lock));
   dout(20) << "dbobjectmap: seq is " << state.seq << dendl;
   KeyValueDB::Transaction t = _t ? _t : db->get_transaction();
   bufferlist bl;
@@ -1121,13 +1159,13 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
   const MapHeaderLock &l,
   const ghobject_t &oid)
 {
-  assert(l.get_locked() == oid);
+  ceph_assert(l.get_locked() == oid);
 
   _Header *header = new _Header();
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     if (caches.lookup(oid, header)) {
-      assert(!in_use.count(header->seq));
+      ceph_assert(!in_use.count(header->seq));
       in_use.insert(header->seq);
       return Header(header, RemoveOnDelete(this));
     }
@@ -1141,15 +1179,14 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
   }
 
   Header ret(header, RemoveOnDelete(this));
-  bufferlist::iterator iter = out.begin();
-
+  auto iter = out.cbegin();
   ret->decode(iter);
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     caches.add(oid, *ret);
   }
 
-  assert(!in_use.count(header->seq));
+  ceph_assert(!in_use.count(header->seq));
   in_use.insert(header->seq);
   return ret;
 }
@@ -1165,7 +1202,7 @@ DBObjectMap::Header DBObjectMap::_generate_new_header(const ghobject_t &oid,
   }
   header->num_children = 1;
   header->oid = oid;
-  assert(!in_use.count(header->seq));
+  ceph_assert(!in_use.count(header->seq));
   in_use.insert(header->seq);
 
   write_state();
@@ -1174,9 +1211,8 @@ DBObjectMap::Header DBObjectMap::_generate_new_header(const ghobject_t &oid,
 
 DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
 {
-  Mutex::Locker l(header_lock);
-  while (in_use.count(input->parent))
-    header_cond.Wait(header_lock);
+  std::unique_lock l{header_lock};
+  header_cond.wait(l, [&input, this] { return !in_use.count(input->parent); });
   map<string, bufferlist> out;
   set<string> keys;
   keys.insert(HEADER_KEY);
@@ -1194,9 +1230,9 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
   }
 
   Header header = Header(new _Header(), RemoveOnDelete(this));
-  bufferlist::iterator iter = out.begin()->second.begin();
+  auto iter = out.begin()->second.cbegin();
   header->decode(iter);
-  assert(header->seq == input->parent);
+  ceph_assert(header->seq == input->parent);
   dout(20) << "lookup_parent: parent seq is " << header->seq << " with parent "
        << header->parent << dendl;
   in_use.insert(header->seq);
@@ -1208,7 +1244,7 @@ DBObjectMap::Header DBObjectMap::lookup_create_map_header(
   const ghobject_t &oid,
   KeyValueDB::Transaction t)
 {
-  Mutex::Locker l(header_lock);
+  std::lock_guard l{header_lock};
   Header header = _lookup_map_header(hl, oid);
   if (!header) {
     header = _generate_new_header(oid, Header());
@@ -1222,7 +1258,7 @@ void DBObjectMap::clear_header(Header header, KeyValueDB::Transaction t)
   dout(20) << "clear_header: clearing seq " << header->seq << dendl;
   t->rmkeys_by_prefix(user_prefix(header));
   t->rmkeys_by_prefix(sys_prefix(header));
-  if (state.v < 3)
+  if (state.legacy)
     t->rmkeys_by_prefix(complete_prefix(header)); // Needed when header.parent != 0
   t->rmkeys_by_prefix(xattr_prefix(header));
   set<string> keys;
@@ -1244,14 +1280,14 @@ void DBObjectMap::remove_map_header(
   Header header,
   KeyValueDB::Transaction t)
 {
-  assert(l.get_locked() == oid);
+  ceph_assert(l.get_locked() == oid);
   dout(20) << "remove_map_header: removing " << header->seq
 	   << " oid " << oid << dendl;
   set<string> to_remove;
   to_remove.insert(map_header_key(oid));
   t->rmkeys(HOBJECT_TO_SEQ, to_remove);
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     caches.clear(oid);
   }
 }
@@ -1261,7 +1297,7 @@ void DBObjectMap::set_map_header(
   const ghobject_t &oid, _Header header,
   KeyValueDB::Transaction t)
 {
-  assert(l.get_locked() == oid);
+  ceph_assert(l.get_locked() == oid);
   dout(20) << "set_map_header: setting " << header.seq
 	   << " oid " << oid << " parent seq "
 	   << header.parent << dendl;
@@ -1269,7 +1305,7 @@ void DBObjectMap::set_map_header(
   header.encode(to_set[map_header_key(oid)]);
   t->set(HOBJECT_TO_SEQ, to_set);
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     caches.add(oid, header);
   }
 }
@@ -1300,7 +1336,7 @@ int DBObjectMap::list_objects(vector<ghobject_t> *out)
   KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
     bufferlist bl = iter->value();
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     _Header header;
     header.decode(bliter);
     out->push_back(header.oid);
@@ -1314,7 +1350,7 @@ int DBObjectMap::list_object_headers(vector<_Header> *out)
   KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
     bufferlist bl = iter->value();
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     _Header header;
     header.decode(bliter);
     out->push_back(header);
@@ -1329,7 +1365,7 @@ int DBObjectMap::list_object_headers(vector<_Header> *out)
 	break;
       } else {
 	bl = got.begin()->second;
-        bufferlist::iterator bliter = bl.begin();
+        auto bliter = bl.cbegin();
         header.decode(bliter);
         out->push_back(header);
       }

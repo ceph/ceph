@@ -41,12 +41,19 @@ const char *mempool::get_pool_name(mempool::pool_index_t ix) {
 
 void mempool::dump(ceph::Formatter *f)
 {
+  stats_t total;
+  f->open_object_section("mempool"); // we need (dummy?) topmost section for 
+				     // JSON Formatter to print pool names. It omits them otherwise.
+  f->open_object_section("by_pool");
   for (size_t i = 0; i < num_pools; ++i) {
     const pool_t &pool = mempool::get_pool((pool_index_t)i);
     f->open_object_section(get_pool_name((pool_index_t)i));
-    pool.dump(f);
+    pool.dump(f, &total);
     f->close_section();
   }
+  f->close_section();
+  f->dump_object("total", total);
+  f->close_section();
 }
 
 void mempool::set_debug_mode(bool d)
@@ -63,7 +70,10 @@ size_t mempool::pool_t::allocated_bytes() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].bytes;
   }
-  assert(result >= 0);
+  if (result < 0) {
+    // we raced with some unbalanced allocations/deallocations
+    result = 0;
+  }
   return (size_t) result;
 }
 
@@ -73,8 +83,18 @@ size_t mempool::pool_t::allocated_items() const
   for (size_t i = 0; i < num_shards; ++i) {
     result += shard[i].items;
   }
-  assert(result >= 0);
+  if (result < 0) {
+    // we raced with some unbalanced allocations/deallocations
+    result = 0;
+  }
   return (size_t) result;
+}
+
+void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
+{
+  shard_t *shard = pick_a_shard();
+  shard->items += items;
+  shard->bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(
@@ -86,7 +106,7 @@ void mempool::pool_t::get_stats(
     total->bytes += shard[i].bytes;
   }
   if (debug_mode) {
-    std::unique_lock<std::mutex> shard_lock(lock);
+    std::lock_guard shard_lock(lock);
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];
@@ -96,17 +116,22 @@ void mempool::pool_t::get_stats(
   }
 }
 
-void mempool::pool_t::dump(ceph::Formatter *f) const
+void mempool::pool_t::dump(ceph::Formatter *f, stats_t *ptotal) const
 {
   stats_t total;
   std::map<std::string, stats_t> by_type;
   get_stats(&total, &by_type);
-  f->dump_object("total", total);
+  if (ptotal) {
+    *ptotal += total;
+  }
+  total.dump(f);
   if (!by_type.empty()) {
+    f->open_object_section("by_type");
     for (auto &i : by_type) {
       f->open_object_section(i.first.c_str());
       i.second.dump(f);
       f->close_section();
     }
+    f->close_section();
   }
 }

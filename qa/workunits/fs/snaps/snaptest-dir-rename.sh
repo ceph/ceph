@@ -2,8 +2,6 @@
 
 set -e
 
-ceph mds set allow_new_snaps true --yes-i-really-mean-it
-
 #
 # make sure we keep an existing dn's seq
 #

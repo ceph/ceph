@@ -106,9 +106,12 @@ out_err:
 static int testrados(void)
 {
 	char tmp[32];
-	int i, r;
+	int i, r, safe;
 	int ret = 1; //set 1 as error case
 	rados_t cl;
+	const char *oid = "foo_object";
+	const char *exkeys[] = { "a", "b", "c", NULL };
+	const char *exvals[] = { "1", "2", "3", NULL };
 
 	if (rados_create(&cl, NULL) < 0) {
 		printf("error initializing\n");
@@ -217,7 +220,6 @@ static int testrados(void)
 	char buf[128], buf2[128];
 	time(&tm);
 	snprintf(buf, 128, "%s", ctime(&tm));
-	const char *oid = "foo_object";
 	r = rados_write(io_ctx, oid, buf, strlen(buf) + 1, 0);
 	printf("rados_write = %d\n", r);
 	r = rados_read(io_ctx, oid, buf2, sizeof(buf2), 0);
@@ -238,8 +240,6 @@ static int testrados(void)
 		goto out_err_cleanup;
 	if (do_rados_getxattr(io_ctx, oid, "c", "3"))
 		goto out_err_cleanup;
-	const char *exkeys[] = { "a", "b", "c", NULL };
-	const char *exvals[] = { "1", "2", "3", NULL };
 	if (do_rados_getxattrs(io_ctx, oid, exkeys, exvals))
 		goto out_err_cleanup;
 
@@ -259,13 +259,13 @@ static int testrados(void)
 
 	/* aio */
 	rados_completion_t a, b;
-	rados_aio_create_completion(0, 0, 0, &a);
-	rados_aio_create_completion(0, 0, 0, &b);
+	rados_aio_create_completion2(NULL, NULL, &a);
+	rados_aio_create_completion2(NULL, NULL, &b);
 	rados_aio_write(io_ctx, "a", a, buf, 100, 0);
 	rados_aio_write(io_ctx, "../b/bb_bb_bb\\foo\\bar", b, buf, 100, 0);
-	rados_aio_wait_for_safe(a);
+	rados_aio_wait_for_complete(a);
 	printf("a safe\n");
-	rados_aio_wait_for_safe(b);
+	rados_aio_wait_for_complete(b);
 	printf("b safe\n");
 	rados_aio_release(a);
 	rados_aio_release(b);
@@ -273,9 +273,9 @@ static int testrados(void)
 	/* test flush */
 	printf("testing aio flush\n");
 	rados_completion_t c;
-	rados_aio_create_completion(0, 0, 0, &c);
+	rados_aio_create_completion2(NULL, NULL,  &c);
 	rados_aio_write(io_ctx, "c", c, buf, 100, 0);
-	int safe = rados_aio_is_safe(c);
+	safe = rados_aio_is_safe(c);
 	printf("a should not yet be safe and ... %s\n", safe ? "is":"is not");
 	assert(!safe);
 	rados_aio_flush(io_ctx);

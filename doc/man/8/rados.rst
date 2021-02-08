@@ -9,9 +9,7 @@
 Synopsis
 ========
 
-| **rados** [ -m *monaddr* ] [ mkpool | rmpool *foo* ] [ -p | --pool
-  *pool* ] [ -s | --snap *snap* ] [ -i *infile* ] [ -o *outfile* ]
-  *command* ...
+| **rados** [ *options* ] [ *command* ]
 
 
 Description
@@ -21,33 +19,54 @@ Description
 cluster (RADOS), part of the Ceph distributed storage system.
 
 
-Options
-=======
+Global Options
+==============
+
+.. option:: --object-locator object_locator
+
+   Set object_locator for operation.
 
 .. option:: -p pool, --pool pool
 
    Interact with the given pool. Required by most commands.
 
+.. option:: --target-pool pool
+
+   Select target pool by name.
+
+.. option:: --pgid
+
+   As an alternative to ``--pool``, ``--pgid`` also allow users to specify the
+   PG id to which the command will be directed. With this option, certain
+   commands like ``ls`` allow users to limit the scope of the command to the given PG.
+
+.. option:: -N namespace, --namespace namespace
+
+   Specify the rados namespace to use for the object.
+
+.. option:: --all
+
+   Use with ls to list objects in all namespaces.
+   Put in CEPH_ARGS environment variable to make this the default.
+
+.. option:: --default
+
+   Use with ls to list objects in default namespace.
+   Takes precedence over --all in case --all is in environment.
+
 .. option:: -s snap, --snap snap
 
    Read from the given pool snapshot. Valid for all pool-specific read operations.
+
+.. option:: --create
+
+   Create the pool or directory that was specified.
 
 .. option:: -i infile
 
    will specify an input file to be passed along as a payload with the
    command to the monitor cluster. This is only used for specific
    monitor commands.
-
-.. option:: -o outfile
-
-   will write any payload returned by the monitor cluster with its
-   reply to outfile. Only specific monitor commands (e.g. osd getmap)
-   return a payload.
-
-.. option:: -c ceph.conf, --conf=ceph.conf
-
-   Use ceph.conf configuration file instead of the default
-   /etc/ceph/ceph.conf to determine monitor addresses during startup.
 
 .. option:: -m monaddress[:port]
 
@@ -60,7 +79,154 @@ Options
 .. option:: --striper
 
    Uses the striping API of rados rather than the default one.
-   Available for stat, get, put, append, truncate, rm, ls and all xattr related operation
+   Available for stat, stat2, get, put, append, truncate, rm, ls
+   and all xattr related operation.
+
+.. option:: -O object_size, --object-size object_size
+
+   Set the object size for put/get ops and for write benchmarking.
+
+.. option:: --max-objects
+
+   Set the max number of objects for write benchmarking.
+
+.. option:: --lock-cookie locker-cookie
+
+   Will set the lock cookie for acquiring advisory lock (lock get command).
+   If the cookie is not empty, this option must be passed to lock break command
+   to find the correct lock when releasing lock.
+
+.. option:: --target-locator
+
+   Use with cp to specify the locator of the new object.
+
+.. option:: --target-nspace
+
+   Use with cp to specify the namespace of the new object.
+
+
+Bench options
+=============
+
+.. option:: -t N, --concurrent-ios=N
+
+   Set number of concurrent I/O operations.
+
+.. option:: --show-time
+
+   Prefix output with date/time.
+
+.. option:: --no-verify
+
+   Do not verify contents of read objects.
+
+.. option:: --write-object
+
+   Write contents to the objects.
+
+.. option:: --write-omap
+
+   Write contents to the omap.
+
+.. option:: --write-xattr
+
+   Write contents to the extended attributes.
+
+
+Load gen options
+================
+
+.. option:: --num-objects
+
+   Total number of objects.
+
+.. option:: --min-object-size
+
+  Min object size.
+
+.. option:: --max-object-size
+
+   Max object size.
+
+.. option:: --min-op-len
+
+   Min io size of operations.
+
+.. option:: --max-op-len
+
+   Max io size of operations.
+
+.. option:: --max-ops
+
+   Max number of operations.
+
+.. option:: --max-backlog
+
+   Max backlog size.
+
+.. option:: --read-percent
+
+   Percent of operations that are read.
+
+.. option:: --target-throughput
+
+   Target throughput (in bytes).
+
+.. option:: --run-length
+
+   Total time (in seconds).
+
+.. option:: --offset-align
+
+   At what boundary to align random op offsets.
+
+
+Cache pools options
+===================
+
+.. option:: --with-clones
+
+   Include clones when doing flush or evict.
+
+
+OMAP options
+============
+
+.. option:: --omap-key-file file
+
+   Read the omap key from a file.
+
+
+Generic options
+===============
+
+.. option:: -c FILE, --conf FILE
+
+   Read configuration from the given configuration file.
+
+.. option:: --id ID
+
+   Set ID portion of my name.
+
+.. option:: -n TYPE.ID, --name TYPE.ID
+
+   Set cephx user name.
+
+.. option:: --cluster NAME
+
+   Set cluster name (default: ceph).
+
+.. option:: --setuser USER
+
+   Set uid to user or uid (and gid to user's gid).
+
+.. option:: --setgroup GROUP
+
+   Set gid to group or gid.
+
+.. option:: --version
+
+   Show version and quit.
 
 
 Global commands
@@ -73,12 +239,6 @@ Global commands
   Show utilization statistics, including disk usage (bytes) and object
   counts, over the entire system and broken down by pool.
 
-:command:`mkpool` *foo*
-  Create a pool with name foo.
-
-:command:`rmpool` *foo* [ *foo* --yes-i-really-really-mean-it ]
-  Delete the pool foo (and all its data).
-
 :command:`list-inconsistent-pg` *pool*
   List inconsistent PGs in given pool.
 
@@ -88,14 +248,18 @@ Global commands
 :command:`list-inconsistent-snapset` *pgid*
   List inconsistent snapsets in given PG.
 
+
 Pool specific commands
 ======================
 
 :command:`get` *name* *outfile*
   Read object name from the cluster and write it to outfile.
 
-:command:`put` *name* *infile*
-  Write object name to the cluster with contents from infile.
+:command:`put` *name* *infile* [--offset offset]
+  Write object name with start offset (default:0) to the cluster with contents from infile.
+  **Warning:** The put command creates a single RADOS object, sized just as
+  large as your input file. Unless your objects are of reasonable and consistent sizes, that
+  is probably not what you want -- consider using RGW/S3, CephFS, or RBD instead.
 
 :command:`append` *name* *infile*
   Append object name to the cluster with contents from infile.
@@ -107,7 +271,7 @@ Pool specific commands
   List the watchers of object name.
 
 :command:`ls` *outfile*
-  List objects in given pool and write to outfile.
+  List objects in the given pool and write to outfile. Instead of ``--pool`` if ``--pgid`` will be specified, ``ls`` will only list the objects in the given PG.
 
 :command:`lssnap`
   List snapshots for given pool.
@@ -136,7 +300,27 @@ Pool specific commands
   Note: *write* and *seq* must be run on the same host otherwise the
   objects created by *write* will have names that will fail *seq*.
 
-:command:`cleanup`
+:command:`cleanup` [ --run-name *run_name* ] [ --prefix *prefix* ]
+  Clean up a previous benchmark operation.
+  Note: the default run-name is "benchmark_last_metadata"
+
+:command:`listxattr` *name*
+  List all extended attributes of an object.
+
+:command:`getxattr` *name* *attr*
+  Dump the extended attribute value of *attr* of an object.
+
+:command:`setxattr` *name* *attr* *value*
+  Set the value of *attr* in the extended attributes of an object.
+
+:command:`rmxattr` *name* *attr*
+  Remove *attr* from the extended attributes of an object.
+
+:command:`stat` *name*
+   Get stat (ie. mtime, size) of given object
+
+:command:`stat2` *name*
+   Get stat (similar to stat, but with high precision time) of given object
 
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
@@ -147,12 +331,12 @@ Pool specific commands
 
 :command:`getomapval` [ --omap-key-file *file* ] *name* *key* [ *out-file* ]
   Dump the hexadecimal value of key in the object map of object name.
-  If the optional *out-file* argument isn't provided, the value will be
+  If the optional *out-file* argument is not provided, the value will be
   written to standard output.
 
 :command:`setomapval` [ --omap-key-file *file* ] *name* *key* [ *value* ]
   Set the value of key in the object map of object name. If the optional
-  *value* argument isn't provided, the value will be read from standard
+  *value* argument is not provided, the value will be read from standard
   input.
 
 :command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*
@@ -164,6 +348,13 @@ Pool specific commands
 :command:`setomapheader` *name* *value*
   Set the value of the object map header of object name.
 
+:command:`export` *filename*
+  Serialize pool contents to a file or standard output.\n"
+
+:command:`import` [--dry-run] [--no-overwrite] < filename | - >
+  Load pool contents from a file or standard input
+
+
 Examples
 ========
 
@@ -174,6 +365,10 @@ To view cluster utilization::
 To get a list object in pool foo sent to stdout::
 
        rados -p foo ls -
+
+To get a list of objects in PG 0.6::
+
+       rados --pgid 0.6 ls
 
 To write an object::
 

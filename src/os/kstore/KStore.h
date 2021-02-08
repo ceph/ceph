@@ -23,11 +23,11 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/Finisher.h"
 #include "common/RWLock.h"
+#include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
 #include "common/perf_counters.h"
@@ -53,7 +53,7 @@ class KStore : public ObjectStore {
   // types
 public:
 
-  class TransContext;
+  struct TransContext;
 
   /// an in-memory object
   struct Onode {
@@ -61,7 +61,7 @@ public:
     std::atomic_int nref;  ///< reference count
 
     ghobject_t oid;
-    string key;     ///< key under PREFIX_OBJ where we are stored
+    std::string key;     ///< key under PREFIX_OBJ where we are stored
     boost::intrusive::list_member_hook<> lru_item;
 
     kstore_onode_t onode;  ///< metadata stored as value in kv store
@@ -70,14 +70,14 @@ public:
 
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for unapplied txns
-    set<TransContext*> flush_txns;   ///< committing txns
+    std::set<TransContext*> flush_txns;   ///< committing txns
 
     uint64_t tail_offset;
-    bufferlist tail_bl;
+    ceph::buffer::list tail_bl;
 
-    map<uint64_t,bufferlist> pending_stripes;  ///< unwritten stripes
+    std::map<uint64_t,ceph::buffer::list> pending_stripes;  ///< unwritten stripes
 
-    Onode(CephContext* cct, const ghobject_t& o, const string& k)
+    Onode(CephContext* cct, const ghobject_t& o, const std::string& k)
       : cct(cct),
 	nref(0),
 	oid(o),
@@ -126,25 +126,26 @@ public:
     OnodeRef lookup(const ghobject_t& o);
     void rename(const ghobject_t& old_oid, const ghobject_t& new_oid);
     void clear();
-    bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
+    bool get_next(const ghobject_t& after, std::pair<ghobject_t,OnodeRef> *next);
     int trim(int max=-1);
   };
 
+  class OpSequencer;
+  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+
   struct Collection : public CollectionImpl {
     KStore *store;
-    coll_t cid;
     kstore_cnode_t cnode;
-    RWLock lock;
+    ceph::shared_mutex lock =
+      ceph::make_shared_mutex("KStore::Collection::lock", true, false);
+
+    OpSequencerRef osr;
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeHashLRU onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
-
-    const coll_t &get_cid() override {
-      return cid;
-    }
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -157,31 +158,33 @@ public:
       return false;
     }
 
+    void flush() override;
+    bool flush_commit(Context *c) override;
+
+  private:
+    FRIEND_MAKE_REF(Collection);
     Collection(KStore *ns, coll_t c);
   };
-  typedef boost::intrusive_ptr<Collection> CollectionRef;
+  using CollectionRef = ceph::ref_t<Collection>;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
     OnodeRef o;
     KeyValueDB::Iterator it;
-    string head, tail;
+    std::string head, tail;
   public:
     OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
     int seek_to_first() override;
-    int upper_bound(const string &after) override;
-    int lower_bound(const string &to) override;
+    int upper_bound(const std::string &after) override;
+    int lower_bound(const std::string &to) override;
     bool valid() override;
-    int next(bool validate=true) override;
-    string key() override;
-    bufferlist value() override;
+    int next() override;
+    std::string key() override;
+    ceph::buffer::list value() override;
     int status() override {
       return 0;
     }
   };
-
-  class OpSequencer;
-  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
   struct TransContext {
     typedef enum {
@@ -218,18 +221,19 @@ public:
         start = now;
     }
 
+    CollectionRef ch;
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
     uint64_t ops, bytes;
 
-    set<OnodeRef> onodes;     ///< these onodes need to be updated/written
+    std::set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
     Context *onreadable_sync;         ///< signal on readable
-    list<Context*> oncommits;  ///< more commit completions
-    list<CollectionRef> removed_collections; ///< colls we removed
+    std::list<Context*> oncommits;  ///< more commit completions
+    std::list<CollectionRef> removed_collections; ///< colls we removed
 
     CollectionRef first_collection;  ///< first referenced collection
     utime_t start;
@@ -253,7 +257,7 @@ public:
     }
   };
 
-  class OpSequencer : public Sequencer_impl {
+  class OpSequencer : public RefCountedObject {
   public:
     std::mutex qlock;
     std::condition_variable qcond;
@@ -265,15 +269,8 @@ public:
 	&TransContext::sequencer_item> > q_list_t;
     q_list_t q;  ///< transactions
 
-    Sequencer *parent;
-
-    OpSequencer(CephContext* cct)
-	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
-      : Sequencer_impl(cct),
-	parent(NULL) {
-    }
-    ~OpSequencer() override {
-      assert(q.empty());
+    ~OpSequencer() {
+      ceph_assert(q.empty());
     }
 
     void queue_new(TransContext *txc) {
@@ -281,13 +278,13 @@ public:
       q.push_back(*txc);
     }
 
-    void flush() override {
+    void flush() {
       std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
-    bool flush_commit(Context *c) override {
+    bool flush_commit(Context *c) {
       std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
@@ -296,7 +293,7 @@ public:
       if (txc->state >= TransContext::STATE_KV_DONE) {
 	return true;
       }
-      assert(txc->state < TransContext::STATE_KV_DONE);
+      ceph_assert(txc->state < TransContext::STATE_KV_DONE);
       txc->oncommits.push_back(c);
       return false;
     }
@@ -316,12 +313,15 @@ public:
 private:
   KeyValueDB *db;
   uuid_d fsid;
+  std::string basedir;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   bool mounted;
 
-  RWLock coll_lock;    ///< rwlock to protect coll_map
+  /// rwlock to protect coll_map
+  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("KStore::coll_lock");
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
+  std::map<coll_t,CollectionRef> new_coll_map;
 
   std::mutex nid_lock;
   uint64_t nid_last;
@@ -335,12 +335,12 @@ private:
   std::mutex kv_lock;
   std::condition_variable kv_cond, kv_sync_cond;
   bool kv_stop;
-  deque<TransContext*> kv_queue, kv_committing;
+  std::deque<TransContext*> kv_queue, kv_committing;
 
   //Logger *logger;
   PerfCounters *logger;
   std::mutex reap_lock;
-  list<CollectionRef> removed_collections;
+  std::list<CollectionRef> removed_collections;
 
 
   // --------------------------------------------------------
@@ -392,20 +392,20 @@ private:
     kv_stop = false;
   }
 
-  void _do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl);
+  void _do_read_stripe(OnodeRef o, uint64_t offset, ceph::buffer::list *pbl, bool do_cache);
   void _do_write_stripe(TransContext *txc, OnodeRef o,
-			uint64_t offset, bufferlist& bl);
+			uint64_t offset, ceph::buffer::list& bl);
   void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max, std::vector<ghobject_t> *ls, ghobject_t *next);
 
 public:
-  KStore(CephContext *cct, const string& path);
+  KStore(CephContext *cct, const std::string& path);
   ~KStore() override;
 
-  string get_type() override {
+  std::string get_type() override {
     return "kstore";
   }
 
@@ -413,7 +413,7 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
-  static int get_block_device_fsid(const string& path, uuid_d *fsid);
+  static int get_block_device_fsid(const std::string& path, uuid_d *fsid);
 
   bool test_mount_in_use() override;
 
@@ -435,108 +435,115 @@ public:
   int mkjournal() override {
     return 0;
   }
-  void dump_perf_counters(Formatter *f) override {
+  void dump_perf_counters(ceph::Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
     f->close_section();
   }
+  void get_db_statistics(ceph::Formatter *f) override {
+    db->get_statistics(f);
+  }
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+		  bool *per_pool_omap) override;
 
-  int statfs(struct store_statfs_t *buf) override;
+  CollectionHandle open_collection(const coll_t& c) override;
+  CollectionHandle create_new_collection(const coll_t& c) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
 
   using ObjectStore::exists;
-  bool exists(const coll_t& cid, const ghobject_t& oid) override;
+  bool exists(CollectionHandle& c, const ghobject_t& oid) override;
   using ObjectStore::stat;
   int stat(
-    const coll_t& cid,
+    CollectionHandle& c,
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false) override; // struct stat?
   int set_collection_opts(
-    const coll_t& cid,
+    CollectionHandle& c,
     const pool_opts_t& opts) override;
   using ObjectStore::read;
   int read(
-    const coll_t& cid,
+    CollectionHandle& c,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    ceph::buffer::list& bl,
+    uint32_t op_flags = 0) override;
   int _do_read(
     OnodeRef o,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
+    ceph::buffer::list& bl,
+    bool do_cache,
     uint32_t op_flags = 0);
 
   using ObjectStore::fiemap;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, ceph::buffer::list& outbl) override;
   using ObjectStore::getattr;
-  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr& value) override;
+  int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, ceph::buffer::ptr& value) override;
   using ObjectStore::getattrs;
-  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset) override;
+  int getattrs(CollectionHandle& c, const ghobject_t& oid, std::map<std::string,ceph::buffer::ptr>& aset) override;
 
-  int list_collections(vector<coll_t>& ls) override;
+  int list_collections(std::vector<coll_t>& ls) override;
   bool collection_exists(const coll_t& c) override;
-  int collection_empty(const coll_t& c, bool *empty) override;
-  int collection_bits(const coll_t& c) override;
-  int collection_list(
-    const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
-    int max,
-    vector<ghobject_t> *ls, ghobject_t *next) override;
+  int collection_empty(CollectionHandle& c, bool *empty) override;
+  int collection_bits(CollectionHandle& c) override;
   int collection_list(
     CollectionHandle &c, const ghobject_t& start, const ghobject_t& end,
     int max,
-    vector<ghobject_t> *ls, ghobject_t *next) override;
+    std::vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
   int omap_get(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value std::map
     ) override;
 
   using ObjectStore::omap_get_header;
   /// Get omap header
   int omap_get_header(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
+    ceph::buffer::list *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
     ) override;
 
   using ObjectStore::omap_get_keys;
   /// Get keys defined on oid
   int omap_get_keys(
-    const coll_t& cid,              ///< [in] Collection containing oid
+    CollectionHandle& c,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
+    std::set<std::string> *keys      ///< [out] Keys defined on oid
     ) override;
 
   using ObjectStore::omap_get_values;
   /// Get key values
   int omap_get_values(
-    const coll_t& cid,                    ///< [in] Collection containing oid
+    CollectionHandle& c,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    const std::set<std::string> &keys,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
 
   using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) override;
 
   using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(
-    const coll_t& cid,              ///< [in] collection
+    CollectionHandle& c,              ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     ) override;
 
@@ -560,29 +567,30 @@ public:
 
 
   int queue_transactions(
-    Sequencer *osr,
-    vector<Transaction>& tls,
+    CollectionHandle& ch,
+    std::vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 
+  void compact () override {
+    ceph_assert(db);
+    db->compact();
+  }
+  
 private:
   // --------------------------------------------------------
   // write ops
-
-  int _do_transaction(Transaction *t,
-		      TransContext *txc,
-		      ThreadPool::TPHandle *handle);
 
   int _write(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o,
 	     uint64_t offset, size_t len,
-	     bufferlist& bl,
+	     ceph::buffer::list& bl,
 	     uint32_t fadvise_flags);
   int _do_write(TransContext *txc,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
-		bufferlist& bl,
+		ceph::buffer::list& bl,
 		uint32_t fadvise_flags);
   int _touch(TransContext *txc,
 	     CollectionRef& c,
@@ -606,16 +614,16 @@ private:
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
-	       const string& name,
-	       bufferptr& val);
+	       const std::string& name,
+	       ceph::buffer::ptr& val);
   int _setattrs(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,
-		const map<string,bufferptr>& aset);
+		const std::map<std::string,ceph::buffer::ptr>& aset);
   int _rmattr(TransContext *txc,
 	      CollectionRef& c,
 	      OnodeRef& o,
-	      const string& name);
+	      const std::string& name);
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o);
@@ -626,19 +634,19 @@ private:
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
 		    OnodeRef& o,
-		    bufferlist& bl);
+		    ceph::buffer::list& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,
 		      OnodeRef& o,
-		      bufferlist& header);
+		      ceph::buffer::list& header);
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& o,
-		   bufferlist& bl);
+		   const ceph::buffer::list& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			OnodeRef& o,
-			const string& first, const string& last);
+			const std::string& first, const std::string& last);
   int _setallochint(TransContext *txc,
 		    CollectionRef& c,
 		    OnodeRef& o,
@@ -666,12 +674,12 @@ private:
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
+  int _merge_collection(TransContext *txc,
+			CollectionRef *c,
+			CollectionRef& d,
+			unsigned bits);
 
 };
-
-inline ostream& operator<<(ostream& out, const KStore::OpSequencer& s) {
-  return out << *s.parent;
-}
 
 static inline void intrusive_ptr_add_ref(KStore::Onode *o) {
   o->get();

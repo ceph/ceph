@@ -14,7 +14,6 @@
 
 #include "include/compat.h"
 #include "common/errno.h"
-#include "include/atomic.h"
 #include "systest_runnable.h"
 #include "systest_settings.h"
 
@@ -26,10 +25,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#ifndef _WIN32
 #include <sys/syscall.h>
-#include <sys/types.h>
 #include <sys/wait.h>
+#endif
+#include <sys/types.h>
 #include <unistd.h>
+#include <atomic>
+#include <limits>
 #include <vector>
 
 using std::ostringstream;
@@ -39,12 +42,14 @@ static pid_t do_gettid(void)
 {
 #if defined(__linux__)
   return static_cast < pid_t >(syscall(SYS_gettid));
+#elif defined(_WIN32)
+  return static_cast < pid_t >(GetCurrentThreadId());
 #else
   return static_cast < pid_t >(pthread_getthreadid_np());
 #endif
 }
 
-ceph::atomic_t m_highest_id(0);
+std::atomic<unsigned> m_highest_id = { 0 };
 
 SysTestRunnable::
 SysTestRunnable(int argc, const char **argv)
@@ -53,7 +58,7 @@ SysTestRunnable(int argc, const char **argv)
     m_argv_orig(NULL)
 {
   m_started = false;
-  m_id = m_highest_id.inc();
+  m_id = ++m_highest_id;
   memset(&m_pthread, 0, sizeof(m_pthread));
   update_id_str(false);
   set_argv(argc, argv);
@@ -86,6 +91,10 @@ start()
       return ret;
     m_started = true;
   } else {
+    #ifdef _WIN32
+    printf("Using separate processes is not supported on Windows.\n");
+    return -1;
+    #else
     std::string err_msg;
     ret = preforker.prefork(err_msg);
     if (ret < 0)
@@ -98,6 +107,7 @@ start()
     } else {
       m_started = true;
     }
+    #endif
   }
   return 0;
 }
@@ -126,9 +136,13 @@ join()
     }
     return "";
   } else {
+    #ifdef _WIN32
+    return "Using separate processes is not supported on Windows.\n";
+    #else
     std::string err_msg;
     ret = preforker.parent_wait(err_msg);
     return err_msg;
+    #endif
   }
 }
 
@@ -176,7 +190,7 @@ void SysTestRunnable::
 update_id_str(bool started)
 {
   bool use_threads = SysTestSettings::inst().use_threads();
-  char extra[128];
+  char extra[std::numeric_limits<int>::digits10 + 1];
   extra[0] = '\0';
 
   if (started) {

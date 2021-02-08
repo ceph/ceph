@@ -31,7 +31,7 @@ private:
     m_uid = b.m_uid;
     m_gid = b.m_gid;
     gid_count = b.gid_count;
-    if (gid_count) {
+    if (gid_count > 0) {
       gids = new gid_t[gid_count];
       alloced_gids = true;
       for (int i = 0; i < gid_count; ++i) {
@@ -61,17 +61,17 @@ public:
     if (alloced_gids)
       delete[] gids;
   }
-  UserPerm& operator=(const UserPerm o) {
+  UserPerm& operator=(const UserPerm& o) {
     deep_copy_from(o);
     return *this;
   }
 
   uid_t uid() const { return m_uid != (uid_t)-1 ? m_uid : ::geteuid(); }
   gid_t gid() const { return m_gid != (gid_t)-1 ? m_gid : ::getegid(); }
-  bool gid_in_groups(gid_t gid) const {
-    if (gid == m_gid) return true;
+  bool gid_in_groups(gid_t id) const {
+    if (id == gid()) return true;
     for (int i = 0; i < gid_count; ++i) {
-      if (gid == gids[i]) return true;
+      if (id == gids[i]) return true;
     }
     return false;
   }
@@ -79,8 +79,8 @@ public:
   void init_gids(gid_t* _gids, int count) {
     gids = _gids;
     gid_count = count;
+    alloced_gids = true;
   }
-  void take_gids() { alloced_gids = true; }
   void shallow_copy(const UserPerm& o) {
     m_uid = o.m_uid;
     m_gid = o.m_gid;

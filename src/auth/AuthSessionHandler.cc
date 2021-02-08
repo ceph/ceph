@@ -15,37 +15,40 @@
 #include "common/debug.h"
 #include "AuthSessionHandler.h"
 #include "cephx/CephxSessionHandler.h"
+#ifdef HAVE_GSSAPI
+#include "krb/KrbSessionHandler.hpp"
+#endif
 #include "none/AuthNoneSessionHandler.h"
-#include "unknown/AuthUnknownSessionHandler.h"
 
+#include "common/ceph_crypto.h"
 #define dout_subsys ceph_subsys_auth
 
 
-AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key, uint64_t features)
+AuthSessionHandler *get_auth_session_handler(
+  CephContext *cct, int protocol,
+  const CryptoKey& key,
+  uint64_t features)
 {
 
   // Should add code to only print the SHA1 hash of the key, unless in secure debugging mode
-
+#ifndef WITH_SEASTAR
   ldout(cct,10) << "In get_auth_session_handler for protocol " << protocol << dendl;
- 
+#endif
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
+    // if there is no session key, there is no session handler.
+    if (key.get_type() == CEPH_CRYPTO_NONE) {
+      return nullptr;
+    }
     return new CephxSessionHandler(cct, key, features);
   case CEPH_AUTH_NONE:
-    return new AuthNoneSessionHandler(cct, key);
-  case CEPH_AUTH_UNKNOWN:
-    return new AuthUnknownSessionHandler(cct, key);
+    return new AuthNoneSessionHandler();
+#ifdef HAVE_GSSAPI
+  case CEPH_AUTH_GSS: 
+    return new KrbSessionHandler();
+#endif
+  default:
+    return nullptr;
   }
-  return NULL;
 }
 
-
-void AuthSessionHandler::print_auth_session_handler_stats() {
-  ldout(cct,10) << "Auth Session Handler Stats " << this << dendl;
-  ldout(cct,10) << "    Messages Signed    = " << messages_signed << dendl;
-  ldout(cct,10) << "    Signatures Checked = " << signatures_checked << dendl;
-  ldout(cct,10) << "        Signatures Matched = " << signatures_matched << dendl;
-  ldout(cct,10) << "        Signatures Did Not Match = " << signatures_failed << dendl;
-  ldout(cct,10) << "    Messages Encrypted = " << messages_encrypted << dendl;
-  ldout(cct,10) << "    Messages Decrypted = " << messages_decrypted << dendl;
-}

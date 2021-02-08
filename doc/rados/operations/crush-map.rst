@@ -3,61 +3,49 @@
 ============
 
 The :abbr:`CRUSH (Controlled Replication Under Scalable Hashing)` algorithm
-determines how to store and retrieve data by computing data storage locations.
+determines how to store and retrieve data by computing storage locations.
 CRUSH empowers Ceph clients to communicate with OSDs directly rather than
 through a centralized server or broker. With an algorithmically determined
 method of storing and retrieving data, Ceph avoids a single point of failure, a
 performance bottleneck, and a physical limit to its scalability.
 
-CRUSH requires a map of your cluster, and uses the CRUSH map to pseudo-randomly 
-store and retrieve data in OSDs with a uniform distribution of data across the 
-cluster. For a detailed discussion of CRUSH, see 
+CRUSH uses a map of your cluster (the CRUSH map) to pseudo-randomly
+map data to OSDs, distributing it across the cluster according to configured
+replication policy and failure domain.  For a detailed discussion of CRUSH, see
 `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_
 
-CRUSH maps contain a list of :abbr:`OSDs (Object Storage Devices)`, a list of
-'buckets' for aggregating the devices into physical locations, and a list of
-rules that tell CRUSH how it should replicate data in a Ceph cluster's pools. By
+CRUSH maps contain a list of :abbr:`OSDs (Object Storage Devices)`, a hierarchy
+of 'buckets' for aggregating devices and buckets, and
+rules that govern how CRUSH replicates data within the cluster's pools. By
 reflecting the underlying physical organization of the installation, CRUSH can
-model—and thereby address—potential sources of correlated device failures.
-Typical sources include physical proximity, a shared power source, and a shared
-network. By encoding this information into the cluster map, CRUSH placement
-policies can separate object replicas across different failure domains while
-still maintaining the desired distribution. For example, to address the
+model (and thereby address) the potential for correlated device failures.
+Typical factors include chassis, racks, physical proximity, a shared power
+source, and shared networking. By encoding this information into the cluster
+map, CRUSH placement
+policies distribute object replicas across failure domains while
+maintaining the desired distribution. For example, to address the
 possibility of concurrent failures, it may be desirable to ensure that data
 replicas are on devices using different shelves, racks, power supplies,
 controllers, and/or physical locations.
 
-When you create a configuration file and deploy Ceph with ``ceph-deploy``, Ceph
-generates a default CRUSH map for your configuration. The default CRUSH map is
-fine for your Ceph sandbox environment. However, when you deploy a large-scale
-data cluster, you should give significant consideration to developing a custom
-CRUSH map, because it will help you manage your Ceph cluster, improve
-performance and ensure data safety. 
-
-For example, if an OSD goes down, a CRUSH map can help you to locate
-the physical data center, room, row and rack of the host with the failed OSD in
-the event you need to use onsite support or replace hardware. 
-
-Similarly, CRUSH may help you identify faults more quickly. For example, if all
-OSDs in a particular rack go down simultaneously, the fault may lie with a
-network switch or power to the rack rather than the OSDs themselves.
-
-A custom CRUSH map can also help you identify the physical locations where
-Ceph stores redundant copies of data when the placement group(s) associated
-with a failed host are in a degraded state.
-
-.. note:: Lines of code in example boxes may extend past the edge of the box. 
-   Please scroll when reading or copying longer examples.
+When you deploy OSDs they are automatically added to the CRUSH map under a
+``host`` bucket named for the node on which they run.  This,
+combined with the configured CRUSH failure domain, ensures that replicas or
+erasure code shards are distributed across hosts and that a single host or other
+failure will not affect availability.  For larger clusters, administrators must
+carefully consider their choice of failure domain.  Separating replicas across racks,
+for example, is typical for mid- to large-sized clusters.
 
 
 CRUSH Location
 ==============
 
-The location of an OSD in terms of the CRUSH map's hierarchy is referred to
-as a 'crush location'.  This location specifier takes the form of a list of
-key and value pairs describing a position.  For example, if an OSD is in a
-particular row, rack, chassis and host, and is part of the 'default' CRUSH 
-tree, its crush location could be described as::
+The location of an OSD within the CRUSH map's hierarchy is
+referred to as a ``CRUSH location``.  This location specifier takes the
+form of a list of key and value pairs.  For
+example, if an OSD is in a particular row, rack, chassis and host, and
+is part of the 'default' CRUSH root (which is the case for most
+clusters), its CRUSH location could be described as::
 
   root=default row=a rack=a2 chassis=a2a host=a2a1
 
@@ -65,738 +53,280 @@ Note:
 
 #. Note that the order of the keys does not matter.
 #. The key name (left of ``=``) must be a valid CRUSH ``type``.  By default
-   these include root, datacenter, room, row, pod, pdu, rack, chassis and host, 
-   but those types can be customized to be anything appropriate by modifying 
-   the CRUSH map.
+   these include ``root``, ``datacenter``, ``room``, ``row``, ``pod``, ``pdu``,
+   ``rack``, ``chassis`` and ``host``.
+   These defined types suffice for almost all clusters, but can be customized
+   by modifying the CRUSH map.
 #. Not all keys need to be specified.  For example, by default, Ceph
-   automatically sets a ``ceph-osd`` daemon's location to be
+   automatically sets an ``OSD``'s location to be
    ``root=default host=HOSTNAME`` (based on the output from ``hostname -s``).
 
-ceph-crush-location hook
-------------------------
-
-By default, the ``ceph-crush-location`` utility will generate a CRUSH
-location string for a given daemon.  The location is based on, in order of
-preference:
-
-#. A ``TYPE crush location`` option in ceph.conf.  For example, this
-   is ``osd crush location`` for OSD daemons.
-#. A ``crush location`` option in ceph.conf.
-#. A default of ``root=default host=HOSTNAME`` where the hostname is
-   generated with the ``hostname -s`` command.
-
-In a typical deployment scenario, provisioning software (or the system
-administrator) can simply set the 'crush location' field in a host's
-ceph.conf to describe that machine's location within the datacenter or
-cluster.  This will provide location awareness to both Ceph daemons
-and clients alike.
-
-It is possible to manage the CRUSH map entirely manually by toggling
-the hook off in the configuration::
+The CRUSH location for an OSD can be defined by adding the ``crush location``
+option in ``ceph.conf``.  Each time the OSD starts,
+it verifies it is in the correct location in the CRUSH map and, if it is not,
+it moves itself.  To disable this automatic CRUSH map management, add the
+following to your configuration file in the ``[osd]`` section::
 
   osd crush update on start = false
+
+Note that in most cases you will not need to manually configure this.
+
 
 Custom location hooks
 ---------------------
 
-A customized location hook can be used in place of the generic hook for OSD
-daemon placement in the hierarchy.  (On startup, each OSD ensures its position is
-correct.)::
+A customized location hook can be used to generate a more complete
+CRUSH location on startup.  The CRUSH location is based on, in order
+of preference:
 
-  osd crush location hook = /path/to/script
+#. A ``crush location`` option in ``ceph.conf``
+#. A default of ``root=default host=HOSTNAME`` where the hostname is
+   derived from the ``hostname -s`` command
+
+A script can be written to provide additional
+location fields (for example, ``rack`` or ``datacenter``) and the
+hook enabled via the config option::
+
+ crush location hook = /path/to/customized-ceph-crush-location
 
 This hook is passed several arguments (below) and should output a single line
-to stdout with the CRUSH location description.::
+to ``stdout`` with the CRUSH location description.::
 
-  $ ceph-crush-location --cluster CLUSTER --id ID --type TYPE
+  --cluster CLUSTER --id ID --type TYPE
 
-where the cluster name is typically 'ceph', the id is the daemon
-identifier (the OSD number), and the daemon type is typically ``osd``.
+where the cluster name is typically ``ceph``, the ``id`` is the daemon
+identifier (e.g., the OSD number or daemon identifier), and the daemon
+type is ``osd``, ``mds``, etc.
 
+For example, a simple hook that additionally specifies a rack location
+based on a value in the file ``/etc/rack`` might be::
 
-Editing a CRUSH Map
-===================
-
-To edit an existing CRUSH map:
-
-#. `Get the CRUSH map`_.
-#. `Decompile`_ the CRUSH map.
-#. Edit at least one of `Devices`_, `Buckets`_ and `Rules`_.
-#. `Recompile`_ the CRUSH map.
-#. `Set the CRUSH map`_.
-
-To activate CRUSH map rules for a specific pool, identify the common ruleset
-number for those rules and specify that ruleset number for the pool. See `Set
-Pool Values`_ for details. 
-
-.. _Get the CRUSH map: #getcrushmap
-.. _Decompile: #decompilecrushmap
-.. _Devices: #crushmapdevices
-.. _Buckets: #crushmapbuckets
-.. _Rules: #crushmaprules
-.. _Recompile: #compilecrushmap
-.. _Set the CRUSH map: #setcrushmap
-.. _Set Pool Values: ../pools#setpoolvalues
-
-.. _getcrushmap:
-
-Get a CRUSH Map
----------------
-
-To get the CRUSH map for your cluster, execute the following:: 
-
-	ceph osd getcrushmap -o {compiled-crushmap-filename}
-
-Ceph will output (-o) a compiled CRUSH map to the filename you specified. Since
-the CRUSH map is in a compiled form, you must decompile it first before you can
-edit it. 
-
-.. _decompilecrushmap:
-
-Decompile a CRUSH Map
----------------------
-
-To decompile a CRUSH map, execute the following:: 
-
-	crushtool -d {compiled-crushmap-filename} -o {decompiled-crushmap-filename}
-
-Ceph will decompile (-d) the compiled CRUSH map and output (-o) it to the 
-filename you specified.
+  #!/bin/sh
+  echo "host=$(hostname -s) rack=$(cat /etc/rack) root=default"
 
 
-.. _compilecrushmap:
+CRUSH structure
+===============
 
-Compile a CRUSH Map
--------------------
+The CRUSH map consists of a hierarchy that describes
+the physical topology of the cluster and a set of rules defining
+data placement policy.  The hierarchy has
+devices (OSDs) at the leaves, and internal nodes
+corresponding to other physical features or groupings: hosts, racks,
+rows, datacenters, and so on.  The rules describe how replicas are
+placed in terms of that hierarchy (e.g., 'three replicas in different
+racks').
 
-To compile a CRUSH map, execute the following:: 
+Devices
+-------
 
-	crushtool -c {decompiled-crush-map-filename} -o {compiled-crush-map-filename}
+Devices are individual OSDs that store data, usually one for each storage drive.
+Devices are identified by an ``id``
+(a non-negative integer) and a ``name``, normally ``osd.N`` where ``N`` is the device id.
 
-Ceph will store a compiled CRUSH map to the filename you specified. 
+Since the Luminous release, devices may also have a *device class* assigned (e.g.,
+``hdd`` or ``ssd`` or ``nvme``), allowing them to be conveniently targeted by
+CRUSH rules.  This is especially useful when mixing device types within hosts.
 
-
-.. _setcrushmap:
-
-Set a CRUSH Map
----------------
-
-To set the CRUSH map for your cluster, execute the following:: 
-
-	ceph osd setcrushmap -i  {compiled-crushmap-filename}
-
-Ceph will input the compiled CRUSH map of the filename you specified as the
-CRUSH map for the cluster.
-
-
-
-CRUSH Map Parameters
-====================
-
-There are four main sections to a CRUSH Map. 
-
-#. **Devices:** Devices consist of any object storage device--i.e., the storage
-   drive corresponding to a ``ceph-osd`` daemon. You should have a device for
-   each OSD daemon in your Ceph configuration file.
-   
-#. **Bucket Types**: Bucket ``types`` define the types of buckets used in your 
-   CRUSH hierarchy. Buckets consist of a hierarchical aggregation of storage 
-   locations (e.g., rows, racks, chassis, hosts, etc.) and their assigned 
-   weights.
-
-#. **Bucket Instances:** Once you define bucket types, you must declare bucket 
-   instances for your hosts, and any other failure domain partitioning
-   you choose.
-
-#. **Rules:** Rules consist of the manner of selecting buckets. 
-
-If you launched Ceph using one of our Quick Start guides, you'll notice 
-that you didn't need to create a CRUSH map. Ceph's deployment tools generate 
-a default CRUSH map that lists devices from the OSDs you defined in your 
-Ceph configuration file, and it declares a bucket for each host you specified
-in the ``[osd]`` sections of your Ceph configuration file. You should create
-your own CRUSH maps with buckets that reflect your cluster's failure domains 
-to better ensure data safety and availability.
-
-.. note:: The generated CRUSH map doesn't take your larger grained failure 
-   domains into account. So you should modify your CRUSH map to account for
-   larger grained failure domains such as chassis, racks, rows, data 
-   centers, etc.
-
-
-
-.. _crushmapdevices:
-
-CRUSH Map Devices
+Types and Buckets
 -----------------
 
-To map placement groups to OSDs, a CRUSH map requires a list of OSD devices
-(i.e., the names of the OSD daemons from the Ceph configuration file). The list
-of devices appears first in the CRUSH map. To declare a device in the CRUSH map,
-create a new line under your list of devices, enter ``device`` followed by a
-unique numeric ID, followed by the corresponding ``ceph-osd`` daemon instance.
-The device class can optionaly be added to group devices so they can be
-conveniently targetted by a crush rule.
+A bucket is the CRUSH term for internal nodes in the hierarchy: hosts,
+racks, rows, etc.  The CRUSH map defines a series of *types* that are
+used to describe these nodes.  Default types include:
 
-::
+- ``osd`` (or ``device``)
+- ``host``
+- ``chassis``
+- ``rack``
+- ``row``
+- ``pdu``
+- ``pod``
+- ``room``
+- ``datacenter``
+- ``zone``
+- ``region``
+- ``root``
 
-	#devices
-	device {num} {osd.name} [class {class}]
+Most clusters use only a handful of these types, and others
+can be defined as needed.
 
-For example:: 
+The hierarchy is built with devices (normally type ``osd``) at the
+leaves, interior nodes with non-device types, and a root node of type
+``root``.  For example,
 
-	#devices
-	device 0 osd.0 class ssd
-	device 1 osd.1 class hdd
-	device 2 osd.2
-	device 3 osd.3
-	
-As a general rule, an OSD daemon maps to a single storage drive or to a RAID.
+.. ditaa::
 
-
-CRUSH Map Bucket Types
-----------------------
-
-The second list in the CRUSH map defines 'bucket' types. Buckets facilitate
-a hierarchy of nodes and leaves. Node (or non-leaf) buckets typically represent
-physical locations in a hierarchy. Nodes aggregate other nodes or leaves.
-Leaf buckets represent ``ceph-osd`` daemons and their corresponding storage
-media. 
-
-.. tip:: The term "bucket" used in the context of CRUSH means a node in
-   the hierarchy, i.e. a location or a piece of physical hardware. It
-   is a different concept from the term "bucket" when used in the
-   context of RADOS Gateway APIs.
-
-To add a bucket type to the CRUSH map, create a new line under your list of
-bucket types. Enter ``type`` followed by a unique numeric ID and a bucket name.
-By convention, there is one leaf bucket and it is ``type 0``;  however, you may
-give it any name you like (e.g., osd, disk, drive, storage, etc.)::
-
-	#types
-	type {num} {bucket-name}
-
-For example::
-
-	# types
-	type 0 osd
-	type 1 host
-	type 2 chassis
-	type 3 rack
-	type 4 row
-	type 5 pdu
-	type 6 pod
-	type 7 room
-	type 8 datacenter
-	type 9 region
-	type 10 root
-
-
-
-.. _crushmapbuckets:
-
-CRUSH Map Bucket Hierarchy
---------------------------
-
-The CRUSH algorithm distributes data objects among storage devices according 
-to a per-device weight value, approximating a uniform probability distribution.
-CRUSH distributes objects and their replicas according to the hierarchical 
-cluster map you define. Your CRUSH map represents the available storage 
-devices and the logical elements that contain them.
-
-To map placement groups to OSDs across failure domains, a CRUSH map defines a
-hierarchical list of bucket types (i.e., under ``#types`` in the generated CRUSH
-map). The purpose of creating a bucket hierarchy is to segregate the
-leaf nodes by their failure domains, such as hosts, chassis, racks, power 
-distribution units, pods, rows, rooms, and data centers. With the exception of 
-the leaf nodes representing OSDs, the rest of the hierarchy is arbitrary, and 
-you may define it according to your own needs.
-
-We recommend adapting your CRUSH map to your firms's hardware naming conventions
-and using instances names that reflect the physical hardware. Your naming
-practice can make it easier to administer the cluster and troubleshoot
-problems when an OSD and/or other hardware malfunctions and the administrator
-need access to physical hardware.
-
-In the following example, the bucket hierarchy has a leaf bucket named ``osd``,
-and two node buckets named ``host`` and ``rack`` respectively.
-
-.. ditaa:: 
-                           +-----------+
-                           | {o}rack   | 
-                           |   Bucket  |
-                           +-----+-----+   
+                        +-----------------+
+                        |{o}root default  |
+                        +--------+--------+
                                  |
-                 +---------------+---------------+             
+                 +---------------+---------------+
                  |                               |
-           +-----+-----+                   +-----+-----+
-           | {o}host   |                   | {o}host   |
-           |   Bucket  |                   |   Bucket  |           
-           +-----+-----+                   +-----+-----+
-                 |                               | 
+          +------+------+                 +------+------+
+          |{o}host foo  |                 |{o}host bar  |
+          +------+------+                 +------+------+
+                 |                               |
          +-------+-------+               +-------+-------+
          |               |               |               |
    +-----+-----+   +-----+-----+   +-----+-----+   +-----+-----+
-   |    osd    |   |    osd    |   |    osd    |   |    osd    |
-   |   Bucket  |   |   Bucket  |   |   Bucket  |   |   Bucket  | 
+   |   osd.0   |   |   osd.1   |   |   osd.2   |   |   osd.3   |
    +-----------+   +-----------+   +-----------+   +-----------+
 
-.. note:: The higher numbered ``rack`` bucket type aggregates the lower 
-   numbered ``host`` bucket type. 
-
-Since leaf nodes reflect storage devices declared under the ``#devices`` list 
-at the beginning of the CRUSH map, you do not need to declare them as bucket
-instances. The second lowest bucket type in your hierarchy usually aggregates
-the devices (i.e., it's usually the computer containing the storage media, and
-uses whatever term you prefer to describe it, such as  "node", "computer",
-"server," "host", "machine", etc.). In high density environments, it is
-increasingly common to see multiple hosts/nodes per chassis. You should account
-for chassis failure too--e.g., the need to pull a chassis if a node fails may 
-result in bringing down numerous hosts/nodes and their OSDs.
-
-When declaring a bucket instance, you must specify its type, give it a unique
-name (string), assign it a unique ID expressed as a negative integer (optional),
-specify a weight relative to the total capacity/capability of its item(s),
-specify the bucket algorithm (usually ``straw``), and the hash (usually ``0``,
-reflecting hash algorithm ``rjenkins1``). A bucket may have one or more items.
-The items may consist of node buckets or leaves. Items may have a weight that
-reflects the relative weight of the item.
-
-You may declare a node bucket with the following syntax:: 
-
-	[bucket-type] [bucket-name] {
-		id [a unique negative numeric ID]
-		weight [the relative capacity/capability of the item(s)]
-		alg [the bucket type: uniform | list | tree | straw ]
-		hash [the hash type: 0 by default]
-		item [item-name] weight [weight]	
-	}
-
-For example, using the diagram above, we would define two host buckets
-and one rack bucket. The OSDs are declared as items within the host buckets::
-
-	host node1 {
-		id -1
-		alg straw
-		hash 0
-		item osd.0 weight 1.00
-		item osd.1 weight 1.00
-	}
-
-	host node2 {
-		id -2
-		alg straw
-		hash 0
-		item osd.2 weight 1.00
-		item osd.3 weight 1.00
-	}
-
-	rack rack1 {
-		id -3
-		alg straw
-		hash 0
-		item node1 weight 2.00
-		item node2 weight 2.00
-	}
-
-.. note:: In the foregoing example, note that the rack bucket does not contain
-   any OSDs. Rather it contains lower level host buckets, and includes the 
-   sum total of their weight in the item entry.
-
-.. topic:: Bucket Types
-
-   Ceph supports four bucket types, each representing a tradeoff between   
-   performance and reorganization efficiency. If you are unsure of which bucket
-   type to use, we recommend using a ``straw`` bucket.  For a detailed
-   discussion of bucket types, refer to 
-   `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
-   and more specifically to **Section 3.4**. The bucket types are: 
-   
-	#. **Uniform:** Uniform buckets aggregate devices with **exactly** the same
-	   weight. For example, when firms commission or decommission hardware, they 
-	   typically do so with many machines that have exactly the same physical
-	   configuration (e.g., bulk purchases). When storage devices have exactly 
-	   the same weight, you may use the ``uniform`` bucket type, which allows 
-	   CRUSH to map replicas into uniform buckets in constant time. With 
-	   non-uniform weights, you should use another bucket algorithm.
-	
-	#. **List**: List buckets aggregate their content as linked lists. Based on 
-	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`P` algorithm,
-	   a list is a natural and intuitive choice for an **expanding cluster**: 
-	   either an object is relocated to the newest device with some appropriate 
-	   probability, or it remains on the older devices as before. The result is 
-	   optimal data migration when items are added to the bucket. Items removed 
-	   from the middle or tail of the list, however, can result in a signiﬁcant 
-	   amount of unnecessary movement, making list buckets most suitable for 
-	   circumstances in which they **never (or very rarely) shrink**.
-	   
-	#. **Tree**: Tree buckets use a binary search tree. They are more efficient
-	   than list buckets when a bucket contains a larger set of items. Based on 
-	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`R` algorithm,
-	   tree buckets reduce the placement time to O(log :sub:`n`), making them 
-	   suitable for managing much larger sets of devices or nested buckets.
-	
-	#. **Straw:** List and Tree buckets use a divide and conquer strategy 
-	   in a way that either gives certain items precedence (e.g., those 
-	   at the beginning of a list) or obviates the need to consider entire 
-	   subtrees of items at all. That improves the performance of the replica 
-	   placement process, but can also introduce suboptimal reorganization 
-	   behavior when the contents of a bucket change due an addition, removal, 
-	   or re-weighting of an item. The straw bucket type allows all items to 
-	   fairly “compete” against each other for replica placement through a 
-	   process analogous to a draw of straws.
+Each node (device or bucket) in the hierarchy has a *weight*
+that indicates the relative proportion of the total
+data that device or hierarchy subtree should store.  Weights are set
+at the leaves, indicating the size of the device, and automatically
+sum up the tree, such that the weight of the ``root`` node
+will be the total of all devices contained beneath it.  Normally
+weights are in units of terabytes (TB).
 
-.. topic:: Hash
+You can get a simple view the of CRUSH hierarchy for your cluster,
+including weights, with::
 
-   Each bucket uses a hash algorithm. Currently, Ceph supports ``rjenkins1``.
-   Enter ``0`` as your hash setting to select ``rjenkins1``.
+  ceph osd tree
 
+Rules
+-----
+
+CRUSH Rules define policy about how data is distributed across the devices
+in the hierarchy. They define placement and replication strategies or
+distribution policies that allow you to specify exactly how CRUSH
+places data replicas. For example, you might create a rule selecting
+a pair of targets for two-way mirroring, another rule for selecting
+three targets in two different data centers for three-way mirroring, and
+yet another rule for erasure coding (EC) across six storage devices. For a
+detailed discussion of CRUSH rules, refer to `CRUSH - Controlled,
+Scalable, Decentralized Placement of Replicated Data`_, and more
+specifically to **Section 3.2**.
+
+CRUSH rules can be created via the CLI by
+specifying the *pool type* they will be used for (replicated or
+erasure coded), the *failure domain*, and optionally a *device class*.
+In rare cases rules must be written by hand by manually editing the
+CRUSH map.
+
+You can see what rules are defined for your cluster with::
 
-.. _weightingbucketitems:
+  ceph osd crush rule ls
 
-.. topic:: Weighting Bucket Items
+You can view the contents of the rules with::
 
-   Ceph expresses bucket weights as doubles, which allows for fine
-   weighting. A weight is the relative difference between device capacities. We
-   recommend using ``1.00`` as the relative weight for a 1TB storage device.
-   In such a scenario, a weight of ``0.5`` would represent approximately 500GB,
-   and a weight of ``3.00`` would represent approximately 3TB. Higher level 
-   buckets have a weight that is the sum total of the leaf items aggregated by
-   the bucket.
-   
-   A bucket item weight is one dimensional, but you may also calculate your 
-   item weights to reflect the performance of the storage drive. For example, 
-   if you have many 1TB drives where some have relatively low data transfer 
-   rate and the others have a relatively high data transfer rate, you may 
-   weight them differently, even though they have the same capacity (e.g., 
-   a weight of 0.80 for the first set of drives with lower total throughput, 
-   and 1.20 for the second set of drives with higher total throughput).
+  ceph osd crush rule dump
 
+Device classes
+--------------
 
-.. _crushmaprules:
+Each device can optionally have a *class* assigned.  By
+default, OSDs automatically set their class at startup to
+`hdd`, `ssd`, or `nvme` based on the type of device they are backed
+by.
 
-CRUSH Map Rules
----------------
+The device class for one or more OSDs can be explicitly set with::
 
-CRUSH maps support the notion of 'CRUSH rules', which are the rules that
-determine data placement for a pool. For large clusters, you will likely create
-many pools where each pool may have its own CRUSH ruleset and rules. The default
-CRUSH map has a rule for each pool, and one ruleset assigned to each of the
-default pools.
+  ceph osd crush set-device-class <class> <osd-name> [...]
 
-.. note:: In most cases, you will not need to modify the default rules. When
-   you create a new pool, its default ruleset is ``0``.
+Once a device class is set, it cannot be changed to another class
+until the old class is unset with::
 
+  ceph osd crush rm-device-class <osd-name> [...]
 
-CRUSH rules define placement and replication strategies or distribution policies
-that allow you to specify exactly how CRUSH places object replicas. For
-example, you might create a rule selecting a pair of targets for 2-way
-mirroring, another rule for selecting three targets in two different data
-centers for 3-way mirroring, and yet another rule for erasure coding over six
-storage devices. For a detailed discussion of CRUSH rules, refer to
-`CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
-and more specifically to **Section 3.2**.
+This allows administrators to set device classes without the class
+being changed on OSD restart or by some other script.
 
-A rule takes the following form:: 
+A placement rule that targets a specific device class can be created with::
 
-	rule <rulename> {
-	
-		ruleset <ruleset>
-		type [ replicated | erasure ]
-		min_size <min-size>
-		max_size <max-size>
-		step take <bucket-name> [class <device-class>]
-		step [choose|chooseleaf] [firstn|indep] <N> <bucket-type>
-		step emit
-	}
+  ceph osd crush rule create-replicated <rule-name> <root> <failure-domain> <class>
 
+A pool can then be changed to use the new rule with::
 
-``ruleset``
+  ceph osd pool set <pool-name> crush_rule <rule-name>
 
-:Description: A means of classifying a rule as belonging to a set of rules. 
-              Activated by `setting the ruleset in a pool`_.
+Device classes are implemented by creating a "shadow" CRUSH hierarchy
+for each device class in use that contains only devices of that class.
+CRUSH rules can then distribute data over the shadow hierarchy.
+This approach is fully backward compatible with
+old Ceph clients.  You can view the CRUSH hierarchy with shadow items
+with::
 
-:Purpose: A component of the rule mask.
-:Type: Integer
-:Required: Yes
-:Default: 0
+  ceph osd crush tree --show-shadow
 
-.. _setting the ruleset in a pool: ../pools#setpoolvalues
+For older clusters created before Luminous that relied on manually
+crafted CRUSH maps to maintain per-device-type hierarchies, there is a
+*reclassify* tool available to help transition to device classes
+without triggering data movement (see :ref:`crush-reclassify`).
 
 
-``type``
+Weights sets
+------------
 
-:Description: Describes a rule for either a storage drive (replicated) 
-              or a RAID.
-              
-:Purpose: A component of the rule mask. 
-:Type: String
-:Required: Yes
-:Default: ``replicated``
-:Valid Values: Currently only ``replicated`` and ``erasure``
+A *weight set* is an alternative set of weights to use when
+calculating data placement.  The normal weights associated with each
+device in the CRUSH map are set based on the device size and indicate
+how much data we *should* be storing where.  However, because CRUSH is
+a "probabilistic" pseudorandom placement process, there is always some
+variation from this ideal distribution, in the same way that rolling a
+die sixty times will not result in rolling exactly 10 ones and 10
+sixes.  Weight sets allow the cluster to perform numerical optimization
+based on the specifics of your cluster (hierarchy, pools, etc.) to achieve
+a balanced distribution.
 
-``min_size``
+There are two types of weight sets supported:
 
-:Description: If a pool makes fewer replicas than this number, CRUSH will 
-              **NOT** select this rule.
-
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: ``1``
-
-``max_size``
-
-:Description: If a pool makes more replicas than this number, CRUSH will 
-              **NOT** select this rule.
-              
-:Type: Integer
-:Purpose: A component of the rule mask.
-:Required: Yes
-:Default: 10
-
-
-``step take <bucket-name> [class <device-class>]``
-
-:Description: Takes a bucket name, and begins iterating down the tree.
-              If the ``device-class`` is specified, it must match
-              a class previously used when defining a device. All
-              devices that do not belong to the class are excluded.
-:Purpose: A component of the rule.
-:Required: Yes
-:Example: ``step take data``
-
-
-``step choose firstn {num} type {bucket-type}``
-
-:Description: Selects the number of buckets of the given type. The number is 
-              usually the number of replicas in the pool (i.e., pool size). 
-
-              - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
-              - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
-              - If ``{num} < 0``, it means ``pool-num-replicas - {num}``.
-
-:Purpose: A component of the rule.
-:Prerequisite: Follows ``step take`` or ``step choose``.  
-:Example: ``step choose firstn 1 type row``
-
-
-``step chooseleaf firstn {num} type {bucket-type}``
-
-:Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf 
-              node from the subtree of each bucket in the set of buckets. The 
-              number of buckets in the set is usually the number of replicas in
-              the pool (i.e., pool size).
-
-              - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
-              - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
-              - If ``{num} < 0``, it means ``pool-num-replicas - {num}``.
-
-:Purpose: A component of the rule. Usage removes the need to select a device using two steps.
-:Prerequisite: Follows ``step take`` or ``step choose``.  
-:Example: ``step chooseleaf firstn 0 type row``
-
-
-
-``step emit`` 
-
-:Description: Outputs the current value and empties the stack. Typically used 
-              at the end of a rule, but may also be used to pick from different
-              trees in the same rule.
-              
-:Purpose: A component of the rule.
-:Prerequisite: Follows ``step choose``.
-:Example: ``step emit``
-
-.. important:: To activate one or more rules with a common ruleset number to a 
-   pool, set the ruleset number of the pool.
-
-
-
-Primary Affinity
-================
-
-When a Ceph Client reads or writes data, it always contacts the primary OSD in
-the acting set. For set ``[2, 3, 4]``, ``osd.2`` is the primary. Sometimes an
-OSD isn't well suited to act as a primary compared to other OSDs (e.g., it has 
-a slow disk or a slow controller). To prevent performance bottlenecks 
-(especially on read operations) while maximizing utilization of your hardware,
-you can set a Ceph OSD's primary affinity so that CRUSH is less likely to use 
-the OSD as a primary in an acting set. ::
-
-	ceph osd primary-affinity <osd-id> <weight>
-
-Primary affinity is ``1`` by default (*i.e.,* an OSD may act as a primary). You
-may set the OSD primary range from ``0-1``, where ``0`` means that the OSD may
-**NOT** be used as a primary and ``1`` means that an OSD may be used as a
-primary.  When the weight is ``< 1``, it is less likely that CRUSH will select
-the Ceph OSD Daemon to act as a primary.
-
-
-Placing Different Pools on Different OSDS:
-==========================================
-
-Suppose you want to have most pools default to OSDs backed by large hard drives,
-but have some pools mapped to OSDs backed by fast solid-state drives (SSDs).
-It's possible to have multiple independent CRUSH hierarchies within the same
-CRUSH map. Define two hierarchies with two different root nodes--one for hard
-disks (e.g., "root platter") and one for SSDs (e.g., "root ssd") as shown
-below::
-
-  device 0 osd.0
-  device 1 osd.1
-  device 2 osd.2
-  device 3 osd.3
-  device 4 osd.4
-  device 5 osd.5
-  device 6 osd.6
-  device 7 osd.7
-
-	host ceph-osd-ssd-server-1 {
-		id -1
-		alg straw
-		hash 0
-		item osd.0 weight 1.00
-		item osd.1 weight 1.00
-	}
-
-	host ceph-osd-ssd-server-2 {
-		id -2
-		alg straw
-		hash 0
-		item osd.2 weight 1.00
-		item osd.3 weight 1.00
-	}
-
-	host ceph-osd-platter-server-1 {
-		id -3
-		alg straw
-		hash 0
-		item osd.4 weight 1.00
-		item osd.5 weight 1.00
-	}
-
-	host ceph-osd-platter-server-2 {
-		id -4
-		alg straw
-		hash 0
-		item osd.6 weight 1.00
-		item osd.7 weight 1.00
-	}
-
-	root platter {
-		id -5	
-		alg straw
-		hash 0
-		item ceph-osd-platter-server-1 weight 2.00
-		item ceph-osd-platter-server-2 weight 2.00
-	}
-
-	root ssd {
-		id -6	
-		alg straw
-		hash 0
-		item ceph-osd-ssd-server-1 weight 2.00
-		item ceph-osd-ssd-server-2 weight 2.00
-	}
-
-	rule data {
-		ruleset 0
-		type replicated
-		min_size 2
-		max_size 2
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
-
-	rule metadata {
-		ruleset 1
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
-
-	rule rbd {
-		ruleset 2
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
-
-	rule platter {
-		ruleset 3
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
-
-	rule ssd {
-		ruleset 4
-		type replicated
-		min_size 0
-		max_size 4
-		step take ssd
-		step chooseleaf firstn 0 type host
-		step emit
-	}
-
-	rule ssd-primary {
-		ruleset 5
-		type replicated
-		min_size 5
-		max_size 10
-		step take ssd
-		step chooseleaf firstn 1 type host
-		step emit
-		step take platter
-		step chooseleaf firstn -1 type host
-		step emit
-	}
-
-You can then set a pool to use the SSD rule by::
-
-  ceph osd pool set <poolname> crush_ruleset 4
-
-Similarly, using the ``ssd-primary`` rule will cause each placement group in the
-pool to be placed with an SSD as the primary and platters as the replicas.
+ #. A **compat** weight set is a single alternative set of weights for
+    each device and node in the cluster.  This is not well-suited for
+    correcting for all anomalies (for example, placement groups for
+    different pools may be different sizes and have different load
+    levels, but will be mostly treated the same by the balancer).
+    However, compat weight sets have the huge advantage that they are
+    *backward compatible* with previous versions of Ceph, which means
+    that even though weight sets were first introduced in Luminous
+    v12.2.z, older clients (e.g., firefly) can still connect to the
+    cluster when a compat weight set is being used to balance data.
+ #. A **per-pool** weight set is more flexible in that it allows
+    placement to be optimized for each data pool.  Additionally,
+    weights can be adjusted for each position of placement, allowing
+    the optimizer to correct for a subtle skew of data toward devices
+    with small weights relative to their peers (and effect that is
+    usually only apparently in very large clusters but which can cause
+    balancing problems).
+
+When weight sets are in use, the weights associated with each node in
+the hierarchy is visible as a separate column (labeled either
+``(compat)`` or the pool name) from the command::
+
+  ceph osd tree
+
+When both *compat* and *per-pool* weight sets are in use, data
+placement for a particular pool will use its own per-pool weight set
+if present.  If not, it will use the compat weight set if present.  If
+neither are present, it will use the normal CRUSH weights.
+
+Although weight sets can be set up and manipulated by hand, it is
+recommended that the ``ceph-mgr`` *balancer* module be enabled to do so
+automatically when running Luminous or later releases.
+
+
+Modifying the CRUSH map
+=======================
 
 .. _addosd:
 
 Add/Move an OSD
-===============
+---------------
 
-To add or move an OSD in the CRUSH map of a running cluster, execute the 
-``ceph osd crush set``. For Argonaut (v 0.48), execute the following::
+.. note: OSDs are normally automatically added to the CRUSH map when
+         the OSD is created.  This command is rarely needed.
 
-	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
-	
-For Bobtail (v 0.56), execute the following:: 
+To add or move an OSD in the CRUSH map of a running cluster::
 
-	ceph osd crush set {id-or-name} {weight} root={pool-name}  [{bucket-type}={bucket-name} ...]
+  ceph osd crush set {name} {weight} root={root} [{bucket-type}={bucket-name} ...]
 
 Where:
 
-``id``
-
-:Description: The numeric ID of the OSD.
-:Type: Integer
-:Required: Yes
-:Example: ``0``
-
-
 ``name``
 
-:Description: The full name of the OSD. 
+:Description: The full name of the OSD.
 :Type: String
 :Required: Yes
 :Example: ``osd.0``
@@ -804,7 +334,7 @@ Where:
 
 ``weight``
 
-:Description: The CRUSH weight for the OSD. 
+:Description: The CRUSH weight for the OSD, normally its size measure in terabytes (TB).
 :Type: Double
 :Required: Yes
 :Example: ``2.0``
@@ -812,7 +342,7 @@ Where:
 
 ``root``
 
-:Description: The root of the tree in which the OSD resides.
+:Description: The root node of the tree in which the OSD resides (normally ``default``)
 :Type: Key/value pair.
 :Required: Yes
 :Example: ``root=default``
@@ -820,31 +350,35 @@ Where:
 
 ``bucket-type``
 
-:Description: You may specify the OSD's location in the CRUSH hierarchy. 
+:Description: You may specify the OSD's location in the CRUSH hierarchy.
 :Type: Key/value pairs.
 :Required: No
 :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
 
-The following example adds ``osd.0`` to the hierarchy, or moves the OSD from a
-previous location. :: 
+The following example adds ``osd.0`` to the hierarchy, or moves the
+OSD from a previous location. ::
 
-	ceph osd crush set osd.0 1.0 root=default datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
+  ceph osd crush set osd.0 1.0 root=default datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
 
 
-Adjust an OSD's CRUSH Weight
-============================
+Adjust OSD weight
+-----------------
 
-To adjust an OSD's crush weight in the CRUSH map of a running cluster, execute
+.. note: Normally OSDs automatically add themselves to the CRUSH map
+         with the correct weight when they are created. This command
+         is rarely needed.
+
+To adjust an OSD's CRUSH weight in the CRUSH map of a running cluster, execute
 the following::
 
-	ceph osd crush reweight {name} {weight}
+  ceph osd crush reweight {name} {weight}
 
 Where:
 
 ``name``
 
-:Description: The full name of the OSD. 
+:Description: The full name of the OSD.
 :Type: String
 :Required: Yes
 :Example: ``osd.0``
@@ -852,7 +386,7 @@ Where:
 
 ``weight``
 
-:Description: The CRUSH weight for the OSD. 
+:Description: The CRUSH weight for the OSD.
 :Type: Double
 :Required: Yes
 :Example: ``2.0``
@@ -861,27 +395,43 @@ Where:
 .. _removeosd:
 
 Remove an OSD
-=============
+-------------
 
-To remove an OSD from the CRUSH map of a running cluster, execute the following::
+.. note: OSDs are normally removed from the CRUSH as part of the
+   ``ceph osd purge`` command.  This command is rarely needed.
 
-	ceph osd crush remove {name}  
+To remove an OSD from the CRUSH map of a running cluster, execute the
+following::
+
+  ceph osd crush remove {name}
 
 Where:
 
 ``name``
 
-:Description: The full name of the OSD. 
+:Description: The full name of the OSD.
 :Type: String
 :Required: Yes
 :Example: ``osd.0``
 
+
 Add a Bucket
-============
+------------
 
-To add a bucket in the CRUSH map of a running cluster, execute the ``ceph osd crush add-bucket`` command::
+.. note: Buckets are implicitly created when an OSD is added
+   that specifies a ``{bucket-type}={bucket-name}`` as part of its
+   location,  if a bucket with that name does not already exist.  This
+   command is typically used when manually adjusting the structure of the
+   hierarchy after OSDs have been created.  One use is to move a
+   series of hosts underneath a new rack-level bucket; another is to
+   add new ``host`` buckets (OSD nodes) to a dummy ``root`` so that they don't
+   receive data until you're ready, at which time you would move them to the
+   ``default`` or other root as described below.
 
-	ceph osd crush add-bucket {bucket-name} {bucket-type}
+To add a bucket in the CRUSH map of a running cluster, execute the
+``ceph osd crush add-bucket`` command::
+
+  ceph osd crush add-bucket {bucket-name} {bucket-type}
 
 Where:
 
@@ -903,15 +453,15 @@ Where:
 
 The following example adds the ``rack12`` bucket to the hierarchy::
 
-	ceph osd crush add-bucket rack12 rack
+  ceph osd crush add-bucket rack12 rack
 
 Move a Bucket
-=============
+-------------
 
-To move a bucket to a different location or position in the CRUSH map hierarchy,
-execute the following:: 
+To move a bucket to a different location or position in the CRUSH map
+hierarchy, execute the following::
 
-	ceph osd crush move {bucket-name} {bucket-type}={bucket-name}, [...]
+  ceph osd crush move {bucket-name} {bucket-type}={bucket-name}, [...]
 
 Where:
 
@@ -924,17 +474,17 @@ Where:
 
 ``bucket-type``
 
-:Description: You may specify the bucket's location in the CRUSH hierarchy. 
+:Description: You may specify the bucket's location in the CRUSH hierarchy.
 :Type: Key/value pairs.
 :Required: No
 :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
 Remove a Bucket
-===============
+---------------
 
-To remove a bucket from the CRUSH map hierarchy, execute the following::
+To remove a bucket from the CRUSH hierarchy, execute the following::
 
-	ceph osd crush remove {bucket-name}
+  ceph osd crush remove {bucket-name}
 
 .. note:: A bucket must be empty before removing it from the CRUSH hierarchy.
 
@@ -949,7 +499,182 @@ Where:
 
 The following example removes the ``rack12`` bucket from the hierarchy::
 
-	ceph osd crush remove rack12
+  ceph osd crush remove rack12
+
+Creating a compat weight set
+----------------------------
+
+.. note: This step is normally done automatically by the ``balancer``
+   module when enabled.
+
+To create a *compat* weight set::
+
+  ceph osd crush weight-set create-compat
+
+Weights for the compat weight set can be adjusted with::
+
+  ceph osd crush weight-set reweight-compat {name} {weight}
+
+The compat weight set can be destroyed with::
+
+  ceph osd crush weight-set rm-compat
+
+Creating per-pool weight sets
+-----------------------------
+
+To create a weight set for a specific pool,::
+
+  ceph osd crush weight-set create {pool-name} {mode}
+
+.. note:: Per-pool weight sets require that all servers and daemons
+          run Luminous v12.2.z or later.
+
+Where:
+
+``pool-name``
+
+:Description: The name of a RADOS pool
+:Type: String
+:Required: Yes
+:Example: ``rbd``
+
+``mode``
+
+:Description: Either ``flat`` or ``positional``.  A *flat* weight set
+	      has a single weight for each device or bucket.  A
+	      *positional* weight set has a potentially different
+	      weight for each position in the resulting placement
+	      mapping.  For example, if a pool has a replica count of
+	      3, then a positional weight set will have three weights
+	      for each device and bucket.
+:Type: String
+:Required: Yes
+:Example: ``flat``
+
+To adjust the weight of an item in a weight set::
+
+  ceph osd crush weight-set reweight {pool-name} {item-name} {weight [...]}
+
+To list existing weight sets,::
+
+  ceph osd crush weight-set ls
+
+To remove a weight set,::
+
+  ceph osd crush weight-set rm {pool-name}
+
+Creating a rule for a replicated pool
+-------------------------------------
+
+For a replicated pool, the primary decision when creating the CRUSH
+rule is what the failure domain is going to be.  For example, if a
+failure domain of ``host`` is selected, then CRUSH will ensure that
+each replica of the data is stored on a unique host.  If ``rack``
+is selected, then each replica will be stored in a different rack.
+What failure domain you choose primarily depends on the size and
+topology of your cluster.
+
+In most cases the entire cluster hierarchy is nested beneath a root node
+named ``default``.  If you have customized your hierarchy, you may
+want to create a rule nested at some other node in the hierarchy.  It
+doesn't matter what type is associated with that node (it doesn't have
+to be a ``root`` node).
+
+It is also possible to create a rule that restricts data placement to
+a specific *class* of device.  By default, Ceph OSDs automatically
+classify themselves as either ``hdd`` or ``ssd``, depending on the
+underlying type of device being used.  These classes can also be
+customized.
+
+To create a replicated rule,::
+
+  ceph osd crush rule create-replicated {name} {root} {failure-domain-type} [{class}]
+
+Where:
+
+``name``
+
+:Description: The name of the rule
+:Type: String
+:Required: Yes
+:Example: ``rbd-rule``
+
+``root``
+
+:Description: The name of the node under which data should be placed.
+:Type: String
+:Required: Yes
+:Example: ``default``
+
+``failure-domain-type``
+
+:Description: The type of CRUSH nodes across which we should separate replicas.
+:Type: String
+:Required: Yes
+:Example: ``rack``
+
+``class``
+
+:Description: The device class on which data should be placed.
+:Type: String
+:Required: No
+:Example: ``ssd``
+
+Creating a rule for an erasure coded pool
+-----------------------------------------
+
+For an erasure-coded (EC) pool, the same basic decisions need to be made:
+what is the failure domain, which node in the
+hierarchy will data be placed under (usually ``default``), and will
+placement be restricted to a specific device class.  Erasure code
+pools are created a bit differently, however, because they need to be
+constructed carefully based on the erasure code being used.  For this reason,
+you must include this information in the *erasure code profile*.  A CRUSH
+rule will then be created from that either explicitly or automatically when
+the profile is used to create a pool.
+
+The erasure code profiles can be listed with::
+
+  ceph osd erasure-code-profile ls
+
+An existing profile can be viewed with::
+
+  ceph osd erasure-code-profile get {profile-name}
+
+Normally profiles should never be modified; instead, a new profile
+should be created and used when creating a new pool or creating a new
+rule for an existing pool.
+
+An erasure code profile consists of a set of key=value pairs.  Most of
+these control the behavior of the erasure code that is encoding data
+in the pool.  Those that begin with ``crush-``, however, affect the
+CRUSH rule that is created.
+
+The erasure code profile properties of interest are:
+
+ * **crush-root**: the name of the CRUSH node under which to place data [default: ``default``].
+ * **crush-failure-domain**: the CRUSH bucket type across which to distribute erasure-coded shards [default: ``host``].
+ * **crush-device-class**: the device class on which to place data [default: none, meaning all devices are used].
+ * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the number of erasure code shards, affecting the resulting CRUSH rule.
+
+Once a profile is defined, you can create a CRUSH rule with::
+
+  ceph osd crush rule create-erasure {name} {profile-name}
+
+.. note: When creating a new pool, it is not actually necessary to
+   explicitly create the rule.  If the erasure code profile alone is
+   specified and the rule argument is left off then Ceph will create
+   the CRUSH rule automatically.
+
+Deleting rules
+--------------
+
+Rules that are not in use by pools can be deleted with::
+
+  ceph osd crush rule rm {rule-name}
+
+
+.. _crush-map-tunables:
 
 Tunables
 ========
@@ -964,7 +689,7 @@ In order to use newer tunables, both clients and servers must support
 the new version of CRUSH.  For this reason, we have created
 ``profiles`` that are named after the Ceph version in which they were
 introduced.  For example, the ``firefly`` tunables are first supported
-in the firefly release, and will not work with older (e.g., dumpling)
+by the Firefly release, and will not work with older (e.g., Dumpling)
 clients.  Once a given set of tunables are changed from the legacy
 default behavior, the ``ceph-mon`` and ``ceph-osd`` will prevent older
 clients who do not support the new CRUSH features from connecting to
@@ -973,23 +698,23 @@ the cluster.
 argonaut (legacy)
 -----------------
 
-The legacy CRUSH behavior used by argonaut and older releases works
-fine for most clusters, provided there are not too many OSDs that have
+The legacy CRUSH behavior used by Argonaut and older releases works
+fine for most clusters, provided there are not many OSDs that have
 been marked out.
 
 bobtail (CRUSH_TUNABLES2)
 -------------------------
 
-The bobtail tunable profile fixes a few key misbehaviors:
+The ``bobtail`` tunable profile fixes a few key misbehaviors:
 
  * For hierarchies with a small number of devices in the leaf buckets,
    some PGs map to fewer than the desired number of replicas.  This
    commonly happens for hierarchies with "host" nodes with a small
    number (1-3) of OSDs nested beneath each one.
 
- * For large clusters, some small percentages of PGs map to less than
+ * For large clusters, some small percentages of PGs map to fewer than
    the desired number of OSDs.  This is more prevalent when there are
-   several layers of the hierarchy (e.g., row, rack, host, osd).
+   mutiple hierarchy layers in use (e.g., ``row``, ``rack``, ``host``, ``osd``).
 
  * When some OSDs are marked out, the data tends to get redistributed
    to nearby OSDs instead of across the entire hierarchy.
@@ -1013,49 +738,49 @@ The new tunables are:
 
 Migration impact:
 
- * Moving from argonaut to bobtail tunables triggers a moderate amount
+ * Moving from ``argonaut`` to ``bobtail`` tunables triggers a moderate amount
    of data movement.  Use caution on a cluster that is already
    populated with data.
 
 firefly (CRUSH_TUNABLES3)
 -------------------------
 
-The firefly tunable profile fixes a problem
-with the ``chooseleaf`` CRUSH rule behavior that tends to result in PG
+The ``firefly`` tunable profile fixes a problem
+with ``chooseleaf`` CRUSH rule behavior that tends to result in PG
 mappings with too few results when too many OSDs have been marked out.
 
 The new tunable is:
 
  * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will
-   start with a non-zero value of r, based on how many attempts the
-   parent has already made.  Legacy default is 0, but with this value
+   start with a non-zero value of ``r``, based on how many attempts the
+   parent has already made.  Legacy default is ``0``, but with this value
    CRUSH is sometimes unable to find a mapping.  The optimal value (in
-   terms of computational cost and correctness) is 1.
+   terms of computational cost and correctness) is ``1``.
 
-Migration impact: 
+Migration impact:
 
- * For existing clusters that have lots of existing data, changing
-   from 0 to 1 will cause a lot of data to move; a value of 4 or 5
-   will allow CRUSH to find a valid mapping but will make less data
-   move.
+ * For existing clusters that house lots of data, changing
+   from ``0`` to ``1`` will cause a lot of data to move; a value of ``4`` or ``5``
+   will allow CRUSH to still find a valid mapping but will cause less data
+   to move.
 
 straw_calc_version tunable (introduced with Firefly too)
 --------------------------------------------------------
 
 There were some problems with the internal weights calculated and
-stored in the CRUSH map for ``straw`` buckets.  Specifically, when
-there were items with a CRUSH weight of 0 or both a mix of weights and
-some duplicated weights CRUSH would distribute data incorrectly (i.e.,
+stored in the CRUSH map for ``straw`` algorithm buckets.  Specifically, when
+there were items with a CRUSH weight of ``0``, or both a mix of different and
+unique weights, CRUSH would distribute data incorrectly (i.e.,
 not in proportion to the weights).
 
 The new tunable is:
 
- * ``straw_calc_version``: A value of 0 preserves the old, broken
-   internal weight calculation; a value of 1 fixes the behavior.
+ * ``straw_calc_version``: A value of ``0`` preserves the old, broken
+   internal weight calculation; a value of ``1`` fixes the behavior.
 
 Migration impact:
 
- * Moving to straw_calc_version 1 and then adjusting a straw bucket
+ * Moving to straw_calc_version ``1`` and then adjusting a straw bucket
    (by adding, removing, or reweighting an item, or by using the
    reweight-all command) can trigger a small to moderate amount of
    data movement *if* the cluster has hit one of the problematic
@@ -1067,12 +792,12 @@ concerning the required kernel version in the client side.
 hammer (CRUSH_V4)
 -----------------
 
-The hammer tunable profile does not affect the
+The ``hammer`` tunable profile does not affect the
 mapping of existing CRUSH maps simply by changing the profile.  However:
 
- * There is a new bucket type (``straw2``) supported.  The new
-   ``straw2`` bucket type fixes several limitations in the original
-   ``straw`` bucket.  Specifically, the old ``straw`` buckets would
+ * There is a new bucket algorithm (``straw2``) supported.  The new
+   ``straw2`` bucket algorithm fixes several limitations in the original
+   ``straw``.  Specifically, the old ``straw`` buckets would
    change some mappings that should have changed when a weight was
    adjusted, while ``straw2`` achieves the original goal of only
    changing mappings to or from the bucket item whose weight has
@@ -1091,16 +816,17 @@ Migration impact:
 jewel (CRUSH_TUNABLES5)
 -----------------------
 
-The jewel tunable profile improves the
+The ``jewel`` tunable profile improves the
 overall behavior of CRUSH such that significantly fewer mappings
-change when an OSD is marked out of the cluster.
+change when an OSD is marked out of the cluster.  This results in
+significantly less data movement.
 
 The new tunable is:
 
  * ``chooseleaf_stable``: Whether a recursive chooseleaf attempt will
    use a better value for an inner loop that greatly reduces the number
-   of mapping changes when an OSD is marked out.  The legacy value is 0,
-   while the new value of 1 uses the new approach.
+   of mapping changes when an OSD is marked out.  The legacy value is ``0``,
+   while the new value of ``1`` uses the new approach.
 
 Migration impact:
 
@@ -1160,7 +886,7 @@ To make this warning go away, you have two options:
 
    If things go poorly (e.g., too much load) and not very much
    progress has been made, or there is a client compatibility problem
-   (old kernel cephfs or rbd clients, or pre-bobtail librados
+   (old kernel CephFS or RBD clients, or pre-Bobtail ``librados``
    clients), you can switch back with::
 
       ceph osd crush tunables legacy
@@ -1173,7 +899,7 @@ To make this warning go away, you have two options:
    For the change to take effect, you will need to restart the monitors, or
    apply the option to running monitors with::
 
-      ceph tell mon.\* injectargs --no-mon-warn-on-legacy-crush-tunables
+      ceph tell mon.\* config set mon_warn_on_legacy_crush_tunables false
 
 
 A few important points
@@ -1188,7 +914,7 @@ A few important points
    effectively grandfathered in, and will misbehave if they do not
    support the new feature.
  * If the CRUSH tunables are set to non-legacy values and then later
-   changed back to the defult values, ``ceph-osd`` daemons will not be
+   changed back to the default values, ``ceph-osd`` daemons will not be
    required to support the feature.  However, the OSD peering process
    requires examining and understanding old maps.  Therefore, you
    should not run old versions of the ``ceph-osd`` daemon
@@ -1199,62 +925,133 @@ A few important points
 Tuning CRUSH
 ------------
 
-The simplest way to adjust the crush tunables is by changing to a known
-profile.  Those are:
+The simplest way to adjust CRUSH tunables is by applying them in matched
+sets known as *profiles*.  As of the Octopus release these are:
 
  * ``legacy``: the legacy behavior from argonaut and earlier.
  * ``argonaut``: the legacy values supported by the original argonaut release
  * ``bobtail``: the values supported by the bobtail release
  * ``firefly``: the values supported by the firefly release
+ * ``hammer``: the values supported by the hammer release
+ * ``jewel``: the values supported by the jewel release
  * ``optimal``: the best (ie optimal) values of the current version of Ceph
  * ``default``: the default values of a new cluster installed from
    scratch. These values, which depend on the current version of Ceph,
-   are hard coded and are generally a mix of optimal and legacy values.
+   are hardcoded and are generally a mix of optimal and legacy values.
    These values generally match the ``optimal`` profile of the previous
-   LTS release, or the most recent release for which we generally except
-   more users to have up to date clients for.
+   LTS release, or the most recent release for which we generally expect
+   most users to have up-to-date clients for.
 
-You can select a profile on a running cluster with the command::
+You can apply a profile to a running cluster with the command::
 
  ceph osd crush tunables {PROFILE}
 
-Note that this may result in some data movement.
+Note that this may result in data movement, potentially quite a bit.  Study
+release notes and documentation carefully before changing the profile on a
+running cluster, and consider throttling recovery/backfill parameters to
+limit the impact of a bolus of backfill.
 
 
-Tuning CRUSH, the hard way
---------------------------
+.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.com/wp-content/uploads/2016/08/weil-crush-sc06.pdf
 
-If you can ensure that all clients are running recent code, you can
-adjust the tunables by extracting the CRUSH map, modifying the values,
-and reinjecting it into the cluster.
 
-* Extract the latest CRUSH map::
+Primary Affinity
+================
 
-	ceph osd getcrushmap -o /tmp/crush
+When a Ceph Client reads or writes data, it first contacts the primary OSD in
+each affected PG's acting set. By default, the first OSD in the acting set is
+the primary.  For example, in the acting set ``[2, 3, 4]``, ``osd.2`` is
+listed first and thus is the primary (aka lead) OSD. Sometimes we know that an
+OSD is less well suited to act as the lead than are other OSDs (e.g., it has
+a slow drive or a slow controller). To prevent performance bottlenecks
+(especially on read operations) while maximizing utilization of your hardware,
+you can influence the selection of primary OSDs by adjusting primary affinity
+values, or by crafting a CRUSH rule that selects preferred OSDs first.
 
-* Adjust tunables.  These values appear to offer the best behavior
-  for both large and small clusters we tested with.  You will need to
-  additionally specify the ``--enable-unsafe-tunables`` argument to
-  ``crushtool`` for this to work.  Please use this option with
-  extreme care.::
+Tuning primary OSD selection is mainly useful for replicated pools, because
+by default read operations are served from the primary OSD for each PG.
+For erasure coded (EC) pools, a way to speed up read operations is to enable
+**fast read** as described in :ref:`pool-settings`.
 
-	crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
+A common scenario for primary affinity is when a cluster contains
+a mix of drive sizes, for example older racks with 1.9 TB SATA SSDS and newer racks with
+3.84TB SATA SSDs.  On average the latter will be assigned double the number of
+PGs and thus will serve double the number of write and read operations, thus
+they'll be busier than the former.  A rough assignment of primary affinity
+inversely proportional to OSD size won't be 100% optimal, but it can readily
+achieve a 15% improvement in overall read throughput by utilizing SATA
+interface bandwidth and CPU cycles more evenly.
 
-* Reinject modified map::
+By default, all ceph OSDs have primary affinity of ``1``, which indicates that
+any OSD may act as a primary with equal probability.
 
-	ceph osd setcrushmap -i /tmp/crush.new
+You can reduce a Ceph OSD's primary affinity so that CRUSH is less likely to choose
+the OSD as primary in a PG's acting set.::
 
-Legacy values
--------------
+	ceph osd primary-affinity <osd-id> <weight>
 
-For reference, the legacy values for the CRUSH tunables can be set
-with::
+You may set an OSD's primary affinity to a real number in the range
+``[0-1]``, where ``0`` indicates that the OSD may **NOT** be used as a primary
+and ``1`` indicates that an OSD may be used as a primary.  When the weight is
+between these extremes, it is less likely that
+CRUSH will select that OSD as a primary.  The process for
+selecting the lead OSD is more nuanced than a simple probability based on
+relative affinity values, but measurable results can be achieved even with
+first-order approximations of desirable values.
 
-   crushtool -i /tmp/crush --set-choose-local-tries 2 --set-choose-local-fallback-tries 5 --set-choose-total-tries 19 --set-chooseleaf-descend-once 0 --set-chooseleaf-vary-r 0 -o /tmp/crush.legacy
+Custom CRUSH Rules
+------------------
 
-Again, the special ``--enable-unsafe-tunables`` option is required.
-Further, as noted above, be careful running old versions of the
-``ceph-osd`` daemon after reverting to legacy values as the feature
-bit is not perfectly enforced.
+There are occasional clusters that balance cost and performance by mixing SSDs
+and HDDs in the same replicated pool. By setting the primary affinity of HDD
+OSDs to ``0`` one can direct operations to the SSD in each acting set. An
+alternative is to define a CRUSH rule that always selects an SSD OSD as the
+first OSD, then selects HDDs for the remaining OSDs. Thus, each PG's acting
+set will contain exactly one SSD OSD as the primary with the balance on HDDs.
 
-.. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: http://ceph.com/papers/weil-crush-sc06.pdf
+For example, the CRUSH rule below::
+
+	rule mixed_replicated_rule {
+	        id 11
+	        type replicated
+	        min_size 1
+	        max_size 10
+	        step take default class ssd
+	        step chooseleaf firstn 1 type host
+	        step emit
+	        step take default class hdd
+	        step chooseleaf firstn 0 type host
+	        step emit
+	}
+
+chooses an SSD as the first OSD.  Note that for an ``N``-times replicated pool
+this rule selects ``N+1`` OSDs to guarantee that ``N`` copies are on different
+hosts, because the first SSD OSD might be co-located with any of the ``N`` HDD
+OSDs.
+
+This extra storage requirement can be avoided by placing SSDs and HDDs in
+different hosts with the tradeoff that hosts with SSDs will receive all client
+requests.  You may thus consider faster CPU(s) for SSD hosts and more modest
+ones for HDD nodes, since the latter will normally only service recovery
+operations.  Here the CRUSH roots ``ssd_hosts`` and ``hdd_hosts`` strictly
+must not contain the same servers::
+
+        rule mixed_replicated_rule_two {
+               id 1
+               type replicated
+               min_size 1
+               max_size 10
+               step take ssd_hosts class ssd
+               step chooseleaf firstn 1 type host
+               step emit
+               step take hdd_hosts class hdd
+               step chooseleaf firstn -1 type host
+               step emit
+        }
+
+
+
+Note also that on failure of an SSD, requests to a PG will be served temporarily
+from a (slower) HDD OSD until the PG's data has been replicated onto the replacement
+primary SSD OSD.
+

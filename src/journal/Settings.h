@@ -10,10 +10,9 @@ namespace journal {
 
 struct Settings {
   double commit_interval = 5;         ///< commit position throttle (in secs)
-  uint64_t max_fetch_bytes = 0;       ///< 0 implies no limit
   uint64_t max_payload_bytes = 0;     ///< 0 implies object size limit
   int max_concurrent_object_sets = 0; ///< 0 implies no limit
-  std::set<std::string> whitelisted_laggy_clients;
+  std::set<std::string> ignored_laggy_clients;
                                       ///< clients that mustn't be disconnected
 };
 

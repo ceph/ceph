@@ -66,6 +66,18 @@ TEST(str_map, plaintext) {
   }
 }
 
+TEST(str_map, empty_values) {
+  {
+    map<string,string> str_map;
+    ASSERT_EQ(0, get_str_map("M= P= L=",
+			     &str_map));
+    ASSERT_EQ(3u, str_map.size());
+    ASSERT_EQ("", str_map["M"]);
+    ASSERT_EQ("", str_map["P"]);
+    ASSERT_EQ("", str_map["L"]);
+  }
+}
+
 /* 
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 && 

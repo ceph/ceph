@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_REST_USAGE_H
-#define CEPH_RGW_REST_USAGE_H
+#pragma once
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -16,7 +15,7 @@ public:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
   ~RGWHandler_Usage() override = default;
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*, optional_yield) override {
     return 0;
   }
 };
@@ -26,11 +25,10 @@ public:
   RGWRESTMgr_Usage() = default;
   ~RGWRESTMgr_Usage() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore* store,
+			       struct req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Usage(auth_registry);
   }
 };
-
-#endif

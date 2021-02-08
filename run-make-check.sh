@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Ceph distributed storage system
 #
@@ -13,62 +13,32 @@
 #
 
 #
-# Return MAX(1, (number of processors / 2)) by default or NPROC
+# To just look at what this script will do, run it like this:
 #
-function get_processors() {
-    if test -n "$NPROC" ; then
-        echo $NPROC
-    else
-        if test $(nproc) -ge 2 ; then
-            expr $(nproc) / 2
-        else
-            echo 1
-        fi
-    fi
-}
+# $ DRY_RUN=echo ./run-make-check.sh
+#
+
+source src/script/run-make.sh
+
+set -e
 
 function run() {
-    local install_cmd
-    if test -f /etc/redhat-release ; then
-        source /etc/os-release
-        if ! type bc > /dev/null 2>&1 ; then
-            echo "Please install bc and re-run." 
-            exit 1
-        fi
-        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
-            install_cmd="dnf -y install"
-        else
-            install_cmd="yum install -y"
-        fi
+    # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
+    $DRY_RUN ulimit -n $(ulimit -Hn)
+    if [ $(ulimit -n) -lt 1024 ];then
+        echo "***ulimit -n too small, better bigger than 1024 for test***"
+        return 1
     fi
 
-    type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
-    type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
+    # increase the aio-max-nr, which is by default 65536. we could reach this
+    # limit while running seastar tests and bluestore tests.
+    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * 16))
 
-    if ! type sudo > /dev/null 2>&1 ; then
-        echo "Please install sudo and re-run. This script assumes it is running"
-        echo "as a normal user with the ability to run commands as root via sudo." 
-        exit 1
-    fi
-    if [ -n "$install_cmd" ]; then
-        $DRY_RUN sudo $install_cmd ccache jq
-    else
-        echo "WARNING: Don't know how to install packages" >&2
-    fi
-
-    if test -f ./install-deps.sh ; then
-	$DRY_RUN ./install-deps.sh || return 1
-    fi
-
-    # Init defaults after deps are installed. get_processors() depends on coreutils nproc.
-    DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
-    BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-
-    $DRY_RUN ./do_cmake.sh $@ || return 1
-    $DRY_RUN cd build
-    $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
-    $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure || return 1
+    if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
+        rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+        return 1
+    fi
 }
 
 function main() {
@@ -77,21 +47,26 @@ function main() {
         echo "with the ability to run commands as root via sudo."
     fi
     echo -n "Checking hostname sanity... "
-    if hostname --fqdn >/dev/null 2>&1 ; then
+    if $DRY_RUN hostname --fqdn >/dev/null 2>&1 ; then
         echo "OK"
     else
         echo "NOT OK"
         echo "Please fix 'hostname --fqdn', otherwise 'make check' will fail"
         return 1
     fi
-    if run "$@" ; then
-        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
-        echo "cmake check: successful run on $(git rev-parse HEAD)"
-        return 0
-    else
-        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
-        return 1
+    FOR_MAKE_CHECK=1 prepare
+    # Init defaults after deps are installed.
+    local cmake_opts=" -DWITH_PYTHON3=3 -DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_CEPHFS_SHELL=ON -DWITH_SPDK=ON -DENABLE_GIT_VERSION=OFF"
+    if [ $WITH_SEASTAR ]; then
+        cmake_opts+=" -DWITH_SEASTAR=ON"
     fi
+    if [ $WITH_ZBD ]; then
+        cmake_opts+=" -DWITH_ZBD=ON"
+    fi
+    configure $cmake_opts $@
+    build tests
+    echo "make check: successful build on $(git rev-parse HEAD)"
+    run
 }
 
 main "$@"

@@ -1,14 +1,20 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <map>
 #include <thread>
 
 #include "rgw_period_pusher.h"
 #include "rgw_cr_rest.h"
+#include "rgw_zone.h"
+#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
+
+#include "services/svc_zone.h"
+
 #include "common/errno.h"
 
-#include "rgw_boost_asio_yield.h"
+#include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -137,9 +143,9 @@ class RGWPeriodPusher::CRThread {
       http(cct, coroutines.get_completion_mgr()),
       push_all(new PushAllCR(cct, &http, std::move(period), std::move(conns)))
   {
-    http.set_threaded();
-    // must spawn the CR thread after set_threaded
-    thread = std::thread([this] { coroutines.run(push_all.get()); });
+    http.start();
+    // must spawn the CR thread after start
+    thread = std::thread([this]() noexcept { coroutines.run(push_all.get()); });
   }
   ~CRThread()
   {
@@ -152,17 +158,18 @@ class RGWPeriodPusher::CRThread {
 };
 
 
-RGWPeriodPusher::RGWPeriodPusher(RGWRados* store)
+RGWPeriodPusher::RGWPeriodPusher(rgw::sal::RGWRadosStore* store,
+				 optional_yield y)
   : cct(store->ctx()), store(store)
 {
-  const auto& realm = store->realm;
+  const auto& realm = store->svc()->zone->get_realm();
   auto& realm_id = realm.get_id();
   if (realm_id.empty()) // no realm configuration
     return;
 
   // always send out the current period on startup
   RGWPeriod period;
-  int r = period.init(cct, store, realm_id, realm.get_name());
+  int r = period.init(cct, store->svc()->sysobj, realm_id, y, realm.get_name());
   if (r < 0) {
     lderr(cct) << "failed to load period for realm " << realm_id << dendl;
     return;
@@ -176,12 +183,12 @@ RGWPeriodPusher::RGWPeriodPusher(RGWRados* store)
 RGWPeriodPusher::~RGWPeriodPusher() = default;
 
 void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
-                                    bufferlist::iterator& p)
+                                    bufferlist::const_iterator& p)
 {
   // decode the period
   RGWZonesNeedPeriod info;
   try {
-    ::decode(info, p);
+    decode(info, p);
   } catch (buffer::error& e) {
     lderr(cct) << "Failed to decode the period: " << e.what() << dendl;
     return;
@@ -217,7 +224,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
 
   // find our zonegroup in the new period
   auto& zonegroups = period.get_map().zonegroups;
-  auto i = zonegroups.find(store->get_zonegroup().get_id());
+  auto i = zonegroups.find(store->svc()->zone->get_zonegroup().get_id());
   if (i == zonegroups.end()) {
     lderr(cct) << "The new period does not contain my zonegroup!" << dendl;
     return;
@@ -225,7 +232,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
   auto& my_zonegroup = i->second;
 
   // if we're not a master zone, we're not responsible for pushing any updates
-  if (my_zonegroup.master_zone != store->get_zone_params().get_id())
+  if (my_zonegroup.master_zone != store->svc()->zone->get_zone_params().get_id())
     return;
 
   // construct a map of the zones that need this period. the map uses the same
@@ -234,11 +241,11 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
   auto hint = conns.end();
 
   // are we the master zonegroup in this period?
-  if (period.get_map().master_zonegroup == store->get_zonegroup().get_id()) {
+  if (period.get_map().master_zonegroup == store->svc()->zone->get_zonegroup().get_id()) {
     // update other zonegroup endpoints
     for (auto& zg : zonegroups) {
       auto& zonegroup = zg.second;
-      if (zonegroup.get_id() == store->get_zonegroup().get_id())
+      if (zonegroup.get_id() == store->svc()->zone->get_zonegroup().get_id())
         continue;
       if (zonegroup.endpoints.empty())
         continue;
@@ -246,14 +253,14 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
       hint = conns.emplace_hint(
           hint, std::piecewise_construct,
           std::forward_as_tuple(zonegroup.get_id()),
-          std::forward_as_tuple(cct, store, zonegroup.get_id(), zonegroup.endpoints));
+          std::forward_as_tuple(cct, store->svc()->zone, zonegroup.get_id(), zonegroup.endpoints));
     }
   }
 
   // update other zone endpoints
   for (auto& z : my_zonegroup.zones) {
     auto& zone = z.second;
-    if (zone.id == store->get_zone_params().get_id())
+    if (zone.id == store->svc()->zone->get_zone_params().get_id())
       continue;
     if (zone.endpoints.empty())
       continue;
@@ -261,7 +268,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
     hint = conns.emplace_hint(
         hint, std::piecewise_construct,
         std::forward_as_tuple(zone.id),
-        std::forward_as_tuple(cct, store, zone.id, zone.endpoints));
+        std::forward_as_tuple(cct, store->svc()->zone, zone.id, zone.endpoints));
   }
 
   if (conns.empty()) {
@@ -287,7 +294,7 @@ void RGWPeriodPusher::pause()
   store = nullptr;
 }
 
-void RGWPeriodPusher::resume(RGWRados* store)
+void RGWPeriodPusher::resume(rgw::sal::RGWRadosStore* store)
 {
   std::lock_guard<std::mutex> lock(mutex);
   this->store = store;

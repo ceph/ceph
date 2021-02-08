@@ -11,7 +11,8 @@
 extern "C" {
 #endif
 
-#ifndef BUILDING_FOR_EMBEDDED
+#define CEPH_CLS_API [[gnu::visibility("default")]]
+
 #define CLS_VER(maj,min) \
 int __cls_ver__## maj ## _ ##min = 0; \
 int __cls_ver_maj = maj; \
@@ -20,14 +21,9 @@ int __cls_ver_min = min;
 #define CLS_NAME(name) \
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
+
 #define CLS_INIT(name) \
-void CEPH_CLS_API __cls_init()
-#else
-#define CLS_VER(maj,min)
-#define CLS_NAME(name)
-#define CLS_INIT(name) \
-void CEPH_CLS_API name##_cls_init()
-#endif
+CEPH_CLS_API void __cls_init()
 
 #define CLS_METHOD_RD       0x1 /// method executes read operations
 #define CLS_METHOD_WR       0x2 /// method executes write operations
@@ -78,7 +74,7 @@ extern int cls_register(const char *name, cls_handle_t *handle);
  *
  */
 typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
-    class buffer::list *inbl, class buffer::list *outbl);
+    class ceph::buffer::list *inbl, class ceph::buffer::list *outbl);
 
 /**
  * Register a method.
@@ -124,7 +120,7 @@ extern int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime
  * @param len
  * @param bl
  */
-extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, ceph::bufferlist *bl);
 
 /**
  * Write to the object.
@@ -134,7 +130,7 @@ extern int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist 
  * @param len
  * @param bl
  */
-extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, ceph::bufferlist *bl);
 
 /**
  * Get xattr of the object.
@@ -144,7 +140,7 @@ extern int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist
  * @param outbl
  */
 extern int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
-                            bufferlist *outbl);
+                            ceph::bufferlist *outbl);
 
 /**
  * Set xattr of the object.
@@ -154,7 +150,7 @@ extern int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
  * @param inbl
  */
 extern int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
-                            bufferlist *inbl);
+                            ceph::bufferlist *inbl);
 
 /**
  * Get value corresponding to a key from the map.
@@ -164,7 +160,7 @@ extern int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
  * @param outbl
  */
 extern int cls_cxx_map_get_val(cls_method_context_t hctx,
-                               const std::string &key, bufferlist *outbl);
+                               const std::string &key, ceph::bufferlist *outbl);
 
 /**
  * Set value corresponding to a key in the map.
@@ -174,7 +170,7 @@ extern int cls_cxx_map_get_val(cls_method_context_t hctx,
  * @param inbl
  */
 extern int cls_cxx_map_set_val(cls_method_context_t hctx,
-                               const std::string &key, bufferlist *inbl);
+                               const std::string &key, ceph::bufferlist *inbl);
 
 #endif
 

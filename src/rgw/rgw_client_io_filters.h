@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_CLIENT_IO_DECOIMPL_H
 #define CEPH_RGW_CLIENT_IO_DECOIMPL_H
@@ -20,20 +20,24 @@ class AccountingFilter : public DecoratedRestfulClient<T>,
   bool enabled;
   uint64_t total_sent;
   uint64_t total_received;
+  CephContext *cct;
 
 public:
   template <typename U>
-  AccountingFilter(U&& decoratee)
+  AccountingFilter(CephContext *cct, U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       enabled(false),
       total_sent(0),
-      total_received(0) {
+      total_received(0), cct(cct) {
   }
 
   size_t send_status(const int status,
                      const char* const status_name) override {
     const auto sent = DecoratedRestfulClient<T>::send_status(status,
                                                              status_name);
+    lsubdout(cct, rgw, 30) << "AccountingFilter::send_status: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
     if (enabled) {
       total_sent += sent;
     }
@@ -42,15 +46,21 @@ public:
 
   size_t send_100_continue() override {
     const auto sent = DecoratedRestfulClient<T>::send_100_continue();
+    lsubdout(cct, rgw, 30) << "AccountingFilter::send_100_continue: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
     if (enabled) {
       total_sent += sent;
     }
     return sent;
   }
 
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override {
     const auto sent = DecoratedRestfulClient<T>::send_header(name, value);
+    lsubdout(cct, rgw, 30) << "AccountingFilter::send_header: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
     if (enabled) {
       total_sent += sent;
     }
@@ -59,6 +69,9 @@ public:
 
   size_t send_content_length(const uint64_t len) override {
     const auto sent = DecoratedRestfulClient<T>::send_content_length(len);
+    lsubdout(cct, rgw, 30) << "AccountingFilter::send_content_length: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
     if (enabled) {
       total_sent += sent;
     }
@@ -67,6 +80,9 @@ public:
 
   size_t send_chunked_transfer_encoding() override {
     const auto sent = DecoratedRestfulClient<T>::send_chunked_transfer_encoding();
+    lsubdout(cct, rgw, 30) << "AccountingFilter::send_chunked_transfer_encoding: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
     if (enabled) {
       total_sent += sent;
     }
@@ -75,6 +91,9 @@ public:
 
   size_t complete_header() override {
     const auto sent = DecoratedRestfulClient<T>::complete_header();
+    lsubdout(cct, rgw, 30) << "AccountingFilter::complete_header: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
     if (enabled) {
       total_sent += sent;
     }
@@ -83,6 +102,8 @@ public:
 
   size_t recv_body(char* buf, size_t max) override {
     const auto received = DecoratedRestfulClient<T>::recv_body(buf, max);
+    lsubdout(cct, rgw, 30) << "AccountingFilter::recv_body: e="
+        << (enabled ? "1" : "0") << ", received=" << received << dendl;
     if (enabled) {
       total_received += received;
     }
@@ -92,6 +113,20 @@ public:
   size_t send_body(const char* const buf,
                    const size_t len) override {
     const auto sent = DecoratedRestfulClient<T>::send_body(buf, len);
+    lsubdout(cct, rgw, 30) << "AccountingFilter::send_body: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
+    if (enabled) {
+      total_sent += sent;
+    }
+    return sent;
+  }
+
+  size_t complete_request() override {
+    const auto sent = DecoratedRestfulClient<T>::complete_request();
+    lsubdout(cct, rgw, 30) << "AccountingFilter::complete_request: e="
+        << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
+        << total_sent << dendl;
     if (enabled) {
       total_sent += sent;
     }
@@ -108,6 +143,8 @@ public:
 
   void set_account(bool enabled) override {
     this->enabled = enabled;
+    lsubdout(cct, rgw, 30) << "AccountingFilter::set_account: e="
+        << (enabled ? "1" : "0") << dendl;
   }
 };
 
@@ -122,13 +159,14 @@ protected:
 
   bool has_content_length;
   bool buffer_data;
+  CephContext *cct;
 
 public:
   template <typename U>
-  BufferingFilter(U&& decoratee)
+  BufferingFilter(CephContext *cct, U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       has_content_length(false),
-      buffer_data(false) {
+      buffer_data(false), cct(cct) {
   }
 
   size_t send_content_length(const uint64_t len) override;
@@ -144,6 +182,9 @@ size_t BufferingFilter<T>::send_body(const char* const buf,
 {
   if (buffer_data) {
     data.append(buf, len);
+
+    lsubdout(cct, rgw, 30) << "BufferingFilter<T>::send_body: defer count = "
+        << len << dendl;
     return 0;
   }
 
@@ -170,6 +211,8 @@ size_t BufferingFilter<T>::complete_header()
   if (! has_content_length) {
     /* We will dump everything in complete_request(). */
     buffer_data = true;
+    lsubdout(cct, rgw, 30) << "BufferingFilter<T>::complete_header: has_content_length="
+        << (has_content_length ? "1" : "0") << dendl;
     return 0;
   }
 
@@ -182,8 +225,16 @@ size_t BufferingFilter<T>::complete_request()
   size_t sent = 0;
 
   if (! has_content_length) {
+    /* It is not correct to count these bytes here,
+     * because they can only be part of the header.
+     * Therefore force count to 0.
+     */
     sent += DecoratedRestfulClient<T>::send_content_length(data.length());
     sent += DecoratedRestfulClient<T>::complete_header();
+    lsubdout(cct, rgw, 30) <<
+        "BufferingFilter::complete_request: !has_content_length: IGNORE: sent="
+        << sent << dendl;
+    sent = 0;
   }
 
   if (buffer_data) {
@@ -195,14 +246,18 @@ size_t BufferingFilter<T>::complete_request()
     }
     data.clear();
     buffer_data = false;
+    lsubdout(cct, rgw, 30) << "BufferingFilter::complete_request: buffer_data: sent="
+        << sent << dendl;
   }
 
   return sent + DecoratedRestfulClient<T>::complete_request();
 }
 
 template <typename T> static inline
-BufferingFilter<T> add_buffering(T&& t) {
-  return BufferingFilter<T>(std::forward<T>(t));
+BufferingFilter<T> add_buffering(
+CephContext *cct,
+T&& t) {
+  return BufferingFilter<T>(cct, std::forward<T>(t));
 }
 
 
@@ -214,7 +269,7 @@ protected:
 
 public:
   template <typename U>
-  ChunkingFilter(U&& decoratee)
+  explicit ChunkingFilter(U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       chunking_enabled(false) {
   }
@@ -231,11 +286,15 @@ public:
       return DecoratedRestfulClient<T>::send_body(buf, len);
     } else {
       static constexpr char HEADER_END[] = "\r\n";
-      char sizebuf[32];
-      const auto slen = snprintf(sizebuf, sizeof(buf), "%" PRIx64 "\r\n", len);
+      /* https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.6.1 */
+      // TODO: we have no support for sending chunked-encoding
+      // extensions/trailing headers.
+      char chunk_size[32];
+      const auto chunk_size_len = snprintf(chunk_size, sizeof(chunk_size),
+                                           "%zx\r\n", len);
       size_t sent = 0;
 
-      sent += DecoratedRestfulClient<T>::send_body(sizebuf, slen);
+      sent += DecoratedRestfulClient<T>::send_body(chunk_size, chunk_size_len);
       sent += DecoratedRestfulClient<T>::send_body(buf, len);
       sent += DecoratedRestfulClient<T>::send_body(HEADER_END,
                                                    sizeof(HEADER_END) - 1);
@@ -276,7 +335,7 @@ protected:
 
 public:
   template <typename U>
-  ConLenControllingFilter(U&& decoratee)
+  explicit ConLenControllingFilter(U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       action(ContentLengthAction::UNKNOWN) {
   }
@@ -284,7 +343,7 @@ public:
   size_t send_status(const int status,
                      const char* const status_name) override {
     if ((204 == status || 304 == status) &&
-        ! g_conf->rgw_print_prohibited_content_length) {
+        ! g_conf()->rgw_print_prohibited_content_length) {
       action = ContentLengthAction::INHIBIT;
     } else {
       action = ContentLengthAction::FORWARD;
@@ -327,8 +386,8 @@ protected:
 
   std::vector<std::pair<std::string, std::string>> headers;
 
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override {
     switch (phase) {
     case ReorderState::RGW_EARLY_HEADERS:
     case ReorderState::RGW_STATUS_SEEN:
@@ -344,7 +403,7 @@ protected:
 
 public:
   template <typename U>
-  ReorderingFilter(U&& decoratee)
+  explicit ReorderingFilter(U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
       phase(ReorderState::RGW_EARLY_HEADERS) {
   }

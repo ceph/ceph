@@ -69,7 +69,7 @@ bool SnapshotRollbackRequest::should_complete(int r) {
     finished = Request::should_complete(r);
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
   return finished;
@@ -89,12 +89,12 @@ void SnapshotRollbackRequest::send_read_map() {
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(snap_oid, rados_completion, &op,
                                          &m_read_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
 void SnapshotRollbackRequest::send_write_map() {
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
 
   CephContext *cct = m_image_ctx.cct;
   std::string snap_oid(ObjectMap<>::object_map_name(m_image_ctx.id,
@@ -104,18 +104,18 @@ void SnapshotRollbackRequest::send_write_map() {
   m_state = STATE_WRITE_MAP;
 
   librados::ObjectWriteOperation op;
-  rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
+  rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, ClsLockType::EXCLUSIVE, "", "");
   op.write_full(m_read_bl);
 
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(snap_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
 void SnapshotRollbackRequest::send_invalidate_map() {
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
+  std::unique_lock image_locker{m_image_ctx.image_lock};
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;

@@ -15,12 +15,13 @@
 #ifndef CEPH_COMMON_PERF_HISTOGRAM_H
 #define CEPH_COMMON_PERF_HISTOGRAM_H
 
-#include "common/Formatter.h"
-#include "include/atomic.h"
-#include "include/int_types.h"
-
 #include <array>
+#include <atomic>
 #include <memory>
+
+#include "common/Formatter.h"
+#include "include/int_types.h"
+#include "include/ceph_assert.h"
 
 class PerfHistogramCommon {
 public:
@@ -73,28 +74,28 @@ class PerfHistogram : public PerfHistogramCommon {
 public:
   /// Initialize new histogram object
   PerfHistogram(std::initializer_list<axis_config_d> axes_config) {
-    assert(axes_config.size() == DIM &&
-           "Invalid number of axis configuration objects");
+    ceph_assert(axes_config.size() == DIM &&
+		"Invalid number of axis configuration objects");
 
     int i = 0;
     for (const auto &ac : axes_config) {
-      assert(ac.m_buckets > 0 && "Must have at least one bucket on axis");
-      assert(ac.m_quant_size > 0 &&
+      ceph_assertf(ac.m_buckets > 0, "Must have at least one bucket on axis");
+      ceph_assertf(ac.m_quant_size > 0,
              "Quantization unit must be non-zero positive integer value");
 
       m_axes_config[i++] = ac;
     }
 
-    m_rawData.reset(new atomic64_t[get_raw_size()]);
+    m_rawData.reset(new std::atomic<uint64_t>[get_raw_size()] {});
   }
 
   /// Copy from other histogram object
   PerfHistogram(const PerfHistogram &other)
       : m_axes_config(other.m_axes_config) {
     int64_t size = get_raw_size();
-    m_rawData.reset(new atomic64_t[size]);
+    m_rawData.reset(new std::atomic<uint64_t>[size] {});
     for (int64_t i = 0; i < size; i++) {
-      m_rawData[i].set(other.m_rawData[i].read());
+      m_rawData[i] = other.m_rawData[i].load();
     }
   }
 
@@ -102,7 +103,7 @@ public:
   void reset() {
     auto size = get_raw_size();
     for (auto i = size; --i >= 0;) {
-      m_rawData[i].set(0);
+      m_rawData[i] = 0;
     }
   }
 
@@ -110,21 +111,21 @@ public:
   template <typename... T>
   void inc(T... axis) {
     auto index = get_raw_index_for_value(axis...);
-    m_rawData[index].add(1);
+    m_rawData[index]++;
   }
 
   /// Increase counter for given axis buckets by one
   template <typename... T>
   void inc_bucket(T... bucket) {
     auto index = get_raw_index_for_bucket(bucket...);
-    m_rawData[index].add(1);
+    m_rawData[index]++;
   }
 
   /// Read value from given bucket
   template <typename... T>
   uint64_t read_bucket(T... bucket) const {
     auto index = get_raw_index_for_bucket(bucket...);
-    return m_rawData[index].read();
+    return m_rawData[index];
   }
 
   /// Dump data to a Formatter object
@@ -143,7 +144,7 @@ public:
 protected:
   /// Raw data stored as linear space, internal indexes are calculated on
   /// demand.
-  std::unique_ptr<atomic64_t[]> m_rawData;
+  std::unique_ptr<std::atomic<uint64_t>[]> m_rawData;
 
   /// Configuration of axes
   std::array<axis_config_d, DIM> m_axes_config;
@@ -177,8 +178,8 @@ protected:
     static_assert(sizeof...(T) == DIM, "Incorrect number of arguments");
     return get_raw_index_internal<0>(
         [](int64_t bucket, const axis_config_d &ac) {
-          assert(bucket >= 0 && "Bucket index can not be negative");
-          assert(bucket < ac.m_buckets && "Bucket index too large");
+          ceph_assertf(bucket >= 0, "Bucket index can not be negative");
+          ceph_assertf(bucket < ac.m_buckets, "Bucket index too large");
           return bucket;
         },
         0, buckets...);
@@ -208,7 +209,7 @@ protected:
   void visit_values(FDE onDimensionEnter, FV onValue, FDL onDimensionLeave,
                     int level = 0, int startIndex = 0) const {
     if (level == DIM) {
-      onValue(m_rawData[startIndex].read());
+      onValue(m_rawData[startIndex]);
       return;
     }
 

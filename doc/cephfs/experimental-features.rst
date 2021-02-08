@@ -1,16 +1,17 @@
-
+=====================
 Experimental Features
 =====================
 
-CephFS includes a number of experimental features which are not fully stabilized
-or qualified for users to turn on in real deployments. We generally do our best
-to clearly demarcate these and fence them off so they can't be used by mistake.
+CephFS includes a number of experimental features which are not fully
+stabilized or qualified for users to turn on in real deployments. We generally
+do our best to clearly demarcate these and fence them off so they cannot be
+used by mistake.
 
-Some of these features are closer to being done than others, though. We describe
-each of them with an approximation of how risky they are and briefly describe
-what is required to enable them. Note that doing so will *irrevocably* flag maps
-in the monitor as having once enabled this flag to improve debugging and
-support processes.
+Some of these features are closer to being done than others, though. We
+describe each of them with an approximation of how risky they are and briefly
+describe what is required to enable them. Note that doing so will
+*irrevocably* flag maps in the monitor as having once enabled this flag to
+improve debugging and support processes.
 
 Inline data
 -----------
@@ -21,84 +22,21 @@ load on the MDS. It is not sufficiently tested to support at this time, although
 failures within it are unlikely to make non-inlined data inaccessible
 
 Inline data has always been off by default and requires setting
-the "inline_data" flag.
+the ``inline_data`` flag.
 
-Multi-MDS filesystem clusters
------------------------------
-CephFS has been designed from the ground up to support fragmenting the metadata
-hierarchy across multiple active metadata servers, to allow horizontal scaling
-to arbitrary throughput requirements. Unfortunately, doing so requires a lot
-more working code than having a single MDS which is authoritative over the
-entire filesystem namespace.
-
-Multiple active MDSes are generally stable under trivial workloads, but often
-break in the presence of any failure, and do not have enough testing to offer
-any stability guarantees. If a filesystem with multiple active MDSes does
-experience failure, it will require (generally extensive) manual intervention.
-There are serious known bugs.
-
-Multi-MDS filesystems have always required explicitly increasing the "max_mds"
-value and have been further protected with the "allow_multimds" flag for Jewel.
+Inline data has been declared deprecated for the Octopus release, and will
+likely be removed altogether in the Q release.
 
 Mantle: Programmable Metadata Load Balancer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------------------------
 
 Mantle is a programmable metadata balancer built into the MDS. The idea is to
 protect the mechanisms for balancing load (migration, replication,
 fragmentation) but stub out the balancing policies using Lua. For details, see
 :doc:`/cephfs/mantle`.
 
-Snapshots
----------
-Like multiple active MDSes, CephFS is designed from the ground up to support
-snapshotting of arbitrary directories. There are no known bugs at the time of
-writing, but there is insufficient testing to provide stability guarantees and
-every expansion of testing has generally revealed new issues. If you do enable
-snapshots and experience failure, manual intervention will be needed.
-
-Snapshots are known not to work properly with multiple filesystems (below) in
-some cases. Specifically, if you share a pool for multiple FSes and delete
-a snapshot in one FS, expect to lose snapshotted file data in any other FS using
-snapshots. See the :doc:`/dev/cephfs-snapshots` page for more information.
-
-Snapshots are known not to work with multi-MDS filesystems.
-
-Snapshotting was blocked off with the "allow_new_snaps" flag prior to Firefly.
-
-Multiple filesystems within a Ceph cluster
-------------------------------------------
-Code was merged prior to the Jewel release which enables administrators
-to create multiple independent CephFS filesystems within a single Ceph cluster.
-These independent filesystems have their own set of active MDSes, cluster maps,
-and data. But the feature required extensive changes to data structures which
-are not yet fully qualified, and has security implications which are not all
-apparent nor resolved.
-
-There are no known bugs, but any failures which do result from having multiple
-active filesystems in your cluster will require manual intervention and, so far,
-will not have been experienced by anybody else -- knowledgeable help will be
-extremely limited. You also probably do not have the security or isolation
-guarantees you want or think you have upon doing so.
-
-Note that snapshots and multiple filesystems are *not* tested in combination
-and may not work together; see above.
-
-Multiple filesystems were available starting in the Jewel release candidates
-but were protected behind the "enable_multiple" flag before the final release.
-
-
-Previously experimental features
-================================
-
-Directory Fragmentation
------------------------
-
-Directory fragmentation was considered experimental prior to the *Luminous*
-(12.2.x).  It is now enabled by default on new filesystems.  To enable directory
-fragmentation on filesystems created with older versions of Ceph, set
-the ``allow_dirfrags`` flag on the filesystem:
-
-::
-
-    ceph fs set <filesystem name> allow_dirfrags
-
+LazyIO
+------
+LazyIO relaxes POSIX semantics. Buffered reads/writes are allowed even when a
+file is opened by multiple applications on multiple clients. Applications are
+responsible for managing cache coherency themselves.

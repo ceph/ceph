@@ -9,7 +9,7 @@ ceph-create-keys -- ceph keyring generate tool
 Synopsis
 ========
 
-| **ceph-create-keys** [-h] [-v] [--cluster *name*] --id *id*
+| **ceph-create-keys** [-h] [-v] [-t seconds] [--cluster *name*] --id *id*
 
 
 Description
@@ -30,7 +30,7 @@ It creates following auth entities (or users)
 
 To list all users in the cluster::
 
-    ceph auth list
+    ceph auth ls
 
 
 Options
@@ -39,6 +39,10 @@ Options
 .. option:: --cluster
 
    name of the cluster (default 'ceph').
+
+.. option:: -t
+
+   time out after **seconds** (default: 600) waiting for a response from the monitor
 
 .. option:: -i, --id
 

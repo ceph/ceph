@@ -9,8 +9,7 @@
 Synopsis
 ========
 
-| **monmaptool** *mapfilename* [ --clobber ] [ --print ] [ --create ]
-  [ --add *ip*:*port* *...* ] [ --rm *ip*:*port* *...* ]
+| **monmaptool** <action> [options] *mapfilename*
 
 
 Description
@@ -26,7 +25,10 @@ When creating a map with --create, a new monitor map with a new,
 random UUID will be created. It should be followed by one or more
 monitor addresses.
 
-The default Ceph monitor port is 6789.
+The default Ceph monitor port for messenger protocol v1 is 6789, and
+3300 for protocol v2.
+
+Multiple actions can be performed per invocation.
 
 
 Options
@@ -34,17 +36,25 @@ Options
 
 .. option:: --print
 
-   will print a plaintext dump of the map, after any modifications are
+   print a plaintext dump of the map, after any modifications are
    made.
 
-.. option:: --clobber
+.. option:: --feature-list [plain|parseable]
 
-   will allow monmaptool to overwrite mapfilename if changes are made.
+   list the enabled features as well as the available ones.
+
+   By default, a human readable output is produced.
 
 .. option:: --create
 
-   will create a new monitor map with a new UUID (and with it, a new,
-   empty Ceph file system).
+   create a new monitor map with a new UUID (and with it, a new,
+   empty Ceph cluster).
+
+.. option:: --clobber
+
+   allow monmaptool to create a new mapfilename in place of an existing map.
+
+   Only useful when *--create* is used.
 
 .. option:: --generate
 
@@ -53,7 +63,7 @@ Options
 
       #. ``--monmap filename`` to specify a monmap to load
       #. ``--mon-host 'host1,ip2'`` to specify a list of hosts or ip addresses
-      #. ``[mon.foo]`` sections containing ``mon addr`` settings in the config
+      #. ``[mon.foo]`` sections containing ``mon addr`` settings in the config. Note that this method is not recommended and support will be removed in a future release.
 
 .. option:: --filter-initial-members
 
@@ -62,26 +72,48 @@ Options
    initial members not present in the map will be added with dummy
    addresses.
 
-.. option:: --add name ip:port
+.. option:: --add name ip[:port]
 
-   will add a monitor with the specified ip:port to the map.
+   add a monitor with the specified ip:port to the map.
+
+   If the *nautilus* feature is set, and the port is not, the monitor
+   will be added for both messenger protocols.
+
+.. option:: --addv name [protocol:ip:port[,...]]
+
+   add a monitor with the specified version:ip:port to the map.
 
 .. option:: --rm name
 
-    will remove the monitor with the specified ip:port from the map.
+   remove the monitor with the specified name from the map.
 
 .. option:: --fsid uuid
 
-    will set the fsid to the given uuid.  If not specified with --create, a random fsid will be generated.
+   set the fsid to the given uuid.  If not specified with *--create*, a random fsid will be generated.
 
+.. option:: --feature-set value [--optional|--persistent]
+
+   enable a feature.
+
+.. option:: --feature-unset value [--optional|--persistent]
+
+   disable a feature.
+
+.. option:: --enable-all-features
+
+   enable all supported features.
+
+.. option:: --set-min-mon-release release
+
+   set the min_mon_release.
 
 Example
 =======
 
-To create a new map with three monitors (for a fresh Ceph file system)::
+To create a new map with three monitors (for a fresh Ceph cluster)::
 
-        monmaptool  --create  --add  mon.a 192.168.0.10:6789 --add mon.b 192.168.0.11:6789 \
-          --add mon.c 192.168.0.12:6789 --clobber monmap
+        monmaptool --create --add nodeA 192.168.0.10 --add nodeB 192.168.0.11 \
+          --add nodeC 192.168.0.12 --enable-all-features --clobber monmap
 
 To display the contents of the map::
 
@@ -89,7 +121,8 @@ To display the contents of the map::
 
 To replace one monitor::
 
-        monmaptool --rm mon.a --add mon.a 192.168.0.9:6789 --clobber monmap
+        monmaptool --rm nodeA monmap
+        monmaptool --add nodeA 192.168.0.9 monmap
 
 
 Availability

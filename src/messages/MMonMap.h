@@ -15,23 +15,25 @@
 #ifndef CEPH_MMONMAP_H
 #define CEPH_MMONMAP_H
 
+#include "include/encoding.h"
 #include "include/ceph_features.h"
 #include "msg/Message.h"
+#include "msg/MessageRef.h"
 #include "mon/MonMap.h"
 
-class MMonMap : public Message {
+class MMonMap final : public Message {
 public:
-  bufferlist monmapbl;
+  ceph::buffer::list monmapbl;
 
-  MMonMap() : Message(CEPH_MSG_MON_MAP) { }
-  explicit MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
-    monmapbl.claim(bl);
+  MMonMap() : Message{CEPH_MSG_MON_MAP} { }
+  explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {
+    monmapbl = std::move(bl);
   }
 private:
-  ~MMonMap() override {}
+  ~MMonMap() final {}
 
 public:
-  const char *get_type_name() const override { return "mon_map"; }
+  std::string_view get_type_name() const override { return "mon_map"; }
 
   void encode_payload(uint64_t features) override { 
     if (monmapbl.length() &&
@@ -44,12 +46,17 @@ public:
       t.encode(monmapbl, features);
     }
 
-    ::encode(monmapbl, payload);
+    using ceph::encode;
+    encode(monmapbl, payload);
   }
   void decode_payload() override { 
-    bufferlist::iterator p = payload.begin();
-    ::decode(monmapbl, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(monmapbl, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,6 +13,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+
 #include "rgw_common.h"
 #include "rgw_xml.h"
 
@@ -38,14 +40,24 @@ void RGWBWRedirectInfo::dump_xml(Formatter *f) const
   }
 }
 
+#define WEBSITE_HTTP_REDIRECT_CODE_MIN      300
+#define WEBSITE_HTTP_REDIRECT_CODE_MAX      400
 void RGWBWRedirectInfo::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("Protocol", redirect.protocol, obj);
   RGWXMLDecoder::decode_xml("HostName", redirect.hostname, obj);
   int code = 0;
-  RGWXMLDecoder::decode_xml("HttpRedirectCode", code, obj);
+  bool has_http_redirect_code = RGWXMLDecoder::decode_xml("HttpRedirectCode", code, obj);
+  if (has_http_redirect_code &&
+      !(code > WEBSITE_HTTP_REDIRECT_CODE_MIN &&
+        code < WEBSITE_HTTP_REDIRECT_CODE_MAX)) {
+    throw RGWXMLDecoder::err("The provided HTTP redirect code is not valid. Valid codes are 3XX except 300.");
+  }
   redirect.http_redirect_code = code;
-  RGWXMLDecoder::decode_xml("ReplaceKeyPrefixWith", replace_key_prefix_with, obj);
-  RGWXMLDecoder::decode_xml("ReplaceKeyWith", replace_key_with, obj);
+  bool has_replace_key_prefix_with = RGWXMLDecoder::decode_xml("ReplaceKeyPrefixWith", replace_key_prefix_with, obj);
+  bool has_replace_key_with = RGWXMLDecoder::decode_xml("ReplaceKeyWith", replace_key_with, obj);
+  if (has_replace_key_prefix_with && has_replace_key_with) {
+    throw RGWXMLDecoder::err("You can only define ReplaceKeyPrefix or ReplaceKey but not both.");
+  }
 }
 
 void RGWBWRoutingRuleCondition::dump_xml(Formatter *f) const
@@ -58,10 +70,17 @@ void RGWBWRoutingRuleCondition::dump_xml(Formatter *f) const
   }
 }
 
+#define WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MIN      400
+#define WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MAX      600
 void RGWBWRoutingRuleCondition::decode_xml(XMLObj *obj) {
   RGWXMLDecoder::decode_xml("KeyPrefixEquals", key_prefix_equals, obj);
   int code = 0;
-  RGWXMLDecoder::decode_xml("HttpErrorCodeReturnedEquals", code, obj);
+  bool has_http_error_code_returned_equals = RGWXMLDecoder::decode_xml("HttpErrorCodeReturnedEquals", code, obj);
+  if (has_http_error_code_returned_equals &&
+      !(code >= WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MIN &&
+        code < WEBSITE_HTTP_ERROR_CODE_RETURNED_EQUALS_MAX)) {
+    throw RGWXMLDecoder::err("The provided HTTP redirect code is not valid. Valid codes are 4XX or 5XX.");
+  }
   http_error_code_returned_equals = code;
 }
 
@@ -114,11 +133,13 @@ void decode_xml_obj(list<RGWBWRoutingRule>& l, XMLObj *obj)
 void RGWBucketWebsiteConf::decode_xml(XMLObj *obj) {
   XMLObj *o = obj->find_first("RedirectAllRequestsTo");
   if (o) {
+    is_redirect_all = true;
     RGWXMLDecoder::decode_xml("HostName", redirect_all.hostname, o, true);
     RGWXMLDecoder::decode_xml("Protocol", redirect_all.protocol, o);
   } else {
     o = obj->find_first("IndexDocument");
     if (o) {
+      is_set_index_doc = true;
       RGWXMLDecoder::decode_xml("Suffix", index_doc_suffix, o);
     }
     o = obj->find_first("ErrorDocument");

@@ -3,10 +3,10 @@ Lost_unfound
 """
 import logging
 import time
-import ceph_manager
+from tasks import ceph_manager
+from tasks.util.rados import rados
 from teuthology import misc as teuthology
 from teuthology.orchestra import run
-from util.rados import rados
 
 log = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ def task(ctx, config):
     """
     Test handling of lost objects.
 
-    A pretty rigid cluseter is brought up andtested by this task
+    A pretty rigid cluster is brought up and tested by this task
     """
     POOL = 'unfound_pool'
     if config is None:
@@ -22,7 +22,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'lost_unfound task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -48,8 +48,7 @@ def task(ctx, config):
     # kludge to make sure they get a map
     rados(ctx, mon, ['-p', POOL, 'put', 'dummy', dummyfile])
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_recovery()
 
     # create old objects
@@ -84,8 +83,7 @@ def task(ctx, config):
     manager.mark_in_osd(0)
     manager.wait_till_osd_is_up(0)
 
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([1, 0])
     manager.wait_till_active()
 
     # take out osd.1 and the only copy of those objects.
@@ -99,11 +97,9 @@ def task(ctx, config):
     manager.mark_in_osd(2)
     manager.wait_till_osd_is_up(2)
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
     manager.wait_till_active()
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
 
     # verify that there are unfound objects
     unfound = manager.get_num_unfound_objects()
@@ -143,9 +139,12 @@ def task(ctx, config):
             # verify that i can list them direct from the osd
             log.info('listing missing/lost in %s state %s', pg['pgid'],
                      pg['state']);
-            m = manager.list_pg_missing(pg['pgid'])
+            m = manager.list_pg_unfound(pg['pgid'])
             #log.info('%s' % m)
             assert m['num_unfound'] == pg['stat_sum']['num_objects_unfound']
+            assert m['available_might_have_unfound'] == True
+            assert m['might_have_unfound'][0]['osd'] == "1"
+            assert m['might_have_unfound'][0]['status'] == "osd is down"
             num_unfound=0
             for o in m['objects']:
                 if len(o['locations']) == 0:
@@ -160,8 +159,7 @@ def task(ctx, config):
 
     manager.raw_cluster_cmd('tell', 'osd.0', 'debug', 'kick_recovery_wq', '5')
     manager.raw_cluster_cmd('tell', 'osd.2', 'debug', 'kick_recovery_wq', '5')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
     manager.wait_for_recovery()
 
     # verify result
@@ -174,8 +172,8 @@ def task(ctx, config):
         assert not err
 
     # see if osd.1 can cope
-    manager.revive_osd(1)
     manager.mark_in_osd(1)
+    manager.revive_osd(1)
     manager.wait_till_osd_is_up(1)
     manager.wait_for_clean()
     run.wait(procs)

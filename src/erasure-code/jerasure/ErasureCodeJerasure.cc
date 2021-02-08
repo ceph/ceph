@@ -17,8 +17,8 @@
 
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
+
+
 extern "C" {
 #include "jerasure.h"
 #include "reed_sol.h"
@@ -34,42 +34,29 @@ extern "C" {
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
+using std::ostream;
+using std::map;
+using std::set;
+
+using ceph::bufferlist;
+using ceph::ErasureCodeProfile;
+
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeJerasure: ";
 }
 
-int ErasureCodeJerasure::create_ruleset(const string &name,
-					CrushWrapper &crush,
-					ostream *ss) const
-{
-  int ruleid = crush.add_simple_ruleset(name, ruleset_root, ruleset_failure_domain,
-					"indep", pg_pool_t::TYPE_ERASURE, ss);
-  if (ruleid < 0)
-    return ruleid;
-  else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
-  }
-}
 
 int ErasureCodeJerasure::init(ErasureCodeProfile& profile, ostream *ss)
 {
   int err = 0;
   dout(10) << "technique=" << technique << dendl;
   profile["technique"] = technique;
-  err |= to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
   err |= parse(profile, ss);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,
@@ -86,7 +73,7 @@ int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,
     chunk_mapping.clear();
     err = -EINVAL;
   }
-  err |= sanity_check_k(k, ss);
+  err |= sanity_check_k_m(k, m, ss);
   return err;
 }
 
@@ -99,7 +86,7 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
       chunk_size++;
     dout(20) << "get_chunk_size: chunk_size " << chunk_size
 	     << " must be modulo " << alignment << dendl; 
-    assert(alignment <= chunk_size);
+    ceph_assert(alignment <= chunk_size);
     unsigned modulo = chunk_size % alignment;
     if (modulo) {
       dout(10) << "get_chunk_size: " << chunk_size
@@ -110,7 +97,7 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
   } else {
     unsigned tail = object_size % alignment;
     unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
-    assert(padded_length % k == 0);
+    ceph_assert(padded_length % k == 0);
     return padded_length / k;
   }
 }
@@ -146,7 +133,7 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
   }
   erasures[erasures_count] = -1;
 
-  assert(erasures_count > 0);
+  ceph_assert(erasures_count > 0);
   return jerasure_decode(erasures, data, coding, blocksize);
 }
 
@@ -204,8 +191,6 @@ int ErasureCodeJerasureReedSolomonVandermonde::parse(ErasureCodeProfile &profile
   if (w != 8 && w != 16 && w != 32) {
     *ss << "ReedSolomonVandermonde: w=" << w
 	<< " must be one of {8, 16, 32} : revert to " << DEFAULT_W << std::endl;
-    profile["w"] = "8";
-    err |= to_int("w", profile, &w, DEFAULT_W, ss);
     err = -EINVAL;
   }
   err |= to_bool("jerasure-per-chunk-alignment", profile,
@@ -252,13 +237,14 @@ int ErasureCodeJerasureReedSolomonRAID6::parse(ErasureCodeProfile &profile,
 					       ostream *ss)
 {
   int err = ErasureCodeJerasure::parse(profile, ss);
-  profile.erase("m");
-  m = 2;
+  if (m != stoi(DEFAULT_M)) {
+    *ss << "ReedSolomonRAID6: m=" << m
+        << " must be 2 for RAID6: revert to 2" << std::endl;
+    err = -EINVAL;
+  }
   if (w != 8 && w != 16 && w != 32) {
     *ss << "ReedSolomonRAID6: w=" << w
 	<< " must be one of {8, 16, 32} : revert to 8 " << std::endl;
-    profile["w"] = "8";
-    err |= to_int("w", profile, &w, DEFAULT_W, ss);
     err = -EINVAL;
   }
   return err;
@@ -319,6 +305,14 @@ void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
 {
   bitmatrix = jerasure_matrix_to_bitmatrix(k, m, w, matrix);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+}
+
+ErasureCodeJerasureCauchy::~ErasureCodeJerasureCauchy() 
+{
+  if (bitmatrix)
+    free(bitmatrix);
+  if (schedule)
+    jerasure_free_schedule(schedule);
 }
 
 // 
@@ -464,7 +458,7 @@ void ErasureCodeJerasureLiberation::prepare()
 //
 bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
 {
-  // back in Firefly, w = 7 was the default and produced useable 
+  // back in Firefly, w = 7 was the default and produced usable
   // chunks. Tolerate this value for backward compatibility.
   if (w == 7)
     return true;
@@ -490,10 +484,16 @@ int ErasureCodeJerasureLiber8tion::parse(ErasureCodeProfile &profile,
 					 ostream *ss)
 {
   int err = ErasureCodeJerasure::parse(profile, ss);
-  profile.erase("m");
-  err |= to_int("m", profile, &m, DEFAULT_M, ss);
-  profile.erase("w");
-  err |= to_int("w", profile, &w, DEFAULT_W, ss);
+  if (m != stoi(DEFAULT_M)) {
+    *ss << "liber8tion: m=" << m << " must be " << DEFAULT_M
+        << " for liber8tion: revert to " << DEFAULT_M << std::endl;
+    err = -EINVAL;
+  }
+  if (w != stoi(DEFAULT_W)) {
+    *ss << "liber8tion: w=" << w << " must be " << DEFAULT_W
+        << " for liber8tion: revert to " << DEFAULT_W << std::endl;
+    err = -EINVAL;
+  }
   err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;

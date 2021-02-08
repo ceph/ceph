@@ -65,10 +65,9 @@
 
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "include/common_fwd.h"
 
-class CephContext;
 class Context;
-class PerfCounters;
 class Finisher;
 class C_OnFinisher;
 
@@ -149,25 +148,25 @@ public:
 
     void encode(bufferlist &bl) const {
       ENCODE_START(2, 2, bl);
-      ::encode(magic, bl);
-      ::encode(trimmed_pos, bl);
-      ::encode(expire_pos, bl);
-      ::encode(unused_field, bl);
-      ::encode(write_pos, bl);
-      ::encode(layout, bl, 0);  // encode in legacy format
-      ::encode(stream_format, bl);
+      encode(magic, bl);
+      encode(trimmed_pos, bl);
+      encode(expire_pos, bl);
+      encode(unused_field, bl);
+      encode(write_pos, bl);
+      encode(layout, bl, 0);  // encode in legacy format
+      encode(stream_format, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(magic, bl);
-      ::decode(trimmed_pos, bl);
-      ::decode(expire_pos, bl);
-      ::decode(unused_field, bl);
-      ::decode(write_pos, bl);
-      ::decode(layout, bl);
+      decode(magic, bl);
+      decode(trimmed_pos, bl);
+      decode(expire_pos, bl);
+      decode(unused_field, bl);
+      decode(write_pos, bl);
+      decode(layout, bl);
       if (struct_v > 1) {
-	::decode(stream_format, bl);
+	decode(stream_format, bl);
       } else {
 	stream_format = JOURNAL_FORMAT_LEGACY;
       }
@@ -240,7 +239,7 @@ private:
    */
   void _do_delayed_flush()
   {
-    assert(delay_flush_event != NULL);
+    ceph_assert(delay_flush_event != NULL);
     lock_guard l(lock);
     delay_flush_event = NULL;
     _do_flush();
@@ -253,6 +252,7 @@ private:
   static const int STATE_ACTIVE = 3;
   static const int STATE_REREADHEAD = 4;
   static const int STATE_REPROBING = 5;
+  static const int STATE_STOPPING = 6;
 
   int state;
   int error;
@@ -299,7 +299,7 @@ private:
 		      ///  write_pos>flush_pos, we're buffering writes.
   uint64_t safe_pos; ///< what has been committed safely to disk.
 
-  uint64_t next_safe_pos; /// start postion of the first entry that isn't
+  uint64_t next_safe_pos; /// start position of the first entry that isn't
 			  /// being fully flushed. If we don't flush any
 			  // partial entry, it's equal to flush_pos.
 
@@ -309,8 +309,10 @@ private:
   // protect write_buf from bufferlist _len overflow 
   Throttle write_buf_throttle;
 
-  bool waiting_for_zero;
+  uint64_t waiting_for_zero_pos;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
+  list<Context*> waitfor_prezero;
+
   std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
   std::map<uint64_t, std::list<Context*> > waitfor_safe;
@@ -366,7 +368,7 @@ private:
 
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {
-    assert(readonly ||
+    ceph_assert(readonly ||
 	   state == STATE_READHEAD ||
 	   state == STATE_REREADHEAD);
     last_written = last_committed = h;
@@ -406,12 +408,12 @@ public:
     prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0),
     safe_pos(0), next_safe_pos(0),
     write_buf_throttle(cct, "write_buf_throttle", UINT_MAX - (UINT_MAX >> 3)),
-    waiting_for_zero(false),
+    waiting_for_zero_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL), called_write_error(false),
     expire_pos(0), trimming_pos(0), trimmed_pos(0), readable(false),
-    write_iohint(0), stopping(false)
+    write_iohint(0)
   {
   }
 
@@ -423,7 +425,7 @@ public:
    */
   void reset() {
     lock_guard l(lock);
-    assert(state == STATE_ACTIVE);
+    ceph_assert(state == STATE_ACTIVE);
 
     readonly = true;
     delay_flush_event = NULL;
@@ -439,11 +441,11 @@ public:
     requested_pos = 0;
     received_pos = 0;
     fetch_len = 0;
-    assert(!on_readable);
+    ceph_assert(!on_readable);
     expire_pos = 0;
     trimming_pos = 0;
     trimmed_pos = 0;
-    waiting_for_zero = false;
+    waiting_for_zero_pos = 0;
   }
 
   // Asynchronous operations
@@ -458,6 +460,7 @@ public:
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
   bool have_waiter() const;
+  void wait_for_prezero(Context *onfinish);
 
   // Synchronous setters
   // ===================
@@ -471,7 +474,7 @@ public:
   void set_read_pos(uint64_t p) {
     lock_guard l(lock);
     // we can't cope w/ in-progress read right now.
-    assert(requested_pos == received_pos);
+    ceph_assert(requested_pos == received_pos);
     read_pos = requested_pos = received_pos = p;
     read_buf.clear();
   }
@@ -496,7 +499,7 @@ public:
   void trim_tail() {
     lock_guard l(lock);
 
-    assert(!readonly);
+    ceph_assert(!readonly);
     _issue_prezero();
   }
 
@@ -510,8 +513,6 @@ public:
    * to -EAGAIN.
    */
   void shutdown();
-protected:
-  bool stopping;
 public:
 
   // Synchronous getters
@@ -522,6 +523,7 @@ public:
   }
   file_layout_t& get_layout() { return layout; }
   bool is_active() { return state == STATE_ACTIVE; }
+  bool is_stopping() { return state == STATE_STOPPING; }
   int get_error() { return error; }
   bool is_readonly() { return readonly; }
   bool is_readable();
@@ -531,6 +533,9 @@ public:
   uint64_t get_read_pos() const { return read_pos; }
   uint64_t get_expire_pos() const { return expire_pos; }
   uint64_t get_trimmed_pos() const { return trimmed_pos; }
+  size_t get_journal_envelope_size() const { 
+    return journal_stream.get_envelope_size(); 
+  }
 };
 WRITE_CLASS_ENCODER(Journaler::Header)
 

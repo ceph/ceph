@@ -4,6 +4,7 @@
 #include "librbd/operation/RebuildObjectMapRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "osdc/Striper.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -23,6 +24,8 @@
 namespace librbd {
 namespace operation {
 
+using util::create_context_callback;
+
 template <typename I>
 void RebuildObjectMapRequest<I>::send() {
   send_resize_object_map();
@@ -33,7 +36,7 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
-  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  std::shared_lock owner_lock{m_image_ctx.owner_lock};
   switch (m_state) {
   case STATE_RESIZE_OBJECT_MAP:
     ldout(cct, 5) << "RESIZE_OBJECT_MAP" << dendl;
@@ -75,7 +78,7 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
     break;
 
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
 
@@ -92,17 +95,17 @@ bool RebuildObjectMapRequest<I>::should_complete(int r) {
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_resize_object_map() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
-  m_image_ctx.snap_lock.get_read();
-  assert(m_image_ctx.object_map != nullptr);
+  m_image_ctx.image_lock.lock_shared();
+  ceph_assert(m_image_ctx.object_map != nullptr);
 
   uint64_t size = get_image_size();
   uint64_t num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
 
   if (m_image_ctx.object_map->size() == num_objects) {
-    m_image_ctx.snap_lock.put_read();
+    m_image_ctx.image_lock.unlock_shared();
     send_verify_objects();
     return;
   }
@@ -111,31 +114,31 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   m_state = STATE_RESIZE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
+              m_image_ctx.exclusive_lock->is_lock_owner());
 
   m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT,
                                      this->create_callback_context());
-  m_image_ctx.snap_lock.put_read();
+  m_image_ctx.image_lock.unlock_shared();
 }
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_trim_image() {
   CephContext *cct = m_image_ctx.cct;
 
-  RWLock::RLocker l(m_image_ctx.owner_lock);
+  std::shared_lock l{m_image_ctx.owner_lock};
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
+              m_image_ctx.exclusive_lock->is_lock_owner());
   ldout(cct, 5) << this << " send_trim_image" << dendl;
   m_state = STATE_TRIM_IMAGE;
 
   uint64_t new_size;
   uint64_t orig_size;
   {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
-    assert(m_image_ctx.object_map != nullptr);
+    std::shared_lock l{m_image_ctx.image_lock};
+    ceph_assert(m_image_ctx.object_map != nullptr);
 
     new_size = get_image_size();
     orig_size = m_image_ctx.get_object_size() *
@@ -153,26 +156,26 @@ bool update_object_map(I& image_ctx, uint64_t object_no, uint8_t current_state,
   CephContext *cct = image_ctx.cct;
   uint64_t snap_id = image_ctx.snap_id;
 
-  uint8_t state = (*image_ctx.object_map)[object_no];
-  if (state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
+  current_state = (*image_ctx.object_map)[object_no];
+  if (current_state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
       snap_id == CEPH_NOSNAP) {
     // might be writing object to OSD concurrently
-    new_state = state;
+    new_state = current_state;
   }
 
-  if (new_state != state) {
+  if (new_state != current_state) {
     ldout(cct, 15) << image_ctx.get_object_name(object_no)
-      << " rebuild updating object map "
-      << static_cast<uint32_t>(state) << "->"
-      << static_cast<uint32_t>(new_state) << dendl;
-    (*image_ctx.object_map)[object_no] = new_state;
+                   << " rebuild updating object map "
+                   << static_cast<uint32_t>(current_state) << "->"
+                   << static_cast<uint32_t>(new_state) << dendl;
+    image_ctx.object_map->set_state(object_no, new_state, current_state);
   }
   return false;
 }
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_verify_objects() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
   m_state = STATE_VERIFY_OBJECTS;
@@ -188,28 +191,28 @@ void RebuildObjectMapRequest<I>::send_verify_objects() {
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_save_object_map() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   CephContext *cct = m_image_ctx.cct;
 
   ldout(cct, 5) << this << " send_save_object_map" << dendl;
   m_state = STATE_SAVE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
+              m_image_ctx.exclusive_lock->is_lock_owner());
 
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-  assert(m_image_ctx.object_map != nullptr);
+  std::shared_lock image_locker{m_image_ctx.image_lock};
+  ceph_assert(m_image_ctx.object_map != nullptr);
   m_image_ctx.object_map->aio_save(this->create_callback_context());
 }
 
 template <typename I>
 void RebuildObjectMapRequest<I>::send_update_header() {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
 
   // should have been canceled prior to releasing lock
-  assert(m_image_ctx.exclusive_lock == nullptr ||
-         m_image_ctx.exclusive_lock->is_lock_owner());
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
+              m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 5) << this << " send_update_header" << dendl;
   m_state = STATE_UPDATE_HEADER;
@@ -221,16 +224,16 @@ void RebuildObjectMapRequest<I>::send_update_header() {
 
   librados::AioCompletion *comp = this->create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   m_image_ctx.update_flags(m_image_ctx.snap_id, flags, false);
 }
 
 template <typename I>
 uint64_t RebuildObjectMapRequest<I>::get_image_size() const {
-  assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
     if (!m_image_ctx.resize_reqs.empty()) {
       return m_image_ctx.resize_reqs.front()->get_image_size();

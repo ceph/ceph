@@ -1,12 +1,17 @@
 overrides:
   ceph:
-    crush_tunables: firefly
-    log-whitelist:
+    log-ignorelist:
       - must scrub before tier agent can activate
+    conf:
+      osd:
+        # override short_pg_log_entries.yaml (which sets these under [global])
+        osd_min_pg_log_entries: 3000
+        osd_max_pg_log_entries: 3000
 tasks:
 - exec:
     client.0:
       - sudo ceph osd pool create base 4
+      - sudo ceph osd pool application enable base rados
       - sudo ceph osd pool create cache 4
       - sudo ceph osd tier add base cache
       - sudo ceph osd tier cache-mode cache writeback

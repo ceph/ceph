@@ -1,6 +1,7 @@
 overrides:
   ceph:
-    log-whitelist:
+    wait-for-scrub: false
+    log-ignorelist:
       - candidate had a stat error
       - candidate had a read error
       - deep-scrub 0 missing, 1 inconsistent objects
@@ -15,13 +16,16 @@ overrides:
       - scrub [0-9]+ errors
       - 'size 1 != size'
       - attr name mismatch
-      - Regular scrub request, losing deep-scrub details
+      - Regular scrub request, deep-scrub details will be lost
+      - candidate size [0-9]+ info size [0-9]+ mismatch
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
     conf:
       osd:
         filestore debug inject read err: true
         bluestore debug inject read err: true
 tasks:
-- install:
-- ceph:
 - repair_test:
 

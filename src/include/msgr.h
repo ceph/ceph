@@ -5,18 +5,22 @@
 #include <sys/socket.h> // for struct sockaddr_storage
 #endif
 
+#include "include/int_types.h"
+
+/* See comment in ceph_fs.h.  */
+#ifndef __KERNEL__
+#include "byteorder.h"
+#define __le16 ceph_le16
+#define __le32 ceph_le32
+#define __le64 ceph_le64
+#endif
+
 /*
  * Data types for message passing layer used by Ceph.
  */
 
-#define CEPH_MON_PORT    6789  /* default monitor port */
-
-/*
- * client-side processes will try to bind to ports in this
- * range, simply for the benefit of tools like nmap or wireshark
- * that would like to identify the protocol.
- */
-#define CEPH_PORT_FIRST  6789
+#define CEPH_MON_PORT_LEGACY    6789  /* legacy default monitor port */
+#define CEPH_MON_PORT_IANA      3300  /* IANA monitor port */
 
 /*
  * tcp connection banner.  include a protocol version. and adjust
@@ -24,6 +28,34 @@
  * constant.
  */
 #define CEPH_BANNER "ceph v027"
+
+
+/*
+ * messenger V2 connection banner prefix.
+ * The full banner string should have the form: "ceph v2\n<le16>"
+ * the 2 bytes are the length of the remaining banner.
+ */
+#define CEPH_BANNER_V2_PREFIX "ceph v2\n"
+
+/*
+ * messenger V2 features
+ */
+#define CEPH_MSGR2_INCARNATION_1 (0ull)
+
+#define DEFINE_MSGR2_FEATURE(bit, incarnation, name)               \
+	const static uint64_t CEPH_MSGR2_FEATURE_##name = (1ULL << bit); \
+	const static uint64_t CEPH_MSGR2_FEATUREMASK_##name =            \
+			(1ULL << bit | CEPH_MSGR2_INCARNATION_##incarnation);
+
+#define HAVE_MSGR2_FEATURE(x, name) \
+	(((x) & (CEPH_MSGR2_FEATUREMASK_##name)) == (CEPH_MSGR2_FEATUREMASK_##name))
+
+DEFINE_MSGR2_FEATURE( 0, 1, REVISION_1)   // msgr2.1
+
+#define CEPH_MSGR2_SUPPORTED_FEATURES (CEPH_MSGR2_FEATURE_REVISION_1)
+
+#define CEPH_MSGR2_REQUIRED_FEATURES  (0ull)
+
 
 /*
  * Rollover-safe type and comparator for 32-bit sequence numbers.
@@ -91,7 +123,7 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_SEQ           13 /* 64-bit int follows with seen seq number */
 #define CEPH_MSGR_TAG_KEEPALIVE2     14
 #define CEPH_MSGR_TAG_KEEPALIVE2_ACK 15  /* keepalive reply */
-
+#define CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER 16  /* ceph v2 doing server challenge */
 
 /*
  * connection negotiation
@@ -162,6 +194,24 @@ struct ceph_msg_header {
 	__le32 crc;       /* header crc32c */
 } __attribute__ ((packed));
 
+struct ceph_msg_header2 {
+	__le64 seq;       /* message seq# for this session */
+	__le64 tid;       /* transaction id */
+	__le16 type;      /* message type */
+	__le16 priority;  /* priority.  higher value == higher priority */
+	__le16 version;   /* version of message encoding */
+
+	__le32 data_pre_padding_len;
+	__le16 data_off;  /* sender: include full offset;
+			     receiver: mask against ~PAGE_MASK */
+
+	__le64 ack_seq;
+	__u8 flags;
+	/* oldest code we think can decode this.  unknown if zero. */
+	__le16 compat_version;
+	__le16 reserved;
+} __attribute__ ((packed));
+
 #define CEPH_MSG_PRIO_LOW     64
 #define CEPH_MSG_PRIO_DEFAULT 127
 #define CEPH_MSG_PRIO_HIGH    196
@@ -188,5 +238,10 @@ struct ceph_msg_footer {
 #define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
 #define CEPH_MSG_FOOTER_SIGNED	  (1<<2)   /* msg was signed */
 
+#ifndef __KERNEL__
+#undef __le16
+#undef __le32
+#undef __le64
+#endif
 
 #endif

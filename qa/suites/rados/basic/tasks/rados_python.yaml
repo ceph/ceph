@@ -1,8 +1,14 @@
+overrides:
+  ceph:
+    log-ignorelist:
+    - but it is still running
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(PG_
+    - \(OSD_
+    - \(OBJECT_
+    - \(POOL_APP_NOT_ENABLED\)
 tasks:
-- install:
-- ceph:
-    log-whitelist:
-    - wrongly marked me down
 - workunit:
     clients:
       client.0:

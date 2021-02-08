@@ -13,6 +13,7 @@
  */
 
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
 #include "os/filestore/FileStore.h"
@@ -31,14 +32,10 @@ void usage(const string &name) {
 
 template <typename T>
 typename T::iterator rand_choose(T &cont) {
-  if (cont.size() == 0) {
-    return cont.end();
+  if (std::empty(cont)) {
+    return std::end(cont);
   }
-  int index = rand() % cont.size();
-  typename T::iterator retval = cont.begin();
-
-  for (; index > 0; --index) ++retval;
-  return retval;
+  return std::next(std::begin(cont), rand() % cont.size());
 }
 
 int main(int argc, char **argv) {
@@ -46,9 +43,10 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  cct->_conf.apply_changes(nullptr);
 
   std::cerr << "args: " << args << std::endl;
   if (args.size() < 4) {
@@ -64,23 +62,25 @@ int main(int argc, char **argv) {
   if (string(args[0]) == string("new")) start_new = true;
 
   KeyValueDB *_db = KeyValueDB::create(g_ceph_context, "leveldb", db_path);
-  assert(!_db->create_and_open(std::cerr));
+  ceph_assert(!_db->create_and_open(std::cerr));
   boost::scoped_ptr<KeyValueDB> db(_db);
   boost::scoped_ptr<ObjectStore> store(new FileStore(cct.get(), store_path,
 						     store_dev));
 
-  ObjectStore::Sequencer osr(__func__);
   coll_t coll(spg_t(pg_t(0,12),shard_id_t::NO_SHARD));
+  ObjectStore::CollectionHandle ch;
 
   if (start_new) {
     std::cerr << "mkfs" << std::endl;
-    assert(!store->mkfs());
+    ceph_assert(!store->mkfs());
     ObjectStore::Transaction t;
-    assert(!store->mount());
+    ceph_assert(!store->mount());
+    ch = store->create_new_collection(coll);
     t.create_collection(coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(ch, std::move(t));
   } else {
-    assert(!store->mount());
+    ceph_assert(!store->mount());
+    ch = store->open_collection(coll);
   }
 
   FileStoreTracker tracker(store.get(), db.get());

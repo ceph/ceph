@@ -15,26 +15,27 @@
 #ifndef CEPH_MMDSRESOLVEACK_H
 #define CEPH_MMDSRESOLVEACK_H
 
-#include "msg/Message.h"
-
 #include "include/types.h"
+#include "messages/MMDSOp.h"
 
 
-class MMDSResolveAck : public Message {
- public:
-  map<metareqid_t, bufferlist> commit;
-  vector<metareqid_t> abort;
+class MMDSResolveAck final : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
+public:
+  std::map<metareqid_t, ceph::buffer::list> commit;
+  std::vector<metareqid_t> abort;
 
-  MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
-private:
-  ~MMDSResolveAck() override {}
+protected:
+  MMDSResolveAck() : MMDSOp{MSG_MDS_RESOLVEACK, HEAD_VERSION, COMPAT_VERSION} {}
+  ~MMDSResolveAck() final {}
 
 public:
-  const char *get_type_name() const override { return "resolve_ack"; }
+  std::string_view get_type_name() const override { return "resolve_ack"; }
   /*void print(ostream& out) const {
     out << "resolve_ack.size()
 	<< "+" << ambiguous_imap.size()
-	<< " imports +" << slave_requests.size() << " slave requests)";
+	<< " imports +" << peer_requests.size() << " peer requests)";
   }
   */
   
@@ -46,14 +47,19 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(commit, payload);
-    ::encode(abort, payload);
+    using ceph::encode;
+    encode(commit, payload);
+    encode(abort, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(commit, p);
-    ::decode(abort, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(commit, p);
+    decode(abort, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

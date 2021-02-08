@@ -18,7 +18,7 @@ following::
 
 .. note:: If you have specified multiple monitors in the setup of the cluster,
    make sure, that all monitors are up and running. If the monitors haven't
-   formed quorum, ``ceph-create-keys`` will not finish and the keys aren't 
+   formed quorum, ``ceph-create-keys`` will not finish and the keys are not 
    generated.
 
 Forget Keys

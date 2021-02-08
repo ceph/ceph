@@ -1,10 +1,10 @@
-
 #ifndef CEPH_MDS_LOCKS_H
 #define CEPH_MDS_LOCKS_H
+#include <stdbool.h>
 
 struct sm_state_t {
   int next;         // 0 if stable
-  char loner;
+  bool loner;
   int replica_state;
   char can_read;
   char can_read_projected;
@@ -94,6 +94,8 @@ enum {
   LOCK_XSYN_EXCL,
   LOCK_EXCL_XSYN,
   LOCK_XSYN_SYNC,
+  LOCK_XSYN_LOCK,
+  LOCK_XSYN_MIX,
 
   LOCK_MAX,
 };
@@ -119,27 +121,6 @@ enum {
 
 #define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
 #define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
-
-
-static inline const char *get_lock_action_name(int a) {
-  switch (a) {
-  case LOCK_AC_SYNC: return "sync";
-  case LOCK_AC_MIX: return "mix";
-  case LOCK_AC_LOCK: return "lock";
-  case LOCK_AC_LOCKFLUSHED: return "lockflushed";
-
-  case LOCK_AC_SYNCACK: return "syncack";
-  case LOCK_AC_MIXACK: return "mixack";
-  case LOCK_AC_LOCKACK: return "lockack";
-
-  case LOCK_AC_REQSCATTER: return "reqscatter";
-  case LOCK_AC_REQUNSCATTER: return "requnscatter";
-  case LOCK_AC_NUDGE: return "nudge";
-  case LOCK_AC_REQRDLOCK: return "reqrdlock";
-  default: return "???";
-  }
-}
-
 
 
 #endif

@@ -8,13 +8,13 @@
 import contextlib
 import json
 import logging
-import StringIO
-import re
+import os
 
 from teuthology.parallel import parallel
 from teuthology import misc as teuthology
 from tempfile import NamedTemporaryFile
 from teuthology.orchestra import run
+from teuthology.packaging import install_package, remove_package
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ or
         client_config = config['all']
     clients = ctx.cluster.only(teuthology.is_type('client'))
     rbd_test_dir = teuthology.get_testdir(ctx) + "/rbd_fio_test"
-    for remote,role in clients.remotes.iteritems():
+    for remote,role in clients.remotes.items():
         if 'client_config' in locals():
            with parallel() as p:
                p.spawn(run_fio, remote, client_config, rbd_test_dir)
@@ -64,13 +64,33 @@ or
     yield
 
 
+def get_ioengine_package_name(ioengine, remote):
+    system_type = teuthology.get_system_type(remote)
+    if ioengine == 'rbd':
+        return 'librbd1-devel' if system_type == 'rpm' else 'librbd-dev'
+    elif ioengine == 'libaio':
+        return 'libaio-devel' if system_type == 'rpm' else 'libaio-dev'
+    else:
+        return None
+
+
+def run_rbd_map(remote, image, iodepth):
+    iodepth = max(iodepth, 128)  # RBD_QUEUE_DEPTH_DEFAULT
+    dev = remote.sh(['sudo', 'rbd', 'device', 'map', '-o',
+                     'queue_depth={}'.format(iodepth), image]).rstrip('\n')
+    remote.sudo_write_file(
+        '/sys/block/{}/queue/nr_requests'.format(os.path.basename(dev)),
+        str(iodepth))
+    return dev
+
+
 def run_fio(remote, config, rbd_test_dir):
     """
     create fio config file with options based on above config
     get the fio from github, generate binary, and use it to run on
     the generated fio config file
     """
-    fio_config=NamedTemporaryFile(prefix='fio_rbd_', dir='/tmp/', delete=False)
+    fio_config=NamedTemporaryFile(mode='w', prefix='fio_rbd_', dir='/tmp/', delete=False)
     fio_config.write('[global]\n')
     if config.get('io-engine'):
         ioengine=config['io-engine']
@@ -82,7 +102,8 @@ def run_fio(remote, config, rbd_test_dir):
         fio_config.write('bs={bs}\n'.format(bs=bs))
     else:
         fio_config.write('bs=4k\n')
-    fio_config.write('iodepth=2\n')
+    iodepth = config.get('io-depth', 2)
+    fio_config.write('iodepth={iod}\n'.format(iod=iodepth))
     if config.get('fio-io-size'):
         size=config['fio-io-size']
         fio_config.write('size={size}\n'.format(size=size))
@@ -102,7 +123,7 @@ def run_fio(remote, config, rbd_test_dir):
 
     formats=[1,2]
     features=[['layering'],['striping'],['exclusive-lock','object-map']]
-    fio_version='2.7'
+    fio_version='3.16'
     if config.get('formats'):
         formats=config['formats']
     if config.get('features'):
@@ -110,23 +131,19 @@ def run_fio(remote, config, rbd_test_dir):
     if config.get('fio-version'):
         fio_version=config['fio-version']
 
-    fio_config.write('norandommap\n')
-    if ioengine == 'rbd':
-        fio_config.write('invalidate=0\n')
-    #handle package required for librbd engine
+    # handle package required for ioengine, if any
     sn=remote.shortname
-    system_type= teuthology.get_system_type(remote)
-    if system_type == 'rpm' and ioengine == 'rbd':
-        log.info("Installing librbd1 devel package on {sn}".format(sn=sn))
-        remote.run(args=['sudo', 'yum' , 'install', 'librbd1-devel', '-y'])
-    elif ioengine == 'rbd':
-        log.info("Installing librbd devel package on {sn}".format(sn=sn))
-        remote.run(args=['sudo', 'apt-get', '-y',
-                         '--force-yes',
-                         'install', 'librbd-dev'])
+    ioengine_pkg = get_ioengine_package_name(ioengine, remote)
+    if ioengine_pkg:
+        install_package(ioengine_pkg, remote)
+
+    fio_config.write('norandommap\n')
     if ioengine == 'rbd':
         fio_config.write('clientname=admin\n')
         fio_config.write('pool=rbd\n')
+        fio_config.write('invalidate=0\n')
+    elif ioengine == 'libaio':
+        fio_config.write('direct=1\n')
     for frmt in formats:
         for feature in features:
            log.info("Creating rbd images on {sn}".format(sn=sn))
@@ -139,21 +156,18 @@ def run_fio(remote, config, rbd_test_dir):
                         '--image', rbd_name,
                         '--image-format', '{f}'.format(f=frmt)]
            map(lambda x: create_args.extend(['--image-feature', x]), feature)
+           if config.get('thick-provision'):
+               create_args.append('--thick-provision')
            remote.run(args=create_args)
            remote.run(args=['rbd', 'info', rbd_name])
            if ioengine != 'rbd':
-               out=StringIO.StringIO()
-               remote.run(args=['sudo', 'rbd', 'map', rbd_name ],stdout=out)
-               dev=re.search(r'(/dev/rbd\d+)',out.getvalue())
-               rbd_dev=dev.group(1)
+               rbd_dev = run_rbd_map(remote, rbd_name, iodepth)
                if config.get('test-clone-io'):
                     log.info("Testing clones using fio")
                     remote.run(args=['rbd', 'snap', 'create', rbd_snap_name])
                     remote.run(args=['rbd', 'snap', 'protect', rbd_snap_name])
                     remote.run(args=['rbd', 'clone', rbd_snap_name, rbd_clone_name])
-                    remote.run(args=['sudo', 'rbd', 'map', rbd_clone_name], stdout=out)
-                    dev=re.search(r'(/dev/rbd\d+)',out.getvalue())
-                    rbd_clone_dev=dev.group(1)
+                    rbd_clone_dev = run_rbd_map(remote, rbd_clone_name, iodepth)
                fio_config.write('[{rbd_dev}]\n'.format(rbd_dev=rbd_dev))
                if config.get('rw'):
                    rw=config['rw']
@@ -191,24 +205,21 @@ def run_fio(remote, config, rbd_test_dir):
         fio = "https://github.com/axboe/fio/archive/fio-" + fio_version + ".tar.gz"
         remote.run(args=['mkdir', run.Raw(rbd_test_dir),])
         remote.run(args=['cd' , run.Raw(rbd_test_dir),
-                         run.Raw(';'), 'wget' , fio , run.Raw(';'), run.Raw('tar -xvf fio*tar.gz'), run.Raw(';'),
-                         run.Raw('cd fio-fio*'), 'configure', run.Raw(';') ,'make'])
+                         run.Raw(';'), 'wget', fio, run.Raw(';'), run.Raw('tar -xvf fio*tar.gz'), run.Raw(';'),
+                         run.Raw('cd fio-fio*'), run.Raw(';'), './configure', run.Raw(';'), 'make'])
         remote.run(args=['ceph', '-s'])
+        remote.run(args=[run.Raw('{tdir}/fio-fio-{v}/fio --showcmd {f}'.format(tdir=rbd_test_dir,v=fio_version,f=fio_config.name))])
         remote.run(args=['sudo', run.Raw('{tdir}/fio-fio-{v}/fio {f}'.format(tdir=rbd_test_dir,v=fio_version,f=fio_config.name))])
         remote.run(args=['ceph', '-s'])
     finally:
-        out=StringIO.StringIO()
-        remote.run(args=['rbd','showmapped', '--format=json'], stdout=out)
-        mapped_images = json.loads(out.getvalue())
+        out = remote.sh('rbd device list --format=json')
+        mapped_images = json.loads(out)
         if mapped_images:
             log.info("Unmapping rbd images on {sn}".format(sn=sn))
-            for image in mapped_images.itervalues():
-                remote.run(args=['sudo', 'rbd', 'unmap', str(image['device'])])
+            for image in mapped_images:
+                remote.run(args=['sudo', 'rbd', 'device', 'unmap',
+                                 str(image['device'])])
         log.info("Cleaning up fio install")
         remote.run(args=['rm','-rf', run.Raw(rbd_test_dir)])
-        if system_type == 'rpm' and ioengine == 'rbd':
-            log.info("Uninstall librbd1 devel package on {sn}".format(sn=sn))
-            remote.run(args=['sudo', 'yum' , 'remove', 'librbd1-devel', '-y'])
-        elif ioengine == 'rbd':
-            log.info("Uninstall librbd devel package on {sn}".format(sn=sn))
-            remote.run(args=['sudo', 'apt-get', '-y', 'remove', 'librbd-dev'])
+        if ioengine_pkg:
+            remove_package(ioengine_pkg, remote)

@@ -13,9 +13,14 @@
  */
 
 
+
+#include "include/rados/librados.hpp"
+#include "mds/CInode.h"
+
 #include "cls_cephfs_client.h"
 
-#include "mds/CInode.h"
+using ceph::bufferlist;
+using ceph::decode;
 
 #define XATTR_CEILING "scan_ceiling"
 #define XATTR_MAX_MTIME "scan_max_mtime"
@@ -72,8 +77,8 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   file_layout_t *layout,
   AccumulateResult *result)
 {
-  assert(backtrace != NULL);
-  assert(result != NULL);
+  ceph_assert(backtrace != NULL);
+  ceph_assert(result != NULL);
 
   librados::ObjectReadOperation op;
 
@@ -107,30 +112,30 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
 
   // Load scan_ceiling
   try {
-    bufferlist::iterator scan_ceiling_bl_iter = scan_ceiling_bl.begin();
+    auto scan_ceiling_bl_iter = scan_ceiling_bl.cbegin();
     ObjCeiling ceiling;
     ceiling.decode(scan_ceiling_bl_iter);
     result->ceiling_obj_index = ceiling.id;
     result->ceiling_obj_size = ceiling.size;
-  } catch (const buffer::error &err) {
+  } catch (const ceph::buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
   }
 
   // Load scan_max_size
   try {
-    bufferlist::iterator scan_max_size_bl_iter = scan_max_size_bl.begin();
-    ::decode(result->max_obj_size, scan_max_size_bl_iter);
-  } catch (const buffer::error &err) {
+    auto scan_max_size_bl_iter = scan_max_size_bl.cbegin();
+    decode(result->max_obj_size, scan_max_size_bl_iter);
+  } catch (const ceph::buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
   }
 
   // Load scan_max_mtime
   try {
-    bufferlist::iterator scan_max_mtime_bl_iter = scan_max_mtime_bl.begin();
-    ::decode(result->max_mtime, scan_max_mtime_bl_iter);
-  } catch (const buffer::error &err) {
+    auto scan_max_mtime_bl_iter = scan_max_mtime_bl.cbegin();
+    decode(result->max_mtime, scan_max_mtime_bl_iter);
+  } catch (const ceph::buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
   }
@@ -138,9 +143,9 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Deserialize backtrace
   if (parent_bl.length()) {
     try {
-      bufferlist::iterator q = parent_bl.begin();
+      auto q = parent_bl.cbegin();
       backtrace->decode(q);
-    } catch (buffer::error &e) {
+    } catch (ceph::buffer::error &e) {
       //dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
       return -EINVAL;
     }
@@ -149,9 +154,9 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Deserialize layout
   if (layout_bl.length()) {
     try {
-      bufferlist::iterator q = layout_bl.begin();
-      ::decode(*layout, q);
-    } catch (buffer::error &e) {
+      auto q = layout_bl.cbegin();
+      decode(*layout, q);
+    } catch (ceph::buffer::error &e) {
       return -EINVAL;
     }
   }
@@ -163,14 +168,13 @@ void ClsCephFSClient::build_tag_filter(
           const std::string &scrub_tag,
           bufferlist *out_bl)
 {
-  assert(out_bl != NULL);
+  ceph_assert(out_bl != NULL);
 
   // Leading part of bl is un-versioned string naming the filter
-  ::encode(std::string("cephfs.inode_tag"), *out_bl);
+  encode(std::string("cephfs.inode_tag"), *out_bl);
 
   // Filter-specific part of the bl: in our case this is a versioned structure
   InodeTagFilterArgs args;
   args.scrub_tag = scrub_tag;
   args.encode(*out_bl);
 }
-

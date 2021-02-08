@@ -5,7 +5,7 @@ import logging
 import time
 
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks.util.rados import rados
 
 
 log = logging.getLogger(__name__)
@@ -33,9 +33,7 @@ def task(ctx, config):
 
     while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2])
     manager.raw_cluster_cmd('osd', 'set', 'noout')
     manager.raw_cluster_cmd('osd', 'set', 'noin')
     manager.raw_cluster_cmd('osd', 'set', 'nodown')
@@ -63,7 +61,7 @@ def task(ctx, config):
 
     log.info('writing initial objects')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     # write 100 objects
     for i in range(100):
         rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
@@ -157,6 +155,6 @@ def task(ctx, config):
     for i in range(DIVERGENT_WRITE + DIVERGENT_REMOVE):
         exit_status = rados(ctx, mon, ['-p', 'foo', 'get', 'existing_%d' % i,
                                        '/tmp/existing'])
-        assert exit_status is 0
+        assert exit_status == 0
 
     log.info("success")

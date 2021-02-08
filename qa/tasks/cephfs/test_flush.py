@@ -44,7 +44,7 @@ class TestFlush(CephFSTestCase):
 
         # ...and the journal is truncated to just a single subtreemap from the
         # newly created segment
-        summary_output = self.fs.journal_tool(["event", "get", "summary"])
+        summary_output = self.fs.journal_tool(["event", "get", "summary"], 0)
         try:
             self.assertEqual(summary_output,
                              dedent(
@@ -72,7 +72,7 @@ class TestFlush(CephFSTestCase):
                              ).strip())
             flush_data = self.fs.mds_asok(["flush", "journal"])
             self.assertEqual(flush_data['return_code'], 0)
-            self.assertEqual(self.fs.journal_tool(["event", "get", "summary"]),
+            self.assertEqual(self.fs.journal_tool(["event", "get", "summary"], 0),
                              dedent(
                                  """
                                  Events by type:
@@ -88,8 +88,7 @@ class TestFlush(CephFSTestCase):
         initial_purges = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_enqueued']
 
         # Use a client to delete a file
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["rm", "-rf", "mydir"])
 
         # Flush the journal so that the directory inode can be purged

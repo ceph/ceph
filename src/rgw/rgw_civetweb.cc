@@ -1,28 +1,31 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
+#include <string_view>
 
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/utility/string_ref.hpp>
 
 #include "civetweb/civetweb.h"
 #include "rgw_civetweb.h"
+#include "rgw_perf_counters.h"
 
 
 #define dout_subsys ceph_subsys_rgw
 
 size_t RGWCivetWeb::write_data(const char *buf, const size_t len)
 {
+  size_t off = 0;
   auto to_sent = len;
   while (to_sent) {
-    const int ret = mg_write(conn, buf, len);
+    const int ret = mg_write(conn, buf + off, to_sent);
     if (ret < 0 || ! ret) {
       /* According to the documentation of mg_write() it always returns -1 on
        * error. The details aren't available, so we will just throw EIO. Same
        * goes to 0 that is associated with writing to a closed connection. */
       throw rgw::io::Exception(EIO, std::system_category());
     } else {
+      off += static_cast<size_t>(ret);
       to_sent -= static_cast<size_t>(ret);
     }
   }
@@ -33,6 +36,7 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn)
   : conn(conn),
     explicit_keepalive(false),
     explicit_conn_close(false),
+    got_eof_on_read(false),
     txbuf(*this)
 {
     sockaddr *lsa = mg_get_local_addr(conn);
@@ -50,11 +54,22 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn)
 
 size_t RGWCivetWeb::read_data(char *buf, size_t len)
 {
-  const int ret = mg_read(conn, buf, len);
-  if (ret < 0) {
-    throw rgw::io::Exception(EIO, std::system_category());
+  size_t c;
+  int ret;
+  if (got_eof_on_read) {
+    return 0;
   }
-  return ret;
+  for (c = 0; c < len; c += ret) {
+    ret = mg_read(conn, buf+c, len-c);
+    if (ret < 0) {
+      throw rgw::io::Exception(EIO, std::system_category());
+    }
+    if (!ret) {
+      got_eof_on_read = true;
+      break;
+    }
+  }
+  return c;
 }
 
 void RGWCivetWeb::flush()
@@ -64,21 +79,30 @@ void RGWCivetWeb::flush()
 
 size_t RGWCivetWeb::complete_request()
 {
+  perfcounter->inc(l_rgw_qlen, -1);
+  perfcounter->inc(l_rgw_qactive, -1);
   return 0;
 }
 
-void RGWCivetWeb::init_env(CephContext *cct)
+int RGWCivetWeb::init_env(CephContext *cct)
 {
   env.init(cct);
   const struct mg_request_info* info = mg_get_request_info(conn);
 
   if (! info) {
-    return;
+    // request info is NULL; we have no info about the connection
+    return -EINVAL;
   }
 
   for (int i = 0; i < info->num_headers; i++) {
-    const struct mg_request_info::mg_header* header = &info->http_headers[i];
-    const boost::string_ref name(header->name);
+    const auto header = &info->http_headers[i];
+
+    if (header->name == nullptr || header->value==nullptr) {
+      lderr(cct) << "client supplied malformatted headers" << dendl;
+      return -EINVAL;
+    }
+
+    const std::string_view name(header->name);
     const auto& value = header->value;
 
     if (boost::algorithm::iequals(name, "content-length")) {
@@ -94,7 +118,7 @@ void RGWCivetWeb::init_env(CephContext *cct)
       explicit_conn_close = boost::algorithm::iequals(value, "close");
     }
 
-    static const boost::string_ref HTTP_{"HTTP_"};
+    static const std::string_view HTTP_{"HTTP_"};
 
     char buf[name.size() + HTTP_.size() + 1];
     auto dest = std::copy(std::begin(HTTP_), std::end(HTTP_), buf);
@@ -110,9 +134,14 @@ void RGWCivetWeb::init_env(CephContext *cct)
     env.set(buf, value);
   }
 
+  perfcounter->inc(l_rgw_qlen);
+  perfcounter->inc(l_rgw_qactive);
+
+  env.set("REMOTE_ADDR", info->remote_addr);
   env.set("REQUEST_METHOD", info->request_method);
-  env.set("REQUEST_URI", info->uri);
-  env.set("SCRIPT_URI", info->uri); /* FIXME */
+  env.set("HTTP_VERSION", info->http_version);
+  env.set("REQUEST_URI", info->request_uri); // get the full uri, we anyway handle abs uris later
+  env.set("SCRIPT_URI", info->local_uri);
   if (info->query_string) {
     env.set("QUERY_STRING", info->query_string);
   }
@@ -128,6 +157,7 @@ void RGWCivetWeb::init_env(CephContext *cct)
   if (info->is_ssl) {
     env.set("SERVER_PORT_SECURE", port_buf);
   }
+  return 0;
 }
 
 size_t RGWCivetWeb::send_status(int status, const char *status_name)
@@ -152,8 +182,8 @@ size_t RGWCivetWeb::send_100_continue()
   return sent;
 }
 
-size_t RGWCivetWeb::send_header(const boost::string_ref& name,
-                                const boost::string_ref& value)
+size_t RGWCivetWeb::send_header(const std::string_view& name,
+                                const std::string_view& value)
 {
   static constexpr char HEADER_SEP[] = ": ";
   static constexpr char HEADER_END[] = "\r\n";

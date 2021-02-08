@@ -13,8 +13,35 @@
  */
 #include "common/utf8.h"
 
-#include <stdio.h>
 #include <string.h>
+
+/*
+ * http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf - page 94
+ *
+ * Table 3-7. Well-Formed UTF-8 Byte Sequences
+ *
+ * +--------------------+------------+-------------+------------+-------------+
+ * | Code Points        | First Byte | Second Byte | Third Byte | Fourth Byte |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+0000..U+007F     | 00..7F     |             |            |             |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+0080..U+07FF     | C2..DF     | 80..BF      |            |             |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+0800..U+0FFF     | E0         | A0..BF      | 80..BF     |             |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+1000..U+CFFF     | E1..EC     | 80..BF      | 80..BF     |             |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+D000..U+D7FF     | ED         | 80..9F      | 80..BF     |             |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+E000..U+FFFF     | EE..EF     | 80..BF      | 80..BF     |             |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+10000..U+3FFFF   | F0         | 90..BF      | 80..BF     | 80..BF      |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+40000..U+FFFFF   | F1..F3     | 80..BF      | 80..BF     | 80..BF      |
+ * +--------------------+------------+-------------+------------+-------------+
+ * | U+100000..U+10FFFF | F4         | 80..8F      | 80..BF     | 80..BF      |
+ * +--------------------+------------+-------------+------------+-------------+
+ */
 
 static int high_bits_set(int c)
 {
@@ -34,37 +61,44 @@ static int high_bits_set(int c)
  */
 int encode_utf8(unsigned long u, unsigned char *buf)
 {
-	int i;
-	unsigned long max_val[MAX_UTF8_SZ] = {
-		0x0000007ful, 0x000007fful, 0x0000fffful,
-		0x001ffffful, 0x03fffffful, 0x7ffffffful
-	};
-	static const int MAX_VAL_SZ = sizeof(max_val) / sizeof(max_val[0]);
-
-	for (i = 0; i < MAX_VAL_SZ; ++i) {
-		if (u <= max_val[i])
-			break;
-	}
-	if (i == MAX_VAL_SZ) {
-		// This code point is too big to encode.
+	/* Unroll loop for common code points  */
+	if (u <= 0x0000007F) {
+		buf[0] = u;
+		return 1;
+	} else if (u <= 0x000007FF) {
+		buf[0] = 0xC0 | (u >> 6);
+		buf[1] = 0x80 | (u & 0x3F);
+		return 2;
+	} else if (u <= 0x0000FFFF) {
+		buf[0] = 0xE0 | (u >> 12);
+		buf[1] = 0x80 | ((u >> 6) & 0x3F);
+		buf[2] = 0x80 | (u & 0x3F);
+		return 3;
+	} else if (u <= 0x001FFFFF) {
+		buf[0] = 0xF0 | (u >> 18);
+		buf[1] = 0x80 | ((u >> 12) & 0x3F);
+		buf[2] = 0x80 | ((u >> 6) & 0x3F);
+		buf[3] = 0x80 | (u & 0x3F);
+		return 4;
+	} else {
+		/* Rare/illegal code points */
+		if (u <= 0x03FFFFFF) {
+			for (int i = 4; i >= 1; --i) {
+				buf[i] = 0x80 | (u & 0x3F);
+				u >>= 6;
+			}
+			buf[0] = 0xF8 | u;
+			return 5;
+		} else if (u <= 0x7FFFFFFF) {
+			for (int i = 5; i >= 1; --i) {
+				buf[i] = 0x80 | (u & 0x3F);
+				u >>= 6;
+			}
+			buf[0] = 0xFC | u;
+			return 6;
+		}
 		return -1;
 	}
-
-	if (i == 0) {
-		buf[0] = u;
-	}
-	else {
-		signed int j;
-		for (j = i; j > 0; --j) {
-			buf[j] = 0x80 | (u & 0x3f);
-			u >>= 6;
-		}
-
-		unsigned char mask = ~(0xFF >> (i + 1));
-		buf[0] = mask | u;
-	}
-
-	return i + 1;
 }
 
 /*
@@ -108,52 +142,69 @@ unsigned long decode_utf8(unsigned char *buf, int nbytes)
 
 int check_utf8(const char *buf, int len)
 {
-	unsigned char u[MAX_UTF8_SZ];
-	int enc_len = 0;
-	int i = 0;
-	while (1) {
-		unsigned int c = buf[i];
-		if (i >= len || c < 0x80 || (c & 0xC0) != 0x80) {
-			// the start of a new character. Process what we have
-			// in the buffer.
-			if (enc_len > 0) {
-				int re_encoded_len;
-				unsigned char re_encoded[MAX_UTF8_SZ];
-				unsigned long code = decode_utf8(u, enc_len);
-				if (code == INVALID_UTF8_CHAR) {
-					//printf("decoded to invalid utf8");
-					return i + 1;
+	/*
+	 * "char" is "signed" on x86 but "unsigned" on aarch64 by default.
+	 * Below code depends on signed/unsigned comparisons, define an
+	 * unsigned buffer explicitly to fix the gap.
+	 */
+	const unsigned char *bufu = (const unsigned char *)buf;
+	int err_pos = 1;
+
+	while (len) {
+		int nbytes;
+		unsigned char byte1 = bufu[0];
+
+		/* 00..7F */
+		if (byte1 <= 0x7F) {
+			nbytes = 1;
+		/* C2..DF, 80..BF */
+		} else if (len >= 2 && byte1 >= 0xC2 && byte1 <= 0xDF &&
+				(signed char)bufu[1] <= (signed char)0xBF) {
+			nbytes = 2;
+		} else if (len >= 3) {
+			unsigned char byte2 = bufu[1];
+
+			/* Is byte2, byte3 between 0x80 ~ 0xBF */
+			int byte2_ok = (signed char)byte2 <= (signed char)0xBF;
+			int byte3_ok = (signed char)bufu[2] <= (signed char)0xBF;
+
+			if (byte2_ok && byte3_ok &&
+					/* E0, A0..BF, 80..BF */
+					((byte1 == 0xE0 && byte2 >= 0xA0) ||
+					 /* E1..EC, 80..BF, 80..BF */
+					 (byte1 >= 0xE1 && byte1 <= 0xEC) ||
+					 /* ED, 80..9F, 80..BF */
+					 (byte1 == 0xED && byte2 <= 0x9F) ||
+					 /* EE..EF, 80..BF, 80..BF */
+					 (byte1 >= 0xEE && byte1 <= 0xEF))) {
+				nbytes = 3;
+			} else if (len >= 4) {
+				/* Is byte4 between 0x80 ~ 0xBF */
+				int byte4_ok = (signed char)bufu[3] <= (signed char)0xBF;
+
+				if (byte2_ok && byte3_ok && byte4_ok &&
+						/* F0, 90..BF, 80..BF, 80..BF */
+						((byte1 == 0xF0 && byte2 >= 0x90) ||
+						 /* F1..F3, 80..BF, 80..BF, 80..BF */
+						 (byte1 >= 0xF1 && byte1 <= 0xF3) ||
+						 /* F4, 80..8F, 80..BF, 80..BF */
+						 (byte1 == 0xF4 && byte2 <= 0x8F))) {
+					nbytes = 4;
+				} else {
+					return err_pos;
 				}
-				re_encoded_len = encode_utf8(code, re_encoded);
-				if (enc_len != re_encoded_len) {
-					//printf("originally encoded as %d bytes, "
-					//	"but was re-encoded to %d!\n",
-					//	enc_len, re_encoded_len);
-					return i + 1;
-				}
-				if (memcmp(u, re_encoded, enc_len) != 0) {
-					//printf("re-encoded to a different "
-					//	"byte stream!");
-					return i + 1;
-				}
-				//printf("code_point %lu\n", code);
+			} else {
+				return err_pos;
 			}
-			enc_len = 0;
-			if (i >= len)
-				break;
-			// start collecting again?
-			if (c >= 0x80)
-				u[enc_len++] = c;
 		} else {
-			if (enc_len == MAX_UTF8_SZ) {
-				//printf("too many enc_len in utf character!\n");
-				return i + 1;
-			}
-			//printf("continuation byte...\n");
-			u[enc_len++] = c;
+			return err_pos;
 		}
-		++i;
+
+		len -= nbytes;
+		err_pos += nbytes;
+		bufu += nbytes;
 	}
+
 	return 0;
 }
 

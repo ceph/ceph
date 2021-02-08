@@ -1,7 +1,8 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
-#include "include/rados/librados.hpp"
+#include "include/rados/librados_fwd.hpp"
 #include "mds/mdstypes.h"
-
 #include "cls_cephfs.h"
 
 class AccumulateArgs;
@@ -29,6 +30,5 @@ class ClsCephFSClient
 
   static void build_tag_filter(
       const std::string &scrub_tag,
-      bufferlist *out_bl);
+      ceph::buffer::list *out_bl);
 };
-

@@ -33,7 +33,7 @@ int PgFiles::init()
   return ceph_init(cmount);
 }
 
-PgFiles::PgFiles(Objecter *o, std::set<pg_t> pgs_)
+PgFiles::PgFiles(Objecter *o, const std::set<pg_t> &pgs_)
   : objecter(o), pgs(pgs_)
 {
   for (const auto &i : pgs) {
@@ -99,7 +99,7 @@ void PgFiles::hit_dir(std::string const &path)
 
 void PgFiles::hit_file(std::string const &path, const struct ceph_statx &stx)
 {
-  assert(S_ISREG(stx.stx_mode));
+  ceph_assert(S_ISREG(stx.stx_mode));
 
   dout(20) << "Hitting file '" << path << "'" << dendl;
 

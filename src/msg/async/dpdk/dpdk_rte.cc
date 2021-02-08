@@ -16,6 +16,8 @@
  * under the License.
  */
 
+#include <bitset>
+
 #include <rte_config.h>
 #include <rte_common.h>
 #include <rte_ethdev.h>
@@ -38,12 +40,39 @@ namespace dpdk {
   std::condition_variable eal::cond;
   std::list<std::function<void()>> eal::funcs;
 
-  static int bitcount(unsigned n)
+  static int bitcount(unsigned long long n)
   {
-    unsigned int c =0 ;
-    for (c = 0; n; ++c)
-      n &= (n -1);
-    return c;
+    return std::bitset<CHAR_BIT * sizeof(n)>{n}.count();
+  }
+
+  static int hex2bitcount(unsigned char c)
+  {
+    int val;
+
+    if (isdigit(c))
+      val = c - '0';
+    else if (isupper(c))
+      val = c - 'A' + 10;
+    else
+      val = c - 'a' + 10;
+    return bitcount(val);
+  }
+
+  static int coremask_bitcount(const char *buf)
+  {
+    int count = 0;
+
+    if (buf[0] == '0' && 
+        ((buf[1] == 'x') || (buf[1] == 'X')))
+      buf += 2;
+
+    for (int i = 0; buf[i] != '\0'; i++) {
+      char c = buf[i];
+      if (isxdigit(c) == 0)
+        return -EINVAL;
+      count += hex2bitcount(c);
+    }
+    return count;
   }
 
   int eal::init(CephContext *c)
@@ -53,11 +82,18 @@ namespace dpdk {
     }
 
     bool done = false;
+    auto coremask = c->_conf.get_val<std::string>("ms_dpdk_coremask");
+    int coremaskbit = coremask_bitcount(coremask.c_str());
+
+    if (coremaskbit <= 0
+        || static_cast<uint64_t>(coremaskbit) < c->_conf->ms_async_op_threads)
+      return -EINVAL;
+
     t = std::thread([&]() {
       // TODO: Inherit these from the app parameters - "opts"
       std::vector<std::vector<char>> args {
           string2vector(string("ceph")),
-          string2vector("-c"), string2vector(c->_conf->get_val<std::string>("ms_dpdk_coremask")),
+          string2vector("-c"), string2vector(c->_conf.get_val<std::string>("ms_dpdk_coremask")),
           string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
       };
 

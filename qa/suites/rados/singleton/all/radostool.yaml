@@ -12,11 +12,16 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
-    - wrongly marked me down
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    log-ignorelist:
+    - but it is still running
     - had wrong client addr
     - had wrong cluster addr
     - reached quota
+    - overall HEALTH_
+    - \(POOL_FULL\)
+    - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

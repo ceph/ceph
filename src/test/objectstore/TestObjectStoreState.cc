@@ -23,7 +23,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include "TestObjectStoreState.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
@@ -34,88 +34,85 @@ void TestObjectStoreState::init(int colls, int objs)
 {
   dout(5) << "init " << colls << " colls " << objs << " objs" << dendl;
 
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
-
+  auto meta_ch = m_store->create_new_collection(coll_t::meta());
   t.create_collection(coll_t::meta(), 0);
-  m_store->apply_transaction(&osr, std::move(t));
+  m_store->queue_transaction(meta_ch, std::move(t));
 
   wait_for_ready();
 
   int baseid = 0;
   for (int i = 0; i < colls; i++) {
-    int coll_id = i;
-    coll_entry_t *entry = coll_create(coll_id);
-    dout(5) << "init create collection " << entry->m_coll.to_str()
+    spg_t pgid(pg_t(i, 1), shard_id_t::NO_SHARD);
+    coll_t cid(pgid);
+    auto ch = m_store->create_new_collection(cid);
+    coll_entry_t *entry = coll_create(pgid, ch);
+    dout(5) << "init create collection " << entry->m_cid
         << " meta " << entry->m_meta_obj << dendl;
 
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->create_collection(entry->m_coll, 32);
+    t->create_collection(entry->m_cid, 32);
     bufferlist hint;
     uint32_t pg_num = colls;
     uint64_t num_objs = uint64_t(objs / colls);
-    ::encode(pg_num, hint);
-    ::encode(num_objs, hint);
-    t->collection_hint(entry->m_coll, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
+    encode(pg_num, hint);
+    encode(num_objs, hint);
+    t->collection_hint(entry->m_cid, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
     dout(5) << "give collection hint, number of objects per collection: " << num_objs << dendl;
-    t->touch(coll_t::meta(), entry->m_meta_obj);
+    t->touch(cid, entry->m_meta_obj);
 
     for (int i = 0; i < objs; i++) {
       hobject_t *obj = entry->touch_obj(i + baseid);
-      t->touch(entry->m_coll, ghobject_t(*obj));
+      t->touch(entry->m_cid, ghobject_t(*obj));
       ceph_assert(i + baseid == m_num_objects);
       m_num_objects++;
     }
     baseid += objs;
 
-    m_store->queue_transaction(&(entry->m_osr), std::move(*t),
-        new C_OnFinished(this));
+    t->register_on_commit(new C_OnFinished(this));
+    m_store->queue_transaction(entry->m_ch, std::move(*t), nullptr);
+
     delete t;
     inc_in_flight();
 
-    m_collections.insert(make_pair(coll_id, entry));
-    m_collections_ids.push_back(coll_id);
+    m_collections.insert(make_pair(cid, entry));
+    rebuild_id_vec();
     m_next_coll_nr++;
   }
-  dout(5) << "init has " << m_in_flight.read() << "in-flight transactions" << dendl;
+  dout(5) << "init has " << m_in_flight.load() << "in-flight transactions" << dendl;
   wait_for_done();
   dout(5) << "init finished" << dendl;
 }
 
-TestObjectStoreState::coll_entry_t *TestObjectStoreState::coll_create(int id)
+TestObjectStoreState::coll_entry_t *TestObjectStoreState::coll_create(
+  spg_t pgid, ObjectStore::CollectionHandle ch)
 {
-  char buf[100];
   char meta_buf[100];
-  memset(buf, 0, 100);
   memset(meta_buf, 0, 100);
-  snprintf(buf, 100, "0.%d_head", id);
-  snprintf(meta_buf, 100, "pglog_0.%d_head", id);
-  return (new coll_entry_t(id, buf, meta_buf));
+  snprintf(meta_buf, 100, "pglog_0_head");
+  return (new coll_entry_t(pgid, ch, meta_buf));
 }
 
 TestObjectStoreState::coll_entry_t*
-TestObjectStoreState::get_coll(int key, bool erase)
+TestObjectStoreState::get_coll(coll_t cid, bool erase)
 {
-  dout(5) << "get_coll id " << key << dendl;
+  dout(5) << "get_coll id " << cid << dendl;
 
   coll_entry_t *entry = NULL;
-  map<int, coll_entry_t*>::iterator it = m_collections.find(key);
+  auto it = m_collections.find(cid);
   if (it != m_collections.end()) {
     entry = it->second;
     if (erase) {
       m_collections.erase(it);
-      vector<int>::iterator cid_it = m_collections_ids.begin()+(entry->m_id);
-      dout(20) << __func__ << " removing key " << key << " coll_id " << entry->m_id
-	      << " iterator's entry id " << (*cid_it) << dendl;
-      m_collections_ids.erase(cid_it);
+      rebuild_id_vec();
     }
   }
 
-  dout(5) << "get_coll id " << key;
+  dout(5) << "get_coll id " << cid;
   if (!entry)
     *_dout << " non-existent";
   else
-    *_dout << " name " << entry->m_coll.to_str();
+    *_dout << " name " << entry->m_cid;
   *_dout << dendl;
   return entry;
 }
@@ -128,10 +125,10 @@ TestObjectStoreState::get_coll_at(int pos, bool erase)
   if (m_collections.empty())
     return NULL;
 
-  assert((size_t) pos < m_collections_ids.size());
+  ceph_assert((size_t) pos < m_collections_ids.size());
 
-  int coll_id = m_collections_ids[pos];
-  coll_entry_t *entry = m_collections[coll_id];
+  coll_t cid = m_collections_ids[pos];
+  coll_entry_t *entry = m_collections[cid];
 
   if (entry == NULL) {
     dout(5) << "get_coll_at pos " << pos << " non-existent" << dendl;
@@ -139,15 +136,12 @@ TestObjectStoreState::get_coll_at(int pos, bool erase)
   }
 
   if (erase) {
-    m_collections.erase(coll_id);
-    vector<int>::iterator it = m_collections_ids.begin()+(pos);
-    dout(20) << __func__ << " removing pos " << pos << " coll_id " << coll_id
-	    << " iterator's entry id " << (*it) << dendl;
-    m_collections_ids.erase(it);
+    m_collections.erase(cid);
+    rebuild_id_vec();
   }
 
   dout(5) << "get_coll_at pos " << pos << ": "
-      << entry->m_coll << "(removed: " << erase << ")" << dendl;
+      << entry->m_cid << "(removed: " << erase << ")" << dendl;
 
   return entry;
 }
@@ -177,7 +171,7 @@ hobject_t *TestObjectStoreState::coll_entry_t::touch_obj(int id)
 {
   map<int, hobject_t*>::iterator it = m_objects.find(id);
   if (it != m_objects.end()) {
-    dout(5) << "touch_obj coll id " << m_id
+    dout(5) << "touch_obj coll id " << m_cid
         << " name " << it->second->oid.name << dendl;
     return it->second;
   }
@@ -187,9 +181,11 @@ hobject_t *TestObjectStoreState::coll_entry_t::touch_obj(int id)
   snprintf(buf, 100, "obj%d", id);
 
   hobject_t *obj = new hobject_t(sobject_t(object_t(buf), CEPH_NOSNAP));
+  obj->set_hash(m_pgid.ps());
+  obj->pool = m_pgid.pool();
   m_objects.insert(make_pair(id, obj));
 
-  dout(5) << "touch_obj coll id " << m_id << " name " << buf << dendl;
+  dout(5) << "touch_obj coll id " << m_cid << " name " << buf << dendl;
   return obj;
 }
 
@@ -212,7 +208,7 @@ hobject_t *TestObjectStoreState::coll_entry_t::get_obj(int id, bool remove)
 {
   map<int, hobject_t*>::iterator it = m_objects.find(id);
   if (it == m_objects.end()) {
-    dout(5) << "get_obj coll " << m_coll.to_str()
+    dout(5) << "get_obj coll " << m_cid
         << " obj #" << id << " non-existent" << dendl;
     return NULL;
   }
@@ -221,7 +217,7 @@ hobject_t *TestObjectStoreState::coll_entry_t::get_obj(int id, bool remove)
   if (remove)
     m_objects.erase(it);
 
-  dout(5) << "get_obj coll " << m_coll.to_str() << " id " << id
+  dout(5) << "get_obj coll " << m_cid << " id " << id
       << ": " << obj->oid.name << "(removed: " << remove << ")" << dendl;
 
   return obj;
@@ -246,7 +242,7 @@ hobject_t *TestObjectStoreState::coll_entry_t::get_obj_at(int pos,
     bool remove, int *key)
 {
   if (m_objects.empty()) {
-    dout(5) << "get_obj_at coll " << m_coll.to_str() << " pos " << pos
+    dout(5) << "get_obj_at coll " << m_cid << " pos " << pos
         << " in an empty collection" << dendl;
     return NULL;
   }
@@ -261,7 +257,7 @@ hobject_t *TestObjectStoreState::coll_entry_t::get_obj_at(int pos,
   }
 
   if (ret == NULL) {
-    dout(5) << "get_obj_at coll " << m_coll.to_str() << " pos " << pos
+    dout(5) << "get_obj_at coll " << m_cid << " pos " << pos
         << " non-existent" << dendl;
     return NULL;
   }
@@ -272,7 +268,7 @@ hobject_t *TestObjectStoreState::coll_entry_t::get_obj_at(int pos,
   if (remove)
     m_objects.erase(it);
 
-  dout(5) << "get_obj_at coll id " << m_id << " pos " << pos
+  dout(5) << "get_obj_at coll id " << m_cid << " pos " << pos
       << ": " << ret->oid.name << "(removed: " << remove << ")" << dendl;
 
   return ret;
@@ -297,5 +293,5 @@ int TestObjectStoreState::coll_entry_t::get_random_obj_id(rngen_t& gen)
       return it->first;
     }
   }
-  ceph_assert(0 == "INTERNAL ERROR");
+  ceph_abort_msg("INTERNAL ERROR");
 }

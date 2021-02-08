@@ -39,6 +39,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+default rel
 
 ; crcB3 MACRO to implement crc32 on 3 %%bSize-byte blocks
 %macro  crcB3 3
@@ -130,6 +131,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+%ifidn __OUTPUT_FORMAT__, elf64
+%define ABI_IS_AMD64
+%elifidn __OUTPUT_FORMAT__, macho64
+%define ABI_IS_AMD64
+%endif
+
 ;;; ISCSI CRC 32 Implementation with crc32 Instruction
 
 ;;; unsigned int crc32_iscsi_00(unsigned char * buffer, int len, unsigned int crc_init);
@@ -142,7 +149,7 @@
 global  crc32_iscsi_zero_00:function
 crc32_iscsi_zero_00:
 
-%ifidn __OUTPUT_FORMAT__, elf64
+%ifdef ABI_IS_AMD64
 %define bufp            rdi
 %define bufp_dw         edi
 %define bufp_w          di
@@ -193,7 +200,7 @@ proc_block:
 	cmp     len, 240
 	jb      bit8
 
-	lea     crc_init, [mul_table_72 wrt rip]  ;; load table base address
+	lea     crc_init, [mul_table_72]  ;; load table base address
 
 	crcB3   640, 0x1000, 0x0c00     ; 640*3 = 1920 (Tables 1280, 640)
 	crcB3   320, 0x0c00, 0x0800     ; 320*3 =  960 (Tables  640, 320)
@@ -644,5 +651,7 @@ global %1_slver
 %endmacro
 ;;;       func            core, ver, snum
 slversion crc32_iscsi_zero_00, 00,   02,  0014
+%ifidn __OUTPUT_FORMAT__, elf64
 ; inform linker that this doesn't require executable stack
 section .note.GNU-stack noalloc noexec nowrite progbits
+%endif

@@ -5,12 +5,12 @@
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
-#include "librbd/image/CloseRequest.h"
-#include "librbd/image/OpenRequest.h"
-#include "librbd/image/SetSnapRequest.h"
+#include "librbd/asio/ContextWQ.h"
+#include "librbd/io/ObjectDispatcherInterface.h"
+#include "librbd/migration/OpenSourceImageRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -23,43 +23,63 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 
 template <typename I>
-RefreshParentRequest<I>::RefreshParentRequest(I &child_image_ctx,
-                                              const ParentInfo &parent_md,
-                                              Context *on_finish)
+RefreshParentRequest<I>::RefreshParentRequest(
+    I &child_image_ctx, const ParentImageInfo &parent_md,
+    const MigrationInfo &migration_info, Context *on_finish)
   : m_child_image_ctx(child_image_ctx), m_parent_md(parent_md),
-    m_on_finish(on_finish), m_parent_image_ctx(nullptr),
-    m_parent_snap_id(CEPH_NOSNAP), m_error_result(0) {
+    m_migration_info(migration_info), m_on_finish(on_finish),
+    m_parent_image_ctx(nullptr), m_parent_snap_id(CEPH_NOSNAP),
+    m_error_result(0) {
 }
 
 template <typename I>
-bool RefreshParentRequest<I>::is_refresh_required(I &child_image_ctx,
-                                                  const ParentInfo &parent_md) {
-  assert(child_image_ctx.snap_lock.is_locked());
-  assert(child_image_ctx.parent_lock.is_locked());
-  return (is_open_required(child_image_ctx, parent_md) ||
-          is_close_required(child_image_ctx, parent_md));
+bool RefreshParentRequest<I>::is_refresh_required(
+    I &child_image_ctx, const ParentImageInfo &parent_md,
+    const MigrationInfo &migration_info) {
+  ceph_assert(ceph_mutex_is_locked(child_image_ctx.image_lock));
+  return (is_open_required(child_image_ctx, parent_md, migration_info) ||
+          is_close_required(child_image_ctx, parent_md, migration_info));
 }
 
 template <typename I>
-bool RefreshParentRequest<I>::is_close_required(I &child_image_ctx,
-                                                const ParentInfo &parent_md) {
+bool RefreshParentRequest<I>::is_close_required(
+    I &child_image_ctx, const ParentImageInfo &parent_md,
+    const MigrationInfo &migration_info) {
   return (child_image_ctx.parent != nullptr &&
-          (parent_md.spec.pool_id == -1 || parent_md.overlap == 0));
+          !does_parent_exist(child_image_ctx, parent_md, migration_info));
 }
 
 template <typename I>
-bool RefreshParentRequest<I>::is_open_required(I &child_image_ctx,
-                                               const ParentInfo &parent_md) {
-  return (parent_md.spec.pool_id > -1 && parent_md.overlap > 0 &&
+bool RefreshParentRequest<I>::is_open_required(
+    I &child_image_ctx, const ParentImageInfo &parent_md,
+    const MigrationInfo &migration_info) {
+  return (does_parent_exist(child_image_ctx, parent_md, migration_info) &&
           (child_image_ctx.parent == nullptr ||
            child_image_ctx.parent->md_ctx.get_id() != parent_md.spec.pool_id ||
+           child_image_ctx.parent->md_ctx.get_namespace() !=
+             parent_md.spec.pool_namespace ||
            child_image_ctx.parent->id != parent_md.spec.image_id ||
            child_image_ctx.parent->snap_id != parent_md.spec.snap_id));
 }
 
 template <typename I>
+bool RefreshParentRequest<I>::does_parent_exist(
+    I &child_image_ctx, const ParentImageInfo &parent_md,
+    const MigrationInfo &migration_info) {
+  if (child_image_ctx.child != nullptr &&
+      child_image_ctx.child->migration_info.empty() && parent_md.overlap == 0) {
+    // intermediate, non-migrating images should only open their parent if they
+    // overlap
+    return false;
+  }
+
+  return (parent_md.spec.pool_id > -1 && parent_md.overlap > 0) ||
+          !migration_info.empty();
+}
+
+template <typename I>
 void RefreshParentRequest<I>::send() {
-  if (is_open_required(m_child_image_ctx, m_parent_md)) {
+  if (is_open_required(m_child_image_ctx, m_parent_md, m_migration_info)) {
     send_open_parent();
   } else {
     // parent will be closed (if necessary) during finalize
@@ -69,12 +89,7 @@ void RefreshParentRequest<I>::send() {
 
 template <typename I>
 void RefreshParentRequest<I>::apply() {
-  if (m_child_image_ctx.parent != nullptr) {
-    // closing parent image
-    m_child_image_ctx.clear_nonexistence_cache();
-  }
-  assert(m_child_image_ctx.snap_lock.is_wlocked());
-  assert(m_child_image_ctx.parent_lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_wlocked(m_child_image_ctx.image_lock));
   std::swap(m_child_image_ctx.parent, m_parent_image_ctx);
 }
 
@@ -93,35 +108,48 @@ void RefreshParentRequest<I>::finalize(Context *on_finish) {
 
 template <typename I>
 void RefreshParentRequest<I>::send_open_parent() {
-  assert(m_parent_md.spec.pool_id >= 0);
+  ceph_assert(m_parent_md.spec.pool_id >= 0);
 
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  librados::Rados rados(m_child_image_ctx.md_ctx);
+  if (!m_migration_info.empty()) {
+    auto ctx = create_async_context_callback(
+      m_child_image_ctx, create_context_callback<
+        RefreshParentRequest<I>,
+        &RefreshParentRequest<I>::handle_open_parent, false>(this));
+    auto req = migration::OpenSourceImageRequest<I>::create(
+      m_child_image_ctx.md_ctx, &m_child_image_ctx, m_parent_md.spec.snap_id,
+      m_migration_info, &m_parent_image_ctx, ctx);
+    req->send();
+    return;
+  }
 
   librados::IoCtx parent_io_ctx;
-  int r = rados.ioctx_create2(m_parent_md.spec.pool_id, parent_io_ctx);
-  assert(r == 0);
+  int r = util::create_ioctx(m_child_image_ctx.md_ctx, "parent image",
+                             m_parent_md.spec.pool_id,
+                             m_parent_md.spec.pool_namespace, &parent_io_ctx);
+  if (r < 0) {
+    send_complete(r);
+    return;
+  }
 
-  // since we don't know the image and snapshot name, set their ids and
-  // reset the snap_name and snap_exists fields after we read the header
-  m_parent_image_ctx = new I("", m_parent_md.spec.image_id, NULL, parent_io_ctx,
-                             true);
+  m_parent_image_ctx = new I("", m_parent_md.spec.image_id,
+                             m_parent_md.spec.snap_id, parent_io_ctx, true);
+  m_parent_image_ctx->child = &m_child_image_ctx;
 
   // set rados flags for reading the parent image
-  if (m_child_image_ctx.balance_parent_reads) {
+  if (m_child_image_ctx.config.template get_val<bool>("rbd_balance_parent_reads")) {
     m_parent_image_ctx->set_read_flag(librados::OPERATION_BALANCE_READS);
-  } else if (m_child_image_ctx.localize_parent_reads) {
+  } else if (m_child_image_ctx.config.template get_val<bool>("rbd_localize_parent_reads")) {
     m_parent_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
   }
 
-  using klass = RefreshParentRequest<I>;
-  Context *ctx = create_async_context_callback(
+  auto ctx = create_async_context_callback(
     m_child_image_ctx, create_context_callback<
-      klass, &klass::handle_open_parent, false>(this));
-  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, false, ctx);
-  req->send();
+      RefreshParentRequest<I>,
+      &RefreshParentRequest<I>::handle_open_parent, false>(this));
+  m_parent_image_ctx->state->open(0U, ctx);
 }
 
 template <typename I>
@@ -135,56 +163,7 @@ Context *RefreshParentRequest<I>::handle_open_parent(int *result) {
                << dendl;
 
     // image already closed by open state machine
-    delete m_parent_image_ctx;
     m_parent_image_ctx = nullptr;
-
-    return m_on_finish;
-  }
-
-  send_set_parent_snap();
-  return nullptr;
-}
-
-template <typename I>
-void RefreshParentRequest<I>::send_set_parent_snap() {
-  assert(m_parent_md.spec.snap_id != CEPH_NOSNAP);
-
-  CephContext *cct = m_child_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  cls::rbd::SnapshotNamespace snap_namespace;
-  std::string snap_name;
-  {
-    RWLock::RLocker snap_locker(m_parent_image_ctx->snap_lock);
-    const SnapInfo *info = m_parent_image_ctx->get_snap_info(m_parent_md.spec.snap_id);
-    if (!info) {
-      lderr(cct) << "failed to locate snapshot: Snapshot with this id not found" << dendl;
-      send_complete(-ENOENT);
-      return;
-    }
-    snap_namespace = info->snap_namespace;
-    snap_name = info->name;
-  }
-
-  using klass = RefreshParentRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_set_parent_snap, false>(this);
-  SetSnapRequest<I> *req = SetSnapRequest<I>::create(
-    *m_parent_image_ctx, snap_namespace, snap_name, ctx);
-  req->send();
-}
-
-template <typename I>
-Context *RefreshParentRequest<I>::handle_set_parent_snap(int *result) {
-  CephContext *cct = m_child_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
-
-  save_result(result);
-  if (*result < 0) {
-    lderr(cct) << "failed to set parent snapshot: " << cpp_strerror(*result)
-               << dendl;
-    send_close_parent();
-    return nullptr;
   }
 
   return m_on_finish;
@@ -192,17 +171,16 @@ Context *RefreshParentRequest<I>::handle_set_parent_snap(int *result) {
 
 template <typename I>
 void RefreshParentRequest<I>::send_close_parent() {
-  assert(m_parent_image_ctx != nullptr);
+  ceph_assert(m_parent_image_ctx != nullptr);
 
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  using klass = RefreshParentRequest<I>;
-  Context *ctx = create_async_context_callback(
+  auto ctx = create_async_context_callback(
     m_child_image_ctx, create_context_callback<
-      klass, &klass::handle_close_parent, false>(this));
-  CloseRequest<I> *req = CloseRequest<I>::create(m_parent_image_ctx, ctx);
-  req->send();
+      RefreshParentRequest<I>,
+      &RefreshParentRequest<I>::handle_close_parent, false>(this));
+  m_parent_image_ctx->state->close(ctx);
 }
 
 template <typename I>
@@ -210,20 +188,45 @@ Context *RefreshParentRequest<I>::handle_close_parent(int *result) {
   CephContext *cct = m_child_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
 
-  delete m_parent_image_ctx;
+  m_parent_image_ctx = nullptr;
+
   if (*result < 0) {
     lderr(cct) << "failed to close parent image: " << cpp_strerror(*result)
                << dendl;
+  }
+
+  send_reset_existence_cache();
+  return nullptr;
+}
+
+template <typename I>
+void RefreshParentRequest<I>::send_reset_existence_cache() {
+  CephContext *cct = m_child_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  Context *ctx = create_async_context_callback(
+    m_child_image_ctx, create_context_callback<
+      RefreshParentRequest<I>,
+      &RefreshParentRequest<I>::handle_reset_existence_cache, false>(this));
+  m_child_image_ctx.io_object_dispatcher->reset_existence_cache(ctx);
+}
+
+template <typename I>
+Context *RefreshParentRequest<I>::handle_reset_existence_cache(int *result) {
+  CephContext *cct = m_child_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to reset object existence cache: "
+               << cpp_strerror(*result) << dendl;
   }
 
   if (m_error_result < 0) {
     // propagate errors from opening the image
     *result = m_error_result;
   } else {
-    // ignore errors from closing the image
     *result = 0;
   }
-
   return m_on_finish;
 }
 

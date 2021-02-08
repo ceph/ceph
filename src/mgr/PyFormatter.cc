@@ -17,8 +17,10 @@
 
 #include "PyFormatter.h"
 
+#define LARGE_SIZE 1024
 
-void PyFormatter::open_array_section(const char *name)
+
+void PyFormatter::open_array_section(std::string_view name)
 {
   PyObject *list = PyList_New(0);
   dump_pyobject(name, list);
@@ -26,7 +28,7 @@ void PyFormatter::open_array_section(const char *name)
   cursor = list;
 }
 
-void PyFormatter::open_object_section(const char *name)
+void PyFormatter::open_object_section(std::string_view name)
 {
   PyObject *dict = PyDict_New();
   dump_pyobject(name, dict);
@@ -34,31 +36,31 @@ void PyFormatter::open_object_section(const char *name)
   cursor = dict;
 }
 
-void PyFormatter::dump_unsigned(const char *name, uint64_t u)
+void PyFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
-  PyObject *p = PyLong_FromLongLong(u);
-  assert(p);
+  PyObject *p = PyLong_FromUnsignedLong(u);
+  ceph_assert(p);
   dump_pyobject(name, p);
 }
 
-void PyFormatter::dump_int(const char *name, int64_t u)
+void PyFormatter::dump_int(std::string_view name, int64_t u)
 {
   PyObject *p = PyLong_FromLongLong(u);
-  assert(p);
+  ceph_assert(p);
   dump_pyobject(name, p);
 }
 
-void PyFormatter::dump_float(const char *name, double d)
+void PyFormatter::dump_float(std::string_view name, double d)
 {
   dump_pyobject(name, PyFloat_FromDouble(d));
 }
 
-void PyFormatter::dump_string(const char *name, const std::string& s)
+void PyFormatter::dump_string(std::string_view name, std::string_view s)
 {
-  dump_pyobject(name, PyString_FromString(s.c_str()));
+  dump_pyobject(name, PyUnicode_FromString(s.data()));
 }
 
-void PyFormatter::dump_bool(const char *name, bool b)
+void PyFormatter::dump_bool(std::string_view name, bool b)
 {
   if (b) {
     Py_INCREF(Py_True);
@@ -69,7 +71,7 @@ void PyFormatter::dump_bool(const char *name, bool b)
   }
 }
 
-std::ostream& PyFormatter::dump_stream(const char *name)
+std::ostream& PyFormatter::dump_stream(std::string_view name)
 {
   // Give the caller an ostream, construct a PyString,
   // and remember the association between the two.  On flush,
@@ -83,22 +85,24 @@ std::ostream& PyFormatter::dump_stream(const char *name)
   return ps->stream;
 }
 
-void PyFormatter::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
+void PyFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
-  // TODO
-  ceph_abort();
+  char buf[LARGE_SIZE];
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+
+  dump_pyobject(name, PyUnicode_FromString(buf));
 }
 
 /**
  * Steals reference to `p`
  */
-void PyFormatter::dump_pyobject(const char *name, PyObject *p)
+void PyFormatter::dump_pyobject(std::string_view name, PyObject *p)
 {
   if (PyList_Check(cursor)) {
     PyList_Append(cursor, p);
     Py_DECREF(p);
   } else if (PyDict_Check(cursor)) {
-    PyObject *key = PyString_FromString(name);
+    PyObject *key = PyUnicode_DecodeUTF8(name.data(), name.size(), nullptr);
     PyDict_SetItem(cursor, key, p);
     Py_DECREF(key);
     Py_DECREF(p);
@@ -114,7 +118,7 @@ void PyFormatter::finish_pending_streams()
     cursor = i->cursor;
     dump_pyobject(
         i->name.c_str(),
-        PyString_FromString(i->stream.str().c_str()));
+        PyUnicode_FromString(i->stream.str().c_str()));
     cursor = tmp_cur;
   }
 

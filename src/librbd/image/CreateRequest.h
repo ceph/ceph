@@ -4,43 +4,43 @@
 #ifndef CEPH_LIBRBD_IMAGE_CREATE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_CREATE_REQUEST_H
 
+#include "common/config_fwd.h"
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "common/WorkQueue.h"
-#include "librbd/ObjectMap.h"
 #include "include/rados/librados.hpp"
-#include "include/rbd_types.h"
-#include "cls/rbd/cls_rbd_types.h"
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
-#include "common/Timer.h"
-#include "librbd/journal/TypeTraits.h"
 
 class Context;
 
 using librados::IoCtx;
 
-namespace journal {
-  class Journaler;
-}
+namespace journal { class Journaler; }
 
 namespace librbd {
+
+namespace asio { struct ContextWQ; }
+
 namespace image {
 
 template <typename ImageCtxT = ImageCtx>
 class CreateRequest {
 public:
-  static CreateRequest *create(IoCtx &ioctx, const std::string &image_name,
+  static CreateRequest *create(const ConfigProxy& config, IoCtx &ioctx,
+                               const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
+                               uint32_t create_flags,
+                               cls::rbd::MirrorImageMode mirror_image_mode,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
-                               bool skip_mirror_enable,
-                               ContextWQ *op_work_queue, Context *on_finish) {
-    return new CreateRequest(ioctx, image_name, image_id, size, image_options,
-                             non_primary_global_image_id, primary_mirror_uuid,
-                             skip_mirror_enable, op_work_queue,
-                             on_finish);
+                               asio::ContextWQ *op_work_queue,
+                               Context *on_finish) {
+    return new CreateRequest(config, ioctx, image_name, image_id, size,
+                             image_options, create_flags,
+                             mirror_image_mode, non_primary_global_image_id,
+                             primary_mirror_uuid, op_work_queue, on_finish);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -54,24 +54,21 @@ private:
    *                                  <start> . . . . > . . . . .
    *                                     |                      .
    *                                     v                      .
-   *                               VALIDATE POOL                v (pool validation
+   *                               VALIDATE DATA POOL           v (pool validation
    *                                     |                      .  disabled)
    *                                     v                      .
-   *                             VALIDATE OVERWRITE             .
-   *                                     |                      .
-   *                                     v                      .
-   * (error: bottom up)           CREATE ID OBJECT. . < . . . . .
+   * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
    *  _______<_______                    |
    * |               |                   v
-   * |               |          ADD IMAGE TO DIRECTORY
+   * |               |            CREATE ID OBJECT
    * |               |               /   |
-   * |      REMOVE ID OBJECT<-------/    v
+   * |      REMOVE FROM DIR <-------/    v
    * |               |           NEGOTIATE FEATURES (when using default features)
    * |               |                   |
    * |               |                   v         (stripingv2 disabled)
    * |               |              CREATE IMAGE. . . . > . . . .
    * v               |               /   |                      .
-   * |      REMOVE FROM DIR<--------/    v                      .
+   * |      REMOVE ID OBJ <---------/    v                      .
    * |               |          SET STRIPE UNIT COUNT           .
    * |               |               /   |  \ . . . . . > . . . .
    * |      REMOVE HEADER OBJ<------/    v                     /. (object-map
@@ -93,15 +90,18 @@ private:
    * @endverbatim
    */
 
-  CreateRequest(IoCtx &ioctx, const std::string &image_name,
+  CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
+                const std::string &image_name,
                 const std::string &image_id, uint64_t size,
                 const ImageOptions &image_options,
+                uint32_t create_flags,
+                cls::rbd::MirrorImageMode mirror_image_mode,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
-                bool skip_mirror_enable,
-                ContextWQ *op_work_queue, Context *on_finish);
+                asio::ContextWQ *op_work_queue, Context *on_finish);
 
-  IoCtx &m_ioctx;
+  const ConfigProxy& m_config;
+  IoCtx m_io_ctx;
   IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
@@ -115,35 +115,32 @@ private:
   std::string m_journal_pool;
   std::string m_data_pool;
   int64_t m_data_pool_id = -1;
+  uint32_t m_create_flags;
+  cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
-  bool m_skip_mirror_enable;
   bool m_negotiate_features = false;
 
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   CephContext *m_cct;
-  int m_r_saved;  // used to return actual error after cleanup
-  bool m_force_non_primary;
+  int m_r_saved = 0;  // used to return actual error after cleanup
   file_layout_t m_layout;
   std::string m_id_obj, m_header_obj, m_objmap_name;
 
   bufferlist m_outbl;
-  rbd_mirror_mode_t m_mirror_mode;
+  cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
 
-  void validate_pool();
-  void handle_validate_pool(int r);
-
-  void validate_overwrite();
-  void handle_validate_overwrite(int r);
-
-  void create_id_object();
-  void handle_create_id_object(int r);
+  void validate_data_pool();
+  void handle_validate_data_pool(int r);
 
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
+
+  void create_id_object();
+  void handle_create_id_object(int r);
 
   void negotiate_features();
   void handle_negotiate_features(int r);
@@ -178,11 +175,12 @@ private:
   void remove_header_object();
   void handle_remove_header_object(int r);
 
+  void remove_id_object();
+  void handle_remove_id_object(int r);
+
   void remove_from_dir();
   void handle_remove_from_dir(int r);
 
-  void remove_id_object();
-  void handle_remove_id_object(int r);
 };
 
 } //namespace image

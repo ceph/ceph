@@ -1,14 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_OBJEXP_H
 #define CEPH_OBJEXP_H
 
-#include <errno.h>
-#include <iostream>
-#include <sstream>
-#include <string>
 #include <atomic>
+#include <string>
+#include <cerrno>
+#include <sstream>
+#include <iostream>
 
 #include "auth/Crypto.h"
 
@@ -19,65 +19,112 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 
 #include "global/global_init.h"
 
+#include "include/common_fwd.h"
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "rgw_user.h"
-#include "rgw_bucket.h"
-#include "rgw_rados.h"
-#include "rgw_acl.h"
-#include "rgw_acl_s3.h"
-#include "rgw_log.h"
-#include "rgw_formats.h"
-#include "rgw_usage.h"
-#include "rgw_replica_log.h"
+#include "rgw_sal.h"
+#include "rgw_sal_rados.h"
 
-#include <atomic>
+class RGWSI_RADOS;
+class RGWSI_Zone;
+class RGWBucketInfo;
+class cls_timeindex_entry;
+
+class RGWObjExpStore {
+  CephContext *cct;
+  RGWSI_RADOS *rados_svc;
+  RGWSI_Zone *zone_svc;
+public:
+  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc) : cct(_cct),
+                                                                                      rados_svc(_rados_svc),
+                                                                                      zone_svc(_zone_svc) {}
+
+  int objexp_hint_add(const ceph::real_time& delete_at,
+                      const string& tenant_name,
+                      const string& bucket_name,
+                      const string& bucket_id,
+                      const rgw_obj_index_key& obj_key);
+
+  int objexp_hint_list(const string& oid,
+                       const ceph::real_time& start_time,
+                       const ceph::real_time& end_time,
+                       const int max_entries,
+                       const string& marker,
+                       list<cls_timeindex_entry>& entries, /* out */
+                       string *out_marker,                 /* out */
+                       bool *truncated);                   /* out */
+
+  int objexp_hint_trim(const string& oid,
+                       const ceph::real_time& start_time,
+                       const ceph::real_time& end_time,
+                       const string& from_marker,
+                       const string& to_marker);
+};
 
 class RGWObjectExpirer {
 protected:
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
+  RGWObjExpStore exp_store;
 
   int init_bucket_info(const std::string& tenant_name,
                        const std::string& bucket_name,
                        const std::string& bucket_id,
                        RGWBucketInfo& bucket_info);
 
-  class OEWorker : public Thread {
+  class OEWorker : public Thread, public DoutPrefixProvider {
     CephContext *cct;
     RGWObjectExpirer *oe;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("OEWorker");
+    ceph::condition_variable cond;
 
   public:
     OEWorker(CephContext * const cct,
              RGWObjectExpirer * const oe)
       : cct(cct),
-        oe(oe),
-        lock("OEWorker") {
+        oe(oe) {
     }
 
     void *entry() override;
     void stop();
+
+    CephContext *get_cct() const override;
+    unsigned get_subsys() const;
+    std::ostream& gen_prefix(std::ostream& out) const;
   };
 
-  OEWorker *worker;
+  OEWorker *worker{nullptr};
   std::atomic<bool> down_flag = { false };
 
 public:
-  explicit RGWObjectExpirer(RGWRados *_store)
-    : store(_store) {
+  explicit RGWObjectExpirer(rgw::sal::RGWRadosStore *_store)
+    : store(_store),
+      exp_store(_store->getRados()->ctx(), _store->svc()->rados, _store->svc()->zone),
+      worker(NULL) {
+  }
+  ~RGWObjectExpirer() {
+    stop_processor();
   }
 
-  int garbage_single_object(objexp_hint_entry& hint);
+  int hint_add(const ceph::real_time& delete_at,
+               const string& tenant_name,
+               const string& bucket_name,
+               const string& bucket_id,
+               const rgw_obj_index_key& obj_key) {
+    return exp_store.objexp_hint_add(delete_at, tenant_name, bucket_name,
+                                     bucket_id, obj_key);
+  }
 
-  void garbage_chunk(std::list<cls_timeindex_entry>& entries, /* in  */
+  int garbage_single_object(const DoutPrefixProvider *dpp, objexp_hint_entry& hint);
+
+  void garbage_chunk(const DoutPrefixProvider *dpp, 
+                     std::list<cls_timeindex_entry>& entries, /* in  */
                      bool& need_trim);                        /* out */
 
   void trim_chunk(const std::string& shard,
@@ -86,11 +133,13 @@ public:
                   const string& from_marker,
                   const string& to_marker);
 
-  bool process_single_shard(const std::string& shard,
+  bool process_single_shard(const DoutPrefixProvider *dpp, 
+                            const std::string& shard,
                             const utime_t& last_run,
                             const utime_t& round_start);
 
-  bool inspect_all_shards(const utime_t& last_run,
+  bool inspect_all_shards(const DoutPrefixProvider *dpp, 
+                          const utime_t& last_run,
                           const utime_t& round_start);
 
   bool going_down();

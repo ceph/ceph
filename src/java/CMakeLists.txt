@@ -15,28 +15,31 @@ set(java_srcs
   java/com/ceph/fs/CephStat.java
   java/com/ceph/fs/CephStatVFS.java)
 
-# note: for the -source 1.5 builds, we add
+# note: for the -source 1.7 builds, we add
 #   -Xlint:-options
 # to get rid of the warning
-#   warning: [options] bootstrap class path not set in conjunction with -source 1.5
+#   warning: [options] bootstrap class path not set in conjunction with -source 1.7
 # as per
 #   https://blogs.oracle.com/darcy/entry/bootclasspath_older_source
-set(CMAKE_JAVA_COMPILE_FLAGS "-source" "1.5" "-target" "1.5" "-Xlint:-options")
-add_jar(libcephfs ${java_srcs})
-install_jar(libcephfs share/java)
+set(CMAKE_JAVA_COMPILE_FLAGS "-source" "1.8" "-target" "1.8" "-Xlint:-options")
+set(jni_header_dir "${CMAKE_CURRENT_BINARY_DIR}/native")
+if(CMAKE_VERSION VERSION_LESS 3.11)
+  set(CMAKE_JAVA_COMPILE_FLAGS ${CMAKE_JAVA_COMPILE_FLAGS} "-h" ${jni_header_dir})
+  add_jar(libcephfs ${java_srcs})
+  add_custom_target(
+    jni-header
+    DEPENDS libcephfs)
+  add_dependencies(jni-header libcephfs)
+else()
+  add_jar(libcephfs ${java_srcs}
+    GENERATE_NATIVE_HEADERS jni-header
+    DESTINATION ${jni_header_dir})
+endif()
 get_property(libcephfs_jar TARGET libcephfs PROPERTY JAR_FILE)
-
-set(java_h native/com_ceph_fs_CephMount.h)
-add_custom_command(
-  OUTPUT ${java_h}
-  COMMAND ${Java_JAVAH_EXECUTABLE} -classpath ${libcephfs_jar} -jni -o ${CMAKE_CURRENT_BINARY_DIR}/${java_h} com.ceph.fs.CephMount)
-add_custom_target(
-  jni-header
-  DEPENDS ${java_h})
-add_dependencies(jni-header libcephfs)
+install_jar(libcephfs share/java)
 
 find_jar(JUNIT_JAR
-  NAMES junit junit4
+  NAMES junit4 junit
   PATHS "/usr/share/java")
 if(JUNIT_JAR)
   set(CMAKE_JAVA_INCLUDE_PATH ${JUNIT_JAR} ${libcephfs_jar})

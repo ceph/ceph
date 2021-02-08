@@ -15,11 +15,12 @@
 #ifndef CEPH_LIBRADOS_IOCTXIMPL_H
 #define CEPH_LIBRADOS_IOCTXIMPL_H
 
+#include <atomic>
+
 #include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/snap_types.h"
 #include "common/zipkin_trace.h"
-#include "include/atomic.h"
 #include "include/types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -30,23 +31,24 @@
 class RadosClient;
 
 struct librados::IoCtxImpl {
-  atomic_t ref_cnt;
-  RadosClient *client;
-  int64_t poolid;
+  std::atomic<uint64_t> ref_cnt = { 0 };
+  RadosClient *client = nullptr;
+  int64_t poolid = 0;
   snapid_t snap_seq;
   ::SnapContext snapc;
-  uint64_t assert_ver;
-  version_t last_objver;
-  uint32_t notify_timeout;
+  uint64_t assert_ver = 0;
+  version_t last_objver = 0;
+  uint32_t notify_timeout = 30;
   object_locator_t oloc;
 
-  Mutex aio_write_list_lock;
-  ceph_tid_t aio_write_seq;
-  Cond aio_write_cond;
+  ceph::mutex aio_write_list_lock =
+    ceph::make_mutex("librados::IoCtxImpl::aio_write_list_lock");
+  ceph_tid_t aio_write_seq = 0;
+  ceph::condition_variable aio_write_cond;
   xlist<AioCompletionImpl*> aio_write_list;
   map<ceph_tid_t, std::list<AioCompletionImpl*> > aio_write_waiters;
 
-  Objecter *objecter;
+  Objecter *objecter = nullptr;
 
   IoCtxImpl();
   IoCtxImpl(RadosClient *c, Objecter *objecter,
@@ -69,11 +71,11 @@ struct librados::IoCtxImpl {
   int set_snap_write_context(snapid_t seq, vector<snapid_t>& snaps);
 
   void get() {
-    ref_cnt.inc();
+    ref_cnt++;
   }
 
   void put() {
-    if (ref_cnt.dec() == 0)
+    if (--ref_cnt == 0)
       delete this;
   }
 
@@ -142,9 +144,6 @@ struct librados::IoCtxImpl {
   int cmpext(const object_t& oid, uint64_t off, bufferlist& cmp_bl);
 
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
-  int tmap_put(const object_t& oid, bufferlist& bl);
-  int tmap_get(const object_t& oid, bufferlist& bl);
-  int tmap_to_omap(const object_t& oid, bool nullok=false);
 
   int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
@@ -178,7 +177,7 @@ struct librados::IoCtxImpl {
   };
 
   struct C_aio_Complete : public Context {
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
     object_t oid;
 #endif
     AioCompletionImpl *c;
@@ -224,9 +223,6 @@ struct librados::IoCtxImpl {
   int aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
 		  const char *name);
   int aio_cancel(AioCompletionImpl *c);
-
-  int pool_change_auid(unsigned long long auid);
-  int pool_change_auid_async(unsigned long long auid, PoolAsyncCompletionImpl *c);
 
   int hit_set_list(uint32_t hash, AioCompletionImpl *c,
 		   std::list< std::pair<time_t, time_t> > *pls);
@@ -280,6 +276,21 @@ struct librados::IoCtxImpl {
 
   int cache_pin(const object_t& oid);
   int cache_unpin(const object_t& oid);
+
+  int application_enable(const std::string& app_name, bool force);
+  void application_enable_async(const std::string& app_name, bool force,
+                                PoolAsyncCompletionImpl *c);
+  int application_list(std::set<std::string> *app_names);
+  int application_metadata_get(const std::string& app_name,
+                               const std::string &key,
+                               std::string* value);
+  int application_metadata_set(const std::string& app_name,
+                               const std::string &key,
+                               const std::string& value);
+  int application_metadata_remove(const std::string& app_name,
+                                  const std::string &key);
+  int application_metadata_list(const std::string& app_name,
+                                std::map<std::string, std::string> *values);
 
 };
 

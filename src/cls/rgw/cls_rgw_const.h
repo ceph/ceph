@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_CLS_RGW_CONST_H
@@ -6,6 +6,7 @@
 
 #define RGW_CLASS "rgw"
 
+/* bucket index */
 #define RGW_BUCKET_INIT_INDEX "bucket_init_index"
 
 
@@ -35,10 +36,14 @@
 #define RGW_BI_LOG_TRIM "bi_log_trim"
 #define RGW_DIR_SUGGEST_CHANGES "dir_suggest_changes"
 
+#define RGW_BI_LOG_RESYNC "bi_log_resync"
+#define RGW_BI_LOG_STOP "bi_log_stop"
+
 /* usage logging */
 #define RGW_USER_USAGE_LOG_ADD "user_usage_log_add"
 #define RGW_USER_USAGE_LOG_READ "user_usage_log_read"
 #define RGW_USER_USAGE_LOG_TRIM "user_usage_log_trim"
+#define RGW_USAGE_LOG_CLEAR "usage_log_clear"
 
 /* garbage collection */
 #define RGW_GC_SET_ENTRY "gc_set_entry"
@@ -47,6 +52,7 @@
 #define RGW_GC_REMOVE "gc_remove"
 
 /* lifecycle bucket list */
+#define RGW_LC_GET_ENTRY "lc_get_entry"
 #define RGW_LC_SET_ENTRY "lc_set_entry"
 #define RGW_LC_RM_ENTRY "lc_rm_entry"
 #define RGW_LC_GET_NEXT_ENTRY "lc_get_next_entry"
@@ -54,5 +60,16 @@
 #define RGW_LC_GET_HEAD "lc_get_head"
 #define RGW_LC_LIST_ENTRIES "lc_list_entries"
 
+/* resharding */
+#define RGW_RESHARD_ADD "reshard_add"
+#define RGW_RESHARD_LIST "reshard_list"
+#define RGW_RESHARD_GET "reshard_get"
+#define RGW_RESHARD_REMOVE "reshard_remove"
+
+/* resharding attribute  */
+#define RGW_SET_BUCKET_RESHARDING "set_bucket_resharding"
+#define RGW_CLEAR_BUCKET_RESHARDING "clear_bucket_resharding"
+#define RGW_GUARD_BUCKET_RESHARDING "guard_bucket_resharding"
+#define RGW_GET_BUCKET_RESHARDING "get_bucket_resharding"
 
 #endif

@@ -25,6 +25,24 @@
 
 const string JournalFilter::range_separator("..");
 
+bool JournalFilter::apply(uint64_t pos, PurgeItem &pi) const
+{
+  /* Filtering by journal offset range */
+  if (pos < range_start || pos >= range_end) {
+    return false;
+  }
+
+  if (purge_action != PurgeItem::NONE) {
+    if (pi.action != purge_action)
+      return false;
+  }
+
+  if (inode) {
+    if (inode != pi.ino)
+      return false;
+  }
+  return true;
+}
 
 /*
  * Return whether a LogEvent is to be included or excluded.
@@ -187,6 +205,10 @@ int JournalFilter::parse_args(
         }
       }
     } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--path", (char*)NULL)) {
+      if (!type.compare("purge_queue")) {
+	derr << "Invalid filter arguments: purge_queue doesn't take \"--path\"." << dendl;
+	return -EINVAL;
+      }
       dout(4) << "Filtering by path '" << arg_str << "'" << dendl;
       path_expr = arg_str;
     } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--inode", (char*)NULL)) {
@@ -198,14 +220,21 @@ int JournalFilter::parse_args(
         return -EINVAL;
       }
     } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--type", (char*)NULL)) {
-      std::string parse_err;
-      event_type = LogEvent::str_to_type(arg_str);
-      if (event_type == LogEvent::EventType(-1)) {
-        derr << "Invalid event type '" << arg_str << "': " << parse_err << dendl;
-        return -EINVAL;
+      try {
+	if (!type.compare("mdlog")) {
+	  event_type = LogEvent::str_to_type(arg_str);
+	} else if (!type.compare("purge_queue")) {
+	  purge_action = PurgeItem::str_to_type(arg_str);
+	}
+      } catch (const std::out_of_range&) {
+	 derr << "Invalid event type '" << arg_str << "'" << dendl;
+	 return -EINVAL;
       }
-
     } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--frag", (char*)NULL)) {
+      if (!type.compare("purge_queue")) {
+	derr << "Invalid filter arguments: purge_queue doesn't take \"--frag\"." << dendl;
+	return -EINVAL;
+      }
       std::string const frag_sep = ".";
       size_t sep_loc = arg_str.find(frag_sep);
       std::string inode_str;
@@ -234,9 +263,18 @@ int JournalFilter::parse_args(
       frag = dirfrag_t(frag_ino, frag_t(frag_enc));
       dout(4) << "dirfrag filter: '" << frag << "'" << dendl;
     } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--dname", (char*)NULL)) {
+      if (!type.compare("purge_queue")) {
+	derr << "Invalid filter arguments: purge_queue doesn't take \"--dname\"." << dendl;
+	return -EINVAL;
+      }
       frag_dentry = arg_str;
       dout(4) << "dentry filter: '" << frag_dentry << "'" << dendl;
     } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--client", (char*)NULL)) {
+      if (!type.compare("purge_queue")) {
+	derr << "Invalid filter arguments: purge_queue doesn't take \"--client\"." << dendl;
+	return -EINVAL;
+      }
+
       std::string parse_err;
       int64_t client_num = strict_strtoll(arg_str.c_str(), 0, &parse_err);
       if (!parse_err.empty()) {

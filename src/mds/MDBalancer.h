@@ -11,25 +11,19 @@
  * Foundation.  See file COPYING.
  * 
  */
-
-
-
 #ifndef CEPH_MDBALANCER_H
 #define CEPH_MDBALANCER_H
-
-#include <list>
-#include <map>
-using std::list;
-using std::map;
 
 #include "include/types.h"
 #include "common/Clock.h"
 #include "common/Cond.h"
-#include "CInode.h"
 
+#include "msg/Message.h"
+#include "messages/MHeartbeat.h"
+
+#include "MDSMap.h"
 
 class MDSRank;
-class Message;
 class MHeartbeat;
 class CInode;
 class CDir;
@@ -37,93 +31,38 @@ class Messenger;
 class MonClient;
 
 class MDBalancer {
- protected:
-  MDSRank *mds;
-  Messenger *messenger;
-  MonClient *mon_client;
-  int beat_epoch;
-
-  int last_epoch_under;  
-  int last_epoch_over; 
-  string bal_code;
-  string bal_version;
-
-  utime_t last_heartbeat;
-  utime_t last_sample;    
-  utime_t rebalance_time; //ensure a consistent view of load for rebalance
-
-  // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir
-  // just as soon as a delayed context comes back and triggers it.
-  // These sets just prevent us from spawning extra timer contexts for
-  // dirfrags that already have one in flight.
-  set<dirfrag_t>   split_pending, merge_pending;
-
-  // per-epoch scatter/gathered info
-  map<mds_rank_t, mds_load_t>  mds_load;
-  map<mds_rank_t, double>       mds_meta_load;
-  map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
-
-  // per-epoch state
-  double          my_load, target_load;
-  map<mds_rank_t,double> my_targets;
-  map<mds_rank_t,double> imported;
-  map<mds_rank_t,double> exported;
-
-  map<mds_rank_t, int> old_prev_targets;  // # iterations they _haven't_ been targets
-  bool check_targets();
-
-  double try_match(mds_rank_t ex, double& maxex,
-                   mds_rank_t im, double& maxim);
-  double get_maxim(mds_rank_t im) {
-    return target_load - mds_meta_load[im] - imported[im];
-  }
-  double get_maxex(mds_rank_t ex) {
-    return mds_meta_load[ex] - target_load - exported[ex];    
-  }
-
 public:
-  MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) : 
-    mds(m),
-    messenger(msgr),
-    mon_client(monc),
-    beat_epoch(0),
-    last_epoch_under(0), last_epoch_over(0), my_load(0.0), target_load(0.0) { }
-  
-  mds_load_t get_load(utime_t);
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+  friend class C_Bal_SendHeartbeat;
 
-  int proc_message(Message *m);
-  
-  int localize_balancer();
-  void send_heartbeat();
-  void handle_heartbeat(MHeartbeat *m);
+  MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc);
 
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
+
+  int proc_message(const cref_t<Message> &m);
+
+  /**
+   * Regularly called upkeep function.
+   *
+   * Sends MHeartbeat messages to the mons.
+   */
   void tick();
 
-  void export_empties();
-  //set up the rebalancing targets for export and do one if the
-  //MDSMap is up to date
-  void prep_rebalance(int beat);
-  int mantle_prep_rebalance();
-  /*check if the monitor has recorded the current export targets;
-    if it has then do the actual export. Otherwise send off our
-    export targets message again*/
-  void try_rebalance();
-  void find_exports(CDir *dir, 
-                    double amount, 
-                    list<CDir*>& exports, 
-                    double& have,
-                    set<CDir*>& already_exporting);
+  void handle_export_pins(void);
 
+  void subtract_export(CDir *ex);
+  void add_import(CDir *im);
+  void adjust_pop_for_rename(CDir *pdir, CDir *dir, bool inc);
 
-  void subtract_export(class CDir *ex, utime_t now);
-  void add_import(class CDir *im, utime_t now);
-
-  void hit_inode(utime_t now, class CInode *in, int type, int who=-1);
-  void hit_dir(utime_t now, class CDir *dir, int type, int who=-1, double amount=1.0);
-  void hit_recursive(utime_t now, class CDir *dir, int type, double amount, double rd_adj);
+  void hit_inode(CInode *in, int type, int who=-1);
+  void hit_dir(CDir *dir, int type, int who=-1, double amount=1.0);
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
+  bool is_fragment_pending(dirfrag_t df) {
+    return split_pending.count(df) || merge_pending.count(df);
+  }
 
   /**
    * Based on size and configuration, decide whether to issue a queue_split
@@ -132,8 +71,87 @@ public:
    * \param hot whether the directory's temperature is enough to split it
    */
   void maybe_fragment(CDir *dir, bool hot);
+
+  void handle_mds_failure(mds_rank_t who);
+
+  int dump_loads(Formatter *f) const;
+
+private:
+  typedef struct {
+    std::map<mds_rank_t, double> targets;
+    std::map<mds_rank_t, double> imported;
+    std::map<mds_rank_t, double> exported;
+  } balance_state_t;
+
+  //set up the rebalancing targets for export and do one if the
+  //MDSMap is up to date
+  void prep_rebalance(int beat);
+  int mantle_prep_rebalance();
+
+  mds_load_t get_load();
+  int localize_balancer();
+  void send_heartbeat();
+  void handle_heartbeat(const cref_t<MHeartbeat> &m);
+  void find_exports(CDir *dir,
+                    double amount,
+                    std::vector<CDir*>* exports,
+                    double& have,
+                    set<CDir*>& already_exporting);
+
+  double try_match(balance_state_t &state,
+                   mds_rank_t ex, double& maxex,
+                   mds_rank_t im, double& maxim);
+
+  double get_maxim(balance_state_t &state, mds_rank_t im) {
+    return target_load - mds_meta_load[im] - state.imported[im];
+  }
+  double get_maxex(balance_state_t &state, mds_rank_t ex) {
+    return mds_meta_load[ex] - target_load - state.exported[ex];
+  }
+
+  /**
+   * Try to rebalance.
+   *
+   * Check if the monitor has recorded the current export targets;
+   * if it has then do the actual export. Otherwise send off our
+   * export targets message again.
+   */
+  void try_rebalance(balance_state_t& state);
+
+  bool bal_fragment_dirs;
+  int64_t bal_fragment_interval;
+  static const unsigned int AUTH_TREES_THRESHOLD = 5;
+
+  MDSRank *mds;
+  Messenger *messenger;
+  MonClient *mon_client;
+  int beat_epoch = 0;
+
+  string bal_code;
+  string bal_version;
+
+  time last_heartbeat = clock::zero();
+  time last_sample = clock::zero();
+  time rebalance_time = clock::zero(); //ensure a consistent view of load for rebalance
+
+  time last_get_load = clock::zero();
+  uint64_t last_num_requests = 0;
+  uint64_t last_cpu_time = 0;
+
+  // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir
+  // just as soon as a delayed context comes back and triggers it.
+  // These sets just prevent us from spawning extra timer contexts for
+  // dirfrags that already have one in flight.
+  set<dirfrag_t> split_pending, merge_pending;
+
+  // per-epoch scatter/gathered info
+  std::map<mds_rank_t, mds_load_t> mds_load;
+  std::map<mds_rank_t, double> mds_meta_load;
+  std::map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
+  std::map<mds_rank_t, int> mds_last_epoch_under_map;
+
+  // per-epoch state
+  double my_load = 0;
+  double target_load = 0;
 };
-
-
-
 #endif

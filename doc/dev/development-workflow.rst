@@ -31,7 +31,7 @@ results.
 The workflows are not enforced when they impose an overhead that does
 not make sense. For instance, if the release notes for a point release
 were not written prior to checking all integration tests, they can be
-commited to the stable branch and the result sent for publication
+committed to the stable branch and the result sent for publication
 without going through another run of integration tests.
 
 Release Cycle
@@ -55,7 +55,7 @@ Release Cycle
 
 
 Four times a year, the development roadmap is discussed online during
-the `Ceph Developer Summit <http://wiki.ceph.com/Planning/CDS/>`_. A
+the `Ceph Developer Summit <http://tracker.ceph.com/projects/ceph/wiki/Planning#Ceph-Developer-Summit>`_. A
 new stable release (hammer, infernalis, jewel ...) is published at the same
 frequency.  Every other release (firefly, hammer, jewel...) is a `Long Term
 Stable (LTS) <../../releases>`_.  See `Understanding the release cycle
@@ -97,12 +97,7 @@ follows:
   assign them a priority
 * The bugs with higher priority are worked on first
 
-Each ``team`` is responsible for a project:
-
-* rgw lead is Yehuda Sadeh
-* CephFS lead is John Spray
-* rados lead is Samuel Just
-* rbd lead is Jason Dillaman
+Each ``team`` is responsible for a project, managed by :ref:`leads <governance>`.
 
 The ``developer`` assigned to an issue is responsible for it. The
 status of an open issue can be:
@@ -126,7 +121,7 @@ Running and interpreting teuthology integration tests
 The :doc:`/dev/sepia` runs `teuthology
 <https://github.com/ceph/teuthology/>`_ integration tests `on a regular basis <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#Automated-tests-AKA-nightlies>`_ and the
 results are posted on `pulpito <http://pulpito.ceph.com/>`_ and the
-`ceph-qa mailing list <http://ceph.com/resources/mailing-list-irc/>`_.
+`ceph-qa mailing list <https://ceph.com/irc/>`_.
 
 * The job failures are `analyzed by quality engineers and developers
   <http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_monitor_the_automated_tests_AKA_nightlies#List-of-suites-and-watchers>`_

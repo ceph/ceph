@@ -20,8 +20,6 @@
 
 class LocalLock : public SimpleLock {
 public:
-  client_t last_wrlock_client;
-  
   LocalLock(MDSCacheObject *o, LockType *t) : 
     SimpleLock(o, t) {
     set_state(LOCK_LOCK); // always.
@@ -39,7 +37,7 @@ public:
     return !is_xlocked();
   }
   void get_wrlock(client_t client) {
-    assert(can_wrlock());
+    ceph_assert(can_wrlock());
     SimpleLock::get_wrlock();
     last_wrlock_client = client;
   }
@@ -59,7 +57,8 @@ public:
       out << " last_client=" << last_wrlock_client;
     out << ")";
   }
+
+private:
+  client_t last_wrlock_client;
 };
-
-
 #endif

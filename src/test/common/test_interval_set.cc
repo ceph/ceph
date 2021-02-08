@@ -15,8 +15,9 @@
  */
 
 #include <gtest/gtest.h>
+#include <boost/container/flat_map.hpp>
 #include "include/interval_set.h"
-#include "include/btree_interval_set.h"
+#include "include/btree_map.h"
 
 using namespace ceph;
 
@@ -29,9 +30,13 @@ class IntervalSetTest : public ::testing::Test {
   typedef T ISet;
 };
 
-typedef ::testing::Types< interval_set<IntervalValueType> ,  btree_interval_set<IntervalValueType> > IntervalSetTypes;
+typedef ::testing::Types<
+  interval_set<IntervalValueType>,
+  interval_set<IntervalValueType, btree::btree_map>,
+  interval_set<IntervalValueType, boost::container::flat_map>
+  > IntervalSetTypes;
 
-TYPED_TEST_CASE(IntervalSetTest, IntervalSetTypes);
+TYPED_TEST_SUITE(IntervalSetTest, IntervalSetTypes);
 
 TYPED_TEST(IntervalSetTest, compare) {
   typedef typename TestFixture::ISet ISet;
@@ -214,66 +219,66 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   IntervalValueType start, len;
   
   iset1.insert(3, 5, &start, &len);
-  ASSERT_TRUE( start == 3 );
-  ASSERT_TRUE( len == 5 );
-  ASSERT_TRUE( iset1.num_intervals() == 1 );
-  ASSERT_TRUE( iset1.size() == 5 );
+  ASSERT_EQ(3, start);
+  ASSERT_EQ(5, len);
+  ASSERT_EQ(1, iset1.num_intervals());
+  ASSERT_EQ(5, iset1.size());
 
   //adding standalone interval
   iset1.insert(15, 10, &start, &len);
-  ASSERT_TRUE( start == 15 );
-  ASSERT_TRUE( len == 10 );
-  ASSERT_TRUE( iset1.num_intervals() == 2 );
-  ASSERT_EQ( iset1.size(), 15 );
+  ASSERT_EQ(15, start);
+  ASSERT_EQ(10, len);
+  ASSERT_EQ(2, iset1.num_intervals());
+  ASSERT_EQ(15, iset1.size());
 
   //adding leftmost standalone interval
   iset1.insert(1, 1, &start, &len);
-  ASSERT_TRUE( start == 1 );
-  ASSERT_TRUE( len == 1 );
-  ASSERT_TRUE( iset1.num_intervals() == 3 );
-  ASSERT_EQ( iset1.size(), 16 );
+  ASSERT_EQ(1, start);
+  ASSERT_EQ(1, len);
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(16, iset1.size());
 
-  //adding leftmost adjusent interval
+  //adding leftmost adjucent interval
   iset1.insert(0, 1, &start, &len);
-  ASSERT_TRUE( start == 0 );
-  ASSERT_TRUE( len == 2 );
-  ASSERT_TRUE( iset1.num_intervals() == 3 );
-  ASSERT_EQ( iset1.size(), 17 );
+  ASSERT_EQ(0, start);
+  ASSERT_EQ(2, len);
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(17, iset1.size());
 
   //adding interim interval that merges leftmost and subseqent intervals
   iset1.insert(2, 1, &start, &len);
-  ASSERT_TRUE( start == 0 );
-  ASSERT_TRUE( len == 8 );
-  ASSERT_TRUE( iset1.num_intervals() == 2);
-  ASSERT_EQ( iset1.size(), 18);
+  ASSERT_EQ(0, start);
+  ASSERT_EQ(8, len);
+  ASSERT_EQ(2, iset1.num_intervals());
+  ASSERT_EQ(18, iset1.size());
 
   //adding rigtmost standalone interval 
   iset1.insert(30, 5, &start, &len);
-  ASSERT_TRUE( start == 30 );
-  ASSERT_TRUE( len == 5 );
-  ASSERT_TRUE( iset1.num_intervals() == 3);
-  ASSERT_EQ( iset1.size(), 23 );
+  ASSERT_EQ(30, start);
+  ASSERT_EQ(5, len);
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(23, iset1.size());
 
   //adding rigtmost adjusent interval 
   iset1.insert(35, 10, &start, &len);
-  ASSERT_TRUE( start == 30 );
-  ASSERT_TRUE( len == 15 );
-  ASSERT_TRUE( iset1.num_intervals() == 3);
-  ASSERT_EQ( iset1.size(), 33 );
+  ASSERT_EQ(30, start);
+  ASSERT_EQ(15, len );
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(33, iset1.size());
 
   //adding interim interval that merges with the interval preceeding the rightmost
   iset1.insert(25, 1, &start, &len);
-  ASSERT_TRUE( start == 15 );
-  ASSERT_TRUE( len == 11 );
-  ASSERT_TRUE( iset1.num_intervals() == 3);
-  ASSERT_EQ( iset1.size(), 34);
+  ASSERT_EQ(15, start);
+  ASSERT_EQ(11, len);
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(34, iset1.size());
 
   //adding interim interval that merges with the rightmost and preceeding intervals
   iset1.insert(26, 4, &start, &len);
-  ASSERT_TRUE( start == 15 );
-  ASSERT_TRUE( len == 30 );
-  ASSERT_TRUE( iset1.num_intervals() == 2);
-  ASSERT_EQ( iset1.size(), 38);
+  ASSERT_EQ(15, start);
+  ASSERT_EQ(30, len);
+  ASSERT_EQ(2, iset1.num_intervals());
+  ASSERT_EQ(38, iset1.size());
 
   //and finally build single interval filling the gap at  8-15 using different interval set
   iset2.insert( 8, 1 );
@@ -281,24 +286,24 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   iset2.insert( 9, 4 );
   iset1.insert( iset2 );
   iset1.insert(13, 1, &start, &len);
-  ASSERT_TRUE( start == 0 );
-  ASSERT_TRUE( len == 45 );
-  ASSERT_TRUE( iset1.num_intervals() == 1);
-  ASSERT_EQ( iset1.size(), 45);
+  ASSERT_EQ(0, start);
+  ASSERT_EQ(45, len);
+  ASSERT_EQ(1, iset1.num_intervals());
+  ASSERT_EQ(45, iset1.size());
 
   //now reverses the process using subtract & erase
   iset1.subtract( iset2 );
   iset1.erase(13, 1);
-  ASSERT_TRUE( iset1.num_intervals() == 2);
-  ASSERT_EQ( iset1.size(), 38);
+  ASSERT_EQ( 2, iset1.num_intervals() );
+  ASSERT_EQ(38, iset1.size());
   ASSERT_TRUE( iset1.contains( 7, 1 ));
   ASSERT_FALSE( iset1.contains( 8, 7 ));
   ASSERT_TRUE( iset1.contains( 15, 1 ));
   ASSERT_TRUE( iset1.contains( 26, 4 ));
 
   iset1.erase(26, 4);
-  ASSERT_TRUE( iset1.num_intervals() == 3);
-  ASSERT_EQ( iset1.size(), 34);
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(34, iset1.size());
   ASSERT_TRUE( iset1.contains( 7, 1 ));
   ASSERT_FALSE( iset1.intersects( 8, 7 ));
   ASSERT_TRUE( iset1.contains( 15, 1 ));
@@ -307,8 +312,8 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_TRUE( iset1.contains( 30, 1 ));
 
   iset1.erase(25, 1);
-  ASSERT_TRUE( iset1.num_intervals() == 3);
-  ASSERT_EQ( iset1.size(), 33 );
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(33, iset1.size());
   ASSERT_TRUE( iset1.contains( 24, 1 ));
   ASSERT_FALSE( iset1.contains( 25, 1 ));
   ASSERT_FALSE( iset1.intersects( 26, 4 ));
@@ -316,16 +321,16 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_TRUE( iset1.contains( 35, 10 ));
 
   iset1.erase(35, 10);
-  ASSERT_TRUE( iset1.num_intervals() == 3);
-  ASSERT_EQ( iset1.size(), 23 );
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(23, iset1.size());
   ASSERT_TRUE( iset1.contains( 30, 5 ));
   ASSERT_TRUE( iset1.contains( 34, 1 ));
   ASSERT_FALSE( iset1.contains( 35, 10 ));
   ASSERT_FALSE(iset1.contains( 45, 1 ));
 
   iset1.erase(30, 5);
-  ASSERT_TRUE( iset1.num_intervals() == 2);
-  ASSERT_EQ( iset1.size(), 18);
+  ASSERT_EQ(2, iset1.num_intervals());
+  ASSERT_EQ(18, iset1.size());
   ASSERT_TRUE( iset1.contains( 2, 1 ));
   ASSERT_TRUE( iset1.contains( 24, 1 ));
   ASSERT_FALSE( iset1.contains( 25, 1 ));
@@ -334,7 +339,7 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_FALSE( iset1.contains( 35, 1 ));
 
   iset1.erase(2, 1);
-  ASSERT_TRUE( iset1.num_intervals() == 3 );
+  ASSERT_EQ(3, iset1.num_intervals());
   ASSERT_EQ( iset1.size(), 17 );
   ASSERT_TRUE( iset1.contains( 0, 1 ));
   ASSERT_TRUE( iset1.contains( 1, 1 ));
@@ -344,8 +349,8 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_FALSE( iset1.contains( 25, 1 ));
 
   iset1.erase( 0, 1);
-  ASSERT_TRUE( iset1.num_intervals() == 3 );
-  ASSERT_EQ( iset1.size(), 16 );
+  ASSERT_EQ(3, iset1.num_intervals());
+  ASSERT_EQ(16, iset1.size());
   ASSERT_FALSE( iset1.contains( 0, 1 ));
   ASSERT_TRUE( iset1.contains( 1, 1 ));
   ASSERT_FALSE( iset1.contains( 2, 1 ));
@@ -353,23 +358,23 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_TRUE( iset1.contains( 15, 1 ));
 
   iset1.erase(1, 1);
-  ASSERT_TRUE( iset1.num_intervals() == 2 );
-  ASSERT_EQ( iset1.size(), 15 );
+  ASSERT_EQ(2, iset1.num_intervals());
+  ASSERT_EQ(15, iset1.size());
   ASSERT_FALSE( iset1.contains( 1, 1 ));
   ASSERT_TRUE( iset1.contains( 15, 10 ));
   ASSERT_TRUE( iset1.contains( 3, 5 ));
 
   iset1.erase(15, 10);
-  ASSERT_TRUE( iset1.num_intervals() == 1 );
-  ASSERT_TRUE( iset1.size() == 5 );
+  ASSERT_EQ(1, iset1.num_intervals());
+  ASSERT_EQ(5, iset1.size());
   ASSERT_FALSE( iset1.contains( 1, 1 ));
   ASSERT_FALSE( iset1.contains( 15, 10 ));
   ASSERT_FALSE( iset1.contains( 25, 1 ));
   ASSERT_TRUE( iset1.contains( 3, 5 ));
 
   iset1.erase( 3, 1);
-  ASSERT_TRUE( iset1.num_intervals() == 1 );
-  ASSERT_TRUE( iset1.size() == 4 );
+  ASSERT_EQ(1, iset1.num_intervals());
+  ASSERT_EQ(4, iset1.size());
   ASSERT_FALSE( iset1.contains( 1, 1 ));
   ASSERT_FALSE( iset1.contains( 15, 10 ));
   ASSERT_FALSE( iset1.contains( 25, 1 ));
@@ -377,8 +382,8 @@ TYPED_TEST(IntervalSetTest, insert_erase) {
   ASSERT_FALSE( iset1.contains( 3, 5 ));
 
   iset1.erase( 4, 4);
-  ASSERT_TRUE( iset1.num_intervals() == 0);
-  ASSERT_TRUE( iset1.size() == 0);
+  ASSERT_EQ(0, iset1.num_intervals());
+  ASSERT_EQ(0, iset1.size());
   ASSERT_FALSE( iset1.contains( 1, 1 ));
   ASSERT_FALSE( iset1.contains( 15, 10 ));
   ASSERT_FALSE( iset1.contains( 25, 1 ));
@@ -525,6 +530,37 @@ TYPED_TEST(IntervalSetTest, subset_of) {
   ASSERT_TRUE(iset1.subset_of(iset2));
 
   iset1.insert( 24, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 24, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 30, 5);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 30, 5);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset2.erase( 30, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset1.erase( 30, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset2.erase( 34, 1);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset1.erase( 34, 1);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 40, 5);
+  ASSERT_FALSE(iset1.subset_of(iset2));
+
+  iset2.insert( 39, 7);
+  ASSERT_TRUE(iset1.subset_of(iset2));
+
+  iset1.insert( 50, 5);
+  iset2.insert( 55, 2);
   ASSERT_FALSE(iset1.subset_of(iset2));
 }
 

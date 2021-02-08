@@ -1,7 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
- * Copyright (C) 2016 Red Hat Inc.
+ * Copyright (C) 2017 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -12,6 +20,7 @@
 #include <condition_variable>
 #include <thread>
 #include <functional>
+
 
 namespace crimson {
   using std::chrono::duration_cast;
@@ -43,7 +52,7 @@ namespace crimson {
 
     template<typename D>
     RunEvery(D                     _wait_period,
-	     std::function<void()> _body) :
+	     const std::function<void()>& _body) :
       wait_period(duration_cast<milliseconds>(_wait_period)),
       body(_body)
     {
@@ -60,6 +69,10 @@ namespace crimson {
 #endif
 
     ~RunEvery();
+
+    void join();
+    // update wait period in milliseconds
+    void try_update(milliseconds _wait_period);
 
   protected:
 

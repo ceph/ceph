@@ -2,4 +2,3 @@
 .*.sw[nmop]
 *.pyc
 .tox
-__pycache__

@@ -1,16 +1,13 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include <ostream>
 #include <cxxabi.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "BackTrace.h"
-
 #include "common/version.h"
-#include "acconfig.h"
-
-#define _STR(x) #x
-#define STRINGIFY(x) _STR(x)
+#include "common/Formatter.h"
 
 namespace ceph {
 
@@ -18,59 +15,59 @@ void BackTrace::print(std::ostream& out) const
 {
   out << " " << pretty_version_to_str() << std::endl;
   for (size_t i = skip; i < size; i++) {
+    out << " " << (i-skip+1) << ": " << demangle(strings[i]) << std::endl;
+  }
+}
+
+void BackTrace::dump(Formatter *f) const
+{
+  f->open_array_section("backtrace");
+  for (size_t i = skip; i < size; i++) {
     //      out << " " << (i-skip+1) << ": " << strings[i] << std::endl;
+    f->dump_string("frame", demangle(strings[i]));
+  }
+  f->close_section();
+}
 
-    size_t sz = 1024; // just a guess, template names will go much wider
-    char *function = (char *)malloc(sz);
-    if (!function)
-      return;
-    char *begin = 0, *end = 0;
-    
-    // find the parentheses and address offset surrounding the mangled name
+std::string BackTrace::demangle(const char* name)
+{
+  // find the parentheses and address offset surrounding the mangled name
 #ifdef __FreeBSD__
-    static constexpr char OPEN = '<';
+  static constexpr char OPEN = '<';
 #else
-    static constexpr char OPEN = '(';
+  static constexpr char OPEN = '(';
 #endif
-    for (char *j = strings[i]; *j; ++j) {
-      if (*j == OPEN)
-	begin = j+1;
-      else if (*j == '+')
-	end = j;
+  const char* begin = nullptr;
+  const char* end = nullptr;
+  for (const char *j = name; *j; ++j) {
+    if (*j == OPEN) {
+      begin = j + 1;
+    } else if (*j == '+') {
+      end = j;
     }
-    if (begin && end) {
-      int len = end - begin;
-      char *foo = (char *)malloc(len+1);
-      if (!foo) {
-	free(function);
-	return;
+  }
+  if (begin && end && begin < end) {
+    std::string mangled(begin, end);
+    int status;
+    // only demangle a C++ mangled name
+    if (mangled.compare(0, 2, "_Z") == 0) {
+      // let __cxa_demangle do the malloc
+      char* demangled = abi::__cxa_demangle(mangled.c_str(), nullptr, nullptr, &status);
+      if (!status) {
+        std::string full_name{OPEN};
+        full_name += demangled;
+        full_name += end;
+        // buf could be reallocated, so free(demangled) instead
+        free(demangled);
+        return full_name;
       }
-      memcpy(foo, begin, len);
-      foo[len] = 0;
-
-      int status;
-      char *ret = nullptr;
-      // only demangle a C++ mangled name
-      if (foo[0] == '_' && foo[1] == 'Z')
-	ret = abi::__cxa_demangle(foo, function, &sz, &status);
-      if (ret) {
-	// return value may be a realloc() of the input
-	function = ret;
-      }
-      else {
-	// demangling failed, just pretend it's a C function with no args
-	strncpy(function, foo, sz);
-	strncat(function, "()", sz);
-	function[sz-1] = 0;
-      }
-      out << " " << (i-skip+1) << ": " << OPEN << function << end << std::endl;
-      //fprintf(out, "    %s:%s\n", stack.strings[i], function);
-      free(foo);
-    } else {
-      // didn't find the mangled name, just print the whole line
-      out << " " << (i-skip+1) << ": " << strings[i] << std::endl;
+      // demangle failed, just pretend it's a C function with no args
     }
-    free(function);
+    // C function
+    return mangled + "()";
+  } else {
+    // didn't find the mangled name, just print the whole line
+    return name;
   }
 }
 

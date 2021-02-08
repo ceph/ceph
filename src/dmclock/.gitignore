@@ -2,3 +2,4 @@
 *.dSYM
 *.o
 build*
+cscope.*

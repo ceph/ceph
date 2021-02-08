@@ -1,20 +1,22 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_CLIENT_IO_H
 #define CEPH_RGW_CLIENT_IO_H
 
 #include <exception>
 #include <string>
+#include <string_view>
 #include <streambuf>
 #include <istream>
 #include <stdlib.h>
 #include <system_error>
 
-#include <boost/utility/string_ref.hpp>
-
 #include "include/types.h"
 #include "rgw_common.h"
+
+
+class RGWRestfulIO;
 
 namespace rgw {
 namespace io {
@@ -25,13 +27,13 @@ using Exception = std::system_error;
  * interacted with. */
 class BasicClient {
 protected:
-  virtual void init_env(CephContext *cct) = 0;
+  virtual int init_env(CephContext *cct) = 0;
 
 public:
   virtual ~BasicClient() = default;
 
   /* Initialize the BasicClient and inject CephContext. */
-  void init(CephContext *cct);
+  int init(CephContext *cct);
 
   /* Return the RGWEnv describing the environment that a given request lives in.
    * The method does not throw exceptions. */
@@ -100,9 +102,9 @@ public:
   /* Generate header. On success returns number of bytes generated for a direct
    * client of RadosGW. On failure throws rgw::io::Exception containing errno.
    *
-   * boost::string_ref is being used because of length it internally carries. */
-  virtual size_t send_header(const boost::string_ref& name,
-                             const boost::string_ref& value) = 0;
+   * std::string_view is being used because of length it internally carries. */
+  virtual size_t send_header(const std::string_view& name,
+                             const std::string_view& value) = 0;
 
   /* Inform a client about a content length. Takes number of bytes as @len.
    * On success returns number of bytes generated for a direct client of RadosGW.
@@ -155,6 +157,7 @@ public:
 template <typename DecorateeT>
 class DecoratedRestfulClient : public RestfulClient {
   template<typename T> friend class DecoratedRestfulClient;
+  friend RGWRestfulIO;
 
   typedef typename std::remove_pointer<DecorateeT>::type DerefedDecorateeT;
 
@@ -169,25 +172,36 @@ class DecoratedRestfulClient : public RestfulClient {
    * object itself. */
   template <typename T = void,
             typename std::enable_if<
-    std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
-  DerefedDecorateeT& get_decoratee() {
-    return *decoratee;
-  }
-
-  template <typename T = void,
-            typename std::enable_if<
     ! std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
   DerefedDecorateeT& get_decoratee() {
     return decoratee;
   }
 
 protected:
-  void init_env(CephContext *cct) override {
+  template <typename T = void,
+            typename std::enable_if<
+    std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
+  DerefedDecorateeT& get_decoratee() {
+    return *decoratee;
+  }
+
+  /* Dynamic decorators (those storing a pointer instead of the decorated
+   * object itself) can be reconfigured on-the-fly. HOWEVER: there are no
+   * facilities for orchestrating such changes. Callers must take care of
+   * atomicity and thread-safety. */
+  template <typename T = void,
+            typename std::enable_if<
+    std::is_pointer<DecorateeT>::value, T>::type* = nullptr>
+  void set_decoratee(DerefedDecorateeT& new_dec) {
+    decoratee = &new_dec;
+  }
+
+  int init_env(CephContext *cct) override {
     return get_decoratee().init_env(cct);
   }
 
 public:
-  DecoratedRestfulClient(DecorateeT&& decoratee)
+  explicit DecoratedRestfulClient(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
@@ -200,8 +214,8 @@ public:
     return get_decoratee().send_100_continue();
   }
 
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override {
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override {
     return get_decoratee().send_header(name, value);
   }
 
@@ -274,7 +288,7 @@ class StaticOutputBufferer : public std::streambuf {
     if (! sync()) {
       /* No error, the buffer has been successfully synchronized. */
       return c;
-     } else {
+    } else {
       return std::streambuf::traits_type::eof();
     }
   }
@@ -293,15 +307,15 @@ class StaticOutputBufferer : public std::streambuf {
   std::streambuf::char_type buffer[BufferSizeV];
 
 public:
-  StaticOutputBufferer(BuffererSink& sink)
+  explicit StaticOutputBufferer(BuffererSink& sink)
     : sink(sink) {
     constexpr size_t len = sizeof(buffer) - sizeof(std::streambuf::char_type);
     std::streambuf::setp(buffer, buffer + len);
   }
 };
 
-} /* namespace rgw */
 } /* namespace io */
+} /* namespace rgw */
 
 
 /* We're doing this nasty thing only because of extensive usage of templates
@@ -319,39 +333,40 @@ public:
  *
  * rgw::io::Accounter came in as a part of rgw::io::AccountingFilter. */
 class RGWRestfulIO : public rgw::io::AccountingFilter<rgw::io::RestfulClient*> {
-  SHA256 *sha256_hash;
+  std::vector<std::shared_ptr<DecoratedRestfulClient>> filters;
 
 public:
-  ~RGWRestfulIO() override {}
+  ~RGWRestfulIO() override = default;
 
-  RGWRestfulIO(rgw::io::RestfulClient* engine)
-    : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)),
-      sha256_hash(nullptr) {
+  RGWRestfulIO(CephContext *_cx, rgw::io::RestfulClient* engine)
+    : AccountingFilter<rgw::io::RestfulClient*>(_cx, std::move(engine)) {
   }
 
-  using DecoratedRestfulClient<RestfulClient*>::recv_body;
-  virtual int recv_body(char* buf, size_t max, bool calculate_hash);
-  std::string grab_aws4_sha256_hash();
+  void add_filter(std::shared_ptr<DecoratedRestfulClient> new_filter) {
+    new_filter->set_decoratee(this->get_decoratee());
+    this->set_decoratee(*new_filter);
+    filters.emplace_back(std::move(new_filter));
+  }
 }; /* RGWRestfulIO */
 
 
 /* Type conversions to work around lack of req_state type hierarchy matching
  * (e.g.) REST backends (may be replaced w/dynamic typed req_state). */
 static inline rgw::io::RestfulClient* RESTFUL_IO(struct req_state* s) {
-  assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
+  ceph_assert(dynamic_cast<rgw::io::RestfulClient*>(s->cio) != nullptr);
 
   return static_cast<rgw::io::RestfulClient*>(s->cio);
 }
 
 static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
   auto ptr = dynamic_cast<rgw::io::Accounter*>(s->cio);
-  assert(ptr != nullptr);
+  ceph_assert(ptr != nullptr);
 
   return ptr;
 }
 
-static inline RGWRestfulIO* AWS_AUTHv4_IO(struct req_state* s) {
-  assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
+static inline RGWRestfulIO* AWS_AUTHv4_IO(const req_state* const s) {
+  ceph_assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
 
   return static_cast<RGWRestfulIO*>(s->cio);
 }
@@ -392,8 +407,13 @@ public:
       start = base;
     }
 
-    const int read_len = rio.recv_body(base, window_size, false);
-    if (read_len < 0 || 0 == read_len) {
+    size_t read_len = 0;
+    try {
+      read_len = rio.recv_body(base, window_size);
+    } catch (rgw::io::Exception&) {
+      return traits_type::eof();
+    }
+    if (0 == read_len) {
       return traits_type::eof();
     }
 

@@ -1,15 +1,45 @@
-========================
- Client Config Reference
-========================
+Client Configuration
+====================
 
-``client acl type``
+Updating Client Configuration
+-----------------------------
+
+Certain client configurations can be applied at runtime. To check if a configuration option can be applied (taken into affect by a client) at runtime, use the `config help` command::
+
+   ceph config help debug_client
+    debug_client - Debug level for client
+    (str, advanced)                                                                                                                      Default: 0/5
+    Can update at runtime: true
+
+    The value takes the form 'N' or 'N/M' where N and M are values between 0 and 99.  N is the debug level to log (all values below this are included), and M is the level to gather and buffer in memory.  In the event of a crash, the most recent items <= M are dumped to the log file.
+
+`config help` tells if a given configuration can be applied at runtime along with the defaults and a description of the configuration option.
+
+To update a configuration option at runtime, use the `config set` command::
+
+   ceph config set client debug_client 20/20
+
+Note that this changes a given configuration for all clients.
+
+To check configured options use the `config get` command::
+
+   ceph config get client
+    WHO    MASK LEVEL    OPTION                    VALUE     RO 
+    client      advanced debug_client              20/20          
+    global      advanced osd_pool_default_min_size 1            
+    global      advanced osd_pool_default_size     3            
+
+Client Config Reference
+------------------------
+
+``client_acl_type``
 
 :Description: Set the ACL type. Currently, only possible value is ``"posix_acl"`` to enable POSIX ACL, or an empty string. This option only takes effect when the ``fuse_default_permissions`` is set to ``false``.
 
 :Type: String
 :Default: ``""`` (no ACL enforcement)
 
-``client cache mid``
+``client_cache_mid``
 
 :Description: Set client cache midpoint. The midpoint splits the least recently used lists into a hot and warm list.
 :Type: Float
@@ -131,19 +161,19 @@
 
 ``client_readahead_max_bytes``
 
-:Description: Set the maximum number of bytes that the kernel reads ahead for future read operations. Overridden by the ``client_readahead_max_periods`` setting.
+:Description: Set the maximum number of bytes that the client reads ahead for future read operations. Overridden by the ``client_readahead_max_periods`` setting.
 :Type: Integer
 :Default: ``0`` (unlimited)
 
 ``client_readahead_max_periods``
 
-:Description: Set the number of file layout periods (object size * number of stripes) that the kernel reads ahead. Overrides the ``client_readahead_max_bytes`` setting.
+:Description: Set the number of file layout periods (object size * number of stripes) that the client reads ahead. Overrides the ``client_readahead_max_bytes`` setting.
 :Type: Integer
 :Default: ``4``
 
 ``client_readahead_min``
 
-:Description: Set the minimum number bytes that the kernel reads ahead.
+:Description: Set the minimum number bytes that the client reads ahead.
 :Type: Integer
 :Default: ``131072`` (128KB)
 
@@ -176,6 +206,23 @@
 :Description: When set to ``false``, ``ceph-fuse`` utility checks does its own permissions checking, instead of relying on the permissions enforcement in FUSE. Set to ``false`` together with the ``client acl type=posix_acl`` option to enable POSIX ACL.
 :Type: Boolean
 :Default: ``true``
+
+``fuse_max_write``
+
+:Description: Set the maximum number of bytes in a single write operation.
+              A value of 0 indicates no change; the
+              FUSE default of 128 kbytes remains in force.
+:Type: Integer
+:Default: ``0``
+
+``fuse_disable_pagecache``
+
+:Description: If set to ``true``, kernel page cache is disabled for ``ceph-fuse``
+              mounts. When multiple clients read/write to a file at the same
+              time, readers may get stale data from page cache. Due to
+              limitations of FUSE, ``ceph-fuse`` can't disable page cache dynamically.
+:Type: Boolean
+:Default: ``false``
 
 Developer Options
 #################

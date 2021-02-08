@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -25,7 +32,7 @@ public:
 
     crimson::IndIntruHeapData heap_data;
 
-    Test1(int _data) : data(_data) {}
+    explicit Test1(int _data) : data(_data) {}
 
     friend std::ostream& operator<<(std::ostream& out, const Test1& d) {
         out << d.data << " (" << d.heap_data << ")";

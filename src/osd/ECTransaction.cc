@@ -14,7 +14,6 @@
 
 #include <iostream>
 #include <vector>
-#include <vector>
 #include <sstream>
 
 #include "ECTransaction.h"
@@ -22,6 +21,17 @@
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
 
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::encode;
+using ceph::ErasureCodeInterfaceRef;
 
 void encode_and_write(
   pg_t pgid,
@@ -37,14 +47,14 @@ void encode_and_write(
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   DoutPrefixProvider *dpp) {
   const uint64_t before_size = hinfo->get_total_logical_size(sinfo);
-  assert(sinfo.logical_offset_is_stripe_aligned(offset));
-  assert(sinfo.logical_offset_is_stripe_aligned(bl.length()));
-  assert(bl.length());
+  ceph_assert(sinfo.logical_offset_is_stripe_aligned(offset));
+  ceph_assert(sinfo.logical_offset_is_stripe_aligned(bl.length()));
+  ceph_assert(bl.length());
 
   map<int, bufferlist> buffers;
   int r = ECUtil::encode(
     sinfo, ecimpl, bl, want, &buffers);
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   written.insert(offset, bl.length(), bl);
 
@@ -54,14 +64,14 @@ void encode_and_write(
 		     << dendl;
 
   if (offset >= before_size) {
-    assert(offset == before_size);
+    ceph_assert(offset == before_size);
     hinfo->append(
       sinfo.aligned_logical_offset_to_chunk_offset(offset),
       buffers);
   }
 
   for (auto &&i : *transactions) {
-    assert(buffers.count(i.first));
+    ceph_assert(buffers.count(i.first));
     bufferlist &enc_bl = buffers[i.first];
     if (offset >= before_size) {
       i.second.set_alloc_hint(
@@ -99,7 +109,6 @@ void ECTransaction::generate_transactions(
   WritePlan &plan,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
-  bool legacy_log_entries,
   const ECUtil::stripe_info_t &sinfo,
   const map<hobject_t,extent_map> &partial_extents,
   vector<pg_log_entry_t> &entries,
@@ -107,20 +116,17 @@ void ECTransaction::generate_transactions(
   map<shard_id_t, ObjectStore::Transaction> *transactions,
   set<hobject_t> *temp_added,
   set<hobject_t> *temp_removed,
-  DoutPrefixProvider *dpp)
+  DoutPrefixProvider *dpp,
+  const ceph_release_t require_osd_release)
 {
-  assert(written_map);
-  assert(transactions);
-  assert(temp_added);
-  assert(temp_removed);
-  assert(plan.t);
+  ceph_assert(written_map);
+  ceph_assert(transactions);
+  ceph_assert(temp_added);
+  ceph_assert(temp_removed);
+  ceph_assert(plan.t);
   auto &t = *(plan.t);
 
   auto &hash_infos = plan.hash_infos;
-
-  assert(transactions);
-  assert(temp_added);
-  assert(temp_removed);
 
   map<hobject_t, pg_log_entry_t*> obj_to_log;
   for (auto &&i: entries) {
@@ -143,15 +149,15 @@ void ECTransaction::generate_transactions(
 	obc = obiter->second;
       }
       if (entry) {
-	assert(obc);
+	ceph_assert(obc);
       } else {
-	assert(oid.is_temp());
+	ceph_assert(oid.is_temp());
       }
 
       ECUtil::HashInfoRef hinfo;
       {
 	auto iter = hash_infos.find(oid);
-	assert(iter != hash_infos.end());
+	ceph_assert(iter != hash_infos.end());
 	hinfo = iter->second;
       }
 
@@ -166,10 +172,10 @@ void ECTransaction::generate_transactions(
       if (entry &&
 	  entry->is_modify() &&
 	  op.updated_snaps) {
-	vector<snapid_t> snaps(
-	  op.updated_snaps->second.begin(),
-	  op.updated_snaps->second.end());
-	::encode(snaps, entry->snaps);
+	bufferlist bl(op.updated_snaps->second.size() * 8 + 8);
+	encode(op.updated_snaps->second, bl);
+	entry->snaps.swap(bl);
+	entry->snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
       }
 
       ldpp_dout(dpp, 20) << "generate_transactions: "
@@ -190,23 +196,23 @@ void ECTransaction::generate_transactions(
 	entry->mod_desc.update_snaps(op.updated_snaps->first);
       }
 
-      map<string, boost::optional<bufferlist> > xattr_rollback;
-      assert(hinfo);
+      map<string, std::optional<bufferlist> > xattr_rollback;
+      ceph_assert(hinfo);
       bufferlist old_hinfo;
-      ::encode(*hinfo, old_hinfo);
+      encode(*hinfo, old_hinfo);
       xattr_rollback[ECUtil::get_hinfo_key()] = old_hinfo;
-      
+
       if (op.is_none() && op.truncate && op.truncate->first == 0) {
-	assert(op.truncate->first == 0);
-	assert(op.truncate->first ==
+	ceph_assert(op.truncate->first == 0);
+	ceph_assert(op.truncate->first ==
 	       op.truncate->second);
-	assert(entry);
-	assert(obc);
-	
+	ceph_assert(entry);
+	ceph_assert(obc);
+
 	if (op.truncate->first != op.truncate->second) {
 	  op.truncate->first = op.truncate->second;
 	} else {
-	  op.truncate = boost::none;
+	  op.truncate = std::nullopt;
 	}
 
 	op.delete_first = true;
@@ -224,7 +230,7 @@ void ECTransaction::generate_transactions(
       }
 
       if (op.delete_first) {
-	/* We also want to remove the boost::none entries since
+	/* We also want to remove the std::nullopt entries since
 	   * the keys already won't exist */
 	for (auto j = op.attr_updates.begin();
 	     j != op.attr_updates.end();
@@ -270,9 +276,15 @@ void ECTransaction::generate_transactions(
 	[&](const PGTransaction::ObjectOperation::Init::None &) {},
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
 	  for (auto &&st: *transactions) {
-	    st.second.touch(
-	      coll_t(spg_t(pgid, st.first)),
-	      ghobject_t(oid, ghobject_t::NO_GEN, st.first));
+	    if (require_osd_release >= ceph_release_t::octopus) {
+	      st.second.create(
+		coll_t(spg_t(pgid, st.first)),
+		ghobject_t(oid, ghobject_t::NO_GEN, st.first));
+	    } else {
+	      st.second.touch(
+		coll_t(spg_t(pgid, st.first)),
+		ghobject_t(oid, ghobject_t::NO_GEN, st.first));
+	    }
 	  }
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Clone &op) {
@@ -284,17 +296,17 @@ void ECTransaction::generate_transactions(
 	  }
 
 	  auto siter = hash_infos.find(op.source);
-	  assert(siter != hash_infos.end());
+	  ceph_assert(siter != hash_infos.end());
 	  hinfo->update_to(*(siter->second));
 
 	  if (obc) {
 	    auto cobciter = obc_map.find(op.source);
-	    assert(cobciter != obc_map.end());
+	    ceph_assert(cobciter != obc_map.end());
 	    obc->attr_cache = cobciter->second->attr_cache;
 	  }
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Rename &op) {
-	  assert(op.source.is_temp());
+	  ceph_assert(op.source.is_temp());
 	  for (auto &&st: *transactions) {
 	    st.second.collection_move_rename(
 	      coll_t(spg_t(pgid, st.first)),
@@ -303,19 +315,19 @@ void ECTransaction::generate_transactions(
 	      ghobject_t(oid, ghobject_t::NO_GEN, st.first));
 	  }
 	  auto siter = hash_infos.find(op.source);
-	  assert(siter != hash_infos.end());
+	  ceph_assert(siter != hash_infos.end());
 	  hinfo->update_to(*(siter->second));
 	  if (obc) {
 	    auto cobciter = obc_map.find(op.source);
-	    assert(cobciter == obc_map.end());
+	    ceph_assert(cobciter == obc_map.end());
 	    obc->attr_cache.clear();
 	  }
 	});
 
       // omap not supported (except 0, handled above)
-      assert(!(op.clear_omap));
-      assert(!(op.omap_header));
-      assert(op.omap_updates.empty());
+      ceph_assert(!(op.clear_omap));
+      ceph_assert(!(op.omap_header));
+      ceph_assert(op.omap_updates.empty());
 
       if (!op.attr_updates.empty()) {
 	map<string, bufferlist> to_set;
@@ -338,13 +350,13 @@ void ECTransaction::generate_transactions(
 		xattr_rollback.insert(
 		  make_pair(
 		    j.first,
-		    boost::optional<bufferlist>(citer->second)));
+		    std::optional<bufferlist>(citer->second)));
 	      } else {
 		// won't overwrite anything we put in earlier
 		xattr_rollback.insert(
 		  make_pair(
 		    j.first,
-		    boost::none));
+		    std::nullopt));
 	      }
 	    }
 	    if (j.second) {
@@ -353,7 +365,7 @@ void ECTransaction::generate_transactions(
 	      obc->attr_cache.erase(citer);
 	    }
 	  } else {
-	    assert(!entry);
+	    ceph_assert(!entry);
 	  }
 	}
 	for (auto &&st : *transactions) {
@@ -362,7 +374,7 @@ void ECTransaction::generate_transactions(
 	    ghobject_t(oid, ghobject_t::NO_GEN, st.first),
 	    to_set);
 	}
-	assert(!xattr_rollback.empty());
+	ceph_assert(!xattr_rollback.empty());
       }
       if (entry && !xattr_rollback.empty()) {
 	entry->mod_desc.setattrs(xattr_rollback);
@@ -403,7 +415,7 @@ void ECTransaction::generate_transactions(
       uint64_t append_after = new_size;
       ldpp_dout(dpp, 20) << __func__ << ": new_size start " << new_size << dendl;
       if (op.truncate && op.truncate->first < new_size) {
-	assert(!op.is_fresh_object());
+	ceph_assert(!op.is_fresh_object());
 	new_size = sinfo.logical_to_next_stripe_offset(
 	  op.truncate->first);
 	ldpp_dout(dpp, 20) << __func__ << ": new_size truncate down "
@@ -430,7 +442,7 @@ void ECTransaction::generate_transactions(
 	  uint64_t restore_len = sinfo.aligned_logical_offset_to_chunk_offset(
 	    orig_size -
 	    sinfo.logical_to_prev_stripe_offset(op.truncate->first));
-	  assert(rollback_extents.empty());
+	  ceph_assert(rollback_extents.empty());
 
 	  ldpp_dout(dpp, 20) << __func__ << ": saving extent "
 			     << make_pair(restore_from, restore_len)
@@ -479,7 +491,7 @@ void ECTransaction::generate_transactions(
 	    bl.append_zero(extent.get_len());
 	  },
 	  [&](const BufferUpdate::CloneRange &) {
-	    assert(
+	    ceph_assert(
 	      0 ==
 	      "CloneRange is not allowed, do_op should have returned ENOTSUPP");
 	  });
@@ -490,9 +502,9 @@ void ECTransaction::generate_transactions(
 	ldpp_dout(dpp, 20) << __func__ << ": adding buffer_update "
 			   << make_pair(off, len)
 			   << dendl;
-	assert(len > 0);
+	ceph_assert(len > 0);
 	if (off > new_size) {
-	  assert(off > append_after);
+	  ceph_assert(off > append_after);
 	  bl.prepend_zero(off - new_size);
 	  len += off - new_size;
 	  ldpp_dout(dpp, 20) << __func__ << ": prepending zeroes to align "
@@ -520,7 +532,7 @@ void ECTransaction::generate_transactions(
 
       if (op.truncate &&
 	  op.truncate->second > new_size) {
-	assert(op.truncate->second > append_after);
+	ceph_assert(op.truncate->second > append_after);
 	uint64_t truncate_to =
 	  sinfo.logical_to_next_stripe_offset(
 	    op.truncate->second);
@@ -546,9 +558,9 @@ void ECTransaction::generate_transactions(
 			 << to_overwrite
 			 << dendl;
       for (auto &&extent: to_overwrite) {
-	assert(extent.get_off() + extent.get_len() <= append_after);
-	assert(sinfo.logical_offset_is_stripe_aligned(extent.get_off()));
-	assert(sinfo.logical_offset_is_stripe_aligned(extent.get_len()));
+	ceph_assert(extent.get_off() + extent.get_len() <= append_after);
+	ceph_assert(sinfo.logical_offset_is_stripe_aligned(extent.get_off()));
+	ceph_assert(sinfo.logical_offset_is_stripe_aligned(extent.get_len()));
 	if (entry) {
 	  uint64_t restore_from = sinfo.aligned_logical_offset_to_chunk_offset(
 	    extent.get_off());
@@ -597,8 +609,8 @@ void ECTransaction::generate_transactions(
 			 << to_append
 			 << dendl;
       for (auto &&extent: to_append) {
-	assert(sinfo.logical_offset_is_stripe_aligned(extent.get_off()));
-	assert(sinfo.logical_offset_is_stripe_aligned(extent.get_len()));
+	ceph_assert(sinfo.logical_offset_is_stripe_aligned(extent.get_off()));
+	ceph_assert(sinfo.logical_offset_is_stripe_aligned(extent.get_len()));
 	ldpp_dout(dpp, 20) << __func__ << ": appending "
 			   << extent.get_off() << "~" << extent.get_len()
 			   << dendl;
@@ -633,7 +645,7 @@ void ECTransaction::generate_transactions(
 	hinfo->set_total_chunk_size_clear_hash(
 	  sinfo.aligned_logical_offset_to_chunk_offset(new_size));
       } else {
-	assert(hinfo->get_total_logical_size(sinfo) == new_size);
+	ceph_assert(hinfo->get_total_logical_size(sinfo) == new_size);
       }
 
       if (entry && !to_append.empty()) {
@@ -645,7 +657,7 @@ void ECTransaction::generate_transactions(
 
       if (!op.is_delete()) {
 	bufferlist hbuf;
-	::encode(*hinfo, hbuf);
+	encode(*hinfo, hbuf);
 	for (auto &&i : *transactions) {
 	  i.second.setattr(
 	    coll_t(spg_t(pgid, i.first)),

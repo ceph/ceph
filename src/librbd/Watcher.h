@@ -4,7 +4,8 @@
 #ifndef CEPH_LIBRBD_WATCHER_H
 #define CEPH_LIBRBD_WATCHER_H
 
-#include "common/Mutex.h"
+#include "common/AsyncOpTracker.h"
+#include "common/ceph_mutex.h"
 #include "common/RWLock.h"
 #include "include/rados/librados.hpp"
 #include "librbd/watcher/Notifier.h"
@@ -12,10 +13,9 @@
 #include <string>
 #include <utility>
 
-class ContextWQ;
-
 namespace librbd {
 
+namespace asio { struct ContextWQ; }
 namespace watcher { struct NotifyResponse; }
 
 class Watcher {
@@ -31,48 +31,65 @@ public:
     void finish(int r) override;
   };
 
-  Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  Watcher(librados::IoCtx& ioctx, asio::ContextWQ *work_queue,
           const std::string& oid);
   virtual ~Watcher();
 
   void register_watch(Context *on_finish);
-  void unregister_watch(Context *on_finish);
+  virtual void unregister_watch(Context *on_finish);
   void flush(Context *on_finish);
+
+  bool notifications_blocked() const;
+  virtual void block_notifies(Context *on_finish);
+  void unblock_notifies();
 
   std::string get_oid() const;
   void set_oid(const string& oid);
 
   uint64_t get_watch_handle() const {
-    RWLock::RLocker watch_locker(m_watch_lock);
+    std::shared_lock watch_locker{m_watch_lock};
     return m_watch_handle;
   }
 
   bool is_registered() const {
-    RWLock::RLocker locker(m_watch_lock);
-    return m_watch_state == WATCH_STATE_REGISTERED;
+    std::shared_lock locker{m_watch_lock};
+    return is_registered(m_watch_lock);
   }
   bool is_unregistered() const {
-    RWLock::RLocker locker(m_watch_lock);
-    return m_watch_state == WATCH_STATE_UNREGISTERED;
+    std::shared_lock locker{m_watch_lock};
+    return is_unregistered(m_watch_lock);
+  }
+  bool is_blocklisted() const {
+    std::shared_lock locker{m_watch_lock};
+    return m_watch_blocklisted;
   }
 
 protected:
   enum WatchState {
-    WATCH_STATE_UNREGISTERED,
+    WATCH_STATE_IDLE,
     WATCH_STATE_REGISTERING,
-    WATCH_STATE_REGISTERED,
-    WATCH_STATE_ERROR,
     WATCH_STATE_REWATCHING
   };
 
   librados::IoCtx& m_ioctx;
-  ContextWQ *m_work_queue;
+  asio::ContextWQ *m_work_queue;
   std::string m_oid;
   CephContext *m_cct;
-  mutable RWLock m_watch_lock;
+  mutable ceph::shared_mutex m_watch_lock;
   uint64_t m_watch_handle;
   watcher::Notifier m_notifier;
+
   WatchState m_watch_state;
+  bool m_watch_blocklisted = false;
+
+  AsyncOpTracker m_async_op_tracker;
+
+  bool is_registered(const ceph::shared_mutex&) const {
+    return (m_watch_state == WATCH_STATE_IDLE && m_watch_handle != 0);
+  }
+  bool is_unregistered(const ceph::shared_mutex&) const {
+    return (m_watch_state == WATCH_STATE_IDLE && m_watch_handle == 0);
+  }
 
   void send_notify(bufferlist &payload,
                    watcher::NotifyResponse *response = nullptr,
@@ -149,10 +166,15 @@ private:
   WatchCtx m_watch_ctx;
   Context *m_unregister_watch_ctx = nullptr;
 
+  bool m_watch_error = false;
+
+  uint32_t m_blocked_count = 0;
+
   void handle_register_watch(int r, Context *on_finish);
 
   void rewatch();
   void handle_rewatch(int r);
+  void handle_rewatch_callback(int r);
 
 };
 

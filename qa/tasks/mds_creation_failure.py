@@ -1,8 +1,9 @@
-
+# FIXME: this file has many undefined vars which are accessed!
+# flake8: noqa
 import logging
 import contextlib
 import time
-import ceph_manager
+from tasks import ceph_manager
 from teuthology import misc
 from teuthology.orchestra.run import CommandFailedError, Raw
 
@@ -23,16 +24,15 @@ def task(ctx, config):
         raise RuntimeError("This task requires exactly one MDS")
 
     mds_id = mdslist[0]
-    (mds_remote,) = ctx.cluster.only('mds.{_id}'.format(_id=mds_id)).remotes.iterkeys()
+    (mds_remote,) = ctx.cluster.only('mds.{_id}'.format(_id=mds_id)).remotes.keys()
     manager = ceph_manager.CephManager(
         mds_remote, ctx=ctx, logger=log.getChild('ceph_manager'),
     )
 
     # Stop MDS
-    manager.raw_cluster_cmd('mds', 'set', "max_mds", "0")
-    mds = ctx.daemons.get_daemon('mds', mds_id)
-    mds.stop()
-    manager.raw_cluster_cmd('mds', 'fail', mds_id)
+    self.fs.set_max_mds(0)
+    self.fs.mds_stop(mds_id)
+    self.fs.mds_fail(mds_id)
 
     # Reset the filesystem so that next start will go into CREATING
     manager.raw_cluster_cmd('fs', 'rm', "default", "--yes-i-really-mean-it")
@@ -55,30 +55,14 @@ def task(ctx, config):
     mds_remote.run(args=['rm', '-f', Raw("{archive}/coredump/*.core".format(archive=misc.get_archive_dir(ctx)))])
 
     # It should have left the MDS map state still in CREATING
-    status = manager.get_mds_status(mds_id)
+    status = self.fs.status().get_mds(mds_id)
     assert status['state'] == 'up:creating'
 
     # Start the MDS again without the kill flag set, it should proceed with creation successfully
     mds.restart()
 
     # Wait for state ACTIVE
-    t = 0
-    create_timeout = 120
-    while True:
-        status = manager.get_mds_status(mds_id)
-        if status['state'] == 'up:active':
-            log.info("MDS creation completed successfully")
-            break
-        elif status['state'] == 'up:creating':
-            log.info("MDS still in creating state")
-            if t > create_timeout:
-                log.error("Creating did not complete within %ss" % create_timeout)
-                raise RuntimeError("Creating did not complete within %ss" % create_timeout)
-            t += 1
-            time.sleep(1)
-        else:
-            log.error("Unexpected MDS state: %s" % status['state'])
-            assert(status['state'] in ['up:active', 'up:creating'])
+    self.fs.wait_for_state("up:active", timeout=120, mds_id=mds_id)
 
     # The system should be back up in a happy healthy state, go ahead and run any further tasks
     # inside this context.

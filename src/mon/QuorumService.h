@@ -40,7 +40,7 @@ protected:
   epoch_t epoch;
 
   QuorumService(Monitor *m) :
-    tick_period(g_conf->mon_tick_interval),
+    tick_period(g_conf()->mon_tick_interval),
     mon(m),
     epoch(0)
   {
@@ -59,11 +59,11 @@ protected:
     if (tick_period <= 0)
       return;
 
-    tick_event = new C_MonContext(mon, [this](int r) {
+    tick_event = new C_MonContext{mon, [this](int r) {
 	if (r < 0)
 	  return;
 	tick();
-      });
+      }};
     mon->timer.add_event_after(tick_period, tick_event);
   }
 
@@ -117,9 +117,6 @@ public:
 
   virtual void init() { }
 
-  virtual void get_health(Formatter *f,
-			  list<pair<health_status_t,string> >& summary,
-                          list<pair<health_status_t,string> > *detail) = 0;
   virtual int get_type() = 0;
   virtual string get_name() const = 0;
 

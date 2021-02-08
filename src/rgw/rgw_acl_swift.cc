@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <string.h>
 
@@ -14,7 +14,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 #define SWIFT_PERM_READ  RGW_PERM_READ_OBJS
 #define SWIFT_PERM_WRITE RGW_PERM_WRITE_OBJS
@@ -24,10 +23,10 @@ using namespace std;
 
 #define SWIFT_GROUP_ALL_USERS ".r:*"
 
-static int parse_list(const std::string& uid_list,
+static int parse_list(const char* uid_list,
                       std::vector<std::string>& uids)           /* out */
 {
-  char *s = strdup(uid_list.c_str());
+  char *s = strdup(uid_list);
   if (!s) {
     return -ENOMEM;
   }
@@ -76,7 +75,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
 {
   /* This function takes url_spec as non-ref std::string because of the trim
    * operation that is essential to preserve compliance with Swift. It can't
-   * be easily accomplished with boost::string_ref. */
+   * be easily accomplished with std::string_view. */
   try {
     bool is_negative;
     ACLGrant grant;
@@ -90,11 +89,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
       is_negative = false;
     }
 
-    /* We're specially handling the .r:* as the S3 API has a similar concept
-     * and thus we can have a small portion of compatibility here. */
-    if (url_spec == "*") {
-      grant.set_group(ACL_GROUP_ALL_USERS, is_negative ? 0 : perm);
-    } else {
+    if (url_spec != RGW_REFERER_WILDCARD) {
       if ('*' == url_spec[0]) {
         url_spec = url_spec.substr(1);
         boost::algorithm::trim(url_spec);
@@ -103,18 +98,22 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
       if (url_spec.empty() || url_spec == ".") {
         return boost::none;
       }
-
-      grant.set_referer(url_spec, is_negative ? 0 : perm);
+    } else {
+      /* Please be aware we're specially handling the .r:* in _add_grant()
+       * of RGWAccessControlList as the S3 API has a similar concept, and
+       * thus we can have a small portion of compatibility. */
     }
 
+    grant.set_referer(url_spec, is_negative ? 0 : perm);
     return grant;
-  } catch (std::out_of_range) {
+  } catch (const std::out_of_range&) {
     return boost::none;
   }
 }
 
-static ACLGrant user_to_grant(CephContext* const cct,
-                              RGWRados* const store,
+static ACLGrant user_to_grant(const DoutPrefixProvider *dpp, 
+                              CephContext* const cct,
+                              RGWUserCtl* const user_ctl,
                               const std::string& uid,
                               const uint32_t perm)
 {
@@ -122,7 +121,7 @@ static ACLGrant user_to_grant(CephContext* const cct,
   RGWUserInfo grant_user;
   ACLGrant grant;
 
-  if (rgw_get_user_info_by_uid(store, user, grant_user) < 0) {
+  if (user_ctl->get_info_by_uid(dpp, user, &grant_user, null_yield) < 0) {
     ldout(cct, 10) << "grant user does not exist: " << uid << dendl;
     /* skipping silently */
     grant.set_canon(user, std::string(), perm);
@@ -133,7 +132,8 @@ static ACLGrant user_to_grant(CephContext* const cct,
   return grant;
 }
 
-int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados* const store,
+int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp, 
+                                             RGWUserCtl* const user_ctl,
                                              const std::vector<std::string>& uids,
                                              const uint32_t perm)
 {
@@ -146,7 +146,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados* const store,
     const size_t pos = uid.find(':');
     if (std::string::npos == pos) {
       /* No, it don't have -- we've got just a regular user identifier. */
-      grant = user_to_grant(cct, store, uid, perm);
+      grant = user_to_grant(dpp, cct, user_ctl, uid, perm);
     } else {
       /* Yes, *potentially* an HTTP referral. */
       auto designator = uid.substr(0, pos);
@@ -157,7 +157,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados* const store,
       boost::algorithm::trim(designatee);
 
       if (! boost::algorithm::starts_with(designator, ".")) {
-        grant = user_to_grant(cct, store, uid, perm);
+        grant = user_to_grant(dpp, cct, user_ctl, uid, perm);
       } else if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
         /* HTTP referrer-based ACLs aren't acceptable for writes. */
         grant = referrer_to_grant(designatee, perm);
@@ -175,11 +175,12 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados* const store,
 }
 
 
-int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
+int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp, 
+                                         RGWUserCtl* const user_ctl,
                                          const rgw_user& id,
                                          const std::string& name,
-                                         const std::string& read_list,
-                                         const std::string& write_list,
+                                         const char* read_list,
+                                         const char* write_list,
                                          uint32_t& rw_mask)
 {
   acl.create_default(id, name);
@@ -187,7 +188,7 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
   owner.set_name(name);
   rw_mask = 0;
 
-  if (read_list.size()) {
+  if (read_list) {
     std::vector<std::string> uids;
     int r = parse_list(read_list, uids);
     if (r < 0) {
@@ -196,7 +197,7 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
       return r;
     }
 
-    r = add_grants(store, uids, SWIFT_PERM_READ);
+    r = add_grants(dpp, user_ctl, uids, SWIFT_PERM_READ);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: add_grants for read returned r="
                     << r << dendl;
@@ -204,7 +205,7 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
     }
     rw_mask |= SWIFT_PERM_READ;
   }
-  if (write_list.size()) {
+  if (write_list) {
     std::vector<std::string> uids;
     int r = parse_list(write_list, uids);
     if (r < 0) {
@@ -213,7 +214,7 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
       return r;
     }
 
-    r = add_grants(store, uids, SWIFT_PERM_WRITE);
+    r = add_grants(dpp, user_ctl, uids, SWIFT_PERM_WRITE);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: add_grants for write returned r="
                     << r << dendl;
@@ -299,7 +300,8 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
   }
 }
 
-void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWRados * const store,
+void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp, 
+                                                  RGWUserCtl * const user_ctl,
                                                   const std::vector<std::string>& uids,
                                                   const uint32_t perm)
 {
@@ -313,7 +315,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWRados * const store,
     } else  {
       rgw_user user(uid);
 
-      if (rgw_get_user_info_by_uid(store, user, grant_user) < 0) {
+      if (user_ctl->get_info_by_uid(dpp, user, &grant_user, null_yield) < 0) {
         ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
         /* skipping silently */
         grant.set_canon(user, std::string(), perm);
@@ -326,7 +328,8 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(RGWRados * const store,
   }
 }
 
-bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
+bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp, 
+                                              RGWUserCtl * const user_ctl,
                                               const rgw_user& id,
                                               const std::string& name,
                                               const std::string& acl_str)
@@ -348,7 +351,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
     decode_json_obj(admin, *iter);
     ldout(cct, 0) << "admins: " << admin << dendl;
 
-    add_grants(store, admin, SWIFT_PERM_ADMIN);
+    add_grants(dpp, user_ctl, admin, SWIFT_PERM_ADMIN);
   }
 
   iter = parser.find_first("read-write");
@@ -357,7 +360,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
     decode_json_obj(readwrite, *iter);
     ldout(cct, 0) << "read-write: " << readwrite << dendl;
 
-    add_grants(store, readwrite, SWIFT_PERM_RWRT);
+    add_grants(dpp, user_ctl, readwrite, SWIFT_PERM_RWRT);
   }
 
   iter = parser.find_first("read-only");
@@ -366,13 +369,13 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(RGWRados * const store,
     decode_json_obj(readonly, *iter);
     ldout(cct, 0) << "read-only: " << readonly << dendl;
 
-    add_grants(store, readonly, SWIFT_PERM_READ);
+    add_grants(dpp, user_ctl, readonly, SWIFT_PERM_READ);
   }
 
   return true;
 }
 
-void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
+boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
 {
   std::vector<std::string> admin;
   std::vector<std::string> readwrite;
@@ -404,6 +407,12 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
     }
   }
 
+  /* If there is no grant to serialize, let's exit earlier to not return
+   * an empty JSON object which brakes the functional tests of Swift. */
+  if (admin.empty() && readwrite.empty() && readonly.empty()) {
+    return boost::none;
+  }
+
   /* Serialize the groups. */
   JSONFormatter formatter;
 
@@ -422,5 +431,5 @@ void RGWAccessControlPolicy_SWIFTAcct::to_str(std::string& acl_str) const
   std::ostringstream oss;
   formatter.flush(oss);
 
-  acl_str = oss.str();
+  return oss.str();
 }

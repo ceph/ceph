@@ -45,13 +45,15 @@ void PassthroughImageCache<I>::aio_write(Extents &&image_extents,
 
 template <typename I>
 void PassthroughImageCache<I>::aio_discard(uint64_t offset, uint64_t length,
-                                           bool skip_partial_discard, Context *on_finish) {
+                                           uint32_t discard_granularity_bytes,
+                                           Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
                  << "on_finish=" << on_finish << dendl;
 
-  m_image_writeback.aio_discard(offset, length, skip_partial_discard, on_finish);
+  m_image_writeback.aio_discard(offset, length, discard_granularity_bytes,
+                                on_finish);
 }
 
 template <typename I>
@@ -74,6 +76,22 @@ void PassthroughImageCache<I>::aio_writesame(uint64_t offset, uint64_t length,
 
   m_image_writeback.aio_writesame(offset, length, std::move(bl), fadvise_flags,
                                   on_finish);
+}
+
+template <typename I>
+void PassthroughImageCache<I>::aio_compare_and_write(Extents &&image_extents,
+                                                     bufferlist&& cmp_bl,
+                                                     bufferlist&& bl,
+                                                     uint64_t *mismatch_offset,
+                                                     int fadvise_flags,
+                                                     Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "image_extents=" << image_extents << ", "
+                 << "on_finish=" << on_finish << dendl;
+
+  m_image_writeback.aio_compare_and_write(
+    std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
+    fadvise_flags, on_finish);
 }
 
 template <typename I>

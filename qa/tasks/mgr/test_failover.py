@@ -1,7 +1,8 @@
 
 import logging
+import json
 
-from tasks.mgr.mgr_test_case import MgrTestCase
+from .mgr_test_case import MgrTestCase
 
 
 log = logging.getLogger(__name__)
@@ -9,6 +10,10 @@ log = logging.getLogger(__name__)
 
 class TestFailover(MgrTestCase):
     MGRS_REQUIRED = 2
+
+    def setUp(self):
+        super(TestFailover, self).setUp()
+        self.setup_mgrs()
 
     def test_timeout(self):
         """
@@ -91,6 +96,15 @@ class TestFailover(MgrTestCase):
             lambda: original_active in self.mgr_cluster.get_standby_ids(),
             timeout=10
         )
+
+        # Both daemons should have fully populated metadata
+        # (regression test for http://tracker.ceph.com/issues/21260)
+        meta = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "metadata"))
+        id_to_meta = dict([(i['name'], i) for i in meta])
+        for i in [original_active] + original_standbys:
+            self.assertIn(i, id_to_meta)
+            self.assertIn('ceph_version', id_to_meta[i])
 
         # We should be able to fail back over again: the exercises
         # our re-initialization of the python runtime within

@@ -33,9 +33,7 @@ KvStoreBench::KvStoreBench()
   client_name("admin"),
   verbose(false),
   kvs(NULL),
-  data_lock("data lock"),
   ops_in_flight(0),
-  ops_in_flight_lock("KvStoreBench::ops_in_flight_lock"),
   rados_id("admin"),
   pool_name("rbd"),
   io_ctx_ready(false)
@@ -115,7 +113,9 @@ int KvStoreBench::setup(int argc, const char** argv) {
       } else if (strcmp(args[i], "--cache-size") == 0) {
 	cache_size = atoi(args[i+1]);
       } else if (strcmp(args[i], "--cache-refresh") == 0) {
-	cache_refresh = 100 / atoi(args[i+1]);
+	auto temp = atoi(args[i+1]);
+	assert (temp != 0);
+	cache_refresh = 100 / (double)temp;
       } else if (strcmp(args[i], "-t") == 0) {
 	max_ops_in_flight = atoi(args[i+1]);
       } else if (strcmp(args[i], "--clients") == 0) {
@@ -304,9 +304,9 @@ int KvStoreBench::test_random_insertions() {
 
 void KvStoreBench::aio_callback_timed(int * err, void *arg) {
   timed_args *args = reinterpret_cast<timed_args *>(arg);
-  Mutex * ops_in_flight_lock = &args->kvsb->ops_in_flight_lock;
-  Mutex * data_lock = &args->kvsb->data_lock;
-  Cond * op_avail = &args->kvsb->op_avail;
+  ceph::mutex * ops_in_flight_lock = &args->kvsb->ops_in_flight_lock;
+  ceph::mutex * data_lock = &args->kvsb->data_lock;
+  ceph::condition_variable * op_avail = &args->kvsb->op_avail;
   int *ops_in_flight = &args->kvsb->ops_in_flight;
   if (*err < 0 && *err != -61) {
     cerr << "Error during " << args->op << " operation: " << *err << std::endl;
@@ -316,7 +316,7 @@ void KvStoreBench::aio_callback_timed(int * err, void *arg) {
   double time = args->sw.get_time();
   args->sw.clear();
 
-  data_lock->Lock();
+  data_lock->lock();
   //latency
   args->kvsb->data.latency_jf.open_object_section("latency");
   args->kvsb->data.latency_jf.dump_float(string(1, args->op).c_str(),
@@ -329,12 +329,12 @@ void KvStoreBench::aio_callback_timed(int * err, void *arg) {
       ceph_clock_now());
   args->kvsb->data.throughput_jf.close_section();
 
-  data_lock->Unlock();
+  data_lock->unlock();
 
-  ops_in_flight_lock->Lock();
+  ops_in_flight_lock->lock();
   (*ops_in_flight)--;
-  op_avail->Signal();
-  ops_in_flight_lock->Unlock();
+  op_avail->notify_all();
+  ops_in_flight_lock->unlock();
 
   delete args;
 }
@@ -355,16 +355,12 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
 
   cout << "done waiting. Starting random operations..." << std::endl;
 
-  Mutex::Locker l(ops_in_flight_lock);
+  std::unique_lock l{ops_in_flight_lock};
   for (int i = 0; i < ops; i++) {
-    assert(ops_in_flight <= max_ops_in_flight);
+    ceph_assert(ops_in_flight <= max_ops_in_flight);
     if (ops_in_flight == max_ops_in_flight) {
-      int err = op_avail.Wait(ops_in_flight_lock);
-      if (err < 0) {
-	assert(false);
-	return err;
-      }
-      assert(ops_in_flight < max_ops_in_flight);
+      op_avail.wait(l);
+      ceph_assert(ops_in_flight < max_ops_in_flight);
     }
     cout << "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t" << i + 1 << " / "
 	<< ops << std::endl;
@@ -416,20 +412,19 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
 	delete cb_args;
 	continue;
       }
-      bufferlist val;
       ops_in_flight++;
       cb_args->sw.start_time();
       kvs->aio_get(kv.first, &cb_args->val, aio_callback_timed,
 	  cb_args, &cb_args->err);
       break;
+    default:
+      // shouldn't happen here
+      assert(false);
     }
 
-    delete cb_args;
   }
 
-  while(ops_in_flight > 0) {
-    op_avail.Wait(ops_in_flight_lock);
-  }
+  op_avail.wait(l, [this] { return ops_in_flight <= 0; });
 
   print_time_data();
   return err;
@@ -541,7 +536,7 @@ void KvStoreBench::print_time_data() {
 int KvStoreBench::teuthology_tests() {
   int err = 0;
   if (max_ops_in_flight > 1) {
-    test_teuthology_aio(&KvStoreBench::rand_distr, probs);
+    err = test_teuthology_aio(&KvStoreBench::rand_distr, probs);
   } else {
     err = test_teuthology_sync(&KvStoreBench::rand_distr, probs);
   }

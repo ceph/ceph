@@ -39,7 +39,7 @@ class TestDumpTree(CephFSTestCase):
 
         self.populate()
         inos = self.get_paths_to_ino()
-        target = random.choice(inos.keys())
+        target = random.sample(inos.keys(), 1)[0]
 
         if target != "./":
             target = os.path.dirname(target)

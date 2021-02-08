@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,22 +13,28 @@
  *
  */
 
-#ifndef RGW_REST_CONFIG_H
-#define RGW_REST_CONFIG_H
+#pragma once
+
+#include "rgw_auth_s3.h"
+#include "rgw_rest.h"
+#include "rgw_zone.h"
 
 class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
   RGWZoneGroupMap zonegroup_map;
   bool old_format;
 public:
-  RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(_old_format) {}
+  explicit RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(_old_format) {}
   ~RGWOp_ZoneGroupMap_Get() override {}
 
-  int verify_permission() override {
-    return 0; 
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("zone", RGW_CAP_READ);
   }
-  void execute() override;
+  int verify_permission(optional_yield) override {
+    return check_caps(s->user->get_caps());
+  }
+  void execute(optional_yield y) override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     if (old_format) {
       return "get_region_map";
     } else {
@@ -41,15 +48,15 @@ class RGWOp_ZoneConfig_Get : public RGWRESTOp {
 public:
   RGWOp_ZoneConfig_Get() {}
 
-  int check_caps(RGWUserCaps& caps) {
-    return caps.check_cap("admin", RGW_CAP_READ);
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("zone", RGW_CAP_READ);
   }
-  int verify_permission() {
-    return check_caps(s->user->caps);
+  int verify_permission(optional_yield) override {
+    return check_caps(s->user->get_caps());
   }
-  void execute() {} /* store already has the info we need, just need to send response */
-  void send_response();
-  const string name() {
+  void execute(optional_yield) override {} /* store already has the info we need, just need to send response */
+  void send_response() override ;
+  const char* name() const override {
     return "get_zone_config";
   }
 };
@@ -58,7 +65,7 @@ class RGWHandler_Config : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get() override;
 
-  int read_permissions(RGWOp*) override {
+  int read_permissions(RGWOp*, optional_yield) override {
     return 0;
   }
 public:
@@ -72,11 +79,10 @@ public:
   RGWRESTMgr_Config() = default;
   ~RGWRESTMgr_Config() override = default;
 
-  RGWHandler_REST* get_handler(struct req_state*,
+  RGWHandler_REST* get_handler(rgw::sal::RGWRadosStore *,
+			       struct req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_Config(auth_registry);
   }
 };
-
-#endif /* RGW_REST_CONFIG_H */

@@ -22,7 +22,7 @@ class Messenger;
 class DispatchStrategy
 {
 protected:
-  Messenger *msgr;
+  Messenger *msgr = nullptr;
 public:
   DispatchStrategy() {}
   Messenger *get_messenger() { return msgr; }

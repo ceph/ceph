@@ -38,17 +38,16 @@
 
 #include "capture.h"
 #include "IP.h"
-#include "shared_ptr.h"
 #include "toeplitz.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
 #define dout_prefix *_dout << "dpdk "
 
-std::ostream& operator<<(std::ostream& os, ipv4_address a) {
+std::ostream& operator<<(std::ostream& os, const ipv4_address& a) {
   auto ip = a.ip;
   return os << ((ip >> 24) & 0xff) << "." << ((ip >> 16) & 0xff)
             << "." << ((ip >> 8) & 0xff) << "." << ((ip >> 0) & 0xff);
@@ -63,7 +62,7 @@ class C_handle_frag_timeout : public EventCallback {
 
  public:
   C_handle_frag_timeout(ipv4 *i): _ipv4(i) {}
-  void do_request(int fd_or_id) {
+  void do_request(uint64_t fd_or_id) {
     _ipv4->frag_timeout();
   }
 };
@@ -73,6 +72,17 @@ enum {
   l_dpdk_total_linearize_operations,
   l_dpdk_qp_last
 };
+
+struct icmp_hdr {
+  enum class msg_type : uint8_t {
+    echo_reply = 0,
+    echo_request = 8,
+  };
+  msg_type type;
+  uint8_t code;
+  uint16_t csum;
+  uint32_t rest;
+} __attribute__((packed));
 
 ipv4::ipv4(CephContext *c, EventCenter *cen, interface* netif)
   : cct(c), center(cen), _netif(netif), _global_arp(netif),

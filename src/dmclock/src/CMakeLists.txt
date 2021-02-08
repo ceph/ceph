@@ -1,19 +1,14 @@
-include_directories(../support/src)
-include_directories(${BOOST_INCLUDE_DIR})
-
-set(local_flags "-Wall -pthread")
-
 set(dmc_srcs dmclock_util.cc ../support/src/run_every.cc)
 
-set_source_files_properties(${dmc_srcs}
-  PROPERTIES
-  COMPILE_FLAGS "${local_flags}"
-  )
-
-if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  set(warnings_off " -Wno-unused-variable -Wno-unused-function")
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  set(warnings_off " -Wno-unused-but-set-variable -Wno-unused-function")
-endif()
-
 add_library(dmclock STATIC ${dmc_srcs})
+add_library(dmclock::dmclock ALIAS dmclock)
+
+target_compile_options(dmclock PRIVATE
+  "-Wno-write-strings" "-Wall")
+target_include_directories(dmclock PUBLIC
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/support/src>)
+
+target_link_libraries(dmclock
+  PUBLIC Boost::boost
+  PRIVATE Threads::Threads)

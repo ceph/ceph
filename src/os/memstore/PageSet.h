@@ -24,8 +24,6 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "include/encoding.h"
-#include "include/Spinlock.h"
-
 
 struct Page {
   char *const data;
@@ -53,13 +51,15 @@ struct Page {
       return lhs.offset < rhs.offset;
     }
   };
-  void encode(bufferlist &bl, size_t page_size) const {
-    bl.append(buffer::copy(data, page_size));
-    ::encode(offset, bl);
+  void encode(ceph::buffer::list &bl, size_t page_size) const {
+    using ceph::encode;
+    bl.append(ceph::buffer::copy(data, page_size));
+    encode(offset, bl);
   }
-  void decode(bufferlist::iterator &p, size_t page_size) {
-    ::decode_array_nohead(data, page_size, p);
-    ::decode(offset, p);
+  void decode(ceph::buffer::list::const_iterator &p, size_t page_size) {
+    using ceph::decode;
+    p.copy(page_size, data);
+    decode(offset, p);
   }
 
   static Ref create(size_t page_size, uint64_t offset = 0) {
@@ -103,7 +103,7 @@ class PageSet {
   page_set pages;
   uint64_t page_size;
 
-  typedef Spinlock lock_type;
+  typedef std::mutex lock_type;
   lock_type mutex;
 
   void free_pages(iterator cur, iterator end) {
@@ -186,7 +186,7 @@ class PageSet {
       length -= c;
     }
     // make sure we sized the vector correctly
-    assert(out == range.rend());
+    ceph_assert(out == range.rend());
   }
 
   // return all allocated pages that intersect the range [offset,length)
@@ -206,18 +206,20 @@ class PageSet {
     free_pages(cur, pages.end());
   }
 
-  void encode(bufferlist &bl) const {
-    ::encode(page_size, bl);
+  void encode(ceph::buffer::list &bl) const {
+    using ceph::encode;
+    encode(page_size, bl);
     unsigned count = pages.size();
-    ::encode(count, bl);
+    encode(count, bl);
     for (auto p = pages.rbegin(); p != pages.rend(); ++p)
       p->encode(bl, page_size);
   }
-  void decode(bufferlist::iterator &p) {
-    assert(empty());
-    ::decode(page_size, p);
+  void decode(ceph::buffer::list::const_iterator &p) {
+    using ceph::decode;
+    ceph_assert(empty());
+    decode(page_size, p);
     unsigned count;
-    ::decode(count, p);
+    decode(count, p);
     auto cur = pages.end();
     for (unsigned i = 0; i < count; i++) {
       auto page = Page::create(page_size);

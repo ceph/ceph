@@ -30,7 +30,7 @@ using namespace librados;
  */
 int PoolDump::dump(IoCtx *io_ctx)
 {
-  assert(io_ctx != NULL);
+  ceph_assert(io_ctx != NULL);
 
   int r = 0;
   write_super();
@@ -70,6 +70,7 @@ int PoolDump::dump(IoCtx *io_ctx)
     const uint32_t op_size = 4096 * 1024;
     uint64_t offset = 0;
     io_ctx->set_namespace(i->get_nspace());
+    io_ctx->locator_set_key(i->get_locator());
     while (true) {
       bufferlist outdata;
       r = io_ctx->read(oid, outdata, op_size, offset);
@@ -87,7 +88,6 @@ int PoolDump::dump(IoCtx *io_ctx)
 
       if (outdata.length() < op_size) {
         // No more data
-        r = 0;
         break;
       }
       offset += outdata.length();
@@ -151,7 +151,6 @@ int PoolDump::dump(IoCtx *io_ctx)
       }
       r = values.size();
     } while (r == MAX_READ);
-    r = 0;
 
     // Close object
     // =============

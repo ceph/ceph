@@ -1,11 +1,18 @@
 #include "include/ipaddr.h"
+#include "common/pick_address.h"
 #include "gtest/gtest.h"
+#include "include/stringify.h"
+#include "common/ceph_context.h"
+
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 #if defined(__FreeBSD__)
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #endif
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 
 static void ipv4(struct sockaddr_in *addr, const char *s) {
   int err;
@@ -32,9 +39,9 @@ TEST(CommonIPAddr, TestNotFound)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -58,9 +65,9 @@ TEST(CommonIPAddr, TestV4_Simple)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -75,7 +82,7 @@ TEST(CommonIPAddr, TestV4_Simple)
   ipv4(&net, "10.11.12.42");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 24);
-  ASSERT_EQ((struct sockaddr*)&a_one, result);
+  ASSERT_EQ((struct sockaddr*)&a_one, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV4_Prefix25)
@@ -84,9 +91,9 @@ TEST(CommonIPAddr, TestV4_Prefix25)
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -101,7 +108,7 @@ TEST(CommonIPAddr, TestV4_Prefix25)
   ipv4(&net, "10.11.12.128");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 25);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV4_Prefix16)
@@ -110,9 +117,9 @@ TEST(CommonIPAddr, TestV4_Prefix16)
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -127,7 +134,7 @@ TEST(CommonIPAddr, TestV4_Prefix16)
   ipv4(&net, "10.2.0.0");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 16);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV4_PrefixTooLong)
@@ -135,9 +142,9 @@ TEST(CommonIPAddr, TestV4_PrefixTooLong)
   struct ifaddrs one;
   struct sockaddr_in a_one;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = NULL;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -156,9 +163,9 @@ TEST(CommonIPAddr, TestV4_PrefixZero)
   struct sockaddr_in6 a_one;
   struct sockaddr_in a_two;
   struct sockaddr_in net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -173,7 +180,7 @@ TEST(CommonIPAddr, TestV4_PrefixZero)
   ipv4(&net, "255.0.1.2");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 0);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV6_Simple)
@@ -182,10 +189,10 @@ TEST(CommonIPAddr, TestV6_Simple)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
-  
+  memset(&net, 0, sizeof(net));
+
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
@@ -199,7 +206,7 @@ TEST(CommonIPAddr, TestV6_Simple)
   ipv6(&net, "2001:1234:5678:90ab::dead:beef");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 64);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV6_Prefix57)
@@ -208,9 +215,9 @@ TEST(CommonIPAddr, TestV6_Prefix57)
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -225,7 +232,7 @@ TEST(CommonIPAddr, TestV6_Prefix57)
   ipv6(&net, "2001:1234:5678:90ab::dead:beef");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 57);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, TestV6_PrefixTooLong)
@@ -233,9 +240,9 @@ TEST(CommonIPAddr, TestV6_PrefixTooLong)
   struct ifaddrs one;
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
-  memset(&net, '0', sizeof(net));
+  memset(&net, 0, sizeof(net));
 
   one.ifa_next = NULL;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -254,7 +261,7 @@ TEST(CommonIPAddr, TestV6_PrefixZero)
   struct sockaddr_in a_one;
   struct sockaddr_in6 a_two;
   struct sockaddr_in6 net;
-  const struct sockaddr *result;
+  const struct ifaddrs *result;
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -269,7 +276,7 @@ TEST(CommonIPAddr, TestV6_PrefixZero)
   ipv6(&net, "ff00::1");
 
   result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 0);
-  ASSERT_EQ((struct sockaddr*)&a_two, result);
+  ASSERT_EQ((struct sockaddr*)&a_two, result->ifa_addr);
 }
 
 TEST(CommonIPAddr, ParseNetwork_Empty)
@@ -535,3 +542,392 @@ TEST(CommonIPAddr, ParseNetwork_IPv6_9000)
   ipv6(&want, "2001:1234:5678:90ab::dead:beef");
   ASSERT_EQ(0, memcmp(want.sin6_addr.s6_addr, network.sin6_addr.s6_addr, sizeof(network.sin6_addr.s6_addr)));
 }
+
+TEST(CommonIPAddr, ambiguous)
+{
+  entity_addr_t a;
+  bool ok;
+
+  ok = a.parse("1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_ANY, a.get_type());
+
+  ok = a.parse("any:1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_ANY, a.get_type());
+
+  ok = a.parse("v1:1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_LEGACY, a.get_type());
+
+  ok = a.parse("v2:1.2.3.4", nullptr, entity_addr_t::TYPE_ANY);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(entity_addr_t::TYPE_MSGR2, a.get_type());
+}
+
+TEST(CommonIPAddr, network_contains)
+{
+  entity_addr_t network, addr;
+  unsigned int prefix;
+  bool ok;
+
+  ok = parse_network("2001:1234:5678:90ab::dead:beef/32", &network, &prefix);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(32U, prefix);
+  ok = addr.parse("2001:1234:5678:90ab::dead:beef", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_TRUE(network_contains(network, prefix, addr));
+  ok = addr.parse("2001:1334:5678:90ab::dead:beef", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+  ok = addr.parse("127.0.0.1", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+
+  ok = parse_network("10.1.2.3/16", &network, &prefix);
+  ASSERT_TRUE(ok);
+  ASSERT_EQ(16U, prefix);
+  ok = addr.parse("2001:1234:5678:90ab::dead:beef", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+  ok = addr.parse("1.2.3.4", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+  ok = addr.parse("10.1.22.44", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_TRUE(network_contains(network, prefix, addr));
+  ok = addr.parse("10.2.22.44", nullptr);
+  ASSERT_TRUE(ok);
+  ASSERT_FALSE(network_contains(network, prefix, addr));
+}
+
+TEST(pick_address, find_ip_in_subnet_list)
+{
+  struct ifaddrs one, two, three;
+  struct sockaddr_in a_one;
+  struct sockaddr_in a_two;
+  struct sockaddr_in6 a_three;
+  const struct sockaddr *result;
+
+  one.ifa_next = &two;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = eth0;
+
+  two.ifa_next = &three;
+  two.ifa_addr = (struct sockaddr*)&a_two;
+  two.ifa_name = eth1;
+
+  three.ifa_next = NULL;
+  three.ifa_addr = (struct sockaddr*)&a_three;
+  three.ifa_name = eth1;
+
+  ipv4(&a_one, "10.1.1.2");
+  ipv4(&a_two, "10.2.1.123");
+  ipv6(&a_three, "2001:1234:5678:90ab::cdef");
+
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+
+  // match by network
+  result = find_ip_in_subnet_list(
+    cct.get(),
+    &one,
+    CEPH_PICK_ADDRESS_IPV4,
+    "10.1.0.0/16",
+    "eth0");
+  ASSERT_EQ((struct sockaddr*)&a_one, result);
+
+  result = find_ip_in_subnet_list(
+    cct.get(),
+    &one,
+    CEPH_PICK_ADDRESS_IPV4,
+    "10.2.0.0/16",
+    "eth1");
+  ASSERT_EQ((struct sockaddr*)&a_two, result);
+
+  // match by eth name
+  result = find_ip_in_subnet_list(
+    cct.get(),
+    &one,
+    CEPH_PICK_ADDRESS_IPV4,
+    "10.0.0.0/8",
+    "eth0");
+  ASSERT_EQ((struct sockaddr*)&a_one, result);
+
+  result = find_ip_in_subnet_list(
+    cct.get(),
+    &one,
+    CEPH_PICK_ADDRESS_IPV4,
+    "10.0.0.0/8",
+    "eth1");
+  ASSERT_EQ((struct sockaddr*)&a_two, result);
+
+  result = find_ip_in_subnet_list(
+    cct.get(),
+    &one,
+    CEPH_PICK_ADDRESS_IPV6,
+    "2001::/16",
+    "eth1");
+  ASSERT_EQ((struct sockaddr*)&a_three, result);
+}
+
+TEST(pick_address, filtering)
+{
+  struct ifaddrs one, two, three;
+  struct sockaddr_in a_one;
+  struct sockaddr_in a_two;
+  struct sockaddr_in6 a_three;
+
+  one.ifa_next = &two;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = eth0;
+
+  two.ifa_next = &three;
+  two.ifa_addr = (struct sockaddr*)&a_two;
+  two.ifa_name = eth1;
+
+  three.ifa_next = NULL;
+  three.ifa_addr = (struct sockaddr*)&a_three;
+  three.ifa_name = eth1;
+
+  ipv4(&a_one, "10.1.1.2");
+  ipv4(&a_two, "10.2.1.123");
+  ipv6(&a_three, "2001:1234:5678:90ab::cdef");
+
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_MON);
+  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
+
+  cct->_conf.set_val("public_addr", "");
+  cct->_conf.set_val("public_network", "");
+  cct->_conf.set_val("public_network_interface", "");
+  cct->_conf.set_val("cluster_addr", "");
+  cct->_conf.set_val("cluster_network", "");
+  cct->_conf.set_val("cluster_network_interface", "");
+
+  entity_addrvec_t av;
+  {
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(1u, av.v.size());
+    ASSERT_EQ(string("v1:0.0.0.0:0/0"), stringify(av.v[0]));
+  }
+  {
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV6 |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(1u, av.v.size());
+    ASSERT_EQ(string("v1:[::]:0/0"), stringify(av.v[0]));
+  }
+  {
+    cct->_conf.set_val("public_network", "10.2.0.0/16");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(1u, av.v.size());
+    ASSERT_EQ(string("v1:10.2.1.123:0/0"), stringify(av.v[0]));
+    cct->_conf.set_val("public_network", "");
+  }
+  {
+    cct->_conf.set_val("public_network", "10.0.0.0/8");
+    cct->_conf.set_val("public_network_interface", "eth1");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(1u, av.v.size());
+    ASSERT_EQ(string("v2:10.2.1.123:0/0"), stringify(av.v[0]));
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("public_network_interface", "");
+  }
+  {
+    cct->_conf.set_val("public_network", "10.2.0.0/16");
+    cct->_conf.set_val("cluster_network", "10.1.0.0/16");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(1u, av.v.size());
+    ASSERT_EQ(string("v2:10.2.1.123:0/0"), stringify(av.v[0]));
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("cluster_network", "");
+  }
+  {
+    cct->_conf.set_val("public_network", "10.2.0.0/16");
+    cct->_conf.set_val("cluster_network", "10.1.0.0/16");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_CLUSTER |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(1u, av.v.size());
+    ASSERT_EQ(string("v1:10.1.1.2:0/0"), stringify(av.v[0]));
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("cluster_network", "");
+  }
+
+  {
+    cct->_conf.set_val("public_network", "2001::/16");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV6 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(1u, av.v.size());
+    ASSERT_EQ(string("v2:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
+    cct->_conf.set_val("public_network", "");
+  }
+  {
+    cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
+    cct->_conf.set_val("public_network_interface", "eth1");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_IPV6 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(2u, av.v.size());
+    ASSERT_EQ(string("v2:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
+    ASSERT_EQ(string("v2:10.2.1.123:0/0"), stringify(av.v[1]));
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("public_network_interface", "");
+  }
+  {
+    cct->_conf.set_val("public_network", "2001::/16 10.0.0.0/8");
+    cct->_conf.set_val("public_network_interface", "eth1");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_IPV6 |
+			   CEPH_PICK_ADDRESS_MSGR1 |
+			   CEPH_PICK_ADDRESS_PREFER_IPV4,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(2u, av.v.size());
+    ASSERT_EQ(string("v1:10.2.1.123:0/0"), stringify(av.v[0]));
+    ASSERT_EQ(string("v1:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[1]));
+    cct->_conf.set_val("public_network", "");
+    cct->_conf.set_val("public_network_interface", "");
+  }
+
+  {
+    cct->_conf.set_val("public_network", "2001::/16");
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV6 |
+			   CEPH_PICK_ADDRESS_MSGR1 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(2u, av.v.size());
+    ASSERT_EQ(string("v2:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[0]));
+    ASSERT_EQ(string("v1:[2001:1234:5678:90ab::cdef]:0/0"), stringify(av.v[1]));
+    cct->_conf.set_val("public_network", "");
+  }
+
+  {
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_IPV4 |
+			   CEPH_PICK_ADDRESS_MSGR1 |
+			   CEPH_PICK_ADDRESS_MSGR2,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(0, r);
+    ASSERT_EQ(2u, av.v.size());
+    ASSERT_EQ(string("v2:0.0.0.0:0/0"), stringify(av.v[0]));
+    ASSERT_EQ(string("v1:0.0.0.0:0/0"), stringify(av.v[1]));
+  }
+}
+
+TEST(pick_address, ipv4_ipv6_enabled)
+{
+  struct ifaddrs one;
+  struct sockaddr_in a_one;
+
+  one.ifa_next = NULL;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = eth0;
+
+  ipv4(&a_one, "10.1.1.2");
+
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
+
+  cct->_conf.set_val("public_addr", "");
+  cct->_conf.set_val("public_network", "10.1.1.0/24");
+  cct->_conf.set_val("public_network_interface", "");
+  cct->_conf.set_val("cluster_addr", "");
+  cct->_conf.set_val("cluster_network", "");
+  cct->_conf.set_val("cluster_network_interface", "");
+  cct->_conf.set_val("ms_bind_ipv6", "true");
+
+  entity_addrvec_t av;
+  {
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(-1, r);
+  }
+}
+
+TEST(pick_address, ipv4_ipv6_enabled2)
+{
+  struct ifaddrs one;
+  struct sockaddr_in6 a_one;
+
+  one.ifa_next = NULL;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = eth0;
+
+  ipv6(&a_one, "2001:1234:5678:90ab::cdef");
+
+  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
+
+  cct->_conf.set_val("public_addr", "");
+  cct->_conf.set_val("public_network", "2001::/16");
+  cct->_conf.set_val("public_network_interface", "");
+  cct->_conf.set_val("cluster_addr", "");
+  cct->_conf.set_val("cluster_network", "");
+  cct->_conf.set_val("cluster_network_interface", "");
+  cct->_conf.set_val("ms_bind_ipv6", "true");
+
+  entity_addrvec_t av;
+  {
+    int r = pick_addresses(cct.get(),
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(-1, r);
+  }
+}
+

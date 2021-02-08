@@ -21,7 +21,6 @@
 #include "ImageNameMap.hpp"
 
 
-using namespace std;
 using namespace rbd_replay;
 
 
@@ -59,12 +58,19 @@ int main(int argc, const char **argv) {
   vector<const char*> args;
 
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage(argv[0]);
+    exit(0);
+  }
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);
 
   std::vector<const char*>::iterator i;
-  string pool_name = "rbd";
+  string pool_name;
   float latency_multiplier = 1;
   bool readonly = false;
   ImageNameMap image_name_map;
@@ -92,9 +98,6 @@ int main(int argc, const char **argv) {
 	cerr << "Unable to parse mapping string: '" << val << "'" << std::endl;
 	return 1;
       }
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage(argv[0]);
-      return 0;
     } else if (ceph_argparse_flag(args, i, "--dump-perf-counters", (char*)NULL)) {
       dump_perf_counters = true;
     } else if (get_remainder(*i, "-")) {

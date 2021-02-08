@@ -155,9 +155,9 @@ URL will stop working).
 
 .. note::
    The `Amazon::S3`_ module does not have a way to generate download
-   URLs, so we're going to be using another module instead. Unfortunately,
+   URLs, so we are going to be using another module instead. Unfortunately,
    most modules for generating these URLs assume that you are using Amazon,
-   so we've had to go with using a more obscure module, `Muck::FS::S3`_. This
+   so we have had to go with using a more obscure module, `Muck::FS::S3`_. This
    should be the same as Amazon's sample S3 perl module, but this sample
    module is not in CPAN. So, you can either use CPAN to install
    `Muck::FS::S3`_, or install Amazon's sample S3 module manually. If you go

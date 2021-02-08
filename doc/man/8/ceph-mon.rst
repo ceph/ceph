@@ -64,7 +64,7 @@ Options
    - A list of monitors and their addresses.  This list of monitors
      can come from a monmap (``--monmap <path>``), the ``mon host``
      configuration value (in *ceph.conf* or via ``-m
-     host1,host2,...``), or ``mon addr`` lines in *ceph.conf*.  If this
+     host1,host2,...``), or (for backward compatibility) the deprecated ``mon addr`` lines in *ceph.conf*.  If this
      monitor is to be part of the initial monitor quorum for a new
      Ceph cluster, then it must be included in the initial list,
      matching either the name or address of a monitor in the list.
@@ -77,6 +77,11 @@ Options
 
    Specify a keyring for use with ``--mkfs``.
 
+.. option:: --no-config-file
+
+    Signal that we don't want to rely on a *ceph.conf*, either user provided
+    or the default, to run the daemon.  This will entail providing all
+    necessary options to the daemon as arguments.
 
 Availability
 ============

@@ -4,21 +4,22 @@
  *
  * Sphinx stylesheet -- nature theme.
  *
- * :copyright: Copyright 2007-2011 by the Sphinx team, see AUTHORS.
+ * :copyright: Copyright 2007-2019 by the Sphinx team, see AUTHORS.
  * :license: BSD, see LICENSE for details.
  *
  */
- 
+
 @import url("basic.css");
- 
+
 /* -- page layout ----------------------------------------------------------- */
 
-@import url('http://fonts.googleapis.com/css?family=Titillium+Web:400,300,700');
+@import url('https://fonts.googleapis.com/css?family=Titillium+Web:400,300,700');
 
 body {
-    font: 14px/1.4 Helvetica, Arial, sans-serif;
-    background-color: #E6E8E8;
-    color: #37424A;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 100%;
+    background-color: #fff;
+    color: #555;
     margin: 0;
     padding: 0;
     border-top: 5px solid #F05C56;
@@ -36,39 +37,39 @@ div.bodywrapper {
 hr {
     border: 1px solid #B1B4B6;
 }
- 
+
 div.document {
-    background-color: #ffffff;
+    background-color: #eee;
 }
- 
+
 div.body {
     background-color: #ffffff;
     color: #3E4349;
     padding: 0 30px 30px 30px;
+    font-size: 0.9em;
 }
- 
+
 div.footer {
-    color: #222B31;
+    color: #555;
     width: 100%;
     padding: 13px 0;
     text-align: center;
     font-size: 75%;
 }
- 
+
 div.footer a {
     color: #444;
     text-decoration: underline;
 }
- 
+
 div.related {
     background-color: #80D2DC;
     line-height: 32px;
     color: #37424A;
-    // text-shadow: 0px 1px 0 #444;
-    font-size: 100%;
+    font-size: 0.9em;
     border-top: #9C4850 5px solid;
 }
- 
+
 div.related a {
     color: #37424A;
     text-decoration: none;
@@ -78,24 +79,23 @@ div.related a:hover {
     color: #fff;
     // text-decoration: underline;
 }
- 
+
 div.sphinxsidebar {
-    // font-size: 100%;
+    font-size: 0.75em;
     line-height: 1.5em;
     width: 330px;
 }
 
 div.sphinxsidebarwrapper{
     padding: 20px 0;
-    background-color: #efefef;
 }
- 
+
 div.sphinxsidebar h3,
 div.sphinxsidebar h4 {
     font-family: 'Titillium Web', sans-serif;
     color: #e6e8e8;
     font-size: 1.2em;
-    font-weight: 500;
+    font-weight: normal;
     margin: 0;
     padding: 5px 10px;
     background-color: #5e6a71;
@@ -106,92 +106,96 @@ div.sphinxsidebar h4 {
 div.sphinxsidebar h4{
     font-size: 1.1em;
 }
- 
-div.sphinxsidebar h3 a {
+
+div.sphinxsidebar h3 a,
+div.sphinxsidebar h4 a {
     color: #e6e8e8;
 }
- 
- 
+
 div.sphinxsidebar p {
     color: #888;
     padding: 5px 20px;
 }
- 
+
 div.sphinxsidebar p.topless {
 }
- 
+
 div.sphinxsidebar ul {
-    margin: 10px 5px 10px 20px;
+    margin: 10px 20px;
     padding: 0;
     color: #000;
 }
- 
+
 div.sphinxsidebar a {
     color: #444;
 }
- 
+
 div.sphinxsidebar input {
     border: 1px solid #ccc;
     font-family: sans-serif;
     font-size: 1em;
 }
 
-div.sphinxsidebar input[type=text]{
+div.sphinxsidebar input[type=text] {
+    margin-left: 20px;
+    margin-right: 20px;
+}
+
+div.sphinxsidebar input[type=submit] {
+    border-left: 1px solid #ccc !important;
     margin-left: 20px;
 }
- 
+
 /* -- body styles ----------------------------------------------------------- */
- 
+
 a {
     color: #F05C56;
     text-decoration: none;
 }
 
 a:hover {
-    color: #F05C56;
+    color: #E32E00;
     text-decoration: underline;
 }
- 
+
 div.body h1,
 div.body h2,
 div.body h3,
 div.body h4,
 div.body h5,
 div.body h6 {
+    background-color: #99DAE3;
+    font-weight: normal;
+    color: #212224;
     margin: 30px 0px 10px 0px;
-    padding: 5px 0 5px 0px;
+    padding: 5px 0 5px 10px;
+    // text-shadow: 0px 1px 0 white;
     text-transform: uppercase;
 }
- 
-div.body h1 { font: 20px/2.0 'Titillium Web'; color: #37424A; border-top: 20px solid white; margin-top: 0; }
-div.body h2 { font: 18px/1.8 'Titillium Web'; background-color: #5E6A71; color: #E6E8E8; padding: 5px 10px; }
-div.body h3 { font: 16px/1.6 'Titillium Web'; color: #37424A; }
-div.body h4 { font: 14px/1.4 Helvetica, Arial, sans-serif;  color: #37424A; }
-div.body h5 { font: 12px/1.2 Helvetica, Arial, sans-serif;  color: #37424A; }
-div.body h6 { font-size: 100%; color: #37424A; }
 
-// div.body h2 { font-size: 150%; background-color: #E6E8E8; color: #37424A; }
-// div.body h3 { font-size: 120%; background-color: #E6E8E8; color: #37424A; }
-// div.body h4 { font-size: 110%; background-color: #E6E8E8; color: #37424A; }
-// div.body h5 { font-size: 100%; background-color: #E6E8E8; color: #37424A; }
-// div.body h6 { font-size: 100%; background-color: #E6E8E8; color: #37424A; }
- 
+div.body h1 { font-family: Titillium Web; border-top: 20px solid white; margin-top: 0; font-size: 200%; }
+div.body h2 { font-family: Titillium Web; font-size: 150%; background-color: #B2E3EA; }
+div.body h3 { font-family: Titillium Web; font-size: 120%; background-color: #CCECF1; }
+div.body h4 { font-family: Helvetica, Arial, sans-serif; font-size: 110%; background-color: #CCECF1; }
+div.body h5 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
+div.body h6 { font-family: Helvetica, Arial, sans-serif; font-size: 100%; background-color: #CCECF1; }
+
 a.headerlink {
     color: #c60f0f;
     font-size: 0.8em;
     padding: 0 4px 0 4px;
     text-decoration: none;
 }
- 
+
 a.headerlink:hover {
     background-color: #c60f0f;
     color: white;
 }
- 
+
 div.body p, div.body dd, div.body li {
     line-height: 1.5em;
 }
- 
+
 div.admonition p.admonition-title + p {
     display: inline;
 }
@@ -201,50 +205,53 @@ div.highlight {
 }
 
 div.note {
-    background-color: #e6e8e8;
+    background-color: #eee;
     border: 1px solid #ccc;
 }
- 
+
 div.seealso {
     background-color: #ffc;
     border: 1px solid #ff6;
 }
- 
+
 div.topic {
-    background-color: #efefef;
+    background-color: #eee;
 }
- 
+
 div.warning {
-    background-color: #F05C56;
-    border: 1px solid #9C4850;
-    color: #fff;
+    background-color: #ffe4e4;
+    border: 1px solid #f66;
 }
- 
+
+div.warning a {
+    color: black;
+}
+
 p.admonition-title {
     display: inline;
 }
- 
+
 p.admonition-title:after {
     content: ":";
 }
- 
+
 pre {
     padding: 10px;
     background-color: White;
     color: #222;
     line-height: 1.2em;
-    border: 1px solid #5e6a71;
+    border: 1px solid #C6C9CB;
     font-size: 1.1em;
-    margin: 1.5em;
-    -webkit-box-shadow: 1px 1px 1px #e6e8e8;
-    -moz-box-shadow: 1px 1px 1px #e6e8e8;
+    margin: 1.5em 0 1.5em 0;
+    -webkit-box-shadow: 1px 1px 1px #d8d8d8;
+    -moz-box-shadow: 1px 1px 1px #d8d8d8;
 }
- 
+
 tt {
     background-color: #ecf0f3;
     color: #222;
     /* padding: 1px 2px; */
-    font-size: 15px;
+    font-size: 1.1em;
     font-family: monospace;
 }
 
@@ -298,9 +305,8 @@ h2 .literal {
 }
 
 dl.glossary dt {
-	font-size: 1.0em;
-	padding-top:20px;	
-
+    font-size: 1.0em;
+    padding-top:20px;
 }
 
 p.breathe-sectiondef-title {

@@ -13,19 +13,17 @@
  */
 
 #include "include/compat.h"
-#include "fd.h"
-
-#include <sys/types.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <errno.h>
-
 #include "debug.h"
 #include "errno.h"
 
+#ifndef _WIN32
 void dump_open_fds(CephContext *cct)
 {
+#ifdef __APPLE__
+  const char *fn = "/dev/fd";
+#else
   const char *fn = PROCPREFIX "/proc/self/fd";
+#endif
   DIR *d = opendir(fn);
   if (!d) {
     lderr(cct) << "dump_open_fds unable to open " << fn << dendl;
@@ -54,3 +52,8 @@ void dump_open_fds(CephContext *cct)
 
   closedir(d);
 }
+#else
+void dump_open_fds(CephContext *cct)
+{
+}
+#endif

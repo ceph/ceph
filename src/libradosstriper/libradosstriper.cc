@@ -34,7 +34,8 @@
 
 libradosstriper::MultiAioCompletion::~MultiAioCompletion()
 {
-  delete pc;
+  ceph_assert(pc->ref == 1);
+  pc->put();
 }
 
 int libradosstriper::MultiAioCompletion::set_complete_callback
@@ -336,7 +337,7 @@ libradosstriper::RadosStriper::multi_aio_create_completion(void *cb_arg,
 {
   MultiAioCompletionImpl *c;
   int r = rados_striper_multi_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
-  assert(r == 0);
+  ceph_assert(r == 0);
   return new MultiAioCompletion(c);
 }
 
@@ -431,7 +432,7 @@ extern "C" int rados_striper_read(rados_striper_t striper,
     if (bl.length() > len)
       return -ERANGE;
     if (!bl.is_provided_buffer(buf))
-      bl.copy(0, bl.length(), buf);
+      bl.begin().copy(bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
   return ret;
@@ -462,7 +463,7 @@ extern "C" int rados_striper_getxattr(rados_striper_t striper,
   if (ret >= 0) {
     if (bl.length() > len)
       return -ERANGE;
-    bl.copy(0, bl.length(), buf);
+    bl.begin().copy(bl.length(), buf);
     ret = bl.length();
   }
   return ret;
@@ -505,8 +506,6 @@ extern "C" int rados_striper_getxattrs(rados_striper_t striper,
     return ret;
   }
   it->i = it->attrset.begin();
-  librados::RadosXattrsIter **iret = (librados::RadosXattrsIter**)iter;
-  *iret = it;
   *iter = it;
   return 0;
 }

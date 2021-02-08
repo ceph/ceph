@@ -17,7 +17,7 @@
 #include "common/Formatter.h"
 #include "include/types.h"
 
-int64_t unit_to_bytesize(string val, ostream *pss);
+std::string bytes2str(uint64_t count);
 
 struct ceph_data_stats
 {
@@ -33,33 +33,33 @@ struct ceph_data_stats
     avail_percent(0)
   { }
 
-  void dump(Formatter *f) const {
-    assert(f != NULL);
+  void dump(ceph::Formatter *f) const {
+    ceph_assert(f != NULL);
     f->dump_int("total", byte_total);
     f->dump_int("used", byte_used);
     f->dump_int("avail", byte_avail);
     f->dump_int("avail_percent", avail_percent);
   }
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(byte_total, bl);
-    ::encode(byte_used, bl);
-    ::encode(byte_avail, bl);
-    ::encode(avail_percent, bl);
+    encode(byte_total, bl);
+    encode(byte_used, bl);
+    encode(byte_avail, bl);
+    encode(avail_percent, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &p) {
+  void decode(ceph::buffer::list::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(byte_total, p);
-    ::decode(byte_used, p);
-    ::decode(byte_avail, p);
-    ::decode(avail_percent, p);
+    decode(byte_total, p);
+    decode(byte_used, p);
+    decode(byte_avail, p);
+    decode(avail_percent, p);
     DECODE_FINISH(p);
   }
 
-  static void generate_test_instances(list<ceph_data_stats*>& ls) {
+  static void generate_test_instances(std::list<ceph_data_stats*>& ls) {
     ls.push_back(new ceph_data_stats);
     ls.push_back(new ceph_data_stats);
     ls.back()->byte_total = 1024*1024;
@@ -73,15 +73,42 @@ WRITE_CLASS_ENCODER(ceph_data_stats)
 
 int get_fs_stats(ceph_data_stats_t &stats, const char *path);
 
+/// get memory limit for the current cgroup
+int get_cgroup_memory_limit(uint64_t *limit);
+
 /// collect info from @p uname(2), @p /proc/meminfo and @p /proc/cpuinfo
-void collect_sys_info(map<string, string> *m, CephContext *cct);
+void collect_sys_info(std::map<std::string, std::string> *m, CephContext *cct);
+
+#ifdef _WIN32
+/// Retrieve the actual Windows version, regardless of the app manifest.
+int get_windows_version(POSVERSIONINFOEXW ver);
+#endif
 
 /// dump service ids grouped by their host to the specified formatter
 /// @param f formatter for the output
 /// @param services a map from hostname to a list of service id hosted by this host
 /// @param type the service type of given @p services, for example @p osd or @p mon.
-void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type);
+void dump_services(ceph::Formatter* f,
+		   const std::map<std::string, std::list<int> >& services,
+		   const char* type);
+/// dump service names grouped by their host to the specified formatter
+/// @param f formatter for the output
+/// @param services a map from hostname to a list of service name hosted by this host
+/// @param type the service type of given @p services, for example @p osd or @p mon.
+void dump_services(ceph::Formatter* f, const std::map<std::string,
+		   std::list<std::string> >& services, const char* type);
 
-string cleanbin(bufferlist &bl, bool &b64);
-string cleanbin(string &str);
+std::string cleanbin(ceph::buffer::list &bl, bool &b64, bool show = false);
+std::string cleanbin(std::string &str);
+
+namespace ceph::util {
+
+// Returns true if s matches any parameters:
+template <typename ...XS>
+bool match_str(const std::string& s, const XS& ...xs)
+{
+ return ((s == xs) || ...);
+}
+
+} // namespace ceph::util
 #endif /* CEPH_UTIL_H */

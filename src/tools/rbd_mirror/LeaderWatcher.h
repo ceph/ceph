@@ -14,10 +14,13 @@
 #include "librbd/managed_lock/Types.h"
 #include "librbd/watcher/Types.h"
 #include "Instances.h"
-#include "MirrorStatusWatcher.h"
+#include "tools/rbd_mirror/instances/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 
-namespace librbd { class ImageCtx; }
+namespace librbd {
+class ImageCtx;
+namespace asio { struct ContextWQ; }
+} // namespace librbd
 
 namespace rbd {
 namespace mirror {
@@ -26,17 +29,16 @@ template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class LeaderWatcher : protected librbd::Watcher {
+  using librbd::Watcher::unregister_watch; // Silence overloaded virtual warning
 public:
-  struct Listener {
-    virtual ~Listener() {
-    }
-
-    virtual void post_acquire_handler(Context *on_finish) = 0;
-    virtual void pre_release_handler(Context *on_finish) = 0;
-  };
+  static LeaderWatcher* create(Threads<ImageCtxT> *threads,
+                               librados::IoCtx &io_ctx,
+                               leader_watcher::Listener *listener) {
+    return new LeaderWatcher(threads, io_ctx, listener);
+  }
 
   LeaderWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &io_ctx,
-                Listener *listener);
+                leader_watcher::Listener *listener);
   ~LeaderWatcher() override;
 
   int init();
@@ -45,23 +47,26 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
+  bool is_blocklisted() const;
   bool is_leader() const;
   bool is_releasing_leader() const;
   bool get_leader_instance_id(std::string *instance_id) const;
   void release_leader();
   void list_instances(std::vector<std::string> *instance_ids);
 
+  std::string get_instance_id();
+
 private:
   /**
    * @verbatim
    *
    *  <uninitialized> <------------------------------ WAIT_FOR_TASKS
-   *     | (init)      ^                                      ^
-   *     v             *                                      |
-   *  CREATE_OBJECT  * *  (error)                     UNREGISTER_WATCH
-   *     |             *                                      ^
-   *     v             *                                      |
-   *  REGISTER_WATCH * *                              SHUT_DOWN_LEADER_LOCK
+   *     | (init)            ^                                ^
+   *     v                   *                                |
+   *  CREATE_OBJECT  * * * * *  (error)               UNREGISTER_WATCH
+   *     |                   *                                ^
+   *     v                   *                                |
+   *  REGISTER_WATCH * * * * *                        SHUT_DOWN_LEADER_LOCK
    *     |                                                    ^
    *     |           (no leader heartbeat and acquire failed) |
    *     | BREAK_LOCK <-------------------------------------\ |
@@ -78,16 +83,14 @@ private:
    *     |                   *                           ^
    * ....|...................*....................  .....|.....................
    * .   v                   *                   .  .    |       post_release .
-   * .INIT_STATUS_WATCHER  * * (error)           .  .NOTIFY_LOCK_RELEASED     .
-   * .   |                   ^                   .  .....^.....................
-   * .   v         (error)   |                   .       |
-   * .INIT_INSTANCES *> SHUT_DOWN_STATUS_WATCHER .   RELEASE_LEADER_LOCK
+   * .INIT_INSTANCES * * * * *                   .  .NOTIFY_LOCK_RELEASED     .
+   * .   |                                       .  .....^.....................
+   * .   v                                       .       |
+   * .NOTIFY_LISTENER                            .   RELEASE_LEADER_LOCK
    * .   |                                       .       ^
    * .   v                                       .  .....|.....................
-   * .NOTIFY_LISTENER                            .  .SHUT_DOWN_STATUS_WATCHER .
-   * .   |                                       .  .    ^                    .
-   * .   v                                       .  .    |                    .
-   * .NOTIFY_LOCK_ACQUIRED          post_acquire .  .SHUT_DOWN_INSTANCES      .
+   * .NOTIFY_LOCK_ACQUIRED                       .  .    |                    .
+   * .   |                          post_acquire .  .SHUT_DOWN_INSTANCES      .
    * ....|........................................  .    ^                    .
    *     v                                          .    |                    .
    *  <leader> -----------------------------------> .NOTIFY_LISTENER          .
@@ -96,26 +99,43 @@ private:
    * @endverbatim
    */
 
+  struct InstancesListener : public instances::Listener {
+    LeaderWatcher* leader_watcher;
+
+    InstancesListener(LeaderWatcher* leader_watcher)
+      : leader_watcher(leader_watcher) {
+    }
+
+    void handle_added(const InstanceIds& instance_ids) override {
+      leader_watcher->m_listener->handle_instances_added(instance_ids);
+    }
+
+    void handle_removed(const InstanceIds& instance_ids) override {
+      leader_watcher->m_listener->handle_instances_removed(instance_ids);
+    }
+  };
+
   class LeaderLock : public librbd::ManagedLock<ImageCtxT> {
   public:
     typedef librbd::ManagedLock<ImageCtxT> Parent;
 
-    LeaderLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
+    LeaderLock(librados::IoCtx& ioctx, librbd::AsioEngine& asio_engine,
                const std::string& oid, LeaderWatcher *watcher,
-               bool blacklist_on_break_lock,
-               uint32_t blacklist_expire_seconds)
-      : Parent(ioctx, work_queue, oid, watcher, librbd::managed_lock::EXCLUSIVE,
-               blacklist_on_break_lock, blacklist_expire_seconds),
+               bool blocklist_on_break_lock,
+               uint32_t blocklist_expire_seconds)
+      : Parent(ioctx, asio_engine, oid, watcher,
+               librbd::managed_lock::EXCLUSIVE, blocklist_on_break_lock,
+               blocklist_expire_seconds),
         watcher(watcher) {
     }
 
     bool is_leader() const {
-      Mutex::Locker locker(Parent::m_lock);
+      std::lock_guard locker{Parent::m_lock};
       return Parent::is_state_post_acquiring() || Parent::is_state_locked();
     }
 
     bool is_releasing_leader() const {
-      Mutex::Locker locker(Parent::m_lock);
+      std::lock_guard locker{Parent::m_lock};
       return Parent::is_state_pre_releasing();
     }
 
@@ -123,7 +143,7 @@ private:
     void post_acquire_lock_handler(int r, Context *on_finish) {
       if (r == 0) {
         // lock is owned at this point
-        Mutex::Locker locker(Parent::m_lock);
+	std::lock_guard locker{Parent::m_lock};
         Parent::set_state_post_acquiring();
       }
       watcher->handle_post_acquire_leader_lock(r, on_finish);
@@ -186,18 +206,21 @@ private:
   };
 
   Threads<ImageCtxT> *m_threads;
-  Listener *m_listener;
+  leader_watcher::Listener *m_listener;
 
-  mutable Mutex m_lock;
+  InstancesListener m_instances_listener;
+  mutable ceph::mutex m_lock;
   uint64_t m_notifier_id;
+  std::string m_instance_id;
   LeaderLock *m_leader_lock;
   Context *m_on_finish = nullptr;
   Context *m_on_shut_down_finish = nullptr;
-  int m_acquire_attempts = 0;
+  uint64_t m_acquire_attempts = 0;
   int m_ret_val = 0;
-  MirrorStatusWatcher<ImageCtxT> *m_status_watcher = nullptr;
   Instances<ImageCtxT> *m_instances = nullptr;
   librbd::managed_lock::Locker m_locker;
+
+  bool m_blocklisted = false;
 
   AsyncOpTracker m_timer_op_tracker;
   Context *m_timer_task = nullptr;
@@ -205,8 +228,8 @@ private:
 
   librbd::watcher::NotifyResponse m_heartbeat_response;
 
-  bool is_leader(Mutex &m_lock) const;
-  bool is_releasing_leader(Mutex &m_lock) const;
+  bool is_leader(ceph::mutex &m_lock) const;
+  bool is_releasing_leader(ceph::mutex &m_lock) const;
 
   void cancel_timer_task();
   void schedule_timer_task(const std::string &name,
@@ -243,12 +266,6 @@ private:
   void release_leader_lock();
   void handle_release_leader_lock(int r);
 
-  void init_status_watcher();
-  void handle_init_status_watcher(int r);
-
-  void shut_down_status_watcher();
-  void handle_shut_down_status_watcher(int r);
-
   void init_instances();
   void handle_init_instances(int r);
 
@@ -267,15 +284,14 @@ private:
   void notify_heartbeat();
   void handle_notify_heartbeat(int r);
 
-  void get_instances();
-  void handle_get_instances(int r);
-
   void handle_post_acquire_leader_lock(int r, Context *on_finish);
   void handle_pre_release_leader_lock(Context *on_finish);
   void handle_post_release_leader_lock(int r, Context *on_finish);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;
+
+  void handle_rewatch_complete(int r) override;
 
   void handle_heartbeat(Context *on_ack);
   void handle_lock_acquired(Context *on_ack);

@@ -12,18 +12,7 @@ extern "C"{
 #define SWIFT_BUCKET_NAME "swift3testgw.fcgi"
 #define BUCKET_URL \
   ((g_test->get_key_type() == KEY_TYPE_S3)?(string("/" S3_BUCKET_NAME)):(string("/swift/v1/" SWIFT_BUCKET_NAME)))
-#define GTEST
-#ifdef GTEST
 #include <gtest/gtest.h>
-#else
-#define TEST(x, y) void y()
-#define ASSERT_EQ(v, s) if(v != s)cout << "Error at " << __LINE__ << "(" << #v << "!= " << #s << "\n"; \
-                                else cout << "(" << #v << "==" << #s << ") PASSED\n";
-#define EXPECT_EQ(v, s) ASSERT_EQ(v, s)
-#define ASSERT_TRUE(c) if(c)cout << "Error at " << __LINE__ << "(" << #c << ")" << "\n"; \
-                          else cout << "(" << #c << ") PASSED\n";
-#define EXPECT_TRUE(c) ASSERT_TRUE(c) 
-#endif
 #include "common/code_environment.h"
 #include "common/ceph_argparse.h"
 #include "common/Finisher.h"
@@ -114,8 +103,7 @@ int test_cors_helper::extract_input(unsigned argc, char *argv[]){
       ERR_CHECK_NEXT_PARAM(port);
     }else return -1;
   }
-  if(host.length() <= 0 ||
-     creds.length() <= 0)
+  if(host.empty() || creds.empty())
     return -1;
   return 0;
 }
@@ -170,7 +158,7 @@ static void calc_hmac_sha1(const char *key, int key_len,
   buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 }
 
-static int get_s3_auth(string method, string creds, string date, string res, string& out){
+static int get_s3_auth(const string &method, string creds, const string &date, const string &res, string& out){
   string aid, secret, auth_hdr;
   size_t off = creds.find(":");
   out = "";
@@ -884,7 +872,8 @@ int main(int argc, char *argv[]){
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY, 0);
+                         CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_test = new test_cors_helper();
   finisher = new Finisher(g_ceph_context);

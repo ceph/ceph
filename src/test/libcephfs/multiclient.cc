@@ -20,7 +20,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#ifdef __linux__
 #include <sys/xattr.h>
+#endif
 
 TEST(LibCephFS, MulticlientSimple) {
   struct ceph_mount_info *ca, *cb;

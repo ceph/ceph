@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -24,12 +31,14 @@
 #include <functional>
 
 
-using ClientId = uint;
-using ServerId = uint;
+using ClientId = unsigned;
+using ServerId = unsigned;
 
 
 namespace crimson {
   namespace qos_simulation {
+
+    using Cost = uint32_t;
 
     inline void debugger() {
       raise(SIGCONT);
@@ -98,7 +107,7 @@ namespace crimson {
     struct TestResponse {
       uint32_t epoch;
 
-      TestResponse(uint32_t _epoch) :
+      explicit TestResponse(uint32_t _epoch) :
 	epoch(_epoch)
       {
 	// empty

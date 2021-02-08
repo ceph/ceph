@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include <iostream>
 #include <string.h>
 #include <stdlib.h>
@@ -8,7 +10,6 @@
 
 #include "include/types.h"
 #include "objclass/objclass.h"
-
 
 CLS_VER(1,0)
 CLS_NAME(crypto)

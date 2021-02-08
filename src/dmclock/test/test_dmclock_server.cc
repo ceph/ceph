@@ -1,7 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -15,6 +23,9 @@
 #include "dmclock_server.h"
 #include "dmclock_util.h"
 #include "gtest/gtest.h"
+
+// process control to prevent core dumps during gtest death tests
+#include "dmcPrCtl.h"
 
 
 namespace dmc = crimson::dmclock;
@@ -39,7 +50,7 @@ namespace crimson {
 
     TEST(dmclock_server, bad_tag_deathtest) {
       using ClientId = int;
-      using Queue = dmc::PullPriorityQueue<ClientId,Request>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request,true>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 17;
@@ -51,46 +62,56 @@ namespace crimson {
       dmc::ClientInfo ci1(reservation, weight, 0.0);
       dmc::ClientInfo ci2(reservation, weight, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return ci1;
-	else if (client2 == c) return ci2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &ci1;
+	else if (client2 == c) return &ci2;
 	else {
 	  ADD_FAILURE() << "got request from neither of two clients";
-	  return ci1; // must return
+	  return nullptr;
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
-      Request req;
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
       ReqParams req_params(1,1);
 
-      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client1, req_params),
+      // Disable coredumps
+      PrCtl unset_dumpable;
+
+      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(Request{}, client1, req_params),
 				"Assertion.*reservation.*max_tag.*"
 				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
 
 
-      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(req, client2, req_params),
+      EXPECT_DEATH_IF_SUPPORTED(pq->add_request(Request{}, client2, req_params),
 				"Assertion.*reservation.*max_tag.*"
 				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
+
+      EXPECT_DEATH_IF_SUPPORTED(Queue(client_info_f, AtLimit::Reject),
+				"Assertion.*Reject.*Delayed") <<
+	"we should fail if a client tries to construct a queue with both "
+        "DelayedTagCalc and AtLimit::Reject";
     }
 
 
     TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
       using Queue = dmc::PushPriorityQueue<ClientId,Request>;
-      int client = 17;
+      ClientId client = 17;
       double reservation = 100.0;
 
       dmc::ClientInfo ci(reservation, 1.0, 0.0);
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo { return ci; };
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &ci;
+      };
       auto server_ready_f = [] () -> bool { return true; };
       auto submit_req_f = [] (const ClientId& c,
 			      std::unique_ptr<Request> req,
-			      dmc::PhaseType phase) {
+			      dmc::PhaseType phase,
+			      uint64_t req_cost) {
 	// empty; do nothing
       };
 
@@ -100,7 +121,7 @@ namespace crimson {
 	       std::chrono::seconds(3),
 	       std::chrono::seconds(5),
 	       std::chrono::seconds(2),
-	       false);
+	       AtLimit::Wait);
 
       auto lock_pq = [&](std::function<void()> code) {
 	test_locked(pq.data_mtx, code);
@@ -137,7 +158,7 @@ namespace crimson {
 
       Request req;
       dmc::ReqParams req_params(1, 1);
-      pq.add_request_time(req, client, req_params, dmc::get_time());
+      EXPECT_EQ(0, pq.add_request_time(req, client, req_params, dmc::get_time()));
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -164,6 +185,51 @@ namespace crimson {
     } // TEST
 
 
+    TEST(dmclock_server, delayed_tag_calc) {
+      using ClientId = int;
+      constexpr ClientId client1 = 17;
+
+      using DelayedQueue = PullPriorityQueue<ClientId, Request, true>;
+      using ImmediateQueue = PullPriorityQueue<ClientId, Request, false>;
+
+      ClientInfo info(0.0, 1.0, 1.0);
+      auto client_info_f = [&] (ClientId c) -> const ClientInfo* {
+	return &info;
+      };
+
+      Time t{1};
+      {
+	DelayedQueue queue(client_info_f);
+
+	queue.add_request_time({}, client1, {0,0}, t);
+	queue.add_request_time({}, client1, {0,0}, t + 1);
+	queue.add_request_time({}, client1, {10,10}, t + 2);
+
+	auto pr1 = queue.pull_request(t);
+	ASSERT_TRUE(pr1.is_retn());
+	auto pr2 = queue.pull_request(t + 1);
+	// ReqParams{10,10} from request #3 pushes request #2 over limit by 10s
+	ASSERT_TRUE(pr2.is_future());
+	EXPECT_DOUBLE_EQ(t + 11, pr2.getTime());
+      }
+      {
+	ImmediateQueue queue(client_info_f);
+
+	queue.add_request_time({}, client1, {0,0}, t);
+	queue.add_request_time({}, client1, {0,0}, t + 1);
+	queue.add_request_time({}, client1, {10,10}, t + 2);
+
+	auto pr1 = queue.pull_request(t);
+	ASSERT_TRUE(pr1.is_retn());
+	auto pr2 = queue.pull_request(t + 1);
+	// ReqParams{10,10} from request #3 has no effect on request #2
+	ASSERT_TRUE(pr2.is_retn());
+	auto pr3 = queue.pull_request(t + 2);
+	ASSERT_TRUE(pr3.is_future());
+	EXPECT_DOUBLE_EQ(t + 12, pr3.getTime());
+      }
+    }
+
 #if 0
     TEST(dmclock_server, reservation_timing) {
       using ClientId = int;
@@ -181,7 +247,9 @@ namespace crimson {
       dmc::ClientInfo ci(1.0, 0.0, 0.0);
       Queue pq;
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo { return ci; };
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &ci;
+      };
       auto server_ready_f = [] () -> bool { return true; };
       auto submit_req_f = [&] (const ClientId& c,
 			       std::unique_ptr<Request> req,
@@ -230,45 +298,46 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
       ClientId client2 = 98;
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(11), client1, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(0), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(98), client2, req_params);
-      pq.add_request(MyReq(44), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(11), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(0), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(98), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(44), client1, req_params));
 
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
 
-      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 1 == r.id % 2;});
+      pq.remove_by_req_filter([](MyReqRef&& r) -> bool {return 1 == r->id % 2;});
 
       EXPECT_EQ(5u, pq.request_count());
 
       std::list<MyReq> capture;
       pq.remove_by_req_filter(
-	[&capture] (const MyReq& r) -> bool {
-	  if (0 == r.id % 2) {
-	    capture.push_front(r);
+	[&capture] (MyReqRef&& r) -> bool {
+	  if (0 == r->id % 2) {
+	    capture.push_front(*r);
 	    return true;
 	  } else {
 	    return false;
@@ -299,28 +368,29 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(2), client1, req_params);
-      pq.add_request(MyReq(3), client1, req_params);
-      pq.add_request(MyReq(4), client1, req_params);
-      pq.add_request(MyReq(5), client1, req_params);
-      pq.add_request(MyReq(6), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(3), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(4), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(5), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(6), client1, req_params));
 
       EXPECT_EQ(1u, pq.client_count());
       EXPECT_EQ(6u, pq.request_count());
@@ -329,9 +399,9 @@ namespace crimson {
 
       std::vector<MyReq> capture;
       pq.remove_by_req_filter(
-	[&capture] (const MyReq& r) -> bool {
-	  if (1 == r.id % 2) {
-	    capture.push_back(r);
+	[&capture] (MyReqRef&& r) -> bool {
+	  if (1 == r->id % 2) {
+	    capture.push_back(*r);
 	    return true;
 	  } else {
 	    return false;
@@ -350,9 +420,9 @@ namespace crimson {
 
       std::vector<MyReq> capture2;
       pq.remove_by_req_filter(
-	[&capture2] (const MyReq& r) -> bool {
-	  if (0 == r.id % 2) {
-	    capture2.insert(capture2.begin(), r);
+	[&capture2] (MyReqRef&& r) -> bool {
+	  if (0 == r->id % 2) {
+	    capture2.insert(capture2.begin(), *r);
 	    return true;
 	  } else {
 	    return false;
@@ -381,28 +451,29 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(2), client1, req_params);
-      pq.add_request(MyReq(3), client1, req_params);
-      pq.add_request(MyReq(4), client1, req_params);
-      pq.add_request(MyReq(5), client1, req_params);
-      pq.add_request(MyReq(6), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(3), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(4), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(5), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(6), client1, req_params));
 
       EXPECT_EQ(1u, pq.client_count());
       EXPECT_EQ(6u, pq.request_count());
@@ -411,9 +482,9 @@ namespace crimson {
 
       std::vector<MyReq> capture;
       pq.remove_by_req_filter(
-	[&capture] (const MyReq& r) -> bool {
-	  if (1 == r.id % 2) {
-	    capture.insert(capture.begin(), r);
+	[&capture] (MyReqRef&& r) -> bool {
+	  if (1 == r->id % 2) {
+	    capture.insert(capture.begin(), *r);
 	    return true;
 	  } else {
 	    return false;
@@ -431,9 +502,9 @@ namespace crimson {
 
       std::vector<MyReq> capture2;
       pq.remove_by_req_filter(
-	[&capture2] (const MyReq& r) -> bool {
-	  if (0 == r.id % 2) {
-	    capture2.push_back(r);
+	[&capture2] (MyReqRef&& r) -> bool {
+	  if (0 == r->id % 2) {
+	    capture2.push_back(*r);
 	    return true;
 	  } else {
 	    return false;
@@ -462,32 +533,33 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
       ClientId client2 = 98;
 
       dmc::ClientInfo info1(0.0, 1.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info1;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(11), client1, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(0), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(98), client2, req_params);
-      pq.add_request(MyReq(44), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(11), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(0), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(98), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(44), client1, req_params));
 
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
@@ -496,8 +568,8 @@ namespace crimson {
 
       pq.remove_by_client(client1,
 			  true,
-			  [&removed] (const MyReq& r) {
-			    removed.push_front(r);
+			  [&removed] (MyReqRef&& r) {
+			    removed.push_front(*r);
 			  });
 
       EXPECT_EQ(3u, removed.size());
@@ -537,25 +609,24 @@ namespace crimson {
 
       QueueRef pq;
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1;
-	else if (client2 == c) return info2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1;
+	  return nullptr;
 	}
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
-      Request req;
       ReqParams req_params(1,1);
 
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(req, client1, req_params);
-	pq->add_request(req, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -591,26 +662,25 @@ namespace crimson {
       dmc::ClientInfo info1(2.0, 0.0, 0.0);
       dmc::ClientInfo info2(1.0, 0.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1;
-	else if (client2 == c) return info2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1;
+	  return nullptr;
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto old_time = dmc::get_time() - 100.0;
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request_time(req, client1, req_params, old_time);
-	pq->add_request_time(req, client2, req_params, old_time);
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, old_time));
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client2, req_params, old_time));
 	old_time += 0.001;
       }
 
@@ -636,6 +706,191 @@ namespace crimson {
     } // dmclock_server_pull.pull_reservation
 
 
+    TEST(dmclock_server_pull, update_client_info) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request,false>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 98;
+
+      dmc::ClientInfo info1(0.0, 100.0, 0.0);
+      dmc::ClientInfo info2(0.0, 200.0, 0.0);
+
+      QueueRef pq;
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
+	else {
+	  ADD_FAILURE() << "client info looked up for non-existant client";
+	  return nullptr;
+	}
+      };
+
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
+
+      ReqParams req_params(1,1);
+
+      auto now = dmc::get_time();
+
+      for (int i = 0; i < 5; ++i) {
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
+	now += 0.0001;
+      }
+
+      int c1_count = 0;
+      int c2_count = 0;
+      for (int i = 0; i < 10; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (i > 5) continue;
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(2, c1_count) <<
+	"before: one-third of request should have come from first client";
+      EXPECT_EQ(4, c2_count) <<
+	"before: two-thirds of request should have come from second client";
+
+      std::chrono::seconds dura(1);
+      std::this_thread::sleep_for(dura);
+
+      info1 = dmc::ClientInfo(0.0, 200.0, 0.0);
+      pq->update_client_info(17);
+
+      now = dmc::get_time();
+
+      for (int i = 0; i < 5; ++i) {
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
+	now += 0.0001;
+      }
+
+      c1_count = 0;
+      c2_count = 0;
+      for (int i = 0; i < 6; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(3, c1_count) <<
+	"after: one-third of request should have come from first client";
+      EXPECT_EQ(3, c2_count) <<
+	"after: two-thirds of request should have come from second client";
+    }
+
+
+    TEST(dmclock_server_pull, dynamic_cli_info_f) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request,true,true>;
+      using QueueRef = std::unique_ptr<Queue>;
+
+      ClientId client1 = 17;
+      ClientId client2 = 98;
+
+      std::vector<dmc::ClientInfo> info1;
+      std::vector<dmc::ClientInfo> info2;
+
+      info1.push_back(dmc::ClientInfo(0.0, 100.0, 0.0));
+      info1.push_back(dmc::ClientInfo(0.0, 150.0, 0.0));
+
+      info2.push_back(dmc::ClientInfo(0.0, 200.0, 0.0));
+      info2.push_back(dmc::ClientInfo(0.0, 50.0, 0.0));
+
+      size_t cli_info_group = 0;
+
+      QueueRef pq;
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1[cli_info_group];
+	else if (client2 == c) return &info2[cli_info_group];
+	else {
+	  ADD_FAILURE() << "client info looked up for non-existant client";
+	  return nullptr;
+	}
+      };
+
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
+
+      ReqParams req_params(1,1);
+
+      auto now = dmc::get_time();
+
+      for (int i = 0; i < 5; ++i) {
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
+	now += 0.0001;
+      }
+
+      int c1_count = 0;
+      int c2_count = 0;
+      for (int i = 0; i < 10; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (i > 5) continue;
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(2, c1_count) <<
+	"before: one-third of request should have come from first client";
+      EXPECT_EQ(4, c2_count) <<
+	"before: two-thirds of request should have come from second client";
+
+      std::chrono::seconds dura(1);
+      std::this_thread::sleep_for(dura);
+
+      cli_info_group = 1;
+ 
+      now = dmc::get_time();
+
+      for (int i = 0; i < 6; ++i) {
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
+	now += 0.0001;
+      }
+
+      c1_count = 0;
+      c2_count = 0;
+      for (int i = 0; i < 8; ++i) {
+	Queue::PullReq pr = pq->pull_request();
+	EXPECT_EQ(Queue::NextReqType::returning, pr.type);
+	auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
+
+	if (client1 == retn.client) ++c1_count;
+	else if (client2 == retn.client) ++c2_count;
+	else ADD_FAILURE() << "got request from neither of two clients";
+
+	EXPECT_EQ(PhaseType::priority, retn.phase);
+      }
+
+      EXPECT_EQ(6, c1_count) <<
+	"after: one-third of request should have come from first client";
+      EXPECT_EQ(2, c2_count) <<
+	"after: two-thirds of request should have come from second client";
+    }
+
+
     // This test shows what happens when a request can be ready (under
     // limit) but not schedulable since proportion tag is 0. We expect
     // to get some future and none responses.
@@ -650,27 +905,26 @@ namespace crimson {
       dmc::ClientInfo info1(1.0, 0.0, 0.0);
       dmc::ClientInfo info2(1.0, 0.0, 0.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	if (client1 == c) return info1;
-	else if (client2 == c) return info2;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	if (client1 == c) return &info1;
+	else if (client2 == c) return &info2;
 	else {
 	  ADD_FAILURE() << "client info looked up for non-existant client";
-	  return info1;
+	  return nullptr;
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
-      Request req;
-      ReqParams req_params(1,1);
+      ReqParams req_params(0, 0);
 
       // make sure all times are well before now
       auto start_time = dmc::get_time() - 100.0;
 
       // add six requests; for same client reservations spaced one apart
       for (int i = 0; i < 3; ++i) {
-	pq->add_request_time(req, client1, req_params, start_time);
-	pq->add_request_time(req, client2, req_params, start_time);
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, start_time));
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client2, req_params, start_time));
       }
 
       Queue::PullReq pr = pq->pull_request(start_time + 0.5);
@@ -711,11 +965,11 @@ namespace crimson {
 
       dmc::ClientInfo info(1.0, 1.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       // Request req;
       ReqParams req_params(1,1);
@@ -738,19 +992,18 @@ namespace crimson {
 
       dmc::ClientInfo info(1.0, 0.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(req, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::future, pr.type);
@@ -770,19 +1023,18 @@ namespace crimson {
 
       dmc::ClientInfo info(0.0, 1.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, true));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Allow));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(req, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
@@ -802,19 +1054,18 @@ namespace crimson {
 
       dmc::ClientInfo info(1.0, 0.0, 1.0);
 
-      auto client_info_f = [&] (ClientId c) -> dmc::ClientInfo {
-	return info;
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, true));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Allow));
 
-      Request req;
       ReqParams req_params(1,1);
 
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(req, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
@@ -822,5 +1073,68 @@ namespace crimson {
       auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
       EXPECT_EQ(client1, retn.client);
     }
+
+
+    TEST(dmclock_server_pull, pull_reject_at_limit) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId, Request, false>;
+      using MyReqRef = typename Queue::RequestRef;
+
+      ClientId client1 = 52;
+      ClientId client2 = 53;
+
+      dmc::ClientInfo info(0.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
+      };
+
+      Queue pq(client_info_f, AtLimit::Reject);
+
+      {
+        // success at 1 request per second
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{2}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{3}));
+        // request too soon
+        EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{3.9}));
+        // previous rejected request counts against limit
+        EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{4}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{6}));
+      }
+      {
+        auto r1 = MyReqRef{new Request};
+        ASSERT_EQ(0, pq.add_request(std::move(r1), client2, {}, Time{1}));
+        EXPECT_EQ(nullptr, r1); // add_request takes r1 on success
+        auto r2 = MyReqRef{new Request};
+        ASSERT_EQ(EAGAIN, pq.add_request(std::move(r2), client2, {}, Time{1}));
+        EXPECT_NE(nullptr, r2); // add_request does not take r2 on failure
+      }
+    }
+
+
+    TEST(dmclock_server_pull, pull_reject_threshold) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId, Request, false>;
+
+      ClientId client1 = 52;
+
+      dmc::ClientInfo info(0.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
+      };
+
+      // allow up to 3 seconds worth of limit before rejecting
+      Queue pq(client_info_f, RejectThreshold{3.0});
+
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // at limit=1
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 1 over
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 2 over
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1})); // 3 over
+      EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{1})); // reject
+      EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{3})); // 3 over
+    }
+
   } // namespace dmclock
 } // namespace crimson

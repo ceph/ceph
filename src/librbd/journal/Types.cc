@@ -2,13 +2,16 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/journal/Types.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/stringify.h"
 #include "include/types.h"
 #include "common/Formatter.h"
 
 namespace librbd {
 namespace journal {
+
+using ceph::encode;
+using ceph::decode;
 
 namespace {
 
@@ -28,7 +31,7 @@ public:
 
   template <typename T>
   inline void operator()(const T& t) const {
-    ::encode(static_cast<uint32_t>(T::TYPE), m_bl);
+    encode(static_cast<uint32_t>(T::TYPE), m_bl);
     t.encode(m_bl);
   }
 private:
@@ -37,7 +40,7 @@ private:
 
 class DecodeVisitor : public boost::static_visitor<void> {
 public:
-  DecodeVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
   }
 
@@ -47,7 +50,7 @@ public:
   }
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpVisitor : public boost::static_visitor<void> {
@@ -69,23 +72,41 @@ private:
 } // anonymous namespace
 
 void AioDiscardEvent::encode(bufferlist& bl) const {
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(skip_partial_discard, bl);
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  bool skip_partial_discard = (discard_granularity_bytes > 0);
+  encode(skip_partial_discard, bl);
+  encode(discard_granularity_bytes, bl);
 }
 
-void AioDiscardEvent::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(offset, it);
-  ::decode(length, it);
+void AioDiscardEvent::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
+
+  bool skip_partial_discard = false;
   if (version >= 4) {
-    ::decode(skip_partial_discard, it);
+    decode(skip_partial_discard, it);
+  }
+
+  if (version >= 5) {
+    decode(discard_granularity_bytes, it);
+  } else {
+    if (skip_partial_discard) {
+      // use a size larger than the maximum object size which will
+      // truncated down to object size during IO processing
+      discard_granularity_bytes = std::numeric_limits<uint32_t>::max();
+    } else {
+      discard_granularity_bytes = 0;
+    }
   }
 }
 
 void AioDiscardEvent::dump(Formatter *f) const {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
-  f->dump_bool("skip_partial_discard", skip_partial_discard);
+  f->dump_unsigned("discard_granularity_bytes", discard_granularity_bytes);
 }
 
 uint32_t AioWriteEvent::get_fixed_size() {
@@ -93,15 +114,17 @@ uint32_t AioWriteEvent::get_fixed_size() {
 }
 
 void AioWriteEvent::encode(bufferlist& bl) const {
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(data, bl);
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  encode(data, bl);
 }
 
-void AioWriteEvent::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(offset, it);
-  ::decode(length, it);
-  ::decode(data, it);
+void AioWriteEvent::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
+  decode(data, it);
 }
 
 void AioWriteEvent::dump(Formatter *f) const {
@@ -110,15 +133,17 @@ void AioWriteEvent::dump(Formatter *f) const {
 }
 
 void AioWriteSameEvent::encode(bufferlist& bl) const {
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(data, bl);
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  encode(data, bl);
 }
 
-void AioWriteSameEvent::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(offset, it);
-  ::decode(length, it);
-  ::decode(data, it);
+void AioWriteSameEvent::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
+  decode(data, it);
 }
 
 void AioWriteSameEvent::dump(Formatter *f) const {
@@ -126,21 +151,48 @@ void AioWriteSameEvent::dump(Formatter *f) const {
   f->dump_unsigned("length", length);
 }
 
+uint32_t AioCompareAndWriteEvent::get_fixed_size() {
+  return EventEntry::get_fixed_size() + 32 /* offset, length */;
+}
+
+void AioCompareAndWriteEvent::encode(bufferlist& bl) const {
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  encode(cmp_data, bl);
+  encode(write_data, bl);
+}
+
+void AioCompareAndWriteEvent::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
+  decode(cmp_data, it);
+  decode(write_data, it);
+}
+
+void AioCompareAndWriteEvent::dump(Formatter *f) const {
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+}
+
 void AioFlushEvent::encode(bufferlist& bl) const {
 }
 
-void AioFlushEvent::decode(__u8 version, bufferlist::iterator& it) {
+void AioFlushEvent::decode(__u8 version, bufferlist::const_iterator& it) {
 }
 
 void AioFlushEvent::dump(Formatter *f) const {
 }
 
 void OpEventBase::encode(bufferlist& bl) const {
-  ::encode(op_tid, bl);
+  using ceph::encode;
+  encode(op_tid, bl);
 }
 
-void OpEventBase::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(op_tid, it);
+void OpEventBase::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(op_tid, it);
 }
 
 void OpEventBase::dump(Formatter *f) const {
@@ -149,14 +201,16 @@ void OpEventBase::dump(Formatter *f) const {
 
 void OpFinishEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(op_tid, bl);
-  ::encode(r, bl);
+  using ceph::encode;
+  encode(op_tid, bl);
+  encode(r, bl);
 }
 
-void OpFinishEvent::decode(__u8 version, bufferlist::iterator& it) {
+void OpFinishEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(op_tid, it);
-  ::decode(r, it);
+  using ceph::decode;
+  decode(op_tid, it);
+  decode(r, it);
 }
 
 void OpFinishEvent::dump(Formatter *f) const {
@@ -166,37 +220,37 @@ void OpFinishEvent::dump(Formatter *f) const {
 }
 
 void SnapEventBase::encode(bufferlist& bl) const {
+  using ceph::encode;
   OpEventBase::encode(bl);
-  ::encode(snap_name, bl);
-  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+  encode(snap_name, bl);
+  encode(snap_namespace, bl);
 }
 
-void SnapEventBase::decode(__u8 version, bufferlist::iterator& it) {
+void SnapEventBase::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
   OpEventBase::decode(version, it);
-  ::decode(snap_name, it);
+  using ceph::decode;
+  decode(snap_name, it);
   if (version >= 4) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    ::decode(sn, it);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, it);
   }
 }
 
 void SnapEventBase::dump(Formatter *f) const {
   OpEventBase::dump(f);
   f->dump_string("snap_name", snap_name);
-  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
+  snap_namespace.dump(f);
 }
 
 void SnapCreateEvent::encode(bufferlist &bl) const {
   SnapEventBase::encode(bl);
 }
 
-void SnapCreateEvent::decode(__u8 version, bufferlist::iterator& it) {
+void SnapCreateEvent::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
   SnapEventBase::decode(version, it);
   if (version == 3) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    ::decode(sn, it);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, it);
   }
 }
 
@@ -206,12 +260,14 @@ void SnapCreateEvent::dump(Formatter *f) const {
 
 void SnapLimitEvent::encode(bufferlist &bl) const {
   OpEventBase::encode(bl);
-  ::encode(limit, bl);
+  using ceph::encode;
+  encode(limit, bl);
 }
 
-void SnapLimitEvent::decode(__u8 version, bufferlist::iterator& it) {
+void SnapLimitEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(limit, it);
+  using ceph::decode;
+  decode(limit, it);
 }
 
 void SnapLimitEvent::dump(Formatter *f) const {
@@ -221,17 +277,19 @@ void SnapLimitEvent::dump(Formatter *f) const {
 
 void SnapRenameEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(dst_snap_name, bl);
-  ::encode(snap_id, bl);
-  ::encode(src_snap_name, bl);
+  using ceph::encode;
+  encode(dst_snap_name, bl);
+  encode(snap_id, bl);
+  encode(src_snap_name, bl);
 }
 
-void SnapRenameEvent::decode(__u8 version, bufferlist::iterator& it) {
+void SnapRenameEvent::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
   OpEventBase::decode(version, it);
-  ::decode(dst_snap_name, it);
-  ::decode(snap_id, it);
+  decode(dst_snap_name, it);
+  decode(snap_id, it);
   if (version >= 2) {
-    ::decode(src_snap_name, it);
+    decode(src_snap_name, it);
   }
 }
 
@@ -244,12 +302,14 @@ void SnapRenameEvent::dump(Formatter *f) const {
 
 void RenameEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(image_name, bl);
+  using ceph::encode;
+  encode(image_name, bl);
 }
 
-void RenameEvent::decode(__u8 version, bufferlist::iterator& it) {
+void RenameEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(image_name, it);
+  using ceph::decode;
+  decode(image_name, it);
 }
 
 void RenameEvent::dump(Formatter *f) const {
@@ -259,12 +319,14 @@ void RenameEvent::dump(Formatter *f) const {
 
 void ResizeEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(size, bl);
+  using ceph::encode;
+  encode(size, bl);
 }
 
-void ResizeEvent::decode(__u8 version, bufferlist::iterator& it) {
+void ResizeEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(size, it);
+  using ceph::decode;
+  decode(size, it);
 }
 
 void ResizeEvent::dump(Formatter *f) const {
@@ -275,7 +337,7 @@ void ResizeEvent::dump(Formatter *f) const {
 void DemotePromoteEvent::encode(bufferlist& bl) const {
 }
 
-void DemotePromoteEvent::decode(__u8 version, bufferlist::iterator& it) {
+void DemotePromoteEvent::decode(__u8 version, bufferlist::const_iterator& it) {
 }
 
 void DemotePromoteEvent::dump(Formatter *f) const {
@@ -283,14 +345,16 @@ void DemotePromoteEvent::dump(Formatter *f) const {
 
 void UpdateFeaturesEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(features, bl);
-  ::encode(enabled, bl);
+  using ceph::encode;
+  encode(features, bl);
+  encode(enabled, bl);
 }
 
-void UpdateFeaturesEvent::decode(__u8 version, bufferlist::iterator& it) {
+void UpdateFeaturesEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(features, it);
-  ::decode(enabled, it);
+  using ceph::decode;
+  decode(features, it);
+  decode(enabled, it);
 }
 
 void UpdateFeaturesEvent::dump(Formatter *f) const {
@@ -301,14 +365,16 @@ void UpdateFeaturesEvent::dump(Formatter *f) const {
 
 void MetadataSetEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(key, bl);
-  ::encode(value, bl);
+  using ceph::encode;
+  encode(key, bl);
+  encode(value, bl);
 }
 
-void MetadataSetEvent::decode(__u8 version, bufferlist::iterator& it) {
+void MetadataSetEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(key, it);
-  ::decode(value, it);
+  using ceph::decode;
+  decode(key, it);
+  decode(value, it);
 }
 
 void MetadataSetEvent::dump(Formatter *f) const {
@@ -319,12 +385,14 @@ void MetadataSetEvent::dump(Formatter *f) const {
 
 void MetadataRemoveEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(key, bl);
+  using ceph::encode;
+  encode(key, bl);
 }
 
-void MetadataRemoveEvent::decode(__u8 version, bufferlist::iterator& it) {
+void MetadataRemoveEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(key, it);
+  using ceph::decode;
+  decode(key, it);
 }
 
 void MetadataRemoveEvent::dump(Formatter *f) const {
@@ -333,10 +401,10 @@ void MetadataRemoveEvent::dump(Formatter *f) const {
 }
 
 void UnknownEvent::encode(bufferlist& bl) const {
-  assert(false);
+  ceph_abort();
 }
 
-void UnknownEvent::decode(__u8 version, bufferlist::iterator& it) {
+void UnknownEvent::decode(__u8 version, bufferlist::const_iterator& it) {
 }
 
 void UnknownEvent::dump(Formatter *f) const {
@@ -347,17 +415,17 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(4, 1, bl);
+  ENCODE_START(5, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
   encode_metadata(bl);
 }
 
-void EventEntry::decode(bufferlist::iterator& it) {
+void EventEntry::decode(bufferlist::const_iterator& it) {
   DECODE_START(1, it);
 
   uint32_t event_type;
-  ::decode(event_type, it);
+  decode(event_type, it);
 
   // select the correct payload variant based upon the encoded op
   switch (event_type) {
@@ -403,6 +471,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_DEMOTE_PROMOTE:
     event = DemotePromoteEvent();
     break;
+  case EVENT_TYPE_SNAP_LIMIT:
+    event = SnapLimitEvent();
+    break;
   case EVENT_TYPE_UPDATE_FEATURES:
     event = UpdateFeaturesEvent();
     break;
@@ -414,6 +485,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
     break;
   case EVENT_TYPE_AIO_WRITESAME:
     event = AioWriteSameEvent();
+    break;
+  case EVENT_TYPE_AIO_COMPARE_AND_WRITE:
+    event = AioCompareAndWriteEvent();
     break;
   default:
     event = UnknownEvent();
@@ -434,19 +508,19 @@ void EventEntry::dump(Formatter *f) const {
 
 void EventEntry::encode_metadata(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(timestamp, bl);
+  encode(timestamp, bl);
   ENCODE_FINISH(bl);
 }
 
-void EventEntry::decode_metadata(bufferlist::iterator& it) {
+void EventEntry::decode_metadata(bufferlist::const_iterator& it) {
   DECODE_START(1, it);
-  ::decode(timestamp, it);
+  decode(timestamp, it);
   DECODE_FINISH(it);
 }
 
 void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(AioDiscardEvent()));
-  o.push_back(new EventEntry(AioDiscardEvent(123, 345, false), utime_t(1, 1)));
+  o.push_back(new EventEntry(AioDiscardEvent(123, 345, 4096), utime_t(1, 1)));
 
   bufferlist bl;
   bl.append(std::string(32, '1'));
@@ -499,13 +573,15 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
 // Journal Client
 
 void ImageClientMeta::encode(bufferlist& bl) const {
-  ::encode(tag_class, bl);
-  ::encode(resync_requested, bl);
+  using ceph::encode;
+  encode(tag_class, bl);
+  encode(resync_requested, bl);
 }
 
-void ImageClientMeta::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(tag_class, it);
-  ::decode(resync_requested, it);
+void ImageClientMeta::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(tag_class, it);
+  decode(resync_requested, it);
 }
 
 void ImageClientMeta::dump(Formatter *f) const {
@@ -514,20 +590,20 @@ void ImageClientMeta::dump(Formatter *f) const {
 }
 
 void MirrorPeerSyncPoint::encode(bufferlist& bl) const {
-  ::encode(snap_name, bl);
-  ::encode(from_snap_name, bl);
-  ::encode(object_number, bl);
-  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+  using ceph::encode;
+  encode(snap_name, bl);
+  encode(from_snap_name, bl);
+  encode(object_number, bl);
+  encode(snap_namespace, bl);
 }
 
-void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(snap_name, it);
-  ::decode(from_snap_name, it);
-  ::decode(object_number, it);
+void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(snap_name, it);
+  decode(from_snap_name, it);
+  decode(object_number, it);
   if (version >= 2) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    ::decode(sn, it);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, it);
   }
 }
 
@@ -537,37 +613,39 @@ void MirrorPeerSyncPoint::dump(Formatter *f) const {
   if (object_number) {
     f->dump_unsigned("object_number", *object_number);
   }
-  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
+  snap_namespace.dump(f);
 }
 
 void MirrorPeerClientMeta::encode(bufferlist& bl) const {
-  ::encode(image_id, bl);
-  ::encode(static_cast<uint32_t>(state), bl);
-  ::encode(sync_object_count, bl);
-  ::encode(static_cast<uint32_t>(sync_points.size()), bl);
+  using ceph::encode;
+  encode(image_id, bl);
+  encode(static_cast<uint32_t>(state), bl);
+  encode(sync_object_count, bl);
+  encode(static_cast<uint32_t>(sync_points.size()), bl);
   for (auto &sync_point : sync_points) {
     sync_point.encode(bl);
   }
-  ::encode(snap_seqs, bl);
+  encode(snap_seqs, bl);
 }
 
-void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(image_id, it);
+void MirrorPeerClientMeta::decode(__u8 version, bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(image_id, it);
 
   uint32_t decode_state;
-  ::decode(decode_state, it);
+  decode(decode_state, it);
   state = static_cast<MirrorPeerState>(decode_state);
 
-  ::decode(sync_object_count, it);
+  decode(sync_object_count, it);
 
   uint32_t sync_point_count;
-  ::decode(sync_point_count, it);
+  decode(sync_point_count, it);
   sync_points.resize(sync_point_count);
   for (auto &sync_point : sync_points) {
     sync_point.decode(version, it);
   }
 
-  ::decode(snap_seqs, it);
+  decode(snap_seqs, it);
 }
 
 void MirrorPeerClientMeta::dump(Formatter *f) const {
@@ -594,17 +672,17 @@ void MirrorPeerClientMeta::dump(Formatter *f) const {
 void CliClientMeta::encode(bufferlist& bl) const {
 }
 
-void CliClientMeta::decode(__u8 version, bufferlist::iterator& it) {
+void CliClientMeta::decode(__u8 version, bufferlist::const_iterator& it) {
 }
 
 void CliClientMeta::dump(Formatter *f) const {
 }
 
 void UnknownClientMeta::encode(bufferlist& bl) const {
-  assert(false);
+  ceph_abort();
 }
 
-void UnknownClientMeta::decode(__u8 version, bufferlist::iterator& it) {
+void UnknownClientMeta::decode(__u8 version, bufferlist::const_iterator& it) {
 }
 
 void UnknownClientMeta::dump(Formatter *f) const {
@@ -620,11 +698,11 @@ void ClientData::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ClientData::decode(bufferlist::iterator& it) {
+void ClientData::decode(bufferlist::const_iterator& it) {
   DECODE_START(1, it);
 
   uint32_t client_meta_type;
-  ::decode(client_meta_type, it);
+  decode(client_meta_type, it);
 
   // select the correct payload variant based upon the encoded op
   switch (client_meta_type) {
@@ -663,17 +741,19 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
 // Journal Tag
 
 void TagPredecessor::encode(bufferlist& bl) const {
-  ::encode(mirror_uuid, bl);
-  ::encode(commit_valid, bl);
-  ::encode(tag_tid, bl);
-  ::encode(entry_tid, bl);
+  using ceph::encode;
+  encode(mirror_uuid, bl);
+  encode(commit_valid, bl);
+  encode(tag_tid, bl);
+  encode(entry_tid, bl);
 }
 
-void TagPredecessor::decode(bufferlist::iterator& it) {
-  ::decode(mirror_uuid, it);
-  ::decode(commit_valid, it);
-  ::decode(tag_tid, it);
-  ::decode(entry_tid, it);
+void TagPredecessor::decode(bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(mirror_uuid, it);
+  decode(commit_valid, it);
+  decode(tag_tid, it);
+  decode(entry_tid, it);
 }
 
 void TagPredecessor::dump(Formatter *f) const {
@@ -684,12 +764,14 @@ void TagPredecessor::dump(Formatter *f) const {
 }
 
 void TagData::encode(bufferlist& bl) const {
-  ::encode(mirror_uuid, bl);
+  using ceph::encode;
+  encode(mirror_uuid, bl);
   predecessor.encode(bl);
 }
 
-void TagData::decode(bufferlist::iterator& it) {
-  ::decode(mirror_uuid, it);
+void TagData::decode(bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(mirror_uuid, it);
   predecessor.decode(it);
 }
 
@@ -752,6 +834,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
   case EVENT_TYPE_DEMOTE_PROMOTE:
     out << "Demote/Promote";
     break;
+  case EVENT_TYPE_SNAP_LIMIT:
+    out << "SnapLimit";
+    break;
   case EVENT_TYPE_UPDATE_FEATURES:
     out << "UpdateFeatures";
     break;
@@ -763,6 +848,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_AIO_WRITESAME:
     out << "AioWriteSame";
+    break;
+  case EVENT_TYPE_AIO_COMPARE_AND_WRITE:
+    out << "AioCompareAndWrite";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

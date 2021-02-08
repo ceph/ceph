@@ -8,7 +8,7 @@
 
 class ObjecterWriteback : public WritebackHandler {
  public:
-  ObjecterWriteback(Objecter *o, Finisher *fin, Mutex *lock)
+  ObjecterWriteback(Objecter *o, Finisher *fin, ceph::mutex *lock)
     : m_objecter(o),
       m_finisher(fin),
       m_lock(lock) { }
@@ -17,7 +17,9 @@ class ObjecterWriteback : public WritebackHandler {
   void read(const object_t& oid, uint64_t object_no,
 		    const object_locator_t& oloc, uint64_t off, uint64_t len,
 		    snapid_t snapid, bufferlist *pbl, uint64_t trunc_size,
-		    __u32 trunc_seq, int op_flags, Context *onfinish) override {
+		    __u32 trunc_seq, int op_flags,
+                    const ZTracer::Trace &parent_trace,
+                    Context *onfinish) override {
     m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
 			   trunc_size, trunc_seq,
 			   new C_OnFinisher(new C_Lock(m_lock, onfinish),
@@ -34,6 +36,7 @@ class ObjecterWriteback : public WritebackHandler {
 			   const SnapContext& snapc, const bufferlist &bl,
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
+                           const ZTracer::Trace &parent_trace,
 			   Context *oncommit) override {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
 				   trunc_size, trunc_seq,
@@ -63,7 +66,7 @@ class ObjecterWriteback : public WritebackHandler {
  private:
   Objecter *m_objecter;
   Finisher *m_finisher;
-  Mutex *m_lock;
+  ceph::mutex *m_lock;
 };
 
 #endif

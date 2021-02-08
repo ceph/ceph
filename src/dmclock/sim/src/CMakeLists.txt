@@ -1,9 +1,4 @@
-include_directories(ssched) # ssched code
-include_directories(../../src) # dmclock code
-include_directories(../../support/src)
-include_directories(${BOOST_INCLUDE_DIR})
-
-set(local_flags "-Wall -pthread ${CMAKE_CXX_SIM_FLAGS}")
+set(local_flags "-Wall ${CMAKE_CXX_SIM_FLAGS}")
 
 set(ssched_sim_srcs test_ssched.cc test_ssched_main.cc)
 set(dmc_sim_srcs test_dmclock.cc test_dmclock_main.cc)
@@ -28,6 +23,7 @@ set_property(
   )
 
 add_executable(ssched_sim EXCLUDE_FROM_ALL ${ssched_sim_srcs})
+target_include_directories(ssched_sim PRIVATE ssched) # ssched code
 add_executable(dmc_sim EXCLUDE_FROM_ALL ${dmc_sim_srcs} ${config_srcs})
 
 set_target_properties(ssched_sim dmc_sim
@@ -36,7 +32,7 @@ set_target_properties(ssched_sim dmc_sim
 
 add_dependencies(dmc_sim dmclock)
 
-target_link_libraries(ssched_sim LINK_PRIVATE pthread)
-target_link_libraries(dmc_sim LINK_PRIVATE pthread $<TARGET_FILE:dmclock>)
+target_link_libraries(ssched_sim LINK_PRIVATE Threads::Threads)
+target_link_libraries(dmc_sim LINK_PRIVATE dmclock)
 
 add_custom_target(dmclock-sims DEPENDS ssched_sim dmc_sim)

@@ -21,7 +21,7 @@
 #include "cls/numops/cls_numops_client.h"
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 using namespace librados;
 

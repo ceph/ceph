@@ -32,20 +32,6 @@
 [submodule "src/isa-l"]
 	path = src/isa-l
 	url = https://github.com/ceph/isa-l
-[submodule "src/lua"]
-	path = src/lua
-	url = https://github.com/ceph/lua.git
-	branch = lua-5.3-ceph
-	ignore = dirty
-[submodule "src/Beast"]
-	path = src/Beast
-	url = https://github.com/ceph/Beast.git
-[submodule "src/boost"]
-	path = src/boost
-	url = https://github.com/boostorg/boost.git
-[submodule "src/dpdk"]
-	path = src/dpdk
-	url = https://github.com/ceph/dpdk
 [submodule "src/zstd"]
 	path = src/zstd
 	url = https://github.com/facebook/zstd
@@ -55,3 +41,39 @@
 [submodule "src/blkin"]
 	path = src/blkin
 	url = https://github.com/ceph/blkin
+[submodule "src/rapidjson"]
+	path = src/rapidjson
+	url = https://github.com/ceph/rapidjson
+[submodule "src/dmclock"]
+	path = src/dmclock
+	url = https://github.com/ceph/dmclock.git
+[submodule "src/seastar"]
+	path = src/seastar
+	url = https://github.com/ceph/seastar.git
+[submodule "src/fmt"]
+	path = src/fmt
+	url = https://github.com/ceph/fmt.git
+[submodule "src/c-ares"]
+	path = src/c-ares
+	url = https://github.com/ceph/c-ares.git
+[submodule "src/spawn"]
+	path = src/spawn
+	url = https://github.com/ceph/spawn.git
+[submodule "src/pybind/mgr/rook/rook-client-python"]
+	path = src/pybind/mgr/rook/rook-client-python
+	url = https://github.com/ceph/rook-client-python.git
+[submodule "s3select"]
+	path = src/s3select
+	url = https://github.com/ceph/s3select.git
+[submodule "src/jaegertracing/opentracing-cpp"]
+	path = src/jaegertracing/opentracing-cpp
+	url = https://github.com/opentracing/opentracing-cpp.git
+	branch = v1.6.0
+[submodule "src/jaegertracing/jaeger-client-cpp"]
+	path = src/jaegertracing/jaeger-client-cpp
+	url = https://github.com/ceph/jaeger-client-cpp.git
+	branch = hunter-disabled
+[submodule "src/jaegertracing/thrift"]
+	path = src/jaegertracing/thrift
+	url = https://github.com/apache/thrift.git
+	branch = 0.13.0

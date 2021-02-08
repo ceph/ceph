@@ -5,3 +5,8 @@ tasks:
     clients:
       client.0:
         - rgw/s3_multipart_upload.pl
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw relaxed s3 bucket names: true

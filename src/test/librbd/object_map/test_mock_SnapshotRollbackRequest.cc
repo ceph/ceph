@@ -25,18 +25,18 @@ public:
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   read(ObjectMap<>::object_map_name(ictx->id, snap_id),
-                       0, 0, _)).WillOnce(Return(r));
+                       0, 0, _, _, _)).WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   read(ObjectMap<>::object_map_name(ictx->id, snap_id),
-                       0, 0, _)).WillOnce(DoDefault());
+                       0, 0, _, _, _)).WillOnce(DoDefault());
     }
   }
 
   void expect_write_map(librbd::ImageCtx *ictx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                 exec(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _,
-		     StrEq("lock"), StrEq("assert_locked"), _, _, _))
+		     StrEq("lock"), StrEq("assert_locked"), _, _, _, _))
                   .WillOnce(DoDefault());
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
@@ -53,7 +53,8 @@ public:
 
   void expect_invalidate(librbd::ImageCtx *ictx, uint32_t times) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
+                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _,
+                     _, _, _))
                   .Times(times)
                   .WillRepeatedly(DoDefault());
   }
@@ -99,12 +100,15 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
   ASSERT_EQ(0, cond_ctx.wait());
 
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     uint64_t flags;
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_NE(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(CEPH_NOSNAP,
+                                RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 
@@ -128,12 +132,15 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, WriteMapError) {
   ASSERT_EQ(0, cond_ctx.wait());
 
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     uint64_t flags;
     ASSERT_EQ(0, ictx->get_flags(snap_id, &flags));
     ASSERT_EQ(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
   }
-  ASSERT_TRUE(ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID));
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(CEPH_NOSNAP,
+                                RBD_FLAG_OBJECT_MAP_INVALID, &flags_set));
+  ASSERT_TRUE(flags_set);
   expect_unlock_exclusive_lock(*ictx);
 }
 

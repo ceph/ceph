@@ -26,7 +26,7 @@
 #include "DPDKStack.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
@@ -112,7 +112,7 @@ uint8_t tcp_option::fill(tcp_hdr* th, uint8_t options_size)
     new (off) tcp_option::eol;
     size += option_len::eol;
   }
-  assert(size == options_size);
+  ceph_assert(size == options_size);
 
   return size;
 }
@@ -153,9 +153,10 @@ bool ipv4_tcp::forward(forward_hash& out_hash_data, Packet& p, size_t off)
 }
 
 int tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, const SocketOptions &opts,
-                 ServerSocket *sock)
+                 int type, unsigned addr_slot, ServerSocket *sock)
 {
-  auto p = new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts);
+  auto p = new DPDKServerSocketImpl<tcp<ipv4_traits>>(tcpv4, port, opts,
+						      type, addr_slot);
   int r = p->listen();
   if (r < 0) {
     delete p;

@@ -55,18 +55,18 @@ e 12v
  *
  * Each version's value (value_1, value_2, ..., value_n) is a blob of data,
  * incomprehensible to the Paxos. These values are proposed to the Paxos on
- * propose_new_value() and each one is a transaction encoded in a bufferlist.
+ * propose_new_value() and each one is a transaction encoded in a ceph::buffer::list.
  *
  * The Paxos will write the value to disk, associating it with its version,
  * but will take a step further: the value shall be decoded, and the operations
  * on that transaction shall be applied during the same transaction that will
- * write the value's encoded bufferlist to disk. This behavior ensures that
+ * write the value's encoded ceph::buffer::list to disk. This behavior ensures that
  * whatever is being proposed will only be available on the store when it is
  * applied by Paxos, which will then be aware of such new values, guaranteeing
  * the store state is always consistent without requiring shady workarounds.
  *
  * So, let's say that FooMonitor proposes the following transaction, neatly
- * encoded on a bufferlist of course:
+ * encoded on a ceph::buffer::list of course:
  *
  *  Tx_Foo
  *    put(foo, last_committed, 3)
@@ -75,16 +75,16 @@ e 12v
  *    erase(foo, 1)
  *    put(foo, first_committed, 3)
  *
- * And knowing that the Paxos is proposed Tx_Foo as a bufferlist, once it is
+ * And knowing that the Paxos is proposed Tx_Foo as a ceph::buffer::list, once it is
  * ready to commit, and assuming we are now committing version 5 of the Paxos,
  * we will do something along the lines of:
  *
  *  Tx proposed_tx;
- *  proposed_tx.decode(Tx_foo_bufferlist);
+ *  proposed_tx.decode(Tx_foo_ceph::buffer::list);
  *
  *  Tx our_tx;
  *  our_tx.put(paxos, last_committed, 5);
- *  our_tx.put(paxos, 5, Tx_foo_bufferlist);
+ *  our_tx.put(paxos, 5, Tx_foo_ceph::buffer::list);
  *  our_tx.append(proposed_tx);
  *
  *  store_apply(our_tx);
@@ -98,7 +98,7 @@ e 12v
  *		    2 -> value_2
  *		    3 -> value_3
  *		    4 -> value_4
- *		    5 -> Tx_foo_bufferlist
+ *		    5 -> Tx_foo_ceph::buffer::list
  *  foo:
  *    first_committed -> 3
  *     last_committed -> 3
@@ -162,7 +162,7 @@ enum {
 
 // i am one state machine.
 /**
- * This libary is based on the Paxos algorithm, but varies in a few key ways:
+ * This library is based on the Paxos algorithm, but varies in a few key ways:
  *  1- Only a single new value is generated at a time, simplifying the recovery logic.
  *  2- Nodes track "committed" values, and share them generously (and trustingly)
  *  3- A 'leasing' mechanism is built-in, allowing nodes to determine when it is 
@@ -179,7 +179,7 @@ class Paxos {
   /**
    * The Monitor to which this Paxos class is associated with.
    */
-  Monitor *mon;
+  Monitor &mon;
 
   /// perf counter for internal instrumentations
   PerfCounters *logger;
@@ -187,12 +187,12 @@ class Paxos {
   void init_logger();
 
   // my state machine info
-  const string paxos_name;
+  const std::string paxos_name;
 
   friend class Monitor;
   friend class PaxosService;
 
-  list<std::string> extra_state_dirs;
+  std::list<std::string> extra_state_dirs;
 
   // LEADER+PEON
 
@@ -230,6 +230,8 @@ public:
     STATE_WRITING_PREVIOUS,
     // leader: refresh following a commit
     STATE_REFRESH,
+    // Shutdown after WRITING or WRITING_PREVIOUS
+    STATE_SHUTDOWN
   };
 
   /**
@@ -241,7 +243,7 @@ public:
    * @param s State value.
    * @return The state's name.
    */
-  static const string get_statename(int s) {
+  static const std::string get_statename(int s) {
     switch (s) {
     case STATE_RECOVERING:
       return "recovering";
@@ -257,6 +259,8 @@ public:
       return "writing-previous";
     case STATE_REFRESH:
       return "refresh";
+    case STATE_SHUTDOWN:
+      return "shutdown";
     default:
       return "UNKNOWN";
     }
@@ -270,6 +274,9 @@ private:
   /**
    * @}
    */
+  int commits_started = 0;
+
+  ceph::condition_variable shutdown_cond;
 
 public:
   /**
@@ -305,6 +312,9 @@ public:
 
   /// @return 'true' if we are refreshing an update just committed
   bool is_refresh() const { return state == STATE_REFRESH; }
+
+  /// @return 'true' if we are in the process of shutting down
+  bool is_shutdown() const { return state == STATE_SHUTDOWN; }
 
 private:
   /**
@@ -350,7 +360,7 @@ private:
    *
    * On the Leader, it will be the Proposal Number picked by the Leader 
    * itself. On the Peon, however, it will be the proposal sent by the Leader
-   * and it will only be updated iif its value is higher than the one
+   * and it will only be updated if its value is higher than the one
    * already known by the Peon.
    */
   version_t accepted_pn;
@@ -367,7 +377,7 @@ private:
    * When the Leader starts the collect phase, each Peon will reply with its
    * first committed version, which will then be kept in this map.
    */
-  map<int,version_t> peer_first_committed;
+  std::map<int,version_t> peer_first_committed;
   /**
    * Map holding the last committed version by each quorum member.
    *
@@ -375,7 +385,7 @@ private:
    * When the Leader starts the collect phase, each Peon will reply with its
    * last committed version, which will then be kept in this map.
    */
-  map<int,version_t> peer_last_committed;
+  std::map<int,version_t> peer_last_committed;
   /**
    * @}
    */
@@ -392,11 +402,11 @@ private:
    * keep leases. Each lease will have an expiration date, which may or may
    * not be extended. 
    */
-  utime_t lease_expire;
+  ceph::real_clock::time_point lease_expire;
   /**
    * List of callbacks waiting for our state to change into STATE_ACTIVE.
    */
-  list<Context*> waiting_for_active;
+  std::list<Context*> waiting_for_active;
   /**
    * List of callbacks waiting for the chance to read a version from us.
    *
@@ -412,7 +422,7 @@ private:
    * with the latest proposal, or if we don't really care about the remaining
    * uncommitted values --, or if we're on a quorum of one.
    */
-  list<Context*> waiting_for_readable;
+  std::list<Context*> waiting_for_readable;
   /**
    * @}
    */
@@ -467,7 +477,7 @@ private:
    * on the Leader, or learnt by the Leader from a Peon during the collect
    * phase.
    */
-  bufferlist uncommitted_value;
+  ceph::buffer::list uncommitted_value;
   /**
    * Used to specify when an on-going collect phase times out.
    */
@@ -489,7 +499,7 @@ private:
    * members, guaranteeing that we trigger new elections if some don't ack in
    * the expected timeframe.
    */
-  set<int>   acked_lease;
+  std::set<int>   acked_lease;
   /**
    * Callback responsible for extending the lease periodically.
    */
@@ -525,10 +535,10 @@ private:
   /**
    * New Value being proposed to the Peons.
    *
-   * This bufferlist holds the value the Leader is proposing to the Peons, and
+   * This ceph::buffer::list holds the value the Leader is proposing to the Peons, and
    * that will be committed if the Peons do accept the proposal.
    */
-  bufferlist new_value;
+  ceph::buffer::list new_value;
   /**
    * Set of participants (Leader & Peons) that accepted the new proposed value.
    *
@@ -537,7 +547,7 @@ private:
    * participants has accepted the proposal), and when to extend the lease
    * (when all the quorum members have accepted the proposal).
    */
-  set<int>   accepted;
+  std::set<int>   accepted;
   /**
    * Callback to trigger a new election if the proposal is not accepted by the
    * full quorum within a given timeframe.
@@ -561,16 +571,7 @@ private:
    * @remarks It is not possible to write if we are not the Leader, or we are
    *	      not on the active state, or if the lease has expired.
    */
-  list<Context*> waiting_for_writeable;
-  /**
-   * List of callbacks waiting for a commit to finish.
-   *
-   * @remarks This may be used to a) wait for an on-going commit to finish
-   *	      before we proceed with, say, a new proposal; or b) wait for the
-   *	      next commit to be finished so we are sure that our value was
-   *	      fully committed.
-   */
-  list<Context*> waiting_for_commit;
+  std::list<Context*> waiting_for_writeable;
 
   /**
    * Pending proposal transaction
@@ -587,7 +588,7 @@ private:
    * These are waiting for updates in the pending proposal/transaction
    * to be committed.
    */
-  list<Context*> pending_finishers;
+  std::list<Context*> pending_finishers;
 
   /**
    * Finishers for committing transaction
@@ -595,7 +596,16 @@ private:
    * When the pending_proposal is submitted, pending_finishers move to
    * this list.  When it commits, these finishers are notified.
    */
-  list<Context*> committing_finishers;
+  std::list<Context*> committing_finishers;
+  /**
+   * This function re-triggers pending_ and committing_finishers
+   * safely, so as to maintain existing system invariants. In particular
+   * we maintain ordering by triggering committing before pending, and
+   * we clear out pending_finishers prior to any triggers so that
+   * we don't trigger asserts on them being empty. You should
+   * use it instead of sending -EAGAIN to them with finish_contexts.
+   */
+  void reset_pending_committing_finishers();
 
   /**
    * @defgroup Paxos_h_sync_warns Synchronization warnings
@@ -613,6 +623,11 @@ private:
    * trimming; false otherwise.
    */
   bool trimming;
+
+  /**
+   * true if we want trigger_propose to *not* propose (yet)
+   */
+  bool plugged = false;
 
   /**
    * @defgroup Paxos_h_callbacks Callback classes.
@@ -649,12 +664,12 @@ public:
   class C_Proposal : public Context {
     Context *proposer_context;
   public:
-    bufferlist bl;
+    ceph::buffer::list bl;
     // for debug purposes. Will go away. Soon.
     bool proposed;
     utime_t proposal_time;
 
-    C_Proposal(Context *c, bufferlist& proposal_bl) :
+    C_Proposal(Context *c, ceph::buffer::list& proposal_bl) :
 	proposer_context(c),
 	bl(proposal_bl),
 	proposed(false),
@@ -707,7 +722,7 @@ private:
    * Once a Peon receives a collect message from the Leader it will reply
    * with its first and last committed versions, as well as information so
    * the Leader may know if its Proposal Number was, or was not, accepted by
-   * the Peon. The Peon will accept the Leader's Proposal Number iif it is
+   * the Peon. The Peon will accept the Leader's Proposal Number if it is
    * higher than the Peon's currently accepted Proposal Number. The Peon may
    * also inform the Leader of accepted but uncommitted values.
    *
@@ -783,14 +798,14 @@ private:
    *
    * @pre We are the Leader
    * @pre We are on STATE_ACTIVE
-   * @post We commit, iif we are alone, or we send a message to each quorum 
+   * @post We commit, if we are alone, or we send a message to each quorum 
    *	   member
-   * @post We are on STATE_ACTIVE, iif we are alone, or on 
+   * @post We are on STATE_ACTIVE, if we are alone, or on 
    *	   STATE_UPDATING otherwise
    *
    * @param value The value being proposed to the quorum
    */
-  void begin(bufferlist& value);
+  void begin(ceph::buffer::list& value);
   /**
    * Accept or decline (by ignoring) a proposal from the Leader.
    *
@@ -800,8 +815,8 @@ private:
    *
    * @pre We are a Peon
    * @pre We are on STATE_ACTIVE
-   * @post We are on STATE_UPDATING iif we accept the Leader's proposal
-   * @post We send a reply message to the Leader iif we accept its proposal
+   * @post We are on STATE_UPDATING if we accept the Leader's proposal
+   * @post We send a reply message to the Leader if we accept its proposal
    *
    * @invariant The received message is an operation of type OP_BEGIN
    *
@@ -823,11 +838,11 @@ private:
    *
    * @pre We are the Leader
    * @pre We are on STATE_UPDATING
-   * @post We are on STATE_ACTIVE iif we received accepts from the full quorum
-   * @post We extended the lease iif we moved on to STATE_ACTIVE
-   * @post We are on STATE_UPDATING iif we didn't received accepts from the
+   * @post We are on STATE_ACTIVE if we received accepts from the full quorum
+   * @post We extended the lease if we moved on to STATE_ACTIVE
+   * @post We are on STATE_UPDATING if we didn't received accepts from the
    *	   full quorum
-   * @post We have committed iif we received accepts from a majority
+   * @post We have committed if we received accepts from a majority
    *
    * @invariant The received message is an operation of type OP_ACCEPT
    *
@@ -875,6 +890,7 @@ private:
    */
   void commit_start();
   void commit_finish();   ///< finish a commit after txn becomes durable
+  void abort_commit();    ///< Handle commit finish after shutdown started
   /**
    * Commit the new value to stable storage as being the latest available
    * version.
@@ -924,7 +940,7 @@ private:
    * @post A lease timeout callback is set
    * @post Move to STATE_ACTIVE
    * @post Fire up all the callbacks waiting for STATE_ACTIVE
-   * @post Fire up all the callbacks waiting for readable iif we are readable
+   * @post Fire up all the callbacks waiting for readable if we are readable
    * @post Ack the lease to the Leader
    *
    * @invariant The received message is an operation of type OP_LEASE
@@ -941,7 +957,7 @@ private:
    * fresh elections.
    *
    * @pre We are the Leader
-   * @post Cancel the Lease Ack timeout callback iif we receive acks from all
+   * @post Cancel the Lease Ack timeout callback if we receive acks from all
    *	   the quorum members
    *
    * @invariant The received message is an operation of type OP_LEASE_ACK
@@ -1029,7 +1045,7 @@ public:
    * @param name A name for the paxos service. It serves as the naming space
    * of the underlying persistent storage for this service.
    */
-  Paxos(Monitor *m, const string &name) 
+  Paxos(Monitor &m, const std::string &name) 
 		 : mon(m),
 		   logger(NULL),
 		   paxos_name(name),
@@ -1049,7 +1065,11 @@ public:
 		   clock_drift_warned(0),
 		   trimming(false) { }
 
-  const string get_name() const {
+  ~Paxos() {
+    delete logger;
+  }
+
+  const std::string get_name() const {
     return paxos_name;
   }
 
@@ -1063,7 +1083,7 @@ public:
   /**
    * dump state info to a formatter
    */
-  void dump_info(Formatter *f);
+  void dump_info(ceph::Formatter *f);
 
   /**
    * This function runs basic consistency checks. Importantly, if
@@ -1115,8 +1135,8 @@ public:
    *
    * Basically, we received a set of version. Or just one. It doesn't matter.
    * What matters is that we have to stash it in the store. So, we will simply
-   * write every single bufferlist into their own versions on our side (i.e.,
-   * onto paxos-related keys), and then we will decode those same bufferlists
+   * write every single ceph::buffer::list into their own versions on our side (i.e.,
+   * onto paxos-related keys), and then we will decode those same ceph::buffer::lists
    * we just wrote and apply the transactions they hold. We will also update
    * our first and last committed values to point to the new values, if need
    * be. All this is done tightly wrapped in a transaction to ensure we
@@ -1129,20 +1149,20 @@ public:
   void _sanity_check_store();
 
   /**
-   * Helper function to decode a bufferlist into a transaction and append it
+   * Helper function to decode a ceph::buffer::list into a transaction and append it
    * to another transaction.
    *
    * This function is used during the Leader's commit and during the
-   * Paxos::store_state in order to apply the bufferlist's transaction onto
+   * Paxos::store_state in order to apply the ceph::buffer::list's transaction onto
    * the store.
    *
    * @param t The transaction to which we will append the operations
-   * @param bl A bufferlist containing an encoded transaction
+   * @param bl A ceph::buffer::list containing an encoded transaction
    */
   static void decode_append_transaction(MonitorDBStore::TransactionRef t,
-					bufferlist& bl) {
+					ceph::buffer::list& bl) {
     auto vt(std::make_shared<MonitorDBStore::Transaction>());
-    bufferlist::iterator it = bl.begin();
+    auto it = bl.cbegin();
     vt->decode(it);
     t->append(vt);
   }
@@ -1152,7 +1172,7 @@ public:
    *	   its objective is to allow a third-party to have a "private"
    *	   state dir. -JL
    */
-  void add_extra_state_dir(string s) {
+  void add_extra_state_dir(std::string s) {
     extra_state_dirs.push_back(s);
   }
 
@@ -1187,14 +1207,26 @@ public:
    */
   bool should_trim() {
     int available_versions = get_version() - get_first_committed();
-    int maximum_versions = g_conf->paxos_min + g_conf->paxos_trim_min;
+    int maximum_versions = g_conf()->paxos_min + g_conf()->paxos_trim_min;
 
     if (trimming || (available_versions <= maximum_versions))
       return false;
 
     return true;
   }
- 
+
+  bool is_plugged() const {
+    return plugged;
+  }
+  void plug() {
+    ceph_assert(plugged == false);
+    plugged = true;
+  }
+  void unplug() {
+    ceph_assert(plugged == true);
+    plugged = false;
+  }
+
   // read
   /**
    * @defgroup Paxos_h_read_funcs Read-related functions
@@ -1212,14 +1244,6 @@ public:
    * @return the first committed version
    */
   version_t get_first_committed() { return first_committed; }
-  /** 
-   * Get the last commit time
-   *
-   * @returns Our last commit time
-  */
-  utime_t get_last_commit_time() const{
-    return last_commit_time;
-  }
   /**
    * Check if a given version is readable.
    *
@@ -1240,7 +1264,7 @@ public:
    * @param[out] bl The version's value
    * @return 'true' if we successfully read the value; 'false' otherwise
    */
-  bool read(version_t v, bufferlist &bl);
+  bool read(version_t v, ceph::buffer::list &bl);
   /**
    * Read the latest committed version
    *
@@ -1248,14 +1272,14 @@ public:
    * @return the latest committed version if we successfully read the value;
    *	     or 0 (zero) otherwise.
    */
-  version_t read_current(bufferlist &bl);
+  version_t read_current(ceph::buffer::list &bl);
   /**
    * Add onreadable to the list of callbacks waiting for us to become readable.
    *
    * @param onreadable A callback
    */
   void wait_for_readable(MonOpRequestRef op, Context *onreadable) {
-    assert(!is_readable());
+    ceph_assert(!is_readable());
     if (op)
       op->mark_event("paxos:wait_for_readable");
     waiting_for_readable.push_back(onreadable);
@@ -1297,7 +1321,7 @@ public:
    * @param c A callback
    */
   void wait_for_writeable(MonOpRequestRef op, Context *c) {
-    assert(!is_writeable());
+    ceph_assert(!is_writeable());
     if (op)
       op->mark_event("paxos:wait_for_writeable");
     waiting_for_writeable.push_back(c);
@@ -1331,25 +1355,6 @@ public:
    * something) that will be deferred (e.g., until the current round finishes).
    */
   bool trigger_propose();
-
-  /**
-   * Add oncommit to the back of the list of callbacks waiting for us to
-   * finish committing.
-   *
-   * @param oncommit A callback
-   */
-  void wait_for_commit(Context *oncommit) {
-    waiting_for_commit.push_back(oncommit);
-  }
-  /**
-   * Add oncommit to the front of the list of callbacks waiting for us to
-   * finish committing.
-   *
-   * @param oncommit A callback
-   */
-  void wait_for_commit_front(Context *oncommit) {
-    waiting_for_commit.push_front(oncommit);
-  }
   /**
    * @}
    */
@@ -1361,20 +1366,19 @@ public:
   MonitorDBStore *get_store();
 };
 
-inline ostream& operator<<(ostream& out, Paxos::C_Proposal& p)
+inline std::ostream& operator<<(std::ostream& out, Paxos::C_Proposal& p)
 {
-  string proposed = (p.proposed ? "proposed" : "unproposed");
+  std::string proposed = (p.proposed ? "proposed" : "unproposed");
   out << " " << proposed
       << " queued " << (ceph_clock_now() - p.proposal_time)
       << " tx dump:\n";
   auto t(std::make_shared<MonitorDBStore::Transaction>());
-  bufferlist::iterator p_it = p.bl.begin();
+  auto p_it = p.bl.cbegin();
   t->decode(p_it);
-  JSONFormatter f(true);
+  ceph::JSONFormatter f(true);
   t->dump(&f);
   f.flush(out);
   return out;
 }
 
 #endif
-

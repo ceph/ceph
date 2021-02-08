@@ -21,34 +21,34 @@
 MDSUtility::MDSUtility() :
   Dispatcher(g_ceph_context),
   objecter(NULL),
-  lock("MDSUtility::lock"),
   finisher(g_ceph_context, "MDSUtility", "fn_mds_utility"),
-  waiting_for_mds_map(NULL)
+  waiting_for_mds_map(NULL),
+  inited(false)
 {
-  monc = new MonClient(g_ceph_context);
+  monc = new MonClient(g_ceph_context, poolctx);
   messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
   fsmap = new FSMap();
-  objecter = new Objecter(g_ceph_context, messenger, monc, NULL, 0, 0);
+  objecter = new Objecter(g_ceph_context, messenger, monc, poolctx);
 }
 
 
 MDSUtility::~MDSUtility()
 {
+  if (inited) {
+    shutdown();
+  }
   delete objecter;
   delete monc;
   delete messenger;
   delete fsmap;
-  assert(waiting_for_mds_map == NULL);
+  ceph_assert(waiting_for_mds_map == NULL);
 }
 
 
 int MDSUtility::init()
 {
   // Initialize Messenger
-  int r = messenger->bind(g_conf->public_addr);
-  if (r < 0)
-    return r;
-
+  poolctx.start(1);
   messenger->start();
 
   objecter->set_client_incarnation(0);
@@ -69,7 +69,7 @@ int MDSUtility::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD|CEPH_ENTITY_TYPE_MDS);
   monc->set_messenger(messenger);
   monc->init();
-  r = monc->authenticate();
+  int r = monc->authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify an MDS ID with a valid keyring?" << dendl;
     monc->shutdown();
@@ -87,26 +87,27 @@ int MDSUtility::init()
   objecter->wait_for_osd_map();
 
   // Prepare to receive MDS map and request it
-  Mutex init_lock("MDSUtility:init");
-  Cond cond;
+  ceph::mutex init_lock = ceph::make_mutex("MDSUtility:init");
+  ceph::condition_variable cond;
   bool done = false;
-  assert(!fsmap->get_epoch());
-  lock.Lock();
-  waiting_for_mds_map = new C_SafeCond(&init_lock, &cond, &done, NULL);
-  lock.Unlock();
+  ceph_assert(!fsmap->get_epoch());
+  lock.lock();
+  waiting_for_mds_map = new C_SafeCond(init_lock, cond, &done, NULL);
+  lock.unlock();
   monc->sub_want("fsmap", 0, CEPH_SUBSCRIBE_ONETIME);
   monc->renew_subs();
 
   // Wait for MDS map
   dout(4) << "waiting for MDS map..." << dendl;
-  init_lock.Lock();
-  while (!done)
-    cond.Wait(init_lock);
-  init_lock.Unlock();
+  {
+    std::unique_lock locker{init_lock};
+    cond.wait(locker, [&done] { return done; });
+  }
   dout(4) << "Got MDS map " << fsmap->get_epoch() << dendl;
 
   finisher.start();
 
+  inited = true;
   return 0;
 }
 
@@ -115,18 +116,19 @@ void MDSUtility::shutdown()
 {
   finisher.stop();
 
-  lock.Lock();
+  lock.lock();
   objecter->shutdown();
-  lock.Unlock();
+  lock.unlock();
   monc->shutdown();
   messenger->shutdown();
   messenger->wait();
+  poolctx.finish();
 }
 
 
 bool MDSUtility::ms_dispatch(Message *m)
 {
-   Mutex::Locker locker(lock);
+  std::lock_guard locker{lock};
    switch (m->get_type()) {
    case CEPH_MSG_FS_MAP:
      handle_fs_map((MFSMap*)m);
@@ -151,17 +153,3 @@ void MDSUtility::handle_fs_map(MFSMap* m)
 }
 
 
-bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new)
-{
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  if (force_new) {
-    if (monc->wait_auth_rotating(10) < 0)
-      return false;
-  }
-
-  *authorizer = monc->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}

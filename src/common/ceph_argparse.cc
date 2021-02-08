@@ -11,25 +11,13 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <stdarg.h>
 
 #include "auth/Auth.h"
-#include "common/ConfUtils.h"
 #include "common/ceph_argparse.h"
-#include "common/common_init.h"
 #include "common/config.h"
-#include "common/strtol.h"
 #include "common/version.h"
-#include "include/intarith.h"
 #include "include/str_list.h"
-#include "msg/msg_types.h"
-
-#include <errno.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <string>
-#include <string.h>
-#include <sstream>
-#include <vector>
 
 /*
  * Ceph argument parsing library
@@ -67,68 +55,75 @@ struct strict_str_convert {
 
 void string_to_vec(std::vector<std::string>& args, std::string argstr)
 {
-  istringstream iss(argstr);
+  std::istringstream iss(argstr);
   while(iss) {
-    string sub;
+    std::string sub;
     iss >> sub;
     if (sub == "") break;
     args.push_back(sub);
   }
 }
 
-bool split_dashdash(const std::vector<const char*>& args,
-		    std::vector<const char*>& options,
-		    std::vector<const char*>& arguments) {
-  bool dashdash = false;
-  for (std::vector<const char*>::const_iterator i = args.begin();
-       i != args.end();
-       ++i) {
-    if (dashdash) {
-      arguments.push_back(*i);
-    } else {
-      if (strcmp(*i, "--") == 0)
-	dashdash = true;
-      else
-	options.push_back(*i);
-    }
+std::pair<std::vector<const char*>, std::vector<const char*>>
+split_dashdash(const std::vector<const char*>& args) {
+  auto dashdash = std::find_if(args.begin(), args.end(),
+			       [](const char* arg) {
+				 return strcmp(arg, "--") == 0;
+			       });
+  std::vector<const char*> options{args.begin(), dashdash};
+  if (dashdash != args.end()) {
+    ++dashdash;
   }
-  return dashdash;
+  std::vector<const char*> arguments{dashdash, args.end()};
+  return {std::move(options), std::move(arguments)};
+}
+
+static std::mutex g_str_vec_lock;
+static std::vector<std::string> g_str_vec;
+
+void clear_g_str_vec()
+{
+  g_str_vec_lock.lock();
+  g_str_vec.clear();
+  g_str_vec_lock.unlock();
 }
 
 void env_to_vec(std::vector<const char*>& args, const char *name)
 {
   if (!name)
     name = "CEPH_ARGS";
-  char *p = getenv(name);
-  if (!p)
-    return;
 
-  bool dashdash = false;
-  std::vector<const char*> options;
-  std::vector<const char*> arguments;
-  if (split_dashdash(args, options, arguments))
-    dashdash = true;
+  /*
+   * We can only populate str_vec once. Other threads could hold pointers into
+   * it, so clearing it out and replacing it is not currently safe.
+   */
+  g_str_vec_lock.lock();
+  if (g_str_vec.empty()) {
+    char *p = getenv(name);
+    if (!p) {
+      g_str_vec_lock.unlock();
+      return;
+    }
+    get_str_vec(p, " ", g_str_vec);
+  }
 
-  std::vector<const char*> env_options;
-  std::vector<const char*> env_arguments;
-  static vector<string> str_vec;
   std::vector<const char*> env;
-  str_vec.clear();
-  get_str_vec(p, " ", str_vec);
-  for (vector<string>::iterator i = str_vec.begin();
-       i != str_vec.end();
-       ++i)
-    env.push_back(i->c_str());
-  if (split_dashdash(env, env_options, env_arguments))
-    dashdash = true;
+  for (const auto& s : g_str_vec) {
+    env.push_back(s.c_str());
+  }
+  g_str_vec_lock.unlock();
+  auto [env_options, env_arguments] = split_dashdash(env);
 
+  auto [options, arguments] = split_dashdash(args);
   args.clear();
-  args.insert(args.end(), options.begin(), options.end());
   args.insert(args.end(), env_options.begin(), env_options.end());
-  if (dashdash)
-    args.push_back("--");
-  args.insert(args.end(), arguments.begin(), arguments.end());
+  args.insert(args.end(), options.begin(), options.end());
+  if (arguments.empty() && env_arguments.empty()) {
+    return;
+  }
+  args.push_back("--");
   args.insert(args.end(), env_arguments.begin(), env_arguments.end());
+  args.insert(args.end(), arguments.begin(), arguments.end());
 }
 
 void argv_to_vec(int argc, const char **argv,
@@ -142,7 +137,7 @@ void vec_to_argv(const char *argv0, std::vector<const char*>& args,
 {
   *argv = (const char**)malloc(sizeof(char*) * (args.size() + 1));
   if (!*argv)
-    throw bad_alloc();
+    throw std::bad_alloc();
   *argc = 1;
   (*argv)[0] = argv0;
 
@@ -194,21 +189,40 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
   return;
 }
 
-bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
+
+bool parse_ip_port_vec(const char *s, std::vector<entity_addrvec_t>& vec, int type)
 {
-  const char *p = s;
-  const char *end = p + strlen(p);
-  while (p < end) {
-    entity_addr_t a;
-    //cout << " parse at '" << p << "'" << std::endl;
-    if (!a.parse(p, &p)) {
-      //dout(0) << " failed to parse address '" << p << "'" << dendl;
-      return false;
+  // first split by [ ;], which are not valid for an addrvec
+  std::list<std::string> items;
+  get_str_list(s, " ;", items);
+
+  for (auto& i : items) {
+    const char *s = i.c_str();
+    while (*s) {
+      const char *end;
+
+      // try parsing as an addr
+      entity_addr_t a;
+      if (a.parse(s, &end, type)) {
+	vec.push_back(entity_addrvec_t(a));
+	s = end;
+	if (*s == ',') {
+	  ++s;
+	}
+	continue;
+      }
+
+      // ok, try parsing as an addrvec
+      entity_addrvec_t av;
+      if (!av.parse(s, &end)) {
+	return false;
+      }
+      vec.push_back(av);
+      s = end;
+      if (*s == ',') {
+	++s;
+      }
     }
-    //cout << " got " << a << ", rest is '" << p << "'" << std::endl;
-    vec.push_back(a);
-    while (*p == ',' || *p == ' ' || *p == ';')
-      p++;
   }
   return true;
 }
@@ -283,6 +297,18 @@ bool ceph_argparse_flag(std::vector<const char*> &args,
   }
 }
 
+static bool check_bool_str(const char *val, int *ret)
+{
+  if ((strcmp(val, "true") == 0) || (strcmp(val, "1") == 0)) {
+    *ret = 1;
+    return true;
+  } else if ((strcmp(val, "false") == 0) || (strcmp(val, "0") == 0)) {
+    *ret = 0;
+    return true;
+  }
+  return false;
+}
+
 static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	std::vector<const char*>::iterator &i, int *ret,
 	std::ostream *oss, va_list ap)
@@ -304,12 +330,7 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
       if (first[strlen_a] == '=') {
 	i = args.erase(i);
 	const char *val = first + strlen_a + 1;
-	if ((strcmp(val, "true") == 0) || (strcmp(val, "1") == 0)) {
-	  *ret = 1;
-	  return true;
-	}
-	else if ((strcmp(val, "false") == 0) || (strcmp(val, "0") == 0)) {
-	  *ret = 0;
+        if (check_bool_str(val, ret)) {
 	  return true;
 	}
 	if (oss) {
@@ -320,8 +341,18 @@ static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
 	return true;
       }
       else if (first[strlen_a] == '\0') {
-	i = args.erase(i);
-	*ret = 1;
+        auto next = i+1;
+        if (next != args.end() &&
+            *next &&
+            (*next)[0] != '-') {
+          if (check_bool_str(*next, ret)) {
+            i = args.erase(i);
+            i = args.erase(i);
+            return true;
+          }
+        }
+        i = args.erase(i);
+        *ret =  1;
 	return true;
       }
     }
@@ -448,7 +479,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
   int r;
   va_list ap;
   va_start(ap, ret);
-  r = va_ceph_argparse_witharg(args, i, ret, cerr, ap);
+  r = va_ceph_argparse_witharg(args, i, ret, std::cerr, ap);
   va_end(ap);
   if (r < 0)
     _exit(1);
@@ -462,7 +493,7 @@ CephInitParameters ceph_argparse_early_args
   CephInitParameters iparams(module_type);
   std::string val;
 
-  vector<const char *> orig_args = args;
+  auto orig_args = args;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (strcmp(*i, "--") == 0) {
@@ -472,11 +503,14 @@ CephInitParameters ceph_argparse_early_args
       break;
     }
     else if (ceph_argparse_flag(args, i, "--version", "-v", (char*)NULL)) {
-      cout << pretty_version_to_str() << std::endl;
+      std::cout << pretty_version_to_str() << std::endl;
       _exit(0);
     }
     else if (ceph_argparse_witharg(args, i, &val, "--conf", "-c", (char*)NULL)) {
       *conf_file_list = val;
+    }
+    else if (ceph_argparse_flag(args, i, "--no-config-file", (char*)NULL)) {
+      iparams.no_config_file = true;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--cluster", (char*)NULL)) {
       *cluster = val;
@@ -490,20 +524,20 @@ CephInitParameters ceph_argparse_early_args
     }
     else if (ceph_argparse_witharg(args, i, &val, "--name", "-n", (char*)NULL)) {
       if (!iparams.name.from_str(val)) {
-	cerr << "error parsing '" << val << "': expected string of the form TYPE.ID, "
-	     << "valid types are: " << EntityName::get_valid_types_as_str()
-	     << std::endl;
+	std::cerr << "error parsing '" << val << "': expected string of the form TYPE.ID, "
+		  << "valid types are: " << EntityName::get_valid_types_as_str()
+		  << std::endl;
 	_exit(1);
       }
     }
     else if (ceph_argparse_flag(args, i, "--show_args", (char*)NULL)) {
-      cout << "args: ";
+      std::cout << "args: ";
       for (std::vector<const char *>::iterator ci = orig_args.begin(); ci != orig_args.end(); ++ci) {
-        if (ci != orig_args.begin())
-          cout << " ";
-        cout << *ci;
+	if (ci != orig_args.begin())
+	  std::cout << " ";
+	std::cout << *ci;
       }
-      cout << std::endl;
+      std::cout << std::endl;
     }
     else {
       // ignore
@@ -515,34 +549,49 @@ CephInitParameters ceph_argparse_early_args
 
 static void generic_usage(bool is_server)
 {
-  cout << "\
-  --conf/-c FILE    read configuration from the given configuration file\n\
-  --id/-i ID        set ID portion of my name\n\
-  --name/-n TYPE.ID set name\n\
-  --cluster NAME    set cluster name (default: ceph)\n\
-  --setuser USER    set uid to user or uid (and gid to user's gid)\n\
-  --setgroup GROUP  set gid to group or gid\n\
-  --version         show version and quit\n\
-" << std::endl;
+  std::cout <<
+    "  --conf/-c FILE    read configuration from the given configuration file" << std::endl <<
+    (is_server ?
+    "  --id/-i ID        set ID portion of my name" :
+    "  --id ID           set ID portion of my name") << std::endl <<
+    "  --name/-n TYPE.ID set name" << std::endl <<
+    "  --cluster NAME    set cluster name (default: ceph)" << std::endl <<
+    "  --setuser USER    set uid to user or uid (and gid to user's gid)" << std::endl <<
+    "  --setgroup GROUP  set gid to group or gid" << std::endl <<
+    "  --version         show version and quit" << std::endl
+    << std::endl;
 
   if (is_server) {
-    cout << "\
-  -d                run in foreground, log to stderr.\n\
-  -f                run in foreground, log to usual location.\n";
-    cout << "\
-  --debug_ms N      set message debug level (e.g. 1)\n";
+    std::cout <<
+      "  -d                run in foreground, log to stderr" << std::endl <<
+      "  -f                run in foreground, log to usual location" << std::endl <<
+      std::endl <<
+      "  --debug_ms N      set message debug level (e.g. 1)" << std::endl;
   }
 
-  cout.flush();
+  std::cout.flush();
+}
+
+bool ceph_argparse_need_usage(const std::vector<const char*>& args)
+{
+  if (args.empty()) {
+    return true;
+  }
+  for (auto a : args) {
+    if (strcmp(a, "-h") == 0 ||
+	strcmp(a, "--help") == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void generic_server_usage()
 {
   generic_usage(true);
-  exit(1);
 }
+
 void generic_client_usage()
 {
   generic_usage(false);
-  exit(1);
 }

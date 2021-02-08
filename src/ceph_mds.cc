@@ -19,13 +19,15 @@
 
 #include <iostream>
 #include <string>
-using namespace std;
 
+#include "common/async/context_pool.h"
 #include "include/ceph_features.h"
 #include "include/compat.h"
+#include "include/random.h"
 
 #include "common/config.h"
 #include "common/strtol.h"
+#include "common/numa.h"
 
 #include "mon/MonMap.h"
 #include "mds/MDSDaemon.h"
@@ -35,6 +37,7 @@ using namespace std;
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
+#include "common/Preforker.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -46,37 +49,21 @@ using namespace std;
 
 #include "perfglue/heap_profiler.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 static void usage()
 {
-  cout << "usage: ceph-mds -i name [flags] [[--hot-standby][rank]]\n"
+  cout << "usage: ceph-mds -i <ID> [flags]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
-       << "  --hot-standby rank\n"
-       << "        start up as a hot standby for rank\n"
        << std::endl;
   generic_server_usage();
 }
-
-
-static int parse_rank(const char *opt_name, const std::string &val)
-{
-  std::string err;
-  int ret = strict_strtol(val.c_str(), 10, &err);
-  if (!err.empty()) {
-    derr << "error parsing " << opt_name << ": failed to parse rank. "
-	 << "It must be an int." << "\n" << dendl;
-    usage();
-  }
-  return ret;
-}
-
 
 
 MDSDaemon *mds = NULL;
@@ -88,74 +75,103 @@ static void handle_mds_signal(int signum)
     mds->handle_signal(signum);
 }
 
-#ifdef BUILDING_FOR_EMBEDDED
-extern "C" int cephd_mds(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   ceph_pthread_setname(pthread_self(), "ceph-mds");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args,
-			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
-			 0, "mds_data");
+			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
 
+  int numa_node = g_conf().get_val<int64_t>("mds_numa_node");
+  size_t numa_cpu_set_size = 0;
+  cpu_set_t numa_cpu_set;
+  if (numa_node >= 0) {
+    int r = get_numa_node_cpu_set(numa_node, &numa_cpu_set_size, &numa_cpu_set);
+    if (r < 0) {
+      dout(1) << __func__ << " unable to determine mds numa node " << numa_node
+              << " CPUs" << dendl;
+      numa_node = -1;
+    } else {
+      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
+      if (r < 0) {
+        derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
+        << dendl;
+      }
+    }
+  } else {
+    dout(1) << __func__ << " not setting numa affinity" << dendl;
+  }
   std::string val, action;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     }
-    else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)NULL)) {
-      // exit(1) will be called in the usage()
-      usage();
-    }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
-      int r = parse_rank("hot-standby", val);
-      dout(0) << "requesting standby_replay for mds." << r << dendl;
-      char rb[32];
-      snprintf(rb, sizeof(rb), "%d", r);
-      g_conf->set_val("mds_standby_for_rank", rb);
-      g_conf->set_val("mds_standby_replay", "true");
-      g_conf->apply_changes(NULL);
+      dout(0) << "--hot-standby is obsolete and has no effect" << dendl;
     }
     else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;
-      usage();
+      exit(1);
     }
   }
 
-  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
+  Preforker forker;
+
+  entity_addrvec_t addrs;
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
 
   // Normal startup
-  if (g_conf->name.has_default_id()) {
+  if (g_conf()->name.has_default_id()) {
     derr << "must specify '-i name' with the ceph-mds instance name" << dendl;
-    usage();
+    exit(1);
   }
 
-  if (g_conf->name.get_id().empty() ||
-      (g_conf->name.get_id()[0] >= '0' && g_conf->name.get_id()[0] <= '9')) {
-    derr << "deprecation warning: MDS id '" << g_conf->name
-      << "' is invalid and will be forbidden in a future version.  "
+  if (g_conf()->name.get_id().empty() ||
+      (g_conf()->name.get_id()[0] >= '0' && g_conf()->name.get_id()[0] <= '9')) {
+    derr << "MDS id '" << g_conf()->name << "' is invalid. "
       "MDS names may not start with a numeric digit." << dendl;
+    exit(1);
   }
 
-  uint64_t nonce = 0;
-  get_random_bytes((char*)&nonce, sizeof(nonce));
+  if (global_init_prefork(g_ceph_context) >= 0) {
+    std::string err;
+    int r = forker.prefork(err);
+    if (r < 0) {
+      cerr << err << std::endl;
+      return r;
+    }
+    if (forker.is_parent()) {
+      if (forker.parent_wait(err) != 0) {
+        return -ENXIO;
+      }
+      return 0;
+    }
+    global_init_postfork_start(g_ceph_context);
+  }
+  common_init_finish(g_ceph_context);
+  global_init_chdir(g_ceph_context);
 
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
-				      nonce, Messenger::HAS_MANY_CONNECTIONS);
+				      Messenger::get_random_nonce());
   if (!msgr)
-    exit(1);
+    forker.exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
-  cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
+  cout << "starting " << g_conf()->name << " at " << msgr->get_myaddrs()
        << std::endl;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
@@ -169,27 +185,34 @@ int main(int argc, const char **argv)
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
                    Messenger::Policy::stateful_server(0));
 
-  int r = msgr->bind(g_conf->public_addr);
+  int r = msgr->bindv(addrs);
   if (r < 0)
-    exit(1);
+    forker.exit(1);
 
-  global_init_daemonize(g_ceph_context);
-  common_init_finish(g_ceph_context);
-
+  // set up signal handlers, now that we've daemonized/forked.
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  
   // get monmap
-  MonClient mc(g_ceph_context);
+  ceph::async::io_context_pool ctxpool(2);
+  MonClient mc(g_ceph_context, ctxpool);
   if (mc.build_initial_monmap() < 0)
-    return -1;
+    forker.exit(1);
   global_init_chdir(g_ceph_context);
 
   msgr->start();
 
   // start mds
-  mds = new MDSDaemon(g_conf->name.get_id().c_str(), msgr, &mc);
+  mds = new MDSDaemon(g_conf()->name.get_id().c_str(), msgr, &mc, ctxpool);
 
   // in case we have to respawn...
   mds->orig_argc = argc;
   mds->orig_argv = argv;
+
+  if (g_conf()->daemonize) {
+    global_init_postfork_finish(g_ceph_context);
+    forker.daemonize();
+  }
 
   r = mds->init();
   if (r < 0) {
@@ -197,13 +220,10 @@ int main(int argc, const char **argv)
     goto shutdown;
   }
 
-  // set up signal handlers, now that we've daemonized/forked.
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mds_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mds_signal);
 
-  if (g_conf->inject_early_sigterm)
+  if (g_conf()->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
   msgr->wait();
@@ -214,10 +234,11 @@ int main(int argc, const char **argv)
   shutdown_async_signal_handler();
 
  shutdown:
+  ctxpool.stop();
   // yuck: grab the mds lock, so we can be sure that whoever in *mds
   // called shutdown finishes what they were doing.
-  mds->mds_lock.Lock();
-  mds->mds_lock.Unlock();
+  mds->mds_lock.lock();
+  mds->mds_lock.unlock();
 
   pidfile_remove();
 
@@ -237,4 +258,3 @@ int main(int argc, const char **argv)
 
   return 0;
 }
-

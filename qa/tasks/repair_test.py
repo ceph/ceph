@@ -124,7 +124,7 @@ def repair_test_2(ctx, manager, config, chooser):
         log.info("starting repair test type 2")
         victim_osd = chooser(manager, pool, 0)
         first_mon = teuthology.get_first_mon(ctx, config)
-        (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
         # create object
         log.info("doing put and setomapval")
@@ -251,7 +251,7 @@ def task(ctx, config):
 
     The config should be as follows:
 
-      Must include the log-whitelist below
+      Must include the log-ignorelist below
       Must enable filestore_debug_inject_read_err config
 
     example:
@@ -260,7 +260,7 @@ def task(ctx, config):
     - chef:
     - install:
     - ceph:
-        log-whitelist:
+        log-ignorelist:
           - 'candidate had a stat error'
           - 'candidate had a read error'
           - 'deep-scrub 0 missing, 1 inconsistent objects'
@@ -275,7 +275,8 @@ def task(ctx, config):
           - 'scrub [0-9]+ errors'
           - 'size 1 != size'
           - 'attr name mismatch'
-          - 'Regular scrub request, losing deep-scrub details'
+          - 'Regular scrub request, deep-scrub details will be lost'
+          - 'candidate size [0-9]+ info size [0-9]+ mismatch'
         conf:
           osd:
             filestore debug inject read err: true
@@ -288,7 +289,7 @@ def task(ctx, config):
         'repair_test task only accepts a dict for config'
 
     manager = ctx.managers['ceph']
-    manager.wait_for_all_up()
+    manager.wait_for_all_osds_up()
 
     manager.raw_cluster_cmd('osd', 'set', 'noscrub')
     manager.raw_cluster_cmd('osd', 'set', 'nodeep-scrub')
@@ -303,3 +304,6 @@ def task(ctx, config):
     repair_test_2(ctx, manager, config, choose_replica)
 
     repair_test_erasure_code(manager, hinfoerr, 'primary', "deep-scrub")
+
+    manager.raw_cluster_cmd('osd', 'unset', 'noscrub')
+    manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')

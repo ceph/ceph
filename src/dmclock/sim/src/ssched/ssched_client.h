@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -24,14 +31,14 @@ namespace crimson {
       // cleaning process
       ServiceTracker()
       {
-	// emptry
-      }
-
-
-      void track_resp(const S& server_id, const NullData& ignore) {
 	// empty
       }
 
+      void track_resp(const S& server_id,
+		      const NullData& ignore,
+		      uint64_t request_cost) {
+	// empty
+      }
 
       /*
        * Returns the ReqParams for the given server.

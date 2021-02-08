@@ -2,10 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/AsyncObjectThrottle.h"
 #include "common/RWLock.h"
-#include "common/WorkQueue.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 
 namespace librbd
 {
@@ -15,7 +15,8 @@ AsyncObjectThrottle<T>::AsyncObjectThrottle(
     const AsyncRequest<T>* async_request, T &image_ctx,
     const ContextFactory& context_factory, Context *ctx,
     ProgressContext *prog_ctx, uint64_t object_no, uint64_t end_object_no)
-  : m_lock(util::unique_lock_name("librbd::AsyncThrottle::m_lock", this)),
+  : m_lock(ceph::make_mutex(
+      util::unique_lock_name("librbd::AsyncThrottle::m_lock", this))),
     m_async_request(async_request), m_image_ctx(image_ctx),
     m_context_factory(context_factory), m_ctx(ctx), m_prog_ctx(prog_ctx),
     m_object_no(object_no), m_end_object_no(end_object_no), m_current_ops(0),
@@ -25,10 +26,10 @@ AsyncObjectThrottle<T>::AsyncObjectThrottle(
 
 template <typename T>
 void AsyncObjectThrottle<T>::start_ops(uint64_t max_concurrent) {
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   bool complete;
   {
-    Mutex::Locker l(m_lock);
+    std::lock_guard l{m_lock};
     for (uint64_t i = 0; i < max_concurrent; ++i) {
       start_next_op();
       if (m_ret < 0 && m_current_ops == 0) {
@@ -48,8 +49,8 @@ template <typename T>
 void AsyncObjectThrottle<T>::finish_op(int r) {
   bool complete;
   {
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    Mutex::Locker locker(m_lock);
+    std::shared_lock owner_locker{m_image_ctx.owner_lock};
+    std::lock_guard locker{m_lock};
     --m_current_ops;
     if (r < 0 && r != -ENOENT && m_ret == 0) {
       m_ret = r;
@@ -93,7 +94,10 @@ void AsyncObjectThrottle<T>::start_next_op() {
       done = true;
     }
     if (m_prog_ctx != NULL) {
-      m_prog_ctx->update_progress(ono, m_end_object_no);
+      r = m_prog_ctx->update_progress(ono, m_end_object_no);
+      if (r < 0) {
+        m_ret = r;
+      }
     }
   }
 }

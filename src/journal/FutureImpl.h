@@ -5,35 +5,27 @@
 #define CEPH_JOURNAL_FUTURE_IMPL_H
 
 #include "include/int_types.h"
-#include "common/Mutex.h"
 #include "common/RefCountedObj.h"
+#include "include/Context.h"
 #include "journal/Future.h"
 #include <list>
 #include <map>
 #include <boost/noncopyable.hpp>
-#include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class Context;
 
 namespace journal {
 
-class FutureImpl;
-typedef boost::intrusive_ptr<FutureImpl> FutureImplPtr;
-
 class FutureImpl : public RefCountedObject, boost::noncopyable {
 public:
   struct FlushHandler {
-    virtual ~FlushHandler() {}
-    virtual void flush(const FutureImplPtr &future) = 0;
-    virtual void get() = 0;
-    virtual void put() = 0;
+    using ref = std::shared_ptr<FlushHandler>;
+    virtual void flush(const ceph::ref_t<FutureImpl> &future) = 0;
+    virtual ~FlushHandler() = default;
   };
-  typedef boost::intrusive_ptr<FlushHandler> FlushHandlerPtr;
 
-  FutureImpl(uint64_t tag_tid, uint64_t entry_tid, uint64_t commit_tid);
-
-  void init(const FutureImplPtr &prev_future);
+  void init(const ceph::ref_t<FutureImpl> &prev_future);
 
   inline uint64_t get_tag_tid() const {
     return m_tag_tid;
@@ -52,23 +44,21 @@ public:
   int get_return_value() const;
 
   inline bool is_flush_in_progress() const {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     return (m_flush_state == FLUSH_STATE_IN_PROGRESS);
   }
   inline void set_flush_in_progress() {
-    Mutex::Locker locker(m_lock);
-    assert(m_flush_handler);
-    m_flush_handler.reset();
+    auto h = std::move(m_flush_handler);
+    ceph_assert(h);
+    std::lock_guard locker{m_lock};
     m_flush_state = FLUSH_STATE_IN_PROGRESS;
   }
 
-  bool attach(const FlushHandlerPtr &flush_handler);
+  bool attach(FlushHandler::ref flush_handler);
   inline void detach() {
-    Mutex::Locker locker(m_lock);
     m_flush_handler.reset();
   }
-  inline FlushHandlerPtr get_flush_handler() const {
-    Mutex::Locker locker(m_lock);
+  inline FlushHandler::ref get_flush_handler() const {
     return m_flush_handler;
   }
 
@@ -77,7 +67,7 @@ public:
 private:
   friend std::ostream &operator<<(std::ostream &, const FutureImpl &);
 
-  typedef std::map<FlushHandlerPtr, FutureImplPtr> FlushHandlers;
+  typedef std::map<FlushHandler::ref, ceph::ref_t<FutureImpl>> FlushHandlers;
   typedef std::list<Context *> Contexts;
 
   enum FlushState {
@@ -87,8 +77,8 @@ private:
   };
 
   struct C_ConsistentAck : public Context {
-    FutureImplPtr future;
-    C_ConsistentAck(FutureImpl *_future) : future(_future) {}
+    ceph::ref_t<FutureImpl> future;
+    C_ConsistentAck(ceph::ref_t<FutureImpl> _future) : future(std::move(_future)) {}
     void complete(int r) override {
       future->consistent(r);
       future.reset();
@@ -96,31 +86,32 @@ private:
     void finish(int r) override {}
   };
 
+  FRIEND_MAKE_REF(FutureImpl);
+  FutureImpl(uint64_t tag_tid, uint64_t entry_tid, uint64_t commit_tid);
+  ~FutureImpl() override = default;
+
   uint64_t m_tag_tid;
   uint64_t m_entry_tid;
   uint64_t m_commit_tid;
 
-  mutable Mutex m_lock;
-  FutureImplPtr m_prev_future;
-  bool m_safe;
-  bool m_consistent;
-  int m_return_value;
+  mutable ceph::mutex m_lock = ceph::make_mutex("FutureImpl::m_lock", false);
+  ceph::ref_t<FutureImpl> m_prev_future;
+  bool m_safe = false;
+  bool m_consistent = false;
+  int m_return_value = 0;
 
-  FlushHandlerPtr m_flush_handler;
-  FlushState m_flush_state;
+  FlushHandler::ref m_flush_handler;
+  FlushState m_flush_state = FLUSH_STATE_NONE;
 
   C_ConsistentAck m_consistent_ack;
   Contexts m_contexts;
 
-  FutureImplPtr prepare_flush(FlushHandlers *flush_handlers);
-  FutureImplPtr prepare_flush(FlushHandlers *flush_handlers, Mutex &lock);
+  ceph::ref_t<FutureImpl> prepare_flush(FlushHandlers *flush_handlers);
+  ceph::ref_t<FutureImpl> prepare_flush(FlushHandlers *flush_handlers, ceph::mutex &lock);
 
   void consistent(int r);
   void finish_unlock();
 };
-
-void intrusive_ptr_add_ref(FutureImpl::FlushHandler *p);
-void intrusive_ptr_release(FutureImpl::FlushHandler *p);
 
 std::ostream &operator<<(std::ostream &os, const FutureImpl &future);
 

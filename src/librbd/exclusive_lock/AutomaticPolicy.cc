@@ -13,8 +13,8 @@ namespace librbd {
 namespace exclusive_lock {
 
 int AutomaticPolicy::lock_requested(bool force) {
-  assert(m_image_ctx->owner_lock.is_locked());
-  assert(m_image_ctx->exclusive_lock != nullptr);
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx->owner_lock));
+  ceph_assert(m_image_ctx->exclusive_lock != nullptr);
 
   ldout(m_image_ctx->cct, 20) << this << " " << __func__ << ": force=" << force
 			      << dendl;

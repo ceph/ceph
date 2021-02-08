@@ -14,9 +14,9 @@
 #ifndef CEPH_COMMON_BIT_STR_H
 #define CEPH_COMMON_BIT_STR_H
 
-#include <ostream>
+#include <cstdint>
+#include <iosfwd>
 #include <functional>
-#include <stdint.h>
 
 namespace ceph {
   class Formatter;
@@ -25,13 +25,13 @@ namespace ceph {
 extern void print_bit_str(
     uint64_t bits,
     std::ostream &out,
-    std::function<const char*(uint64_t)> func,
+    const std::function<const char*(uint64_t)> &func,
     bool dump_bit_val = false);
 
 extern void dump_bit_str(
     uint64_t bits,
     ceph::Formatter *f,
-    std::function<const char*(uint64_t)> func,
+    const std::function<const char*(uint64_t)> &func,
     bool dump_bit_val = false);
 
 #endif /* CEPH_COMMON_BIT_STR_H */

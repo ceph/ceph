@@ -14,44 +14,8 @@
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "common/WorkQueue.h"
+#include "common/ceph_time.h"
 #include "librbd/Types.h"
-
-enum {
-  l_librbd_first = 26000,
-
-  l_librbd_rd,               // read ops
-  l_librbd_rd_bytes,         // bytes read
-  l_librbd_rd_latency,       // average latency
-  l_librbd_wr,
-  l_librbd_wr_bytes,
-  l_librbd_wr_latency,
-  l_librbd_discard,
-  l_librbd_discard_bytes,
-  l_librbd_discard_latency,
-  l_librbd_flush,
-
-  l_librbd_aio_flush,
-  l_librbd_aio_flush_latency,
-  l_librbd_ws,
-  l_librbd_ws_bytes,
-  l_librbd_ws_latency,
-
-  l_librbd_snap_create,
-  l_librbd_snap_remove,
-  l_librbd_snap_rollback,
-  l_librbd_snap_rename,
-
-  l_librbd_notify,
-  l_librbd_resize,
-
-  l_librbd_readahead,
-  l_librbd_readahead_bytes,
-
-  l_librbd_invalidate_cache,
-
-  l_librbd_last,
-};
 
 namespace librbd {
 
@@ -95,12 +59,6 @@ namespace librbd {
   void image_options_clear(rbd_image_options_t opts);
   bool image_options_is_empty(rbd_image_options_t opts);
 
-  int snap_set(ImageCtx *ictx, const cls::rbd::SnapshotNamespace &snap_namespace,
-	       const char *snap_name);
-
-  int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
-  int list_children(ImageCtx *ictx,
-		    std::set<std::pair<std::string, std::string> > & names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -115,10 +73,9 @@ namespace librbd {
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
 	    uint64_t stripe_unit, int stripe_count);
-  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
-	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts);
-  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const std::string &c_name,
-            const std::string &c_id, ImageOptions& c_opts,
+  int clone(IoCtx& p_ioctx, const char *p_id, const char *p_name,
+            const char *p_snap_name, IoCtx& c_ioctx, const char *c_id,
+            const char *c_name, ImageOptions& c_opts,
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
@@ -127,9 +84,6 @@ namespace librbd {
   int get_size(ImageCtx *ictx, uint64_t *size);
   int get_features(ImageCtx *ictx, uint64_t *features);
   int get_overlap(ImageCtx *ictx, uint64_t *overlap);
-  int get_parent_info(ImageCtx *ictx, std::string *parent_pool_name,
-                      std::string *parent_name, std::string *parent_id,
-                      std::string *parent_snap_name);
   int get_flags(ImageCtx *ictx, uint64_t *flags);
   int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
@@ -140,29 +94,6 @@ namespace librbd {
   int lock_break(ImageCtx *ictx, rbd_lock_mode_t lock_mode,
                  const std::string &lock_owner);
 
-  int remove(librados::IoCtx& io_ctx, const std::string &image_name,
-             const std::string &image_id, ProgressContext& prog_ctx,
-             bool force=false, bool from_trash_remove=false);
-
-  int trash_move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
-                 const std::string &image_name, uint64_t delay);
-  int trash_get(IoCtx &io_ctx, const std::string &id, trash_image_info_t *info);
-  int trash_list(librados::IoCtx &io_ctx,
-                 std::vector<trash_image_info_t> &entries);
-  int trash_remove(librados::IoCtx &io_ctx, const std::string &image_id,
-                   bool force, ProgressContext& prog_ctx);
-  int trash_restore(librados::IoCtx &io_ctx, const std::string &image_id,
-                    const std::string &image_new_name);
-
-  int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
-  int snap_exists(ImageCtx *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
-		  const char *snap_name, bool *exists);
-  int snap_get_limit(ImageCtx *ictx, uint64_t *limit);
-  int snap_set_limit(ImageCtx *ictx, uint64_t limit);
-  int snap_get_timestamp(ImageCtx *ictx, uint64_t snap_id, struct timespec *timestamp);
-  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx);
-  int snap_is_protected(ImageCtx *ictx, const char *snap_name,
-			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size);
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx, size_t sparse_size);
@@ -198,15 +129,15 @@ namespace librbd {
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg);
-  void readahead(ImageCtx *ictx,
-                 const vector<pair<uint64_t,uint64_t> >& image_extents);
 
-  int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
   int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
 
+  int list_watchers(ImageCtx *ictx, std::list<librbd::image_watcher_t> &watchers);
 }
+
+std::ostream &operator<<(std::ostream &os, const librbd::ImageOptions &opts);
 
 #endif

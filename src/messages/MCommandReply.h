@@ -15,40 +15,44 @@
 #ifndef CEPH_MCOMMANDREPLY_H
 #define CEPH_MCOMMANDREPLY_H
 
+#include <string_view>
+
 #include "msg/Message.h"
 #include "MCommand.h"
 
-class MCommandReply : public Message {
- public:
+class MCommandReply final : public Message {
+public:
   errorcode32_t r;
-  string rs;
+  std::string rs;
   
   MCommandReply()
-    : Message(MSG_COMMAND_REPLY) {}
+    : Message{MSG_COMMAND_REPLY} {}
   MCommandReply(MCommand *m, int _r)
-    : Message(MSG_COMMAND_REPLY), r(_r) {
+    : Message{MSG_COMMAND_REPLY}, r(_r) {
     header.tid = m->get_tid();
   }
-  MCommandReply(int _r, string s)
-    : Message(MSG_COMMAND_REPLY),
+  MCommandReply(int _r, std::string_view s)
+    : Message{MSG_COMMAND_REPLY},
       r(_r), rs(s) { }
 private:
-  ~MCommandReply() override {}
+  ~MCommandReply() final {}
 
 public:
-  const char *get_type_name() const override { return "command_reply"; }
-  void print(ostream& o) const override {
+  std::string_view get_type_name() const override { return "command_reply"; }
+  void print(std::ostream& o) const override {
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }
   
   void encode_payload(uint64_t features) override {
-    ::encode(r, payload);
-    ::encode(rs, payload);
+    using ceph::encode;
+    encode(r, payload);
+    encode(rs, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(r, p);
-    ::decode(rs, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(r, p);
+    decode(rs, p);
   }
 };
 

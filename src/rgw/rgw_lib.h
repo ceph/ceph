@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 #ifndef RGW_LIB_H
 #define RGW_LIB_H
 
@@ -14,7 +15,8 @@
 #include "rgw_process.h"
 #include "rgw_rest_s3.h" // RGW_Auth_S3
 #include "rgw_ldap.h"
-#include "include/assert.h"
+#include "services/svc_zone_utils.h"
+#include "include/ceph_assert.h"
 
 class OpsLogSocket;
 
@@ -26,9 +28,9 @@ namespace rgw {
     RGWFrontendConfig* fec;
     RGWLibFrontend* fe;
     OpsLogSocket* olog;
-    rgw::LDAPHelper* ldh;
+    rgw::LDAPHelper* ldh{nullptr};
     RGWREST rest; // XXX needed for RGWProcessEnv
-    RGWRados* store;
+    rgw::sal::RGWRadosStore* store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
@@ -36,7 +38,7 @@ namespace rgw {
       {}
     ~RGWLib() {}
 
-    RGWRados* get_store() { return store; }
+    rgw::sal::RGWRadosStore* get_store() { return store; }
 
     RGWLibFrontend* get_fe() { return fe; }
 
@@ -60,16 +62,19 @@ namespace rgw {
     RGWLibIO() {
       get_env().set("HTTP_HOST", "");
     }
-    RGWLibIO(const RGWUserInfo &_user_info)
+    explicit RGWLibIO(const RGWUserInfo &_user_info)
       : user_info(_user_info) {}
 
-    void init_env(CephContext *cct) override {}
+    int init_env(CephContext *cct) override {
+      env.init(cct);
+      return 0;
+    }
 
     const RGWUserInfo& get_user() {
       return user_info;
     }
 
-    int set_uid(RGWRados* store, const rgw_user& uid);
+    int set_uid(rgw::sal::RGWRadosStore* store, const rgw_user& uid);
 
     int write_data(const char *buf, int len);
     int read_data(char *buf, int len);
@@ -112,29 +117,31 @@ namespace rgw {
     friend class RGWRESTMgr_Lib;
   public:
 
-    int authorize() override;
+    int authorize(const DoutPrefixProvider *dpp, optional_yield y) override;
 
     RGWHandler_Lib() {}
     ~RGWHandler_Lib() override {}
-    static int init_from_header(struct req_state *s);
+    static int init_from_header(rgw::sal::RGWRadosStore *store,
+				struct req_state *s);
   }; /* RGWHandler_Lib */
 
   class RGWLibRequest : public RGWRequest,
 			public RGWHandler_Lib {
+  private:
+    std::unique_ptr<rgw::sal::RGWUser> tuser; // Don't use this.  It's empty except during init.
   public:
     CephContext* cct;
-    RGWUserInfo* user;
+    boost::optional<RGWSysObjectCtx> sysobj_ctx;
 
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
-    RGWLibRequest(CephContext* _cct, RGWUserInfo* _user)
-      :  RGWRequest(0), cct(_cct), user(_user)
+    RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::RGWUser> _user)
+      :  RGWRequest(rgwlib.get_store()->getRados()->get_new_req_id()),
+	 tuser(std::move(_user)), cct(_cct)
       {}
 
-    RGWUserInfo* get_user() { return user; }
-
-  int postauth_init() override { return 0; }
+  int postauth_init(optional_yield) override { return 0; }
 
     /* descendant equivalent of *REST*::init_from_header(...):
      * prepare request for execute()--should mean, fixup URI-alikes
@@ -152,30 +159,30 @@ namespace rgw {
 	     RGWLibIO* io, struct req_state* _s) {
 
       RGWRequest::init_state(_s);
-      RGWHandler::init(rados_ctx->store, _s, io);
+      RGWHandler::init(rados_ctx->get_store(), _s, io);
 
-      /* fixup _s->req */
-      _s->req = this;
-
-      log_init();
+      sysobj_ctx.emplace(store->svc()->sysobj);
 
       get_state()->obj_ctx = rados_ctx;
-      get_state()->req_id = store->unique_id(id);
-      get_state()->trans_id = store->unique_trans_id(id);
+      get_state()->sysobj_ctx = &(sysobj_ctx.get());
+      get_state()->req_id = store->svc()->zone_utils->unique_id(id);
+      get_state()->trans_id = store->svc()->zone_utils->unique_trans_id(id);
+      get_state()->bucket_tenant = tuser->get_tenant();
+      get_state()->set_user(tuser);
 
-      log_format(_s, "initializing for trans_id = %s",
-		 get_state()->trans_id.c_str());
+      ldpp_dout(_s, 2) << "initializing for trans_id = "
+	  << get_state()->trans_id.c_str() << dendl;
 
       int ret = header_init();
       if (ret == 0) {
-	ret = init_from_header(_s);
+	ret = init_from_header(rados_ctx->get_store(), _s);
       }
       return ret;
     }
 
     virtual bool only_bucket() = 0;
 
-    int read_permissions(RGWOp *op) override;
+    int read_permissions(RGWOp *op, optional_yield y) override;
 
   }; /* RGWLibRequest */
 
@@ -185,35 +192,37 @@ namespace rgw {
     RGWObjectCtx rados_ctx;
   public:
 
-    RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user)
-      :  RGWLibRequest(_cct, _user), io_ctx(),
-	 rstate(_cct, &io_ctx.get_env(), _user), rados_ctx(rgwlib.get_store(),
-							   &rstate)
+    RGWLibContinuedReq(CephContext* _cct,
+		       std::unique_ptr<rgw::sal::RGWUser> _user)
+      :  RGWLibRequest(_cct, std::move(_user)), io_ctx(),
+	 rstate(_cct, &io_ctx.get_env(), id),
+	 rados_ctx(rgwlib.get_store(), &rstate)
       {
 	io_ctx.init(_cct);
 
 	RGWRequest::init_state(&rstate);
-	RGWHandler::init(rados_ctx.store, &rstate, &io_ctx);
+	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
-	/* fixup _s->req */
-	get_state()->req = this;
+	sysobj_ctx.emplace(store->svc()->sysobj);
 
-	log_init();
-
+	get_state()->cio = &io_ctx;
 	get_state()->obj_ctx = &rados_ctx;
-	get_state()->req_id = store->unique_id(id);
-	get_state()->trans_id = store->unique_trans_id(id);
+	get_state()->sysobj_ctx = &(sysobj_ctx.get());
+	get_state()->req_id = store->svc()->zone_utils->unique_id(id);
+	get_state()->trans_id = store->svc()->zone_utils->unique_trans_id(id);
 
-	log_format(get_state(), "initializing for trans_id = %s",
-		   get_state()->trans_id.c_str());
+	ldpp_dout(get_state(), 2) << "initializing for trans_id = "
+	    << get_state()->trans_id.c_str() << dendl;
       }
 
-    inline RGWRados* get_store() { return store; }
+    inline rgw::sal::RGWRadosStore* get_store() { return store; }
+    inline RGWLibIO& get_io() { return io_ctx; }
+    inline RGWObjectCtx& get_octx() { return rados_ctx; }
 
-    virtual int execute() final { abort(); }
+    virtual int execute() final { ceph_abort(); }
     virtual int exec_start() = 0;
     virtual int exec_continue() = 0;
-    virtual int exec_finish() = 0;
+    virtual int exec_finish(const DoutPrefixProvider *dpp) = 0;
 
   }; /* RGWLibContinuedReq */
 

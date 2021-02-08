@@ -28,17 +28,19 @@ template<>
 struct BreakRequest<librbd::MockImageCtx> {
   Context *on_finish = nullptr;
   static BreakRequest *s_instance;
-  static BreakRequest* create(librados::IoCtx& ioctx, ContextWQ *work_queue,
+  static BreakRequest* create(librados::IoCtx& ioctx,
+                              AsioEngine& asio_engine,
                               const std::string& oid, const Locker &locker,
-                              bool blacklist_locker,
-                              uint32_t blacklist_expire_seconds,
+                              bool exclusive, bool blocklist_locker,
+                              uint32_t blocklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
     CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
-    EXPECT_EQ(cct->_conf->rbd_blacklist_on_break_lock, blacklist_locker);
-    EXPECT_EQ(cct->_conf->rbd_blacklist_expire_seconds,
-              (int)blacklist_expire_seconds);
+    EXPECT_EQ(cct->_conf.get_val<bool>("rbd_blocklist_on_break_lock"),
+              blocklist_locker);
+    EXPECT_EQ(cct->_conf.get_val<uint64_t>("rbd_blocklist_expire_seconds"),
+              blocklist_expire_seconds);
     EXPECT_FALSE(force_break_lock);
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -51,14 +53,14 @@ struct BreakRequest<librbd::MockImageCtx> {
 
 template <>
 struct GetLockerRequest<librbd::MockImageCtx> {
-  Locker *locker;
-  Context *on_finish;
+  Locker *locker = nullptr;
+  Context *on_finish = nullptr;
 
   static GetLockerRequest *s_instance;
   static GetLockerRequest* create(librados::IoCtx& ioctx,
                                   const std::string& oid, bool exclusive,
                                   Locker *locker, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->locker = locker;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -87,9 +89,9 @@ MATCHER_P(IsLockType, exclusive, "") {
   cls_lock_lock_op op;
   bufferlist bl;
   bl.share(arg);
-  bufferlist::iterator iter = bl.begin();
-  ::decode(op, iter);
-  return op.type == (exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED);
+  auto iter = bl.cbegin();
+  decode(op, iter);
+  return op.type == (exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED);
 }
 
 } // anonymous namespace
@@ -118,7 +120,7 @@ public:
                              bool exclusive = true) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("lock"),
-                     StrEq("lock"), IsLockType(exclusive), _, _))
+                     StrEq("lock"), IsLockType(exclusive), _, _, _))
                   .WillOnce(Return(r));
   }
 
@@ -154,8 +156,8 @@ TEST_F(TestMockManagedLockAcquireRequest, SuccessExclusive) {
 
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx.md_ctx,
-     mock_image_ctx.image_watcher, ictx->op_work_queue, mock_image_ctx.header_oid,
-     TEST_COOKIE, true, true, 0, &ctx);
+    mock_image_ctx.image_watcher, *ictx->asio_engine, mock_image_ctx.header_oid,
+    TEST_COOKIE, true, true, 0, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -174,8 +176,8 @@ TEST_F(TestMockManagedLockAcquireRequest, SuccessShared) {
 
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx.md_ctx,
-     mock_image_ctx.image_watcher, ictx->op_work_queue, mock_image_ctx.header_oid,
-     TEST_COOKIE, false, true, 0, &ctx);
+    mock_image_ctx.image_watcher, *ictx->asio_engine, mock_image_ctx.header_oid,
+    TEST_COOKIE, false, true, 0, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -195,13 +197,12 @@ TEST_F(TestMockManagedLockAcquireRequest, LockBusy) {
                     0);
   expect_lock(mock_image_ctx, -EBUSY);
   expect_break_lock(mock_image_ctx, mock_break_request, 0);
-  expect_get_locker(mock_image_ctx, mock_get_locker_request, {}, 0);
   expect_lock(mock_image_ctx, -ENOENT);
 
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx.md_ctx,
-     mock_image_ctx.image_watcher, ictx->op_work_queue, mock_image_ctx.header_oid,
-     TEST_COOKIE, true, true, 0, &ctx);
+    mock_image_ctx.image_watcher, *ictx->asio_engine, mock_image_ctx.header_oid,
+    TEST_COOKIE, true, true, 0, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -218,8 +219,8 @@ TEST_F(TestMockManagedLockAcquireRequest, GetLockInfoError) {
 
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx.md_ctx,
-     mock_image_ctx.image_watcher, ictx->op_work_queue, mock_image_ctx.header_oid,
-     TEST_COOKIE, true, true, 0, &ctx);
+    mock_image_ctx.image_watcher, *ictx->asio_engine, mock_image_ctx.header_oid,
+    TEST_COOKIE, true, true, 0, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -237,8 +238,8 @@ TEST_F(TestMockManagedLockAcquireRequest, GetLockInfoEmpty) {
 
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx.md_ctx,
-     mock_image_ctx.image_watcher, ictx->op_work_queue, mock_image_ctx.header_oid,
-     TEST_COOKIE, true, true, 0, &ctx);
+    mock_image_ctx.image_watcher, *ictx->asio_engine, mock_image_ctx.header_oid,
+    TEST_COOKIE, true, true, 0, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -260,8 +261,8 @@ TEST_F(TestMockManagedLockAcquireRequest, BreakLockError) {
 
   C_SaferCond ctx;
   MockAcquireRequest *req = MockAcquireRequest::create(mock_image_ctx.md_ctx,
-     mock_image_ctx.image_watcher, ictx->op_work_queue, mock_image_ctx.header_oid,
-     TEST_COOKIE, true, true, 0, &ctx);
+    mock_image_ctx.image_watcher, *ictx->asio_engine, mock_image_ctx.header_oid,
+    TEST_COOKIE, true, true, 0, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }

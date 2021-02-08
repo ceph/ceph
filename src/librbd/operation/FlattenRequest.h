@@ -4,8 +4,6 @@
 #define CEPH_LIBRBD_OPERATION_FLATTEN_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include "common/snap_types.h"
-#include "librbd/Types.h"
 
 namespace librbd {
 
@@ -19,12 +17,9 @@ class FlattenRequest : public Request<ImageCtxT>
 {
 public:
   FlattenRequest(ImageCtxT &image_ctx, Context *on_finish,
-		 uint64_t object_size, uint64_t overlap_objects,
-		 const ::SnapContext &snapc, ProgressContext &prog_ctx)
-    : Request<ImageCtxT>(image_ctx, on_finish), m_object_size(object_size),
-      m_overlap_objects(overlap_objects), m_snapc(snapc), m_prog_ctx(prog_ctx),
-      m_ignore_enoent(false)
-  {
+                 uint64_t overlap_objects, ProgressContext &prog_ctx)
+    : Request<ImageCtxT>(image_ctx, on_finish),
+      m_overlap_objects(overlap_objects), m_prog_ctx(prog_ctx) {
   }
 
 protected:
@@ -37,49 +32,37 @@ protected:
 
 private:
   /**
-   * Flatten goes through the following state machine to copyup objects
-   * from the parent image:
-   *
    * @verbatim
    *
    * <start>
    *    |
    *    v
-   * STATE_FLATTEN_OBJECTS ---> STATE_UPDATE_HEADER . . . . .
-   *           .                         |                  .
-   *           .                         |                  .
-   *           .                         v                  .
-   *           .               STATE_UPDATE_CHILDREN        .
-   *           .                         |                  .
-   *           .                         |                  .
-   *           .                         \---> <finish> < . .
-   *           .                                   ^
-   *           .                                   .
-   *           . . . . . . . . . . . . . . . . . . .
+   * FLATTEN_OBJECTS
+   *    |
+   *    v
+   * DETACH_CHILD
+   *    |
+   *    v
+   * DETACH_PARENT
+   *    |
+   *    v
+   * <finish>
    *
    * @endverbatim
-   *
-   * The _UPDATE_CHILDREN state will be skipped if the image has one or
-   * more snapshots. The _UPDATE_HEADER state will be skipped if the
-   * image was concurrently flattened by another client.
    */
-  enum State {
-    STATE_FLATTEN_OBJECTS,
-    STATE_UPDATE_HEADER,
-    STATE_UPDATE_CHILDREN
-  };
 
-  uint64_t m_object_size;
   uint64_t m_overlap_objects;
-  ::SnapContext m_snapc;
   ProgressContext &m_prog_ctx;
-  State m_state;
 
-  ParentSpec m_parent_spec;
-  bool m_ignore_enoent;
+  void flatten_objects();
+  void handle_flatten_objects(int r);
 
-  bool send_update_header();
-  bool send_update_children();
+  void detach_child();
+  void handle_detach_child(int r);
+
+  void detach_parent();
+  void handle_detach_parent(int r);
+
 };
 
 } // namespace operation

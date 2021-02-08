@@ -3,13 +3,22 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
+
 
 #pragma once
 
 #include <memory>
 #include <mutex>
 #include <deque>
+#include <functional>
 
 #include "boost/variant.hpp"
 
@@ -36,7 +45,7 @@ namespace crimson {
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
       using HandleRequestFunc =
-	std::function<void(const C&,RequestRef,NullData)>;
+	std::function<void(const C&,RequestRef,NullData,uint64_t)>;
 
       struct PullReq {
 	enum class Type { returning, none };
@@ -100,15 +109,18 @@ namespace crimson {
 	finishing = true;
       }
 
-      void add_request(const R& request,
+      void add_request(R&& request,
 		       const C& client_id,
-		       const ReqParams& req_params) {
-	add_request(RequestRef(new R(request)), client_id, req_params);
+		       const ReqParams& req_params,
+		       uint64_t request_cost) {
+	add_request(RequestRef(new R(std::move(request))),
+		    client_id, req_params, request_cost);
       }
 
       void add_request(RequestRef&& request,
 		       const C& client_id,
-		       const ReqParams& req_params) {
+		       const ReqParams& req_params,
+		       uint64_t request_cost) {
 	DataGuard g(queue_mtx);
 
 #ifdef PROFILE
@@ -173,7 +185,7 @@ namespace crimson {
 	if (!queue.empty() && can_handle_f()) {
 	  auto& front = queue.front();
 	  static NullData null_data;
-	  handle_f(front.client, std::move(front.request), null_data);
+	  handle_f(front.client, std::move(front.request), null_data, 1u);
 	  queue.pop_front();
 	}
       }

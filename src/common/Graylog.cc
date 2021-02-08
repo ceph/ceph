@@ -2,22 +2,16 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Graylog.h"
-
-#include <iostream>
-#include <sstream>
-
-#include <arpa/inet.h>
-
 #include "common/Formatter.h"
 #include "common/LogEntry.h"
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
-#include "include/uuid.h"
 
-namespace ceph {
-namespace logging {
+using std::cerr;
 
-Graylog::Graylog(const SubsystemMap * const s, std::string logger)
+namespace ceph::logging {
+
+Graylog::Graylog(const SubsystemMap * const s, const std::string &logger)
     : m_subs(s),
       m_log_dst_valid(false),
       m_hostname(""),
@@ -31,7 +25,7 @@ Graylog::Graylog(const SubsystemMap * const s, std::string logger)
   m_formatter_section = std::unique_ptr<Formatter>(Formatter::create("json"));
 }
 
-Graylog::Graylog(std::string logger)
+Graylog::Graylog(const std::string &logger)
     : m_subs(NULL),
       m_log_dst_valid(false),
       m_hostname(""),
@@ -74,22 +68,23 @@ void Graylog::set_fsid(const uuid_d& fsid)
   m_fsid = std::string(&buf[0]);
 }
 
-void Graylog::log_entry(Entry const * const e)
+void Graylog::log_entry(const Entry& e)
 {
   if (m_log_dst_valid) {
-    std::string s = e->get_str();
+    auto s = e.strv();
 
     m_formatter->open_object_section("");
     m_formatter->dump_string("version", "1.1");
     m_formatter->dump_string("host", m_hostname);
     m_formatter->dump_string("short_message", s);
     m_formatter->dump_string("_app", "ceph");
-    m_formatter->dump_float("timestamp", e->m_stamp.sec() + (e->m_stamp.usec() / 1000000.0));
-    m_formatter->dump_unsigned("_thread", (uint64_t)e->m_thread);
-    m_formatter->dump_int("_level", e->m_prio);
+    auto t = ceph::logging::log_clock::to_timeval(e.m_stamp);
+    m_formatter->dump_float("timestamp", t.tv_sec + (t.tv_usec / 1000000.0));
+    m_formatter->dump_unsigned("_thread", (uint64_t)e.m_thread);
+    m_formatter->dump_int("_level", e.m_prio);
     if (m_subs != NULL)
-    m_formatter->dump_string("_subsys_name", m_subs->get_name(e->m_subsys));
-    m_formatter->dump_int("_subsys_id", e->m_subsys);
+    m_formatter->dump_string("_subsys_name", m_subs->get_name(e.m_subsys));
+    m_formatter->dump_int("_subsys_id", e.m_subsys);
     m_formatter->dump_string("_fsid", m_fsid);
     m_formatter->dump_string("_logger", m_logger);
     m_formatter->close_section();
@@ -127,9 +122,14 @@ void Graylog::log_log_entry(LogEntry const * const e)
     m_formatter->dump_float("timestamp", e->stamp.sec() + (e->stamp.usec() / 1000000.0));
     m_formatter->dump_string("_app", "ceph");
 
-    m_formatter_section->open_object_section("");
-    e->who.addr.dump(m_formatter_section.get());
-    e->who.name.dump(m_formatter_section.get());
+    m_formatter->dump_string("name", e->name.to_str());
+
+    m_formatter_section->open_object_section("rank");
+    e->rank.dump(m_formatter_section.get());
+    m_formatter_section->close_section();
+
+    m_formatter_section->open_object_section("addrs");
+    e->addrs.dump(m_formatter_section.get());
     m_formatter_section->close_section();
 
     m_ostream_section.clear();
@@ -167,5 +167,4 @@ void Graylog::log_log_entry(LogEntry const * const e)
   }
 }
 
-} // ceph::logging::
-} // ceph::
+} // name ceph::logging

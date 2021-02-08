@@ -16,32 +16,27 @@
 #include "include/util.h"
 #include "gtest/gtest.h"
 
-#include <sstream>
-
-TEST(util, unit_to_bytesize)
-{
-  ASSERT_EQ(1234ll, unit_to_bytesize("1234", &cerr));
-  ASSERT_EQ(1024ll, unit_to_bytesize("1K", &cerr));
-  ASSERT_EQ(1024ll, unit_to_bytesize("1k", &cerr));
-  ASSERT_EQ(1048576ll, unit_to_bytesize("1M", &cerr));
-  ASSERT_EQ(1073741824ll, unit_to_bytesize("1G", &cerr));
-  ASSERT_EQ(1099511627776ll, unit_to_bytesize("1T", &cerr));
-  ASSERT_EQ(1125899906842624ll, unit_to_bytesize("1P", &cerr));
-  ASSERT_EQ(1152921504606846976ll, unit_to_bytesize("1E", &cerr));
-
-  ASSERT_EQ(65536ll, unit_to_bytesize(" 64K", &cerr));
-}
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#endif
 
 #if defined(__linux__)
 TEST(util, collect_sys_info)
 {
+  if (!fs::exists("/etc/os-release")) {
+    GTEST_SKIP() << "skipping as '/etc/os-release' does not exist";
+  }
+
   map<string, string> sys_info;
 
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
   collect_sys_info(&sys_info, cct);
 
   ASSERT_TRUE(sys_info.find("distro") != sys_info.end());
-  ASSERT_TRUE(sys_info.find("distro_version") != sys_info.end());
   ASSERT_TRUE(sys_info.find("distro_description") != sys_info.end());
 
   cct->put();

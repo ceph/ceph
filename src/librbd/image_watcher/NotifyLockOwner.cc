@@ -36,7 +36,7 @@ void NotifyLockOwner::send_notify() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_image_ctx.owner_lock));
   m_notifier.notify(m_bl, &m_notify_response, create_context_callback<
     NotifyLockOwner, &NotifyLockOwner::handle_notify>(this));
 }
@@ -62,7 +62,7 @@ void NotifyLockOwner::handle_notify(int r) {
         return;
       }
       lock_owner_responded = true;
-      response.claim(it.second);
+      response = std::move(it.second);
     }
   }
 
@@ -73,10 +73,11 @@ void NotifyLockOwner::handle_notify(int r) {
   }
 
   try {
-    bufferlist::iterator iter = response.begin();
+    auto iter = response.cbegin();
 
     ResponseMessage response_message;
-    ::decode(response_message, iter);
+    using ceph::decode;
+    decode(response_message, iter);
 
     r = response_message.result;
   } catch (const buffer::error &err) {

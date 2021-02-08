@@ -36,19 +36,19 @@ class ObjCeiling {
       return id > rhs.id;
     }
 
-    void encode(bufferlist &bl) const
+    void encode(ceph::buffer::list &bl) const
     {
       ENCODE_START(1, 1, bl);
-      ::encode(id, bl);
-      ::encode(size, bl);
+      encode(id, bl);
+      encode(size, bl);
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &p)
+    void decode(ceph::buffer::list::const_iterator &p)
     {
       DECODE_START(1, p);
-      ::decode(id, p);
-      ::decode(size, p);
+      decode(id, p);
+      decode(size, p);
       DECODE_FINISH(p);
     }
 };
@@ -68,9 +68,9 @@ public:
       uint64_t obj_index_,
       uint64_t obj_size_,
       time_t mtime_,
-      std::string obj_xattr_name_,
-      std::string mtime_xattr_name_,
-      std::string obj_size_xattr_name_)
+      const std::string &obj_xattr_name_,
+      const std::string &mtime_xattr_name_,
+      const std::string &obj_size_xattr_name_)
    : obj_index(obj_index_),
      obj_size(obj_size_),
      mtime(mtime_),
@@ -83,27 +83,27 @@ public:
     : obj_index(0), obj_size(0), mtime(0)
   {}
 
-  void encode(bufferlist &bl) const
+  void encode(ceph::buffer::list &bl) const
   {
     ENCODE_START(1, 1, bl);
-    ::encode(obj_xattr_name, bl);
-    ::encode(mtime_xattr_name, bl);
-    ::encode(obj_size_xattr_name, bl);
-    ::encode(obj_index, bl);
-    ::encode(obj_size, bl);
-    ::encode(mtime, bl);
+    encode(obj_xattr_name, bl);
+    encode(mtime_xattr_name, bl);
+    encode(obj_size_xattr_name, bl);
+    encode(obj_index, bl);
+    encode(obj_size, bl);
+    encode(mtime, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl)
+  void decode(ceph::buffer::list::const_iterator &bl)
   {
     DECODE_START(1, bl);
-    ::decode(obj_xattr_name, bl);
-    ::decode(mtime_xattr_name, bl);
-    ::decode(obj_size_xattr_name, bl);
-    ::decode(obj_index, bl);
-    ::decode(obj_size, bl);
-    ::decode(mtime, bl);
+    decode(obj_xattr_name, bl);
+    decode(mtime_xattr_name, bl);
+    decode(obj_size_xattr_name, bl);
+    decode(obj_index, bl);
+    decode(obj_size, bl);
+    decode(mtime, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -113,17 +113,17 @@ class InodeTagFilterArgs
   public:
     std::string scrub_tag;
 
-  void encode(bufferlist &bl) const
+  void encode(ceph::buffer::list &bl) const
   {
     ENCODE_START(1, 1, bl);
-    ::encode(scrub_tag, bl);
+    encode(scrub_tag, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl)
+  void decode(ceph::buffer::list::const_iterator &bl)
   {
     DECODE_START(1, bl);
-    ::decode(scrub_tag, bl);
+    decode(scrub_tag, bl);
     DECODE_FINISH(bl);
   }
 };

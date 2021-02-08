@@ -1,45 +1,21 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <iostream>
-
-#include <string.h>
-#include <stdlib.h>
 #include <errno.h>
 
-#include "include/types.h"
-#include "include/utime.h"
 #include "objclass/objclass.h"
 #include "cls/refcount/cls_refcount_ops.h"
-#include "common/Clock.h"
 
-#include "global/global_context.h"
 #include "include/compat.h"
+
+using std::string;
+
+using ceph::bufferlist;
 
 CLS_VER(1,0)
 CLS_NAME(refcount)
 
-
 #define REFCOUNT_ATTR "refcount"
-
-struct obj_refcount {
-  map<string, bool> refs;
-
-  obj_refcount() {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(refs, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(refs, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(obj_refcount)
 
 static string wildcard_tag;
 
@@ -58,9 +34,9 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
     return ret;
 
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*objr, iter);
-  } catch (buffer::error& err) {
+    auto iter = bl.cbegin();
+    decode(*objr, iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(0, "ERROR: read_refcount(): failed to decode refcount entry\n");
     return -EIO;
   }
@@ -68,14 +44,11 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
   return 0;
 }
 
-static int set_refcount(cls_method_context_t hctx, map<string, bool>& refs)
+static int set_refcount(cls_method_context_t hctx, const struct obj_refcount& objr)
 {
   bufferlist bl;
-  struct obj_refcount objr;
 
-  objr.refs = refs;
-
-  ::encode(objr, bl);
+  encode(objr, bl);
 
   int ret = cls_cxx_setxattr(hctx, REFCOUNT_ATTR, &bl);
   if (ret < 0)
@@ -86,12 +59,12 @@ static int set_refcount(cls_method_context_t hctx, map<string, bool>& refs)
 
 static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_get_op op;
   try {
-    ::decode(op, in_iter);
-  } catch (buffer::error& err) {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_rc_refcount_get(): failed to decode entry\n");
     return -EINVAL;
   }
@@ -105,7 +78,7 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
 
   objr.refs[op.tag] = true;
 
-  ret = set_refcount(hctx, objr.refs);
+  ret = set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
 
@@ -114,12 +87,12 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_put_op op;
   try {
-    ::decode(op, in_iter);
-  } catch (buffer::error& err) {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_rc_refcount_put(): failed to decode entry\n");
     return -EINVAL;
   }
@@ -137,7 +110,7 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
   CLS_LOG(10, "cls_rc_refcount_put() tag=%s\n", op.tag.c_str());
 
   bool found = false;
-  map<string, bool>::iterator iter = objr.refs.find(op.tag);
+  auto iter = objr.refs.find(op.tag);
   if (iter != objr.refs.end()) {
     found = true;
   } else if (op.implicit_ref) {
@@ -147,16 +120,18 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
     }
   }
 
-  if (!found)
+  if (!found ||
+      objr.retired_refs.find(op.tag) != objr.retired_refs.end())
     return 0;
 
+  objr.retired_refs.insert(op.tag);
   objr.refs.erase(iter);
 
   if (objr.refs.empty()) {
     return cls_cxx_remove(hctx);
   }
 
-  ret = set_refcount(hctx, objr.refs);
+  ret = set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
 
@@ -165,12 +140,12 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_set_op op;
   try {
-    ::decode(op, in_iter);
-  } catch (buffer::error& err) {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_refcount_set(): failed to decode entry\n");
     return -EINVAL;
   }
@@ -180,12 +155,11 @@ static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   obj_refcount objr;
-  list<string>::iterator iter;
-  for (iter = op.refs.begin(); iter != op.refs.end(); ++iter) {
+  for (auto iter = op.refs.begin(); iter != op.refs.end(); ++iter) {
     objr.refs[*iter] = true;
   }
 
-  int ret = set_refcount(hctx, objr.refs);
+  int ret = set_refcount(hctx, objr);
   if (ret < 0)
     return ret;
 
@@ -194,12 +168,12 @@ static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_read_op op;
   try {
-    ::decode(op, in_iter);
-  } catch (buffer::error& err) {
+    decode(op, in_iter);
+  } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_rc_refcount_read(): failed to decode entry\n");
     return -EINVAL;
   }
@@ -211,12 +185,11 @@ static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, buffe
   if (ret < 0)
     return ret;
 
-  map<string, bool>::iterator iter;
-  for (iter = objr.refs.begin(); iter != objr.refs.end(); ++iter) {
+  for (auto iter = objr.refs.begin(); iter != objr.refs.end(); ++iter) {
     read_ret.refs.push_back(iter->first);
   }
 
-  ::encode(read_ret, *out);
+  encode(read_ret, *out);
 
   return 0;
 }

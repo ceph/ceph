@@ -15,7 +15,6 @@
 #ifndef CEPH_SAFE_IO
 #define CEPH_SAFE_IO
 
-#include "acconfig.h"
 #include "common/compiler_extensions.h"
 #include <sys/types.h>
 
@@ -27,10 +26,16 @@ extern "C" {
    * Safe functions wrapping the raw read() and write() libc functions.
    * These retry on EINTR, and on error return -errno instead of returning
    * -1 and setting errno).
+   *
+   * On Windows, only recv/send work with sockets.
    */
   ssize_t safe_read(int fd, void *buf, size_t count)
       WARN_UNUSED_RESULT;
   ssize_t safe_write(int fd, const void *buf, size_t count)
+      WARN_UNUSED_RESULT;
+  ssize_t safe_recv(int fd, void *buf, size_t count)
+      WARN_UNUSED_RESULT;
+  ssize_t safe_send(int fd, const void *buf, size_t count)
       WARN_UNUSED_RESULT;
   ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
       WARN_UNUSED_RESULT;
@@ -55,6 +60,8 @@ extern "C" {
    */
   ssize_t safe_read_exact(int fd, void *buf, size_t count)
       WARN_UNUSED_RESULT;
+  ssize_t safe_recv_exact(int fd, void *buf, size_t count)
+      WARN_UNUSED_RESULT;
   ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
       WARN_UNUSED_RESULT;
 
@@ -63,9 +70,10 @@ extern "C" {
    * Safe functions to read and write an entire file.
    */
   int safe_write_file(const char *base, const char *file,
-			const char *val, size_t vallen);
+		      const char *val, size_t vallen,
+		      unsigned mode);
   int safe_read_file(const char *base, const char *file,
-		       char *val, size_t vallen);
+		     char *val, size_t vallen);
 
 #ifdef __cplusplus
 }

@@ -7,24 +7,21 @@
 namespace librados {
 
 TestMemCluster::File::File()
-  : snap_id(), exists(true), lock("TestMemCluster::File::lock") {
+  : objver(0), snap_id(), exists(true) {
 }
 
 TestMemCluster::File::File(const File &rhs)
   : data(rhs.data),
     mtime(rhs.mtime),
+    objver(rhs.objver),
     snap_id(rhs.snap_id),
-    exists(rhs.exists),
-    lock("TestMemCluster::File::lock") {
+    exists(rhs.exists) {
 }
 
-TestMemCluster::Pool::Pool()
-  : file_lock("TestMemCluster::Pool::file_lock") {
-}
+TestMemCluster::Pool::Pool() = default;
 
 TestMemCluster::TestMemCluster()
-  : m_lock("TestMemCluster::m_lock"),
-    m_next_nonce(static_cast<uint32_t>(reinterpret_cast<uint64_t>(this))) {
+  : m_next_nonce(static_cast<uint32_t>(reinterpret_cast<uint64_t>(this))) {
 }
 
 TestMemCluster::~TestMemCluster() {
@@ -37,8 +34,50 @@ TestRadosClient *TestMemCluster::create_rados_client(CephContext *cct) {
   return new TestMemRadosClient(cct, this);
 }
 
+int TestMemCluster::register_object_handler(int64_t pool_id,
+                                            const ObjectLocator& locator,
+                                            ObjectHandler* object_handler) {
+  std::lock_guard locker{m_lock};
+  auto pool = get_pool(m_lock, pool_id);
+  if (pool == nullptr) {
+    return -ENOENT;
+  }
+
+  std::unique_lock pool_locker{pool->file_lock};
+  auto file_it = pool->files.find(locator);
+  if (file_it == pool->files.end()) {
+    return -ENOENT;
+  }
+
+  auto& object_handlers = pool->file_handlers[locator];
+  auto it = object_handlers.find(object_handler);
+  ceph_assert(it == object_handlers.end());
+
+  object_handlers.insert(object_handler);
+  return 0;
+}
+
+void TestMemCluster::unregister_object_handler(int64_t pool_id,
+                                               const ObjectLocator& locator,
+                                               ObjectHandler* object_handler) {
+  std::lock_guard locker{m_lock};
+  auto pool = get_pool(m_lock, pool_id);
+  if (pool == nullptr) {
+    return;
+  }
+
+  std::unique_lock pool_locker{pool->file_lock};
+  auto handlers_it = pool->file_handlers.find(locator);
+  if (handlers_it == pool->file_handlers.end()) {
+    return;
+  }
+
+  auto& object_handlers = handlers_it->second;
+  object_handlers.erase(object_handler);
+}
+
 int TestMemCluster::pool_create(const std::string &pool_name) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   if (m_pools.find(pool_name) != m_pools.end()) {
     return -EEXIST;
   }
@@ -49,7 +88,7 @@ int TestMemCluster::pool_create(const std::string &pool_name) {
 }
 
 int TestMemCluster::pool_delete(const std::string &pool_name) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter == m_pools.end()) {
     return -ENOENT;
@@ -66,7 +105,7 @@ int TestMemCluster::pool_get_base_tier(int64_t pool_id, int64_t* base_tier) {
 }
 
 int TestMemCluster::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   v.clear();
   for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
     v.push_back(std::make_pair(iter->second->pool_id, iter->first));
@@ -75,7 +114,7 @@ int TestMemCluster::pool_list(std::list<std::pair<int64_t, std::string> >& v) {
 }
 
 int64_t TestMemCluster::pool_lookup(const std::string &pool_name) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter == m_pools.end()) {
     return -ENOENT;
@@ -84,7 +123,7 @@ int64_t TestMemCluster::pool_lookup(const std::string &pool_name) {
 }
 
 int TestMemCluster::pool_reverse_lookup(int64_t id, std::string *name) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   for (Pools::iterator iter = m_pools.begin(); iter != m_pools.end(); ++iter) {
     if (iter->second->pool_id == id) {
       *name = iter->first;
@@ -95,7 +134,12 @@ int TestMemCluster::pool_reverse_lookup(int64_t id, std::string *name) {
 }
 
 TestMemCluster::Pool *TestMemCluster::get_pool(int64_t pool_id) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
+  return get_pool(m_lock, pool_id);
+}
+
+TestMemCluster::Pool *TestMemCluster::get_pool(const ceph::mutex& lock,
+                                               int64_t pool_id) {
   for (auto &pool_pair : m_pools) {
     if (pool_pair.second->pool_id == pool_id) {
       return pool_pair.second;
@@ -105,7 +149,7 @@ TestMemCluster::Pool *TestMemCluster::get_pool(int64_t pool_id) {
 }
 
 TestMemCluster::Pool *TestMemCluster::get_pool(const std::string &pool_name) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   Pools::iterator iter = m_pools.find(pool_name);
   if (iter != m_pools.end()) {
     return iter->second;
@@ -114,43 +158,42 @@ TestMemCluster::Pool *TestMemCluster::get_pool(const std::string &pool_name) {
 }
 
 void TestMemCluster::allocate_client(uint32_t *nonce, uint64_t *global_id) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   *nonce = m_next_nonce++;
   *global_id = m_next_global_id++;
 }
 
 void TestMemCluster::deallocate_client(uint32_t nonce) {
-  Mutex::Locker locker(m_lock);
-  m_blacklist.erase(nonce);
+  std::lock_guard locker{m_lock};
+  m_blocklist.erase(nonce);
 }
 
-bool TestMemCluster::is_blacklisted(uint32_t nonce) const {
-  Mutex::Locker locker(m_lock);
-  return (m_blacklist.find(nonce) != m_blacklist.end());
+bool TestMemCluster::is_blocklisted(uint32_t nonce) const {
+  std::lock_guard locker{m_lock};
+  return (m_blocklist.find(nonce) != m_blocklist.end());
 }
 
-void TestMemCluster::blacklist(uint32_t nonce) {
-  m_watch_notify.blacklist(nonce);
+void TestMemCluster::blocklist(uint32_t nonce) {
+  m_watch_notify.blocklist(nonce);
 
-  Mutex::Locker locker(m_lock);
-  m_blacklist.insert(nonce);
+  std::lock_guard locker{m_lock};
+  m_blocklist.insert(nonce);
 }
 
-void TestMemCluster::transaction_start(const std::string &oid) {
-  Mutex::Locker locker(m_lock);
-  while (m_transactions.count(oid)) {
-    m_transaction_cond.Wait(m_lock);
-  }
-  std::pair<std::set<std::string>::iterator, bool> result =
-    m_transactions.insert(oid);
-  assert(result.second);
+void TestMemCluster::transaction_start(const ObjectLocator& locator) {
+  std::unique_lock locker{m_lock};
+  m_transaction_cond.wait(locker, [&locator, this] {
+    return m_transactions.count(locator) == 0;
+  });
+  auto result = m_transactions.insert(locator);
+  ceph_assert(result.second);
 }
 
-void TestMemCluster::transaction_finish(const std::string &oid) {
-  Mutex::Locker locker(m_lock);
-  size_t count = m_transactions.erase(oid);
-  assert(count == 1);
-  m_transaction_cond.Signal();
+void TestMemCluster::transaction_finish(const ObjectLocator& locator) {
+  std::lock_guard locker{m_lock};
+  size_t count = m_transactions.erase(locator);
+  ceph_assert(count == 1);
+  m_transaction_cond.notify_all();
 }
 
 } // namespace librados

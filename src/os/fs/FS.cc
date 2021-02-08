@@ -17,9 +17,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-// from include/linux/falloc.h:
-#ifndef FALLOC_FL_PUNCH_HOLE
-# define FALLOC_FL_PUNCH_HOLE 0x2
+#ifdef __linux__
+#include <linux/falloc.h>
 #endif
 
 #include "FS.h"
@@ -30,7 +29,7 @@
 #include "XFS.h"
 #endif
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/mount.h>
 #else
 #include <sys/vfs.h>
@@ -114,7 +113,7 @@ int FS::copy_file_range(int to_fd, uint64_t to_offset,
 			int from_fd,
 			uint64_t from_offset, uint64_t from_len)
 {
-  assert(0 == "write me");
+  ceph_abort_msg("write me");
 }
 
 int FS::zero(int fd, uint64_t offset, uint64_t length)
@@ -151,7 +150,7 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
    So: we only do this is PUNCH_HOLE *and* KEEP_SIZE are defined.
 
   */
-#if !defined(DARWIN) && !defined(__FreeBSD__)
+#if !defined(__APPLE__) && !defined(__FreeBSD__)
 # ifdef CEPH_HAVE_FALLOCATE
 #  ifdef FALLOC_FL_KEEP_SIZE
   // first try fallocate
@@ -169,7 +168,7 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
 
   {
     // fall back to writing zeros
-    bufferlist bl;
+    ceph::bufferlist bl;
     bl.append_zero(length);
     r = ::lseek64(fd, offset, SEEK_SET);
     if (r < 0) {

@@ -14,7 +14,9 @@ and a dual-core processor, but more CPU and RAM will perform better. The
 following diagram depicts the CloudStack/Ceph technology stack.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                   CloudStack                      |
             +---------------------------------------------------+
             |                     libvirt                       |
@@ -68,6 +70,11 @@ See `Create a Pool`_ for details on specifying the number of placement groups
 for your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
+A newly created pool must be initialized prior to use. Use the ``rbd`` tool
+to initialize the pool::
+
+        rbd pool init cloudstack
+
 Create a Ceph User
 ==================
 
@@ -76,7 +83,7 @@ credentials to access the ``cloudstack`` pool we just created. Although we could
 use ``client.admin`` for this, it's recommended to create a user with only
 access to the ``cloudstack`` pool. ::
 
-  ceph auth get-or-create client.cloudstack mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=cloudstack'
+  ceph auth get-or-create client.cloudstack mon 'profile rbd' osd 'profile rbd pool=cloudstack'
 
 Use the information returned by the command in the next step when adding the 
 Primary Storage.
@@ -86,26 +93,46 @@ See `User Management`_ for additional details.
 Add Primary Storage
 ===================
 
-To add primary storage, refer to `Add Primary Storage (4.2.0)`_ to add a Ceph block device, the steps
-include: 
+To add a Ceph block device as Primary Storage, the steps include: 
 
 #. Log in to the CloudStack UI.
 #. Click **Infrastructure** on the left side navigation bar. 
-#. Select the Zone you want to use for Primary Storage.
-#. Click the **Compute** tab.
-#. Select **View All** on the `Primary Storage` node in the diagram.
-#. Click **Add Primary Storage**.
-#. Follow the CloudStack instructions.
+#. Select **View All** under **Primary Storage**.
+#. Click the **Add Primary Storage** button on the top right hand side.
+#. Fill in the following information, according to your infrastructure setup:
 
+   - Scope (i.e. Cluster or Zone-Wide).
+   
+   - Zone.
+   
+   - Pod.
+   
+   - Cluster.
+   
+   - Name of Primary Storage.
+   
    - For **Protocol**, select ``RBD``.
-   - Add cluster information (cephx is supported). Note: Do not include the ``client.`` part of the user.
-   - Add ``rbd`` as a tag.
+   
+   - For **Provider**, select the appropriate provider type (i.e. DefaultPrimary, SolidFire, SolidFireShared, or CloudByte).  Depending on the provider chosen, fill out the information pertinent to your setup.
+   
+#. Add cluster information (``cephx`` is supported).
 
+   - For **RADOS Monitor**, provide the IP address of a Ceph monitor node.
+   
+   - For **RADOS Pool**, provide the name of an RBD pool.
+   
+   - For **RADOS User**, provide a user that has sufficient rights to the RBD pool. Note: Do not include the ``client.`` part of the user.
+   
+   - For **RADOS Secret**, provide the secret the user's secret.
+   
+   - **Storage Tags** are optional. Use tags at your own discretion. For more information about storage tags in CloudStack, refer to `Storage Tags`_.
+   
+#. Click **OK**.
 
 Create a Disk Offering
 ======================
 
-To create a new disk offering, refer to `Create a New Disk Offering (4.2.0)`_.
+To create a new disk offering, refer to `Create a New Disk Offering`_.
 Create a disk offering so that it matches the ``rbd`` tag.
 The ``StoragePoolAllocator`` will choose the  ``rbd``
 pool when searching for a suitable storage pool. If the disk offering doesn't
@@ -124,7 +151,7 @@ Limitations
 .. _Placement Groups: ../../rados/operations/placement-groups
 .. _Install and Configure QEMU: ../qemu-rbd
 .. _Install and Configure libvirt: ../libvirt
-.. _KVM Hypervisor Host Installation: http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Installation_Guide/hypervisor-kvm-install-flow.html
-.. _Add Primary Storage (4.2.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Admin_Guide/primary-storage-add.html
-.. _Create a New Disk Offering (4.2.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Admin_Guide/compute-disk-service-offerings.html#creating-disk-offerings
+.. _KVM Hypervisor Host Installation: http://docs.cloudstack.apache.org/en/latest/installguide/hypervisor/kvm.html
+.. _Storage Tags: http://docs.cloudstack.apache.org/en/latest/adminguide/storage.html#storage-tags
+.. _Create a New Disk Offering: http://docs.cloudstack.apache.org/en/latest/adminguide/service_offerings.html#creating-a-new-disk-offering
 .. _User Management: ../../rados/operations/user-management

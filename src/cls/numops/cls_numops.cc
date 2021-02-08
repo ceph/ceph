@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,14 +23,17 @@
 
 #include "objclass/objclass.h"
 #include <errno.h>
-#include <iostream>
-#include <map>
 #include <string>
 #include <sstream>
 #include <cstdio>
 #include <include/compat.h>
 
 #define DECIMAL_PRECISION 10
+
+using ceph::bufferlist;
+using std::string;
+using ceph::decode;
+using ceph::encode;
 
 CLS_VER(1,0)
 CLS_NAME(numops)
@@ -37,11 +42,11 @@ static int add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   string key, diff_str;
 
-  bufferlist::iterator iter = in->begin();
+  auto iter = in->cbegin();
   try {
-    ::decode(key, iter);
-    ::decode(diff_str, iter);
-  } catch (const buffer::error &err) {
+    decode(key, iter);
+    decode(diff_str, iter);
+  } catch (const ceph::buffer::error &err) {
     CLS_LOG(20, "add: invalid decode of input");
     return -EINVAL;
   }
@@ -92,12 +97,12 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   string key, diff_str;
 
-  bufferlist::iterator iter = in->begin();
+  auto iter = in->cbegin();
   try {
-    ::decode(key, iter);
-    ::decode(diff_str, iter);
-  } catch (const buffer::error &err) {
-    CLS_LOG(20, "add: invalid decode of input");
+    decode(key, iter);
+    decode(diff_str, iter);
+  } catch (const ceph::buffer::error &err) {
+    CLS_LOG(20, "mul: invalid decode of input");
     return -EINVAL;
   }
 
@@ -105,7 +110,7 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   double difference = strtod(diff_str.c_str(), &end_ptr);
 
   if (end_ptr && *end_ptr != '\0') {
-    CLS_ERR("add: invalid input value: %s", diff_str.c_str());
+    CLS_ERR("mul: invalid input value: %s", diff_str.c_str());
     return -EINVAL;
   }
 
@@ -118,7 +123,7 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     value = 0;
   } else if (ret < 0) {
     if (ret != -ENOENT) {
-      CLS_ERR("add: error reading omap key %s: %d", key.c_str(), ret);
+      CLS_ERR("mul: error reading omap key %s: %d", key.c_str(), ret);
     }
     return ret;
   } else {
@@ -127,7 +132,7 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     value = strtod(stored_value.c_str(), &end_ptr);
 
     if (end_ptr && *end_ptr != '\0') {
-      CLS_ERR("add: invalid stored value: %s", stored_value.c_str());
+      CLS_ERR("mul: invalid stored value: %s", stored_value.c_str());
       return -EBADMSG;
     }
   }

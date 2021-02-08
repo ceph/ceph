@@ -5,7 +5,7 @@ import logging
 import time
 
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks.util.rados import rados
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def task(ctx, config):
 
     log.info('writing initial objects')
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
     #create few objects
     for i in range(100):
         rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
@@ -82,7 +82,7 @@ def task(ctx, config):
     pgnum=0
     pgstr = manager.get_pgid(pool, pgnum)
     stats = manager.get_single_pg_stats(pgstr)
-    print stats['state']
+    print(stats['state'])
 
     timeout=60
     start=time.time()
@@ -100,7 +100,7 @@ def task(ctx, config):
     #expect the pg status to be active+undersized+degraded
     #pg should recover and become active+clean within timeout
     stats = manager.get_single_pg_stats(pgstr)
-    print stats['state']
+    print(stats['state'])
 
     timeout=10
     start=time.time()
@@ -108,3 +108,5 @@ def task(ctx, config):
     while manager.get_num_down():
         assert time.time() - start < timeout, \
             'failed to recover before timeout expired'
+
+    manager.revive_osd(primary)

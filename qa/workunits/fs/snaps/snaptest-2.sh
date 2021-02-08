@@ -1,6 +1,4 @@
-#!/bin/bash
-
-ceph mds set allow_new_snaps true --yes-i-really-mean-it
+#!/usr/bin/env bash
 
 echo "Create dir 100 to 199 ..."
 for i in $(seq 100 199); do

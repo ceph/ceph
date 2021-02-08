@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 #
 # Creates some unfound objects and then tests finding them.
@@ -106,7 +107,7 @@ stray_test_impl() {
         [ $? -eq 1 ] || die "Failed to see unfound objects."
 
         #
-        # Now, when we bring up osd2, it wil be considered a stray. However, it
+        # Now, when we bring up osd2, it will be considered a stray. However, it
         # has the version that we need-- the very latest version of the
         # objects.
         #

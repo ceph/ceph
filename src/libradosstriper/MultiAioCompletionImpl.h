@@ -15,15 +15,17 @@
 #ifndef CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H
 #define CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H
 
-#include "common/Cond.h"
-#include "common/Mutex.h"
-
+#include <list>
+#include <mutex>
+#include "common/ceph_mutex.h"
 #include "include/radosstriper/libradosstriper.hpp"
 
-struct libradosstriper::MultiAioCompletionImpl {
+namespace libradosstriper {
 
-  Mutex lock;
-  Cond cond;
+struct MultiAioCompletionImpl {
+
+  ceph::mutex lock = ceph::make_mutex("MultiAioCompletionImpl lock", false);
+  ceph::condition_variable cond;
   int ref, rval;
   int pending_complete, pending_safe;
   rados_callback_t callback_complete, callback_safe;
@@ -32,8 +34,8 @@ struct libradosstriper::MultiAioCompletionImpl {
   bufferlist bl;       /// only used for read case in C api of rados striper
   std::list<bufferlist*> bllist; /// keep temporary buffer lists used for destriping
 
-  MultiAioCompletionImpl() : lock("MultiAioCompletionImpl lock", false, false),
-    ref(1), rval(0),
+  MultiAioCompletionImpl()
+  : ref(1), rval(0),
     pending_complete(0), pending_safe(0),
     callback_complete(0), callback_safe(0),
     callback_complete_arg(0), callback_safe_arg(0),
@@ -50,131 +52,118 @@ struct libradosstriper::MultiAioCompletionImpl {
   }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
-    lock.Lock();
+    std::scoped_lock l{lock};
     callback_complete = cb;
     callback_complete_arg = cb_arg;
-    lock.Unlock();
     return 0;
   }
   int set_safe_callback(void *cb_arg, rados_callback_t cb) {
-    lock.Lock();
+    std::scoped_lock l{lock};
     callback_safe = cb;
     callback_safe_arg = cb_arg;
-    lock.Unlock();
     return 0;
   }
   int wait_for_complete() {
-    lock.Lock();
-    while (pending_complete)
-      cond.Wait(lock);
-    lock.Unlock();
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return !pending_complete; });
     return 0;
   }
   int wait_for_safe() {
-    lock.Lock();
-    while (pending_safe)
-      cond.Wait(lock);
-    lock.Unlock();
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return !pending_safe; });
     return 0;
   }
   bool is_complete() {
-    lock.Lock();
-    int r = pending_complete;
-    lock.Unlock();
-    return 0 == r;
+    std::scoped_lock l{lock};
+    return pending_complete == 0;
   }
   bool is_safe() {
-    lock.Lock();
-    int r = pending_safe;
-    lock.Unlock();
-    return r == 0;
+    std::scoped_lock l{lock};
+    return pending_safe == 0;
   }
   void wait_for_complete_and_cb() {
-    lock.Lock();
-    while (pending_complete || callback_complete)
-      cond.Wait(lock);
-    lock.Unlock();
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return !pending_complete && !callback_complete; });
   }
   void wait_for_safe_and_cb() {
-    lock.Lock();
-    while (pending_safe || callback_safe)
-      cond.Wait(lock);
-    lock.Unlock();
+    std::unique_lock l{lock};
+    cond.wait(l, [this] { return !pending_safe && !callback_safe; });
   }
   bool is_complete_and_cb() {
-    lock.Lock();
-    bool r = ((0 == pending_complete) && !callback_complete);
-    lock.Unlock();
-    return r;
+    std::scoped_lock l{lock};
+    return ((0 == pending_complete) && !callback_complete);
   }
   bool is_safe_and_cb() {
-    lock.Lock();
-    int r = ((0 == pending_safe) && !callback_safe);
-    lock.Unlock();
-    return r;
+    std::scoped_lock l{lock};
+    return ((0 == pending_safe) && !callback_safe);
   }
   int get_return_value() {
-    lock.Lock();
-    int r = rval;
-    lock.Unlock();
-    return r;
+    std::scoped_lock l{lock};
+    return rval;
   }
   void get() {
-    lock.Lock();
+    std::scoped_lock l{lock};
     _get();
-    lock.Unlock();
   }
   void _get() {
-    assert(lock.is_locked());
-    assert(ref > 0);
+    ceph_assert(ceph_mutex_is_locked(lock));
+    ceph_assert(ref > 0);
     ++ref;
   }
   void put() {
-    lock.Lock();
+    lock.lock();
     put_unlock();
   }
   void put_unlock() {
-    assert(ref > 0);
+    ceph_assert(ref > 0);
     int n = --ref;
-    lock.Unlock();
+    lock.unlock();
     if (!n)
       delete this;
   }
   void add_request() {
-    lock.Lock();
+    std::scoped_lock l{lock};
     pending_complete++;
     _get();
     pending_safe++;
     _get();
-    lock.Unlock();
   }
   void add_safe_request() {
-    lock.Lock();
+    std::scoped_lock l{lock};
     pending_complete++;
     _get();
-    lock.Unlock();
   }
   void complete() {
-    assert(lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(lock));
     if (callback_complete) {
       callback_complete(this, callback_complete_arg);
       callback_complete = 0;
     }
-    cond.Signal();
+    cond.notify_all();
   }
   void safe() {
-    assert(lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(lock));
     if (callback_safe) {
       callback_safe(this, callback_safe_arg);
       callback_safe = 0;
     }
-    cond.Signal();
+    cond.notify_all();
   };
 
   void complete_request(ssize_t r);
   void safe_request(ssize_t r);
   void finish_adding_requests();
-
 };
+
+inline void intrusive_ptr_add_ref(MultiAioCompletionImpl* ptr)
+{
+  ptr->get();
+}
+
+inline void intrusive_ptr_release(MultiAioCompletionImpl* ptr)
+{
+  ptr->put();
+}
+}
 
 #endif // CEPH_LIBRADOSSTRIPERSTRIPER_MULTIAIOCOMPLETIONIMPL_H

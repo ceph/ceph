@@ -4,10 +4,9 @@
 
 Understanding how to configure a :term:`Ceph Monitor` is an important part of
 building a reliable :term:`Ceph Storage Cluster`. **All Ceph Storage Clusters
-have at least one monitor**. A monitor configuration usually remains fairly
+have at least one monitor**. The monitor complement usually remains fairly
 consistent, but you can add, remove or replace a monitor in a cluster. See
-`Adding/Removing a Monitor`_ and `Add/Remove a Monitor (ceph-deploy)`_ for
-details.
+`Adding/Removing a Monitor`_ for details.
 
 
 .. index:: Ceph Monitor; Paxos
@@ -15,7 +14,7 @@ details.
 Background
 ==========
 
-Ceph Monitors maintain a "master copy" of the :term:`cluster map`, which means a
+Ceph Monitors maintain a "master copy" of the :term:`Cluster Map`, which means a
 :term:`Ceph Client` can determine the location of all Ceph Monitors, Ceph OSD
 Daemons, and Ceph Metadata Servers just by connecting to one Ceph Monitor and
 retrieving a current cluster map. Before Ceph Clients can read from or write to
@@ -34,8 +33,7 @@ Monitors can query the most recent version of the cluster map during sync
 operations. Ceph Monitors leverage the key/value store's snapshots and iterators
 (using leveldb) to perform store-wide synchronization.
 
-.. ditaa:: 
-
+.. ditaa::
  /-------------\               /-------------\
  |   Monitor   | Write Changes |    Paxos    |
  |   cCCC      +-------------->+   cCCC      |
@@ -106,6 +104,11 @@ A consensus requires a majority of monitors running to establish a quorum for
 consensus about the cluster map (e.g., 1; 2 out of 3; 3 out of 5; 4 out of 6;
 etc.).
 
+``mon force quorum join``
+
+:Description: Force monitor to join quorum even if it has been previously removed from the map
+:Type: Boolean
+:Default: ``False``
 
 .. index:: Ceph Monitor; consistency
 
@@ -137,12 +140,12 @@ version, and a set of previous versions. Maintaining a history enables a Ceph
 Monitor that has an older version of the monmap to catch up with the current
 state of the Ceph Storage Cluster.
 
-If Ceph Monitors discovered each other through the Ceph configuration file
-instead of through the monmap, it would introduce additional risks because the
-Ceph configuration files aren't updated and distributed automatically. Ceph
+If Ceph Monitors were to discover each other through the Ceph configuration file
+instead of through the monmap, additional risks would be introduced because
+Ceph configuration files are not updated and distributed automatically. Ceph
 Monitors might inadvertently use an older Ceph configuration file, fail to
 recognize a Ceph Monitor, fall out of a quorum, or develop a situation where
-`Paxos`_ isn't able to determine the current state of the system accurately.
+`Paxos`_ is not able to determine the current state of the system accurately.
 
 
 .. index:: Ceph Monitor; bootstrapping monitors
@@ -150,16 +153,16 @@ recognize a Ceph Monitor, fall out of a quorum, or develop a situation where
 Bootstrapping Monitors
 ----------------------
 
-In most configuration and deployment cases, tools that deploy Ceph may help
+In most configuration and deployment cases, tools that deploy Ceph help
 bootstrap the Ceph Monitors by generating a monitor map for you (e.g.,
-``ceph-deploy``, etc). A Ceph Monitor requires a few explicit
+``cephadm``, etc). A Ceph Monitor requires a few explicit
 settings:
 
 - **Filesystem ID**: The ``fsid`` is the unique identifier for your
   object store. Since you can run multiple clusters on the same
   hardware, you must specify the unique ID of the object store when
   bootstrapping a monitor.  Deployment tools usually do this for you
-  (e.g., ``ceph-deploy`` can call a tool like ``uuidgen``), but you
+  (e.g., ``cephadm`` can call a tool like ``uuidgen``), but you
   may specify the ``fsid`` manually too.
   
 - **Monitor ID**: A monitor ID is a unique ID assigned to each monitor within 
@@ -169,7 +172,7 @@ settings:
   by a deployment tool, or using the ``ceph`` commandline.
 
 - **Keys**: The monitor must have secret keys. A deployment tool such as 
-  ``ceph-deploy`` usually does this for you, but you may
+  ``cephadm`` usually does this for you, but you may
   perform this step manually too. See `Monitor Keyrings`_ for details.
 
 For additional details on bootstrapping, see `Bootstrapping a Monitor`_.
@@ -202,15 +205,13 @@ Minimum Configuration
 ---------------------
 
 The bare minimum monitor settings for a Ceph monitor via the Ceph configuration
-file include a hostname and a monitor address for each monitor. You can configure
+file include a hostname and a network address for each monitor. You can configure
 these under ``[mon]`` or under the entry for a specific monitor.
 
 .. code-block:: ini
 
-	[mon]
-		mon host = hostname1,hostname2,hostname3
-		mon addr = 10.0.0.10:6789,10.0.0.11:6789,10.0.0.12:6789
-
+	[global]
+		mon host = 10.0.0.2,10.0.0.3,10.0.0.4
 
 .. code-block:: ini
 
@@ -223,12 +224,12 @@ See the `Network Configuration Reference`_ for details.
 .. note:: This minimum configuration for monitors assumes that a deployment 
    tool generates the ``fsid`` and the ``mon.`` key for you.
 
-Once you deploy a Ceph cluster, you **SHOULD NOT** change the IP address of
-the monitors. However, if you decide to change the monitor's IP address, you
+Once you deploy a Ceph cluster, you **SHOULD NOT** change the IP addresses of
+monitors. However, if you decide to change the monitor's IP address, you
 must follow a specific procedure. See `Changing a Monitor's IP Address`_ for
 details.
 
-Monitors can also be found by clients using DNS SRV records. See `Monitor lookup through DNS`_ for details.
+Monitors can also be found by clients by using DNS SRV records. See `Monitor lookup through DNS`_ for details.
 
 Cluster ID
 ----------
@@ -264,10 +265,10 @@ online.
 .. code-block:: ini
 
 	[mon]		
-		mon initial members = a,b,c
+		mon_initial_members = a,b,c
 
 
-``mon initial members``
+``mon_initial_members``
 
 :Description: The IDs of initial monitors in a cluster during startup. If 
               specified, Ceph requires an odd number of monitors to form an 
@@ -287,14 +288,14 @@ Data
 
 Ceph provides a default path where Ceph Monitors store data. For optimal
 performance in a production Ceph Storage Cluster, we recommend running Ceph
-Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb is using
+Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb uses
 ``mmap()`` for writing the data, Ceph Monitors flush their data from memory to disk
 very often, which can interfere with Ceph OSD Daemon workloads if the data
 store is co-located with the OSD Daemons.
 
-In Ceph versions 0.58 and earlier, Ceph Monitors store their data in files. This 
+In Ceph versions 0.58 and earlier, Ceph Monitors store their data in plain files. This 
 approach allows users to inspect monitor data with common tools like ``ls``
-and ``cat``. However, it doesn't provide strong consistency.
+and ``cat``. However, this approach didn't provide strong consistency.
 
 In Ceph versions 0.59 and later, Ceph Monitors store their data as key/value
 pairs. Ceph Monitors require `ACID`_ transactions. Using a data store prevents
@@ -307,21 +308,171 @@ the default location, we recommend that you make it uniform across Ceph Monitors
 by setting it in the ``[mon]`` section of the configuration file.
 
 
-``mon data`` 
+``mon_data`` 
 
 :Description: The monitor's data location.
 :Type: String
 :Default: ``/var/lib/ceph/mon/$cluster-$id``
 
 
+``mon_data_size_warn``
+
+:Description: Raise ``HEALTH_WARN`` status when a monitor's data
+              store grows to be larger than this size, 15GB by default.
+
+:Type: Integer
+:Default: ``15*1024*1024*1024``
+
+
+``mon_data_avail_warn``
+
+:Description: Raise ``HEALTH_WARN`` status when the filesystem that houses a
+              monitor's data store reports that its available capacity is
+              less than or equal to this percentage .
+
+:Type: Integer
+:Default: ``30``
+
+
+``mon_data_avail_crit``
+
+:Description: Raise ``HEALTH_ERR`` status when the filesystem that houses a
+              monitor's data store reports that its available capacity is
+              less than or equal to this percentage.
+
+:Type: Integer
+:Default: ``5``
+
+``mon_warn_on_cache_pools_without_hit_sets``
+
+:Description: Raise ``HEALTH_WARN`` when a cache pool does not
+              have the ``hit_set_type`` value configured.
+              See :ref:`hit_set_type <hit_set_type>` for more
+              details.
+
+:Type: Boolean
+:Default: ``True``
+
+``mon_warn_on_crush_straw_calc_version_zero``
+
+:Description: Raise ``HEALTH_WARN`` when the CRUSH
+              ``straw_calc_version`` is zero. See
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
+              details.
+
+:Type: Boolean
+:Default: ``True``
+
+
+``mon_warn_on_legacy_crush_tunables``
+
+:Description: Raise ``HEALTH_WARN`` when
+              CRUSH tunables are too old (older than ``mon_min_crush_required_version``)
+
+:Type: Boolean
+:Default: ``True``
+
+
+``mon_crush_min_required_version``
+
+:Description: The minimum tunable profile required by the cluster.
+              See
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
+              details.
+
+:Type: String
+:Default: ``hammer``
+
+
+``mon_warn_on_osd_down_out_interval_zero``
+
+:Description: Raise ``HEALTH_WARN`` when
+              ``mon_osd_down_out_interval`` is zero. Having this option set to
+              zero on the leader acts much like the ``noout`` flag. It's hard
+              to figure out what's going wrong with clusters without the
+              ``noout`` flag set but acting like that just the same, so we
+              report a warning in this case.
+
+:Type: Boolean
+:Default: ``True``
+
+
+``mon_warn_on_slow_ping_ratio``
+
+:Description: Raise ``HEALTH_WARN`` when any heartbeat
+              between OSDs exceeds ``mon_warn_on_slow_ping_ratio``
+              of ``osd_heartbeat_grace``.  The default is 5%.
+:Type: Float
+:Default: ``0.05``
+
+
+``mon_warn_on_slow_ping_time``
+
+:Description: Override ``mon_warn_on_slow_ping_ratio`` with a specific value.
+              Raise ``HEALTH_WARN`` if any heartbeat
+              between OSDs exceeds ``mon_warn_on_slow_ping_time``
+              milliseconds.  The default is 0 (disabled).
+:Type: Integer
+:Default: ``0``
+
+
+``mon_warn_on_pool_no_redundancy``
+
+:Description: Raise ``HEALTH_WARN`` if any pool is
+              configured with no replicas.
+:Type: Boolean
+:Default: ``True``
+
+
+``mon_cache_target_full_warn_ratio``
+
+:Description: Position between pool's ``cache_target_full`` and
+              ``target_max_object`` where we start warning
+
+:Type: Float
+:Default: ``0.66``
+
+
+``mon_health_to_clog``
+
+:Description: Enable sending a health summary to the cluster log periodically.
+:Type: Boolean
+:Default: ``True``
+
+
+``mon_health_to_clog_tick_interval``
+
+:Description: How often (in seconds) the monitor sends a health summary to the cluster
+              log (a non-positive number disables). If current health summary
+              is empty or identical to the last time, monitor will not send it
+              to cluster log.
+
+:Type: Float
+:Default: ``60.0``
+
+
+``mon_health_to_clog_interval``
+
+:Description: How often (in seconds) the monitor sends a health summary to the cluster
+              log (a non-positive number disables). Monitors will always
+              send a summary to the cluster log whether or not it differs from
+              the previous summary.
+
+:Type: Integer
+:Default: ``3600``
+
+
+
 .. index:: Ceph Storage Cluster; capacity planning, Ceph Monitor; capacity planning
+
+.. _storage-capacity:
 
 Storage Capacity
 ----------------
 
-When a Ceph Storage Cluster gets close to its maximum capacity (i.e., ``mon osd
-full ratio``),  Ceph prevents you from writing to or reading from Ceph OSD
-Daemons as a safety measure to prevent data loss. Therefore, letting a
+When a Ceph Storage Cluster gets close to its maximum capacity
+(see``mon_osd_full ratio``), Ceph prevents you from writing to or reading from OSDs
+as a safety measure to prevent data loss. Therefore, letting a
 production Ceph Storage Cluster approach its full ratio is not a good practice,
 because it sacrifices high availability. The default full ratio is ``.95``, or
 95% of capacity. This a very aggressive setting for a test cluster with a small
@@ -332,19 +483,19 @@ number of OSDs.
    in a temporary service disruption if one or more OSDs fails. Consider adding
    more OSDs to increase storage capacity.
 
-A common scenario for test clusters involves a system administrator removing a
-Ceph OSD Daemon from the Ceph Storage Cluster to watch the cluster rebalance;
-then, removing another Ceph OSD Daemon, and so on until the Ceph Storage Cluster
-eventually reaches the full ratio and locks up. We recommend a bit of capacity
+A common scenario for test clusters involves a system administrator removing an
+OSD from the Ceph Storage Cluster, watching the cluster rebalance, then removing
+another OSD, and another, until at least one OSD eventually reaches the full
+ratio and the cluster locks up. We recommend a bit of capacity
 planning even with a test cluster. Planning enables you to gauge how much spare
 capacity you will need in order to maintain high availability. Ideally, you want
 to plan for a series of Ceph OSD Daemon failures where the cluster can recover
-to an ``active + clean`` state without replacing those Ceph OSD Daemons
-immediately. You can run a cluster in an ``active + degraded`` state, but this
-is not ideal for normal operating conditions.
+to an ``active+clean`` state without replacing those OSDs
+immediately. Cluster operation continues in the ``active+degraded`` state, but this
+is not ideal for normal operation and should be addressed promptly.
 
 The following diagram depicts a simplistic Ceph Storage Cluster containing 33
-Ceph Nodes with one Ceph OSD Daemon per host, each Ceph OSD Daemon reading from
+Ceph Nodes with one OSD per host, each OSD reading from
 and writing to a 3TB drive. So this exemplary Ceph Storage Cluster has a maximum
 actual capacity of 99TB. With a ``mon osd full ratio`` of ``0.95``, if the Ceph
 Storage Cluster falls to 5TB of remaining capacity, the cluster will not allow
@@ -352,7 +503,6 @@ Ceph Clients to read and write data. So the Ceph Storage Cluster's operating
 capacity is 95TB, not 99TB.
 
 .. ditaa::
-
  +--------+  +--------+  +--------+  +--------+  +--------+  +--------+
  | Rack 1 |  | Rack 2 |  | Rack 3 |  | Rack 4 |  | Rack 5 |  | Rack 6 |
  | cCCC   |  | cF00   |  | cCCC   |  | cCCC   |  | cCCC   |  | cCCC   |
@@ -395,44 +545,52 @@ you expect to fail to arrive at a reasonable full ratio. Repeat the foregoing
 process with a higher number of OSD failures (e.g., a rack of OSDs) to arrive at
 a reasonable number for a near full ratio.
 
+The following settings only apply on cluster creation and are then stored in
+the OSDMap. To clarify, in normal operation the values that are used by OSDs
+are those found in the OSDMap, not those in the configuration file or central
+config store.
+
 .. code-block:: ini
 
 	[global]
-		
-		mon osd full ratio = .80
-		mon osd backfillfull ratio = .75
-		mon osd nearfull ratio = .70
+		mon_osd_full_ratio = .80
+		mon_osd_backfillfull_ratio = .75
+		mon_osd_nearfull_ratio = .70
 
 
-``mon osd full ratio`` 
+``mon_osd_full_ratio`` 
 
-:Description: The percentage of disk space used before an OSD is 
+:Description: The threshold percentage of device space utilized before an OSD is 
               considered ``full``.
 
 :Type: Float
-:Default: ``.95``
+:Default: ``0.95``
 
 
-``mon osd backfillfull ratio``
+``mon_osd_backfillfull_ratio``
 
-:Description: The percentage of disk space used before an OSD is
+:Description: The threshold percentage of device space utilized before an OSD is
               considered too ``full`` to backfill.
 
 :Type: Float
-:Default: ``.90``
+:Default: ``0.90``
 
 
-``mon osd nearfull ratio`` 
+``mon_osd_nearfull_ratio`` 
 
-:Description: The percentage of disk space used before an OSD is 
+:Description: The threshold percentage of device space used before an OSD is 
               considered ``nearfull``.
 
 :Type: Float
-:Default: ``.85``
+:Default: ``0.85``
 
 
 .. tip:: If some OSDs are nearfull, but others have plenty of capacity, you 
-         may have a problem with the CRUSH weight for the nearfull OSDs.
+         may have an inaccurate CRUSH weight set for the nearfull OSDs.
+
+.. tip:: These settings only apply during cluster creation. Afterwards they need
+         to be changed in the OSDMap using ``ceph osd set-nearfull-ratio`` and
+         ``ceph osd set-full-ratio``
 
 .. index:: heartbeat
 
@@ -476,7 +634,8 @@ fallen behind the other monitors. The requester asks the leader to synchronize,
 and the leader tells the requester to synchronize with a provider.
 
 
-.. ditaa:: +-----------+          +---------+          +----------+
+.. ditaa::
+           +-----------+          +---------+          +----------+
            | Requester |          | Leader  |          | Provider |
            +-----------+          +---------+          +----------+
                   |                    |                     |
@@ -512,79 +671,65 @@ times. This means the leader and provider roles may migrate from one monitor to
 another. If this happens while synchronizing (e.g., a provider falls behind the
 leader), the provider can terminate synchronization with a requester.
 
-Once synchronization is complete, Ceph requires trimming across the cluster. 
-Trimming requires that the placement groups are ``active + clean``.
+Once synchronization is complete, Ceph performs trimming across the cluster. 
+Trimming requires that the placement groups are ``active+clean``.
 
 
-``mon sync trim timeout``
+``mon_sync_timeout``
 
-:Description: 
+:Description: Number of seconds the monitor will wait for the next update
+              message from its sync provider before it gives up and bootstrap
+              again.
+
 :Type: Double
-:Default: ``30.0``
+:Default: ``60.0``
 
 
-``mon sync heartbeat timeout``
+``mon_sync_max_payload_size``
 
-:Description: 
-:Type: Double
-:Default: ``30.0``
-
-
-``mon sync heartbeat interval``
-
-:Description: 
-:Type: Double
-:Default: ``5.0``
-
-
-``mon sync backoff timeout``
-
-:Description: 
-:Type: Double
-:Default: ``30.0``
-
-
-``mon sync timeout``
-
-:Description: 
-:Type: Double
-:Default: ``30.0``
-
-
-``mon sync max retries``
-
-:Description: 
-:Type: Integer
-:Default: ``5``
-
-
-``mon sync max payload size``
-
-:Description: The maximum size for a sync payload.
+:Description: The maximum size for a sync payload (in bytes).
 :Type: 32-bit Integer
-:Default: ``1045676``
+:Default: ``1048576``
 
 
-``mon accept timeout`` 
+``paxos_max_join_drift``
 
-:Description: Number of seconds the Leader will wait for the Requester(s) to 
-              accept a Paxos update. It is also used during the Paxos recovery 
-              phase for similar purposes.
+:Description: The maximum Paxos iterations before we must first sync the
+              monitor data stores. When a monitor finds that its peer is too
+              far ahead of it, it will first sync with data stores before moving
+              on.
 
-:Type: Float
-:Default: ``10.0`` 
+:Type: Integer
+:Default: ``10``
 
 
-``paxos propose interval``
+``paxos_stash_full_interval``
+
+:Description: How often (in commits) to stash a full copy of the PaxosService state.
+              Current this setting only affects ``mds``, ``mon``, ``auth`` and ``mgr``
+              PaxosServices.
+
+:Type: Integer
+:Default: ``25``
+
+
+``paxos_propose_interval``
 
 :Description: Gather updates for this time interval before proposing 
-              a map update. 
+              a map update.
 
 :Type: Double
 :Default: ``1.0``
 
 
-``paxos min wait``
+``paxos_min``
+
+:Description: The minimum number of Paxos states to keep around
+:Type: Integer
+:Default: ``500``
+
+
+``paxos_min_wait``
 
 :Description: The minimum amount of time to gather updates after a period of 
               inactivity.
@@ -593,87 +738,116 @@ Trimming requires that the placement groups are ``active + clean``.
 :Default: ``0.05``
 
 
-``mon lease`` 
+``paxos_trim_min``
+
+:Description: Number of extra proposals tolerated before trimming
+:Type: Integer
+:Default: ``250``
+
+
+``paxos_trim_max``
+
+:Description: The maximum number of extra proposals to trim at a time
+:Type: Integer
+:Default: ``500``
+
+
+``paxos_service_trim_min``
+
+:Description: The minimum amount of versions to trigger a trim (0 disables it)
+:Type: Integer
+:Default: ``250``
+
+
+``paxos_service_trim_max``
+
+:Description: The maximum amount of versions to trim during a single proposal (0 disables it)
+:Type: Integer
+:Default: ``500``
+
+
+``mon_mds_force_trim_to``
+
+:Description: Force monitor to trim mdsmaps to this point (0 disables it.
+              dangerous, use with care)
+
+:Type: Integer
+:Default: ``0``
+
+
+``mon_osd_force_trim_to``
+
+:Description: Force monitor to trim osdmaps to this point, even if there is
+              PGs not clean at the specified epoch (0 disables it. dangerous,
+              use with care)
+
+:Type: Integer
+:Default: ``0``
+
+
+``mon_osd_cache_size``
+
+:Description: The size of osdmaps cache, not to rely on underlying store's cache
+:Type: Integer
+:Default: ``500``
+
+
+``mon_election_timeout``
+
+:Description: On election proposer, maximum waiting time for all ACKs in seconds.
+:Type: Float
+:Default: ``5.00``
+
+
+``mon_lease`` 
 
 :Description: The length (in seconds) of the lease on the monitor's versions.
 :Type: Float
-:Default: ``5``
+:Default: ``5.00``
 
 
-``mon lease renew interval`` 
+``mon_lease_renew_interval_factor``
 
-:Description: The interval (in seconds) for the Leader to renew the other 
-              monitor's leases.
-              
+:Description: ``mon_lease`` \* ``mon_lease_renew_interval_factor`` will be the
+              interval for the Leader to renew the other monitor's leases. The
+              factor should be less than ``1.0``.
+
 :Type: Float
-:Default: ``3``
+:Default: ``0.60``
 
 
-``mon lease ack timeout`` 
+``mon_lease_ack_timeout_factor``
 
-:Description: The number of seconds the Leader will wait for the Providers to 
-              acknowledge the lease extension.
-              
+:Description: The Leader will wait ``mon_lease`` \* ``mon_lease_ack_timeout_factor``
+              for the Providers to acknowledge the lease extension.
+
 :Type: Float
-:Default: ``10.0``
+:Default: ``2.00``
 
 
-``mon min osdmap epochs`` 
+``mon_accept_timeout_factor``
+
+:Description: The Leader will wait ``mon_lease`` \* ``mon_accept_timeout_factor``
+              for the Requester(s) to accept a Paxos update. It is also used
+              during the Paxos recovery phase for similar purposes.
+
+:Type: Float
+:Default: ``2.00``
+
+
+``mon_min_osdmap_epochs`` 
 
 :Description: Minimum number of OSD map epochs to keep at all times.
 :Type: 32-bit Integer
 :Default: ``500``
 
 
-``mon max pgmap epochs`` 
-
-:Description: Maximum number of PG map epochs the monitor should keep.
-:Type: 32-bit Integer
-:Default: ``500``
-
-
-``mon max log epochs`` 
+``mon_max_log_epochs`` 
 
 :Description: Maximum number of Log epochs the monitor should keep.
 :Type: 32-bit Integer
 :Default: ``500``
 
-
-
-
-Slurp
------
-
-In Ceph version 0.58 and earlier, when a Paxos service drifts beyond a given
-number of versions, Ceph triggers the `slurp` mechanism, which establishes a
-connection with the quorum Leader and obtains every single version the Leader
-has for every service that has drifted. In Ceph versions 0.59 and later, slurp
-will not work, because there is a single Paxos instance for all services.
-
-.. deprecated:: 0.58
-
-``paxos max join drift``
-
-:Description: The maximum Paxos iterations before we must first sync the
-              monitor data stores.
-:Type: Integer
-:Default: ``10`` 
-
-
-``mon slurp timeout`` 
-
-:Description: The number of seconds the monitor has to recover using slurp 
-              before the process is aborted and the monitor bootstraps.
-
-:Type: Double
-:Default: ``10.0``
-
-
-``mon slurp bytes``
-
-:Description: Limits the slurp messages to the specified number of bytes.
-:Type: 32-bit Integer
-:Default: ``256 * 1024``
 
 
 .. index:: Ceph Monitor; clock
@@ -688,13 +862,15 @@ are not synchronized, it can lead to a number of anomalies. For example:
 - Daemons ignoring received messages (e.g., timestamps outdated)
 - Timeouts triggered too soon/late when a message wasn't received in time.
 
-See `Monitor Store Synchronization`_ and `Slurp`_ for details.
+See `Monitor Store Synchronization`_ for details.
 
 
-.. tip:: You SHOULD install NTP on your Ceph monitor hosts to 
+.. tip:: You must configure NTP or PTP daemons on your Ceph monitor hosts to 
          ensure that the monitor cluster operates with synchronized clocks.
+         It can be advantageous to have monitor hosts sync with each other
+         as well as with multiple quality upstream time sources.
 
-Clock drift may still be noticeable with NTP even though the discrepancy isn't
+Clock drift may still be noticeable with NTP even though the discrepancy is not
 yet harmful. Ceph's clock drift / clock skew warnings may get triggered even 
 though NTP maintains a reasonable level of synchronization. Increasing your 
 clock drift may be tolerable under such circumstances; however, a number of 
@@ -706,66 +882,65 @@ Ceph provides the following tunable options to allow you to find
 acceptable values.
 
 
-``clock offset``
-
-:Description: How much to offset the system clock. See ``Clock.cc`` for details.
-:Type: Double
-:Default: ``0``
-
-
-.. deprecated:: 0.58
-
-``mon tick interval`` 
+``mon_tick_interval`` 
 
 :Description: A monitor's tick interval in seconds. 
 :Type: 32-bit Integer
 :Default: ``5`` 
 
 
-``mon clock drift allowed`` 
+``mon_clock_drift_allowed`` 
 
 :Description: The clock drift in seconds allowed between monitors.
 :Type: Float
-:Default: ``.050``
+:Default: ``0.05``
 
 
-``mon clock drift warn backoff`` 
+``mon_clock_drift_warn_backoff`` 
 
 :Description: Exponential backoff for clock drift warnings
 :Type: Float
-:Default: ``5``
+:Default: ``5.00``
 
 
-``mon timecheck interval``
+``mon_timecheck_interval``
 
 :Description: The time check interval (clock drift check) in seconds 
-              for the leader.
+              for the Leader.
 
 :Type: Float
-:Default: ``300.0``
+:Default: ``300.00``
 
+
+``mon_timecheck_skew_interval``
+
+:Description: The time check interval (clock drift check) in seconds when in
+              presence of a skew in seconds for the Leader.
+
+:Type: Float
+:Default: ``30.00``
 
 
 Client
 ------
 
-``mon client hunt interval``
+``mon_client_hunt_interval``
 
 :Description: The client will try a new monitor every ``N`` seconds until it
               establishes a connection.
               
 :Type: Double
-:Default: ``3.0``
+:Default: ``3.00``
 
 
-``mon client ping interval``
+``mon_client_ping_interval``
 
 :Description: The client will ping the monitor every ``N`` seconds.
 :Type: Double
-:Default: ``10.0``
+:Default: ``10.00``
 
 
-``mon client max log entries per message``
+``mon_client_max_log_entries_per_message``
 
 :Description: The maximum number of log entries a monitor will generate 
               per client message.
@@ -774,46 +949,63 @@ Client
 :Default: ``1000``
 
 
-``mon client bytes``
+``mon_client_bytes``
 
 :Description: The amount of client message data allowed in memory (in bytes).
 :Type: 64-bit Integer Unsigned
 :Default: ``100ul << 20``
 
+.. _pool-settings:
 
 Pool settings
 =============
+
 Since version v0.94 there is support for pool flags which allow or disallow changes to be made to pools.
+Monitors can also disallow removal of pools if appropriately configured. The inconvenience of this guardrail
+is far outweighed by the number of accidental pool (and thus data) deletions it prevents.
 
-Monitors can also disallow removal of pools if configured that way.
+``mon_allow_pool_delete``
 
-``mon allow pool delete``
+:Description: Should monitors allow pools to be removed, regardless of what the pool flags say?
 
-:Description: If the monitors should allow pools to be removed. Regardless of what the pool flags say.
 :Type: Boolean
 :Default: ``false``
 
-``osd pool default flag hashpspool``
+
+``osd_pool_default_ec_fast_read``
+
+:Description: Whether to turn on fast read on the pool or not. It will be used as
+              the default setting of newly created erasure coded pools if ``fast_read``
+              is not specified at create time.
+
+:Type: Boolean
+:Default: ``false``
+
+
+``osd_pool_default_flag_hashpspool``
 
 :Description: Set the hashpspool flag on new pools
 :Type: Boolean
 :Default: ``true``
 
-``osd pool default flag nodelete``
 
-:Description: Set the nodelete flag on new pools. Prevents allow pool removal with this flag in any way.
+``osd_pool_default_flag_nodelete``
+
+:Description: Set the ``nodelete`` flag on new pools, which prevents pool removal.
 :Type: Boolean
 :Default: ``false``
 
-``osd pool default flag nopgchange``
 
-:Description: Set the nopgchange flag on new pools. Does not allow the number of PGs to be changed for a pool.
+``osd_pool_default_flag_nopgchange``
+
+:Description: Set the ``nopgchange`` flag on new pools. Does not allow the number of PGs to be changed.
 :Type: Boolean
 :Default: ``false``
 
-``osd pool default flag nosizechange``
 
-:Description: Set the nosizechange flag on new pools. Does not allow the size to be changed of pool.
+``osd_pool_default_flag_nosizechange``
+
+:Description: Set the ``nosizechange`` flag on new pools. Does not allow the ``size`` to be changed.
 :Type: Boolean
 :Default: ``false``
 
@@ -822,90 +1014,216 @@ For more information about the pool flags see `Pool values`_.
 Miscellaneous
 =============
 
-
-``mon max osd``
+``mon_max_osd``
 
 :Description: The maximum number of OSDs allowed in the cluster.
 :Type: 32-bit Integer
 :Default: ``10000``
 
-``mon globalid prealloc`` 
+
+``mon_globalid_prealloc`` 
 
 :Description: The number of global IDs to pre-allocate for clients and daemons in the cluster.
 :Type: 32-bit Integer
-:Default: ``100``
+:Default: ``10000``
 
-``mon sync fs threshold`` 
 
-:Description: Synchronize with the filesystem when writing the specified number of objects. Set it to ``0`` to disable it.
-:Type: 32-bit Integer
-:Default: ``5`` 
-
-``mon subscribe interval`` 
+``mon_subscribe_interval`` 
 
 :Description: The refresh interval (in seconds) for subscriptions. The 
-              subscription mechanism enables obtaining the cluster maps 
+              subscription mechanism enables obtaining cluster maps 
               and log information.
 
 :Type: Double
-:Default: ``300`` 
+:Default: ``86400.00`` 
 
 
-``mon stat smooth intervals``
+``mon_stat_smooth_intervals``
 
 :Description: Ceph will smooth statistics over the last ``N`` PG maps.
 :Type: Integer
-:Default: ``2``
+:Default: ``6``
 
 
-``mon probe timeout`` 
+``mon_probe_timeout`` 
 
 :Description: Number of seconds the monitor will wait to find peers before bootstrapping.
 :Type: Double
-:Default: ``2.0``
+:Default: ``2.00``
 
 
-``mon daemon bytes``
+``mon_daemon_bytes``
 
 :Description: The message memory cap for metadata server and OSD messages (in bytes).
 :Type: 64-bit Integer Unsigned
 :Default: ``400ul << 20``
 
 
-``mon max log entries per event``
+``mon_max_log_entries_per_event``
 
 :Description: The maximum number of log entries per event. 
 :Type: Integer
 :Default: ``4096``
 
 
-``mon osd prime pg temp``
+``mon_osd_prime_pg_temp``
 
-:Description: Enables or disable priming the PGMap with the previous OSDs when an out
-              OSD comes back into the cluster. With the ``true`` setting the clients
-              will continue to use the previous OSDs until the newly in OSDs as that
-              PG peered.
+:Description: Enables or disables priming the PGMap with the previous OSDs when an ``out``
+              OSD comes back into the cluster. With the ``true`` setting, clients
+              will continue to use the previous OSDs until the newly ``in`` OSDs for
+              a PG have peered.
+
 :Type: Boolean
 :Default: ``true``
 
 
-``mon osd prime pg temp max time``
+``mon_osd_prime pg temp max time``
 
 :Description: How much time in seconds the monitor should spend trying to prime the
               PGMap when an out OSD comes back into the cluster.
+
 :Type: Float
-:Default: ``0.5``
+:Default: ``0.50``
 
 
+``mon_osd_prime_pg_temp_max_time_estimate``
 
-.. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
+:Description: Maximum estimate of time spent on each PG before we prime all PGs
+              in parallel.
+
+:Type: Float
+:Default: ``0.25``
+
+
+``mon_mds_skip_sanity``
+
+:Description: Skip safety assertions on FSMap (in case of bugs where we want to
+              continue anyway). Monitor terminates if the FSMap sanity check
+              fails, but we can disable it by enabling this option.
+
+:Type: Boolean
+:Default: ``False``
+
+
+``mon_max_mdsmap_epochs``
+
+:Description: The maximum number of mdsmap epochs to trim during a single proposal.
+:Type: Integer
+:Default: ``500``
+
+
+``mon_config_key_max_entry_size``
+
+:Description: The maximum size of config-key entry (in bytes)
+:Type: Integer
+:Default: ``65536``
+
+
+``mon_scrub_interval``
+
+:Description: How often the monitor scrubs its store by comparing
+              the stored checksums with the computed ones for all stored
+              keys. (0 disables it. dangerous, use with care)
+
+:Type: Seconds
+:Default: ``1 day``
+
+
+``mon_scrub_max_keys``
+
+:Description: The maximum number of keys to scrub each time.
+:Type: Integer
+:Default: ``100``
+
+
+``mon_compact_on_start``
+
+:Description: Compact the database used as Ceph Monitor store on
+              ``ceph-mon`` start. A manual compaction helps to shrink the
+              monitor database and improve the performance of it if the regular
+              compaction fails to work.
+
+:Type: Boolean
+:Default: ``False``
+
+
+``mon_compact_on_bootstrap``
+
+:Description: Compact the database used as Ceph Monitor store
+              on bootstrap. Monitors probe each other to establish
+              a quorum after bootstrap. If a monitor times out before joining the
+              quorum, it will start over and bootstrap again.
+
+:Type: Boolean
+:Default: ``False``
+
+
+``mon_compact_on_trim``
+
+:Description: Compact a certain prefix (including paxos) when we trim its old states.
+:Type: Boolean
+:Default: ``True``
+
+
+``mon_cpu_threads``
+
+:Description: Number of threads for performing CPU intensive work on monitor.
+:Type: Integer
+:Default: ``4``
+
+
+``mon_osd_mapping_pgs_per_chunk``
+
+:Description: We calculate the mapping from placement group to OSDs in chunks.
+              This option specifies the number of placement groups per chunk.
+
+:Type: Integer
+:Default: ``4096``
+
+
+``mon_session_timeout``
+
+:Description: Monitor will terminate inactive sessions stay idle over this
+              time limit.
+
+:Type: Integer
+:Default: ``300``
+
+
+``mon_osd_cache_size_min``
+
+:Description: The minimum amount of bytes to be kept mapped in memory for osd
+               monitor caches.
+
+:Type: 64-bit Integer
+:Default: ``134217728``
+
+
+``mon_memory_target``
+
+:Description: The amount of bytes pertaining to OSD monitor caches and KV cache
+              to be kept mapped in memory with cache auto-tuning enabled.
+
+:Type: 64-bit Integer
+:Default: ``2147483648``
+
+
+``mon_memory_autotune``
+
+:Description: Autotune the cache memory used for OSD monitors and KV
+              database.
+
+:Type: Boolean
+:Default: ``True``
+
+
+.. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
 .. _Ceph configuration file: ../ceph-conf/#monitors
 .. _Network Configuration Reference: ../network-config-ref
 .. _Monitor lookup through DNS: ../mon-lookup-dns
-.. _ACID: http://en.wikipedia.org/wiki/ACID
+.. _ACID: https://en.wikipedia.org/wiki/ACID
 .. _Adding/Removing a Monitor: ../../operations/add-or-rm-mons
-.. _Add/Remove a Monitor (ceph-deploy): ../../deployment/ceph-deploy-mon
 .. _Monitoring a Cluster: ../../operations/monitoring
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg
 .. _Bootstrapping a Monitor: ../../../dev/mon-bootstrap

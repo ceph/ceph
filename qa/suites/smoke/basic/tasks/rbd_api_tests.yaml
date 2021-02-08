@@ -1,6 +1,13 @@
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
     fs: xfs
 - ceph-fuse:
 - workunit:

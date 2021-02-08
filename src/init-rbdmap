@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # rbdmap Ceph RBD Mapping
 #
@@ -29,11 +29,11 @@ fi
 
 case "$1" in
   start)
-	rbdmap map
+	rbdmap device map
 	;;
 
   stop)
-	rbdmap unmap
+	rbdmap device unmap
 	;;
 
   restart|force-reload)
@@ -42,11 +42,11 @@ case "$1" in
 	;;
 
   reload)
-	rbdmap map
+	rbdmap device map
 	;;
 
   status)
-	rbd showmapped
+	rbd device list
 	;;
 
   *)

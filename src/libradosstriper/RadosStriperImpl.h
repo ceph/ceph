@@ -17,227 +17,25 @@
 
 #include <string>
 
-#include "include/atomic.h"
+#include <boost/intrusive_ptr.hpp>
 
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/radosstriper/libradosstriper.h"
 #include "include/radosstriper/libradosstriper.hpp"
+#include "MultiAioCompletionImpl.h"
 
 #include "librados/IoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
 #include "common/RefCountedObj.h"
+#include "common/ceph_context.h"
 
-struct libradosstriper::RadosStriperImpl {
+namespace libradosstriper {
 
-  /**
-   * struct handling the data needed to pass to the call back
-   * function in asynchronous operations
-   */
-  struct CompletionData : RefCountedObject {
-    /// constructor
-    CompletionData(libradosstriper::RadosStriperImpl * striper,
-		   const std::string& soid,
-		   const std::string& lockCookie,
-		   librados::AioCompletionImpl *userCompletion = 0,
-                   int n = 1);
-    /// destructor
-    ~CompletionData() override;
-    /// complete method
-    void complete(int r);
-    /// striper to be used to handle the write completion
-    libradosstriper::RadosStriperImpl *m_striper;
-    /// striped object concerned by the write operation
-    std::string m_soid;
-    /// shared lock to be released at completion
-    std::string m_lockCookie;
-    /// completion handler
-    librados::IoCtxImpl::C_aio_Complete *m_ack;
-  };
+using MultiAioCompletionImplPtr =
+    boost::intrusive_ptr<MultiAioCompletionImpl>;
 
-  /**
-   * struct handling the data needed to pass to the call back
-   * function in asynchronous read operations
-   */
-  struct ReadCompletionData : CompletionData {
-    /// bufferlist containing final result
-    bufferlist* m_bl;
-    /// extents that will be read
-    std::vector<ObjectExtent>* m_extents;
-    /// intermediate results
-    std::vector<bufferlist>* m_resultbl;
-    /// return code of read completion, to be remembered until unlocking happened
-    int m_readRc;
-    /// completion object for the unlocking of the striped object at the end of the read
-    librados::AioCompletion *m_unlockCompletion;
-    /// constructor
-    ReadCompletionData(libradosstriper::RadosStriperImpl * striper,
-		       const std::string& soid,
-		       const std::string& lockCookie,
-		       librados::AioCompletionImpl *userCompletion,
-		       bufferlist* bl,
-		       std::vector<ObjectExtent>* extents,
-		       std::vector<bufferlist>* resultbl,
-                       int n);
-    /// destructor
-    ~ReadCompletionData() override;
-    /// complete method for when reading is over
-    void complete_read(int r);
-    /// complete method for when object is unlocked
-    void complete_unlock(int r);
-  };
-
-  /**
-   * struct handling the data needed to pass to the call back
-   * function in asynchronous write operations
-   */
-  struct WriteCompletionData : CompletionData {
-    /// safe completion handler
-    librados::IoCtxImpl::C_aio_Complete *m_safe;
-    /// return code of write completion, to be remembered until unlocking happened
-    int m_writeRc;
-    /// completion object for the unlocking of the striped object at the end of the write
-    librados::AioCompletion *m_unlockCompletion;
-    /// constructor
-    WriteCompletionData(libradosstriper::RadosStriperImpl * striper,
-			const std::string& soid,
-			const std::string& lockCookie,
-			librados::AioCompletionImpl *userCompletion,
-                        int n);
-    /// destructor
-    ~WriteCompletionData() override;
-    /// complete method for when writing is over
-    void complete_write(int r);
-    /// complete method for when object is unlocked
-    void complete_unlock(int r);
-    /// safe method
-    void safe(int r);
-  };
-
-  /**
-   * struct handling the data needed to pass to the call back
-   * function in asynchronous read operations of a Rados File
-   */
-  struct RadosReadCompletionData : RefCountedObject {
-    /// constructor
-    RadosReadCompletionData(MultiAioCompletionImpl *multiAioCompl,
-			    uint64_t expectedBytes,
-			    bufferlist *bl,
-			    CephContext *context,
-			    int n = 1) :
-      RefCountedObject(context, n),
-      m_multiAioCompl(multiAioCompl), m_expectedBytes(expectedBytes), m_bl(bl) {};
-    /// the multi asynch io completion object to be used
-    MultiAioCompletionImpl *m_multiAioCompl;
-    /// the expected number of bytes
-    uint64_t m_expectedBytes;
-    /// the bufferlist object where data have been written
-    bufferlist *m_bl;
-  };
-
-  /**
-   * struct handling (most of) the data needed to pass to the call back
-   * function in asynchronous stat operations.
-   * Inherited by the actual type for adding time information in different
-   * versions (time_t or struct timespec)
-   */
-  struct BasicStatCompletionData : CompletionData {
-    /// constructor
-    BasicStatCompletionData(libradosstriper::RadosStriperImpl* striper,
-			    const std::string& soid,
-			    librados::AioCompletionImpl *userCompletion,
-			    libradosstriper::MultiAioCompletionImpl *multiCompletion,
-			    uint64_t *psize,
-                            int n = 1) :
-      CompletionData(striper, soid, "", userCompletion, n),
-      m_multiCompletion(multiCompletion), m_psize(psize),
-      m_statRC(0), m_getxattrRC(0) {};
-    // MultiAioCompletionImpl used to handle the double aysnc
-    // call in the back (stat + getxattr)
-    libradosstriper::MultiAioCompletionImpl *m_multiCompletion;
-    // where to store the size of first objct
-    // this will be ignored but we need a place to store it when
-    // async stat is called
-    uint64_t m_objectSize;
-    // where to store the file size
-    uint64_t *m_psize;
-    /// the bufferlist object used for the getxattr call
-    bufferlist m_bl;
-    /// return code of the stat
-    int m_statRC;
-    /// return code of the getxattr
-    int m_getxattrRC;
-  };
-
-  /**
-   * struct handling the data needed to pass to the call back
-   * function in asynchronous stat operations.
-   * Simple templated extension of BasicStatCompletionData.
-   * The template parameter is the type of the time information
-   * (used with time_t for stat and struct timespec for stat2)
-   */
-  template<class TimeType>
-  struct StatCompletionData : BasicStatCompletionData {
-    /// constructor
-    StatCompletionData(libradosstriper::RadosStriperImpl* striper,
-		       const std::string& soid,
-		       librados::AioCompletionImpl *userCompletion,
-		       libradosstriper::MultiAioCompletionImpl *multiCompletion,
-		       uint64_t *psize,
-		       TimeType *pmtime,
-                       int n = 1) :
-      BasicStatCompletionData(striper, soid, userCompletion, multiCompletion, psize, n),
-      m_pmtime(pmtime) {};
-    // where to store the file time
-    TimeType *m_pmtime;
-  };
-
-  /**
-   * struct handling the data needed to pass to the call back
-   * function in asynchronous remove operations of a Rados File
-   */
-  struct RadosRemoveCompletionData : RefCountedObject {
-    /// constructor
-    RadosRemoveCompletionData(MultiAioCompletionImpl *multiAioCompl,
-			      CephContext *context) :
-      RefCountedObject(context, 2),
-      m_multiAioCompl(multiAioCompl) {};
-    /// the multi asynch io completion object to be used
-    MultiAioCompletionImpl *m_multiAioCompl;
-  };
-
-  struct RemoveCompletionData : CompletionData {
-    /// removal flags
-    int flags;
-    /**
-     * constructor
-     * note that the constructed object will take ownership of the lock
-     */
-    RemoveCompletionData(libradosstriper::RadosStriperImpl * striper,
-			 const std::string& soid,
-			 const std::string& lockCookie,
-			 librados::AioCompletionImpl *userCompletion,
-			 int flags = 0);
-  };
-
-  /**
-   * struct handling the data needed to pass to the call back
-   * function in asynchronous truncate operations
-   */
-  struct TruncateCompletionData : RefCountedObject {
-    /// constructor
-    TruncateCompletionData(libradosstriper::RadosStriperImpl* striper,
-			   const std::string& soid,
-			   uint64_t size);
-    /// destructor
-    ~TruncateCompletionData() override;
-    /// striper to be used
-    libradosstriper::RadosStriperImpl *m_striper;
-    /// striped object concerned by the truncate operation
-    std::string m_soid;
-    /// the final size of the truncated object
-    uint64_t m_size;
-  };
+struct RadosStriperImpl {
 
   /**
    * exception wrapper around an error code
@@ -316,18 +114,17 @@ struct libradosstriper::RadosStriperImpl {
 
   // reference counting
   void get() {
-    lock.Lock();
+    std::lock_guard l{lock};
     m_refCnt ++ ;
-    lock.Unlock();
   }
   void put() {
     bool deleteme = false;
-    lock.Lock();
+    lock.lock();
     m_refCnt --;
     if (m_refCnt == 0)
       deleteme = true;
-    cond.Signal();
-    lock.Unlock();
+    cond.notify_all();
+    lock.unlock();
     if (deleteme)
       delete this;
   }
@@ -357,7 +154,7 @@ struct libradosstriper::RadosStriperImpl {
 			       size_t len,
 			       uint64_t off);
   int internal_aio_write(const std::string& soid,
-			 libradosstriper::MultiAioCompletionImpl *c,
+			 MultiAioCompletionImplPtr c,
 			 const bufferlist& bl,
 			 size_t len,
 			 uint64_t off,
@@ -376,7 +173,7 @@ struct libradosstriper::RadosStriperImpl {
 				   uint64_t *size);
 
   int internal_aio_remove(const std::string& soid,
-			  libradosstriper::MultiAioCompletionImpl *multi_completion,
+			  MultiAioCompletionImplPtr multi_completion,
 			  int flags=0);
 
   /**
@@ -439,7 +236,7 @@ struct libradosstriper::RadosStriperImpl {
    * point is synchronous for lack of asynchronous truncation in the rados layer
    */
   int aio_truncate(const std::string& soid,
-		   libradosstriper::MultiAioCompletionImpl *c,
+		   MultiAioCompletionImplPtr c,
 		   uint64_t original_size,
 		   uint64_t size,
 		   ceph_file_layout &layout);
@@ -462,9 +259,9 @@ struct libradosstriper::RadosStriperImpl {
   }
 
   // reference counting
-  Cond  cond;
+  std::condition_variable cond;
   int m_refCnt;
-  Mutex lock;
+  std::mutex lock;
 
 
   // Context
@@ -475,5 +272,5 @@ struct libradosstriper::RadosStriperImpl {
   // Default layout
   ceph_file_layout m_layout;
 };
-
+}
 #endif

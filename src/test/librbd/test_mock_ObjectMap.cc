@@ -8,6 +8,7 @@
 #include "librbd/object_map/RefreshRequest.h"
 #include "librbd/object_map/UnlockRequest.h"
 #include "librbd/object_map/UpdateRequest.h"
+#include <boost/scope_exit.hpp>
 
 namespace librbd {
 
@@ -27,10 +28,10 @@ struct RefreshRequest<MockTestImageCtx> {
   Context *on_finish = nullptr;
   ceph::BitVector<2u> *object_map = nullptr;
   static RefreshRequest *s_instance;
-  static RefreshRequest *create(MockTestImageCtx &image_ctx,
+  static RefreshRequest *create(MockTestImageCtx &image_ctx, ceph::shared_mutex*,
                                 ceph::BitVector<2u> *object_map,
                                 uint64_t snap_id, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->object_map = object_map;
     return s_instance;
@@ -49,7 +50,7 @@ struct UnlockRequest<MockTestImageCtx> {
   static UnlockRequest *s_instance;
   static UnlockRequest *create(MockTestImageCtx &image_ctx,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -64,23 +65,25 @@ template <>
 struct UpdateRequest<MockTestImageCtx> {
   Context *on_finish = nullptr;
   static UpdateRequest *s_instance;
-  static UpdateRequest *create(MockTestImageCtx &image_ctx,
+  static UpdateRequest *create(MockTestImageCtx &image_ctx, ceph::shared_mutex*,
                                ceph::BitVector<2u> *object_map,
                                uint64_t snap_id,
                                uint64_t start_object_no, uint64_t end_object_no,
                                uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
-                               Context *on_finish) {
-    assert(s_instance != nullptr);
+                               const ZTracer::Trace &parent_trace,
+                               bool ignore_enoent, Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->construct(snap_id, start_object_no, end_object_no, new_state,
-                          current_state);
+                          current_state, ignore_enoent);
     return s_instance;
   }
 
-  MOCK_METHOD5(construct, void(uint64_t snap_id, uint64_t start_object_no,
+  MOCK_METHOD6(construct, void(uint64_t snap_id, uint64_t start_object_no,
                                uint64_t end_object_no, uint8_t new_state,
-                               const boost::optional<uint8_t> &current_state));
+                               const boost::optional<uint8_t> &current_state,
+                               bool ignore_enoent));
   MOCK_METHOD0(send, void());
   UpdateRequest() {
     s_instance = this;
@@ -132,13 +135,13 @@ public:
                      uint64_t snap_id, uint64_t start_object_no,
                      uint64_t end_object_no, uint8_t new_state,
                      const boost::optional<uint8_t> &current_state,
-                     Context **on_finish) {
+                     bool ignore_enoent, Context **on_finish) {
     EXPECT_CALL(mock_update_request, construct(snap_id, start_object_no,
                                                end_object_no, new_state,
-                                               current_state))
+                                               current_state, ignore_enoent))
       .Times(1);
     EXPECT_CALL(mock_update_request, send())
-      .WillOnce(Invoke([&mock_image_ctx, &mock_update_request, on_finish]() {
+      .WillOnce(Invoke([&mock_update_request, on_finish]() {
           *on_finish = mock_update_request.on_finish;
         }));
   }
@@ -162,26 +165,29 @@ TEST_F(TestMockObjectMap, NonDetainedUpdate) {
   MockUpdateRequest mock_update_request;
   Context *finish_update_1;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                0, 1, 1, {}, &finish_update_1);
+                0, 1, 1, {}, false, &finish_update_1);
   Context *finish_update_2;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                1, 2, 1, {}, &finish_update_2);
+                1, 2, 1, {}, false, &finish_update_2);
 
   MockUnlockRequest mock_unlock_request;
   expect_unlock(mock_image_ctx, mock_unlock_request, 0);
 
-  MockObjectMap mock_object_map(mock_image_ctx, CEPH_NOSNAP);
+  MockObjectMap *mock_object_map = new MockObjectMap(mock_image_ctx, CEPH_NOSNAP);
+  BOOST_SCOPE_EXIT(&mock_object_map) {
+    mock_object_map->put();
+  } BOOST_SCOPE_EXIT_END
+
   C_SaferCond open_ctx;
-  mock_object_map.open(&open_ctx);
+  mock_object_map->open(&open_ctx);
   ASSERT_EQ(0, open_ctx.wait());
 
   C_SaferCond update_ctx1;
   C_SaferCond update_ctx2;
   {
-    RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
-    RWLock::WLocker object_map_locker(mock_image_ctx.object_map_lock);
-    mock_object_map.aio_update(CEPH_NOSNAP, 0, 1, {}, &update_ctx1);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 1, {}, &update_ctx2);
+    std::shared_lock image_locker{mock_image_ctx.image_lock};
+    mock_object_map->aio_update(CEPH_NOSNAP, 0, 1, {}, {}, false, &update_ctx1);
+    mock_object_map->aio_update(CEPH_NOSNAP, 1, 1, {}, {}, false, &update_ctx2);
   }
 
   finish_update_2->complete(0);
@@ -191,7 +197,7 @@ TEST_F(TestMockObjectMap, NonDetainedUpdate) {
   ASSERT_EQ(0, update_ctx1.wait());
 
   C_SaferCond close_ctx;
-  mock_object_map.close(&close_ctx);
+  mock_object_map->close(&close_ctx);
   ASSERT_EQ(0, close_ctx.wait());
 }
 
@@ -212,23 +218,27 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   MockUpdateRequest mock_update_request;
   Context *finish_update_1;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                1, 4, 1, {}, &finish_update_1);
+                1, 4, 1, {}, false, &finish_update_1);
   Context *finish_update_2 = nullptr;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                1, 3, 1, {}, &finish_update_2);
+                1, 3, 1, {}, false, &finish_update_2);
   Context *finish_update_3 = nullptr;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                2, 3, 1, {}, &finish_update_3);
+                2, 3, 1, {}, false, &finish_update_3);
   Context *finish_update_4 = nullptr;
   expect_update(mock_image_ctx, mock_update_request, CEPH_NOSNAP,
-                0, 2, 1, {}, &finish_update_4);
+                0, 2, 1, {}, false, &finish_update_4);
 
   MockUnlockRequest mock_unlock_request;
   expect_unlock(mock_image_ctx, mock_unlock_request, 0);
 
-  MockObjectMap mock_object_map(mock_image_ctx, CEPH_NOSNAP);
+  MockObjectMap *mock_object_map = new MockObjectMap(mock_image_ctx, CEPH_NOSNAP);
+  BOOST_SCOPE_EXIT(&mock_object_map) {
+    mock_object_map->put();
+  } BOOST_SCOPE_EXIT_END
+
   C_SaferCond open_ctx;
-  mock_object_map.open(&open_ctx);
+  mock_object_map->open(&open_ctx);
   ASSERT_EQ(0, open_ctx.wait());
 
   C_SaferCond update_ctx1;
@@ -236,12 +246,15 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   C_SaferCond update_ctx3;
   C_SaferCond update_ctx4;
   {
-    RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
-    RWLock::WLocker object_map_locker(mock_image_ctx.object_map_lock);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 4, 1, {}, &update_ctx1);
-    mock_object_map.aio_update(CEPH_NOSNAP, 1, 3, 1, {}, &update_ctx2);
-    mock_object_map.aio_update(CEPH_NOSNAP, 2, 3, 1, {}, &update_ctx3);
-    mock_object_map.aio_update(CEPH_NOSNAP, 0, 2, 1, {}, &update_ctx4);
+    std::shared_lock image_locker{mock_image_ctx.image_lock};
+    mock_object_map->aio_update(CEPH_NOSNAP, 1, 4, 1, {}, {}, false,
+                               &update_ctx1);
+    mock_object_map->aio_update(CEPH_NOSNAP, 1, 3, 1, {}, {}, false,
+                               &update_ctx2);
+    mock_object_map->aio_update(CEPH_NOSNAP, 2, 3, 1, {}, {}, false,
+                               &update_ctx3);
+    mock_object_map->aio_update(CEPH_NOSNAP, 0, 2, 1, {}, {}, false,
+                               &update_ctx4);
   }
 
   // updates 2, 3, and 4 are blocked on update 1
@@ -264,7 +277,7 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   ASSERT_EQ(0, update_ctx4.wait());
 
   C_SaferCond close_ctx;
-  mock_object_map.close(&close_ctx);
+  mock_object_map->close(&close_ctx);
   ASSERT_EQ(0, close_ctx.wait());
 }
 

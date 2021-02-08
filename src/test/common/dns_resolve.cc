@@ -11,6 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <arpa/nameser_compat.h>
+
 #include "common/dns_resolve.h"
 #include "test/common/dns_messages.h"
 
@@ -62,7 +64,7 @@ TEST_F(DNSResolverTest, resolve_ip_addr) {
 
   std::ostringstream os;
   os << addr;
-  ASSERT_EQ(os.str(), "192.168.1.11:0/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.11:0/0");
 }
 
 TEST_F(DNSResolverTest, resolve_ip_addr_fail) {
@@ -135,26 +137,32 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_empty_domain) {
 #endif
   }
 
-  map<string, entity_addr_t> addrs;
+  map<string, DNSResolver::Record> records;
   DNSResolver::get_instance(resolvH)->resolve_srv_hosts(g_ceph_context, "cephmon", 
-      DNSResolver::SRV_Protocol::TCP, &addrs);
+      DNSResolver::SRV_Protocol::TCP, &records);
 
-  ASSERT_EQ(addrs.size(), (unsigned int)3);
-  map<string,entity_addr_t>::iterator it = addrs.find("mon.a");
-  ASSERT_NE(it, addrs.end());
+  ASSERT_EQ(records.size(), (unsigned int)3);
+  auto it = records.find("mon.a");
+  ASSERT_NE(it, records.end());
   std::ostringstream os;
-  os << it->second;
-  ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
+  os << it->second.addr;
+  ASSERT_EQ(os.str(), "v2:192.168.1.11:6789/0");
   os.str("");
-  it = addrs.find("mon.b");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
-  ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
+  ASSERT_EQ(it->second.priority, 10);
+  ASSERT_EQ(it->second.weight, 40);
+  it = records.find("mon.b");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
+  ASSERT_EQ(os.str(), "v2:192.168.1.12:6789/0");
   os.str("");
-  it = addrs.find("mon.c");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
-  ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
+  ASSERT_EQ(it->second.priority, 10);
+  ASSERT_EQ(it->second.weight, 35);
+  it = records.find("mon.c");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
+  ASSERT_EQ(os.str(), "v2:192.168.1.13:6789/0");
+  ASSERT_EQ(it->second.priority, 10);
+  ASSERT_EQ(it->second.weight, 25);
 }
 
 TEST_F(DNSResolverTest, resolve_srv_hosts_full_domain) {
@@ -205,26 +213,26 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_full_domain) {
 #endif
   }
 
-  map<string, entity_addr_t> addrs;
+  map<string, DNSResolver::Record> records;
   DNSResolver::get_instance(resolvH)->resolve_srv_hosts(g_ceph_context, "cephmon", 
-      DNSResolver::SRV_Protocol::TCP, "ceph.com", &addrs);
+      DNSResolver::SRV_Protocol::TCP, "ceph.com", &records);
 
-  ASSERT_EQ(addrs.size(), (unsigned int)3);
-  map<string,entity_addr_t>::iterator it = addrs.find("mon.a");
-  ASSERT_NE(it, addrs.end());
+  ASSERT_EQ(records.size(), (unsigned int)3);
+  auto it = records.find("mon.a");
+  ASSERT_NE(it, records.end());
   std::ostringstream os;
-  os << it->second;
-  ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
+  os << it->second.addr;
+  ASSERT_EQ(os.str(), "v2:192.168.1.11:6789/0");
   os.str("");
-  it = addrs.find("mon.b");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
-  ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
+  it = records.find("mon.b");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
+  ASSERT_EQ(os.str(), "v2:192.168.1.12:6789/0");
   os.str("");
-  it = addrs.find("mon.c");
-  ASSERT_NE(it, addrs.end());
-  os << it->second;
-  ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
+  it = records.find("mon.c");
+  ASSERT_NE(it, records.end());
+  os << it->second.addr;
+  ASSERT_EQ(os.str(), "v2:192.168.1.13:6789/0");
 }
 
 TEST_F(DNSResolverTest, resolve_srv_hosts_fail) {
@@ -244,11 +252,11 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_fail) {
 #endif
   }
 
-  map<string, entity_addr_t> addrs;
+  map<string, DNSResolver::Record> records;
   int ret = DNSResolver::get_instance(resolvH)->resolve_srv_hosts(
-      g_ceph_context, "noservice", DNSResolver::SRV_Protocol::TCP, "", &addrs);
+      g_ceph_context, "noservice", DNSResolver::SRV_Protocol::TCP, "", &records);
 
-  ASSERT_EQ(ret, 0);
-  ASSERT_EQ(addrs.size(), (unsigned int)0);
+  ASSERT_EQ(0, ret);
+  ASSERT_TRUE(records.empty());
 }
 

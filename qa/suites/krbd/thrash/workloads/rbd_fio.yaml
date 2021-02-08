@@ -1,9 +1,11 @@
 tasks:
 - rbd_fio:
     client.0:
-       fio-io-size: 90%
+       fio-io-size: 100%
        formats: [2]
        features: [[layering,exclusive-lock]]
-       io-engine: sync
+       io-engine: libaio
        rw: randrw
+       bs: 1024
+       io-depth: 256
        runtime: 1200

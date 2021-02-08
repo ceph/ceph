@@ -5,6 +5,7 @@
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "librbd/Utils.h"
 #include "librbd/watcher/Utils.h"
 
@@ -27,7 +28,7 @@ static const uint64_t NOTIFY_TIMEOUT_MS = 5000;
 
 template <typename I>
 MirroringWatcher<I>::MirroringWatcher(librados::IoCtx &io_ctx,
-                                      ContextWQ *work_queue)
+                                      asio::ContextWQ *work_queue)
   : Watcher(io_ctx, work_queue, RBD_MIRRORING) {
 }
 
@@ -47,12 +48,12 @@ void MirroringWatcher<I>::notify_mode_updated(librados::IoCtx &io_ctx,
   ldout(cct, 20) << dendl;
 
   bufferlist bl;
-  ::encode(NotifyMessage{ModeUpdatedPayload{mirror_mode}}, bl);
+  encode(NotifyMessage{ModeUpdatedPayload{mirror_mode}}, bl);
 
   librados::AioCompletion *comp = create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
                             nullptr);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -76,13 +77,13 @@ void MirroringWatcher<I>::notify_image_updated(
   ldout(cct, 20) << dendl;
 
   bufferlist bl;
-  ::encode(NotifyMessage{ImageUpdatedPayload{
+  encode(NotifyMessage{ImageUpdatedPayload{
       mirror_image_state, image_id, global_image_id}}, bl);
 
   librados::AioCompletion *comp = create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
                             nullptr);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 
 }
@@ -97,8 +98,8 @@ void MirroringWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
 
   NotifyMessage notify_message;
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(notify_message, iter);
+    auto iter = bl.cbegin();
+    decode(notify_message, iter);
   } catch (const buffer::error &err) {
     lderr(cct) << ": error decoding image notification: " << err.what()
                << dendl;

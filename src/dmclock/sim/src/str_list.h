@@ -1,3 +1,18 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+/*
+ * Copyright (C) 2009 Red Hat Inc.
+ *
+ * Forked from Red Hat's Ceph project.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
+ */
+
+
 #ifndef CEPH_STRLIST_H
 #define CEPH_STRLIST_H
 
@@ -78,7 +93,7 @@ extern void get_str_set(const std::string& str,
  * @param [in] sep String used to join each element from **v**
  * @return empty string if **v** is empty or concatenated string
 **/
-inline std::string str_join(const std::vector<std::string>& v, std::string sep)
+inline std::string str_join(const std::vector<std::string>& v, const std::string& sep)
 {
   if (v.empty())
     return std::string();

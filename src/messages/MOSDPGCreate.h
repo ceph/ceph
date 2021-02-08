@@ -23,47 +23,51 @@
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
  */
 
-struct MOSDPGCreate : public Message {
+class MOSDPGCreate final : public Message {
+public:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 3;
 
-  const static int HEAD_VERSION = 3;
-  const static int COMPAT_VERSION = 3;
-
-  version_t          epoch;
-  map<pg_t,pg_create_t> mkpg;
-  map<pg_t,utime_t> ctimes;
+  version_t          epoch = 0;
+  std::map<pg_t,pg_create_t> mkpg;
+  std::map<pg_t,utime_t> ctimes;
 
   MOSDPGCreate()
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDPGCreate{0}
+  {}
   MOSDPGCreate(epoch_t e)
-    : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
-      epoch(e) { }
+    : Message{MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION},
+      epoch(e)
+  {}
 private:
-  ~MOSDPGCreate() override {}
+  ~MOSDPGCreate() final {}
 
-public:  
-  const char *get_type_name() const override { return "pg_create"; }
+public:
+  std::string_view get_type_name() const override { return "pg_create"; }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(mkpg, payload);
-    ::encode(ctimes, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(mkpg, payload);
+    encode(ctimes, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(mkpg, p);
-    ::decode(ctimes, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(mkpg, p);
+    decode(ctimes, p);
   }
-
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_pg_create(e" << epoch;
-    for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
-         i != mkpg.end();
-         ++i) {
+    for (auto i = mkpg.begin(); i != mkpg.end(); ++i) {
       out << " " << i->first << ":" << i->second.created;
     }
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -22,32 +22,37 @@
  * The mgr digest is a way for the mgr to subscribe to things
  * other than the cluster maps, which are needed by 
  */
-class MMgrDigest : public Message {
+class MMgrDigest final : public Message {
 public:
-  bufferlist mon_status_json;
-  bufferlist health_json;
+  ceph::buffer::list mon_status_json;
+  ceph::buffer::list health_json;
 
-  MMgrDigest() : 
-    Message(MSG_MGR_DIGEST) {}
-
-  const char *get_type_name() const override { return "mgrdigest"; }
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "mgrdigest"; }
+  void print(std::ostream& out) const override {
     out << get_type_name();
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(mon_status_json, p);
-    ::decode(health_json, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(mon_status_json, p);
+    decode(health_json, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(mon_status_json, payload);
-    ::encode(health_json, payload);
+    using ceph::encode;
+    encode(mon_status_json, payload);
+    encode(health_json, payload);
   }
 
 private:
-  ~MMgrDigest() override {}
+  MMgrDigest() :
+    Message{MSG_MGR_DIGEST} {}
+  ~MMgrDigest() final {}
 
+  using RefCountedObject::put;
+  using RefCountedObject::get;
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

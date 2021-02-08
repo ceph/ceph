@@ -5,25 +5,34 @@
 #include "include/buffer.h"
 #include "common/dout.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/Utils.h"
 #include <boost/variant/apply_visitor.hpp>
 #include <boost/variant/static_visitor.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::ReadResult: "
+#define dout_prefix *_dout << "librbd::io::ReadResult: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace io {
 
-struct ReadResult::SetClipLengthVisitor : public boost::static_visitor<void> {
-  size_t length;
+struct ReadResult::SetImageExtentsVisitor : public boost::static_visitor<void> {
+  Extents image_extents;
 
-  SetClipLengthVisitor(size_t length) : length(length) {
+  explicit SetImageExtentsVisitor(const Extents& image_extents)
+    : image_extents(image_extents) {
   }
 
   void operator()(Linear &linear) const {
-    assert(length <= linear.buf_len);
+    uint64_t length = util::get_extents_length(image_extents);
+
+    ceph_assert(length <= linear.buf_len);
     linear.buf_len = length;
+  }
+
+  void operator()(SparseBufferlist &sbl) const {
+    sbl.image_extents = image_extents;
   }
 
   template <typename T>
@@ -61,11 +70,11 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
     size_t offset = 0;
     int idx = 0;
     for (; offset < length && idx < vector.iov_count; idx++) {
-      size_t len = MIN(vector.iov[idx].iov_len, length - offset);
+      size_t len = std::min(vector.iov[idx].iov_len, length - offset);
       it.copy(len, static_cast<char *>(vector.iov[idx].iov_base));
       offset += len;
     }
-    assert(offset == bl.length());
+    ceph_assert(offset == bl.length());
   }
 
   void operator()(Bufferlist &bufferlist) const {
@@ -76,65 +85,149 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
                    << "bytes to bl " << reinterpret_cast<void*>(bufferlist.bl)
                    << dendl;
   }
+
+  void operator()(SparseBufferlist &sparse_bufferlist) const {
+    sparse_bufferlist.bl->clear();
+
+    ExtentMap buffer_extent_map;
+    auto buffer_extents_length = destriper.assemble_result(
+      cct, &buffer_extent_map, sparse_bufferlist.bl);
+
+    ldout(cct, 20) << "image_extents="
+                   << sparse_bufferlist.image_extents << ", "
+                   << "buffer_extent_map=" << buffer_extent_map << dendl;
+
+    sparse_bufferlist.extent_map->clear();
+    sparse_bufferlist.extent_map->reserve(buffer_extent_map.size());
+
+    // The extent-map is logically addressed by buffer-extents not image- or
+    // object-extents. Translate this address mapping to image-extent
+    // logical addressing since it's tied to an image-extent read
+    uint64_t buffer_offset = 0;
+    auto bem_it = buffer_extent_map.begin();
+    for (auto [image_offset, image_length] : sparse_bufferlist.image_extents) {
+      while (bem_it != buffer_extent_map.end()) {
+        auto [buffer_extent_offset, buffer_extent_length] = *bem_it;
+
+        if (buffer_offset + image_length <= buffer_extent_offset) {
+          // skip any image extent that is not included in the results
+          break;
+        }
+
+        // current buffer-extent should be within the current image-extent
+        ceph_assert(buffer_offset <= buffer_extent_offset &&
+                    buffer_offset + image_length >=
+                      buffer_extent_offset + buffer_extent_length);
+        auto image_extent_offset =
+          image_offset + (buffer_extent_offset - buffer_offset);
+        ldout(cct, 20) << "mapping buffer extent " << buffer_extent_offset
+                       << "~" << buffer_extent_length << " to image extent "
+                       << image_extent_offset << "~" << buffer_extent_length
+                       << dendl;
+        sparse_bufferlist.extent_map->emplace_back(
+          image_extent_offset, buffer_extent_length);
+        ++bem_it;
+      }
+
+      buffer_offset += image_length;
+    }
+    ceph_assert(buffer_offset == buffer_extents_length);
+    ceph_assert(bem_it == buffer_extent_map.end());
+
+    ldout(cct, 20) << "moved resulting " << *sparse_bufferlist.extent_map
+                   << " extents of total " << sparse_bufferlist.bl->length()
+                   << " bytes to bl "
+                   << reinterpret_cast<void*>(sparse_bufferlist.bl) << dendl;
+  }
 };
 
-ReadResult::C_ReadRequest::C_ReadRequest(AioCompletion *aio_completion)
-  : aio_completion(aio_completion) {
+ReadResult::C_ImageReadRequest::C_ImageReadRequest(
+    AioCompletion *aio_completion, uint64_t buffer_offset,
+    const Extents image_extents)
+  : aio_completion(aio_completion), buffer_offset(buffer_offset),
+    image_extents(image_extents) {
   aio_completion->add_request();
-}
-
-void ReadResult::C_ReadRequest::finish(int r) {
-  aio_completion->complete_request(r);
 }
 
 void ReadResult::C_ImageReadRequest::finish(int r) {
   CephContext *cct = aio_completion->ictx->cct;
-  ldout(cct, 10) << "C_ImageReadRequest::finish() " << this << ": r=" << r
+  ldout(cct, 10) << "C_ImageReadRequest: r=" << r
                  << dendl;
-  if (r >= 0) {
+  if (r >= 0 || (ignore_enoent && r == -ENOENT)) {
+    striper::LightweightBufferExtents buffer_extents;
     size_t length = 0;
     for (auto &image_extent : image_extents) {
+      buffer_extents.emplace_back(buffer_offset + length, image_extent.second);
       length += image_extent.second;
     }
-    assert(length == bl.length());
+    ceph_assert(r == -ENOENT || length == bl.length());
 
-    aio_completion->lock.Lock();
+    aio_completion->lock.lock();
     aio_completion->read_result.m_destriper.add_partial_result(
-      cct, bl, image_extents);
-    aio_completion->lock.Unlock();
+      cct, std::move(bl), buffer_extents);
+    aio_completion->lock.unlock();
     r = length;
   }
 
-  C_ReadRequest::finish(r);
+  aio_completion->complete_request(r);
 }
 
-void ReadResult::C_SparseReadRequestBase::finish(ExtentMap &extent_map,
-                                                 const Extents &buffer_extents,
-                                                 uint64_t offset, size_t length,
-                                                 bufferlist &bl, int r) {
-  aio_completion->lock.Lock();
+ReadResult::C_ObjectReadRequest::C_ObjectReadRequest(
+    AioCompletion *aio_completion, ReadExtents&& extents)
+  : aio_completion(aio_completion), extents(std::move(extents)) {
+  aio_completion->add_request();
+}
+
+void ReadResult::C_ObjectReadRequest::finish(int r) {
   CephContext *cct = aio_completion->ictx->cct;
-  ldout(cct, 10) << "C_SparseReadRequest::finish() " << this << " r = " << r
+  ldout(cct, 10) << "C_ObjectReadRequest: r=" << r
                  << dendl;
 
-  if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
-    ldout(cct, 10) << " got " << extent_map
-                   << " for " << buffer_extents
-                   << " bl " << bl.length() << dendl;
-    // reads from the parent don't populate the m_ext_map and the overlap
-    // may not be the full buffer.  compensate here by filling in m_ext_map
-    // with the read extent when it is empty.
-    if (extent_map.empty()) {
-      extent_map[offset] = bl.length();
-    }
-
-    aio_completion->read_result.m_destriper.add_partial_sparse_result(
-      cct, bl, extent_map, offset, buffer_extents);
-    r = length;
+  if (r == -ENOENT) {
+    r = 0;
   }
-  aio_completion->lock.Unlock();
+  if (r >= 0) {
+    uint64_t object_len = 0;
+    aio_completion->lock.lock();
+    for (auto& extent: extents) {
+      ldout(cct, 10) << " got " << extent.extent_map
+                     << " for " << extent.buffer_extents
+                     << " bl " << extent.bl.length() << dendl;
 
-  C_ReadRequest::finish(r);
+      aio_completion->read_result.m_destriper.add_partial_sparse_result(
+              cct, std::move(extent.bl), extent.extent_map, extent.offset,
+              extent.buffer_extents);
+
+      object_len += extent.length;
+    }
+    aio_completion->lock.unlock();
+    r = object_len;
+  }
+
+  aio_completion->complete_request(r);
+}
+
+ReadResult::C_ObjectReadMergedExtents::C_ObjectReadMergedExtents(
+        CephContext* cct, ReadExtents* extents, Context* on_finish)
+        : cct(cct), extents(extents), on_finish(on_finish) {
+}
+
+void ReadResult::C_ObjectReadMergedExtents::finish(int r) {
+  if (r >= 0) {
+    for (auto& extent: *extents) {
+      if (bl.length() < extent.length) {
+        lderr(cct) << "Merged extents length is less than expected" << dendl;
+        r = -EIO;
+        break;
+      }
+      bl.splice(0, extent.length, &extent.bl);
+    }
+    if (bl.length() != 0) {
+      lderr(cct) << "Merged extents length is greater than expected" << dendl;
+      r = -EIO;
+    }
+  }
+  on_finish->complete(r);
 }
 
 ReadResult::ReadResult() : m_buffer(Empty()) {
@@ -152,8 +245,12 @@ ReadResult::ReadResult(ceph::bufferlist *bl)
   : m_buffer(Bufferlist(bl)) {
 }
 
-void ReadResult::set_clip_length(size_t length) {
-  boost::apply_visitor(SetClipLengthVisitor(length), m_buffer);
+ReadResult::ReadResult(Extents* extent_map, ceph::bufferlist* bl)
+  : m_buffer(SparseBufferlist(extent_map, bl)) {
+}
+
+void ReadResult::set_image_extents(const Extents& image_extents) {
+  boost::apply_visitor(SetImageExtentsVisitor(image_extents), m_buffer);
 }
 
 void ReadResult::assemble_result(CephContext *cct) {

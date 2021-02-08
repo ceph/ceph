@@ -63,7 +63,7 @@ private:
 
   ImageCtxT &m_image_ctx;
   ProgressContext &m_prog_ctx;
-  State m_state;
+  State m_state = STATE_RESIZE_OBJECT_MAP;
   bool m_attempted_trim;
 
   void send_resize_object_map();

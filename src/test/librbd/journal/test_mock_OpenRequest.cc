@@ -5,7 +5,7 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/journal/mock/MockJournaler.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/OpenRequest.h"
 #include "librbd/journal/Types.h"
@@ -15,7 +15,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
+  explicit MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
   }
 };
 
@@ -49,12 +49,11 @@ class TestMockJournalOpenRequest : public TestMockFixture {
 public:
   typedef OpenRequest<MockTestImageCtx> MockOpenRequest;
 
-  TestMockJournalOpenRequest() : m_lock("m_lock") {
-  }
+  TestMockJournalOpenRequest() = default;
 
   void expect_init_journaler(::journal::MockJournaler &mock_journaler, int r) {
     EXPECT_CALL(mock_journaler, init(_))
-                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+                  .WillOnce(CompleteContext(r, static_cast<asio::ContextWQ*>(NULL)));
   }
 
   void expect_get_journaler_cached_client(::journal::MockJournaler &mock_journaler,
@@ -66,7 +65,7 @@ public:
     client_data.client_meta = image_client_meta;
 
     cls::journal::Client client;
-    ::encode(client_data, client.data);
+    encode(client_data, client.data);
 
     EXPECT_CALL(mock_journaler, get_cached_client("", _))
                   .WillOnce(DoAll(SetArgPointee<1>(client),
@@ -80,7 +79,7 @@ public:
     tag_data.mirror_uuid = "remote mirror";
 
     bufferlist tag_data_bl;
-    ::encode(tag_data, tag_data_bl);
+    encode(tag_data, tag_data_bl);
 
     ::journal::Journaler::Tags tags = {{0, 345, {}}, {1, 345, tag_data_bl}};
     EXPECT_CALL(mock_journaler, get_tags(345, _, _))
@@ -88,7 +87,7 @@ public:
                                   WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue))));
   }
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("m_lock");
   ImageClientMeta m_client_meta;
   uint64_t m_tag_tid = 0;
   TagData m_tag_data;

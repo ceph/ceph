@@ -4,12 +4,9 @@
 #ifndef CEPH_CLS_JOURNAL_CLIENT_H
 #define CEPH_CLS_JOURNAL_CLIENT_H
 
-#include "include/int_types.h"
-#include "include/rados/librados.hpp"
+#include "include/rados/librados_fwd.hpp"
 #include "cls/journal/cls_journal_types.h"
-#include <map>
 #include <set>
-#include <string>
 #include <boost/optional.hpp>
 
 class Context;
@@ -39,7 +36,7 @@ int get_client(librados::IoCtx &ioctx, const std::string &oid,
                const std::string &id, cls::journal::Client *client);
 void get_client_start(librados::ObjectReadOperation *op,
                       const std::string &id);
-int get_client_finish(bufferlist::iterator *iter,
+int get_client_finish(bufferlist::const_iterator *iter,
                       cls::journal::Client *client);
 
 int client_register(librados::IoCtx &ioctx, const std::string &oid,
@@ -74,14 +71,14 @@ void client_list(librados::IoCtx &ioctx, const std::string &oid,
 int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,
                      uint64_t *tag_tid);
 void get_next_tag_tid_start(librados::ObjectReadOperation *op);
-int get_next_tag_tid_finish(bufferlist::iterator *iter,
+int get_next_tag_tid_finish(bufferlist::const_iterator *iter,
                             uint64_t *tag_tid);
 
 int get_tag(librados::IoCtx &ioctx, const std::string &oid,
             uint64_t tag_tid, cls::journal::Tag *tag);
 void get_tag_start(librados::ObjectReadOperation *op,
                    uint64_t tag_tid);
-int get_tag_finish(bufferlist::iterator *iter, cls::journal::Tag *tag);
+int get_tag_finish(bufferlist::const_iterator *iter, cls::journal::Tag *tag);
 
 int tag_create(librados::IoCtx &ioctx, const std::string &oid,
                uint64_t tag_tid, uint64_t tag_class,
@@ -97,11 +94,13 @@ void tag_list_start(librados::ObjectReadOperation *op,
                     uint64_t start_after_tag_tid, uint64_t max_return,
                     const std::string &client_id,
                     boost::optional<uint64_t> tag_class);
-int tag_list_finish(bufferlist::iterator *iter,
+int tag_list_finish(bufferlist::const_iterator *iter,
                     std::set<cls::journal::Tag> *tags);
 
 // journal entry helpers
 void guard_append(librados::ObjectWriteOperation *op, uint64_t soft_max_size);
+void append(librados::ObjectWriteOperation *op, uint64_t soft_max_size,
+            bufferlist &data);
 
 } // namespace client
 } // namespace journal

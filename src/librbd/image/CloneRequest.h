@@ -5,153 +5,170 @@
 #define CEPH_LIBRBD_IMAGE_CLONE_REQUEST_H
 
 #include "cls/rbd/cls_rbd_types.h"
-#include "include/rbd/librbd.hpp"
+#include "common/config_fwd.h"
 #include "librbd/internal.h"
+#include "include/rbd/librbd.hpp"
 
 class Context;
 
 using librados::IoCtx;
 
 namespace librbd {
+
+namespace asio { struct ContextWQ; }
+
 namespace image {
 
 template <typename ImageCtxT = ImageCtx>
 class CloneRequest {
 public:
-  static CloneRequest *create(ImageCtxT *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
-			      const std::string &c_id, ImageOptions c_options,
-			      const std::string &non_primary_global_image_id,
-			      const std::string &primary_mirror_uuid,
-			      ContextWQ *op_work_queue, Context *on_finish) {
-    return new CloneRequest(p_imctx, c_ioctx, c_name, c_id, c_options,
-                             non_primary_global_image_id, primary_mirror_uuid,
-                             op_work_queue, on_finish);
+  static CloneRequest *create(
+      ConfigProxy& config, IoCtx& parent_io_ctx,
+      const std::string& parent_image_id,
+      const std::string& parent_snap_name,
+      const cls::rbd::SnapshotNamespace& parent_snap_namespace,
+      uint64_t parent_snap_id,
+      IoCtx &c_ioctx, const std::string &c_name,
+      const std::string &c_id, ImageOptions c_options,
+      cls::rbd::MirrorImageMode mirror_image_mode,
+      const std::string &non_primary_global_image_id,
+      const std::string &primary_mirror_uuid,
+      asio::ContextWQ *op_work_queue, Context *on_finish) {
+    return new CloneRequest(config, parent_io_ctx, parent_image_id,
+                            parent_snap_name, parent_snap_namespace,
+                            parent_snap_id, c_ioctx, c_name, c_id, c_options,
+                            mirror_image_mode, non_primary_global_image_id,
+                            primary_mirror_uuid, op_work_queue, on_finish);
   }
 
+  CloneRequest(ConfigProxy& config, IoCtx& parent_io_ctx,
+               const std::string& parent_image_id,
+               const std::string& parent_snap_name,
+               const cls::rbd::SnapshotNamespace& parent_snap_namespace,
+               uint64_t parent_snap_id,
+               IoCtx &c_ioctx, const std::string &c_name,
+               const std::string &c_id, ImageOptions c_options,
+               cls::rbd::MirrorImageMode mirror_image_mode,
+               const std::string &non_primary_global_image_id,
+               const std::string &primary_mirror_uuid,
+               asio::ContextWQ *op_work_queue, Context *on_finish);
+
   void send();
+
 private:
   /**
    * @verbatim
    *
-   *                                  <start>
-   *                                     |
-   *                                     v
-   *                             VALIDATE PARENT
-   *                                     |
-   *                                     v
-   * (error: bottom up)           VALIDATE CHILD
-   *  _______<_______                    |
-   * |               |                   v
-   * |               |             CREATE IMAGE
-   * |               |                   |
-   * |               |                   v          (parent_md exists)
-   * |               |              OPEN IMAGE. . . . . > . . . .
-   * v               |               /   |                      .
-   * |         REMOVE IMAGE<--------/    v                      .
-   * |               |           SET PARENT IN HEADER           .
-   * |          CLOSE IMAGE          /   |                      .
-   * |               ^-------<------/    v                      .
-   * |               |\           UPDATE DIR_CHILDREN. . < . . . 
-   * |               | \              /  |
-   * |               |  *<-----------/   v
-   * |               |                REFRESH
-   * |               |                /  |                     
-   * |   CLEAN DIR_CHILDREN <--------/   v            (meta is empty)
-   * |               |\         GET META IN PARENT  . . . . . . .
-   * |               | \              /  |                      .
-   * v               |  *<-----------/   v     (journaling disabled)           .
-   * |               |          SET META IN CHILD . . . . . . . v
-   * |               |               /   |                      .
-   * |               -------<-------/    v       (no need to enable mirror)             .
-   * |               |            GET MIRROR MODE . . . . . . . v
-   * |               |               /   |                      .
-   * |               -------<-------/    v                      .
-   * |               |          ENABLE MIRROR MODE              v
-   * |               |               /   |                      .
-   * |               -------<-------/    v                      .
-   * |                               CLOSE IMAGE . . . . .< . . .
-   * |                                   |
-   * |                                   v
-   * |_____________>__________________<finish>
+   * <start>
+   *    |
+   *    v
+   * OPEN PARENT
+   *    |
+   *    v
+   * VALIDATE CHILD                    <finish>
+   *    |                                 ^
+   *    v                                 |
+   * CREATE CHILD * * * * * * * * * > CLOSE PARENT
+   *    |                                 ^
+   *    v                                 |
+   * OPEN CHILD * * * * * * * * * * > REMOVE CHILD
+   *    |                                 ^
+   *    v                                 |
+   * ATTACH PARENT  * * * * * * * * > CLOSE CHILD
+   *    |                               ^
+   *    v                               *
+   * ATTACH CHILD * * * * * * * * * * * *
+   *    |                               *
+   *    v                               *
+   * COPY META DATA * * * * * * * * * * ^
+   *    |                               *
+   *    v (skip if not needed)          *
+   * GET MIRROR MODE  * * * * * * * * * ^
+   *    |                               *
+   *    v (skip if not needed)          *
+   * SET MIRROR ENABLED * * * * * * * * *
+   *    |
+   *    v
+   * CLOSE CHILD
+   *    |
+   *    v
+   * CLOSE PARENT
+   *    |
+   *    v
+   * <finish>
    *
    * @endverbatim
    */
 
-  CloneRequest(ImageCtxT *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
-			      const std::string &c_id,
-			      ImageOptions c_options,
-			      const std::string &non_primary_global_image_id,
-			      const std::string &primary_mirror_uuid,
-			      ContextWQ *op_work_queue, Context *on_finish);
+  ConfigProxy& m_config;
+  IoCtx &m_parent_io_ctx;
+  std::string m_parent_image_id;
+  std::string m_parent_snap_name;
+  cls::rbd::SnapshotNamespace m_parent_snap_namespace;
+  uint64_t m_parent_snap_id;
+  ImageCtxT *m_parent_image_ctx;
 
-  ImageCtxT *m_p_imctx;
   IoCtx &m_ioctx;
   std::string m_name;
   std::string m_id;
   ImageOptions m_opts;
-  ParentSpec m_pspec;
+  cls::rbd::ParentImageSpec m_pspec;
   ImageCtxT *m_imctx;
   cls::rbd::MirrorMode m_mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
+  cls::rbd::MirrorImageMode m_mirror_image_mode;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
   NoOpProgressContext m_no_op;
-  ContextWQ *m_op_work_queue;
+  asio::ContextWQ *m_op_work_queue;
   Context *m_on_finish;
 
   CephContext *m_cct;
+  uint64_t m_clone_format = 2;
   bool m_use_p_features;
-  uint64_t m_p_features;
   uint64_t m_features;
-  map<string, bufferlist> m_pairs;
   bufferlist m_out_bl;
   uint64_t m_size;
   int m_r_saved = 0;
-  bool m_is_primary;
-  bool m_force_non_primary;
 
   void validate_options();
 
-  void send_validate_parent();
-  void handle_validate_parent(int r);
+  void open_parent();
+  void handle_open_parent(int r);
 
-  void send_validate_child();
+  void validate_parent();
+
+  void validate_child();
   void handle_validate_child(int r);
 
-  void send_create();
-  void handle_create(int r);
+  void create_child();
+  void handle_create_child(int r);
 
-  void send_open();
-  void handle_open(int r);
+  void open_child();
+  void handle_open_child(int r);
 
-  void send_set_parent();
-  void handle_set_parent(int r);
+  void attach_parent();
+  void handle_attach_parent(int r);
 
-  void send_add_child();
-  void handle_add_child(int r);
+  void attach_child();
+  void handle_attach_child(int r);
 
-  void send_refresh();
-  void handle_refresh(int r);
-
-  void send_metadata_list();
-  void handle_metadata_list(int r);
-
-  void send_metadata_set();
-  void handle_metadata_set(int r);
+  void copy_metadata();
+  void handle_copy_metadata(int r);
 
   void get_mirror_mode();
   void handle_get_mirror_mode(int r);
 
-  void send_enable_mirror();
+  void enable_mirror();
   void handle_enable_mirror(int r);
 
-  void send_close();
-  void handle_close(int r);
+  void close_child();
+  void handle_close_child(int r);
 
-  void send_remove();
-  void handle_remove(int r);
-
-  void send_remove_child();
+  void remove_child();
   void handle_remove_child(int r);
+
+  void close_parent();
+  void handle_close_parent(int r);
 
   void complete(int r);
 };

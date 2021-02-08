@@ -9,39 +9,50 @@
 
 #include "common/AsyncOpTracker.h"
 #include "common/Formatter.h"
-#include "common/Mutex.h"
-#include "types.h"
+#include "common/ceph_mutex.h"
+#include "tools/rbd_mirror/Types.h"
+
+namespace journal { struct CacheManagerHandler; }
 
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
-class ImageDeleter;
-
 template <typename> class ImageReplayer;
+template <typename> class InstanceWatcher;
+template <typename> class MirrorStatusUpdater;
+struct PoolMetaCache;
+template <typename> class ServiceDaemon;
 template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class InstanceReplayer {
 public:
   static InstanceReplayer* create(
-      Threads<ImageCtxT> *threads, std::shared_ptr<ImageDeleter> image_deleter,
-      ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler, RadosRef local_rados,
-      const std::string &local_mirror_uuid, int64_t local_pool_id) {
-      return new InstanceReplayer(threads, image_deleter, image_sync_throttler,
-                                 local_rados, local_mirror_uuid, local_pool_id);
+      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      Threads<ImageCtxT> *threads, ServiceDaemon<ImageCtxT> *service_daemon,
+      MirrorStatusUpdater<ImageCtxT>* local_status_updater,
+      journal::CacheManagerHandler *cache_manager_handler,
+      PoolMetaCache* pool_meta_cache) {
+    return new InstanceReplayer(local_io_ctx, local_mirror_uuid, threads,
+                                service_daemon, local_status_updater,
+                                cache_manager_handler, pool_meta_cache);
   }
   void destroy() {
     delete this;
   }
 
-  InstanceReplayer(Threads<ImageCtxT> *threads,
-		   std::shared_ptr<ImageDeleter> image_deleter,
-                   ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
-		   RadosRef local_rados, const std::string &local_mirror_uuid,
-		   int64_t local_pool_id);
+  InstanceReplayer(librados::IoCtx &local_io_ctx,
+                   const std::string &local_mirror_uuid,
+                   Threads<ImageCtxT> *threads,
+                   ServiceDaemon<ImageCtxT> *service_daemon,
+                   MirrorStatusUpdater<ImageCtxT>* local_status_updater,
+                   journal::CacheManagerHandler *cache_manager_handler,
+                   PoolMetaCache* pool_meta_cache);
   ~InstanceReplayer();
+
+  bool is_blocklisted() const;
 
   int init();
   void shut_down();
@@ -49,24 +60,24 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  void add_peer(std::string mirror_uuid, librados::IoCtx io_ctx);
-  void remove_peer(std::string mirror_uuid);
+  void add_peer(const Peer<ImageCtxT>& peer);
 
-  void acquire_image(const std::string &global_image_id,
-                     const std::string &peer_mirror_uuid,
-                     const std::string &peer_image_id,
-                     Context *on_finish);
-  void release_image(const std::string &global_image_id,
-                     const std::string &peer_mirror_uuid,
-                     const std::string &peer_image_id,
-                     bool schedule_delete, Context *on_finish);
+  void acquire_image(InstanceWatcher<ImageCtxT> *instance_watcher,
+                     const std::string &global_image_id, Context *on_finish);
+  void release_image(const std::string &global_image_id, Context *on_finish);
+  void remove_peer_image(const std::string &global_image_id,
+                         const std::string &peer_mirror_uuid,
+                         Context *on_finish);
+
   void release_all(Context *on_finish);
 
-  void print_status(Formatter *f, stringstream *ss);
+  void print_status(Formatter *f);
   void start();
   void stop();
   void restart();
   void flush();
+
+  void stop(Context *on_finish);
 
 private:
   /**
@@ -83,50 +94,31 @@ private:
    * @endverbatim
    */
 
-  struct Peer {
-    std::string mirror_uuid;
-    librados::IoCtx io_ctx;
+  typedef std::set<Peer<ImageCtxT>> Peers;
 
-    Peer() {
-    }
-
-    Peer(const std::string &mirror_uuid) : mirror_uuid(mirror_uuid) {
-    }
-
-    Peer(const std::string &mirror_uuid, librados::IoCtx &io_ctx)
-      : mirror_uuid(mirror_uuid), io_ctx(io_ctx) {
-    }
-
-    inline bool operator<(const Peer &rhs) const {
-      return mirror_uuid < rhs.mirror_uuid;
-    }
-    inline bool operator==(const Peer &rhs) const {
-      return mirror_uuid == rhs.mirror_uuid;
-    }
-  };
-
-  typedef std::set<Peer> Peers;
-
-  Threads<ImageCtxT> *m_threads;
-  std::shared_ptr<ImageDeleter> m_image_deleter;
-  ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
-  RadosRef m_local_rados;
+  librados::IoCtx &m_local_io_ctx;
   std::string m_local_mirror_uuid;
-  int64_t m_local_pool_id;
+  Threads<ImageCtxT> *m_threads;
+  ServiceDaemon<ImageCtxT> *m_service_daemon;
+  MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
+  journal::CacheManagerHandler *m_cache_manager_handler;
+  PoolMetaCache* m_pool_meta_cache;
 
-  Mutex m_lock;
+  mutable ceph::mutex m_lock;
   AsyncOpTracker m_async_op_tracker;
   std::map<std::string, ImageReplayer<ImageCtxT> *> m_image_replayers;
   Peers m_peers;
   Context *m_image_state_check_task = nullptr;
   Context *m_on_shut_down = nullptr;
   bool m_manual_stop = false;
+  bool m_blocklisted = false;
 
   void wait_for_ops();
   void handle_wait_for_ops(int r);
 
   void start_image_replayer(ImageReplayer<ImageCtxT> *image_replayer);
-  void start_image_replayers();
+  void queue_start_image_replayers();
+  void start_image_replayers(int r);
 
   void stop_image_replayer(ImageReplayer<ImageCtxT> *image_replayer,
                            Context *on_finish);

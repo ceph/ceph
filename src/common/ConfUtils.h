@@ -19,6 +19,8 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "include/buffer_fwd.h"
 
@@ -37,50 +39,50 @@
  * writing them back out without too much difficulty. Currently, this is not
  * implemented, and the file is read-only.
  */
-class ConfLine {
-public:
-  ConfLine(const std::string &key_, const std::string &val_,
-	   const std::string &newsection_, const std::string &comment_, int line_no_);
-  bool operator<(const ConfLine &rhs) const;
-  friend std::ostream &operator<<(std::ostream& oss, const ConfLine &l);
-
-  std::string key, val, newsection;
+struct conf_line_t  {
+  conf_line_t() = default;
+  conf_line_t(const std::string& key, const std::string& val);
+  bool operator<(const conf_line_t& rhs) const;
+  std::string key;
+  std::string val;
 };
 
-class ConfSection {
-public:
-  typedef std::set <ConfLine>::const_iterator const_line_iter_t;
+std::ostream &operator<<(std::ostream& oss, const conf_line_t& line);
 
-  std::set <ConfLine> lines;
+class conf_section_t : public std::set<conf_line_t> {
+public:
+  conf_section_t() = default;
+  conf_section_t(const std::string& heading,
+		 const std::vector<conf_line_t>& lines);
+  std::string heading;
+  friend std::ostream& operator<<(std::ostream& os, const conf_section_t&);
 };
 
-class ConfFile {
+class ConfFile : public std::map<std::string, conf_section_t, std::less<>> {
+  using base_type = std::map<std::string, conf_section_t, std::less<>>;
 public:
-  typedef std::map <std::string, ConfSection>::iterator section_iter_t;
-  typedef std::map <std::string, ConfSection>::const_iterator const_section_iter_t;
+  ConfFile()
+    : ConfFile{std::vector<conf_section_t>{}}
+  {}
+  ConfFile(const conf_line_t& line)
+    : ConfFile{{conf_section_t{"global", {line}}}}
+  {}
+  ConfFile(const std::vector<conf_section_t>& sections);
+  int parse_file(const std::string &fname, std::ostream *warnings);
+  int parse_bufferlist(ceph::bufferlist *bl, std::ostream *warnings);
+  bool parse_buffer(std::string_view buf, std::ostream* warning);
+  int read(std::string_view section, std::string_view key,
+	   std::string &val) const;
+  static std::string normalize_key_name(std::string_view key);
+  // print warnings to os if any old-style section name is found
+  //
+  // consider a section name as old-style name if it starts with any of the
+  // given prefixes, but does not follow with a "."
+  void check_old_style_section_names(const std::vector<std::string>& prefixes,
+				     std::ostream& os);
 
-  ConfFile();
-  ~ConfFile();
-  void clear();
-  int parse_file(const std::string &fname, std::deque<std::string> *errors, std::ostream *warnings);
-  int parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors, std::ostream *warnings);
-  int read(const std::string &section, const std::string &key,
-	      std::string &val) const;
-
-  const_section_iter_t sections_begin() const;
-  const_section_iter_t sections_end() const;
-
-  static void trim_whitespace(std::string &str, bool strip_internal);
-  static std::string normalize_key_name(const std::string &key);
-  friend std::ostream &operator<<(std::ostream &oss, const ConfFile &cf);
-
-private:
-  void load_from_buffer(const char *buf, size_t sz,
-			std::deque<std::string> *errors, std::ostream *warnings);
-  static ConfLine* process_line(int line_no, const char *line,
-			        std::deque<std::string> *errors);
-
-  std::map <std::string, ConfSection> sections;
 };
+
+std::ostream &operator<<(std::ostream& oss, const ConfFile& cf);
 
 #endif

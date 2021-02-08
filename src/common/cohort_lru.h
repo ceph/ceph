@@ -13,16 +13,9 @@
 #ifndef COHORT_LRU_H
 #define COHORT_LRU_H
 
-#include <stdint.h>
-#include <atomic>
 #include <boost/intrusive/list.hpp>
-#include <boost/intrusive/rbtree.hpp>
-#include <boost/intrusive/avltree.hpp>
-#include <mutex>
-#include <atomic>
-#include <vector>
-#include <algorithm>
-#include <iostream>
+#include <boost/intrusive/slist.hpp>
+
 #include "common/likely.h"
 
 #ifndef CACHE_LINE_SIZE
@@ -39,6 +32,7 @@ namespace cohort {
     /* public flag values */
     constexpr uint32_t FLAG_NONE = 0x0000;
     constexpr uint32_t FLAG_INITIAL = 0x0001;
+    constexpr uint32_t FLAG_RECYCLE = 0x0002;
 
     enum class Edge : std::uint8_t
     {
@@ -46,7 +40,9 @@ namespace cohort {
       LRU
     };
 
-    typedef bi::link_mode<bi::safe_link> link_mode; // for debugging
+    typedef bi::link_mode<bi::safe_link> link_mode;
+
+    class ObjectFactory; // Forward declaration
 
     class Object
     {
@@ -62,19 +58,31 @@ namespace cohort {
 			 &Object::lru_hook >,
 		       bi::constant_time_size<true>> Queue;
 
+      bi::slist_member_hook< link_mode > q2_hook;
+
+      typedef bi::slist<Object,
+			bi::member_hook<
+			  Object, bi::slist_member_hook< link_mode >,
+			  &Object::q2_hook >,
+			bi::constant_time_size<true>> Queue2;
+
     public:
 
       Object() : lru_flags(FLAG_NONE), lru_refcnt(0), lru_adj(0) {}
 
       uint32_t get_refcnt() const { return lru_refcnt; }
 
-      virtual bool reclaim() = 0;
+      virtual bool reclaim(const ObjectFactory* newobj_fac) = 0;
 
       virtual ~Object() {}
 
     private:
       template <typename LK>
       friend class LRU;
+
+      template <typename T, typename TTree, typename CLT, typename CEQ,
+	      typename K, typename LK>
+      friend class TreeX;
     };
 
     /* allocator & recycler interface (create or re-use LRU objects) */
@@ -126,30 +134,25 @@ namespace cohort {
 		(!(o->lru_flags & FLAG_EVICTING)));
       }
 
-      Object* evict_block() {
+      Object* evict_block(const ObjectFactory* newobj_fac) {
 	uint32_t lane_ix = next_evict_lane();
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
 	  Lane& lane = qlane[lane_ix];
+	  lane.lock.lock();
 	  /* if object at LRU has refcnt==1, it may be reclaimable */
 	  Object* o = &(lane.q.back());
-#if 0 /* XXX save for refactor */
-	  std::cout << __func__
-		    << " " << o
-		    << " refcnt: " << o->lru_refcnt
-		    << std::endl;
-#endif
 	  if (can_reclaim(o)) {
 	    ++(o->lru_refcnt);
 	    o->lru_flags |= FLAG_EVICTING;
 	    lane.lock.unlock();
-	    if (o->reclaim()) {
+	    if (o->reclaim(newobj_fac)) {
 	      lane.lock.lock();
 	      --(o->lru_refcnt);
 	      /* assertions that o state has not changed across
 	       * relock */
-	      assert(o->lru_refcnt == SENTINEL_REFCNT);
-	      assert(o->lru_flags & FLAG_INLRU);
+	      ceph_assert(o->lru_refcnt == SENTINEL_REFCNT);
+	      ceph_assert(o->lru_flags & FLAG_INLRU);
 	      Object::Queue::iterator it =
 		Object::Queue::s_iterator_to(*o);
 	      lane.q.erase(it);
@@ -157,7 +160,6 @@ namespace cohort {
 	      return o;
 	    } else {
 	      // XXX can't make unreachable (means what?)
-	      lane.lock.lock();
 	      --(o->lru_refcnt);
 	      o->lru_flags &= ~FLAG_EVICTING;
 	      /* unlock in next block */
@@ -173,7 +175,7 @@ namespace cohort {
       LRU(int lanes, uint32_t _hiwat)
 	: n_lanes(lanes), evict_lane(0), lane_hiwat(_hiwat)
 	  {
-	    assert(n_lanes > 0);
+	    ceph_assert(n_lanes > 0);
 	    qlane = new Lane[n_lanes];
 	  }
 
@@ -198,6 +200,7 @@ namespace cohort {
 
       void unref(Object* o, uint32_t flags) {
 	uint32_t refcnt = --(o->lru_refcnt);
+	Object* tdo = nullptr;
 	if (unlikely(refcnt == 0)) {
 	  Lane& lane = lane_of(o);
 	  lane.lock.lock();
@@ -206,7 +209,7 @@ namespace cohort {
 	    Object::Queue::iterator it =
 	      Object::Queue::s_iterator_to(*o);
 	    lane.q.erase(it);
-	    delete o;
+	    tdo = o;
 	  }
 	  lane.lock.unlock();
 	} else if (unlikely(refcnt == SENTINEL_REFCNT)) {
@@ -220,21 +223,26 @@ namespace cohort {
 	    lane.q.erase(it);
 	    /* hiwat check */
 	    if (lane.q.size() > lane_hiwat) {
-	      delete o;
+	      tdo = o;
 	    } else {
 	      lane.q.push_back(*o);
 	    }
 	  }
 	  lane.lock.unlock();
 	}
+	/* unref out-of-line && !LOCKED */
+	if (tdo)
+	  delete tdo;
       } /* unref */
 
-      Object* insert(ObjectFactory* fac, Edge edge, uint32_t flags) {
+      Object* insert(ObjectFactory* fac, Edge edge, uint32_t& flags) {
 	/* use supplied functor to re-use an evicted object, or
 	 * allocate a new one of the descendant type */
-	Object* o = evict_block();
-	if (o)
+	Object* o = evict_block(fac);
+	if (o) {
 	  fac->recycle(o); /* recycle existing object */
+	  flags |= FLAG_RECYCLE;
+	}
 	else
 	  o = fac->alloc(); /* get a new one */
 
@@ -250,7 +258,7 @@ namespace cohort {
 	  lane.q.push_back(*o);
 	  break;
 	default:
-	  abort();
+	  ceph_abort();
 	  break;
 	}
 	if (flags & FLAG_INITIAL)
@@ -302,7 +310,7 @@ namespace cohort {
       struct Latch {
 	Partition* p;
 	LK* lock;
-	insert_commit_data commit_data;
+	insert_commit_data commit_data{};
 
 	Latch() : p(nullptr), lock(nullptr) {}
       };
@@ -330,13 +338,14 @@ namespace cohort {
       }
 
       TreeX(int n_part=1, int csz=127) : n_part(n_part), csz(csz) {
-	assert(n_part > 0);
+	ceph_assert(n_part > 0);
 	part = new Partition[n_part];
 	for (int ix = 0; ix < n_part; ++ix) {
 	  Partition& p = part[ix];
 	  if (csz) {
 	    p.csz = csz;
 	    p.cache = (T**) ::operator new(csz * sizeof(T*));
+	    // FIPS zeroization audit 20191115: this memset is not security related.
 	    memset(p.cache, 0, csz * sizeof(T*));
 	  }
 	  locks.push_back(&p.lock);
@@ -396,7 +405,7 @@ namespace cohort {
 	  v = lat.p->cache[slot];
 	  if (v) {
 	    if (CEQ()(*v, k)) {
-	      if (flags & (FLAG_LOCK|FLAG_UNLOCK))
+	      if ((flags & FLAG_LOCK) && (flags & FLAG_UNLOCK))
 		lat.lock->unlock();
 	      return v;
 	    }
@@ -414,11 +423,13 @@ namespace cohort {
 	    lat.p->cache[slot] = v;
 	  }
 	}
-	if (flags & (FLAG_LOCK|FLAG_UNLOCK))
+	if ((flags & FLAG_LOCK) && (flags & FLAG_UNLOCK))
 	  lat.lock->unlock();
 	return v;
       } /* find_latch */
-
+      bool is_same_partition(uint64_t lhs, uint64_t rhs) {
+        return ((lhs % n_part) == (rhs % n_part));
+      }
       void insert_latched(T* v, Latch& lat, uint32_t flags) {
 	(void) lat.p->tr.insert_unique_commit(*v, lat.commit_data);
 	if (flags & FLAG_UNLOCK)
@@ -454,8 +465,9 @@ namespace cohort {
       void drain(std::function<void(T*)> uref,
 		 uint32_t flags = FLAG_NONE) {
 	/* clear a table, call supplied function on
-	 * each element found (e.g., retuns sentinel
+	 * each element found (e.g., returns sentinel
 	 * references) */
+	Object::Queue2 drain_q;
 	for (int t_ix = 0; t_ix < n_part; ++t_ix) {
 	  Partition& p = part[t_ix];
 	  if (flags & FLAG_LOCK) /* LOCKED */
@@ -463,13 +475,19 @@ namespace cohort {
 	  while (p.tr.size() > 0) {
 	    iterator it = p.tr.begin();
 	    T* v = &(*it);
-	    p.tr.erase(it); /* must precede uref(v), in
-			     * safe_link mode */
-	    uref(v);
+	    p.tr.erase(it);
+	    drain_q.push_front(*v);
 	  }
 	  if (flags & FLAG_LOCK) /* we locked it, !LOCKED */
 	    p.lock.unlock();
 	} /* each partition */
+	/* unref out-of-line && !LOCKED */
+	while (drain_q.size() > 0) {
+	  Object::Queue2::iterator it = drain_q.begin();
+	  T* v = static_cast<T*>(&(*it));
+	  drain_q.erase(it); /* must precede uref(v) in safe_link mode */
+	  uref(v);
+	}
       } /* drain */
 
     private:

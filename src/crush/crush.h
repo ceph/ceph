@@ -17,7 +17,7 @@
  *
  *     http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
  *
- * LGPL2
+ * LGPL-2.1 or LGPL-3.0
  */
 
 
@@ -143,7 +143,7 @@ enum crush_algorithm {
          * can contain items with arbitrary weights.  To place a
          * replica, CRUSH begins at the head of the list with the most
          * recently added item and compares its weight to the sum of
-         * all remaining items’ weights.  Depending on the value of
+         * all remaining items' weights.  Depending on the value of
          * hash( x , r , item), either the current item is chosen with
          * the appropriate probability, or the process continues
          * recursively down the list.  This is a natural and intuitive
@@ -174,13 +174,13 @@ enum crush_algorithm {
          * change due an addition, removal, or re-weighting of an
          * item.
          *
-         * The straw2 bucket type allows all items to fairly “compete”
+         * The straw2 bucket type allows all items to fairly "compete"
          * against each other for replica placement through a process
          * analogous to a draw of straws.  To place a replica, a straw
          * of random length is drawn for each item in the bucket.  The
          * item with the longest straw wins.  The length of each straw
          * is initially a value in a fixed range.  Each straw length
-         * is scaled by a factor based on the item’s weight so that
+         * is scaled by a factor based on the item's weight so that
          * heavily weighted items are more likely to win the draw.
          * Although this process is almost twice as slow (on average)
          * than a list bucket and even slower than a tree bucket
@@ -258,7 +258,7 @@ struct crush_weight_set {
  * When crush_do_rule() chooses the Nth item from a straw2 bucket, the
  * replacement weights found at __weight_set[N]__ are used instead of
  * the weights from __item_weights__. If __N__ is greater than
- * __weight_set_size__, the weights found at __weight_set_size-1__ are
+ * __weight_set_positions__, the weights found at __weight_set_positions-1__ are
  * used instead. For instance if __weight_set__ is:
  *
  *    [ [ 0x10000, 0x20000 ],   // position 0
@@ -271,10 +271,10 @@ struct crush_weight_set {
  *
  */
 struct crush_choose_arg {
-  int *ids;                             /*!< values to use instead of items */
+  __s32 *ids;                           /*!< values to use instead of items */
   __u32 ids_size;                       /*!< size of the __ids__ array */
   struct crush_weight_set *weight_set;  /*!< weight replacements for a given position */
-  __u32 weight_set_size;                /*!< size of the __weight_set__ array */
+  __u32 weight_set_positions;           /*!< size of the __weight_set__ array */
 };
 
 /** @ingroup API
@@ -335,7 +335,7 @@ struct crush_bucket_straw {
  * __h.alg__ == ::CRUSH_BUCKET_STRAW2.
  *
  * The weight of __h.items[i]__ is __item_weights[i]__ for i in
- * [0,__h.size__[.
+ * [0,__h.size__].
  */
 struct crush_bucket_straw2 {
         struct crush_bucket h; /*!< generic bucket information */
@@ -504,6 +504,24 @@ extern void crush_destroy(struct crush_map *map);
 static inline int crush_calc_tree_node(int i)
 {
 	return ((i+1) << 1)-1;
+}
+
+static inline const char *crush_alg_name(int alg)
+{
+	switch (alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return "uniform";
+	case CRUSH_BUCKET_LIST:
+		return "list";
+	case CRUSH_BUCKET_TREE:
+		return "tree";
+	case CRUSH_BUCKET_STRAW:
+		return "straw";
+	case CRUSH_BUCKET_STRAW2:
+		return "straw2";
+	default:
+		return "unknown";
+	}
 }
 
 /* ---------------------------------------------------------------------

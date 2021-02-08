@@ -15,23 +15,24 @@
 #ifndef CEPH_OBJ_BENCHER_H
 #define CEPH_OBJ_BENCHER_H
 
-#include "common/config.h"
-#include "common/Cond.h"
 #include "common/ceph_context.h"
 #include "common/Formatter.h"
+#include "ceph_time.h"
 #include <cfloat>
+
+using ceph::mono_clock;
 
 struct bench_interval_data {
   double min_bandwidth = DBL_MAX;
   double max_bandwidth = 0;
+  double avg_bandwidth = 0;
+  int bandwidth_cycles = 0;
+  double bandwidth_diff_sum = 0;
   int min_iops = INT_MAX;
   int max_iops = 0;
-};
-
-struct bench_history {
-  vector<double> bandwidth;
-  vector<double> latency;
-  vector<long> iops;
+  double avg_iops = 0;
+  int iops_cycles = 0;
+  double iops_diff_sum = 0;
 };
 
 struct bench_data {
@@ -47,9 +48,9 @@ struct bench_data {
   double max_latency;
   double avg_latency;
   struct bench_interval_data idata; // data that is updated by time intervals and not by events
-  struct bench_history history; // data history, used to calculate stddev
-  utime_t cur_latency; //latency of last completed transaction
-  utime_t start_time; //start time for benchmark
+  double latency_diff_sum;
+  std::chrono::duration<double> cur_latency; //latency of last completed transaction - in seconds by default
+  mono_time start_time; //start time for benchmark - use the monotonic clock as we'll measure the passage of time
   char *object_contents; //pointer to the contents written to each object
 };
 
@@ -67,18 +68,18 @@ class ObjBencher {
 public:
   CephContext *cct;
 protected:
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("ObjBencher::lock");
 
   static void *status_printer(void *bencher);
 
   struct bench_data data;
 
   int fetch_bench_metadata(const std::string& metadata_file, uint64_t* op_size,
-			   uint64_t* object_size, int* num_objects, int* prevPid);
+			   uint64_t* object_size, int* num_ops, int* num_objects, int* prev_pid);
 
-  int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta, unsigned max_objects);
-  int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
-  int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
+  int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta, unsigned max_objects, int prev_pid);
+  int seq_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
+  int rand_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
   bool more_objects_matching_prefix(const std::string& prefix, std::list<Object>* name);
@@ -106,12 +107,12 @@ protected:
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
 public:
-  explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock") {}
+  explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), data() {}
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun,
     int concurrentios, uint64_t op_size, uint64_t object_size, unsigned max_objects,
-    bool cleanup, bool hints, const std::string& run_name, bool no_verify=false);
+    bool cleanup, bool hints, const std::string& run_name, bool reuse_bench, bool no_verify=false);
   int clean_up(const std::string& prefix, int concurrentios, const std::string& run_name);
 
   void set_show_time(bool dt) {

@@ -16,38 +16,48 @@
 #ifndef CEPH_MINODEFILECAPS_H
 #define CEPH_MINODEFILECAPS_H
 
-class MInodeFileCaps : public Message {
+#include "messages/MMDSOp.h"
+
+class MInodeFileCaps final : public MMDSOp {
+private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
   inodeno_t ino;
-  __u32     caps;
+  __u32     caps = 0;
 
- public:
-  inodeno_t get_ino() { return ino; }
-  int       get_caps() { return caps; }
+public:
+  inodeno_t get_ino() const { return ino; }
+  int       get_caps() const { return caps; }
 
-  MInodeFileCaps() : Message(MSG_MDS_INODEFILECAPS) {}
+protected:
+  MInodeFileCaps() : MMDSOp(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    Message(MSG_MDS_INODEFILECAPS) {
+    MMDSOp(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {
     this->ino = ino;
     this->caps = caps;
   }
-private:
-  ~MInodeFileCaps() override {}
+  ~MInodeFileCaps() final {}
 
 public:
-  const char *get_type_name() const override { return "inode_file_caps";}
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "inode_file_caps";}
+  void print(std::ostream& out) const override {
     out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
   }
   
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(caps, payload);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(caps, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(caps, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(caps, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

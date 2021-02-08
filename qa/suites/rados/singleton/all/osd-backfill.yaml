@@ -13,8 +13,15 @@ openstack:
 tasks:
 - install:
 - ceph:
-    log-whitelist:
-    - wrongly marked me down
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    log-ignorelist:
+      - but it is still running
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_
     conf:
       osd:
         osd min pg log entries: 5

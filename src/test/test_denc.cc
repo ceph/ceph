@@ -15,6 +15,7 @@
  */
 
 #include <stdio.h>
+#include <numeric>
 
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -28,10 +29,10 @@
 template<typename T>
 void test_encode_decode(T v) {
   bufferlist bl;
-  ::encode(v, bl);
-  bufferlist::iterator p = bl.begin();
+  encode(v, bl);
+  auto p = bl.cbegin();
   T out;
-  ::decode(out, p);
+  decode(out, p);
   ASSERT_EQ(v, out);
 }
 
@@ -65,10 +66,10 @@ void test_denc(T v) {
 template<typename T>
 void test_encode_decode_featured(T v) {
   bufferlist bl;
-  ::encode(v, bl, 123);
-  bufferlist::iterator p = bl.begin();
+  encode(v, bl, 123);
+  auto p = bl.cbegin();
   T out;
-  ::decode(out, p);
+  decode(out, p);
   ASSERT_EQ(v, out);
 }
 
@@ -122,8 +123,8 @@ struct denc_counter_t {
     p.append("a", 1);
     ++counts.num_encode;
   }
-  void decode(buffer::ptr::iterator &p) {
-    p.advance(1);
+  void decode(buffer::ptr::const_iterator &p) {
+    p += 1;
     ++counts.num_decode;
   }
 };
@@ -138,8 +139,8 @@ struct denc_counter_bounded_t {
     p.append("a", 1);
     ++counts.num_encode;
   }
-  void decode(buffer::ptr::iterator &p) {
-    p.advance(1);
+  void decode(buffer::ptr::const_iterator &p) {
+    p += 1;
     ++counts.num_decode;
   }
 };
@@ -150,8 +151,8 @@ TEST(denc, denc_counter)
   denc_counter_t single, single2;
   {
     bufferlist bl;
-    ::encode(single, bl);
-    ::decode(single2, bl);
+    encode(single, bl);
+    decode(single2, bl);
   }
   ASSERT_EQ(counts.num_bound_encode, 1);
   ASSERT_EQ(counts.num_encode, 1);
@@ -182,13 +183,15 @@ TEST(denc, string)
 struct legacy_t {
   int32_t a = 1;
   void encode(bufferlist& bl) const {
-    ::encode(a, bl);
+    using ceph::encode;
+    encode(a, bl);
   }
-  void decode(bufferlist::iterator& p) {
-    ::decode(a, p);
+  void decode(bufferlist::const_iterator& p) {
+    using ceph::decode;
+    decode(a, p);
   }
   legacy_t() {}
-  legacy_t(int32_t i) : a(i) {}
+  explicit legacy_t(int32_t i) : a(i) {}
   friend bool operator<(const legacy_t& l, const legacy_t& r) {
     return l.a < r.a;
   }
@@ -242,8 +245,8 @@ TEST(denc, vector)
     v.resize(100);
     {
       bufferlist bl;
-      ::encode(v, bl);
-      ::decode(v2, bl);
+      encode(v, bl);
+      decode(v2, bl);
     }
     ASSERT_EQ(counts.num_bound_encode, 100);
     ASSERT_EQ(counts.num_encode, 100);
@@ -255,8 +258,8 @@ TEST(denc, vector)
     v.resize(100);
     {
       bufferlist bl;
-      ::encode(v, bl);
-      ::decode(v2, bl);
+      encode(v, bl);
+      decode(v2, bl);
     }
     ASSERT_EQ(counts.num_bound_encode, 1);
     ASSERT_EQ(counts.num_encode, 100);
@@ -278,8 +281,8 @@ TEST(denc, list)
     }
     {
       bufferlist bl;
-      ::encode(l, bl);
-      ::decode(l2, bl);
+      encode(l, bl);
+      decode(l2, bl);
     }
     ASSERT_EQ(counts.num_bound_encode, 1);
     ASSERT_EQ(counts.num_encode, 100);
@@ -385,7 +388,7 @@ TEST(denc, foo)
   foo_t a;
   test_denc(a);
   bufferlist bl;
-  ::encode(a, bl);
+  encode(a, bl);
   bl.hexdump(cout);
 }
 
@@ -404,11 +407,11 @@ TEST(denc, pair)
   {
     auto a = bl.get_contiguous_appender(1000);
     denc(p, a);
-    ::encode(p, bl);
+    encode(p, bl);
   }
 
   pair<int32_t,legacy_t> lp;
-  ::encode(lp, bl);
+  encode(lp, bl);
 }
 
 template<template<class, class> class C>
@@ -576,5 +579,163 @@ TEST(denc, optional)
     denc(out, bpi);
     ASSERT_FALSE(!!out);
     ASSERT_EQ(bpi.get_pos(), bl.c_str() + bl.length());
+  }
+}
+
+TEST(denc, stdoptional)
+{
+  {
+    cout << "std::optional<uint64_t>" << std::endl;
+    std::optional<uint64_t> s = 97, t = std::nullopt;
+    counts.reset();
+    test_denc(s);
+    test_denc(t);
+  }
+  {
+    cout << "std::optional<std::string>" << std::endl;
+    std::optional<std::string> s = std::string("Meow"), t = std::nullopt;
+    counts.reset();
+    test_denc(s);
+    test_denc(t);
+  }
+  {
+    size_t s = 0;
+    denc(std::nullopt, s);
+    ASSERT_NE(s, 0u);
+
+    // encode
+    bufferlist bl;
+    {
+      auto a = bl.get_contiguous_appender(s);
+      denc(std::nullopt, a);
+    }
+    ASSERT_LE(bl.length(), s);
+
+    bl.rebuild();
+    std::optional<uint32_t> out = 5;
+    auto bpi = bl.front().begin();
+    denc(out, bpi);
+    ASSERT_FALSE(!!out);
+    ASSERT_EQ(bpi.get_pos(), bl.c_str() + bl.length());
+  }
+}
+
+// unlike legacy_t, Legacy supports denc() also.
+struct Legacy {
+  static unsigned n_denc;
+  static unsigned n_decode;
+  uint8_t value = 0;
+  DENC(Legacy, v, p) {
+    n_denc++;
+    denc(v.value, p);
+  }
+  void decode(buffer::list::const_iterator& p) {
+    n_decode++;
+    using ceph::decode;
+    decode(value, p);
+  }
+  static void reset() {
+    n_denc = n_decode = 0;
+  }
+  static bufferlist encode_n(unsigned n, const vector<unsigned>& segments);
+};
+WRITE_CLASS_DENC(Legacy)
+unsigned Legacy::n_denc = 0;
+unsigned Legacy::n_decode = 0;
+
+bufferlist Legacy::encode_n(unsigned n, const vector<unsigned>& segments) {
+  vector<Legacy> v;
+  for (unsigned i = 0; i < n; i++) {
+    v.push_back(Legacy());
+  }
+  bufferlist bl(n * sizeof(uint8_t));
+  using ceph::encode;
+  encode(v, bl);
+  bufferlist segmented;
+  auto p = bl.begin();
+
+  auto sum = std::accumulate(segments.begin(), segments.end(), 0u);
+  ceph_assert(sum != 0u);
+  for (auto i : segments) {
+    buffer::ptr seg;
+    p.copy_deep(bl.length() * i / sum, seg);
+    segmented.push_back(seg);
+  }
+  p.copy_all(segmented);
+  return segmented;
+}
+
+TEST(denc, no_copy_if_segmented_and_lengthy)
+{
+  static_assert(_denc::has_legacy_denc<Legacy>::value,
+                "Legacy do have legacy denc");
+  {
+    // use denc() which shallow_copy() if the buffer is small
+    constexpr unsigned N_COPIES = 42;
+    const vector<unsigned> segs{50, 50}; // half-half
+    bufferlist segmented = Legacy::encode_n(N_COPIES, segs);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
+    ASSERT_LT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.cbegin();
+    vector<Legacy> v;
+    // denc() is shared by encode() and decode(), so reset() right before
+    // decode()
+    Legacy::reset();
+    decode(v, p);
+    ASSERT_EQ(N_COPIES, v.size());
+    ASSERT_EQ(N_COPIES, Legacy::n_denc);
+    ASSERT_EQ(0u, Legacy::n_decode);
+  }
+  {
+    // use denc() which shallow_copy() if the buffer is not segmented and large
+    const unsigned N_COPIES = CEPH_PAGE_SIZE * 2;
+    const vector<unsigned> segs{100};
+    bufferlist segmented = Legacy::encode_n(N_COPIES, segs);
+    ASSERT_EQ(segmented.get_num_buffers(), 1u);
+    ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.cbegin();
+    vector<Legacy> v;
+    Legacy::reset();
+    decode(v, p);
+    ASSERT_EQ(N_COPIES, v.size());
+    ASSERT_EQ(N_COPIES, Legacy::n_denc);
+    ASSERT_EQ(0u, Legacy::n_decode);
+  }
+  {
+    // use denc() which shallow_copy() if the buffer is segmented and large,
+    // but the total size of the chunks to be decoded is smallish.
+    bufferlist large_bl = Legacy::encode_n(CEPH_PAGE_SIZE * 2, {50, 50});
+    bufferlist small_bl = Legacy::encode_n(100, {50, 50});
+    bufferlist segmented;
+    segmented.append(large_bl);
+    segmented.append(small_bl);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
+    ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.cbegin();
+    p += large_bl.length();
+    ASSERT_LT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
+    vector<Legacy> v;
+    Legacy::reset();
+    decode(v, p);
+    ASSERT_EQ(Legacy::n_denc, 100u);
+    ASSERT_EQ(0u, Legacy::n_decode);
+  }
+  {
+    // use decode() which avoids deep copy if the buffer is segmented and large
+    bufferlist small_bl = Legacy::encode_n(100, {50, 50});
+    bufferlist large_bl = Legacy::encode_n(CEPH_PAGE_SIZE * 2, {50, 50});
+    bufferlist segmented;
+    segmented.append(small_bl);
+    segmented.append(large_bl);
+    ASSERT_GT(segmented.get_num_buffers(), 1u);
+    ASSERT_GT(segmented.length(), CEPH_PAGE_SIZE);
+    auto p = segmented.cbegin();
+    p += small_bl.length();
+    ASSERT_GT(segmented.length() - p.get_off(), CEPH_PAGE_SIZE);
+    vector<Legacy> v;
+    Legacy::reset();
+    decode(v, p);
+    ASSERT_EQ(0u, Legacy::n_denc);
+    ASSERT_EQ(CEPH_PAGE_SIZE * 2, Legacy::n_decode);
   }
 }

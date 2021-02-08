@@ -19,20 +19,6 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
-
 
 #ifndef CEPH_MSG_PACKET_H_
 #define CEPH_MSG_PACKET_H_
@@ -118,14 +104,14 @@ class Packet {
 
     fragment frags[];
 
-    impl(size_t nr_frags = default_nr_frags);
+    explicit impl(size_t nr_frags = default_nr_frags);
     impl(const impl&) = delete;
     impl(fragment frag, size_t nr_frags = default_nr_frags);
 
     pseudo_vector fragments() { return { frags, _nr_frags }; }
 
     static std::unique_ptr<impl> allocate(size_t nr_frags) {
-      nr_frags = MAX(nr_frags, default_nr_frags);
+      nr_frags = std::max(nr_frags, default_nr_frags);
       return std::unique_ptr<impl>(new (nr_frags) impl(nr_frags));
     }
 
@@ -139,7 +125,7 @@ class Packet {
       n->rss_hash.construct(old->rss_hash);
       std::copy(old->frags, old->frags + old->_nr_frags, n->frags);
       old->copy_internal_fragment_to(n.get());
-      return std::move(n);
+      return n;
     }
 
     static std::unique_ptr<impl> copy(impl* old) {
@@ -148,12 +134,12 @@ class Packet {
 
     static std::unique_ptr<impl> allocate_if_needed(std::unique_ptr<impl> old, size_t extra_frags) {
       if (old->_allocated_frags >= old->_nr_frags + extra_frags) {
-        return std::move(old);
+        return old;
       }
       return copy(old.get(), std::max<size_t>(old->_nr_frags + extra_frags, 2 * old->_nr_frags));
     }
     void* operator new(size_t size, size_t nr_frags = default_nr_frags) {
-      assert(nr_frags == uint16_t(nr_frags));
+      ceph_assert(nr_frags == uint16_t(nr_frags));
       return ::operator new(size + nr_frags * sizeof(fragment));
     }
     // Matching the operator new above
@@ -194,7 +180,7 @@ class Packet {
               to->frags[0].base);
     }
   };
-  Packet(std::unique_ptr<impl>&& impl) : _impl(std::move(impl)) {}
+  explicit Packet(std::unique_ptr<impl>&& impl) : _impl(std::move(impl)) {}
   std::unique_ptr<impl> _impl;
 public:
   static Packet from_static_data(const char* data, size_t len) {
@@ -204,13 +190,13 @@ public:
   // build empty Packet
   Packet();
   // build empty Packet with nr_frags allocated
-  Packet(size_t nr_frags);
+  explicit Packet(size_t nr_frags);
   // move existing Packet
   Packet(Packet&& x) noexcept;
   // copy data into Packet
   Packet(const char* data, size_t len);
   // copy data into Packet
-  Packet(fragment frag);
+  explicit Packet(fragment frag);
   // zero-copy single fragment
   Packet(fragment frag, deleter del);
   // zero-copy multiple fragments
@@ -309,7 +295,7 @@ inline Packet::impl::impl(size_t nr_frags)
 
 inline Packet::impl::impl(fragment frag, size_t nr_frags)
     : _len(frag.size), _allocated_frags(nr_frags) {
-    assert(_allocated_frags > _nr_frags);
+    ceph_assert(_allocated_frags > _nr_frags);
   if (frag.size <= internal_data_size) {
     headroom -= frag.size;
     frags[0] = { data + headroom, frag.size };
@@ -472,7 +458,7 @@ inline Header* Packet::get_header(size_t offset) {
 }
 
 inline void Packet::trim_front(size_t how_much) {
-  assert(how_much <= _impl->_len);
+  ceph_assert(how_much <= _impl->_len);
   _impl->_len -= how_much;
   size_t i = 0;
   while (how_much && how_much >= _impl->frags[i].size) {
@@ -493,7 +479,7 @@ inline void Packet::trim_front(size_t how_much) {
 }
 
 inline void Packet::trim_back(size_t how_much) {
-  assert(how_much <= _impl->_len);
+  ceph_assert(how_much <= _impl->_len);
   _impl->_len -= how_much;
   size_t i = _impl->_nr_frags - 1;
   while (how_much && how_much >= _impl->frags[i].size) {
@@ -556,7 +542,7 @@ inline Packet Packet::share(size_t offset, size_t len) {
     offset = 0;
   }
   n._impl->_offload_info = _impl->_offload_info;
-  assert(!n._impl->_deleter);
+  ceph_assert(!n._impl->_deleter);
   n._impl->_deleter = _impl->_deleter.share();
   return n;
 }

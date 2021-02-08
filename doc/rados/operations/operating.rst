@@ -8,9 +8,9 @@
 Running Ceph with systemd
 ==========================
 
-For all distributions that support systemd (CentOS 7, Fedora, Debian Jessie
-8.x, SUSE), ceph daemons are now managed using native systemd files instead of
-the legacy sysvinit scripts.  For example::
+For all distributions that support systemd (CentOS 7, Fedora, Debian
+Jessie 8 and later, SUSE), ceph daemons are now managed using native
+systemd files instead of the legacy sysvinit scripts.  For example::
 
         sudo systemctl start ceph.target       # start all daemons
         sudo systemctl status ceph-osd@12      # check status of osd.12
@@ -93,24 +93,10 @@ For example::
 	sudo systemctl stop ceph-mds@ceph-server
 
 
-.. index:: Ceph service; Upstart; operating a cluster
-
-
+.. index:: Upstart; operating a cluster
 
 Running Ceph with Upstart
-=========================
-
-When deploying Ceph with ``ceph-deploy`` on Ubuntu Trusty, you may start and
-stop Ceph daemons on a :term:`Ceph Node` using the event-based `Upstart`_.
-Upstart does not require you to define daemon instances in the Ceph
-configuration file.
-
-To list the Ceph Upstart jobs and instances on a node, execute:: 
-
-	sudo initctl list | grep ceph
-
-See `initctl`_ for additional details.
-
+==========================
 
 Starting all Daemons
 --------------------
@@ -186,11 +172,10 @@ For example::
 	sudo start ceph-mds id=ceph-server
 
 
-.. index:: Ceph service; sysvinit; operating a cluster
+.. index:: sysvinit; operating a cluster
 
-
-Running Ceph
-============
+Running Ceph with sysvinit
+==========================
 
 Each time you to **start**, **restart**, and  **stop** Ceph daemons (or your
 entire cluster) you must specify at least one option and one command. You may
@@ -247,5 +232,4 @@ include:
 
 
 .. _Valgrind: http://www.valgrind.org/
-.. _Upstart: http://upstart.ubuntu.com/index.html
 .. _initctl: http://manpages.ubuntu.com/manpages/raring/en/man8/initctl.8.html

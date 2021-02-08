@@ -1,7 +1,7 @@
 #ifndef CLS_LUA_CLIENT_HPP
 #define CLS_LUA_CLIENT_HPP
 #include <string>
-#include <vector>
+
 #include "include/rados/librados.hpp"
 
 namespace cls_lua_client {

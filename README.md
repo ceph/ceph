@@ -5,10 +5,10 @@ Please see http://ceph.com/ for current info.
 
 ## Contributing Code
 
-Most of Ceph is licensed under the LGPL version 2.1.  Some
+Most of Ceph is dual licensed under the LGPL version 2.1 or 3.0.  Some
 miscellaneous code is under BSD-style license or is public domain.
 The documentation is licensed under Creative Commons
-Attribution-ShareAlike (CC BY-SA).  There are a handful of headers
+Attribution Share Alike 3.0 (CC-BY-SA-3.0).  There are a handful of headers
 included here that are licensed under the GPL.  Please see the file
 COPYING for a full inventory of licenses by file.
 
@@ -48,10 +48,8 @@ The list of Debian or RPM packages dependencies can be installed with:
 Note that these instructions are meant for developers who are
 compiling the code for development and testing.  To build binaries
 suitable for installation we recommend you build deb or rpm packages,
-or refer to the ceph.spec.in or debian/rules to see which
+or refer to the `ceph.spec.in` or `debian/rules` to see which
 configuration options are specified for production builds.
-
-Prerequisite: CMake 2.8.11
 
 Build instructions:
 
@@ -59,17 +57,30 @@ Build instructions:
 	cd build
 	make
 
+(Note: do_cmake.sh now defaults to creating a debug build of ceph that can
+be up to 5x slower with some workloads. Please pass 
+"-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug
+release.)
+
+(Note: `make` alone will use only one CPU thread, this could take a while. use
+the `-j` option to use more threads. Something like `make -j$(nproc)` would be
+a good start.
+
 This assumes you make your build dir a subdirectory of the ceph.git
-checkout. If you put it elsewhere, just replace .. in do_cmake.sh with a
-correct path to the checkout.
+checkout. If you put it elsewhere, just point `CEPH_GIT_DIR`to the correct
+path to the checkout. Any additional CMake args can be specified setting ARGS
+before invoking do_cmake. See [cmake options](#cmake-options)
+for more details. Eg.
+
+    ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
 
 To build only certain targets use:
 
-        make [target name]
+	make [target name]
 
 To install:
 
-        make install
+	make install
  
 ### CMake Options
 
@@ -77,28 +88,28 @@ If you run the `cmake` command by hand, there are many options you can
 set with "-D". For example the option to build the RADOS Gateway is
 defaulted to ON. To build without the RADOS Gateway:
 
-        cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
+	cmake -DWITH_RADOSGW=OFF [path to top level ceph directory]
 
 Another example below is building with debugging and alternate locations 
 for a couple of external dependencies:
 
-        cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" -DOFED_PREFIX="/opt/ofed" \
-        -DCMAKE_INSTALL_PREFIX=/opt/accelio -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
-        ..
+	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" \
+	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-O0 -g3 -gdwarf-4" \
+	..
 
 To view an exhaustive list of -D options, you can invoke `cmake` with:
 
-        cmake -LH
+	cmake -LH
 
 If you often pipe `make` to `less` and would like to maintain the
 diagnostic colors for errors and warnings (and if your compiler
 supports it), you can invoke `cmake` with:
 
-        cmake -DDIAGNOSTICS_COLOR=always ..
+	cmake -DDIAGNOSTICS_COLOR=always ..
 
 Then you'll get the diagnostic colors when you execute:
 
-        make | less -R
+	make | less -R
 
 Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 'never'.
@@ -122,7 +133,7 @@ To run a functional test cluster,
 
 	cd build
 	make vstart        # builds just enough to run vstart
-	../src/vstart.sh -d -n -x -l
+	../src/vstart.sh --debug --new -x --localhost --bluestore
 	./bin/ceph -s
 
 Almost all of the usual commands are available in the bin/ directory.
@@ -159,8 +170,8 @@ When failures occur, look in build/Testing/Temporary for logs.
 To build and run all tests and their dependencies without other
 unnecessary targets in Ceph:
 
-        cd build
-        make check -j$(nproc)
+	cd build
+	make check -j$(nproc)
 
 To run an individual test manually, run `ctest` with -R (regex matching):
 
@@ -175,7 +186,7 @@ To run an individual test manually and see all the tests output, run
 	ctest -V -R [regex matching test name(s)]
 
 To run an tests manually and run the jobs in parallel, run `ctest` with 
-the -j flag:
+the `-j` flag:
 
 	ctest -j [number of jobs]
 
@@ -190,14 +201,14 @@ over manual test execution. To view these options run:
 ### Prerequisites
 
 The list of package dependencies for building the documentation can be
-found in doc_deps.deb.txt:
+found in `doc_deps.deb.txt`:
 
 	sudo apt-get install `cat doc_deps.deb.txt`
 
 ### Building the Documentation
 
 To build the documentation, ensure that you are in the top-level
-`/ceph directory, and execute the build script. For example:
+`/ceph` directory, and execute the build script. For example:
 
 	admin/build-doc
 

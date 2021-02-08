@@ -22,9 +22,9 @@ MATCHER_P(IsLockType, exclusive, "") {
   cls_lock_set_cookie_op op;
   bufferlist bl;
   bl.share(arg);
-  bufferlist::iterator iter = bl.begin();
-  ::decode(op, iter);
-  return op.type == (exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED);
+  auto iter = bl.cbegin();
+  decode(op, iter);
+  return op.type == (exclusive ? ClsLockType::EXCLUSIVE : ClsLockType::SHARED);
 }
 
 } // anonymous namespace
@@ -46,7 +46,7 @@ public:
                          bool exclusive = true) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("lock"),
-                     StrEq("set_cookie"), IsLockType(exclusive), _, _))
+                     StrEq("set_cookie"), IsLockType(exclusive), _, _, _))
                   .WillOnce(Return(r));
   }
 };

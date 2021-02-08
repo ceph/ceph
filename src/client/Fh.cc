@@ -18,9 +18,9 @@
 
 #include "Fh.h"
 
-Fh::Fh(Inode *in) : inode(in), _ref(1), pos(0), mds(0), mode(0), flags(0),
-                pos_locked(false), actor_perms(), readahead(),
-                fcntl_locks(NULL), flock_locks(NULL)
+Fh::Fh(InodeRef in, int flags, int cmode, uint64_t _gen, const UserPerm &perms) :
+    inode(in), _ref(1), pos(0), mds(0), mode(cmode), gen(_gen), flags(flags),
+    pos_locked(false), actor_perms(perms), readahead()
 {
   inode->add_fh(this);
 }

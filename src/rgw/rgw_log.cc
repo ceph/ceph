@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "common/Clock.h"
 #include "common/Timer.h"
@@ -10,9 +10,11 @@
 #include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
-#include "rgw_rados.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -24,7 +26,7 @@ static void set_param_str(struct req_state *s, const char *name, string& str)
 }
 
 string render_log_object_name(const string& format,
-			      struct tm *dt, string& bucket_id,
+			      struct tm *dt, const string& bucket_id,
 			      const string& bucket_name)
 {
   string o;
@@ -88,9 +90,9 @@ class UsageLogger {
   CephContext *cct;
   RGWRados *store;
   map<rgw_user_bucket, RGWUsageBatch> usage_map;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("UsageLogger");
   int32_t num_entries;
-  Mutex timer_lock;
+  ceph::mutex timer_lock = ceph::make_mutex("UsageLogger::timer_lock");
   SafeTimer timer;
   utime_t round_timestamp;
 
@@ -109,16 +111,16 @@ class UsageLogger {
   }
 public:
 
-  UsageLogger(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("UsageLogger"), num_entries(0), timer_lock("UsageLogger::timer_lock"), timer(cct, timer_lock) {
+  UsageLogger(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), num_entries(0), timer(cct, timer_lock) {
     timer.init();
-    Mutex::Locker l(timer_lock);
+    std::lock_guard l{timer_lock};
     set_timer();
     utime_t ts = ceph_clock_now();
     recalc_round_timestamp(ts);
   }
 
   ~UsageLogger() {
-    Mutex::Locker l(timer_lock);
+    std::lock_guard l{timer_lock};
     flush();
     timer.cancel_all_events();
     timer.shutdown();
@@ -129,7 +131,7 @@ public:
   }
 
   void insert_user(utime_t& timestamp, const rgw_user& user, rgw_usage_log_entry& entry) {
-    lock.Lock();
+    lock.lock();
     if (timestamp.sec() > round_timestamp + 3600)
       recalc_round_timestamp(timestamp);
     entry.epoch = round_timestamp.sec();
@@ -141,9 +143,9 @@ public:
     if (account)
       num_entries++;
     bool need_flush = (num_entries > cct->_conf->rgw_usage_log_flush_threshold);
-    lock.Unlock();
+    lock.unlock();
     if (need_flush) {
-      Mutex::Locker l(timer_lock);
+      std::lock_guard l{timer_lock};
       flush();
     }
   }
@@ -158,10 +160,10 @@ public:
 
   void flush() {
     map<rgw_user_bucket, RGWUsageBatch> old_map;
-    lock.Lock();
+    lock.lock();
     old_map.swap(usage_map);
     num_entries = 0;
-    lock.Unlock();
+    lock.unlock();
 
     store->log_usage(old_map);
   }
@@ -195,12 +197,14 @@ static void log_usage(struct req_state *s, const string& op_name)
   bucket_name = s->bucket_name;
 
   if (!bucket_name.empty()) {
+  bucket_name = s->bucket_name;
     user = s->bucket_owner.get_id();
-    if (s->bucket_info.requester_pays) {
-      payer = s->user->user_id;
+    if (!rgw::sal::RGWBucket::empty(s->bucket.get()) &&
+	s->bucket->get_info().requester_pays) {
+      payer = s->user->get_id();
     }
   } else {
-      user = s->user->user_id;
+      user = s->user->get_id();
   }
 
   bool error = s->err.is_err();
@@ -218,8 +222,13 @@ static void log_usage(struct req_state *s, const string& op_name)
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
-  if (!error)
+  if (!s->is_err())
     data.successful_ops = 1;
+
+  ldout(s->cct, 30) << "log_usage: bucket_name=" << bucket_name
+	<< " tenant=" << s->bucket_tenant
+	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
+	<< bytes_received << ", success=" << data.successful_ops << dendl;
 
   entry.add(op_name, data);
 
@@ -232,8 +241,11 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
 {
   formatter->open_object_section("log_entry");
   formatter->dump_string("bucket", entry.bucket);
-  entry.time.gmtime(formatter->dump_stream("time"));      // UTC
-  entry.time.localtime(formatter->dump_stream("time_local"));
+  {
+    auto t = utime_t{entry.time};
+    t.gmtime(formatter->dump_stream("time"));      // UTC
+    t.localtime(formatter->dump_stream("time_local"));
+  }
   formatter->dump_string("remote_addr", entry.remote_addr);
   string obj_owner = entry.object_owner.to_str();
   if (obj_owner.length())
@@ -246,9 +258,11 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("bytes_sent", entry.bytes_sent);
   formatter->dump_int("bytes_received", entry.bytes_received);
   formatter->dump_int("object_size", entry.obj_size);
-  uint64_t total_time =  entry.total_time.sec() * 1000000LL + entry.total_time.usec();
-
-  formatter->dump_int("total_time", total_time);
+  {
+    using namespace std::chrono;
+    uint64_t total_time = duration_cast<milliseconds>(entry.total_time).count();
+    formatter->dump_int("total_time", total_time);
+  }
   formatter->dump_string("user_agent",  entry.user_agent);
   formatter->dump_string("referrer",  entry.referrer);
   if (entry.x_headers.size() > 0) {
@@ -260,6 +274,20 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     }
     formatter->close_section();
   }
+  formatter->dump_string("trans_id", entry.trans_id);
+  if (entry.token_claims.size() > 0) {
+    if (entry.token_claims[0] == "sts") {
+      formatter->open_object_section("sts_token_claims");
+      for (const auto& iter: entry.token_claims) {
+        auto pos = iter.find(":");
+        if (pos != string::npos) {
+          formatter->dump_string(iter.substr(0, pos), iter.substr(pos + 1));
+        }
+      }
+      formatter->close_section();
+    }
+  }
+
   formatter->close_section();
 }
 
@@ -277,7 +305,7 @@ void OpsLogSocket::init_connection(bufferlist& bl)
   bl.append("[");
 }
 
-OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSocket(cct, _backlog), lock("OpsLogSocket")
+OpsLogSocket::OpsLogSocket(CephContext *cct, uint64_t _backlog) : OutputDataSocket(cct, _backlog)
 {
   formatter = new JSONFormatter;
   delim.append(",\n");
@@ -292,10 +320,10 @@ void OpsLogSocket::log(struct rgw_log_entry& entry)
 {
   bufferlist bl;
 
-  lock.Lock();
+  lock.lock();
   rgw_format_ops_log_entry(entry, formatter);
   formatter_to_bl(bl);
-  lock.Unlock();
+  lock.unlock();
 
   append_output(bl);
 }
@@ -316,24 +344,24 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
-  if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
+  if (s->err.ret == -ERR_NO_SUCH_BUCKET || rgw::sal::RGWBucket::empty(s->bucket.get())) {
     if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
-      ldout(s->cct, 5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
+      ldout(s->cct, 5) << "bucket " << s->bucket_name << " doesn't exist, not logging" << dendl;
       return 0;
     }
     bucket_id = "";
   } else {
-    bucket_id = s->bucket.bucket_id;
+    bucket_id = s->bucket->get_bucket_id();
   }
-  rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, entry.bucket);
+  entry.bucket = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
 
-  if (check_utf8(s->bucket_name.c_str(), entry.bucket.size()) != 0) {
+  if (check_utf8(entry.bucket.c_str(), entry.bucket.size()) != 0) {
     ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
 
-  if (!s->object.empty()) {
-    entry.obj = s->object;
+  if (!rgw::sal::RGWObject::empty(s->object.get())) {
+    entry.obj = s->object->get_key();
   } else {
     entry.obj = rgw_obj_key("-");
   }
@@ -346,9 +374,43 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   else
     set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
-  set_param_str(s, "HTTP_REFERRER", entry.referrer);
-  set_param_str(s, "REQUEST_URI", entry.uri);
-  set_param_str(s, "REQUEST_METHOD", entry.op);
+  // legacy apps are still using misspelling referer, such as curl -e option
+  if (s->info.env->exists("HTTP_REFERRER"))
+    set_param_str(s, "HTTP_REFERRER", entry.referrer);
+  else
+    set_param_str(s, "HTTP_REFERER", entry.referrer);
+
+  std::string uri;
+  if (s->info.env->exists("REQUEST_METHOD")) {
+    uri.append(s->info.env->get("REQUEST_METHOD"));
+    uri.append(" ");
+  }
+
+  if (s->info.env->exists("REQUEST_URI")) {
+    uri.append(s->info.env->get("REQUEST_URI"));
+  }
+
+  if (s->info.env->exists("QUERY_STRING")) {
+    const char* qs = s->info.env->get("QUERY_STRING");
+    if(qs && (*qs != '\0')) {
+      uri.append("?");
+      uri.append(qs);
+    }
+  }
+
+  if (s->info.env->exists("HTTP_VERSION")) {
+    uri.append(" ");
+    uri.append("HTTP/");
+    uri.append(s->info.env->get("HTTP_VERSION"));
+  }
+
+  entry.uri = std::move(uri);
+
+  entry.op = op_name;
+
+  if (! s->token_claims.empty()) {
+    entry.token_claims = std::move(s->token_claims);
+  }
 
   /* custom header logging */
   if (rest) {
@@ -362,7 +424,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     }
   }
 
-  entry.user = s->user->user_id.to_str();
+  entry.user = s->user->get_id().to_str();
   if (s->object_acl)
     entry.object_owner = s->object_acl->get_owner().get_id();
   entry.bucket_owner = s->bucket_owner.get_id();
@@ -371,7 +433,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   entry.time = s->time;
-  entry.total_time = ceph_clock_now() - s->time;
+  entry.total_time = s->time_elapsed();
   entry.bytes_sent = bytes_sent;
   entry.bytes_received = bytes_received;
   if (s->err.http_ret) {
@@ -381,14 +443,15 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   } else
     entry.http_status = "200"; // default
 
-  entry.error_code = s->err.s3_code;
+  entry.error_code = s->err.err_code;
   entry.bucket_id = bucket_id;
+  entry.trans_id = s->trans_id;
 
   bufferlist bl;
-  ::encode(entry, bl);
+  encode(entry, bl);
 
   struct tm bdt;
-  time_t t = entry.time.sec();
+  time_t t = req_state::Clock::to_time_t(entry.time);
   if (s->cct->_conf->rgw_log_object_name_utc)
     gmtime_r(&t, &bdt);
   else
@@ -398,13 +461,13 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   if (s->cct->_conf->rgw_ops_log_rados) {
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
-				        s->bucket.bucket_id, entry.bucket);
+				        entry.bucket_id, entry.bucket);
 
-    rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
+    rgw_raw_obj obj(store->svc.zone->get_zone_params().log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
-      ret = store->create_pool(store->get_zone_params().log_pool);
+      ret = store->create_pool(store->svc.zone->get_zone_params().log_pool);
       if (ret < 0)
         goto done;
       // retry

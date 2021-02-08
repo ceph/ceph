@@ -1,11 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 echo "getting blogbench"
 wget http://download.ceph.com/qa/blogbench-1.0.tar.bz2
 #cp /home/gregf/src/blogbench-1.0.tar.bz2 .
 tar -xvf blogbench-1.0.tar.bz2
-cd blogbench*
+cd blogbench-1.0/
 echo "making blogbench"
 ./configure
 make

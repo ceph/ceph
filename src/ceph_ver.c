@@ -1,5 +1,4 @@
 
-#include "acconfig.h"
 #include "ceph_ver.h"
 
 #define CONCAT_VER_SYMBOL(x) ceph_ver__##x

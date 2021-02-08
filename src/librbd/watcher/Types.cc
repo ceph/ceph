@@ -8,13 +8,15 @@ namespace librbd {
 namespace watcher {
 
 void ClientId::encode(bufferlist &bl) const {
-  ::encode(gid, bl);
-  ::encode(handle, bl);
+  using ceph::encode;
+  encode(gid, bl);
+  encode(handle, bl);
 }
 
-void ClientId::decode(bufferlist::iterator &iter) {
-  ::decode(gid, iter);
-  ::decode(handle, iter);
+void ClientId::decode(bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  decode(gid, iter);
+  decode(handle, iter);
 }
 
 void ClientId::dump(Formatter *f) const {
@@ -22,23 +24,22 @@ void ClientId::dump(Formatter *f) const {
   f->dump_unsigned("handle", handle);
 }
 
-WRITE_CLASS_ENCODER(ClientId);
-
 void NotifyResponse::encode(bufferlist& bl) const {
-  ::encode(acks, bl);
-  ::encode(timeouts, bl);
+  using ceph::encode;
+  encode(acks, bl);
+  encode(timeouts, bl);
 }
 
-void NotifyResponse::decode(bufferlist::iterator& iter) {
-  ::decode(acks, iter);
-  ::decode(timeouts, iter);
+void NotifyResponse::decode(bufferlist::const_iterator& iter) {
+  using ceph::decode;
+  decode(acks, iter);
+  decode(timeouts, iter);
+}
+std::ostream &operator<<(std::ostream &out,
+                         const ClientId &client_id) {
+  out << "[" << client_id.gid << "," << client_id.handle << "]";
+  return out;
 }
 
 } // namespace watcher
 } // namespace librbd
-
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::watcher::ClientId &client_id) {
-  out << "[" << client_id.gid << "," << client_id.handle << "]";
-  return out;
-}

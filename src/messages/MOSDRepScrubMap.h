@@ -21,15 +21,16 @@
  * pass a ScrubMap from a shard back to the primary
  */
 
-struct MOSDRepScrubMap : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MOSDRepScrubMap final : public MOSDFastDispatchOp {
+public:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   spg_t pgid;            // primary spg_t
   epoch_t map_epoch = 0;
   pg_shard_t from;   // whose scrubmap this is
-  bufferlist scrub_map_bl;
+  ceph::buffer::list scrub_map_bl;
+  bool preempted = false;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -39,36 +40,45 @@ struct MOSDRepScrubMap : public MOSDFastDispatchOp {
   }
 
   MOSDRepScrubMap()
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDFastDispatchOp{MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION} {}
 
   MOSDRepScrubMap(spg_t pgid, epoch_t map_epoch, pg_shard_t from)
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid),
       map_epoch(map_epoch),
       from(from) {}
 
 private:
-  ~MOSDRepScrubMap() {}
+  ~MOSDRepScrubMap() final {}
 
 public:
-  const char *get_type_name() const { return "rep_scrubmap"; }
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "rep_scrubmap"; }
+  void print(std::ostream& out) const override {
     out << "rep_scrubmap(" << pgid << " e" << map_epoch
-	<< " from shard " << from << ")";
+	<< " from shard " << from
+	<< (preempted ? " PREEMPTED":"") << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(from, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(from, payload);
+    encode(preempted, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(from, p);
+  void decode_payload() override {
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(from, p);
+    if (header.version >= 2) {
+      decode(preempted, p);
+    }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
 
 #endif

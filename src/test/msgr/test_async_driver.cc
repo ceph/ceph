@@ -24,12 +24,13 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 #include "include/Context.h"
-#include "include/atomic.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/Event.h"
+
+#include <atomic>
 
 // We use epoll, kqueue, evport, select in descending order by performance.
 #if defined(__linux__)
@@ -57,8 +58,6 @@
 
 #include <gtest/gtest.h>
 
-
-#if GTEST_HAS_PARAM_TEST
 
 class EventDriverTest : public ::testing::TestWithParam<const char*> {
  public:
@@ -148,11 +147,12 @@ void* echoclient(void *arg)
   sa.sin_port = htons(port);
   char addr[] = "127.0.0.1";
   int r = inet_pton(AF_INET, addr, &sa.sin_addr);
-  assert(r == 1);
+  ceph_assert(r == 1);
 
   int connect_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (connect_sd >= 0) {
     r = connect(connect_sd, (struct sockaddr*)&sa, sizeof(sa));
+    ceph_assert(r == 0);
     int t = 0;
   
     do {
@@ -225,21 +225,22 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
     tv.tv_sec = 5;
     tv.tv_usec = 0;
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
-    ASSERT_EQ(fired_events[0].mask, EVENT_READABLE);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ(EVENT_READABLE, fired_events[0].mask);
 
     fired_events.clear();
     char data[100];
     r = ::read(client_sd, data, sizeof(data));
     if (r == 0)
       break;
-    ASSERT_TRUE(r > 0);
+    ASSERT_GT(r, 0);
     r = driver->add_event(client_sd, EVENT_READABLE, EVENT_WRITABLE);
+    ASSERT_EQ(0, r);
     r = driver->event_wait(fired_events, &tv);
-    ASSERT_EQ(r, 1);
+    ASSERT_EQ(1, r);
     ASSERT_EQ(fired_events[0].mask, EVENT_WRITABLE);
     r = write(client_sd, data, strlen(data));
-    ASSERT_EQ(r, (int)strlen(data));
+    ASSERT_EQ((int)strlen(data), r);
     driver->del_event(client_sd, EVENT_READABLE|EVENT_WRITABLE,
                       EVENT_WRITABLE);
   } while (1);
@@ -251,7 +252,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
 class FakeEvent : public EventCallback {
 
  public:
-  void do_request(int fd_or_id) override {}
+  void do_request(uint64_t fd_or_id) override {}
 };
 
 TEST(EventCenterTest, FileEventExpansion) {
@@ -293,35 +294,35 @@ class Worker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  atomic_t *count;
-  Mutex *lock;
-  Cond *cond;
+  std::atomic<unsigned> *count;
+  ceph::mutex *lock;
+  ceph::condition_variable *cond;
 
  public:
-  CountEvent(atomic_t *atomic, Mutex *l, Cond *c): count(atomic), lock(l), cond(c) {}
-  void do_request(int id) override {
-    lock->Lock();
-    count->dec();
-    cond->Signal();
-    lock->Unlock();
+  CountEvent(std::atomic<unsigned> *atomic,
+             ceph::mutex *l, ceph::condition_variable *c)
+    : count(atomic), lock(l), cond(c) {}
+  void do_request(uint64_t id) override {
+    std::scoped_lock l{*lock};
+    (*count)--;
+    cond->notify_all();
   }
 };
 
 TEST(EventCenterTest, DispatchTest) {
   Worker worker1(g_ceph_context, 1), worker2(g_ceph_context, 2);
-  atomic_t count(0);
-  Mutex lock("DispatchTest::lock");
-  Cond cond;
+  std::atomic<unsigned> count = { 0 };
+  ceph::mutex lock = ceph::make_mutex("DispatchTest::lock");
+  ceph::condition_variable cond;
   worker1.create("worker_1");
   worker2.create("worker_2");
   for (int i = 0; i < 10000; ++i) {
-    count.inc();
+    count++;
     worker1.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
-    count.inc();
+    count++;
     worker2.center.dispatch_event_external(EventCallbackRef(new CountEvent(&count, &lock, &cond)));
-    Mutex::Locker l(lock);
-    while (count.read())
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [&] { return count == 0; });
   }
   worker1.stop();
   worker2.stop();
@@ -329,7 +330,7 @@ TEST(EventCenterTest, DispatchTest) {
   worker2.join();
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   AsyncMessenger,
   EventDriverTest,
   ::testing::Values(
@@ -342,19 +343,6 @@ INSTANTIATE_TEST_CASE_P(
     "select"
   )
 );
-
-#else
-
-// Google Test may not support value-parameterized tests with some
-// compilers. If we use conditional compilation to compile out all
-// code referring to the gtest_main library, MSVC linker will not link
-// that library at all and consequently complain about missing entry
-// point defined in that library (fatal error LNK1561: entry point
-// must be defined). This dummy test keeps gtest_main linked in.
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-
-#endif
-
 
 /*
  * Local Variables:

@@ -1,52 +1,51 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "Readahead.h"
+#include "common/Readahead.h"
+#include "common/Cond.h"
 
-using namespace std;
+using std::vector;
 
 Readahead::Readahead()
   : m_trigger_requests(10),
     m_readahead_min_bytes(0),
     m_readahead_max_bytes(NO_LIMIT),
     m_alignments(),
-    m_lock("Readahead::m_lock"),
     m_nr_consec_read(0),
     m_consec_read_bytes(0),
     m_last_pos(0),
     m_readahead_pos(0),
     m_readahead_trigger_pos(0),
     m_readahead_size(0),
-    m_pending(0),
-    m_pending_lock("Readahead::m_pending_lock") {
+    m_pending(0) {
 }
 
 Readahead::~Readahead() {
 }
 
 Readahead::extent_t Readahead::update(const vector<extent_t>& extents, uint64_t limit) {
-  m_lock.Lock();
+  m_lock.lock();
   for (vector<extent_t>::const_iterator p = extents.begin(); p != extents.end(); ++p) {
     _observe_read(p->first, p->second);
   }
   if (m_readahead_pos >= limit|| m_last_pos >= limit) {
-    m_lock.Unlock();
+    m_lock.unlock();
     return extent_t(0, 0);
   }
-  pair<uint64_t, uint64_t> extent = _compute_readahead(limit);
-  m_lock.Unlock();
+  std::pair<uint64_t, uint64_t> extent = _compute_readahead(limit);
+  m_lock.unlock();
   return extent;
 }
 
 Readahead::extent_t Readahead::update(uint64_t offset, uint64_t length, uint64_t limit) {
-  m_lock.Lock();
+  m_lock.lock();
   _observe_read(offset, length);
   if (m_readahead_pos >= limit || m_last_pos >= limit) {
-    m_lock.Unlock();
+    m_lock.unlock();
     return extent_t(0, 0);
   }
   extent_t extent = _compute_readahead(limit);
-  m_lock.Unlock();
+  m_lock.unlock();
   return extent;
 }
 
@@ -82,8 +81,8 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
 	  m_readahead_pos = m_last_pos;
 	}
       }
-      m_readahead_size = MAX(m_readahead_size, m_readahead_min_bytes);
-      m_readahead_size = MIN(m_readahead_size, m_readahead_max_bytes);
+      m_readahead_size = std::max(m_readahead_size, m_readahead_min_bytes);
+      m_readahead_size = std::min(m_readahead_size, m_readahead_max_bytes);
       readahead_offset = m_readahead_pos;
       readahead_length = m_readahead_size;
 
@@ -98,12 +97,12 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
 	uint64_t dist_next = align_next - readahead_end;
 	if (dist_prev < readahead_length / 2 && dist_prev < dist_next) {
 	  // we can snap to the previous alignment point by a less than 50% reduction in size
-	  assert(align_prev > readahead_offset);
+	  ceph_assert(align_prev > readahead_offset);
 	  readahead_length = align_prev - readahead_offset;
 	  break;
 	} else if(dist_next < readahead_length / 2) {
 	  // we can snap to the next alignment point by a less than 50% increase in size
-	  assert(align_next > readahead_offset);
+	  ceph_assert(align_next > readahead_offset);
 	  readahead_length = align_next - readahead_offset;
 	  break;
 	}
@@ -122,26 +121,26 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
 }
 
 void Readahead::inc_pending(int count) {
-  assert(count > 0);
-  m_pending_lock.Lock();
+  ceph_assert(count > 0);
+  m_pending_lock.lock();
   m_pending += count;
-  m_pending_lock.Unlock();
+  m_pending_lock.unlock();
 }
 
 void Readahead::dec_pending(int count) {
-  assert(count > 0);
-  m_pending_lock.Lock();
-  assert(m_pending >= count);
+  ceph_assert(count > 0);
+  m_pending_lock.lock();
+  ceph_assert(m_pending >= count);
   m_pending -= count;
   if (m_pending == 0) {
     std::list<Context *> pending_waiting(std::move(m_pending_waiting));
-    m_pending_lock.Unlock();
+    m_pending_lock.unlock();
 
     for (auto ctx : pending_waiting) {
       ctx->complete(0);
     }
   } else {
-    m_pending_lock.Unlock();
+    m_pending_lock.unlock();
   }
 }
 
@@ -152,46 +151,46 @@ void Readahead::wait_for_pending() {
 }
 
 void Readahead::wait_for_pending(Context *ctx) {
-  m_pending_lock.Lock();
+  m_pending_lock.lock();
   if (m_pending > 0) {
-    m_pending_lock.Unlock();
+    m_pending_lock.unlock();
     m_pending_waiting.push_back(ctx);
     return;
   }
-  m_pending_lock.Unlock();
+  m_pending_lock.unlock();
 
   ctx->complete(0);
 }
 void Readahead::set_trigger_requests(int trigger_requests) {
-  m_lock.Lock();
+  m_lock.lock();
   m_trigger_requests = trigger_requests;
-  m_lock.Unlock();
+  m_lock.unlock();
 }
 
 uint64_t Readahead::get_min_readahead_size(void) {
-  Mutex::Locker lock(m_lock);
+  std::lock_guard lock(m_lock);
   return m_readahead_min_bytes;
 }
 
 uint64_t Readahead::get_max_readahead_size(void) {
-  Mutex::Locker lock(m_lock);
+  std::lock_guard lock(m_lock);
   return m_readahead_max_bytes;
 }
 
 void Readahead::set_min_readahead_size(uint64_t min_readahead_size) {
-  m_lock.Lock();
+  m_lock.lock();
   m_readahead_min_bytes = min_readahead_size;
-  m_lock.Unlock();
+  m_lock.unlock();
 }
 
 void Readahead::set_max_readahead_size(uint64_t max_readahead_size) {
-  m_lock.Lock();
+  m_lock.lock();
   m_readahead_max_bytes = max_readahead_size;
-  m_lock.Unlock();
+  m_lock.unlock();
 }
 
 void Readahead::set_alignments(const vector<uint64_t> &alignments) {
-  m_lock.Lock();
+  m_lock.lock();
   m_alignments = alignments;
-  m_lock.Unlock();
+  m_lock.unlock();
 }

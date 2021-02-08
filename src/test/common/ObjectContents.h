@@ -60,7 +60,7 @@ public:
     Iterator &operator++() {
       ++pos;
       if (iter != parent->seeds.end() && pos >= iter->first) {
-	assert(pos == iter->first);
+	ceph_assert(pos == iter->first);
 	current_state = iter->second;
 	++iter;
       }
@@ -77,11 +77,11 @@ public:
     seeds[0] = 0;
   }
 
-  explicit ObjectContents(bufferlist::iterator &bp) {
-    ::decode(_size, bp);
-    ::decode(seeds, bp);
-    ::decode(written, bp);
-    ::decode(_exists, bp);
+  explicit ObjectContents(bufferlist::const_iterator &bp) {
+    decode(_size, bp);
+    decode(seeds, bp);
+    decode(written, bp);
+    decode(_exists, bp);
   }
 
   void clone_range(ObjectContents &other,
@@ -111,10 +111,11 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    ::encode(_size, bl);
-    ::encode(seeds, bl);
-    ::encode(written, bl);
-    ::encode(_exists, bl);
+    using ceph::encode;
+    encode(_size, bl);
+    encode(seeds, bl);
+    encode(written, bl);
+    encode(_exists, bl);
   }
 };
 

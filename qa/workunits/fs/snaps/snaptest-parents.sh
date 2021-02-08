@@ -2,8 +2,6 @@
 
 set -e
 
-ceph mds set allow_new_snaps true --yes-i-really-mean-it
-
 echo "making directory tree and files"
 mkdir -p 1/a/b/c/
 echo "i'm file1" > 1/a/file1
@@ -35,7 +33,7 @@ echo "comparing snapshots and new tree"
 dir1=`find 1/ | wc -w`
 dir2=`find 2/.snap/barsnap2/a/b/c | wc -w`
 #diff $dir1 $dir2 && echo "Success!"
-test $dir1==$dir2 && echo "Sucess!"
+test $dir1==$dir2 && echo "Success!"
 rmdir 1/.snap/*
 rmdir 2/.snap/*
 echo "OK"

@@ -16,7 +16,7 @@ daemons.
 Install an Operating System
 ===========================
 
-Install a recent release of Debian or Ubuntu (e.g., 12.04 LTS, 14.04 LTS) on
+Install a recent release of Debian or Ubuntu (e.g., 16.04 LTS) on
 your nodes. For additional details on operating systems or to use other
 operating systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
@@ -90,7 +90,7 @@ Install ceph-deploy
 To install ``ceph-deploy``, execute the following:: 
 
 	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
-	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb https://download.ceph.com/debian-nautilus/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 	sudo apt-get update	
 	sudo apt-get install ceph-deploy
 

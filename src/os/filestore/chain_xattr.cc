@@ -2,28 +2,20 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "chain_xattr.h"
-
-#include "include/int_types.h"
-
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <errno.h>
-#include <dirent.h>
-#include <sys/ioctl.h>
-#include <string.h>
-#include <stdio.h>
-#include "include/assert.h"
+#include <errno.h>           // for ERANGE, ENODATA, ENOMEM
+#include <stdio.h>           // for size_t, snprintf
+#include <stdlib.h>          // for free, malloc
+#include <string.h>          // for strcpy, strlen
+#include "include/ceph_assert.h"  // for assert
+#include "include/buffer.h"
 
 #if defined(__linux__)
 #include <linux/fs.h>
 #endif
 
-#include "common/xattr.h"
-#include "include/compat.h"
+#include "include/ceph_assert.h"
+
+using ceph::bufferptr;
 
 /*
  * chaining xattrs
@@ -45,14 +37,14 @@ void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
     switch (*name) {
     case '@': /* escape it */
       pos += 2;
-      assert (pos < raw_len - 1);
+      ceph_assert (pos < raw_len - 1);
       *raw_name = '@';
       raw_name++;
       *raw_name = '@';
       break;
     default:
       pos++;
-      assert(pos < raw_len - 1);
+      ceph_assert(pos < raw_len - 1);
       *raw_name = *name;
       break;
     }
@@ -64,7 +56,7 @@ void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_len)
     *raw_name = '\0';
   } else {
     int r = snprintf(raw_name, raw_len - pos, "@%d", i);
-    assert(r < raw_len - pos);
+    ceph_assert(r < raw_len - pos);
   }
 }
 
@@ -90,7 +82,7 @@ static int translate_raw_name(const char *raw_name, char *name, int name_len, bo
       break;
     }
     pos++;
-    assert(pos < name_len);
+    ceph_assert(pos < name_len);
     name++;
     raw_name++;
   }
@@ -198,7 +190,7 @@ int chain_getxattr_buf(const char *fn, const char *name, bufferptr *bp)
       }
     }
   }
-  assert(0 == "unreachable");
+  ceph_abort_msg("unreachable");
   return 0;
 }
 

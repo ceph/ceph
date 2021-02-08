@@ -36,11 +36,12 @@ from git import Repo
 
 
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
+reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
 # labels is the list of relevant labels defined for github.com/ceph/ceph
-labels = ['bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
+labels = {'bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
-          'tools']
-merge_re = re.compile("Merge pull request #(\d+).*")
+          'tools'}
+merge_re = re.compile("Merge (pull request|PR) #(\d+).*")
 # prefixes is the list of commit description prefixes we recognize
 prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
             'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
@@ -48,6 +49,7 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
             'rbd', 'rbd-mirror', 'rbd-nbd', 'rgw', 'tests', 'tools']
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
+rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
 
@@ -104,14 +106,38 @@ def split_component(title, gh, number):
         issue_labels = {it['name'] for it in issue['labels']}
         if 'documentation' in issue_labels:
             return 'doc: ' + title
-        item = labels.intersection(issue_labels)
+        item = set(prefixes).intersection(issue_labels)
         if item:
-            return ",".join(item) + ': ' + title
+            return ",".join(sorted(item)) + ': ' + title
         else:
             return 'UNKNOWN: ' + title
 
+def _title_message(commit, pr, strict):
+    title = pr['title']
+    message_lines = commit.message.split('\n')
+    if strict or len(message_lines) < 1:
+        return (title, None)
+    lines = []
+    for line in message_lines[1:]:
+        if reviewed_by_re.match(line):
+            continue
+        line = line.strip()
+        if line:
+            lines.append(line)
+    if len(lines) == 0:
+        return (title, None)
+    duplicates_pr_title = lines[0] == pr['title'].strip()
+    if duplicates_pr_title:
+        return (title, None)
+    assert len(lines) > 0, "missing message content"
+    if len(lines) == 1:
+        # assume that a single line means the intention is to
+        # re-write the PR title
+        return (lines[0], None)
+    message = "    " + "\n    ".join(lines)
+    return (title, message)
 
-def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
+def make_release_notes(gh, repo, ref, plaintext, html, verbose, strict, use_tags):
 
     issue2prs = {}
     pr2issues = {}
@@ -119,106 +145,93 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
 
     for commit in repo.iter_commits(ref, merges=True):
         merge = merge_re.match(commit.summary)
-        if merge:
-            number = merge.group(1)
-            print ("Considering PR#" + number)
-            # do not pick up ceph/ceph-qa-suite.git PRs
-            if int(number) < 1311:
-                print ("Ignoring low-numbered PR, probably picked up from"
-                       " ceph/ceph-qa-suite.git")
-                continue
-            pr = gh.repos("ceph")("ceph").pulls(number).get()
-            title = pr['title']
-            message_lines = commit.message.split('\n')
-            if not strict and len(message_lines) > 1:
-                lines = []
-                for line in message_lines[1:]:
-                    if 'Reviewed-by' in line:
-                        continue
-                    line = line.strip()
-                    if line:
-                        lines.append(line)
-                duplicates_pr_title = lines[0] == pr['title'].strip()
-                if duplicates_pr_title:
-                    lines.pop(0)
-                if len(lines) == 0:
-                    if duplicates_pr_title:
-                        message = None
-                elif len(lines) == 1:
-                    # assume that a single line means the intention is to
-                    # re-write the PR title
-                    title = lines[0]
-                    message = None
-                else:
-                    message = "    " + "\n    ".join(lines)
-            else:
-                message = None
-            issues = []
-            if pr['body']:
-                issues = fixes_re.findall(pr['body']) + tracker_re.findall(
-                    pr['body']
-                )
+        if not merge:
+            continue
+        number = merge.group(2)
+        print ("Considering PR#" + number)
+        # do not pick up ceph/ceph-qa-suite.git PRs
+        if int(number) < 1311:
+            print ("Ignoring low-numbered PR, probably picked up from"
+                   " ceph/ceph-qa-suite.git")
+            continue
+        pr = gh.repos("ceph")("ceph").pulls(number).get()
+        (title, message) = _title_message(commit, pr, strict)
+        issues = []
+        if pr['body']:
+            issues = fixes_re.findall(pr['body']) + tracker_re.findall(
+                pr['body']
+            )
 
-            authors = {}
-            for c in repo.iter_commits(
-                         "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
-                     ):
-                for author in re.findall(
-                                  "Signed-off-by:\s*(.*?)\s*<", c.message
-                              ):
-                    authors[author] = 1
-                issues.extend(fixes_re.findall(c.message) +
-                              tracker_re.findall(c.message))
-            if authors:
-                author = ", ".join(authors.keys())
-            else:
-                author = commit.parents[-1].author.name
+        authors = {}
+        for c in repo.iter_commits(
+                     "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
+                 ):
+            for author in re.findall(
+                              "Signed-off-by:\s*(.*?)\s*<", c.message
+                          ):
+                authors[author] = 1
+            issues.extend(fixes_re.findall(c.message) +
+                          tracker_re.findall(c.message))
+        if authors:
+            author = ", ".join(authors.keys())
+        else:
+            author = commit.parents[-1].author.name
 
-            if strict and not issues:
+        if strict and not issues:
+            print ("ERROR: https://github.com/ceph/ceph/pull/" +
+                   str(number) + " has no associated issue")
+            continue
+
+        if strict:
+            title_re = (
+                '^(?:hammer|infernalis|jewel|kraken|luminous|mimic|nautilus|octopus|pacific):\s+(' +
+                '|'.join(prefixes) +
+                ')(:.*)'
+            )
+            match = re.match(title_re, title)
+            if not match:
                 print ("ERROR: https://github.com/ceph/ceph/pull/" +
-                       str(number) + " has no associated issue")
-                continue
+                       str(number) + " title " + title.encode("utf-8") +
+                       " does not match " + title_re)
+            else:
+                title = match.group(1) + match.group(2)
+        if use_tags:
+            title = split_component(title, gh, number)
 
+        title = title.strip(' \t\n\r\f\v\.\,\;\:\-\=')
+        # escape asterisks, which is used by reStructuredTextrst for inline
+        # emphasis
+        title = title.replace('*', '\*')
+        # and escape the underscores for noting a link
+        title = rst_link_re.sub(r'\1\_\2', title)
+        pr2info[number] = (author, title, message)
+
+        for issue in set(issues):
             if strict:
-                title_re = (
-                    '^(?:hammer|infernalis|jewel|kraken):\s+(' +
-                    '|'.join(prefixes) +
-                    ')(:.*)'
-                )
-                match = re.match(title_re, title)
-                if not match:
-                    print ("ERROR: https://github.com/ceph/ceph/pull/" +
-                           str(number) + " title " + title.encode("utf-8") +
-                           " does not match " + title_re)
-                else:
-                    title = match.group(1) + match.group(2)
-            if use_tags:
-                title = split_component(title, gh, number)
-
-            title = title.strip(' \t\n\r\f\v\.\,\;\:\-\=')
-            pr2info[number] = (author, title, message)
-
-            for issue in set(issues):
-                if strict:
-                    issue = get_original_issue(issue, verbose)
-                issue2prs.setdefault(issue, set([])).add(number)
-                pr2issues.setdefault(number, set([])).add(issue)
-            sys.stdout.write('.')
+                issue = get_original_issue(issue, verbose)
+            issue2prs.setdefault(issue, set([])).add(number)
+            pr2issues.setdefault(number, set([])).add(issue)
+        sys.stdout.write('.')
 
     print (" done collecting merges.")
 
     if strict:
-        for (issue, prs) in issue2prs.iteritems():
+        for (issue, prs) in issue2prs.items():
             if len(prs) > 1:
                 print (">>>>>>> " + str(len(prs)) + " pr for issue " +
                        issue + " " + str(prs))
 
     for (pr, (author, title, message)) in sorted(
-        pr2info.iteritems(), key=lambda (k, v): (v[2], v[1])
+        pr2info.items(), key=lambda title: title[1][1]
     ):
         if pr in pr2issues:
             if plaintext:
                 issues = map(lambda issue: '#' + str(issue), pr2issues[pr])
+            elif html:
+                issues = map(lambda issue: (
+                    '<a href="http://tracker.ceph.com/issues/{issue}">issue#{issue}</a>'
+                    ).format(issue=issue), pr2issues[pr]
+                )
             else:
                 issues = map(lambda issue: (
                     '`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_'
@@ -232,6 +245,18 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                     title=title.encode("utf-8"),
                     issues=issues,
                     author=author.encode("utf-8")
+                )
+            )
+        elif html:
+            print (
+                (
+                    "<li><p>{title} ({issues}<a href=\""
+                    "https://github.com/ceph/ceph/pull/{pr}\""
+                    ">pr#{pr}</a>, {author})</p></li>"
+                ).format(
+                    title=title.encode("utf-8"),
+                    issues=issues,
+                    author=author.encode("utf-8"), pr=pr
                 )
             )
         else:
@@ -271,6 +296,9 @@ if __name__ == "__main__":
     parser.add_argument("--text", "-t",
                         action='store_true', default=None,
                         help="output plain text only, no links")
+    parser.add_argument("--html",
+                        action='store_true', default=None,
+                        help="output html format for website blog")
     parser.add_argument("--verbose", "-v",
                         action='store_true', default=None,
                         help="verbose")
@@ -296,6 +324,7 @@ if __name__ == "__main__":
         Repo(args.repo),
         args.rev,
         args.text,
+        args.html,
         args.verbose,
         args.strict,
         args.use_tags

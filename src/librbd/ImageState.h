@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_IMAGE_STATE_H
 
 #include "include/int_types.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include <list>
 #include <string>
 #include <utility>
@@ -16,6 +16,8 @@ class RWLock;
 
 namespace librbd {
 
+class QuiesceWatchCtx;
+class QuiesceWatchers;
 class ImageCtx;
 class ImageUpdateWatchers;
 class UpdateWatchCtx;
@@ -26,8 +28,8 @@ public:
   ImageState(ImageCtxT *image_ctx);
   ~ImageState();
 
-  int open(bool skip_open_parent);
-  void open(bool skip_open_parent, Context *on_finish);
+  int open(uint64_t flags);
+  void open(uint64_t flags, Context *on_finish);
 
   int close();
   void close(Context *on_finish);
@@ -40,17 +42,22 @@ public:
   int refresh_if_required();
   void refresh(Context *on_finish);
 
-  void snap_set(const cls::rbd::SnapshotNamespace &snap_namespace,
-		const std::string &snap_name,
-		Context *on_finish);
+  void snap_set(uint64_t snap_id, Context *on_finish);
 
   void prepare_lock(Context *on_ready);
   void handle_prepare_lock_complete();
 
   int register_update_watcher(UpdateWatchCtx *watcher, uint64_t *handle);
+  void unregister_update_watcher(uint64_t handle, Context *on_finish);
   int unregister_update_watcher(uint64_t handle);
   void flush_update_watchers(Context *on_finish);
   void shut_down_update_watchers(Context *on_finish);
+
+  int register_quiesce_watcher(QuiesceWatchCtx *watcher, uint64_t *handle);
+  int unregister_quiesce_watcher(uint64_t handle);
+  void notify_quiesce(Context *on_finish);
+  void notify_unquiesce(Context *on_finish);
+  void quiesce_complete(uint64_t handle, int r);
 
 private:
   enum State {
@@ -75,8 +82,7 @@ private:
   struct Action {
     ActionType action_type;
     uint64_t refresh_seq = 0;
-    cls::rbd::SnapshotNamespace snap_namespace;
-    std::string snap_name;
+    uint64_t snap_id = CEPH_NOSNAP;
     Context *on_ready = nullptr;
 
     Action(ActionType action_type) : action_type(action_type) {
@@ -89,7 +95,7 @@ private:
       case ACTION_TYPE_REFRESH:
         return (refresh_seq == action.refresh_seq);
       case ACTION_TYPE_SET_SNAP:
-        return (snap_name == action.snap_name) && (snap_namespace == action.snap_namespace);
+        return (snap_id == action.snap_id);
       case ACTION_TYPE_LOCK:
         return false;
       default:
@@ -105,15 +111,16 @@ private:
   ImageCtxT *m_image_ctx;
   State m_state;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
   ActionsContexts m_actions_contexts;
 
   uint64_t m_last_refresh;
   uint64_t m_refresh_seq;
 
   ImageUpdateWatchers *m_update_watchers;
+  QuiesceWatchers *m_quiesce_watchers;
 
-  bool m_skip_open_parent_image;
+  uint64_t m_open_flags;
 
   bool is_transition_state() const;
   bool is_closed() const;

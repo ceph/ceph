@@ -24,8 +24,17 @@ case "$1" in
     ;;
 
     purge)
-	rm -rf /var/log/ceph 
-	rm -rf /etc/ceph
+        [ -f "/etc/default/ceph" ] && . /etc/default/ceph
+        [ -z "$SERVER_USER" ] && SERVER_USER=ceph
+
+        rm -rf /var/log/ceph
+        rm -rf /etc/ceph
+
+        if [ -f /etc/shadow ]; then
+            usermod -L -e 1 $SERVER_USER
+        else
+            usermod -L $SERVER_USER
+        fi
     ;;
 
     upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)

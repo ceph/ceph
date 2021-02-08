@@ -3,7 +3,6 @@
 #include <map>
 #include <set>
 #include <string>
-#include "include/memory.h"
 
 #include "kv/KeyValueDB.h"
 #include "include/buffer.h"
@@ -22,10 +21,10 @@ public:
   int init(string _opt) override {
     return 0;
   }
-  int open(ostream &out) override {
+  int open(std::ostream &out, const std::string& cfs="") override {
     return 0;
   }
-  int create_and_open(ostream &out) override {
+  int create_and_open(ostream &out, const std::string& cfs="") override {
     return 0;
   }
 
@@ -99,6 +98,8 @@ public:
       }
     };
 
+    using KeyValueDB::TransactionImpl::rmkey;
+    using KeyValueDB::TransactionImpl::set;
     void rmkey(const string &prefix, const string &key) override {
       on_commit.push_back(new RmKeysOp(db, std::make_pair(prefix, key)));
     }
@@ -184,6 +185,6 @@ private:
 
   friend class WholeSpaceMemIterator;
 
-protected:
-  WholeSpaceIterator _get_iterator() override;
+public:
+  WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) override;
 };

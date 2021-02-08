@@ -1,14 +1,14 @@
 # Contributor: John Coyle <dx9err@gmail.com>
 # Maintainer: John Coyle <dx9err@gmail.com>
 pkgname=ceph
-pkgver=@VERSION@
+pkgver=@PROJECT_VERSION@
 pkgrel=@RPM_RELEASE@
 pkgdesc="Ceph is a distributed object store and file system"
 pkgusers="ceph"
 pkggroups="ceph"
 url="http://ceph.com"
 arch="x86_64"
-license="LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and \
+license="LGPL-2.1 and LGPL-3.0 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and \
 GPL-2.0-with-autoconf-exception and BSD-3-Clause and MIT"
 depends="ceph-osd ceph-mds ceph-mgr	ceph-mon"
 # grep --quiet option required
@@ -38,7 +38,6 @@ makedepends="
 	keyutils-dev
 	leveldb-dev
 	libaio-dev
-	libatomic_ops-dev
 	libedit-dev
 	libressl-dev
 	libtirpc-dev
@@ -48,6 +47,7 @@ makedepends="
 	lvm2-dev
 	nss-dev
 	openldap-dev
+	krb5-dev
 	parted
 	procps
 	python-dev
@@ -58,7 +58,6 @@ makedepends="
 	readline-dev
 	rpcgen
 	snappy-dev
-	userspace-rcu-dev
 	util-linux
 	xfsprogs-dev
 	xmlstarlet
@@ -143,7 +142,6 @@ build() {
 		-DWITH_PYTHON3=OFF \
 		-DWITH_LTTNG=OFF \
 		-DWITH_SYSTEM_BOOST=ON \
-		-DWITH_EMBEDDED=OFF \
 		-DWITH_TESTS=${_with_tests:-OFF} \
 		|| return 1
 	make -j${JOBS:-2} || return 1
@@ -167,14 +165,9 @@ package() {
 		|| return 1
 
 	chmod 0644 $pkgdir$_docdir/ceph/sample.ceph.conf || return 1
-	chmod 0644 $pkgdir$_docdir/ceph/sample.fetch_config || return 1
 
 	# udev rules
 	install -m 0644 -D udev/50-rbd.rules $pkgdir$_udevrulesdir/50-rbd.rules || return 1
-	install -m 0644 -D udev/60-ceph-by-parttypeuuid.rules  \
-		$pkgdir$_udevrulesdir/60-ceph-by-parttypeuuid.rules || return 1
-	install -m 0644 -D udev/95-ceph-osd.rules \
-		$pkgdir$_udevrulesdir/95-ceph-osd.rules
 }
 
 base() {
@@ -193,15 +186,13 @@ base() {
 		xfsprogs
 	"
 
-	_pkg $_docdir/ceph sample.ceph.conf sample.fetch_config
-	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run ceph-detect-init
+	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run
 	_pkg $_sbindir ceph-create-keys mount.ceph
 	_pkg $_libexecdir/ceph ceph_common.sh
 	_pkg $_libdir/rados-classes *.so*
 	_pkg $_libdir/ceph/erasure-code libec_*.so*
 	_pkg $_libdir/ceph/compressor libceph_*.so*
 	_pkg $_sysconfdir/logrotate.d ceph
-	_pkg $_python_sitelib ceph_detect_init* ceph_disk*
 	for dir in tmp bootstrap-osd bootstrap-mds bootstrap-rgw; do
     	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
     		$subpkgdir$_localstatedir/lib/ceph/$dir || return 1
@@ -219,7 +210,6 @@ common() {
 		ceph-dencoder \
 		ceph-rbdnamer \
 		ceph-syn \
-		ceph-crush-location \
 		cephfs-data-scan \
 		cephfs-journal-tool \
 		cephfs-table-tool \
@@ -292,7 +282,7 @@ radosgw() {
 	pkgdesc="Rados REST gateway which implements Amazon's S3 and OpenStack's Swift APIs."
 	depends="ceph-common"
 
-	_pkg $_bindir radosgw radosgw-admin radosgw-token radosgw-object-expirer
+	_pkg $_bindir radosgw radosgw-admin radosgw-token radosgw-es radosgw-object-expirer
 	mkdir -p $subpkgdir$_localstatedir/lib/ceph/radosgw
 }
 
@@ -301,9 +291,8 @@ osd() {
 	depends="ceph-base parted gptfdisk"
 
 	_pkg $_bindir ceph-clsinfo ceph-bluefs-tool ceph-objectstore-tool ceph-osd
-	_pkg $_sbindir ceph-disk ceph-disk-udev
+	_pkg $_sbindir ceph-volume
 	_pkg $_libexecdir/ceph ceph-osd-prestart.sh
-	_pkg $_udevrulesdir 60-ceph-by-parttypeuuid.rules 95-ceph-osd.rules
 	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
 		$subpkgdir$_localstatedir/lib/ceph/osd
 }
@@ -326,8 +315,7 @@ librados_dev() {
 		page.h \
 		crc32c.h \
 		rados_types.h \
-		rados_types.hpp \
-		memory.h
+		rados_types.hpp
 	_pkg $_libdir librados.so
 	_pkg $_bindir librados-config
 }
@@ -408,7 +396,7 @@ libcephfs_dev() {
 	pkgdesc="Ceph distributed file system client library headers"
 	depends="libcephfs librados-devel"
 
-	_pkg $_includedir/cephfs ceph_statx.h libcephfs.h
+	_pkg $_includedir/cephfs ceph_ll_client.h libcephfs.h
 	_pkg $_libdir libcephfs.so
 }
 
@@ -441,18 +429,13 @@ ceph_test() {
 		ceph_rgw_multiparser \
 		ceph_scratchtool \
 		ceph_scratchtoolpp \
-		ceph_smalliobench \
-		ceph_smalliobenchdumb \
-		ceph_smalliobenchfs \
-		ceph_smalliobenchrbd \
 		ceph_test_* \
-		ceph_tpbench \
-		ceph_xattr_bench \
 		ceph-coverage \
 		ceph-monstore-tool \
 		ceph-osdomap-tool \
 		ceph-kvstore-tool \
-		ceph-debugpack
+		ceph-debugpack \
+		ceph-dedup-tool
 
 	_pkg $_libdir ceph/ceph-monstore-update-crush.sh
 }

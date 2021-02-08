@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
+
 #ifndef CEPH_RGW_TORRENT_H
 #define CEPH_RGW_TORRENT_H
 
@@ -11,7 +14,6 @@
 #include "rgw_rados.h"
 #include "rgw_common.h"
 
-using namespace std;
 using ceph::crypto::SHA1;
 
 struct req_state;
@@ -97,17 +99,17 @@ private:
 
   string  announce;    // tracker
   string origin; // origin
-  time_t create_date;    // time of the file created
+  time_t create_date{0};    // time of the file created
   string comment;  // comment
   string create_by;    // app name and version
   string encoding;    // if encode use gbk rather than gtf-8 use this field
   uint64_t sha_len;  // sha1 length
   bool is_torrent;  // flag
   bufferlist bl;  // bufflist ready to send
-  list<bufferlist> torrent_bl;   // meate data
 
-  struct req_state *s;
-  RGWRados *store;
+  struct req_state *s{nullptr};
+  rgw::sal::RGWRadosStore *store{nullptr};
+  SHA1 h;
 
   TorrentBencode dencode;
 public:
@@ -115,25 +117,26 @@ public:
   ~seed();
 
   int get_params();
-  void init(struct req_state *p_req, RGWRados *p_store);
-  void get_torrent_file(int &op_ret, RGWRados::Object::Read &read_op, 
-    uint64_t &total_len, bufferlist &bl_data, rgw_obj &obj);
+  void init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store);
+  int get_torrent_file(rgw::sal::RGWObject* object,
+                       uint64_t &total_len,
+                       ceph::bufferlist &bl_data,
+                       rgw_obj &obj);
   
   off_t get_data_len();
   bool get_flag();
 
-  int handle_data();
-  void save_data(bufferlist &bl);
   void set_create_date(ceph::real_time& value);
-  void set_info_name(const string& value); 
+  void set_info_name(const string& value);
+  void update(bufferlist &bl);
+  int complete(optional_yield y);
 
 private:
   void do_encode ();
   void set_announce();
   void set_exist(bool exist);
   void set_info_pieces(char *buff);
-  int sha1_process();
   void sha1(SHA1 *h, bufferlist &bl, off_t bl_len);
-  int save_torrent_file();
+  int save_torrent_file(optional_yield y);
 };
 #endif /* CEPH_RGW_TORRENT_H */

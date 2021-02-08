@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 pool=rbd
 image=my-image
 size=10G
-export LD_LIBRARY_PATH=../../src/.libs
+export LD_LIBRARY_PATH=../../build/lib
 #qemu-img create -f raw rbd:$pool/$image:conf=../../src/ceph.conf $size
 qemu-img convert linux-0.2.img -O raw rbd:$pool/$image:conf=../../src/ceph.conf

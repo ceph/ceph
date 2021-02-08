@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef RGW_PERIOD_PUSHER_H
 #define RGW_PERIOD_PUSHER_H
@@ -8,9 +8,15 @@
 #include <mutex>
 #include <vector>
 
+#include "common/async/yield_context.h"
 #include "rgw_realm_reloader.h"
 
-class RGWRados;
+namespace rgw {
+namespace sal {
+class RGWRadosStore;
+}
+}
+
 class RGWPeriod;
 
 // RGWRealmNotify payload for push coordination
@@ -23,24 +29,24 @@ using RGWZonesNeedPeriod = RGWPeriod;
 class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
-  RGWPeriodPusher(RGWRados* store);
+  explicit RGWPeriodPusher(rgw::sal::RGWRadosStore* store, optional_yield y);
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones
-  void handle_notify(RGWRealmNotify type, bufferlist::iterator& p) override;
+  void handle_notify(RGWRealmNotify type, bufferlist::const_iterator& p) override;
 
   /// avoid accessing RGWRados while dynamic reconfiguration is in progress.
   /// notifications will be enqueued until resume()
   void pause() override;
 
   /// continue processing notifications with a new RGWRados instance
-  void resume(RGWRados* store) override;
+  void resume(rgw::sal::RGWRadosStore* store) override;
 
  private:
   void handle_notify(RGWZonesNeedPeriod&& period);
 
   CephContext *const cct;
-  RGWRados* store;
+  rgw::sal::RGWRadosStore* store;
 
   std::mutex mutex;
   epoch_t realm_epoch{0}; //< the current realm epoch being sent

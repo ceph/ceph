@@ -5,15 +5,15 @@
 General Settings
 ================
 
-``ms tcp nodelay``
+``ms_tcp_nodelay``
 
-:Description: Disables nagle's algorithm on messenger tcp sessions.
+:Description: Disables Nagle's algorithm on messenger TCP sessions.
 :Type: Boolean
 :Required: No
 :Default: ``true``
 
 
-``ms initial backoff``
+``ms_initial_backoff``
 
 :Description: The initial time to wait before reconnecting on a fault.
 :Type: Double
@@ -21,7 +21,7 @@ General Settings
 :Default: ``.2``
 
 
-``ms max backoff``
+``ms_max_backoff``
 
 :Description: The maximum time to wait before reconnecting on a fault.
 :Type: Double
@@ -29,15 +29,15 @@ General Settings
 :Default: ``15.0``
 
 
-``ms nocrc``
+``ms_nocrc``
 
-:Description: Disables crc on network messages.  May increase performance if cpu limited.
+:Description: Disables CRC on network messages.  May increase performance if CPU limited.
 :Type: Boolean
 :Required: No
 :Default: ``false``
 
 
-``ms die on bad msg``
+``ms_die_on_bad_msg``
 
 :Description: Debug option; do not configure.
 :Type: Boolean
@@ -45,7 +45,7 @@ General Settings
 :Default: ``false``
 
 
-``ms dispatch throttle bytes``
+``ms_dispatch_throttle_bytes``
 
 :Description: Throttles total size of messages waiting to be dispatched.
 :Type: 64-bit Unsigned Integer
@@ -53,15 +53,15 @@ General Settings
 :Default: ``100 << 20``
 
 
-``ms bind ipv6``
+``ms_bind_ipv6``
 
-:Description: Enable if you want your daemons to bind to IPv6 address instead of IPv4 ones. (Not required if you specify a daemon or cluster IP.)
+:Description: Enable to bind daemons to IPv6 addresses instead of IPv4. Not required if you specify a daemon or cluster IP.
 :Type: Boolean
 :Required: No
 :Default: ``false``
 
 
-``ms rwthread stack bytes``
+``ms_rwthread_stack_bytes``
 
 :Description: Debug option for stack size; do not configure.
 :Type: 64-bit Unsigned Integer
@@ -69,7 +69,7 @@ General Settings
 :Default: ``1024 << 10``
 
 
-``ms tcp read timeout``
+``ms_tcp_read_timeout``
 
 :Description: Controls how long (in seconds) the messenger will wait before closing an idle connection.
 :Type: 64-bit Unsigned Integer
@@ -77,7 +77,7 @@ General Settings
 :Default: ``900``
 
 
-``ms inject socket failures``
+``ms_inject_socket_failures``
 
 :Description: Debug option; do not configure.
 :Type: 64-bit Unsigned Integer
@@ -88,7 +88,7 @@ Async messenger options
 =======================
 
 
-``ms async transport type``
+``ms_async_transport_type``
 
 :Description: Transport type used by Async Messenger. Can be ``posix``, ``dpdk``
               or ``rdma``. Posix uses standard TCP/IP networking and is default. 
@@ -98,18 +98,18 @@ Async messenger options
 :Default: ``posix``
 
 
-``ms async op threads``
+``ms_async_op_threads``
 
 :Description: Initial number of worker threads used by each Async Messenger instance.
               Should be at least equal to highest number of replicas, but you can
-              decrease it if you're low on CPU core count and/or you host a lot of
+              decrease it if you are low on CPU core count and/or you host a lot of
               OSDs on single server.
 :Type: 64-bit Unsigned Integer
 :Required: No
 :Default: ``3``
 
 
-``ms async max op threads``
+``ms_async_max_op_threads``
 
 :Description: Maximum number of worker threads used by each Async Messenger instance. 
               Set to lower values when your machine has limited CPU count, and increase 
@@ -120,28 +120,7 @@ Async messenger options
 :Default: ``5``
 
 
-``ms async set affinity``
-
-:Description: Set to true to bind Async Messenger workers to particular CPU cores. 
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``ms async affinity cores``
-
-:Description: When ``ms async set affinity`` is true, this string specifies how Async
-              Messenger workers are bound to CPU cores. For example, "0,2" will bind
-              workers #1 and #2 to CPU cores #0 and #2, respectively.
-              NOTE: when manually setting affinity, make sure to not assign workers to
-              processors that are virtual CPUs created as an effect of Hyperthreading
-              or similar technology, because they're slower than regular CPU cores.
-:Type: String
-:Required: No
-:Default: ``(empty)``
-
-
-``ms async send inline``
+``ms_async_send_inline``
 
 :Description: Send messages directly from the thread that generated them instead of
               queuing and sending from Async Messenger thread. This option is known

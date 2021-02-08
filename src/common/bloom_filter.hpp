@@ -22,17 +22,10 @@
 #ifndef COMMON_BLOOM_FILTER_HPP
 #define COMMON_BLOOM_FILTER_HPP
 
-#include <cstddef>
-#include <algorithm>
 #include <cmath>
-#include <limits>
-#include <list>
-#include <string>
-#include <vector>
 
 #include "include/mempool.h"
 #include "include/encoding.h"
-#include "common/Formatter.h"
 
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 static const unsigned char bit_mask[bits_per_char] = {
@@ -82,7 +75,7 @@ public:
       target_element_count_(predicted_inserted_element_count),
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
-    assert(false_positive_probability > 0.0);
+    ceph_assert(false_positive_probability > 0.0);
     find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
 			    &salt_count_, &table_size_);
     init();
@@ -163,7 +156,7 @@ public:
    * @param val integer value to insert
    */
   inline void insert(uint32_t val) {
-    assert(bit_table_);
+    ceph_assert(bit_table_);
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -176,7 +169,7 @@ public:
 
   inline void insert(const unsigned char* key_begin, const std::size_t& length)
   {
-    assert(bit_table_);
+    ceph_assert(bit_table_);
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -185,13 +178,6 @@ public:
       bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
     ++insert_count_;
-  }
-
-  template<typename T>
-  inline void insert(const T& t)
-  {
-    // Note: T must be a C++ POD type.
-    insert(reinterpret_cast<const unsigned char*>(&t),sizeof(T));
   }
 
   inline void insert(const std::string& key)
@@ -256,12 +242,6 @@ public:
       }
     }
     return true;
-  }
-
-  template<typename T>
-  inline bool contains(const T& t) const
-  {
-    return contains(reinterpret_cast<const unsigned char*>(&t),static_cast<std::size_t>(sizeof(T)));
   }
 
   inline bool contains(const std::string& key) const
@@ -526,9 +506,9 @@ protected:
   }
 
 public:
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(bloom_filter)
@@ -623,9 +603,9 @@ private:
 
   std::vector<std::size_t> size_list;
 public:
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::bufferlist& bl) const;
+  void decode(ceph::bufferlist::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<compressible_bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(compressible_bloom_filter)

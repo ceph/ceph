@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2017 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -14,7 +21,7 @@
 #include "dmclock_util.h"
 
 
-std::string crimson::dmclock::format_time(const Time& time, uint modulo) {
+std::string crimson::dmclock::format_time(const Time& time, unsigned modulo) {
   long subtract = long(time / modulo) * modulo;
   std::stringstream ss;
   ss << std::fixed << std::setprecision(4) << (time - subtract);

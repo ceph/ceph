@@ -20,21 +20,21 @@
 
 #include <deque>
 
-class MLog : public PaxosServiceMessage {
+class MLog final : public PaxosServiceMessage {
 public:
   uuid_d fsid;
   std::deque<LogEntry> entries;
-  
-  MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
-  MLog(const uuid_d& f, const std::deque<LogEntry>& e)
-    : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e) { }
+
+  MLog() : PaxosServiceMessage{MSG_LOG, 0} {}
+  MLog(const uuid_d& f, std::deque<LogEntry>&& e)
+    : PaxosServiceMessage{MSG_LOG, 0}, fsid(f), entries{std::move(e)} { }
   MLog(const uuid_d& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) { }
 private:
-  ~MLog() override {}
+  ~MLog() final {}
 
 public:
-  const char *get_type_name() const override { return "log"; }
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "log"; }
+  void print(std::ostream& out) const override {
     out << "log(";
     if (entries.size())
       out << entries.size() << " entries from seq " << entries.front().seq
@@ -43,15 +43,17 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(entries, payload, features);
+    encode(fsid, payload);
+    encode(entries, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(entries, p);
+    decode(fsid, p);
+    decode(entries, p);
   }
 };
 

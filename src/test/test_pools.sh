@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 #
 # Test pools
@@ -19,7 +20,7 @@ setup() {
 
 test629_impl() {
         # create the pool
-        ./rados -c ./ceph.conf mkpool foo || die "mkpool failed"
+        ./ceph -c ./ceph.conf osd pool create foo 8 || die "pool create failed"
 
         # Write lots and lots of objects
         write_objects 1 1 10 1000000 foo
@@ -31,7 +32,7 @@ test629_impl() {
         poll_cmd "./ceph pg debug degraded_pgs_exist" TRUE 3 120
 
         # delete the pool
-        ./rados -c ./ceph.conf rmpool foo || die "rmpool failed"
+        ./ceph -c ./ceph.conf osd pool rm foo foo --yes-i-really-really-mean-it || die "pool rm failed"
 
         # make sure the system is stable
         sleep 10

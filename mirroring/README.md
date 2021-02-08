@@ -48,6 +48,8 @@ A few things which are required:
 
 You can then run the *mirror-ceph.sh* script and mirror all the contents.
 
+Mirror maintainers should sign up to the [Ceph-mirrors mailing list](https://lists.ceph.io/postorius/lists/ceph-mirrors.ceph.io/).
+
 ### Logs
 The project wants to analyze the downloads of Ceph a few times a year. From mirrors
 we expect that they store HTTP access logs for at least 6 months so they can be

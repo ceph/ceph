@@ -1,75 +1,77 @@
 from __future__ import print_function
-
-import os
 import pkgutil
-import shutil
-import subprocess
-import sys
-import tempfile
-import textwrap
-
 if not pkgutil.find_loader('setuptools'):
     from distutils.core import setup
     from distutils.extension import Extension
 else:
     from setuptools import setup
     from setuptools.extension import Extension
-
-from distutils.ccompiler import new_compiler
+import distutils.sysconfig
 from distutils.errors import CompileError, LinkError
-from distutils.sysconfig import customize_compiler
+from distutils.ccompiler import new_compiler
+from itertools import filterfalse, takewhile
+
+import os
+import shutil
+import sys
+import tempfile
+import textwrap
+
+
+def filter_unsupported_flags(compiler, flags):
+    args = takewhile(lambda argv: not argv.startswith('-'), [compiler] + flags)
+    if any('clang' in arg for arg in args):
+        return list(filterfalse(lambda f:
+                                f in ('-mcet',
+                                      '-fstack-clash-protection',
+                                      '-fno-var-tracking-assignments',
+                                      '-Wno-deprecated-register',
+                                      '-Wno-gnu-designator') or
+                                f.startswith('-fcf-protection'),
+                                flags))
+    else:
+        return flags
+
+
+def monkey_with_compiler(customize):
+    def patched(compiler):
+        customize(compiler)
+        if compiler.compiler_type != 'unix':
+            return
+        compiler.compiler[1:] = \
+            filter_unsupported_flags(compiler.compiler[0],
+                                     compiler.compiler[1:])
+        compiler.compiler_so[1:] = \
+            filter_unsupported_flags(compiler.compiler_so[0],
+                                     compiler.compiler_so[1:])
+    return patched
+
+
+distutils.sysconfig.customize_compiler = \
+    monkey_with_compiler(distutils.sysconfig.customize_compiler)
 
 # PEP 440 versioning of the Rados package on PyPI
 # Bump this version, after every changeset
-# NOTE: This version is not the same as get_ceph_version()
-
 __version__ = '2.0.0'
 
 
-def get_ceph_version():
-    try:
-        for line in open(os.path.join(os.path.dirname(__file__), "..", "..", "ceph_ver.h")):
-            if "CEPH_GIT_NICE_VER" in line:
-                return line.split()[2].strip('"')
-        else:
-            return "0"
-    except IOError:
-        return "0"
-
-
-def get_python_flags():
-    cflags = {'I': [], 'extras': []}
-    ldflags = {'l': [], 'L': [], 'extras': []}
-
-    if os.environ.get('VIRTUAL_ENV', None):
-        python = "python"
-    else:
-        python = 'python' + str(sys.version_info.major) + '.' + str(sys.version_info.minor)
-
-    python_config = python + '-config'
-
-    for cflag in subprocess.check_output(
-            [python_config, "--cflags"]
-    ).strip().decode('utf-8').split():
-        if cflag.startswith('-I'):
-            cflags['I'].append(cflag.replace('-I', ''))
-        else:
-            cflags['extras'].append(cflag)
-
-    for ldflag in subprocess.check_output(
-            [python_config, "--ldflags"]
-    ).strip().decode('utf-8').split():
-        if ldflag.startswith('-l'):
-            ldflags['l'].append(ldflag.replace('-l', ''))
-        if ldflag.startswith('-L'):
-            ldflags['L'].append(ldflag.replace('-L', ''))
-        else:
-            ldflags['extras'].append(ldflag)
-
-    return {
-        'cflags': cflags,
-        'ldflags': ldflags
-    }
+def get_python_flags(libs):
+    py_libs = sum((libs.split() for libs in
+                   distutils.sysconfig.get_config_vars('LIBS', 'SYSLIBS')), [])
+    ldflags = list(filterfalse(lambda lib: lib.startswith('-l'), py_libs))
+    py_libs = [lib.replace('-l', '') for lib in
+               filter(lambda lib: lib.startswith('-l'), py_libs)]
+    compiler = new_compiler()
+    distutils.sysconfig.customize_compiler(compiler)
+    return dict(
+        include_dirs=[distutils.sysconfig.get_python_inc()],
+        library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
+        libraries=libs + py_libs,
+        extra_compile_args=filter_unsupported_flags(
+            compiler.compiler[0],
+            compiler.compiler[1:] + distutils.sysconfig.get_config_var('CFLAGS').split()),
+        extra_link_args=(distutils.sysconfig.get_config_var('LDFLAGS').split() +
+                         ldflags))
 
 
 def check_sanity():
@@ -98,12 +100,11 @@ def check_sanity():
         fp.write(dummy_prog)
 
     compiler = new_compiler()
-    customize_compiler(compiler)
+    distutils.sysconfig.customize_compiler(compiler)
 
-    if {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
+    if 'CEPH_LIBDIR' in os.environ:
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
-
         compiler.set_include_dirs([os.path.join(CEPH_SRC_DIR, 'include')])
         compiler.set_library_dirs([os.environ.get('CEPH_LIBDIR')])
 
@@ -131,10 +132,12 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
-if 'BUILD_DOC' in os.environ.keys():
-    pass
+if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
+    ext_args = {}
+    cython_constants = dict(BUILD_DOC=True)
 elif check_sanity():
-    pass
+    ext_args = get_python_flags(['rados'])
+    cython_constants = dict(BUILD_DOC=False)
 else:
     sys.exit(1)
 
@@ -165,8 +168,6 @@ if (len(sys.argv) >= 2 and
     def cythonize(x, **kwargs):
         return x
 
-flags = get_python_flags()
-
 setup(
     name='rados',
     version=__version__,
@@ -186,12 +187,13 @@ setup(
             Extension(
                 "rados",
                 [source],
-                include_dirs=flags['cflags']['I'],
-                library_dirs=flags['ldflags']['L'],
-                libraries=["rados"] + flags['ldflags']['l'],
-                extra_compile_args=flags['cflags']['extras'] + flags['ldflags']['extras'],
+                **ext_args
             )
-        ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)
+        ],
+        # use "3str" when Cython 3.0 is available
+        compiler_directives={'language_level': sys.version_info.major},
+        compile_time_env=cython_constants,
+        build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
     ),
     classifiers=[
         'Intended Audience :: Developers',
@@ -199,9 +201,7 @@ setup(
         'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Cython',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5'
+        'Programming Language :: Python :: 3'
     ],
     cmdclass=cmdclass,
 )

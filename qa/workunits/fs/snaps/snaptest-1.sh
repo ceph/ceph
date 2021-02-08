@@ -1,8 +1,6 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
 
-set -e
-
-ceph mds set allow_new_snaps true --yes-i-really-mean-it
+set -ex
 
 echo 1 > file1
 echo 2 > file2

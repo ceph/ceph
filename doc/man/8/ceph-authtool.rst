@@ -17,10 +17,10 @@ Synopsis
   [ --gen-print-key ]
   [ --import-keyring *otherkeyringfile* ]
   [ -n | --name *entityname* ]
-  [ -u | --set-uid *auid* ]
   [ -a | --add-key *base64_key* ]
   [ --cap *subsystem* *capability* ]
   [ --caps *capfile* ]
+  [ --mode *mode* ]
 
 
 Description
@@ -71,10 +71,6 @@ Options
 
    specify entityname to operate on
 
-.. option:: -u, --set-uid *auid*
-
-   sets the auid (authenticated user id) for the specified entityname
-
 .. option:: -a, --add-key *base64_key*
 
    will add an encoded key to the keyring
@@ -86,6 +82,10 @@ Options
 .. option:: --caps *capsfile*
 
    will set all of capabilities associated with a given key, for all subsystems
+
+ .. option:: --mode *mode*
+
+    will set the desired file mode to the keyring e.g: 0644, defaults to 0600
 
 
 Capabilities
@@ -139,7 +139,9 @@ In general, an osd capability follows the grammar::
 
         osdcap  := grant[,grant...]
         grant   := allow (match capspec | capspec match)
-        match   := [pool[=]<poolname> | object_prefix <prefix>]
+        match   := [ pool[=]<poolname> | object_prefix <prefix>
+                    | namespace[=]<rados-namespace>
+                    | tag <application-name> <key>=<value> ]
         capspec := * | [r][w][x] [class-read] [class-write]
 
 The capspec determines what kind of operations the entity can perform::
@@ -149,7 +151,7 @@ The capspec determines what kind of operations the entity can perform::
     x           = can call any class method (same as class-read class-write)
     class-read  = can call class methods that are reads
     class-write = can call class methods that are writes
-    *           = equivalent to rwx, plus the ability to run osd admin commands,
+    * or "all"  = equivalent to rwx, plus the ability to run osd admin commands,
                   i.e. ceph osd tell ...
 
 The match criteria restrict a grant based on the pool being accessed.
@@ -172,12 +174,12 @@ value is the capability string (see above).
 Example
 =======
 
-To create a new keyring containing a key for client.foo::
+To create a new keyring containing a key for client.foo with a 0644 file mode::
 
-        ceph-authtool -C -n client.foo --gen-key keyring
+        ceph-authtool -C -n client.foo --gen-key keyring --mode 0644
 
 To associate some capabilities with the key (namely, the ability to
-mount a Ceph filesystem)::
+mount a Ceph file system)::
 
         ceph-authtool -n client.foo --cap mds 'allow' --cap osd 'allow rw pool=data' --cap mon 'allow r' keyring
 

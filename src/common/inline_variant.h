@@ -8,31 +8,13 @@
 #ifndef INLINE_VARIANT_H
 #define INLINE_VARIANT_H
 
-#include <boost/utility/enable_if.hpp>
 #include <boost/function_types/function_arity.hpp>
-#include <boost/function_types/parameter_types.hpp>
-#include <boost/function_types/result_type.hpp>
-#include <boost/fusion/include/at_key.hpp>
-#include <boost/fusion/include/has_key.hpp>
-#include <boost/fusion/include/make_vector.hpp>
-#include <boost/fusion/include/map.hpp>
 #include <boost/fusion/algorithm/transformation/transform.hpp>
-#include <boost/move/move.hpp>
 #include <boost/mpl/contains.hpp>
-#include <boost/mpl/equal_to.hpp>
-#include <boost/mpl/front.hpp>
-#include <boost/mpl/pop_front.hpp>
 #include <boost/mpl/map.hpp>
-#include <boost/mpl/void.hpp>
-#include <boost/mpl/size.hpp>
-#include <boost/mpl/transform.hpp>
-#include <boost/mpl/unpack_args.hpp>
 #include <boost/mpl/vector.hpp>
 #include <boost/mpl/range_c.hpp>
-#include <boost/static_assert.hpp>
-#include <boost/type_traits/is_same.hpp>
-#include <boost/type_traits/remove_reference.hpp>
-#include <boost/utility.hpp>
+#include <boost/noncopyable.hpp>
 
 #include "function_signature.h"
 

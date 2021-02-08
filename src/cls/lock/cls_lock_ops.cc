@@ -12,18 +12,16 @@
  * 
  */
 
-#include "include/types.h"
 #include "msg/msg_types.h"
 #include "common/Formatter.h"
 
-#include "cls/lock/cls_lock_types.h"
 #include "cls/lock/cls_lock_ops.h"
 
 using namespace rados::cls::lock;
 
 static void generate_lock_id(locker_id_t& i, int n, const string& cookie)
 {
-  i.locker = entity_name_t(entity_name_t::CLIENT(n));
+  i.locker = entity_name_t::CLIENT(n);
   i.cookie = cookie;
 }
 
@@ -42,12 +40,12 @@ void cls_lock_lock_op::generate_test_instances(list<cls_lock_lock_op*>& o)
 {
   cls_lock_lock_op *i = new cls_lock_lock_op;
   i->name = "name";
-  i->type = LOCK_SHARED;
+  i->type = ClsLockType::SHARED;
   i->cookie = "cookie";
   i->tag = "tag";
   i->description = "description";
   i->duration = utime_t(5, 0);
-  i->flags = LOCK_FLAG_RENEW;
+  i->flags = LOCK_FLAG_MAY_RENEW;
   o.push_back(i);
   o.push_back(new cls_lock_lock_op);
 }
@@ -79,7 +77,7 @@ void cls_lock_break_op::generate_test_instances(list<cls_lock_break_op*>& o)
   cls_lock_break_op *i = new cls_lock_break_op;
   i->name = "name";
   i->cookie = "cookie";
-  i->locker =  entity_name_t(entity_name_t::CLIENT(1));
+  i->locker =  entity_name_t::CLIENT(1);
   o.push_back(i);
   o.push_back(new cls_lock_break_op);
 }
@@ -123,7 +121,7 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
     f->dump_string("description", info.description);
     f->dump_string("cookie", id.cookie);
     f->dump_stream("expiration") << info.expiration;
-    f->dump_stream("addr") << info.addr;
+    f->dump_string("addr", info.addr.get_legacy_str());
     f->close_section();
   }
   f->close_section();
@@ -132,7 +130,7 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
 void cls_lock_get_info_reply::generate_test_instances(list<cls_lock_get_info_reply*>& o)
 {
   cls_lock_get_info_reply *i = new cls_lock_get_info_reply;
-  i->lock_type = LOCK_SHARED;
+  i->lock_type = ClsLockType::SHARED;
   i->tag = "tag";
   locker_id_t id1, id2;
   entity_addr_t addr1, addr2;
@@ -182,7 +180,7 @@ void cls_lock_assert_op::generate_test_instances(list<cls_lock_assert_op*>& o)
 {
   cls_lock_assert_op *i = new cls_lock_assert_op;
   i->name = "name";
-  i->type = LOCK_SHARED;
+  i->type = ClsLockType::SHARED;
   i->cookie = "cookie";
   i->tag = "tag";
   o.push_back(i);
@@ -202,7 +200,7 @@ void cls_lock_set_cookie_op::generate_test_instances(list<cls_lock_set_cookie_op
 {
   cls_lock_set_cookie_op *i = new cls_lock_set_cookie_op;
   i->name = "name";
-  i->type = LOCK_SHARED;
+  i->type = ClsLockType::SHARED;
   i->cookie = "cookie";
   i->tag = "tag";
   i->new_cookie = "new cookie";

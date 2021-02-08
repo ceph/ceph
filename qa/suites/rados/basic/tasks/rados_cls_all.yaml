@@ -1,14 +1,12 @@
 overrides:
   ceph:
+    log-ignorelist:
+    - \(PG_AVAILABILITY\)
     conf:
       osd:
-        osd_class_load_list: "cephfs hello journal lock log numops rbd refcount 
-                              replica_log rgw sdk statelog timeindex user version"
-        osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
-                                 replica_log rgw sdk statelog timeindex user version"
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
 tasks:
-- install:
-- ceph:
 - workunit:
     clients:
       client.0:

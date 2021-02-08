@@ -1,23 +1,32 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "common/errno.h"
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
+#include "include/scope_guard.h"
 
-#include "rgw_rados.h"
+#include "rgw_dmclock_scheduler.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
+#include "rgw_opa.h"
+#include "rgw_perf_counters.h"
+#include "rgw_lua.h"
+#include "rgw_lua_request.h"
+
+#include "services/svc_zone_utils.h"
 
 #define dout_subsys ceph_subsys_rgw
 
+using rgw::dmclock::Scheduler;
+
 void RGWProcess::RGWWQ::_dump_queue()
 {
-  if (!g_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (!g_conf()->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     return;
   }
   deque<RGWRequest *>::iterator iter;
@@ -32,15 +41,61 @@ void RGWProcess::RGWWQ::_dump_queue()
   }
 } /* RGWProcess::RGWWQ::_dump_queue */
 
+auto schedule_request(Scheduler *scheduler, req_state *s, RGWOp *op)
+{
+  using rgw::dmclock::SchedulerCompleter;
+  if (!scheduler)
+    return std::make_pair(0,SchedulerCompleter{});
+
+  const auto client = op->dmclock_client();
+  const auto cost = op->dmclock_cost();
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 10)) {
+    ldpp_dout(op,10) << "scheduling with "
+		     << s->cct->_conf.get_val<std::string>("rgw_scheduler_type")
+		     << " client=" << static_cast<int>(client)
+		     << " cost=" << cost << dendl;
+  }
+  return scheduler->schedule_request(client, {},
+                                     req_state::Clock::to_double(s->time),
+                                     cost,
+                                     s->yield);
+}
+
+bool RGWProcess::RGWWQ::_enqueue(RGWRequest* req) {
+  process->m_req_queue.push_back(req);
+  perfcounter->inc(l_rgw_qlen);
+  dout(20) << "enqueued request req=" << hex << req << dec << dendl;
+  _dump_queue();
+  return true;
+}
+
+RGWRequest* RGWProcess::RGWWQ::_dequeue() {
+  if (process->m_req_queue.empty())
+    return NULL;
+  RGWRequest *req = process->m_req_queue.front();
+  process->m_req_queue.pop_front();
+  dout(20) << "dequeued request req=" << hex << req << dec << dendl;
+  _dump_queue();
+  perfcounter->inc(l_rgw_qlen, -1);
+  return req;
+}
+
+void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
+  perfcounter->inc(l_rgw_qactive);
+  process->handle_request(req);
+  process->req_throttle.put(1);
+  perfcounter->inc(l_rgw_qactive, -1);
+}
 
 int rgw_process_authenticated(RGWHandler_REST * const handler,
                               RGWOp *& op,
                               RGWRequest * const req,
                               req_state * const s,
+			      optional_yield y,
                               const bool skip_retarget)
 {
-  req->log(s, "init permissions");
-  int ret = handler->init_permissions(op);
+  ldpp_dout(op, 2) << "init permissions" << dendl;
+  int ret = handler->init_permissions(op, y);
   if (ret < 0) {
     return ret;
   }
@@ -50,78 +105,86 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
    * if you are using the REST endpoint either (ergo, no authenticated access)
    */
   if (! skip_retarget) {
-    req->log(s, "recalculating target");
-    ret = handler->retarget(op, &op);
+    ldpp_dout(op, 2) << "recalculating target" << dendl;
+    ret = handler->retarget(op, &op, y);
     if (ret < 0) {
       return ret;
     }
     req->op = op;
   } else {
-    req->log(s, "retargeting skipped because of SubOp mode");
+    ldpp_dout(op, 2) << "retargeting skipped because of SubOp mode" << dendl;
   }
 
   /* If necessary extract object ACL and put them into req_state. */
-  req->log(s, "reading permissions");
-  ret = handler->read_permissions(op);
+  ldpp_dout(op, 2) << "reading permissions" << dendl;
+  ret = handler->read_permissions(op, y);
   if (ret < 0) {
     return ret;
   }
 
-  req->log(s, "init op");
-  ret = op->init_processing();
+  ldpp_dout(op, 2) << "init op" << dendl;
+  ret = op->init_processing(y);
   if (ret < 0) {
     return ret;
   }
 
-  req->log(s, "verifying op mask");
+  ldpp_dout(op, 2) << "verifying op mask" << dendl;
   ret = op->verify_op_mask();
   if (ret < 0) {
     return ret;
   }
 
-  req->log(s, "verifying op permissions");
-  ret = op->verify_permission();
+  /* Check if OPA is used to authorize requests */
+  if (s->cct->_conf->rgw_use_opa_authz) {
+    ret = rgw_opa_authorize(op, s);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  ldpp_dout(op, 2) << "verifying op permissions" << dendl;
+  ret = op->verify_permission(y);
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
+    } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
       dout(2) << "overriding permissions due to admin operation" << dendl;
     } else {
       return ret;
     }
   }
 
-  req->log(s, "verifying op params");
+  ldpp_dout(op, 2) << "verifying op params" << dendl;
   ret = op->verify_params();
   if (ret < 0) {
     return ret;
   }
 
-  req->log(s, "pre-executing");
+  ldpp_dout(op, 2) << "pre-executing" << dendl;
   op->pre_exec();
 
-  req->log(s, "executing");
-  op->execute();
+  ldpp_dout(op, 2) << "executing" << dendl;
+  op->execute(y);
 
-  req->log(s, "completing");
+  ldpp_dout(op, 2) << "completing" << dendl;
   op->complete();
 
   return 0;
 }
 
-int process_request(RGWRados* const store,
+int process_request(rgw::sal::RGWRadosStore* const store,
                     RGWREST* const rest,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
                     const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
-                    OpsLogSocket* const olog)
+                    OpsLogSocket* const olog,
+                    optional_yield yield,
+		    rgw::dmclock::Scheduler *scheduler,
+                    string* user,
+                    int* http_ret)
 {
-  int ret = 0;
-
-  client_io->init(g_ceph_context);
-
-  req->log_init();
+  int ret = client_io->init(g_ceph_context);
 
   dout(1) << "====== starting new request req=" << hex << req << dec
 	  << " =====" << dendl;
@@ -129,21 +192,32 @@ int process_request(RGWRados* const store,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  RGWUserInfo userinfo;
-
-  struct req_state rstate(g_ceph_context, &rgw_env, &userinfo);
+  struct req_state rstate(g_ceph_context, &rgw_env, req->id);
   struct req_state *s = &rstate;
+
+  std::unique_ptr<rgw::sal::RGWUser> u = store->get_user(rgw_user());
+  s->set_user(u);
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
 
-  s->req_id = store->unique_id(req->id);
-  s->trans_id = store->unique_trans_id(req->id);
-  s->host_id = store->host_id;
+  auto sysobj_ctx = store->svc()->sysobj->init_obj_ctx();
+  s->sysobj_ctx = &sysobj_ctx;
 
-  req->log_format(s, "initializing for trans_id = %s", s->trans_id.c_str());
+  if (ret < 0) {
+    s->cio = client_io;
+    abort_early(s, nullptr, ret, nullptr, yield);
+    return ret;
+  }
 
-  RGWOp* op = NULL;
+  s->req_id = store->svc()->zone_utils->unique_id(req->id);
+  s->trans_id = store->svc()->zone_utils->unique_trans_id(req->id);
+  s->host_id = store->getRados()->host_id;
+  s->yield = yield;
+
+  ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
+
+  RGWOp* op = nullptr;
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
@@ -151,60 +225,105 @@ int process_request(RGWRados* const store,
                                                auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
+  rgw::dmclock::SchedulerCompleter c;
+
   if (init_error != 0) {
-    abort_early(s, NULL, init_error, NULL);
+    abort_early(s, nullptr, init_error, nullptr, yield);
     goto done;
   }
-  dout(10) << "handler=" << typeid(*handler).name() << dendl;
+  ldpp_dout(s, 10) << "handler=" << typeid(*handler).name() << dendl;
 
   should_log = mgr->get_logging();
 
-  req->log_format(s, "getting op %d", s->op);
-  op = handler->get_op(store);
+  ldpp_dout(s, 2) << "getting op " << s->op << dendl;
+  op = handler->get_op();
   if (!op) {
-    abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
+    abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler, yield);
     goto done;
   }
-
+  {
+    std::string script;
+    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    if (rc == -ENOENT) {
+      // no script, nothing to do
+    } else if (rc < 0) {
+      ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
+    } else {
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      if (rc < 0) {
+        ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
+      }
+    }
+  }
+  std::tie(ret,c) = schedule_request(scheduler, s, op);
+  if (ret < 0) {
+    if (ret == -EAGAIN) {
+      ret = -ERR_RATE_LIMITED;
+    }
+    ldpp_dout(op,0) << "Scheduling request failed with " << ret << dendl;
+    abort_early(s, op, ret, handler, yield);
+    goto done;
+  }
   req->op = op;
-  dout(10) << "op=" << typeid(*op).name() << dendl;
+  ldpp_dout(op, 10) << "op=" << typeid(*op).name() << dendl;
 
   s->op_type = op->get_type();
 
-  req->log(s, "verifying requester");
-  ret = op->verify_requester(auth_registry);
-  if (ret < 0) {
-    dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, NULL, ret, handler);
-    goto done;
+  try {
+    ldpp_dout(op, 2) << "verifying requester" << dendl;
+    ret = op->verify_requester(auth_registry, yield);
+    if (ret < 0) {
+      dout(10) << "failed to authorize request" << dendl;
+      abort_early(s, op, ret, handler, yield);
+      goto done;
+    }
+
+    /* FIXME: remove this after switching all handlers to the new authentication
+     * infrastructure. */
+    if (nullptr == s->auth.identity) {
+      s->auth.identity = rgw::auth::transform_old_authinfo(s);
+    }
+
+    ldpp_dout(op, 2) << "normalizing buckets and tenants" << dendl;
+    ret = handler->postauth_init(yield);
+    if (ret < 0) {
+      dout(10) << "failed to run post-auth init" << dendl;
+      abort_early(s, op, ret, handler, yield);
+      goto done;
+    }
+
+    if (s->user->get_info().suspended) {
+      dout(10) << "user is suspended, uid=" << s->user->get_id() << dendl;
+      abort_early(s, op, -ERR_USER_SUSPENDED, handler, yield);
+      goto done;
+    }
+
+    ret = rgw_process_authenticated(handler, op, req, s, yield);
+    if (ret < 0) {
+      abort_early(s, op, ret, handler, yield);
+      goto done;
+    }
+  } catch (const ceph::crypto::DigestException& e) {
+    dout(0) << "authentication failed" << e.what() << dendl;
+    abort_early(s, op, -ERR_INVALID_SECRET_KEY, handler, yield);
   }
 
-  /* FIXME: remove this after switching all handlers to the new authentication
-   * infrastructure. */
-  if (nullptr == s->auth.identity) {
-    s->auth.identity = rgw::auth::transform_old_authinfo(s);
-  }
-
-  req->log(s, "normalizing buckets and tenants");
-  ret = handler->postauth_init();
-  if (ret < 0) {
-    dout(10) << "failed to run post-auth init" << dendl;
-    abort_early(s, op, ret, handler);
-    goto done;
-  }
-
-  if (s->user->suspended) {
-    dout(10) << "user is suspended, uid=" << s->user->user_id << dendl;
-    abort_early(s, op, -ERR_USER_SUSPENDED, handler);
-    goto done;
-  }
-
-  ret = rgw_process_authenticated(handler, op, req, s);
-  if (ret < 0) {
-    abort_early(s, op, ret, handler);
-    goto done;
-  }
 done:
+  if (op) {
+    std::string script;
+    auto rc = rgw::lua::read_script(store, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    if (rc == -ENOENT) {
+      // no script, nothing to do
+    } else if (rc < 0) {
+      ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
+    } else {
+      rc = rgw::lua::request::execute(store, rest, olog, s, op->name(), script);
+      if (rc < 0) {
+        ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
+      }
+    }
+  }
+
   try {
     client_io->complete_request();
   } catch (rgw::io::Exception& e) {
@@ -213,25 +332,33 @@ done:
   }
 
   if (should_log) {
-    rgw_log_op(store, rest, s, (op ? op->name() : "unknown"), olog);
+    rgw_log_op(store->getRados(), rest, s, (op ? op->name() : "unknown"), olog);
   }
 
-  int http_ret = s->err.http_ret;
+  if (http_ret != nullptr) {
+    *http_ret = s->err.http_ret;
+  }
   int op_ret = 0;
+
+  if (user && !rgw::sal::RGWUser::empty(s->user.get())) {
+    *user = s->user->get_id().to_str();
+  }
+
   if (op) {
     op_ret = op->get_ret();
+    ldpp_dout(op, 2) << "op status=" << op_ret << dendl;
+    ldpp_dout(op, 2) << "http status=" << s->err.http_ret << dendl;
+  } else {
+    ldpp_dout(s, 2) << "http status=" << s->err.http_ret << dendl;
   }
-
-  req->log_format(s, "op status=%d", op_ret);
-  req->log_format(s, "http status=%d", http_ret);
-
   if (handler)
     handler->put_op(op);
   rest->put_handler(handler);
 
   dout(1) << "====== req done req=" << hex << req << dec
 	  << " op status=" << op_ret
-	  << " http_status=" << http_ret
+	  << " http_status=" << s->err.http_ret
+	  << " latency=" << s->time_elapsed()
 	  << " ======"
 	  << dendl;
 

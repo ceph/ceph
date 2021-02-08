@@ -10,11 +10,13 @@
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/utime.h"
+#include "librbd/Types.h"
 #include <iosfwd>
 #include <list>
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
 #include <boost/variant.hpp>
+#include <boost/mpl/vector.hpp>
 
 namespace ceph {
 class Formatter;
@@ -24,42 +26,45 @@ namespace librbd {
 namespace journal {
 
 enum EventType {
-  EVENT_TYPE_AIO_DISCARD     = 0,
-  EVENT_TYPE_AIO_WRITE       = 1,
-  EVENT_TYPE_AIO_FLUSH       = 2,
-  EVENT_TYPE_OP_FINISH       = 3,
-  EVENT_TYPE_SNAP_CREATE     = 4,
-  EVENT_TYPE_SNAP_REMOVE     = 5,
-  EVENT_TYPE_SNAP_RENAME     = 6,
-  EVENT_TYPE_SNAP_PROTECT    = 7,
-  EVENT_TYPE_SNAP_UNPROTECT  = 8,
-  EVENT_TYPE_SNAP_ROLLBACK   = 9,
-  EVENT_TYPE_RENAME          = 10,
-  EVENT_TYPE_RESIZE          = 11,
-  EVENT_TYPE_FLATTEN         = 12,
-  EVENT_TYPE_DEMOTE_PROMOTE  = 13,
-  EVENT_TYPE_SNAP_LIMIT      = 14,
-  EVENT_TYPE_UPDATE_FEATURES = 15,
-  EVENT_TYPE_METADATA_SET    = 16,
-  EVENT_TYPE_METADATA_REMOVE = 17,
-  EVENT_TYPE_AIO_WRITESAME   = 18,
+  EVENT_TYPE_AIO_DISCARD           = 0,
+  EVENT_TYPE_AIO_WRITE             = 1,
+  EVENT_TYPE_AIO_FLUSH             = 2,
+  EVENT_TYPE_OP_FINISH             = 3,
+  EVENT_TYPE_SNAP_CREATE           = 4,
+  EVENT_TYPE_SNAP_REMOVE           = 5,
+  EVENT_TYPE_SNAP_RENAME           = 6,
+  EVENT_TYPE_SNAP_PROTECT          = 7,
+  EVENT_TYPE_SNAP_UNPROTECT        = 8,
+  EVENT_TYPE_SNAP_ROLLBACK         = 9,
+  EVENT_TYPE_RENAME                = 10,
+  EVENT_TYPE_RESIZE                = 11,
+  EVENT_TYPE_FLATTEN               = 12,
+  EVENT_TYPE_DEMOTE_PROMOTE        = 13,
+  EVENT_TYPE_SNAP_LIMIT            = 14,
+  EVENT_TYPE_UPDATE_FEATURES       = 15,
+  EVENT_TYPE_METADATA_SET          = 16,
+  EVENT_TYPE_METADATA_REMOVE       = 17,
+  EVENT_TYPE_AIO_WRITESAME         = 18,
+  EVENT_TYPE_AIO_COMPARE_AND_WRITE = 19,
 };
 
 struct AioDiscardEvent {
   static const EventType TYPE = EVENT_TYPE_AIO_DISCARD;
 
-  uint64_t offset;
-  uint64_t length;
-  bool skip_partial_discard;
+  uint64_t offset = 0;
+  uint64_t length = 0;
+  uint32_t discard_granularity_bytes = 0;
 
-  AioDiscardEvent() : offset(0), length(0), skip_partial_discard(false) {
+  AioDiscardEvent() {
   }
-  AioDiscardEvent(uint64_t _offset, uint64_t _length, bool _skip_partial_discard)
-    : offset(_offset), length(_length), skip_partial_discard(_skip_partial_discard) {
+  AioDiscardEvent(uint64_t _offset, uint64_t _length,
+                  uint32_t discard_granularity_bytes)
+    : offset(_offset), length(_length),
+      discard_granularity_bytes(discard_granularity_bytes) {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -79,7 +84,7 @@ struct AioWriteEvent {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -98,7 +103,29 @@ struct AioWriteSameEvent {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
+  void dump(Formatter *f) const;
+};
+
+struct AioCompareAndWriteEvent {
+  static const EventType TYPE = EVENT_TYPE_AIO_COMPARE_AND_WRITE;
+
+  uint64_t offset;
+  uint64_t length;
+  bufferlist cmp_data;
+  bufferlist write_data;
+
+  static uint32_t get_fixed_size();
+
+  AioCompareAndWriteEvent() : offset(0), length(0) {
+  }
+  AioCompareAndWriteEvent(uint64_t _offset, uint64_t _length,
+                          const bufferlist &_cmp_data, const bufferlist &_write_data)
+    : offset(_offset), length(_length), cmp_data(_cmp_data), write_data(_write_data) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -106,7 +133,7 @@ struct AioFlushEvent {
   static const EventType TYPE = EVENT_TYPE_AIO_FLUSH;
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -120,7 +147,7 @@ protected:
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -135,7 +162,7 @@ struct OpFinishEvent : public OpEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -154,7 +181,7 @@ protected:
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -169,7 +196,7 @@ struct SnapCreateEvent : public SnapEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -207,7 +234,7 @@ struct SnapRenameEvent : public OpEventBase{
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -252,7 +279,7 @@ struct SnapLimitEvent : public OpEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -283,7 +310,7 @@ struct RenameEvent : public OpEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -299,7 +326,7 @@ struct ResizeEvent : public OpEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -321,7 +348,7 @@ struct DemotePromoteEvent {
     EVENT_TYPE_DEMOTE_PROMOTE);
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -338,7 +365,7 @@ struct UpdateFeaturesEvent : public OpEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -355,7 +382,7 @@ struct MetadataSetEvent : public OpEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -371,7 +398,7 @@ struct MetadataRemoveEvent : public OpEventBase {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -379,30 +406,32 @@ struct UnknownEvent {
   static const EventType TYPE = static_cast<EventType>(-1);
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<AioDiscardEvent,
-                       AioWriteEvent,
-                       AioFlushEvent,
-                       OpFinishEvent,
-                       SnapCreateEvent,
-                       SnapRemoveEvent,
-                       SnapRenameEvent,
-                       SnapProtectEvent,
-                       SnapUnprotectEvent,
-                       SnapRollbackEvent,
-                       RenameEvent,
-                       ResizeEvent,
-                       FlattenEvent,
-                       DemotePromoteEvent,
-		       SnapLimitEvent,
-                       UpdateFeaturesEvent,
-                       MetadataSetEvent,
-                       MetadataRemoveEvent,
-                       AioWriteSameEvent,
-                       UnknownEvent> Event;
+typedef boost::mpl::vector<AioDiscardEvent,
+                           AioWriteEvent,
+                           AioFlushEvent,
+                           OpFinishEvent,
+                           SnapCreateEvent,
+                           SnapRemoveEvent,
+                           SnapRenameEvent,
+                           SnapProtectEvent,
+                           SnapUnprotectEvent,
+                           SnapRollbackEvent,
+                           RenameEvent,
+                           ResizeEvent,
+                           FlattenEvent,
+                           DemotePromoteEvent,
+                           SnapLimitEvent,
+                           UpdateFeaturesEvent,
+                           MetadataSetEvent,
+                           MetadataRemoveEvent,
+                           AioWriteSameEvent,
+                           AioCompareAndWriteEvent,
+                           UnknownEvent> EventVector;
+typedef boost::make_variant_over<EventVector>::type Event;
 
 struct EventEntry {
   static uint32_t get_fixed_size() {
@@ -421,7 +450,7 @@ struct EventEntry {
   EventType get_event_type() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<EventEntry *> &o);
@@ -431,7 +460,7 @@ private:
   static const uint32_t METADATA_FIXED_SIZE = 14; /// version encoding, timestamp
 
   void encode_metadata(bufferlist& bl) const;
-  void decode_metadata(bufferlist::iterator& it);
+  void decode_metadata(bufferlist::const_iterator& it);
 };
 
 // Journal Client data structures
@@ -454,7 +483,7 @@ struct ImageClientMeta {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -489,7 +518,7 @@ struct MirrorPeerSyncPoint {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -500,7 +529,6 @@ enum MirrorPeerState {
 
 struct MirrorPeerClientMeta {
   typedef std::list<MirrorPeerSyncPoint> SyncPoints;
-  typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 
@@ -527,7 +555,7 @@ struct MirrorPeerClientMeta {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -535,7 +563,7 @@ struct CliClientMeta {
   static const ClientMetaType TYPE = CLI_CLIENT_META_TYPE;
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -543,7 +571,7 @@ struct UnknownClientMeta {
   static const ClientMetaType TYPE = static_cast<ClientMetaType>(-1);
 
   void encode(bufferlist& bl) const;
-  void decode(__u8 version, bufferlist::iterator& it);
+  void decode(__u8 version, bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -563,7 +591,7 @@ struct ClientData {
   ClientMetaType get_client_meta_type() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<ClientData *> &o);
@@ -593,7 +621,7 @@ struct TagPredecessor {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 };
 
@@ -618,7 +646,7 @@ struct TagData {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<TagData *> &o);
@@ -647,11 +675,11 @@ struct Listener {
   virtual void handle_resync() = 0;
 };
 
+WRITE_CLASS_ENCODER(EventEntry);
+WRITE_CLASS_ENCODER(ClientData);
+WRITE_CLASS_ENCODER(TagData);
+
 } // namespace journal
 } // namespace librbd
-
-WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
-WRITE_CLASS_ENCODER(librbd::journal::ClientData);
-WRITE_CLASS_ENCODER(librbd::journal::TagData);
 
 #endif // CEPH_LIBRBD_JOURNAL_TYPES_H

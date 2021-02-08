@@ -28,12 +28,12 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
+#define dout_prefix *_dout << "mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->dirfrag() << " " << name << ") "
 
 
 ostream& CDentry::print_db_line_prefix(ostream& out)
 {
-  return out << ceph_clock_now() << " mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
+  return out << ceph_clock_now() << " mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
 
 LockType CDentry::lock_type(CEPH_LOCK_DN);
@@ -83,16 +83,34 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     out << " pv=" << dn.get_projected_version();
   out << " v=" << dn.get_version();
 
-  if (dn.is_auth_pinned())
-    out << " ap=" << dn.get_num_auth_pins() << "+" << dn.get_num_nested_auth_pins();
+  if (dn.get_num_auth_pins()) {
+    out << " ap=" << dn.get_num_auth_pins();
+#ifdef MDS_AUTHPIN_SET
+    dn.print_authpin_set(out);
+#endif
+  }
 
-  out << " inode=" << dn.get_linkage()->get_inode();
+  {
+    const CInode *inode = dn.get_linkage()->get_inode();
+    out << " ino=";
+     if (inode) {
+       out << inode->ino();
+     } else {
+       out << "(nil)";
+     }
+  }
 
-  if (dn.is_new()) out << " state=new";
+  out << " state=" << dn.get_state();
+  if (dn.is_new()) out << "|new";
+  if (dn.state_test(CDentry::STATE_BOTTOMLRU)) out << "|bottomlru";
 
   if (dn.get_num_ref()) {
     out << " |";
     dn.print_pin_set(out);
+  }
+
+  if (dn.get_alternate_name().size()) {
+    out << " altname=" << binstrprint(dn.get_alternate_name(), 16);
   }
 
   out << " " << &dn;
@@ -133,7 +151,7 @@ mds_authority_t CDentry::authority() const
 }
 
 
-void CDentry::add_waiter(uint64_t tag, MDSInternalContextBase *c)
+void CDentry::add_waiter(uint64_t tag, MDSContext *c)
 {
   // wait on the directory?
   if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
@@ -147,7 +165,7 @@ void CDentry::add_waiter(uint64_t tag, MDSInternalContextBase *c)
 version_t CDentry::pre_dirty(version_t min)
 {
   projected_version = dir->pre_dirty(min);
-  dout(10) << " pre_dirty " << *this << dendl;
+  dout(10) << __func__ << " " << *this << dendl;
   return projected_version;
 }
 
@@ -157,9 +175,10 @@ void CDentry::_mark_dirty(LogSegment *ls)
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
-    dir->inc_num_dirty();
     get(PIN_DIRTY);
-    assert(ls);
+    dir->inc_num_dirty();
+    dir->dirty_dentries.push_back(&item_dir_dirty);
+    ceph_assert(ls);
   }
   if (ls) 
     ls->dirty_dentries.push_back(&item_dirty);
@@ -167,39 +186,38 @@ void CDentry::_mark_dirty(LogSegment *ls)
 
 void CDentry::mark_dirty(version_t pv, LogSegment *ls) 
 {
-  dout(10) << " mark_dirty " << *this << dendl;
+  dout(10) << __func__ << " " << *this << dendl;
 
   // i now live in this new dir version
-  assert(pv <= projected_version);
+  ceph_assert(pv <= projected_version);
   version = pv;
   _mark_dirty(ls);
 
   // mark dir too
-  dir->mark_dirty(pv, ls);
+  dir->mark_dirty(ls, pv);
 }
 
 
 void CDentry::mark_clean() 
 {
-  dout(10) << " mark_clean " << *this << dendl;
-  assert(is_dirty());
+  dout(10) << __func__ << " " << *this << dendl;
+  ceph_assert(is_dirty());
 
   // not always true for recalc_auth_bits during resolve finish
   //assert(dir->get_version() == 0 || version <= dir->get_version());  // hmm?
 
-  // state+pin
-  state_clear(STATE_DIRTY);
+  state_clear(STATE_DIRTY|STATE_NEW);
   dir->dec_num_dirty();
-  put(PIN_DIRTY);
-  
+
+  item_dir_dirty.remove_myself();
   item_dirty.remove_myself();
 
-  clear_new();
-}    
+  put(PIN_DIRTY);
+}
 
 void CDentry::mark_new() 
 {
-  dout(10) << " mark_new " << *this << dendl;
+  dout(10) << __func__ << " " << *this << dendl;
   state_set(STATE_NEW);
 }
 
@@ -216,9 +234,9 @@ void CDentry::make_path_string(string& s, bool projected) const
 
 void CDentry::make_path(filepath& fp, bool projected) const
 {
-  assert(dir);
+  ceph_assert(dir);
   dir->inode->make_path(fp, projected);
-  fp.push_dentry(name);
+  fp.push_dentry(get_name());
 }
 
 /*
@@ -228,8 +246,8 @@ void CDentry::make_path(filepath& fp, bool projected) const
  */
 void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 {
-  assert(dnl->is_remote());
-  assert(in->ino() == dnl->get_remote_ino());
+  ceph_assert(dnl->is_remote());
+  ceph_assert(in->ino() == dnl->get_remote_ino());
   dnl->inode = in;
 
   if (dnl == &linkage)
@@ -238,8 +256,8 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 
 void CDentry::unlink_remote(CDentry::linkage_t *dnl)
 {
-  assert(dnl->is_remote());
-  assert(dnl->inode);
+  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->inode);
   
   if (dnl == &linkage)
     dnl->inode->remove_remote_parent(this);
@@ -281,7 +299,7 @@ void CDentry::push_projected_linkage(CInode *inode)
 
 CDentry::linkage_t *CDentry::pop_projected_linkage()
 {
-  assert(projected.size());
+  ceph_assert(projected.size());
   
   linkage_t& n = projected.front();
 
@@ -297,14 +315,16 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);
     }
-  } else if (n.inode) {
-    dir->link_primary_inode(this, n.inode);
-    n.inode->pop_projected_parent();
+  } else {
+    if (n.inode) {
+      dir->link_primary_inode(this, n.inode);
+      n.inode->pop_projected_parent();
+    }
   }
 
-  assert(n.inode == linkage.inode);
-  assert(n.remote_ino == linkage.remote_ino);
-  assert(n.remote_d_type == linkage.remote_d_type);
+  ceph_assert(n.inode == linkage.inode);
+  ceph_assert(n.remote_ino == linkage.remote_ino);
+  ceph_assert(n.remote_d_type == linkage.remote_d_type);
 
   projected.pop_front();
 
@@ -318,16 +338,16 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
 
 int CDentry::get_num_dir_auth_pins() const
 {
-  assert(!is_projected());
+  ceph_assert(!is_projected());
   if (get_linkage()->is_primary())
     return auth_pins + get_linkage()->get_inode()->get_num_auth_pins();
   return auth_pins;
 }
 
-bool CDentry::can_auth_pin() const
+bool CDentry::can_auth_pin(int *err_ret) const
 {
-  assert(dir);
-  return dir->can_auth_pin();
+  ceph_assert(dir);
+  return dir->can_auth_pin(err_ret);
 }
 
 void CDentry::auth_pin(void *by)
@@ -340,11 +360,9 @@ void CDentry::auth_pin(void *by)
   auth_pin_set.insert(by);
 #endif
 
-  dout(10) << "auth_pin by " << by << " on " << *this 
-	   << " now " << auth_pins << "+" << nested_auth_pins
-	   << dendl;
+  dout(10) << "auth_pin by " << by << " on " << *this << " now " << auth_pins << dendl;
 
-  dir->adjust_nested_auth_pins(1, 1, by);
+  dir->adjust_nested_auth_pins(1, by);
 }
 
 void CDentry::auth_unpin(void *by)
@@ -352,32 +370,25 @@ void CDentry::auth_unpin(void *by)
   auth_pins--;
 
 #ifdef MDS_AUTHPIN_SET
-  assert(auth_pin_set.count(by));
-  auth_pin_set.erase(auth_pin_set.find(by));
+  {
+    auto it = auth_pin_set.find(by);
+    ceph_assert(it != auth_pin_set.end());
+    auth_pin_set.erase(it);
+  }
 #endif
 
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
 
-  dout(10) << "auth_unpin by " << by << " on " << *this
-	   << " now " << auth_pins << "+" << nested_auth_pins
-	   << dendl;
-  assert(auth_pins >= 0);
+  dout(10) << "auth_unpin by " << by << " on " << *this << " now " << auth_pins << dendl;
+  ceph_assert(auth_pins >= 0);
 
-  dir->adjust_nested_auth_pins(-1, -1, by);
+  dir->adjust_nested_auth_pins(-1, by);
 }
 
-void CDentry::adjust_nested_auth_pins(int adjustment, int diradj, void *by)
+void CDentry::adjust_nested_auth_pins(int diradj, void *by)
 {
-  nested_auth_pins += adjustment;
-
-  dout(35) << "adjust_nested_auth_pins by " << by 
-	   << ", change " << adjustment << " yields "
-	   << auth_pins << "+" << nested_auth_pins
-	   << dendl;
-  assert(nested_auth_pins >= 0);
-
-  dir->adjust_nested_auth_pins(adjustment, diradj, by);
+  dir->adjust_nested_auth_pins(diradj, by);
 }
 
 bool CDentry::is_frozen() const
@@ -390,32 +401,10 @@ bool CDentry::is_freezing() const
   return dir->is_freezing();
 }
 
-void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
-{
-  __u32 nonce;
-  ::decode(nonce, p);
-  replica_nonce = nonce;
-  
-  ::decode(first, p);
-
-  inodeno_t rino;
-  unsigned char rdtype;
-  __s32 ls;
-  ::decode(rino, p);
-  ::decode(rdtype, p);
-  ::decode(ls, p);
-
-  if (is_new) {
-    if (rino)
-      dir->link_remote_inode(this, rino, rdtype);
-    lock.set_state(ls);
-  }
-}
-
 // ----------------------------
 // locking
 
-void CDentry::set_object_info(MDSCacheObjectInfo &info) 
+void CDentry::set_object_info(MDSCacheObjectInfo &info)
 {
   info.dirfrag = dir->dirfrag();
   info.dname = name;
@@ -424,19 +413,19 @@ void CDentry::set_object_info(MDSCacheObjectInfo &info)
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)
 {
-  ::encode(first, bl);
+  encode(first, bl);
 
   // null, ino, or remote_ino?
   char c;
   if (linkage.is_primary()) {
     c = 1;
-    ::encode(c, bl);
-    ::encode(linkage.get_inode()->inode.ino, bl);
+    encode(c, bl);
+    encode(linkage.get_inode()->ino(), bl);
   }
   else if (linkage.is_remote()) {
     c = 2;
-    ::encode(c, bl);
-    ::encode(linkage.get_remote_ino(), bl);
+    encode(c, bl);
+    encode(linkage.get_remote_ino(), bl);
   }
   else if (linkage.is_null()) {
     // encode nothing.
@@ -444,37 +433,37 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
   else ceph_abort();
 }
 
-void CDentry::decode_lock_state(int type, bufferlist& bl)
+void CDentry::decode_lock_state(int type, const bufferlist& bl)
 {  
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
 
   snapid_t newfirst;
-  ::decode(newfirst, p);
+  decode(newfirst, p);
 
   if (!is_auth() && newfirst != first) {
-    dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
-    assert(newfirst > first);
+    dout(10) << __func__ << " first " << first << " -> " << newfirst << dendl;
+    ceph_assert(newfirst > first);
     first = newfirst;
   }
 
   if (p.end()) {
     // null
-    assert(linkage.is_null());
+    ceph_assert(linkage.is_null());
     return;
   }
 
   char c;
   inodeno_t ino;
-  ::decode(c, p);
+  decode(c, p);
 
   switch (c) {
   case 1:
   case 2:
-    ::decode(ino, p);
+    decode(ino, p);
     // newly linked?
     if (linkage.is_null() && !is_auth()) {
       // force trim from cache!
-      dout(10) << "decode_lock_state replica dentry null -> non-null, must trim" << dendl;
+      dout(10) << __func__ << " replica dentry null -> non-null, must trim" << dendl;
       //assert(get_num_ref() == 0);
     } else {
       // verify?
@@ -493,13 +482,14 @@ ClientLease *CDentry::add_client_lease(client_t c, Session *session)
   if (client_lease_map.count(c))
     l = client_lease_map[c];
   else {
-    dout(20) << "add_client_lease client." << c << " on " << lock << dendl;
-    if (client_lease_map.empty())
+    dout(20) << __func__ << " client." << c << " on " << lock << dendl;
+    if (client_lease_map.empty()) {
       get(PIN_CLIENTLEASE);
+      lock.get_client_lease();
+    }
     l = client_lease_map[c] = new ClientLease(c, this);
     l->seq = ++session->lease_seq;
   
-    lock.get_client_lease();
   }
   
   return l;
@@ -507,22 +497,22 @@ ClientLease *CDentry::add_client_lease(client_t c, Session *session)
 
 void CDentry::remove_client_lease(ClientLease *l, Locker *locker) 
 {
-  assert(l->parent == this);
+  ceph_assert(l->parent == this);
 
   bool gather = false;
 
-  dout(20) << "remove_client_lease client." << l->client << " on " << lock << dendl;
-  lock.put_client_lease();
-  if (lock.get_num_client_lease() == 0 && !lock.is_stable())
-    gather = true;
+  dout(20) << __func__ << " client." << l->client << " on " << lock << dendl;
 
   client_lease_map.erase(l->client);
   l->item_lease.remove_myself();
   l->item_session_lease.remove_myself();
   delete l;
 
-  if (client_lease_map.empty())
+  if (client_lease_map.empty()) {
+    gather = !lock.is_stable();
+    lock.put_client_lease();
     put(PIN_CLIENTLEASE);
+  }
 
   if (gather)
     locker->eval_gather(&lock);
@@ -546,9 +536,40 @@ void CDentry::_put()
   }
 }
 
+void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl)
+{
+  bl.append('l');  // remote link
+
+  // marker, name, ino
+  ENCODE_START(2, 1, bl);
+  encode(ino, bl);
+  encode(d_type, bl);
+  encode(alternate_name, bl);
+  ENCODE_FINISH(bl);
+}
+
+void CDentry::decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
+                            ceph::buffer::list::const_iterator& bl)
+{
+  if (icode == 'l') {
+    DECODE_START(2, bl);
+    decode(ino, bl);
+    decode(d_type, bl);
+    if (struct_v >= 2)
+      decode(alternate_name, bl);
+    DECODE_FINISH(bl);
+  } else if (icode == 'L') {
+    decode(ino, bl);
+    decode(d_type, bl);
+  } else ceph_assert(0);
+}
+
 void CDentry::dump(Formatter *f) const
 {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
 
   filepath path;
   make_path(path);
@@ -578,7 +599,6 @@ void CDentry::dump(Formatter *f) const
   f->dump_unsigned("projected_version", get_projected_version());
 
   f->dump_int("auth_pins", auth_pins);
-  f->dump_int("nested_auth_pins", nested_auth_pins);
 
   MDSCacheObject::dump(f);
 
@@ -618,3 +638,5 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     default: ceph_abort(); return "";
   }
 }
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(CDentry, co_dentry, mds_co);

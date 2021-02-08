@@ -24,18 +24,26 @@ def rados(ctx, remote, cmd, wait=True, check_status=False):
     else:
         return proc
 
-def create_ec_pool(remote, name, profile_name, pgnum, profile={}, cluster_name="ceph"):
+def create_ec_pool(remote, name, profile_name, pgnum, profile={}, cluster_name="ceph", application=None):
     remote.run(args=['sudo', 'ceph'] +
                cmd_erasure_code_profile(profile_name, profile) + ['--cluster', cluster_name])
     remote.run(args=[
         'sudo', 'ceph', 'osd', 'pool', 'create', name,
         str(pgnum), str(pgnum), 'erasure', profile_name, '--cluster', cluster_name
         ])
+    if application:
+        remote.run(args=[
+            'sudo', 'ceph', 'osd', 'pool', 'application', 'enable', name, application, '--cluster', cluster_name
+        ], check_status=False) # may fail as EINVAL when run in jewel upgrade test
 
-def create_replicated_pool(remote, name, pgnum, cluster_name="ceph"):
+def create_replicated_pool(remote, name, pgnum, cluster_name="ceph", application=None):
     remote.run(args=[
         'sudo', 'ceph', 'osd', 'pool', 'create', name, str(pgnum), str(pgnum), '--cluster', cluster_name
         ])
+    if application:
+        remote.run(args=[
+            'sudo', 'ceph', 'osd', 'pool', 'application', 'enable', name, application, '--cluster', cluster_name
+        ], check_status=False)
 
 def create_cache_pool(remote, base_name, cache_name, pgnum, size, cluster_name="ceph"):
     remote.run(args=[
@@ -57,7 +65,7 @@ def cmd_erasure_code_profile(profile_name, profile):
 
     If profile is {}, it is replaced with 
 
-      { 'k': '2', 'm': '1', 'ruleset-failure-domain': 'osd'}
+      { 'k': '2', 'm': '1', 'crush-failure-domain': 'osd'}
 
     for backward compatibility. In previous versions of teuthology,
     these values were hardcoded as function arguments and some yaml
@@ -71,9 +79,9 @@ def cmd_erasure_code_profile(profile_name, profile):
         profile = {
             'k': '2',
             'm': '1',
-            'ruleset-failure-domain': 'osd'
+            'crush-failure-domain': 'osd'
         }
     return [
         'osd', 'erasure-code-profile', 'set',
         profile_name
-        ] + [ str(key) + '=' + str(value) for key, value in profile.iteritems() ]
+        ] + [ str(key) + '=' + str(value) for key, value in profile.items() ]

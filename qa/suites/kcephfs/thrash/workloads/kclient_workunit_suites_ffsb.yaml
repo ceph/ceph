@@ -1,10 +1,12 @@
 overrides:
   ceph:
+    log-whitelist:
+    - SLOW_OPS
+    - slow request
     conf:
       osd:
         filestore flush min: 0
 tasks:
-- kclient:
 - workunit:
     clients:
       all:

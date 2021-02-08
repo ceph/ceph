@@ -17,6 +17,8 @@ if [ -e /lib/lsb/init-functions ]; then
     . /lib/lsb/init-functions
 fi
 
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     # looks like an autotools src dir build
     BINDIR=.
@@ -33,10 +35,10 @@ else
 	LIBEXECDIR=$CEPH_ROOT/src
 	ETCDIR=.
 	ASSUME_DEV=1
-	CEPH_LIB=$CEPH_ROOT/build/lib
-	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
-	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
-	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
+	CEPH_LIB=$CEPH_ROOT/${BUILD_DIR}/lib
+	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_ROOT/src/pybind:$CEPH_LIB/cython_modules/lib.3:$CEPH_ROOT/src/python-common:$PYTHONPATH
+	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$CEPH_ROOT/${BUILD_DIR}/external/lib:$LD_LIBRARY_PATH
+	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$CEPH_ROOT/${BUILD_DIR}/external/lib:$DYLD_LIBRARY_PATH
     else
 	BINDIR=@bindir@
 	SBINDIR=@sbindir@
@@ -141,7 +143,7 @@ stop_daemon() {
 	    cmd=\"kill $signal \$pid\"
 	    printf \"\$cmd...\"
 	    \$cmd
-	    sleep 1
+	    sleep 2
 	    continue
 	done
     fi"
@@ -418,27 +420,6 @@ for name in $what; do
 		fi
 	    fi
 
-	    if [ "$type" = "osd" ]; then
-		get_conf update_crush "" "osd crush update on start"
-		case "${update_crush:-1}" in 1|[Tt][Rr][Uu][Ee])
-		    # update location in crush
-		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
-                   if [ ! -e "$osd_location_hook" ]; then
-                       EXIT_STATUS=2
-                       continue
-                   fi
-		    osd_location=`$osd_location_hook --cluster $cluster --id $id --type osd`
-		    get_conf osd_weight "" "osd crush initial weight"
-		    defaultweight="$(df -P -k $osd_data/. | tail -1 | awk '{ print sprintf("%.4f",$2/1073741824) }')"
-		    get_conf osd_keyring "$osd_data/keyring" "keyring"
-		    do_cmd_okfail "timeout 30 $BINDIR/ceph -c $conf --name=osd.$id --keyring=$osd_keyring osd crush create-or-move -- $id ${osd_weight:-${defaultweight:-1}} $osd_location"
-		    if [ "$ERR" != "0" ]; then
-			EXIT_STATUS=$ERR
-			continue
-		    fi
-		esac
-	    fi
-
 	    echo Starting Ceph $name on $host...
 	    if [ ! -d $run_dir ]; then
 		# assume /var/run exists
@@ -542,14 +523,5 @@ for name in $what; do
 	    ;;
     esac
 done
-
-# activate latent osds?
-if [ "$command" = "start" -a "$BINDIR" != "." ]; then
-    if [ "$*" = "" ] || echo $* | grep -q ^osd\$ ; then
-       if [ -x $SBINDIR/ceph-disk ]; then
-           ceph-disk activate-all
-       fi
-    fi
-fi
 
 exit $EXIT_STATUS

@@ -12,26 +12,34 @@
  *
  */
 
-#include "include/compat.h"
+#include <signal.h>
+#include <unistd.h>
+#ifdef __linux__
+#include <sys/syscall.h>   /* For SYS_xxx definitions */
+#endif
+
+#ifdef WITH_SEASTAR
+#include "crimson/os/alienstore/alien_store.h"
+#endif
+
 #include "common/Thread.h"
 #include "common/code_environment.h"
 #include "common/debug.h"
 #include "common/signal.h"
-#include "common/io_priority.h"
 
-#include <dirent.h>
-#include <errno.h>
-#include <iostream>
-#include <pthread.h>
-
-#include <signal.h>
-#include <sstream>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
 #ifdef HAVE_SCHED
 #include <sched.h>
 #endif
+
+
+pid_t ceph_gettid(void)
+{
+#ifdef __linux__
+  return syscall(SYS_gettid);
+#else
+  return -ENOSYS;
+#endif
+}
 
 static int _set_affinity(int id)
 {
@@ -54,10 +62,7 @@ static int _set_affinity(int id)
 Thread::Thread()
   : thread_id(0),
     pid(0),
-    ioprio_class(-1),
-    ioprio_priority(-1),
-    cpuid(-1),
-    thread_name(NULL)
+    cpuid(-1)
 {
 }
 
@@ -65,7 +70,7 @@ Thread::~Thread()
 {
 }
 
-void *Thread::_entry_func(void *arg) {
+void *Thread::_entry_func(void *arg) noexcept {
   void *r = ((Thread*)arg)->entry_wrapper();
   return r;
 }
@@ -75,17 +80,10 @@ void *Thread::entry_wrapper()
   int p = ceph_gettid(); // may return -ENOSYS on other platforms
   if (p > 0)
     pid = p;
-  if (pid &&
-      ioprio_class >= 0 &&
-      ioprio_priority >= 0) {
-    ceph_ioprio_set(IOPRIO_WHO_PROCESS,
-		    pid,
-		    IOPRIO_PRIO_VALUE(ioprio_class, ioprio_priority));
-  }
   if (pid && cpuid >= 0)
     _set_affinity(cpuid);
 
-  ceph_pthread_setname(pthread_self(), thread_name);
+  ceph_pthread_setname(pthread_self(), thread_name.c_str());
   return entry();
 }
 
@@ -130,6 +128,8 @@ int Thread::try_create(size_t stacksize)
   // the set of signals we want to block.  (It's ok to block signals more
   // signals than usual for a little while-- they will just be delivered to
   // another thread or delieverd to this thread later.)
+
+  #ifndef _WIN32
   sigset_t old_sigset;
   if (g_code_env == CODE_ENVIRONMENT_LIBRARY) {
     block_signals(NULL, &old_sigset);
@@ -140,6 +140,9 @@ int Thread::try_create(size_t stacksize)
   }
   r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
   restore_sigset(&old_sigset);
+  #else
+  r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
+  #endif
 
   if (thread_attr) {
     pthread_attr_destroy(thread_attr);	
@@ -150,7 +153,7 @@ int Thread::try_create(size_t stacksize)
 
 void Thread::create(const char *name, size_t stacksize)
 {
-  assert(strlen(name) < 16);
+  ceph_assert(strlen(name) < 16);
   thread_name = name;
 
   int ret = try_create(stacksize);
@@ -159,14 +162,14 @@ void Thread::create(const char *name, size_t stacksize)
     snprintf(buf, sizeof(buf), "Thread::try_create(): pthread_create "
 	     "failed with error %d", ret);
     dout_emergency(buf);
-    assert(ret == 0);
+    ceph_assert(ret == 0);
   }
 }
 
 int Thread::join(void **prval)
 {
   if (thread_id == 0) {
-    assert("join on thread that was never started" == 0);
+    ceph_abort_msg("join on thread that was never started");
     return -EINVAL;
   }
 
@@ -176,7 +179,7 @@ int Thread::join(void **prval)
     snprintf(buf, sizeof(buf), "Thread::join(): pthread_join "
              "failed with error %d\n", status);
     dout_emergency(buf);
-    assert(status == 0);
+    ceph_assert(status == 0);
   }
 
   thread_id = 0;
@@ -188,18 +191,6 @@ int Thread::detach()
   return pthread_detach(thread_id);
 }
 
-int Thread::set_ioprio(int cls, int prio)
-{
-  // fixme, maybe: this can race with create()
-  ioprio_class = cls;
-  ioprio_priority = prio;
-  if (pid && cls >= 0 && prio >= 0)
-    return ceph_ioprio_set(IOPRIO_WHO_PROCESS,
-			   pid,
-			   IOPRIO_PRIO_VALUE(cls, prio));
-  return 0;
-}
-
 int Thread::set_affinity(int id)
 {
   int r = 0;
@@ -207,4 +198,33 @@ int Thread::set_affinity(int id)
   if (pid && ceph_gettid() == pid)
     r = _set_affinity(id);
   return r;
+}
+
+// Functions for std::thread
+// =========================
+
+void set_thread_name(std::thread& t, const std::string& s) {
+  int r = ceph_pthread_setname(t.native_handle(), s.c_str());
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
+}
+std::string get_thread_name(const std::thread& t) {
+  std::string s(256, '\0');
+
+  int r = ceph_pthread_getname(const_cast<std::thread&>(t).native_handle(),
+			       s.data(), s.length());
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
+  s.resize(std::strlen(s.data()));
+  return s;
+}
+
+void kill(std::thread& t, int signal)
+{
+  auto r = pthread_kill(t.native_handle(), signal);
+  if (r != 0) {
+    throw std::system_error(r, std::generic_category());
+  }
 }

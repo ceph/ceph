@@ -13,31 +13,39 @@
  */
 
 #include <random>
-#include "Compressor.h"
+#include <sstream>
+#include <iterator>
+#include <algorithm>
+
 #include "CompressionPlugin.h"
+#include "Compressor.h"
+#include "include/random.h"
+#include "common/ceph_context.h"
+#include "common/debug.h"
 #include "common/dout.h"
 
-const char * Compressor::get_comp_alg_name(int a) {
-  switch (a) {
-  case COMP_ALG_NONE: return "none";
-  case COMP_ALG_SNAPPY: return "snappy";
-  case COMP_ALG_ZLIB: return "zlib";
-  case COMP_ALG_ZSTD: return "zstd";
-  default: return "???";
-  }
+namespace TOPNSPC {
+
+const char* Compressor::get_comp_alg_name(int a) {
+
+  auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
+		   [a](const auto& kv) { return kv.second == a; });
+
+  if (std::cend(compression_algorithms) == p)
+   return "???"; // It would be nice to revise this...
+
+  return p->first;
 }
 
-boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(const std::string &s) {
-  if (s == "snappy")
-    return COMP_ALG_SNAPPY;
-  if (s == "zlib")
-    return COMP_ALG_ZLIB;
-  if (s == "zstd")
-    return COMP_ALG_ZSTD;
-  if (s == "")
-    return COMP_ALG_NONE;
+boost::optional<Compressor::CompressionAlgorithm>
+Compressor::get_comp_alg_type(std::string_view s) {
 
-  return boost::optional<CompressionAlgorithm>();
+  auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
+		   [&s](const auto& kv) { return kv.first == s; });
+  if (std::cend(compression_algorithms) == p)
+    return {};
+
+  return p->second;
 }
 
 const char *Compressor::get_comp_mode_name(int m) {
@@ -49,7 +57,8 @@ const char *Compressor::get_comp_mode_name(int m) {
     default: return "???";
   }
 }
-boost::optional<Compressor::CompressionMode> Compressor::get_comp_mode_type(const std::string &s) {
+boost::optional<Compressor::CompressionMode>
+Compressor::get_comp_mode_type(std::string_view s) {
   if (s == "force")
     return COMP_FORCE;
   if (s == "aggressive")
@@ -65,16 +74,7 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 {
   // support "random" for teuthology testing
   if (type == "random") {
-    static std::random_device seed;
-    static std::default_random_engine engine(seed());
-    static Spinlock mutex;
-
-    int alg = COMP_ALG_NONE;
-    std::uniform_int_distribution<> dist(0, COMP_ALG_LAST - 1);
-    {
-      std::lock_guard<Spinlock> lock(mutex);
-      alg = dist(engine);
-    }
+    int alg = ceph::util::generate_random_number(0, COMP_ALG_LAST - 1);
     if (alg == COMP_ALG_NONE) {
       return nullptr;
     }
@@ -83,8 +83,8 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 
   CompressorRef cs_impl = NULL;
   std::stringstream ss;
-  PluginRegistry *reg = cct->get_plugin_registry();
-  CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", type));
+  auto reg = cct->get_plugin_registry();
+  auto factory = dynamic_cast<ceph::CompressionPlugin*>(reg->get_with_load("compressor", type));
   if (factory == NULL) {
     lderr(cct) << __func__ << " cannot load compressor of type " << type << dendl;
     return NULL;
@@ -104,3 +104,5 @@ CompressorRef Compressor::create(CephContext *cct, int alg)
   std::string type_name = get_comp_alg_name(alg);
   return create(cct, type_name);
 }
+
+} // namespace TOPNSPC

@@ -16,7 +16,6 @@
 
 #include <iostream>
 #include <sstream>
-using namespace std;
 
 
 #include "common/config.h"
@@ -36,8 +35,8 @@ using namespace std;
 #include <sys/statvfs.h>
 
 #include "common/errno.h"
-#include "include/assert.h"
-#include "include/cephfs/ceph_statx.h"
+#include "include/ceph_assert.h"
+#include "include/cephfs/ceph_ll_client.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_client
@@ -48,7 +47,7 @@ using namespace std;
 //void trace_include(SyntheticClient *syn, Client *cl, string& prefix);
 //void trace_openssh(SyntheticClient *syn, Client *cl, string& prefix);
 
-
+int num_client = 1;
 list<int> syn_modes;
 list<int> syn_iargs;
 list<string> syn_sargs;
@@ -59,6 +58,10 @@ void parse_syn_options(vector<const char*>& args)
   vector<const char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
+    if (strcmp(args[i],"--num-client") == 0) {
+      num_client = atoi(args[++i]);
+      continue;
+    }
     if (strcmp(args[i],"--syn") == 0) {
       ++i;
 
@@ -261,7 +264,7 @@ void parse_syn_options(vector<const char*>& args)
 }
 
 
-SyntheticClient::SyntheticClient(Client *client, int w)
+SyntheticClient::SyntheticClient(StandaloneClient *client, int w)
 {
   this->client = client;
   whoami = w;
@@ -937,17 +940,17 @@ int SyntheticClient::run()
 
 int SyntheticClient::start_thread()
 {
-  assert(!thread_id);
+  ceph_assert(!thread_id);
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
-  assert(thread_id);
+  ceph_assert(thread_id);
   ceph_pthread_setname(thread_id, "client");
   return 0;
 }
 
 int SyntheticClient::join_thread()
 {
-  assert(thread_id);
+  ceph_assert(thread_id);
   void *rv;
   pthread_join(thread_id, &rv);
   return 0;
@@ -1042,8 +1045,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   int n = 0;
 
   // for object traces
-  Mutex lock("synclient foo");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("synclient foo");
+  ceph::condition_variable cond;
   bool ack;
 
   while (!t.end()) {
@@ -1447,14 +1450,13 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t oh = t.get_int();
       int64_t ol = t.get_int();
       object_t oid = file_object_t(oh, ol);
-      lock.Lock();
+      std::unique_lock locker{lock};
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       uint64_t size;
       ceph::real_time mtime;
       client->objecter->stat(oid, oloc, CEPH_NOSNAP, &size, &mtime, 0,
-			     new C_SafeCond(&lock, &cond, &ack));
-      while (!ack) cond.Wait(lock);
-      lock.Unlock();
+			     new C_SafeCond(lock, cond, &ack));
+      cond.wait(locker, [&ack] { return ack; });
     }
     else if (strcmp(op, "o_read") == 0) {
       int64_t oh = t.get_int();
@@ -1463,12 +1465,11 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
-      lock.Lock();
+      std::unique_lock locker{lock};
       bufferlist bl;
       client->objecter->read(oid, oloc, off, len, CEPH_NOSNAP, &bl, 0,
-			     new C_SafeCond(&lock, &cond, &ack));
-      while (!ack) cond.Wait(lock);
-      lock.Unlock();
+			     new C_SafeCond(lock, cond, &ack));
+      cond.wait(locker, [&ack] { return ack; });
     }
     else if (strcmp(op, "o_write") == 0) {
       int64_t oh = t.get_int();
@@ -1477,16 +1478,15 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
-      lock.Lock();
+      std::unique_lock locker{lock};
       bufferptr bp(len);
       bufferlist bl;
       bl.push_back(bp);
       SnapContext snapc;
       client->objecter->write(oid, oloc, off, len, snapc, bl,
 			      ceph::real_clock::now(), 0,
-			      new C_SafeCond(&lock, &cond, &ack));
-      while (!ack) cond.Wait(lock);
-      lock.Unlock();
+			      new C_SafeCond(lock, cond, &ack));
+      cond.wait(locker, [&ack] { return ack; });
     }
     else if (strcmp(op, "o_zero") == 0) {
       int64_t oh = t.get_int();
@@ -1495,13 +1495,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
       object_locator_t oloc(SYNCLIENT_FIRST_POOL);
-      lock.Lock();
+      std::unique_lock locker{lock};
       SnapContext snapc;
       client->objecter->zero(oid, oloc, off, len, snapc,
 			     ceph::real_clock::now(), 0,
-			     new C_SafeCond(&lock, &cond, &ack));
-      while (!ack) cond.Wait(lock);
-      lock.Unlock();
+			     new C_SafeCond(lock, cond, &ack));
+      cond.wait(locker, [&ack] { return ack; });
     }
 
 
@@ -1592,7 +1591,6 @@ int SyntheticClient::full_walk(string& basedir)
   list<frag_info_t> statq;
   dirq.push_back(basedir);
   frag_info_t empty;
-  memset(&empty, 0, sizeof(empty));
   statq.push_back(empty);
 
   ceph::unordered_map<inodeno_t, int> nlink;
@@ -2212,27 +2210,26 @@ int SyntheticClient::read_file(const std::string& fn, int size,
 
 
 class C_Ref : public Context {
-  Mutex& lock;
-  Cond& cond;
+  ceph::mutex& lock;
+  ceph::condition_variable& cond;
   int *ref;
 public:
-  C_Ref(Mutex &l, Cond &c, int *r) : lock(l), cond(c), ref(r) {
-    lock.Lock();
+  C_Ref(ceph::mutex &l, ceph::condition_variable &c, int *r)
+    : lock(l), cond(c), ref(r) {
+    lock_guard locker{lock};
     (*ref)++;
-    lock.Unlock();
   }
   void finish(int) override {
-    lock.Lock();
+    lock_guard locker{lock};
     (*ref)--;
-    cond.Signal();
-    lock.Unlock();
+    cond.notify_all();
   }
 };
 
 int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 {
   // divy up
-  int numc = client->cct->_conf->num_client ? client->cct->_conf->num_client : 1;
+  int numc = num_client ? num_client : 1;
 
   int start, inc, end;
 
@@ -2257,8 +2254,8 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   bufferlist bl;
   bl.push_back(bp);
 
-  Mutex lock("create_objects lock");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("create_objects lock");
+  ceph::condition_variable cond;
   
   int unsafe = 0;
   
@@ -2277,31 +2274,34 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     dout(10) << "writing " << oid << dendl;
 
     starts.push_back(ceph_clock_now());
-    client->client_lock.Lock();
-    client->objecter->write(oid, oloc, 0, osize, snapc, bl,
-			    ceph::real_clock::now(), 0,
-			    new C_Ref(lock, cond, &unsafe));
-    client->client_lock.Unlock();
-
-    lock.Lock();
-    while (unsafe > inflight) {
-      dout(20) << "waiting for " << unsafe << " unsafe" << dendl;
-      cond.Wait(lock);
+    {
+      std::lock_guard locker{client->client_lock};
+      client->objecter->write(oid, oloc, 0, osize, snapc, bl,
+			      ceph::real_clock::now(), 0,
+			      new C_Ref(lock, cond, &unsafe));
     }
-    lock.Unlock();
-
+    {
+      std::unique_lock locker{lock};
+      cond.wait(locker, [&unsafe, inflight, this] {
+        if (unsafe > inflight) {
+	  dout(20) << "waiting for " << unsafe << " unsafe" << dendl;
+	}
+	return unsafe <= inflight;
+      });
+    }
     utime_t lat = ceph_clock_now();
     lat -= starts.front();
     starts.pop_front();
   }
-
-  lock.Lock();
-  while (unsafe > 0) {
-    dout(10) << "waiting for " << unsafe << " unsafe" << dendl;
-    cond.Wait(lock);
+  {
+    std::unique_lock locker{lock};
+    cond.wait(locker, [&unsafe, this] {
+      if (unsafe > 0) {
+	dout(10) << "waiting for " << unsafe << " unsafe" << dendl;
+      }
+      return unsafe <= 0;
+    });
   }
-  lock.Unlock();
-
   dout(5) << "create_objects done" << dendl;
   return 0;
 }
@@ -2339,8 +2339,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     prime += 2;
   }
 
-  Mutex lock("lock");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("lock");
+  ceph::condition_variable cond;
 
   int unack = 0;
 
@@ -2365,7 +2365,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     object_locator_t oloc(SYNCLIENT_FIRST_POOL);
     SnapContext snapc;
     
-    client->client_lock.Lock();
+    client->client_lock.lock();
     utime_t start = ceph_clock_now();
     if (write) {
       dout(10) << "write to " << oid << dendl;
@@ -2386,14 +2386,17 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       client->objecter->read(oid, oloc, 0, osize, CEPH_NOSNAP, &inbl, 0,
 			     new C_Ref(lock, cond, &unack));
     }
-    client->client_lock.Unlock();
+    client->client_lock.unlock();
 
-    lock.Lock();
-    while (unack > 0) {
-      dout(20) << "waiting for " << unack << " unack" << dendl;
-      cond.Wait(lock);
+    {
+      std::unique_lock locker{lock};
+      cond.wait(locker, [&unack, this] {
+	if (unack > 0) {
+	  dout(20) << "waiting for " << unack << " unack" << dendl;
+	}
+	return unack <= 0;
+      });
     }
-    lock.Unlock();
 
     utime_t lat = ceph_clock_now();
     lat -= start;
@@ -2745,7 +2748,7 @@ int SyntheticClient::random_walk(int num_req)
       else {
         r = client->open(get_random_sub(), O_RDONLY, perms);
         if (r > 0) {
-          assert(open_files.count(r) == 0);
+          ceph_assert(open_files.count(r) == 0);
           open_files.insert(r);
         }
       }
@@ -2898,18 +2901,18 @@ void SyntheticClient::foo()
     char buffer[8192]; 
     client->unlink(fn, perms);
     int handle = client->open(fn, O_CREAT|O_RDWR, perms, S_IRWXU);
-    assert(handle>=0);
+    ceph_assert(handle>=0);
     int r=client->write(handle,buffer,8192);
-    assert(r>=0);
+    ceph_assert(r>=0);
     r=client->close(handle);
-    assert(r>=0);
+    ceph_assert(r>=0);
          
     handle = client->open(fn, O_RDWR, perms); // open the same  file, it must have some data already
-    assert(handle>=0);      
+    ceph_assert(handle>=0);      
     r=client->read(handle,buffer,8192);
-    assert(r==8192); //  THIS ASSERTION FAILS with disabled cache
+    ceph_assert(r==8192); //  THIS ASSERTION FAILS with disabled cache
     r=client->close(handle);
-    assert(r>=0);
+    ceph_assert(r>=0);
 
     return;
   }
@@ -3206,7 +3209,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     client->mkdir(base, 0755, process_perms);
 
   ifstream f(find);
-  assert(f.is_open());
+  ceph_assert(f.is_open());
   
   int dirnum = 0;
 
@@ -3235,7 +3238,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     if (filename == ".") continue;
 
     // remove leading ./
-    assert(filename[0] == '.' && filename[1] == '/');
+    ceph_assert(filename[0] == '.' && filename[1] == '/');
     filename = filename.substr(2);
 
     // new leading dir?
@@ -3243,13 +3246,13 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     if (sp < 0) dirnum++;
 
     //dout(0) << "leading dir " << filename << " " << dirnum << dendl;
-    if (dirnum % client->cct->_conf->num_client != client->get_nodeid()) {
+    if (dirnum % num_client != client->get_nodeid()) {
       dout(20) << "skipping leading dir " << dirnum << " " << filename << dendl;
       continue;
     }
 
     // parse the mode
-    assert(modestring.length() == 10);
+    ceph_assert(modestring.length() == 10);
     mode_t mode = 0;
     switch (modestring[0]) {
     case 'd': mode |= S_IFDIR; break;
@@ -3272,7 +3275,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
     if (S_ISLNK(mode)) {
       // target vs destination
       int pos = filename.find(" -> ");
-      assert(pos > 0);
+      ceph_assert(pos > 0);
       string link;
       if (base[0] != '-') {
 	link = base;
@@ -3300,7 +3303,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
 	client->mkdir(f.c_str(), mode, perms);
       } else {
 	int fd = client->open(f.c_str(), O_WRONLY|O_CREAT, perms, mode & 0777);
-	assert(fd > 0);	
+	ceph_assert(fd > 0);	
 	if (data) {
 	  client->write(fd, "", 0, size);
 	} else {
@@ -3354,31 +3357,27 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
 
-
-  inode_t inode;
-  memset(&inode, 0, sizeof(inode));
+  inode_t inode{};
   inode.ino = st.st_ino;
   ret = client->fdescribe_layout(fd, &inode.layout);
-  assert(ret == 0); // otherwise fstat did a bad thing
+  ceph_assert(ret == 0); // otherwise fstat did a bad thing
 
   uint64_t pos = 0;
   bufferlist from_before;
   while (pos < size) {
-    int get = MIN(size-pos, 1048576);
+    int get = std::min<int>(size - pos, 1048576);
 
-    Mutex flock("synclient chunk_file lock");
-    Cond cond;
+    ceph::mutex flock = ceph::make_mutex("synclient chunk_file lock");
+    ceph::condition_variable cond;
     bool done;
     bufferlist bl;
-    
-    flock.Lock();
-    Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-    client->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0,
-			onfinish);
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
-
+    {
+      std::unique_lock locker{flock};
+      Context *onfinish = new C_SafeCond(flock, cond, &done);
+      client->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0,
+			  onfinish);
+      cond.wait(locker, [&done] { return done; });
+    }
     dout(0) << "got " << bl.length() << " bytes at " << pos << dendl;
     
     if (from_before.length()) {

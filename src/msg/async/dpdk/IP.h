@@ -20,19 +20,6 @@
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  *
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_MSG_IP_H_
 #define CEPH_MSG_IP_H_
@@ -131,21 +118,10 @@ class ipv4_tcp final : public ip_protocol {
  public:
   ipv4_tcp(ipv4& inet, EventCenter *c);
   ~ipv4_tcp();
-  virtual void received(Packet p, ipv4_address from, ipv4_address to);
+  virtual void received(Packet p, ipv4_address from, ipv4_address to) override;
   virtual bool forward(forward_hash& out_hash_data, Packet& p, size_t off) override;
   friend class ipv4;
 };
-
-struct icmp_hdr {
-  enum class msg_type : uint8_t {
-    echo_reply = 0,
-    echo_request = 8,
-  };
-  msg_type type;
-  uint8_t code;
-  uint16_t csum;
-  uint32_t rest;
-} __attribute__((packed));
 
 
 class icmp {
@@ -180,7 +156,7 @@ class ipv4_icmp final : public ip_protocol {
   icmp _icmp;
  public:
   ipv4_icmp(CephContext *c, ipv4& inet) : cct(c), _inet_l4(inet), _icmp(c, _inet_l4) {}
-  virtual void received(Packet p, ipv4_address from, ipv4_address to) {
+  virtual void received(Packet p, ipv4_address from, ipv4_address to) override {
     _icmp.received(std::move(p), from, to);
   }
   friend class ipv4;

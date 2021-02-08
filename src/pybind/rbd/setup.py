@@ -7,16 +7,49 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-from distutils.ccompiler import new_compiler
-from distutils.errors import CompileError, LinkError
-from distutils.sysconfig import customize_compiler
-
 if not pkgutil.find_loader('setuptools'):
     from distutils.core import setup
     from distutils.extension import Extension
 else:
     from setuptools import setup
     from setuptools.extension import Extension
+from distutils.ccompiler import new_compiler
+from distutils.errors import CompileError, LinkError
+from itertools import filterfalse, takewhile
+import distutils.sysconfig
+
+
+def filter_unsupported_flags(compiler, flags):
+    args = takewhile(lambda argv: not argv.startswith('-'), [compiler] + flags)
+    if any('clang' in arg for arg in args):
+        return list(filterfalse(lambda f:
+                                f in ('-mcet',
+                                      '-fstack-clash-protection',
+                                      '-fno-var-tracking-assignments',
+                                      '-Wno-deprecated-register',
+                                      '-Wno-gnu-designator') or
+                                f.startswith('-fcf-protection'),
+                                flags))
+    else:
+        return flags
+
+
+def monkey_with_compiler(customize):
+    def patched(compiler):
+        customize(compiler)
+        if compiler.compiler_type != 'unix':
+            return
+        compiler.compiler[1:] = \
+            filter_unsupported_flags(compiler.compiler[0],
+                                     compiler.compiler[1:])
+        compiler.compiler_so[1:] = \
+            filter_unsupported_flags(compiler.compiler_so[0],
+                                     compiler.compiler_so[1:])
+    return patched
+
+
+distutils.sysconfig.customize_compiler = \
+    monkey_with_compiler(distutils.sysconfig.customize_compiler)
 
 # PEP 440 versioning of the RBD package on PyPI
 # Bump this version, after every changeset
@@ -24,39 +57,23 @@ else:
 __version__ = '2.0.0'
 
 
-def get_python_flags():
-    cflags = {'I': [], 'extras': []}
-    ldflags = {'l': [], 'L': [], 'extras': []}
-
-    if os.environ.get('VIRTUAL_ENV', None):
-        python = "python"
-    else:
-        python = 'python' + str(sys.version_info.major) + '.' + str(sys.version_info.minor)
-
-    python_config = python + '-config'
-
-    for cflag in subprocess.check_output(
-            [python_config, "--cflags"]
-    ).strip().decode('utf-8').split():
-        if cflag.startswith('-I'):
-            cflags['I'].append(cflag.replace('-I', ''))
-        else:
-            cflags['extras'].append(cflag)
-
-    for ldflag in subprocess.check_output(
-            [python_config, "--ldflags"]
-    ).strip().decode('utf-8').split():
-        if ldflag.startswith('-l'):
-            ldflags['l'].append(ldflag.replace('-l', ''))
-        if ldflag.startswith('-L'):
-            ldflags['L'].append(ldflag.replace('-L', ''))
-        else:
-            ldflags['extras'].append(ldflag)
-
-    return {
-        'cflags': cflags,
-        'ldflags': ldflags
-    }
+def get_python_flags(libs):
+    py_libs = sum((libs.split() for libs in
+                   distutils.sysconfig.get_config_vars('LIBS', 'SYSLIBS')), [])
+    ldflags = list(filterfalse(lambda lib: lib.startswith('-l'), py_libs))
+    py_libs = [lib.replace('-l', '') for lib in
+               filter(lambda lib: lib.startswith('-l'), py_libs)]
+    compiler = new_compiler()
+    distutils.sysconfig.customize_compiler(compiler)
+    return dict(
+        include_dirs=[distutils.sysconfig.get_python_inc()],
+        library_dirs=distutils.sysconfig.get_config_vars('LIBDIR', 'LIBPL'),
+        libraries=libs + py_libs,
+        extra_compile_args=filter_unsupported_flags(
+            compiler.compiler[0],
+            compiler.compiler[1:] + distutils.sysconfig.get_config_var('CFLAGS').split()),
+        extra_link_args=(distutils.sysconfig.get_config_var('LDFLAGS').split() +
+                         ldflags))
 
 
 def check_sanity():
@@ -85,15 +102,13 @@ def check_sanity():
         fp.write(dummy_prog)
 
     compiler = new_compiler()
-    customize_compiler(compiler)
+    distutils.sysconfig.customize_compiler(compiler)
 
-    if {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}.issubset(set(os.environ.keys())):
+    if 'CEPH_LIBDIR' in os.environ:
         # The setup.py has been invoked by a top-level Ceph make.
         # Set the appropriate CFLAGS and LDFLAGS
-
         compiler.set_include_dirs([os.path.join(CEPH_SRC_DIR, 'include')])
         compiler.set_library_dirs([os.environ.get('CEPH_LIBDIR')])
-
     try:
         compiler.define_macro('_FILE_OFFSET_BITS', '64')
 
@@ -121,10 +136,16 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
-if 'BUILD_DOC' in os.environ.keys():
-    pass
+if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
+    ext_args = {}
+    cython_constants = dict(BUILD_DOC=True)
+    cythonize_args = dict(compile_time_env=cython_constants)
 elif check_sanity():
-    pass
+    ext_args = get_python_flags(['rados', 'rbd'])
+    cython_constants = dict(BUILD_DOC=False)
+    include_path = [os.path.join(os.path.dirname(__file__), "..", "rados")]
+    cythonize_args = dict(compile_time_env=cython_constants,
+                          include_path=include_path)
 else:
     sys.exit(1)
 
@@ -155,8 +176,6 @@ if (len(sys.argv) >= 2 and
     def cythonize(x, **kwargs):
         return x
 
-flags = get_python_flags()
-
 setup(
     name='rbd',
     version=__version__,
@@ -177,16 +196,12 @@ setup(
             Extension(
                 "rbd",
                 [source],
-                include_dirs=flags['cflags']['I'],
-                library_dirs=flags['ldflags']['L'],
-                libraries=['rbd', 'rados'] + flags['ldflags']['l'],
-                extra_compile_args=flags['cflags']['extras'] + flags['ldflags']['extras'],
+                **ext_args
             )
         ],
+        compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
-        include_path=[
-            os.path.join(os.path.dirname(__file__), "..", "rados")
-        ]
+        **cythonize_args
     ),
     classifiers=[
         'Intended Audience :: Developers',
@@ -194,9 +209,7 @@ setup(
         'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
         'Operating System :: POSIX :: Linux',
         'Programming Language :: Cython',
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5'
+        'Programming Language :: Python :: 3'
     ],
     cmdclass=cmdclass,
 )

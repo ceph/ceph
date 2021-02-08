@@ -17,8 +17,7 @@
 #include "common/debug.h"
 
 QueueStrategy::QueueStrategy(int _n_threads)
-  : lock("QueueStrategy::lock"),
-    n_threads(_n_threads),
+  : n_threads(_n_threads),
     stop(false),
     mqueue(),
     disp_threads()
@@ -31,39 +30,36 @@ void QueueStrategy::ds_dispatch(Message *m) {
     msgr->ms_fast_dispatch(m);
     return;
   }
-  lock.Lock();
+  std::lock_guard l{lock};
   mqueue.push_back(*m);
   if (disp_threads.size()) {
     if (! disp_threads.empty()) {
       QSThread *thrd = &disp_threads.front();
       disp_threads.pop_front();
-      thrd->cond.Signal();
+      thrd->cond.notify_all();
     }
   }
-  lock.Unlock();
 }
 
 void QueueStrategy::entry(QSThread *thrd)
 {
-  Message *m = NULL;
   for (;;) {
-    lock.Lock();
+    ref_t<Message> m;
+    std::unique_lock l{lock};
     for (;;) {
       if (! mqueue.empty()) {
-	m = &(mqueue.front());
+	m = ref_t<Message>(&mqueue.front(), false);
 	mqueue.pop_front();
 	break;
       }
-      m = NULL;
       if (stop)
 	break;
       disp_threads.push_front(*thrd);
-      thrd->cond.Wait(lock);
+      thrd->cond.wait(l);
     }
-    lock.Unlock();
+    l.unlock();
     if (stop) {
 	if (!m) break;
-	m->put();
 	continue;
     }
     get_messenger()->ms_deliver_dispatch(m);
@@ -73,44 +69,39 @@ void QueueStrategy::entry(QSThread *thrd)
 void QueueStrategy::shutdown()
 {
   QSThread *thrd;
-  lock.Lock();
+  std::lock_guard l{lock};
   stop = true;
   while (disp_threads.size()) {
     thrd = &(disp_threads.front());
     disp_threads.pop_front();
-    thrd->cond.Signal();
+    thrd->cond.notify_all();
   }
-  lock.Unlock();
 }
 
 void QueueStrategy::wait()
 {
-  QSThread *thrd;
-  lock.Lock();
-  assert(stop);
-  while (disp_threads.size()) {
-    thrd = &(disp_threads.front());
-    disp_threads.pop_front();
-    lock.Unlock();
+  std::unique_lock l{lock};
+  ceph_assert(stop);
+  for (auto& thread : threads) {
+    l.unlock();
 
     // join outside of lock
-    thrd->join();
+    thread->join();
 
-    lock.Lock();
+    l.lock();
   }
-  lock.Unlock();
 }
 
 void QueueStrategy::start()
 {
-  QSThread *thrd;
-  assert(!stop);
-  lock.Lock();
+  ceph_assert(!stop);
+  std::lock_guard l{lock};
+  threads.reserve(n_threads);
   for (int ix = 0; ix < n_threads; ++ix) {
-    string thread_name = "ms_xio_qs_";
+    string thread_name = "ms_qs_";
     thread_name.append(std::to_string(ix));
-    thrd = new QSThread(this);
+    auto thrd = std::make_unique<QSThread>(this);
     thrd->create(thread_name.c_str());
+    threads.emplace_back(std::move(thrd));
   }
-  lock.Unlock();
 }

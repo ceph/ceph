@@ -1,12 +1,18 @@
 overrides:
   ceph:
-    log-whitelist:
+    log-ignorelist:
       - must scrub before tier agent can activate
+    conf:
+      osd:
+        # override short_pg_log_entries.yaml (which sets these under [global])
+        osd_min_pg_log_entries: 3000
+        osd_max_pg_log_entries: 3000
 tasks:
 - exec:
     client.0:
-      - sudo ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd m=1 k=2
-      - sudo ceph osd pool create base 4 4 erasure teuthologyprofile
+      - sudo ceph osd erasure-code-profile set myprofile crush-failure-domain=osd m=2 k=2
+      - sudo ceph osd pool create base 4 4 erasure myprofile
+      - sudo ceph osd pool application enable base rados
       - sudo ceph osd pool set base min_size 2
       - sudo ceph osd pool create cache 4
       - sudo ceph osd tier add base cache

@@ -5,7 +5,7 @@
 #define CEPH_TEST_MEM_RADOS_CLIENT_H
 
 #include "test/librados_test_stub/TestRadosClient.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <list>
 #include <string>
 
@@ -29,8 +29,29 @@ public:
     return m_global_id;
   }
 
+  int get_min_compatible_osd(int8_t* require_osd_release) override {
+    *require_osd_release = CEPH_RELEASE_OCTOPUS;
+    return 0;
+  }
+
+  int get_min_compatible_client(int8_t* min_compat_client,
+                                int8_t* require_min_compat_client) override {
+    *min_compat_client = CEPH_RELEASE_MIMIC;
+    *require_min_compat_client = CEPH_RELEASE_MIMIC;
+    return 0;
+  }
+
   void object_list(int64_t pool_id,
                    std::list<librados::TestRadosClient::Object> *list) override;
+
+  int service_daemon_register(const std::string& service,
+                              const std::string& name,
+                              const std::map<std::string,std::string>& metadata) override {
+    return 0;
+  }
+  int service_daemon_update_status(std::map<std::string,std::string>&& status) override {
+    return 0;
+  }
 
   int pool_create(const std::string &pool_name) override;
   int pool_delete(const std::string &pool_name) override;
@@ -41,8 +62,8 @@ public:
 
   int watch_flush() override;
 
-  bool is_blacklisted() const override;
-  int blacklist_add(const std::string& client_address,
+  bool is_blocklisted() const override;
+  int blocklist_add(const std::string& client_address,
                     uint32_t expire_seconds) override;
 protected:
   TestMemCluster *get_mem_cluster() {
@@ -50,8 +71,10 @@ protected:
   }
 
 protected:
-  void transaction_start(const std::string &oid) override;
-  void transaction_finish(const std::string &oid) override;
+  void transaction_start(const std::string& nspace,
+                         const std::string &oid) override;
+  void transaction_finish(const std::string& nspace,
+                          const std::string &oid) override;
 
 private:
   TestMemCluster *m_mem_cluster;

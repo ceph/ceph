@@ -1,7 +1,9 @@
 /*
  * Ceph string constants
  */
+#include "ceph_strings.h"
 #include "include/types.h"
+#include "include/ceph_features.h"
 
 const char *ceph_entity_type_name(int type)
 {
@@ -13,6 +15,16 @@ const char *ceph_entity_type_name(int type)
 	case CEPH_ENTITY_TYPE_CLIENT: return "client";
 	case CEPH_ENTITY_TYPE_AUTH: return "auth";
 	default: return "unknown";
+	}
+}
+
+const char *ceph_con_mode_name(int con_mode)
+{
+	switch (con_mode) {
+	case CEPH_CON_MODE_UNKNOWN: return "unknown";
+	case CEPH_CON_MODE_CRC: return "crc";
+	case CEPH_CON_MODE_SECURE: return "secure";
+	default: return "???";
 	}
 }
 
@@ -44,9 +56,124 @@ const char *ceph_osd_state_name(int s)
 		return "nearfull";
 	case CEPH_OSD_BACKFILLFULL:
 		return "backfillfull";
+        case CEPH_OSD_DESTROYED:
+                return "destroyed";
+        case CEPH_OSD_NOUP:
+                return "noup";
+        case CEPH_OSD_NODOWN:
+                return "nodown";
+        case CEPH_OSD_NOIN:
+                return "noin";
+        case CEPH_OSD_NOOUT:
+                return "noout";
+        case CEPH_OSD_STOP:
+                return "stop";
 	default:
 		return "???";
-	}	
+	}
+}
+
+const char *ceph_release_name(int r)
+{
+	switch (r) {
+	case CEPH_RELEASE_ARGONAUT:
+		return "argonaut";
+	case CEPH_RELEASE_BOBTAIL:
+		return "bobtail";
+	case CEPH_RELEASE_CUTTLEFISH:
+		return "cuttlefish";
+	case CEPH_RELEASE_DUMPLING:
+		return "dumpling";
+	case CEPH_RELEASE_EMPEROR:
+		return "emperor";
+	case CEPH_RELEASE_FIREFLY:
+		return "firefly";
+	case CEPH_RELEASE_GIANT:
+		return "giant";
+	case CEPH_RELEASE_HAMMER:
+		return "hammer";
+	case CEPH_RELEASE_INFERNALIS:
+		return "infernalis";
+	case CEPH_RELEASE_JEWEL:
+		return "jewel";
+	case CEPH_RELEASE_KRAKEN:
+		return "kraken";
+	case CEPH_RELEASE_LUMINOUS:
+		return "luminous";
+	case CEPH_RELEASE_MIMIC:
+		return "mimic";
+	case CEPH_RELEASE_NAUTILUS:
+		return "nautilus";
+	case CEPH_RELEASE_OCTOPUS:
+		return "octopus";
+	case CEPH_RELEASE_PACIFIC:
+		return "pacific";
+	case CEPH_RELEASE_QUINCY:
+		return "quincy";
+	default:
+		if (r < 0)
+			return "unspecified";
+		return "unknown";
+	}
+}
+
+uint64_t ceph_release_features(int r)
+{
+	uint64_t req = 0;
+
+	req |= CEPH_FEATURE_CRUSH_TUNABLES;
+	if (r <= CEPH_RELEASE_CUTTLEFISH)
+		return req;
+
+	req |= CEPH_FEATURE_CRUSH_TUNABLES2 |
+		CEPH_FEATURE_OSDHASHPSPOOL;
+	if (r <= CEPH_RELEASE_EMPEROR)
+		return req;
+
+	req |= CEPH_FEATURE_CRUSH_TUNABLES3 |
+		CEPH_FEATURE_OSD_PRIMARY_AFFINITY |
+		CEPH_FEATURE_OSD_CACHEPOOL;
+	if (r <= CEPH_RELEASE_GIANT)
+		return req;
+
+	req |= CEPH_FEATURE_CRUSH_V4;
+	if (r <= CEPH_RELEASE_INFERNALIS)
+		return req;
+
+	req |= CEPH_FEATURE_CRUSH_TUNABLES5;
+	if (r <= CEPH_RELEASE_JEWEL)
+		return req;
+
+	req |= CEPH_FEATURE_MSG_ADDR2;
+	if (r <= CEPH_RELEASE_KRAKEN)
+		return req;
+
+	req |= CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS; // and overlaps
+	if (r <= CEPH_RELEASE_LUMINOUS)
+		return req;
+
+	return req;
+}
+
+/* return oldest/first release that supports these features */
+int ceph_release_from_features(uint64_t features)
+{
+	int r = 1;
+	while (true) {
+		uint64_t need = ceph_release_features(r);
+		if ((need & features) != need ||
+		    r == CEPH_RELEASE_MAX) {
+			r--;
+			need = ceph_release_features(r);
+			/* we want the first release that looks like this */
+			while (r > 1 && ceph_release_features(r - 1) == need) {
+				r--;
+			}
+			break;
+		}
+		++r;
+	}
+	return r;
 }
 
 const char *ceph_osd_watch_op_name(int o)
@@ -115,6 +242,8 @@ const char *ceph_mds_state_name(int s)
 	case CEPH_MDS_STATE_CLIENTREPLAY: return "up:clientreplay";
 	case CEPH_MDS_STATE_ACTIVE:     return "up:active";
 	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
+               /* misc */
+	case CEPH_MDS_STATE_NULL:       return "null";
 	}
 	return "???";
 }
@@ -134,6 +263,7 @@ const char *ceph_session_op_name(int op)
 	case CEPH_SESSION_FLUSHMSG_ACK: return "flushmsg_ack";
 	case CEPH_SESSION_FORCE_RO: return "force_ro";
 	case CEPH_SESSION_REJECT: return "reject";
+	case CEPH_SESSION_REQUEST_FLUSH_MDLOG: return "request_flushmdlog";
 	}
 	return "???";
 }
@@ -236,7 +366,7 @@ const char *ceph_pool_op_name(int op)
 	switch (op) {
 	case POOL_OP_CREATE: return "create";
 	case POOL_OP_DELETE: return "delete";
-	case POOL_OP_AUID_CHANGE: return "auid change";
+	case POOL_OP_AUID_CHANGE: return "auid change";  // (obsolete)
 	case POOL_OP_CREATE_SNAP: return "create snap";
 	case POOL_OP_DELETE_SNAP: return "delete snap";
 	case POOL_OP_CREATE_UNMANAGED_SNAP: return "create unmanaged snap";

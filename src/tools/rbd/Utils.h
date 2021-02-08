@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "tools/rbd/ArgumentTypes.h"
+#include <map>
 #include <string>
 #include <boost/program_options.hpp>
 
@@ -46,10 +47,13 @@ static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
 #define RBD_DIFF_ZERO		'z'
 #define RBD_DIFF_END		'e'
 
+#define RBD_SNAP_PROTECTION_STATUS     'p'
+
 #define RBD_EXPORT_IMAGE_ORDER		'O'
 #define RBD_EXPORT_IMAGE_FEATURES	'T'
 #define RBD_EXPORT_IMAGE_STRIPE_UNIT	'U'
 #define RBD_EXPORT_IMAGE_STRIPE_COUNT	'C'
+#define RBD_EXPORT_IMAGE_META		'M'
 #define RBD_EXPORT_IMAGE_END		'E'
 
 enum SnapshotPresence {
@@ -89,60 +93,41 @@ void aio_context_callback(librbd::completion_t completion, void *arg);
 int read_string(int fd, unsigned max, std::string *out);
 
 int extract_spec(const std::string &spec, std::string *pool_name,
-                 std::string *image_name, std::string *snap_name,
-                 SpecValidation spec_validation);
-
-int extract_group_spec(const std::string &spec,
-		       std::string *pool_name,
-		       std::string *group_name);
-
-int extract_image_id_spec(const std::string &spec, std::string *pool_name,
-                          std::string *image_id);
+                 std::string *namespace_name, std::string *name,
+                 std::string *snap_name, SpecValidation spec_validation);
 
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
-std::string get_pool_name(const boost::program_options::variables_map &vm,
-                          size_t *arg_index);
+void normalize_pool_name(std::string* pool_name);
+std::string get_default_pool_name();
+
+int get_pool_and_namespace_names(
+    const boost::program_options::variables_map &vm,
+    bool default_empty_pool_name, bool validate_pool_name,
+    std::string* pool_name, std::string* namespace_name, size_t *arg_index);
 
 int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
-    std::string *pool_name, std::string *image_name, std::string *snap_name,
-    SnapshotPresence snapshot_presence, SpecValidation spec_validation,
-    bool image_required = true);
+    std::string *pool_name, std::string *namespace_name,
+    std::string *image_name, std::string *snap_name, bool image_name_required,
+    SnapshotPresence snapshot_presence, SpecValidation spec_validation);
 
-int get_pool_snapshot_names(const boost::program_options::variables_map &vm,
-                            argument_types::ArgumentModifier mod,
-                            size_t *spec_arg_index, std::string *pool_name,
-                            std::string *snap_name,
-                            SnapshotPresence snapshot_presence,
-                            SpecValidation spec_validation);
-
-int get_special_pool_group_names(const boost::program_options::variables_map &vm,
-				 size_t *arg_index,
-				 std::string *group_pool_name,
-				 std::string *group_name);
-
-int get_special_pool_image_names(const boost::program_options::variables_map &vm,
-				 size_t *arg_index,
-				 std::string *image_pool_name,
-				 std::string *image_name);
-
-int get_pool_image_id(const boost::program_options::variables_map &vm,
-		      size_t *arg_index, std::string *image_pool_name,
-		      std::string *image_id);
-
-int get_pool_group_names(const boost::program_options::variables_map &vm,
-			 argument_types::ArgumentModifier mod,
-			 size_t *spec_arg_index,
-			 std::string *pool_name,
-			 std::string *group_name);
-
-int get_pool_journal_names(
+int get_pool_generic_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
-    std::string *pool_name, std::string *journal_name);
+    const std::string& pool_key, std::string *pool_name,
+    std::string *namespace_name, const std::string& generic_key,
+    const std::string& generic_key_desc, std::string *generic_name,
+    std::string *snap_name, bool generic_name_required,
+    SnapshotPresence snapshot_presence, SpecValidation spec_validation);
+
+int get_pool_image_id(const boost::program_options::variables_map &vm,
+                      size_t *spec_arg_index,
+                      std::string *pool_name,
+                      std::string *namespace_name,
+                      std::string *image_id);
 
 int validate_snapshot_name(argument_types::ArgumentModifier mod,
                            const std::string &snap_name,
@@ -155,22 +140,32 @@ int get_image_options(const boost::program_options::variables_map &vm,
 int get_journal_options(const boost::program_options::variables_map &vm,
 			librbd::ImageOptions *opts);
 
+int get_flatten_option(const boost::program_options::variables_map &vm,
+                       librbd::ImageOptions *opts);
+
 int get_image_size(const boost::program_options::variables_map &vm,
                    uint64_t *size);
 
 int get_path(const boost::program_options::variables_map &vm,
-             const std::string &positional_path, std::string *path);
+             size_t *arg_index, std::string *path);
 
 int get_formatter(const boost::program_options::variables_map &vm,
                   argument_types::Format::Formatter *formatter);
 
+int get_snap_create_flags(const boost::program_options::variables_map &vm,
+                          uint32_t *flags);
+
 void init_context();
 
-int init(const std::string &pool_name, librados::Rados *rados,
-         librados::IoCtx *io_ctx);
+int init_rados(librados::Rados *rados);
 
-int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
-                librados::IoCtx *io_ctx);
+int init(const std::string& pool_name, const std::string& namespace_name,
+         librados::Rados *rados, librados::IoCtx *io_ctx);
+int init_io_ctx(librados::Rados &rados, std::string pool_name,
+                const std::string& namespace_name, librados::IoCtx *io_ctx);
+int set_namespace(const std::string& namespace_name, librados::IoCtx *io_ctx);
+
+void disable_cache();
 
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image);
@@ -179,6 +174,7 @@ int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
                      bool read_only, librbd::Image *image);
 
 int init_and_open_image(const std::string &pool_name,
+                        const std::string &namespace_name,
                         const std::string &image_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,
@@ -194,20 +190,44 @@ void calc_sparse_extent(const bufferptr &bp,
                         size_t *write_length,
 			bool *zeroed);
 
-bool check_if_image_spec_present(const boost::program_options::variables_map &vm,
-                                 argument_types::ArgumentModifier mod,
-                                 size_t spec_arg_index);
+bool is_not_user_snap_namespace(librbd::Image* image,
+                                const librbd::snap_info_t &snap_info);
 
 std::string image_id(librbd::Image& image);
 
-std::string mirror_image_state(librbd::mirror_image_state_t mirror_image_state);
-std::string mirror_image_status_state(librbd::mirror_image_status_state_t state);
-std::string mirror_image_status_state(librbd::mirror_image_status_t status);
+std::string mirror_image_mode(
+    librbd::mirror_image_mode_t mirror_image_mode);
+std::string mirror_image_state(
+    librbd::mirror_image_state_t mirror_image_state);
+std::string mirror_image_status_state(
+    librbd::mirror_image_status_state_t state);
+std::string mirror_image_site_status_state(
+    const librbd::mirror_image_site_status_t& status);
+std::string mirror_image_global_status_state(
+    const librbd::mirror_image_global_status_t& status);
+
+int get_local_mirror_image_status(
+    const librbd::mirror_image_global_status_t& status,
+    librbd::mirror_image_site_status_t* local_status);
 
 std::string timestr(time_t t);
 
 // duplicate here to not include librbd_internal lib
 uint64_t get_rbd_default_features(CephContext* cct);
+
+void get_mirror_peer_sites(
+    librados::IoCtx& io_ctx,
+    std::vector<librbd::mirror_peer_site_t>* mirror_peers);
+void get_mirror_peer_mirror_uuids_to_names(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    std::map<std::string, std::string>* fsid_to_name);
+void populate_unknown_mirror_image_site_statuses(
+    const std::vector<librbd::mirror_peer_site_t>& mirror_peers,
+    librbd::mirror_image_global_status_t* global_status);
+
+int mgr_command(librados::Rados& rados, const std::string& cmd,
+                const std::map<std::string, std::string> &args,
+                std::ostream *out_os, std::ostream *err_os);
 
 } // namespace utils
 } // namespace rbd

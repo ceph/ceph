@@ -8,7 +8,7 @@ from teuthology.orchestra import run
 from teuthology import misc
 from teuthology.exceptions import ConfigError
 from teuthology.task import Task
-from util import get_remote_for_role
+from tasks.util import get_remote_for_role
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ class RBDMirror(Task):
         client: role - ceph client to connect as
         valgrind: [--tool=<valgrind tool>] - none by default
         coverage: bool - whether this run may be collecting coverage data
+        thrash: bool - whether this run may be thrashed
     """
     def __init__(self, ctx, config):
         super(RBDMirror, self).__init__(ctx, config)
@@ -71,7 +72,8 @@ class RBDMirror(Task):
         super(RBDMirror, self).begin()
         testdir = misc.get_testdir(self.ctx)
         daemon_signal = 'kill'
-        if 'coverage' in self.config or 'valgrind' in self.config:
+        if 'coverage' in self.config or 'valgrind' in self.config or \
+                self.config.get('thrash', False):
             daemon_signal = 'term'
 
         args = [
@@ -91,7 +93,7 @@ class RBDMirror(Task):
             )
 
         args.extend([
-            'rbd-mirror',
+            'rbd-mirror', '--foreground',
             '--cluster',
             self.cluster_name,
             '--id',

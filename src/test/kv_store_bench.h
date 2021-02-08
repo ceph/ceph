@@ -18,7 +18,6 @@
 #include "key_value_store/kv_flat_btree_async.h"
 #include "common/Clock.h"
 #include "global/global_context.h"
-#include "common/Mutex.h"
 #include "common/Cond.h"
 
 #include <string>
@@ -117,10 +116,11 @@ protected:
   set<string> key_set;//set of keys already in the data set
   KeyValueStructure * kvs;
   kv_bench_data data;//stores throughput and latency from completed tests
-  Mutex data_lock;
-  Cond op_avail;//signaled when an op completes
+  ceph::mutex data_lock = ceph::make_mutex("data lock");
+  ceph::condition_variable op_avail; // signaled when an op completes
   int ops_in_flight;//number of operations currently in progress
-  Mutex ops_in_flight_lock;
+  ceph::mutex ops_in_flight_lock =
+    ceph::make_mutex("KvStoreBench::ops_in_flight_lock");
   //these are used for cleanup and setup purposes - they are NOT passed to kvs!
   librados::Rados rados;
   string rados_id;

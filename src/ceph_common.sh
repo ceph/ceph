@@ -182,10 +182,14 @@ get_name_list() {
     orig="$*"
 
     # extract list of monitors, mdss, osds, mgrs defined in startup.conf
-    allconf="$local "`$CCONF -c $conf -l mon | egrep -v '^mon$' || true ; \
-	$CCONF -c $conf -l mds | egrep -v '^mds$' || true ; \
-	$CCONF -c $conf -l mgr | egrep -v '^mgr$' || true ; \
-	$CCONF -c $conf -l osd | egrep -v '^osd$' || true`
+    allconf=$(for entity in \
+      $local \
+      `$CCONF -c $conf -l mon | egrep -v '^mon$' || true` \
+      `$CCONF -c $conf -l mds | egrep -v '^mds$' || true` \
+      `$CCONF -c $conf -l mgr | egrep -v '^mgr$' || true` \
+      `$CCONF -c $conf -l osd | egrep -v '^osd$' || true`; do
+      echo $entity
+    done | sort -u)
 
     if [ -z "$orig" ]; then
 	what="$allconf"

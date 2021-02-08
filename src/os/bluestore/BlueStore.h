@@ -20,6 +20,8 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
+#include <ratio>
 #include <mutex>
 #include <condition_variable>
 
@@ -28,32 +30,51 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
+#include <boost/circular_buffer.hpp>
 
-#include "include/assert.h"
+#include "include/cpp-btree/btree_set.h"
+
+#include "include/ceph_assert.h"
+#include "include/interval_set.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "include/mempool.h"
+#include "include/hash.h"
+#include "common/bloom_filter.hpp"
 #include "common/Finisher.h"
+#include "common/ceph_mutex.h"
+#include "common/Throttle.h"
 #include "common/perf_counters.h"
+#include "common/PriorityCache.h"
 #include "compressor/Compressor.h"
 #include "os/ObjectStore.h"
 
 #include "bluestore_types.h"
-#include "BlockDevice.h"
+#include "BlueFS.h"
 #include "common/EventTrace.h"
+
+#ifdef WITH_BLKIN
+#include "common/zipkin_trace.h"
+#endif
 
 class Allocator;
 class FreelistManager;
-class BlueFS;
+class BlueStoreRepairer;
 
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
+
+
+
+// constants for Buffer::optimize()
+#define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
+
 
 enum {
   l_bluestore_first = 732430,
   l_bluestore_kv_flush_lat,
   l_bluestore_kv_commit_lat,
-  l_bluestore_kv_lat,
+  l_bluestore_kv_sync_lat,
+  l_bluestore_kv_final_lat,
   l_bluestore_state_prepare_lat,
   l_bluestore_state_aio_wait_lat,
   l_bluestore_state_io_done_lat,
@@ -86,6 +107,7 @@ enum {
   l_bluestore_compressed_allocated,
   l_bluestore_compressed_original,
   l_bluestore_onodes,
+  l_bluestore_pinned_onodes,
   l_bluestore_onode_hits,
   l_bluestore_onode_misses,
   l_bluestore_onode_shard_hits,
@@ -99,19 +121,33 @@ enum {
   l_bluestore_write_big,
   l_bluestore_write_big_bytes,
   l_bluestore_write_big_blobs,
+  l_bluestore_write_big_deferred,
   l_bluestore_write_small,
   l_bluestore_write_small_bytes,
   l_bluestore_write_small_unused,
-  l_bluestore_write_small_deferred,
+  l_bluestore_write_deferred,
   l_bluestore_write_small_pre_read,
-  l_bluestore_write_small_new,
+  l_bluestore_write_new,
   l_bluestore_txc,
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
   l_bluestore_extent_compress,
   l_bluestore_gc_merged,
+  l_bluestore_read_eio,
+  l_bluestore_reads_with_retries,
+  l_bluestore_fragmentation,
+  l_bluestore_omap_seek_to_first_lat,
+  l_bluestore_omap_upper_bound_lat,
+  l_bluestore_omap_lower_bound_lat,
+  l_bluestore_omap_next_lat,
+  l_bluestore_omap_get_keys_lat,
+  l_bluestore_omap_get_values_lat,
+  l_bluestore_clist_lat,
+  l_bluestore_remove_lat,
   l_bluestore_last
 };
+
+#define META_POOL_ID ((uint64_t)-1ull)
 
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
@@ -120,16 +156,25 @@ class BlueStore : public ObjectStore,
 public:
   // config observer
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
-                                  const std::set<std::string> &changed) override;
+  void handle_conf_change(const ConfigProxy& conf,
+			  const std::set<std::string> &changed) override;
+
+  //handler for discard event
+  void handle_discard(interval_set<uint64_t>& to_release);
 
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
+  int _set_cache_sizes();
+  void _set_max_defer_interval() {
+    max_defer_interval =
+	cct->_conf.get_val<double>("bluestore_max_defer_interval");
+  }
 
-  class TransContext;
+  struct TransContext;
 
-  typedef map<uint64_t, bufferlist> ready_regions_t;
+  typedef std::map<uint64_t, ceph::buffer::list> ready_regions_t;
+
 
   struct BufferSpace;
   struct Collection;
@@ -174,7 +219,7 @@ public:
     uint32_t flags;             ///< FLAG_*
     uint64_t seq;
     uint32_t offset, length;
-    bufferlist data;
+    ceph::buffer::list data;
 
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
@@ -182,7 +227,7 @@ public:
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, uint32_t l,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o), length(l) {}
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, bufferlist& b,
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, ceph::buffer::list& b,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
@@ -202,16 +247,23 @@ public:
     }
 
     void truncate(uint32_t newlen) {
-      assert(newlen < length);
+      ceph_assert(newlen < length);
       if (data.length()) {
-	bufferlist t;
+	ceph::buffer::list t;
 	t.substr_of(data, 0, newlen);
-	data.claim(t);
+	data = std::move(t);
       }
       length = newlen;
     }
+    void maybe_rebuild() {
+      if (data.length() &&
+	  (data.get_num_buffers() > 1 ||
+	   data.front().wasted() > data.length() / MAX_BUFFER_SLOP_RATIO_DEN)) {
+	data.rebuild();
+      }
+    }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->dump_string("state", get_state_name(state));
       f->dump_unsigned("seq", seq);
       f->dump_unsigned("offset", offset);
@@ -220,10 +272,14 @@ public:
     }
   };
 
-  struct Cache;
+  struct BufferCacheShard;
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
+    enum {
+      BYPASS_CLEAN_CACHE = 0x1,  // bypass clean cache
+    };
+
     typedef boost::intrusive::list<
       Buffer,
       boost::intrusive::member_hook<
@@ -231,7 +287,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    mempool::bluestore_meta_other::map<uint32_t, std::unique_ptr<Buffer>>
+    mempool::bluestore_cache_meta::map<uint32_t, std::unique_ptr<Buffer>>
       buffer_map;
 
     // we use a bare intrusive list here instead of std::map because
@@ -240,36 +296,53 @@ public:
     state_list_t writing;   ///< writing buffers, sorted by seq, ascending
 
     ~BufferSpace() {
-      assert(buffer_map.empty());
-      assert(writing.empty());
+      ceph_assert(buffer_map.empty());
+      ceph_assert(writing.empty());
     }
 
-    void _add_buffer(Cache* cache, Buffer *b, int level, Buffer *near) {
+    void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
-        writing.push_back(*b);
+        // we might get already cached data for which resetting mempool is inppropriate
+        // hence calling try_assign_to_mempool
+        b->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
+        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
+          writing.push_back(*b);
+        } else {
+          auto it = writing.begin();
+          while (it->seq < b->seq) {
+            ++it;
+          }
+
+          ceph_assert(it->seq >= b->seq);
+          // note that this will insert b before it
+          // hence the order is maintained
+          writing.insert(it, *b);
+        }
       } else {
-	cache->_add_buffer(b, level, near);
+        b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+        cache->_add(b, level, near);
       }
       cache->_audit("_add_buffer end");
     }
-    void _rm_buffer(Cache* cache, Buffer *b) {
+    void _rm_buffer(BufferCacheShard* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    void _rm_buffer(Cache* cache, map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
-      assert(p != buffer_map.end());
+    void _rm_buffer(BufferCacheShard* cache,
+		    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
+      ceph_assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
         writing.erase(writing.iterator_to(*p->second));
       } else {
-	cache->_rm_buffer(p->second.get());
+	cache->_rm(p->second.get());
       }
       buffer_map.erase(p);
       cache->_audit("_rm_buffer end");
     }
 
-    map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
+    std::map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
       uint32_t offset) {
       auto i = buffer_map.lower_bound(offset);
       if (i != buffer_map.begin()) {
@@ -281,47 +354,52 @@ public:
     }
 
     // must be called under protection of the Cache lock
-    void _clear(Cache* cache);
+    void _clear(BufferCacheShard* cache);
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
-    int discard(Cache* cache, uint32_t offset, uint32_t length) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
-      return _discard(cache, offset, length);
+    int discard(BufferCacheShard* cache, uint32_t offset, uint32_t length) {
+      std::lock_guard l(cache->lock);
+      int ret = _discard(cache, offset, length);
+      cache->_trim();
+      return ret;
     }
-    int _discard(Cache* cache, uint32_t offset, uint32_t length);
+    int _discard(BufferCacheShard* cache, uint32_t offset, uint32_t length);
 
-    void write(Cache* cache, uint64_t seq, uint32_t offset, bufferlist& bl,
+    void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list& bl,
 	       unsigned flags) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      cache->_trim();
     }
-    void finish_write(Cache* cache, uint64_t seq);
-    void did_read(Cache* cache, uint32_t offset, bufferlist& bl) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+    void _finish_write(BufferCacheShard* cache, uint64_t seq);
+    void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
+      std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, 1, nullptr);
+      cache->_trim();
     }
 
-    void read(Cache* cache, uint32_t offset, uint32_t length,
+    void read(BufferCacheShard* cache, uint32_t offset, uint32_t length,
 	      BlueStore::ready_regions_t& res,
-	      interval_set<uint32_t>& res_intervals);
+	      interval_set<uint32_t>& res_intervals,
+	      int flags = 0);
 
-    void truncate(Cache* cache, uint32_t offset) {
+    void truncate(BufferCacheShard* cache, uint32_t offset) {
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
-    void split(Cache* cache, size_t pos, BufferSpace &r);
+    void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
-    void dump(Cache* cache, Formatter *f) const {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+    void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
+      std::lock_guard l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
-	assert(i.first == i.second->offset);
+	ceph_assert(i.first == i.second->offset);
 	i.second->dump(f);
 	f->close_section();
       }
@@ -360,7 +438,8 @@ public:
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
     friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
 
-    friend ostream& operator<<(ostream& out, const SharedBlob& sb);
+    void dump(ceph::Formatter* f) const;
+    friend std::ostream& operator<<(std::ostream& out, const SharedBlob& sb);
 
     void get() {
       ++nref;
@@ -372,12 +451,14 @@ public:
 
     /// put logical references, and get back any released extents
     void put_ref(uint64_t offset, uint32_t length,
-      PExtentVector *r);
+		 PExtentVector *r, bool *unshare);
+
+    void finish_write(uint64_t seq);
 
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
     }
-    inline Cache* get_cache() {
+    inline BufferCacheShard* get_cache() {
       return coll ? coll->cache : nullptr;
     }
     inline SharedBlobSet* get_parent() {
@@ -392,41 +473,51 @@ public:
 
   /// a lookup table of SharedBlobs
   struct SharedBlobSet {
-    std::mutex lock;   ///< protect lookup, insertion, removal
+    /// protect lookup, insertion, removal
+    ceph::mutex lock = ceph::make_mutex("BlueStore::SharedBlobSet::lock");
 
     // we use a bare pointer because we don't want to affect the ref
     // count
-    mempool::bluestore_meta_other::unordered_map<uint64_t,SharedBlob*> sb_map;
+    mempool::bluestore_cache_meta::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       auto p = sb_map.find(sbid);
-      if (p == sb_map.end()) {
+      if (p == sb_map.end() ||
+	  p->second->nref == 0) {
         return nullptr;
       }
       return p->second;
     }
 
     void add(Collection* coll, SharedBlob *sb) {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       sb_map[sb->get_sbid()] = sb;
       sb->coll = coll;
     }
 
-    bool remove(SharedBlob *sb) {
-      std::lock_guard<std::mutex> l(lock);
-      if (sb->nref == 0) {
-	assert(sb->get_parent() == this);
-	sb_map.erase(sb->get_sbid());
-	return true;
+    bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
+      std::lock_guard l(lock);
+      ceph_assert(sb->get_parent() == this);
+      if (verify_nref_is_zero && sb->nref != 0) {
+	return false;
       }
-      return false;
+      // only remove if it still points to us
+      auto p = sb_map.find(sb->get_sbid());
+      if (p != sb_map.end() &&
+	  p->second == sb) {
+	sb_map.erase(p);
+      }
+      return true;
     }
 
     bool empty() {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       return sb_map.empty();
     }
+
+    template <int LogLevelV>
+    void dump(CephContext *cct);
   };
 
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
@@ -443,7 +534,7 @@ public:
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
 #ifdef CACHE_BLOB_BL
-    mutable bufferlist blob_bl;     ///< cached encoded blob, blob is dirty if empty
+    mutable ceph::buffer::list blob_bl;     ///< cached encoded blob, blob is dirty if empty
 #endif
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_blob_use_tracker_t used_in_blob;
@@ -453,7 +544,8 @@ public:
     friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
     friend void intrusive_ptr_release(Blob *b) { b->put(); }
 
-    friend ostream& operator<<(ostream& out, const Blob &b);
+    void dump(ceph::Formatter* f) const;
+    friend std::ostream& operator<<(std::ostream& out, const Blob &b);
 
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
       return used_in_blob;
@@ -470,7 +562,7 @@ public:
     }
 
     bool can_split() const {
-      std::lock_guard<std::recursive_mutex> l(shared_blob->get_cache()->lock);
+      std::lock_guard l(shared_blob->get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
       return shared_blob->bc.writing.empty() &&
              used_in_blob.can_split() &&
@@ -482,7 +574,7 @@ public:
              get_blob().can_split_at(blob_offset);
     }
 
-    bool try_reuse_blob(uint32_t min_alloc_size,
+    bool can_reuse_blob(uint32_t min_alloc_size,
 			uint32_t target_blob_size,
 			uint32_t b_offset,
 			uint32_t *length0);
@@ -495,10 +587,10 @@ public:
 #endif
     }
 
-    const bluestore_blob_t& get_blob() const {
+    inline const bluestore_blob_t& get_blob() const {
       return blob;
     }
-    bluestore_blob_t& dirty_blob() {
+    inline bluestore_blob_t& dirty_blob() {
 #ifdef CACHE_BLOB_BL
       blob_bl.clear();
 #endif
@@ -529,9 +621,9 @@ public:
 #ifdef CACHE_BLOB_BL
     void _encode() const {
       if (blob_bl.length() == 0 ) {
-	::encode(blob, blob_bl);
+	encode(blob, blob_bl);
       } else {
-	assert(blob_bl.length());
+	ceph_assert(blob_bl.length());
       }
     }
     void bound_encode(
@@ -544,7 +636,7 @@ public:
       }
     }
     void encode(
-      bufferlist::contiguous_appender& p,
+      ceph::buffer::list::contiguous_appender& p,
       bool include_ref_map) const {
       _encode();
       p.append(blob_bl);
@@ -554,7 +646,7 @@ public:
     }
     void decode(
       Collection */*coll*/,
-      bufferptr::iterator& p,
+      ceph::buffer::ptr::const_iterator& p,
       bool include_ref_map) {
       const char *start = p.get_pos();
       denc(blob, p);
@@ -580,7 +672,7 @@ public:
       }
     }
     void encode(
-      bufferlist::contiguous_appender& p,
+      ceph::buffer::list::contiguous_appender& p,
       uint64_t struct_v,
       uint64_t sbid,
       bool include_ref_map) const {
@@ -594,14 +686,14 @@ public:
     }
     void decode(
       Collection *coll,
-      bufferptr::iterator& p,
+      ceph::buffer::ptr::const_iterator& p,
       uint64_t struct_v,
       uint64_t* sbid,
       bool include_ref_map);
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_meta_other::map<int,BlobRef> blob_map_t;
+  typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
@@ -630,8 +722,10 @@ public:
       }
     }
 
+    void dump(ceph::Formatter* f) const;
+
     void assign_blob(const BlobRef& b) {
-      assert(!blob);
+      ceph_assert(!blob);
       blob = b;
       blob->shared_blob->get_cache()->add_extent();
     }
@@ -668,7 +762,7 @@ public:
   typedef boost::intrusive::set<Extent> extent_map_t;
 
 
-  friend ostream& operator<<(ostream& out, const Extent& e);
+  friend std::ostream& operator<<(std::ostream& out, const Extent& e);
 
   struct OldExtent {
     boost::intrusive::list_member_hook<> old_extent_item;
@@ -699,6 +793,7 @@ public:
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
     blob_map_t spanning_blob_map;   ///< blobs that span shards
+    typedef boost::intrusive_ptr<Onode> OnodeRef;
 
     struct Shard {
       bluestore_onode_t::shard_info *shard_info = nullptr;
@@ -706,12 +801,15 @@ public:
       bool loaded = false;   ///< true if shard is loaded
       bool dirty = false;    ///< true if shard is dirty and needs reencoding
     };
-    mempool::bluestore_meta_other::vector<Shard> shards;    ///< shards
+    mempool::bluestore_cache_meta::vector<Shard> shards;    ///< shards
 
-    bufferlist inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
+    ceph::buffer::list inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
 
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
+
+    void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
+      uint64_t&, uint64_t&, uint64_t&);
 
     bool needs_reshard() const {
       return needs_reshard_end > needs_reshard_begin;
@@ -744,21 +842,24 @@ public:
       clear_needs_reshard();
     }
 
-    bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
+    void dump(ceph::Formatter* f) const;
+
+    bool encode_some(uint32_t offset, uint32_t length, ceph::buffer::list& bl,
 		     unsigned *pn);
-    unsigned decode_some(bufferlist& bl);
+    unsigned decode_some(ceph::buffer::list& bl);
 
     void bound_encode_spanning_blobs(size_t& p);
-    void encode_spanning_blobs(bufferlist::contiguous_appender& p);
-    void decode_spanning_blobs(bufferptr::iterator& p);
+    void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
+    void decode_spanning_blobs(ceph::buffer::ptr::const_iterator& p);
 
     BlobRef get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
-      assert(p != spanning_blob_map.end());
+      ceph_assert(p != spanning_blob_map.end());
       return p->second;
     }
 
     void update(KeyValueDB::Transaction t, bool force);
+    decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t);
@@ -796,7 +897,7 @@ public:
 	return false;
       }
       int s = seek_shard(offset);
-      assert(s >= 0);
+      ceph_assert(s >= 0);
       if (s == (int)shards.size() - 1) {
 	return false; // last shard
       }
@@ -811,13 +912,10 @@ public:
 		     uint32_t offset, uint32_t length);
 
     /// ensure a range of the map is marked dirty
-    void dirty_range(KeyValueDB::Transaction t,
-		     uint32_t offset, uint32_t length);
+    void dirty_range(uint32_t offset, uint32_t length);
 
+    /// for seek_lextent test
     extent_map_t::iterator find(uint64_t offset);
-
-    /// find a lextent that includes offset
-    extent_map_t::iterator find_lextent(uint64_t offset);
 
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
@@ -866,7 +964,7 @@ public:
   The root cause for old_extents use is the need to handle blob ref counts
   properly. Old extents still hold blob refs and hence we need to traverse
   the collection to determine if blob to be released.
-  Protrusive extents are extents that fit into the blob set in action
+  Protrusive extents are extents that fit into the blob std::set in action
   (ones that are below the logical range from above) but not removed totally
   due to the current write. 
   E.g. for
@@ -897,7 +995,7 @@ public:
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
-    const vector<AllocExtent>& get_extents_to_collect() const {
+    const interval_set<uint64_t>& get_extents_to_collect() const {
       return extents_to_collect;
     }
     GarbageCollector(CephContext* _cct) : cct(_cct) {}
@@ -923,12 +1021,12 @@ public:
       }
     };
     CephContext* cct;
-    map<Blob*, BlobInfo> affected_blobs; ///< compressed blobs and their ref_map
+    std::map<Blob*, BlobInfo> affected_blobs; ///< compressed blobs and their ref_map
                                          ///< copies that are affected by the
                                          ///< specific write
 
-    vector<AllocExtent> extents_to_collect; ///< protrusive extents that should
-                                            ///< be collected if GC takes place
+    ///< protrusive extents that should be collected if GC takes place
+    interval_set<uint64_t> extents_to_collect;
 
     boost::optional<uint64_t > used_alloc_unit; ///< last processed allocation
                                                 ///<  unit when traversing 
@@ -938,7 +1036,7 @@ public:
                                                 ///< (except the case where
                                                 ///< uncompressed extent follows
                                                 ///< compressed one - see below).
-    BlobInfo* blob_info_counted = nullptr; ///< set if previous allocation unit
+    BlobInfo* blob_info_counted = nullptr; ///< std::set if previous allocation unit
                                            ///< caused expected_allocations
 					   ///< counter increment at this blob.
                                            ///< if uncompressed extent follows 
@@ -950,8 +1048,6 @@ public:
     int64_t expected_for_release = 0;      ///< alloc units currently used by
                                            ///< compressed blobs that might
                                            ///< gone after GC
-    uint64_t gc_start_offset;              ///starting offset for GC
-    uint64_t gc_end_offset;                ///ending offset for GC
 
   protected:
     void process_protrusive_extents(const BlueStore::ExtentMap& extent_map, 
@@ -963,82 +1059,205 @@ public:
   };
 
   struct OnodeSpace;
-
   /// an in-memory object
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
 
     std::atomic_int nref;  ///< reference count
     Collection *c;
-
     ghobject_t oid;
 
     /// key under PREFIX_OBJ where we are stored
-    mempool::bluestore_meta_other::string key;
+    mempool::bluestore_cache_meta::string key;
 
     boost::intrusive::list_member_hook<> lru_item;
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
-
+    bool cached;              ///< Onode is logically in the cache
+                              /// (it can be pinned and hence physically out
+                              /// of it at the moment though)
+    bool pinned;              ///< Onode is pinned
+                              /// (or should be pinned when cached)
     ExtentMap extent_map;
 
     // track txc's that have not been committed to kv store (and whose
     // effects cannot be read via the kvdb read methods)
     std::atomic<int> flushing_count = {0};
-    std::mutex flush_lock;  ///< protect flush_txns
-    std::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    std::atomic<int> waiting_count = {0};
+    /// protect flush_txns
+    ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
+    ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
 
     Onode(Collection *c, const ghobject_t& o,
-	  const mempool::bluestore_meta_other::string& k)
+	  const mempool::bluestore_cache_meta::string& k)
       : nref(0),
 	c(c),
 	oid(o),
 	key(k),
 	exists(false),
+        cached(false),
+        pinned(false),
 	extent_map(this) {
     }
+    Onode(Collection* c, const ghobject_t& o,
+      const std::string& k)
+      : nref(0),
+      c(c),
+      oid(o),
+      key(k),
+      exists(false),
+      cached(false),
+      pinned(false),
+      extent_map(this) {
+    }
+    Onode(Collection* c, const ghobject_t& o,
+      const char* k)
+      : nref(0),
+      c(c),
+      oid(o),
+      key(k),
+      exists(false),
+      cached(false),
+      pinned(false),
+      extent_map(this) {
+    }
+
+    static Onode* decode(
+      CollectionRef c,
+      const ghobject_t& oid,
+      const std::string& key,
+      const ceph::buffer::list& v);
+
+    void dump(ceph::Formatter* f) const;
 
     void flush();
-    void get() {
-      ++nref;
+    void get();
+    void put();
+
+    inline bool put_cache() {
+      ceph_assert(!cached);
+      cached = true;
+      return !pinned;
     }
-    void put() {
-      if (--nref == 0)
-	delete this;
+    inline bool pop_cache() {
+      ceph_assert(cached);
+      cached = false;
+      return !pinned;
+    }
+
+    const std::string& get_omap_prefix();
+    void get_omap_header(std::string *out);
+    void get_omap_key(const std::string& key, std::string *out);
+    void rewrite_omap_key(const std::string& old, std::string *out);
+    void get_omap_tail(std::string *out);
+    void decode_omap_key(const std::string& key, std::string *user_key);
+
+    // Return the offset of an object on disk.  This function is intended *only*
+    // for use with zoned storage devices because in these devices, the objects
+    // are laid out contiguously on disk, which is not the case in general.
+    // Also, it should always be called after calling extent_map.fault_range(),
+    // so that the extent map is loaded.
+    int64_t zoned_get_ondisk_starting_offset() const {
+      return extent_map.extent_map.begin()->blob->
+	  get_blob().calc_offset(0, nullptr);
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
-
-  /// a cache (shard) of onodes and buffers
-  struct Cache {
-    CephContext* cct;
+  /// A generic Cache Shard
+  struct CacheShard {
+    CephContext *cct;
     PerfCounters *logger;
-    std::recursive_mutex lock;          ///< protect lru and other structures
 
+    /// protect lru and other structures
+    ceph::recursive_mutex lock = {
+      ceph::make_recursive_mutex("BlueStore::CacheShard::lock") };
+
+    std::atomic<uint64_t> max = {0};
+    std::atomic<uint64_t> num = {0};
+
+    CacheShard(CephContext* cct) : cct(cct), logger(nullptr) {}
+    virtual ~CacheShard() {}
+
+    void set_max(uint64_t max_) {
+      max = max_;
+    }
+
+    uint64_t _get_num() {
+      return num;
+    }
+
+    virtual void _trim_to(uint64_t new_size) = 0;
+    void _trim() {
+      if (cct->_conf->objectstore_blackhole) {
+	// do not trim if we are throwing away IOs a layer down
+	return;
+      }
+      _trim_to(max);
+    }
+
+    void trim() {
+      std::lock_guard l(lock);
+      _trim();    
+    }
+    void flush() {
+      std::lock_guard l(lock);
+      // we should not be shutting down after the blackhole is enabled
+      assert(!cct->_conf->objectstore_blackhole);
+      _trim_to(0);
+    }
+
+#ifdef DEBUG_CACHE
+    virtual void _audit(const char *s) = 0;
+#else
+    void _audit(const char *s) { /* no-op */ }
+#endif
+  };
+
+  /// A Generic onode Cache Shard
+  struct OnodeCacheShard : public CacheShard {
+    std::atomic<uint64_t> num_pinned = {0};
+
+    std::array<std::pair<ghobject_t, ceph::mono_clock::time_point>, 64> dumped_onodes;
+
+    virtual void _pin(Onode* o) = 0;
+    virtual void _unpin(Onode* o) = 0;
+
+  public:
+    OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
+    static OnodeCacheShard *create(CephContext* cct, std::string type,
+                                   PerfCounters *logger);
+    virtual void _add(Onode* o, int level) = 0;
+    virtual void _rm(Onode* o) = 0;
+    virtual void _unpin_and_rm(Onode* o) = 0;
+
+    virtual void move_pinned(OnodeCacheShard *to, Onode *o) = 0;
+    virtual void add_stats(uint64_t *onodes, uint64_t *pinned_onodes) = 0;
+    bool empty() {
+      return _get_num() == 0;
+    }
+  };
+
+  /// A Generic buffer Cache Shard
+  struct BufferCacheShard : public CacheShard {
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
+    uint64_t buffer_bytes = 0;
 
-    size_t last_trim_seq = 0;
+  public:
+    BufferCacheShard(CephContext* cct) : CacheShard(cct) {}
+    static BufferCacheShard *create(CephContext* cct, std::string type, 
+                                    PerfCounters *logger);
+    virtual void _add(Buffer *b, int level, Buffer *near) = 0;
+    virtual void _rm(Buffer *b) = 0;
+    virtual void _move(BufferCacheShard *src, Buffer *b) = 0;
+    virtual void _touch(Buffer *b) = 0;
+    virtual void _adjust_size(Buffer *b, int64_t delta) = 0;
 
-    static Cache *create(CephContext* cct, string type, PerfCounters *logger);
-
-    Cache(CephContext* cct) : cct(cct), logger(nullptr) {}
-    virtual ~Cache() {}
-
-    virtual void _add_onode(OnodeRef& o, int level) = 0;
-    virtual void _rm_onode(OnodeRef& o) = 0;
-    virtual void _touch_onode(OnodeRef& o) = 0;
-
-    virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
-    virtual void _rm_buffer(Buffer *b) = 0;
-    virtual void _move_buffer(Cache *src, Buffer *b) = 0;
-    virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
-    virtual void _touch_buffer(Buffer *b) = 0;
-
-    virtual uint64_t _get_num_onodes() = 0;
-    virtual uint64_t _get_buffer_bytes() = 0;
+    uint64_t _get_bytes() {
+      return buffer_bytes;
+    }
 
     void add_extent() {
       ++num_extents;
@@ -1054,248 +1273,59 @@ public:
       --num_blobs;
     }
 
-    void trim(uint64_t target_bytes, float target_meta_ratio,
-	      float bytes_per_onode);
+    virtual void add_stats(uint64_t *extents,
+                           uint64_t *blobs,
+                           uint64_t *buffers,
+                           uint64_t *bytes) = 0;
 
-    void trim_all();
-
-    virtual void _trim(uint64_t onode_max, uint64_t buffer_max) = 0;
-
-    virtual void add_stats(uint64_t *onodes, uint64_t *extents,
-			   uint64_t *blobs,
-			   uint64_t *buffers,
-			   uint64_t *bytes) = 0;
-
-#ifdef DEBUG_CACHE
-    virtual void _audit(const char *s) = 0;
-#else
-    void _audit(const char *s) { /* no-op */ }
-#endif
-  };
-
-  /// simple LRU cache for onodes and buffers
-  struct LRUCache : public Cache {
-  private:
-    typedef boost::intrusive::list<
-      Onode,
-      boost::intrusive::member_hook<
-        Onode,
-	boost::intrusive::list_member_hook<>,
-	&Onode::lru_item> > onode_lru_list_t;
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_lru_list_t;
-
-    onode_lru_list_t onode_lru;
-
-    buffer_lru_list_t buffer_lru;
-    uint64_t buffer_size = 0;
-
-  public:
-    LRUCache(CephContext* cct) : Cache(cct) {}
-    uint64_t _get_num_onodes() override {
-      return onode_lru.size();
+    bool empty() {
+      std::lock_guard l(lock);
+      return _get_bytes() == 0;
     }
-    void _add_onode(OnodeRef& o, int level) override {
-      if (level > 0)
-	onode_lru.push_front(*o);
-      else
-	onode_lru.push_back(*o);
-    }
-    void _rm_onode(OnodeRef& o) override {
-      auto q = onode_lru.iterator_to(*o);
-      onode_lru.erase(q);
-    }
-    void _touch_onode(OnodeRef& o) override;
-
-    uint64_t _get_buffer_bytes() override {
-      return buffer_size;
-    }
-    void _add_buffer(Buffer *b, int level, Buffer *near) override {
-      if (near) {
-	auto q = buffer_lru.iterator_to(*near);
-	buffer_lru.insert(q, *b);
-      } else if (level > 0) {
-	buffer_lru.push_front(*b);
-      } else {
-	buffer_lru.push_back(*b);
-      }
-      buffer_size += b->length;
-    }
-    void _rm_buffer(Buffer *b) override {
-      assert(buffer_size >= b->length);
-      buffer_size -= b->length;
-      auto q = buffer_lru.iterator_to(*b);
-      buffer_lru.erase(q);
-    }
-    void _move_buffer(Cache *src, Buffer *b) override {
-      src->_rm_buffer(b);
-      _add_buffer(b, 0, nullptr);
-    }
-    void _adjust_buffer_size(Buffer *b, int64_t delta) override {
-      assert((int64_t)buffer_size + delta >= 0);
-      buffer_size += delta;
-    }
-    void _touch_buffer(Buffer *b) override {
-      auto p = buffer_lru.iterator_to(*b);
-      buffer_lru.erase(p);
-      buffer_lru.push_front(*b);
-      _audit("_touch_buffer end");
-    }
-
-    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
-
-    void add_stats(uint64_t *onodes, uint64_t *extents,
-		   uint64_t *blobs,
-		   uint64_t *buffers,
-		   uint64_t *bytes) override {
-      std::lock_guard<std::recursive_mutex> l(lock);
-      *onodes += onode_lru.size();
-      *extents += num_extents;
-      *blobs += num_blobs;
-      *buffers += buffer_lru.size();
-      *bytes += buffer_size;
-    }
-
-#ifdef DEBUG_CACHE
-    void _audit(const char *s) override;
-#endif
-  };
-
-  // 2Q cache for buffers, LRU for onodes
-  struct TwoQCache : public Cache {
-  private:
-    // stick with LRU for onodes for now (fixme?)
-    typedef boost::intrusive::list<
-      Onode,
-      boost::intrusive::member_hook<
-        Onode,
-	boost::intrusive::list_member_hook<>,
-	&Onode::lru_item> > onode_lru_list_t;
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_list_t;
-
-    onode_lru_list_t onode_lru;
-
-    buffer_list_t buffer_hot;      ///< "Am" hot buffers
-    buffer_list_t buffer_warm_in;  ///< "A1in" newly warm buffers
-    buffer_list_t buffer_warm_out; ///< "A1out" empty buffers we've evicted
-    uint64_t buffer_bytes = 0;     ///< bytes
-
-    enum {
-      BUFFER_NEW = 0,
-      BUFFER_WARM_IN,   ///< in buffer_warm_in
-      BUFFER_WARM_OUT,  ///< in buffer_warm_out
-      BUFFER_HOT,       ///< in buffer_hot
-      BUFFER_TYPE_MAX
-    };
-
-    uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
-
-  public:
-    TwoQCache(CephContext* cct) : Cache(cct) {}
-    uint64_t _get_num_onodes() override {
-      return onode_lru.size();
-    }
-    void _add_onode(OnodeRef& o, int level) override {
-      if (level > 0)
-	onode_lru.push_front(*o);
-      else
-	onode_lru.push_back(*o);
-    }
-    void _rm_onode(OnodeRef& o) override {
-      auto q = onode_lru.iterator_to(*o);
-      onode_lru.erase(q);
-    }
-    void _touch_onode(OnodeRef& o) override;
-
-    uint64_t _get_buffer_bytes() override {
-      return buffer_bytes;
-    }
-    void _add_buffer(Buffer *b, int level, Buffer *near) override;
-    void _rm_buffer(Buffer *b) override;
-    void _move_buffer(Cache *src, Buffer *b) override;
-    void _adjust_buffer_size(Buffer *b, int64_t delta) override;
-    void _touch_buffer(Buffer *b) override {
-      switch (b->cache_private) {
-      case BUFFER_WARM_IN:
-	// do nothing (somewhat counter-intuitively!)
-	break;
-      case BUFFER_WARM_OUT:
-	// move from warm_out to hot LRU
-	assert(0 == "this happens via discard hint");
-	break;
-      case BUFFER_HOT:
-	// move to front of hot LRU
-	buffer_hot.erase(buffer_hot.iterator_to(*b));
-	buffer_hot.push_front(*b);
-	break;
-      }
-      _audit("_touch_buffer end");
-    }
-
-    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
-
-    void add_stats(uint64_t *onodes, uint64_t *extents,
-		   uint64_t *blobs,
-		   uint64_t *buffers,
-		   uint64_t *bytes) override {
-      std::lock_guard<std::recursive_mutex> l(lock);
-      *onodes += onode_lru.size();
-      *extents += num_extents;
-      *blobs += num_blobs;
-      *buffers += buffer_hot.size() + buffer_warm_in.size();
-      *bytes += buffer_bytes;
-    }
-
-#ifdef DEBUG_CACHE
-    void _audit(const char *s) override;
-#endif
   };
 
   struct OnodeSpace {
+    OnodeCacheShard *cache;
+
   private:
-    Cache *cache;
-
     /// forward lookups
-    mempool::bluestore_meta_other::unordered_map<ghobject_t,OnodeRef> onode_map;
+    mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
 
-    friend class Collection; // for split_cache()
-
+    friend struct Collection; // for split_cache()
+    friend struct Onode; // for put()
+    friend struct LruOnodeCacheShard;
+    void _remove(const ghobject_t& oid);
   public:
-    OnodeSpace(Cache *c) : cache(c) {}
+    OnodeSpace(OnodeCacheShard *c) : cache(c) {}
     ~OnodeSpace() {
       clear();
     }
 
-    OnodeRef add(const ghobject_t& oid, OnodeRef o);
+    OnodeRef add(const ghobject_t& oid, OnodeRef& o);
     OnodeRef lookup(const ghobject_t& o);
-    void remove(const ghobject_t& oid) {
-      onode_map.erase(oid);
-    }
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
-		const mempool::bluestore_meta_other::string& new_okey);
+		const mempool::bluestore_cache_meta::string& new_okey);
     void clear();
     bool empty();
 
+    template <int LogLevelV>
+    void dump(CephContext *cct);
+
     /// return true if f true for any item
-    bool map_any(std::function<bool(OnodeRef)> f);
+    bool map_any(std::function<bool(Onode*)> f);
   };
+
+  class OpSequencer;
+  using OpSequencerRef = ceph::ref_t<OpSequencer>;
 
   struct Collection : public CollectionImpl {
     BlueStore *store;
-    Cache *cache;       ///< our cache shard
-    coll_t cid;
+    OpSequencerRef osr;
+    BufferCacheShard *cache;       ///< our cache shard
     bluestore_cnode_t cnode;
-    RWLock lock;
+    ceph::shared_mutex lock =
+      ceph::make_shared_mutex("BlueStore::Collection::lock", true, false);
 
     bool exists;
 
@@ -1307,8 +1337,12 @@ public:
 
     //pool options
     pool_opts_t pool_opts;
+    ContextQueue *commit_queue;
 
-    OnodeRef get_onode(const ghobject_t& oid, bool create);
+    OnodeCacheShard* get_onode_cache() const {
+      return onode_map.cache;
+    }
+    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
 
     // the terminology is confusing here, sorry!
     //
@@ -1319,20 +1353,17 @@ public:
     //
     // i.e.,
     //  open = SharedBlob is instantiated
-    //  shared = blob_t shared flag is set; SharedBlob is hashed.
+    //  shared = blob_t shared flag is std::set; SharedBlob is hashed.
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
     void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
     void make_blob_shared(uint64_t sbid, BlobRef b);
+    uint64_t make_blob_unshared(SharedBlob *sb);
 
     BlobRef new_blob() {
       BlobRef b = new Blob();
       b->shared_blob = new SharedBlob(this);
       return b;
-    }
-
-    const coll_t &get_cid() override {
-      return cid;
     }
 
     bool contains(const ghobject_t& oid) {
@@ -1346,35 +1377,138 @@ public:
       return false;
     }
 
-    void split_cache(Collection *dest);
-    void trim_cache();
+    int64_t pool() const {
+      return cid.pool();
+    }
 
-    Collection(BlueStore *ns, Cache *ca, coll_t c);
+    void split_cache(Collection *dest);
+
+    bool flush_commit(Context *c) override;
+    void flush() override;
+    void flush_all_but_last();
+
+    Collection(BlueStore *ns, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t c);
   };
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
     OnodeRef o;
     KeyValueDB::Iterator it;
-    string head, tail;
+    std::string head, tail;
+
+    std::string _stringify() const;
+
   public:
     OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
     int seek_to_first() override;
-    int upper_bound(const string &after) override;
-    int lower_bound(const string &to) override;
+    int upper_bound(const std::string &after) override;
+    int lower_bound(const std::string &to) override;
     bool valid() override;
-    int next(bool validate=true) override;
-    string key() override;
-    bufferlist value() override;
+    int next() override;
+    std::string key() override;
+    ceph::buffer::list value() override;
+    std::string tail_key() override {
+      return tail;
+    }
+
     int status() override {
       return 0;
     }
   };
 
-  class OpSequencer;
-  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+  struct volatile_statfs{
+    enum {
+      STATFS_ALLOCATED = 0,
+      STATFS_STORED,
+      STATFS_COMPRESSED_ORIGINAL,
+      STATFS_COMPRESSED,
+      STATFS_COMPRESSED_ALLOCATED,
+      STATFS_LAST
+    };
+    int64_t values[STATFS_LAST];
+    volatile_statfs() {
+      memset(this, 0, sizeof(volatile_statfs));
+    }
+    void reset() {
+      *this = volatile_statfs();
+    }
+    void publish(store_statfs_t* buf) const {
+      buf->allocated = allocated();
+      buf->data_stored = stored();
+      buf->data_compressed = compressed();
+      buf->data_compressed_original = compressed_original();
+      buf->data_compressed_allocated = compressed_allocated();
+    }
 
-  struct TransContext : public AioContext {
+    volatile_statfs& operator+=(const volatile_statfs& other) {
+      for (size_t i = 0; i < STATFS_LAST; ++i) {
+	values[i] += other.values[i];
+      }
+      return *this;
+    }
+    int64_t& allocated() {
+      return values[STATFS_ALLOCATED];
+    }
+    int64_t& stored() {
+      return values[STATFS_STORED];
+    }
+    int64_t& compressed_original() {
+      return values[STATFS_COMPRESSED_ORIGINAL];
+    }
+    int64_t& compressed() {
+      return values[STATFS_COMPRESSED];
+    }
+    int64_t& compressed_allocated() {
+      return values[STATFS_COMPRESSED_ALLOCATED];
+    }
+    int64_t allocated() const {
+      return values[STATFS_ALLOCATED];
+    }
+    int64_t stored() const {
+      return values[STATFS_STORED];
+    }
+    int64_t compressed_original() const {
+      return values[STATFS_COMPRESSED_ORIGINAL];
+    }
+    int64_t compressed() const {
+      return values[STATFS_COMPRESSED];
+    }
+    int64_t compressed_allocated() const {
+      return values[STATFS_COMPRESSED_ALLOCATED];
+    }
+    volatile_statfs& operator=(const store_statfs_t& st) {
+      values[STATFS_ALLOCATED] = st.allocated;
+      values[STATFS_STORED] = st.data_stored;
+      values[STATFS_COMPRESSED_ORIGINAL] = st.data_compressed_original;
+      values[STATFS_COMPRESSED] = st.data_compressed;
+      values[STATFS_COMPRESSED_ALLOCATED] = st.data_compressed_allocated;
+      return *this;
+    }
+    bool is_empty() {
+      return values[STATFS_ALLOCATED] == 0 &&
+	values[STATFS_STORED] == 0 &&
+	values[STATFS_COMPRESSED] == 0 &&
+	values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
+	values[STATFS_COMPRESSED_ALLOCATED] == 0;
+    }
+    void decode(ceph::buffer::list::const_iterator& it) {
+      using ceph::decode;
+      for (size_t i = 0; i < STATFS_LAST; i++) {
+	decode(values[i], it);
+      }
+    }
+
+    void encode(ceph::buffer::list& bl) {
+      using ceph::encode;
+      for (size_t i = 0; i < STATFS_LAST; i++) {
+	encode(values[i], bl);
+      }
+    }
+  };
+
+  struct TransContext final : public AioContext {
+    MEMPOOL_CLASS_HELPERS();
+
     typedef enum {
       STATE_PREPARE,
       STATE_AIO_WAIT,
@@ -1388,8 +1522,6 @@ public:
       STATE_FINISHING,
       STATE_DONE,
     } state_t;
-
-    state_t state = STATE_PREPARE;
 
     const char *get_state_name() {
       switch (state) {
@@ -1408,7 +1540,7 @@ public:
       return "???";
     }
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_LTTNG)
     const char *get_state_latency_name(int state) {
       switch (state) {
       case l_bluestore_state_prepare_lat: return "prepare";
@@ -1426,111 +1558,87 @@ public:
     }
 #endif
 
-    void log_state_latency(PerfCounters *logger, int state) {
-      utime_t lat, now = ceph_clock_now();
-      lat = now - last_stamp;
-      logger->tinc(state, lat);
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
-      if (state >= l_bluestore_state_prepare_lat && state <= l_bluestore_state_done_lat) {
-        double usecs = (now.to_nsec()-last_stamp.to_nsec())/1000;
-        OID_ELAPSED("", usecs, get_state_latency_name(state));
-      }
+    inline void set_state(state_t s) {
+       state = s;
+#ifdef WITH_BLKIN
+       if (trace) {
+         trace.event(get_state_name());
+       } 
 #endif
-      last_stamp = now;
+    }
+    inline state_t get_state() {
+      return state;
     }
 
-    OpSequencerRef osr;
+    CollectionRef ch;
+    OpSequencerRef osr;  // this should be ch->osr
     boost::intrusive::list_member_hook<> sequencer_item;
 
-    uint64_t bytes = 0, cost = 0;
+    uint64_t bytes = 0, ios = 0, cost = 0;
 
-    set<OnodeRef> onodes;     ///< these need to be updated/written
-    set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
-    set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
+    std::set<OnodeRef> onodes;     ///< these need to be updated/written
+    std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
+
+    // A map from onode to a vector of object offset.  For new objects created
+    // in the transaction we append the new offset to the vector, for
+    // overwritten objects we append the negative of the previous ondisk offset
+    // followed by the new offset, and for truncated objects we append the
+    // negative of the previous ondisk offset.  We need to maintain a vector of
+    // offsets because *within the same transaction* an object may be truncated
+    // and then written again, or an object may be overwritten multiple times to
+    // different zones.  See update_cleaning_metadata function for how this map
+    // is used.
+    std::map<OnodeRef, std::vector<int64_t>> zoned_onode_to_offset_map;
+
+    std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
+    std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
-    Context *oncommit = nullptr;         ///< signal on commit
-    Context *onreadable = nullptr;       ///< signal on readable
-    Context *onreadable_sync = nullptr;  ///< signal on readable
-    list<Context*> oncommits;  ///< more commit completions
-    list<CollectionRef> removed_collections; ///< colls we removed
+    std::list<Context*> oncommits;  ///< more commit completions
+    std::list<CollectionRef> removed_collections; ///< colls we removed
 
     boost::intrusive::list_member_hook<> deferred_queue_item;
     bluestore_deferred_transaction_t *deferred_txn = nullptr; ///< if any
 
     interval_set<uint64_t> allocated, released;
-    struct volatile_statfs{
-      enum {
-        STATFS_ALLOCATED = 0,
-        STATFS_STORED,
-        STATFS_COMPRESSED_ORIGINAL,
-        STATFS_COMPRESSED,
-        STATFS_COMPRESSED_ALLOCATED,
-        STATFS_LAST
-      };
-      int64_t values[STATFS_LAST];
-      volatile_statfs() {
-        memset(this, 0, sizeof(volatile_statfs));
-      }
-      void reset() {
-        *this = volatile_statfs();
-      }
-      int64_t& allocated() {
-        return values[STATFS_ALLOCATED];
-      }
-      int64_t& stored() {
-        return values[STATFS_STORED];
-      }
-      int64_t& compressed_original() {
-        return values[STATFS_COMPRESSED_ORIGINAL];
-      }
-      int64_t& compressed() {
-        return values[STATFS_COMPRESSED];
-      }
-      int64_t& compressed_allocated() {
-        return values[STATFS_COMPRESSED_ALLOCATED];
-      }
-      bool is_empty() {
-        return values[STATFS_ALLOCATED] == 0 &&
-          values[STATFS_STORED] == 0 &&
-          values[STATFS_COMPRESSED] == 0 &&
-          values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
-          values[STATFS_COMPRESSED_ALLOCATED] == 0;
-      }
-      void decode(bufferlist::iterator& it) {
-        for (size_t i = 0; i < STATFS_LAST; i++) {
-          ::decode(values[i], it);
-        }
-      }
-
-      void encode(bufferlist& bl) {
-        for (size_t i = 0; i < STATFS_LAST; i++) {
-          ::encode(values[i], bl);
-        }
-      }
-    } statfs_delta;
-
+    volatile_statfs statfs_delta;	   ///< overall store statistics delta
+    uint64_t osd_pool_id = META_POOL_ID;    ///< osd pool id we're operating on
 
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
-    CollectionRef first_collection;  ///< first referenced collection
-
     uint64_t seq = 0;
-    utime_t start;
-    utime_t last_stamp;
+    ceph::mono_clock::time_point start;
+    ceph::mono_clock::time_point last_stamp;
 
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
-    explicit TransContext(CephContext* cct, OpSequencer *o)
-      : osr(o),
+#if defined(WITH_LTTNG)
+    bool tracing = false;
+#endif
+
+#ifdef WITH_BLKIN
+    ZTracer::Trace trace;
+#endif
+
+    explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
+			  std::list<Context*> *on_commits)
+      : ch(c),
+	osr(o),
 	ioc(cct, this),
-	start(ceph_clock_now()) {
+	start(ceph::mono_clock::now()) {
       last_stamp = start;
+      if (on_commits) {
+	oncommits.swap(*on_commits);
+      }
     }
     ~TransContext() {
+#ifdef WITH_BLKIN
+      if (trace) {
+        trace.event("txc destruct");
+      }
+#endif
       delete deferred_txn;
     }
 
@@ -1540,20 +1648,158 @@ public:
     void write_shared_blob(SharedBlobRef &sb) {
       shared_blobs.insert(sb);
     }
+    void unshare_blob(SharedBlob *sb) {
+      shared_blobs.erase(sb);
+    }
+
     /// note we logically modified object (when onode itself is unmodified)
     void note_modified_object(OnodeRef &o) {
       // onode itself isn't written, though
       modified_objects.insert(o);
     }
-    void removed(OnodeRef& o) {
+    void note_removed_object(OnodeRef& o) {
+      modified_objects.insert(o);
       onodes.erase(o);
-      modified_objects.erase(o);
+    }
+
+    void zoned_note_new_object(OnodeRef &o) {
+      auto [_, ok] = zoned_onode_to_offset_map.emplace(
+	  std::pair<OnodeRef, std::vector<int64_t>>(o, {o->zoned_get_ondisk_starting_offset()}));
+      ceph_assert(ok);
+    }
+
+    void zoned_note_updated_object(OnodeRef &o, int64_t prev_offset) {
+      int64_t new_offset = o->zoned_get_ondisk_starting_offset();
+      auto [it, ok] = zoned_onode_to_offset_map.emplace(
+	  std::pair<OnodeRef, std::vector<int64_t>>(o, {-prev_offset, new_offset}));
+      if (!ok) {
+	it->second.push_back(-prev_offset);
+	it->second.push_back(new_offset);
+      }
+    }
+
+    void zoned_note_truncated_object(OnodeRef &o, int64_t offset) {
+      auto [it, ok] = zoned_onode_to_offset_map.emplace(
+	    std::pair<OnodeRef, std::vector<int64_t>>(o, {-offset}));
+      if (!ok) {
+	it->second.push_back(-offset);
+      }
     }
 
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
     }
+  private:
+    state_t state = STATE_PREPARE;
   };
+
+  class BlueStoreThrottle {
+#if defined(WITH_LTTNG)
+    const std::chrono::time_point<ceph::mono_clock> time_base = ceph::mono_clock::now();
+
+    // Time of last chosen io (microseconds)
+    std::atomic<uint64_t> previous_emitted_tp_time_mono_mcs = {0};
+    std::atomic<uint64_t> ios_started_since_last_traced = {0};
+    std::atomic<uint64_t> ios_completed_since_last_traced = {0};
+
+    std::atomic_uint pending_kv_ios = {0};
+    std::atomic_uint pending_deferred_ios = {0};
+
+    // Min period between trace points (microseconds)
+    std::atomic<uint64_t> trace_period_mcs = {0};
+
+    bool should_trace(
+      uint64_t *started,
+      uint64_t *completed) {
+      uint64_t min_period_mcs = trace_period_mcs.load(
+	std::memory_order_relaxed);
+
+      if (min_period_mcs == 0) {
+	*started = 1;
+	*completed = ios_completed_since_last_traced.exchange(0);
+	return true;
+      } else {
+	ios_started_since_last_traced++;
+	auto now_mcs = ceph::to_microseconds<uint64_t>(
+	  ceph::mono_clock::now() - time_base);
+	uint64_t previous_mcs = previous_emitted_tp_time_mono_mcs;
+	uint64_t period_mcs = now_mcs - previous_mcs;
+	if (period_mcs > min_period_mcs) {
+	  if (previous_emitted_tp_time_mono_mcs.compare_exchange_strong(
+		previous_mcs, now_mcs)) {
+	    // This would be racy at a sufficiently extreme trace rate, but isn't
+	    // worth the overhead of doing it more carefully.
+	    *started = ios_started_since_last_traced.exchange(0);
+	    *completed = ios_completed_since_last_traced.exchange(0);
+	    return true;
+	  }
+	}
+	return false;
+      }
+    }
+#endif
+
+#if defined(WITH_LTTNG)
+    void emit_initial_tracepoint(
+      KeyValueDB &db,
+      TransContext &txc,
+      ceph::mono_clock::time_point);
+#else
+    void emit_initial_tracepoint(
+      KeyValueDB &db,
+      TransContext &txc,
+      ceph::mono_clock::time_point) {}
+#endif
+
+    Throttle throttle_bytes;           ///< submit to commit
+    Throttle throttle_deferred_bytes;  ///< submit to deferred complete
+
+  public:
+    BlueStoreThrottle(CephContext *cct) :
+      throttle_bytes(cct, "bluestore_throttle_bytes", 0),
+      throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes", 0)
+    {
+      reset_throttle(cct->_conf);
+    }
+
+#if defined(WITH_LTTNG)
+    void complete_kv(TransContext &txc);
+    void complete(TransContext &txc);
+#else
+    void complete_kv(TransContext &txc) {}
+    void complete(TransContext &txc) {}
+#endif
+
+    ceph::mono_clock::duration log_state_latency(
+      TransContext &txc, PerfCounters *logger, int state);
+    bool try_start_transaction(
+      KeyValueDB &db,
+      TransContext &txc,
+      ceph::mono_clock::time_point);
+    void finish_start_transaction(
+      KeyValueDB &db,
+      TransContext &txc,
+      ceph::mono_clock::time_point);
+    void release_kv_throttle(uint64_t cost) {
+      throttle_bytes.put(cost);
+    }
+    void release_deferred_throttle(uint64_t cost) {
+      throttle_deferred_bytes.put(cost);
+    }
+    bool should_submit_deferred() {
+      return throttle_deferred_bytes.past_midpoint();
+    }
+    void reset_throttle(const ConfigProxy &conf) {
+      throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
+      throttle_deferred_bytes.reset_max(
+	conf->bluestore_throttle_bytes +
+	conf->bluestore_throttle_deferred_bytes);
+#if defined(WITH_LTTNG)
+      double rate = conf.get_val<double>("bluestore_throttle_trace_rate");
+      trace_period_mcs = rate > 0 ? floor((1/rate) * 1000000.0) : 0;
+#endif
+    }
+  } throttle;
 
   typedef boost::intrusive::list<
     TransContext,
@@ -1562,17 +1808,17 @@ public:
       boost::intrusive::list_member_hook<>,
       &TransContext::deferred_queue_item> > deferred_queue_t;
 
-  struct DeferredBatch : public AioContext {
+  struct DeferredBatch final : public AioContext {
     OpSequencer *osr;
     struct deferred_io {
-      bufferlist bl;    ///< data
+      ceph::buffer::list bl;    ///< data
       uint64_t seq;     ///< deferred transaction seq
     };
-    map<uint64_t,deferred_io> iomap; ///< map of ios in this batch
+    std::map<uint64_t,deferred_io> iomap; ///< map of ios in this batch
     deferred_queue_t txcs;           ///< txcs in this batch
     IOContext ioc;                   ///< our aios
     /// bytes of pending io for each deferred seq (may be 0)
-    map<uint64_t,int> seq_bytes;
+    std::map<uint64_t,int> seq_bytes;
 
     void _discard(CephContext *cct, uint64_t offset, uint64_t length);
     void _audit(CephContext *cct);
@@ -1583,17 +1829,17 @@ public:
     /// prepare a write
     void prepare_write(CephContext *cct,
 		       uint64_t seq, uint64_t offset, uint64_t length,
-		       bufferlist::const_iterator& p);
+		       ceph::buffer::list::const_iterator& p);
 
     void aio_finish(BlueStore *store) override {
       store->_deferred_aio_finish(osr);
     }
   };
 
-  class OpSequencer : public Sequencer_impl {
+  class OpSequencer : public RefCountedObject {
   public:
-    std::mutex qlock;
-    std::condition_variable qcond;
+    ceph::mutex qlock = ceph::make_mutex("BlueStore::OpSequencer::qlock");
+    ceph::condition_variable qcond;
     typedef boost::intrusive::list<
       TransContext,
       boost::intrusive::member_hook<
@@ -1607,8 +1853,10 @@ public:
     DeferredBatch *deferred_running = nullptr;
     DeferredBatch *deferred_pending = nullptr;
 
-    Sequencer *parent;
+    ceph::mutex deferred_lock = ceph::make_mutex("BlueStore::OpSequencer::deferred_lock");
+
     BlueStore *store;
+    coll_t cid;
 
     uint64_t last_seq = 0;
 
@@ -1618,81 +1866,51 @@ public:
 
     std::atomic_int kv_submitted_waiters = {0};
 
-    std::atomic_bool registered = {true}; ///< registered in BlueStore's osr_set
-    std::atomic_bool zombie = {false};    ///< owning Sequencer has gone away
+    std::atomic_bool zombie = {false};    ///< in zombie_osr std::set (collection going away)
 
-    OpSequencer(CephContext* cct, BlueStore *store)
-      : Sequencer_impl(cct),
-	parent(NULL), store(store) {
-      store->register_osr(this);
-    }
-    ~OpSequencer() override {
-      assert(q.empty());
-      _unregister();
-    }
+    const uint32_t sequencer_id;
 
-    void discard() override {
-      // Note that we may have txc's in flight when the parent Sequencer
-      // goes away.  Reflect this with zombie==registered==true and let
-      // _osr_drain_all clean up later.
-      assert(!zombie);
-      zombie = true;
-      parent = nullptr;
-      bool empty;
-      {
-	std::lock_guard<std::mutex> l(qlock);
-	empty = q.empty();
-      }
-      if (empty) {
-	_unregister();
-      }
-    }
-
-    void _unregister() {
-      if (registered) {
-	store->unregister_osr(this);
-	registered = false;
-      }
+    uint32_t get_sequencer_id() const {
+      return sequencer_id;
     }
 
     void queue_new(TransContext *txc) {
-      std::lock_guard<std::mutex> l(qlock);
+      std::lock_guard l(qlock);
       txc->seq = ++last_seq;
       q.push_back(*txc);
     }
 
     void drain() {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
     void drain_preceding(TransContext *txc) {
-      std::unique_lock<std::mutex> l(qlock);
-      while (!q.empty() && &q.front() != txc)
+      std::unique_lock l(qlock);
+      while (&q.front() != txc)
 	qcond.wait(l);
     }
 
     bool _is_all_kv_submitted() {
-      // caller must hold qlock
-      if (q.empty()) {
-	return true;
-      }
+      // caller must hold qlock & q.empty() must not empty
+      ceph_assert(!q.empty());
       TransContext *txc = &q.back();
-      if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
+      if (txc->get_state() >= TransContext::STATE_KV_SUBMITTED) {
 	return true;
       }
       return false;
     }
 
-    void flush() override {
-      std::unique_lock<std::mutex> l(qlock);
+    void flush() {
+      std::unique_lock l(qlock);
       while (true) {
-	// set flag before the check because the condition
+	// std::set flag before the check because the condition
 	// may become true outside qlock, and we need to make
 	// sure those threads see waiters and signal qcond.
 	++kv_submitted_waiters;
-	if (_is_all_kv_submitted()) {
+	if (q.empty() || _is_all_kv_submitted()) {
+	  --kv_submitted_waiters;
 	  return;
 	}
 	qcond.wait(l);
@@ -1700,17 +1918,50 @@ public:
       }
     }
 
-    bool flush_commit(Context *c) override {
-      std::lock_guard<std::mutex> l(qlock);
+    void flush_all_but_last() {
+      std::unique_lock l(qlock);
+      assert (q.size() >= 1);
+      while (true) {
+	// std::set flag before the check because the condition
+	// may become true outside qlock, and we need to make
+	// sure those threads see waiters and signal qcond.
+	++kv_submitted_waiters;
+	if (q.size() <= 1) {
+	  --kv_submitted_waiters;
+	  return;
+	} else {
+	  auto it = q.rbegin();
+	  it++;
+	  if (it->get_state() >= TransContext::STATE_KV_SUBMITTED) {
+	    --kv_submitted_waiters;
+	    return;
+          }
+	}
+	qcond.wait(l);
+	--kv_submitted_waiters;
+      }
+      }
+
+    bool flush_commit(Context *c) {
+      std::lock_guard l(qlock);
       if (q.empty()) {
 	return true;
       }
       TransContext *txc = &q.back();
-      if (txc->state >= TransContext::STATE_KV_DONE) {
+      if (txc->get_state() >= TransContext::STATE_KV_DONE) {
 	return true;
       }
       txc->oncommits.push_back(c);
       return false;
+    }
+  private:
+    FRIEND_MAKE_REF(OpSequencer);
+    OpSequencer(BlueStore *store, uint32_t sequencer_id, const coll_t& c)
+      : RefCountedObject(store->cct),
+	store(store), cid(c), sequencer_id(sequencer_id) {
+    }
+    ~OpSequencer() {
+      ceph_assert(q.empty());
     }
   };
 
@@ -1729,6 +1980,22 @@ public:
       return NULL;
     }
   };
+  struct KVFinalizeThread : public Thread {
+    BlueStore *store;
+    explicit KVFinalizeThread(BlueStore *s) : store(s) {}
+    void *entry() override {
+      store->_kv_finalize_thread();
+      return NULL;
+    }
+  };
+  struct ZonedCleanerThread : public Thread {
+    BlueStore *store;
+    explicit ZonedCleanerThread(BlueStore *s) : store(s) {}
+    void *entry() override {
+      store->_zoned_cleaner_thread();
+      return nullptr;
+    }
+  };
 
   struct DBHistogram {
     struct value_dist {
@@ -1739,84 +2006,125 @@ public:
     struct key_dist {
       uint64_t count;
       uint32_t max_len;
-      map<int, struct value_dist> val_map; ///< slab id to count, max length of value and key
+      std::map<int, struct value_dist> val_map; ///< slab id to count, max length of value and key
     };
 
-    map<string, map<int, struct key_dist> > key_hist;
-    map<int, uint64_t> value_hist;
+    std::map<std::string, std::map<int, struct key_dist> > key_hist;
+    std::map<int, uint64_t> value_hist;
     int get_key_slab(size_t sz);
-    string get_key_slab_to_range(int slab);
+    std::string get_key_slab_to_range(int slab);
     int get_value_slab(size_t sz);
-    string get_value_slab_to_range(int slab);
-    void update_hist_entry(map<string, map<int, struct key_dist> > &key_hist,
-			  const string &prefix, size_t key_size, size_t value_size);
-    void dump(Formatter *f);
+    std::string get_value_slab_to_range(int slab);
+    void update_hist_entry(std::map<std::string, std::map<int, struct key_dist> > &key_hist,
+			  const std::string &prefix, size_t key_size, size_t value_size);
+    void dump(ceph::Formatter *f);
+  };
+
+  struct BigDeferredWriteContext {
+    uint64_t off = 0;     // original logical offset
+    uint32_t b_off = 0;   // blob relative offset
+    uint32_t used = 0;
+    uint64_t head_read = 0;
+    uint64_t tail_read = 0;
+    BlobRef blob_ref;
+    uint64_t blob_start = 0;
+    PExtentVector res_extents;
+
+    inline uint64_t blob_aligned_len() const {
+      return used + head_read + tail_read;
+    }
+
+    bool can_defer(BlueStore::extent_map_t::iterator ep,
+      uint64_t prefer_deferred_size,
+      uint64_t block_size,
+      uint64_t offset,
+      uint64_t l);
+    bool apply_defer();
   };
 
   // --------------------------------------------------------
   // members
 private:
   BlueFS *bluefs = nullptr;
-  unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
-  bool bluefs_single_shared_device = true;
-  utime_t bluefs_last_balance;
+  bluefs_layout_t bluefs_layout;
+  utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
-  Allocator *alloc = nullptr;
+
+  bluefs_shared_alloc_context_t shared_alloc;
+
   uuid_d fsid;
   int path_fd = -1;  ///< open handle to $path
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
   bool mounted = false;
 
-  RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
-  mempool::bluestore_meta_other::unordered_map<coll_t, CollectionRef> coll_map;
+  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");  ///< rwlock to protect coll_map
+  mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
+  bool collections_had_errors = false;
+  std::map<coll_t,CollectionRef> new_coll_map;
 
-  vector<Cache*> cache_shards;
+  std::vector<OnodeCacheShard*> onode_cache_shards;
+  std::vector<BufferCacheShard*> buffer_cache_shards;
 
-  std::mutex osr_lock;              ///< protect osd_set
-  std::set<OpSequencerRef> osr_set; ///< set of all OpSequencers
+  /// protect zombie_osr_set
+  ceph::mutex zombie_osr_lock = ceph::make_mutex("BlueStore::zombie_osr_lock");
+  uint32_t next_sequencer_id = 0;
+  std::map<coll_t,OpSequencerRef> zombie_osr_set; ///< std::set of OpSequencers for deleted collections
 
   std::atomic<uint64_t> nid_last = {0};
   std::atomic<uint64_t> nid_max = {0};
   std::atomic<uint64_t> blobid_last = {0};
   std::atomic<uint64_t> blobid_max = {0};
 
-  Throttle throttle_bytes;          ///< submit to commit
-  Throttle throttle_deferred_bytes;  ///< submit to deferred complete
-
-  interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
-  interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
-
-  std::mutex deferred_lock;
+  ceph::mutex deferred_lock = ceph::make_mutex("BlueStore::deferred_lock");
+  ceph::mutex atomic_alloc_and_submit_lock =
+      ceph::make_mutex("BlueStore::atomic_alloc_and_submit_lock");
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
-  int deferred_queue_size = 0;         ///< num txc's queued across all osrs
-  atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
-
-  int m_finisher_num = 1;
-  vector<Finisher*> finishers;
+  std::atomic_int deferred_queue_size = {0};         ///< num txc's queued across all osrs
+  std::atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
+  Finisher  finisher;
+  utime_t  deferred_last_submitted = utime_t();
 
   KVSyncThread kv_sync_thread;
-  std::mutex kv_lock;
-  std::condition_variable kv_cond;
+  ceph::mutex kv_lock = ceph::make_mutex("BlueStore::kv_lock");
+  ceph::condition_variable kv_cond;
+  bool _kv_only = false;
+  bool kv_sync_started = false;
   bool kv_stop = false;
-  deque<TransContext*> kv_queue;             ///< ready, already submitted
-  deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
-  deque<TransContext*> kv_committing;        ///< currently syncing
-  deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
-  deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
+  bool kv_finalize_started = false;
+  bool kv_finalize_stop = false;
+  std::deque<TransContext*> kv_queue;             ///< ready, already submitted
+  std::deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
+  std::deque<TransContext*> kv_committing;        ///< currently syncing
+  std::deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
+  bool kv_sync_in_progress = false;
+
+  KVFinalizeThread kv_finalize_thread;
+  ceph::mutex kv_finalize_lock = ceph::make_mutex("BlueStore::kv_finalize_lock");
+  ceph::condition_variable kv_finalize_cond;
+  std::deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
+  std::deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
+  bool kv_finalize_in_progress = false;
+
+  ZonedCleanerThread zoned_cleaner_thread;
+  ceph::mutex zoned_cleaner_lock = ceph::make_mutex("BlueStore::zoned_cleaner_lock");
+  ceph::condition_variable zoned_cleaner_cond;
+  bool zoned_cleaner_started = false;
+  bool zoned_cleaner_stop = false;
+  std::deque<uint64_t> zoned_cleaner_queue;
 
   PerfCounters *logger = nullptr;
 
-  std::mutex reap_lock;
-  list<CollectionRef> removed_collections;
+  std::list<CollectionRef> removed_collections;
 
-  RWLock debug_read_error_lock = {"BlueStore::debug_read_error_lock"};
-  set<ghobject_t> debug_data_error_objects;
-  set<ghobject_t> debug_mdata_error_objects;
+  ceph::shared_mutex debug_read_error_lock =
+    ceph::make_shared_mutex("BlueStore::debug_read_error_lock");
+  std::set<ghobject_t> debug_data_error_objects;
+  std::set<ghobject_t> debug_mdata_error_objects;
 
   std::atomic<int> csum_type = {Checksummer::CSUM_CRC32C};
 
@@ -1824,68 +2132,214 @@ private:
   uint64_t block_mask = 0;     ///< mask to get just the block offset
   size_t block_size_order = 0; ///< bits to shift to get block size
 
-  uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  int deferred_batch_ops = 0; ///< deferred batch size
-
+  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
   ///< bits for min_alloc_size
-  std::atomic<uint8_t> min_alloc_size_order = {0};
+  uint8_t min_alloc_size_order = 0;
   static_assert(std::numeric_limits<uint8_t>::max() >
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
 
-  ///< size threshold for forced deferred writes
-  std::atomic<uint64_t> prefer_deferred_size = {0};
+  enum {
+    // Please preserve the order since it's DB persistent
+    OMAP_BULK = 0,
+    OMAP_PER_POOL = 1,
+    OMAP_PER_PG = 2,
+    } per_pool_omap = OMAP_BULK;
 
   ///< maximum allocation unit (power of 2)
   std::atomic<uint64_t> max_alloc_size = {0};
 
+  ///< number threshold for forced deferred writes
+  std::atomic<int> deferred_batch_ops = {0};
+
+  ///< size threshold for forced deferred writes
+  std::atomic<uint64_t> prefer_deferred_size = {0};
+
   ///< approx cost per io, in bytes
   std::atomic<uint64_t> throttle_cost_per_io = {0};
 
-  std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
+  std::atomic<Compressor::CompressionMode> comp_mode =
+    {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
 
   std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
 
+  uint64_t kv_ios = 0;
+  uint64_t kv_throttle_costs = 0;
+
   // cache trim control
+  uint64_t cache_size = 0;       ///< total cache size
+  double cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
+  double cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
+  double cache_kv_onode_ratio = 0; ///< cache ratio dedicated to kv onodes (e.g., rocksdb onode CF)
+  double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
+  bool cache_autotune = false;   ///< cache autotune setting
+  double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
+  uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
+  uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
+  double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
+  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
+  double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
+  double max_defer_interval = 0; ///< Time to wait between last deferred submit
+  std::atomic<uint32_t> config_changed = {0}; ///< Counter to determine if there is a configuration change.
 
-  // note that these update in a racy way, but we don't *really* care if
-  // they're perfectly accurate.  they are all word sized so they will
-  // individually update atomically, but may not be coherent with each other.
-  size_t mempool_seq = 0;
-  size_t mempool_bytes = 0;
-  size_t mempool_onodes = 0;
+  typedef std::map<uint64_t, volatile_statfs> osd_pools_map;
 
-  void get_mempool_stats(size_t *seq, uint64_t *bytes, uint64_t *onodes) {
-    *seq = mempool_seq;
-    *bytes = mempool_bytes;
-    *onodes = mempool_onodes;
-  }
+  ceph::mutex vstatfs_lock = ceph::make_mutex("BlueStore::vstatfs_lock");
+  volatile_statfs vstatfs;
+  osd_pools_map osd_pools; // protected by vstatfs_lock as well
+
+  bool per_pool_stat_collection = true;
 
   struct MempoolThread : public Thread {
+  public:
     BlueStore *store;
-    Cond cond;
-    Mutex lock;
+
+    ceph::condition_variable cond;
+    ceph::mutex lock = ceph::make_mutex("BlueStore::MempoolThread::lock");
     bool stop = false;
+    std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
+    std::shared_ptr<PriorityCache::PriCache> binned_kv_onode_cache = nullptr;
+    std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
+
+    struct MempoolCache : public PriorityCache::PriCache {
+      BlueStore *store;
+      int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
+      int64_t committed_bytes = 0;
+      double cache_ratio = 0;
+
+      MempoolCache(BlueStore *s) : store(s) {};
+
+      virtual uint64_t _get_used_bytes() const = 0;
+
+      virtual int64_t request_cache_bytes(
+          PriorityCache::Priority pri, uint64_t total_cache) const {
+        int64_t assigned = get_cache_bytes(pri);
+
+        switch (pri) {
+        // All cache items are currently shoved into the PRI1 priority 
+        case PriorityCache::Priority::PRI1:
+          {
+            int64_t request = _get_used_bytes();
+            return(request > assigned) ? request - assigned : 0;
+          }
+        default:
+          break;
+        }
+        return -EOPNOTSUPP;
+      }
+ 
+      virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
+        return cache_bytes[pri];
+      }
+      virtual int64_t get_cache_bytes() const { 
+        int64_t total = 0;
+
+        for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
+          PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
+          total += get_cache_bytes(pri);
+        }
+        return total;
+      }
+      virtual void set_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+        cache_bytes[pri] = bytes;
+      }
+      virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+        cache_bytes[pri] += bytes;
+      }
+      virtual int64_t commit_cache_size(uint64_t total_cache) {
+        committed_bytes = PriorityCache::get_chunk(
+            get_cache_bytes(), total_cache);
+        return committed_bytes;
+      }
+      virtual int64_t get_committed_size() const {
+        return committed_bytes;
+      }
+      virtual double get_cache_ratio() const {
+        return cache_ratio;
+      }
+      virtual void set_cache_ratio(double ratio) {
+        cache_ratio = ratio;
+      }
+      virtual std::string get_cache_name() const = 0;
+    };
+
+    struct MetaCache : public MempoolCache {
+      MetaCache(BlueStore *s) : MempoolCache(s) {};
+
+      virtual uint64_t _get_used_bytes() const {
+        return mempool::bluestore_Buffer::allocated_bytes() +
+          mempool::bluestore_Blob::allocated_bytes() +
+          mempool::bluestore_Extent::allocated_bytes() +
+          mempool::bluestore_cache_meta::allocated_bytes() +
+          mempool::bluestore_cache_other::allocated_bytes() +
+	   mempool::bluestore_cache_onode::allocated_bytes() +
+          mempool::bluestore_SharedBlob::allocated_bytes() +
+          mempool::bluestore_inline_bl::allocated_bytes();
+      }
+
+      virtual std::string get_cache_name() const {
+        return "BlueStore Meta Cache";
+      }
+
+      uint64_t _get_num_onodes() const {
+        uint64_t onode_num =
+            mempool::bluestore_cache_onode::allocated_items();
+        return (2 > onode_num) ? 2 : onode_num;
+      }
+
+      double get_bytes_per_onode() const {
+        return (double)_get_used_bytes() / (double)_get_num_onodes();
+      }
+    };
+    std::shared_ptr<MetaCache> meta_cache;
+
+    struct DataCache : public MempoolCache {
+      DataCache(BlueStore *s) : MempoolCache(s) {};
+
+      virtual uint64_t _get_used_bytes() const {
+        uint64_t bytes = 0;
+        for (auto i : store->buffer_cache_shards) {
+          bytes += i->_get_bytes();
+        }
+        return bytes; 
+      }
+      virtual std::string get_cache_name() const {
+        return "BlueStore Data Cache";
+      }
+    };
+    std::shared_ptr<DataCache> data_cache;
+
   public:
     explicit MempoolThread(BlueStore *s)
       : store(s),
-	lock("BlueStore::MempoolThread::lock") {}
+        meta_cache(new MetaCache(s)),
+        data_cache(new DataCache(s)) {}
+
     void *entry() override;
     void init() {
-      assert(stop == false);
+      ceph_assert(stop == false);
       create("bstore_mempool");
     }
     void shutdown() {
-      lock.Lock();
+      lock.lock();
       stop = true;
-      cond.Signal();
-      lock.Unlock();
+      cond.notify_all();
+      lock.unlock();
       join();
     }
+
+  private:
+    void _adjust_cache_settings();
+    void _update_cache_settings();
+    void _resize_shards(bool interval_stats);
   } mempool_thread;
+
+#ifdef WITH_BLKIN
+  ZTracer::Endpoint trace_endpoint {"0.0.0.0", 0, "BlueStore"};
+#endif
 
   // --------------------------------------------------------
   // private methods
@@ -1903,34 +2357,82 @@ private:
   void _close_fsid();
   void _set_alloc_sizes();
   void _set_blob_size();
+  void _set_finisher_num();
+  void _set_per_pool_omap();
+  void _update_osd_memory_options();
 
   int _open_bdev(bool create);
+  // Verifies if disk space is enough for reserved + min bluefs
+  // and alters the latter if needed.
+  // Depends on min_alloc_size hence should be called after
+  // its initialization (and outside of _open_bdev)
+  void _validate_bdev();
   void _close_bdev();
-  int _open_db(bool create);
-  void _close_db();
-  int _open_fm(bool create);
+
+  int _minimal_open_bluefs(bool create);
+  void _minimal_close_bluefs();
+  int _open_bluefs(bool create, bool read_only);
+  void _close_bluefs(bool cold_close);
+
+  int _is_bluefs(bool create, bool* ret);
+  /*
+  * opens both DB and dependant super_meta, FreelistManager and allocator
+  * in the proper order
+  */
+  int _open_db_and_around(bool read_only, bool to_repair = false);
+  void _close_db_and_around(bool read_only);
+
+  int _prepare_db_environment(bool create, bool read_only,
+			      std::string* kv_dir, std::string* kv_backend);
+
+  /*
+   * @warning to_repair_db means that we open this db to repair it, will not
+   * hold the rocksdb's file lock.
+   */
+  int _open_db(bool create,
+	       bool to_repair_db=false,
+	       bool read_only = false);
+  void _close_db(bool read_only);
+  int _open_fm(KeyValueDB::Transaction t, bool read_only);
   void _close_fm();
-  int _open_alloc();
+  int _write_out_fm_meta(uint64_t target_size);
+  int _create_alloc();
+  int _init_alloc();
   void _close_alloc();
-  int _open_collections(int *errors=0);
+  int _open_collections();
+  void _fsck_collections(int64_t* errors);
   void _close_collections();
 
-  int _setup_block_symlink_or_file(string name, string path, uint64_t size,
+  int _setup_block_symlink_or_file(std::string name, std::string path, uint64_t size,
 				   bool create);
 
-  int _write_bdev_label(string path, bluestore_bdev_label_t label);
+  // Functions related to zoned storage.
+  uint64_t _zoned_piggyback_device_parameters_onto(uint64_t min_alloc_size);
+  int _zoned_check_config_settings();
+  void _zoned_update_cleaning_metadata(TransContext *txc);
+  std::string _zoned_get_prefix(uint64_t offset);
+
 public:
-  static int _read_bdev_label(CephContext* cct, string path,
+  utime_t get_deferred_last_submitted() {
+    std::lock_guard l(deferred_lock);
+    return deferred_last_submitted;
+  }
+
+  static int _write_bdev_label(CephContext* cct,
+			       std::string path, bluestore_bdev_label_t label);
+  static int _read_bdev_label(CephContext* cct, std::string path,
 			      bluestore_bdev_label_t *label);
 private:
-  int _check_or_set_bdev_label(string path, uint64_t size, string desc,
+  int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
 			       bool create);
+  int _set_bdev_label_size(const string& path, uint64_t size);
 
   int _open_super_meta();
 
-  int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(PExtentVector *extents);
-  void _commit_bluefs_freespace(const PExtentVector& extents);
+  void _open_statfs();
+  void _get_statfs_overall(struct store_statfs_t *buf);
+
+  void _dump_alloc_on_failure();
 
   CollectionRef _get_collection(const coll_t& cid);
   void _queue_reap_collection(CollectionRef& c);
@@ -1940,11 +2442,16 @@ private:
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
 
-  void _dump_onode(OnodeRef o, int log_level=30);
-  void _dump_extent_map(ExtentMap& em, int log_level=30);
-  void _dump_transaction(Transaction *t, int log_level = 30);
+  template <int LogLevelV>
+  friend void _dump_onode(CephContext *cct, const Onode& o);
+  template <int LogLevelV>
+  friend void _dump_extent_map(CephContext *cct, const ExtentMap& em);
+  template <int LogLevelV>
+  friend void _dump_transaction(CephContext *cct, Transaction *t);
 
-  TransContext *_txc_create(OpSequencer *osr);
+  TransContext *_txc_create(Collection *c, OpSequencer *osr,
+			    std::list<Context*> *on_commits,
+			    TrackedOpRef osd_op=TrackedOpRef());
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);
@@ -1958,37 +2465,33 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_applied_kv(TransContext *txc);
+  void _txc_apply_kv(TransContext *txc, bool sync_submit_transaction);
   void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
 
+  void _osr_attach(Collection *c);
+  void _osr_register_zombie(OpSequencer *osr);
+  void _osr_drain(OpSequencer *osr);
   void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
-  void _osr_unregister_all();
 
+  void _kv_start();
+  void _kv_stop();
   void _kv_sync_thread();
-  void _kv_stop() {
-    {
-      std::lock_guard<std::mutex> l(kv_lock);
-      kv_stop = true;
-      kv_cond.notify_all();
-    }
-    kv_sync_thread.join();
-    {
-      std::lock_guard<std::mutex> l(kv_lock);
-      kv_stop = false;
-    }
-  }
+  void _kv_finalize_thread();
 
-  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
+  void _zoned_cleaner_start();
+  void _zoned_cleaner_stop();
+  void _zoned_cleaner_thread();
+  void _zoned_clean_zone(uint64_t zone_num);
+
+  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
   void _deferred_queue(TransContext *txc);
-  void deferred_try_submit() {
-    std::lock_guard<std::mutex> l(deferred_lock);
-    _deferred_try_submit();
-  }
-  void _deferred_try_submit();
-  void _deferred_submit(OpSequencer *osr);
+public:
+  void deferred_try_submit();
+private:
+  void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
 
@@ -1996,20 +2499,44 @@ public:
   using mempool_dynamic_bitset =
     boost::dynamic_bitset<uint64_t,
 			  mempool::bluestore_fsck::pool_allocator<uint64_t>>;
+  using  per_pool_statfs =
+    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
+
+  enum FSCKDepth {
+    FSCK_REGULAR,
+    FSCK_DEEP,
+    FSCK_SHALLOW
+  };
+  enum {
+    MAX_FSCK_ERROR_LINES = 100,
+  };
 
 private:
   int _fsck_check_extents(
+    const coll_t& cid,
     const ghobject_t& oid,
     const PExtentVector& extents,
     bool compressed,
     mempool_dynamic_bitset &used_blocks,
-    store_statfs_t& expected_statfs);
+    uint64_t granularity,
+    BlueStoreRepairer* repairer,
+    store_statfs_t& expected_statfs,
+    FSCKDepth depth);
+
+  void _fsck_check_pool_statfs(
+    per_pool_statfs& expected_pool_statfs,
+    int64_t& errors,
+    int64_t &warnings,
+    BlueStoreRepairer* repairer);
+
+  int _fsck(FSCKDepth depth, bool repair);
+  int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair);
 
   void _buffer_cache_write(
     TransContext *txc,
     BlobRef b,
     uint64_t offset,
-    bufferlist& bl,
+    ceph::buffer::list& bl,
     unsigned flags) {
     b->shared_blob->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
 			     flags);
@@ -2018,7 +2545,7 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max, bool legacy, std::vector<ghobject_t> *ls, ghobject_t *next);
 
   template <typename T, typename F>
   T select_option(const std::string& opt_name, T val1, F f) {
@@ -2032,28 +2559,30 @@ private:
 
   void _apply_padding(uint64_t head_pad,
 		      uint64_t tail_pad,
-		      bufferlist& bl,
-		      bufferlist& padded);
+		      ceph::buffer::list& padded);
+
+  void _record_onode(OnodeRef &o, KeyValueDB::Transaction &txn);
 
   // -- ondisk version ---
 public:
-  const int32_t latest_ondisk_format = 2;        ///< our version
+  const int32_t latest_ondisk_format = 4;        ///< our version
   const int32_t min_readable_ondisk_format = 1;  ///< what we can read
-  const int32_t min_compat_ondisk_format = 2;    ///< who can read us
+  const int32_t min_compat_ondisk_format = 3;    ///< who can read us
 
 private:
   int32_t ondisk_format = 0;  ///< value detected on mount
 
   int _upgrade_super();  ///< upgrade (called during open_super)
+  uint64_t _get_ondisk_reserved() const;
   void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
 
   // --- public interface ---
 public:
-  BlueStore(CephContext *cct, const string& path);
-  BlueStore(CephContext *cct, const string& path, uint64_t min_alloc_size); // Ctor for UT only
+  BlueStore(CephContext *cct, const std::string& path);
+  BlueStore(CephContext *cct, const std::string& path, uint64_t min_alloc_size); // Ctor for UT only
   ~BlueStore() override;
 
-  string get_type() override {
+  std::string get_type() override {
     return "bluestore";
   }
 
@@ -2061,30 +2590,87 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
-  static int get_block_device_fsid(CephContext* cct, const string& path,
+  uint64_t get_min_alloc_size() const override {
+    return min_alloc_size;
+  }
+
+  int get_devices(std::set<std::string> *ls) override;
+
+  bool is_rotational() override;
+  bool is_journal_rotational() override;
+
+  std::string get_default_device_class() override {
+    std::string device_class;
+    std::map<std::string, std::string> metadata;
+    collect_metadata(&metadata);
+    auto it = metadata.find("bluestore_bdev_type");
+    if (it != metadata.end()) {
+      device_class = it->second;
+    }
+    return device_class;
+  }
+
+  int get_numa_node(
+    int *numa_node,
+    std::set<int> *nodes,
+    std::set<std::string> *failed) override;
+
+  static int get_block_device_fsid(CephContext* cct, const std::string& path,
 				   uuid_d *fsid);
 
   bool test_mount_in_use() override;
 
 private:
-  int _mount(bool kv_only);
+  int _mount();
 public:
   int mount() override {
-    return _mount(false);
+    return _mount();
   }
   int umount() override;
 
-  int start_kv_only(KeyValueDB **pdb) {
-    int r = _mount(true);
-    if (r < 0)
-      return r;
-    *pdb = db;
-    return 0;
+  int open_db_environment(KeyValueDB **pdb, bool to_repair);
+  int close_db_environment();
+
+  int write_meta(const std::string& key, const std::string& value) override;
+  int read_meta(const std::string& key, std::string *value) override;
+
+  // open in read-only and limited mode
+  int cold_open();
+  int cold_close();
+
+  int fsck(bool deep) override {
+    return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, false);
+  }
+  int repair(bool deep) override {
+    return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, true);
+  }
+  int quick_fix() override {
+    return _fsck(FSCK_SHALLOW, true);
   }
 
-  int fsck(bool deep) override;
-
   void set_cache_shards(unsigned num) override;
+  void dump_cache_stats(ceph::Formatter *f) override {
+    int onode_count = 0, buffers_bytes = 0;
+    for (auto i: onode_cache_shards) {
+      onode_count += i->_get_num();
+    }
+    for (auto i: buffer_cache_shards) {
+      buffers_bytes += i->_get_bytes();
+    }
+    f->dump_int("bluestore_onode", onode_count);
+    f->dump_int("bluestore_buffers", buffers_bytes);
+  }
+  void dump_cache_stats(std::ostream& ss) override {
+    int onode_count = 0, buffers_bytes = 0;
+    for (auto i: onode_cache_shards) {
+      onode_count += i->_get_num();
+    }
+    for (auto i: buffer_cache_shards) {
+      buffers_bytes += i->_get_bytes();
+    }
+    ss << "bluestore_onode: " << onode_count;
+    ss << "bluestore_buffers: " << buffers_bytes;
+  }
 
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;
@@ -2098,182 +2684,250 @@ public:
     return 0;
   }
 
-  void get_db_statistics(Formatter *f) override;
-  void generate_db_histogram(Formatter *f) override;
-  void flush_cache() override;
-  void dump_perf_counters(Formatter *f) override {
+  void get_db_statistics(ceph::Formatter *f) override;
+  void generate_db_histogram(ceph::Formatter *f) override;
+  void _shutdown_cache();
+  int flush_cache(std::ostream *os = NULL) override;
+  void dump_perf_counters(ceph::Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
     f->close_section();
   }
 
-  void register_osr(OpSequencer *osr) {
-    std::lock_guard<std::mutex> l(osr_lock);
-    osr_set.insert(osr);
-  }
-  void unregister_osr(OpSequencer *osr) {
-    std::lock_guard<std::mutex> l(osr_lock);
-    osr_set.erase(osr);
-  }
+  int add_new_bluefs_device(int id, const std::string& path);
+  int migrate_to_existing_bluefs_device(const std::set<int>& devs_source,
+    int id);
+  int migrate_to_new_bluefs_device(const std::set<int>& devs_source,
+    int id,
+    const std::string& path);
+  int expand_devices(std::ostream& out);
+  std::string get_device_path(unsigned id);
+
+  int dump_bluefs_sizes(ostream& out);
 
 public:
-  int statfs(struct store_statfs_t *buf) override;
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+		  bool *per_pool_omap) override;
 
-  void collect_metadata(map<string,string> *pm) override;
+  void collect_metadata(std::map<std::string,std::string> *pm) override;
 
-  bool exists(const coll_t& cid, const ghobject_t& oid) override;
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
   int set_collection_opts(
-    const coll_t& cid,
+    CollectionHandle& c,
     const pool_opts_t& opts) override;
   int stat(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false) override;
-  int stat(
     CollectionHandle &c,
     const ghobject_t& oid,
     struct stat *st,
-    bool allow_eio = false) override;
-  int read(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    uint64_t offset,
-    size_t len,
-    bufferlist& bl,
-    uint32_t op_flags = 0,
     bool allow_eio = false) override;
   int read(
     CollectionHandle &c,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    ceph::buffer::list& bl,
+    uint32_t op_flags = 0) override;
+
+private:
+
+  // --------------------------------------------------------
+  // intermediate data structures used while reading
+  struct region_t {
+    uint64_t logical_offset;
+    uint64_t blob_xoffset;   //region offset within the blob
+    uint64_t length;
+
+    // used later in read process
+    uint64_t front = 0;
+
+    region_t(uint64_t offset, uint64_t b_offs, uint64_t len, uint64_t front = 0)
+      : logical_offset(offset),
+      blob_xoffset(b_offs),
+      length(len),
+      front(front){}
+    region_t(const region_t& from)
+      : logical_offset(from.logical_offset),
+      blob_xoffset(from.blob_xoffset),
+      length(from.length),
+      front(from.front){}
+
+    friend std::ostream& operator<<(std::ostream& out, const region_t& r) {
+      return out << "0x" << std::hex << r.logical_offset << ":"
+        << r.blob_xoffset << "~" << r.length << std::dec;
+    }
+  };
+
+  // merged blob read request
+  struct read_req_t {
+    uint64_t r_off = 0;
+    uint64_t r_len = 0;
+    ceph::buffer::list bl;
+    std::list<region_t> regs; // original read regions
+
+    read_req_t(uint64_t off, uint64_t len) : r_off(off), r_len(len) {}
+
+    friend std::ostream& operator<<(std::ostream& out, const read_req_t& r) {
+      out << "{<0x" << std::hex << r.r_off << ", 0x" << r.r_len << "> : [";
+      for (const auto& reg : r.regs)
+        out << reg;
+      return out << "]}" << std::dec;
+    }
+  };
+
+  typedef std::list<read_req_t> regions2read_t;
+  typedef std::map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
+
+  void _read_cache(
+    OnodeRef o,
+    uint64_t offset,
+    size_t length,
+    int read_cache_policy,
+    ready_regions_t& ready_regions,
+    blobs2read_t& blobs2read);
+
+
+  int _prepare_read_ioc(
+    blobs2read_t& blobs2read,
+    std::vector<ceph::buffer::list>* compressed_blob_bls,
+    IOContext* ioc);
+
+  int _generate_read_result_bl(
+    OnodeRef o,
+    uint64_t offset,
+    size_t length,
+    ready_regions_t& ready_regions,
+    std::vector<ceph::buffer::list>& compressed_blob_bls,
+    blobs2read_t& blobs2read,
+    bool buffered,
+    bool* csum_error,
+    ceph::buffer::list& bl);
+
   int _do_read(
     Collection *c,
     OnodeRef o,
     uint64_t offset,
     size_t len,
-    bufferlist& bl,
-    uint32_t op_flags = 0);
+    ceph::buffer::list& bl,
+    uint32_t op_flags = 0,
+    uint64_t retry_count = 0);
 
-private:
+  int _do_readv(
+    Collection *c,
+    OnodeRef o,
+    const interval_set<uint64_t>& m,
+    ceph::buffer::list& bl,
+    uint32_t op_flags = 0,
+    uint64_t retry_count = 0);
+
   int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
- 	     uint64_t offset, size_t len, interval_set<uint64_t>& destset);
+	      uint64_t offset, size_t len, interval_set<uint64_t>& destset);
 public:
-  int fiemap(const coll_t& cid, const ghobject_t& oid,
-	     uint64_t offset, size_t len, bufferlist& bl) override;
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
-	     uint64_t offset, size_t len, bufferlist& bl) override;
-  int fiemap(const coll_t& cid, const ghobject_t& oid,
-	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+	     uint64_t offset, size_t len, ceph::buffer::list& bl) override;
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
-	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+	     uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) override;
 
+  int readv(
+    CollectionHandle &c_,
+    const ghobject_t& oid,
+    interval_set<uint64_t>& m,
+    ceph::buffer::list& bl,
+    uint32_t op_flags) override;
 
-  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
-	      bufferptr& value) override;
+  int dump_onode(CollectionHandle &c, const ghobject_t& oid,
+    const std::string& section_name, ceph::Formatter *f) override;
+
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
-	      bufferptr& value) override;
+	      ceph::buffer::ptr& value) override;
 
-  int getattrs(const coll_t& cid, const ghobject_t& oid,
-	       map<string,bufferptr>& aset) override;
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       map<string,bufferptr>& aset) override;
+	       std::map<std::string,ceph::buffer::ptr>& aset) override;
 
-  int list_collections(vector<coll_t>& ls) override;
+  int list_collections(std::vector<coll_t>& ls) override;
 
   CollectionHandle open_collection(const coll_t &c) override;
+  CollectionHandle create_new_collection(const coll_t& cid) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override;
 
   bool collection_exists(const coll_t& c) override;
-  int collection_empty(const coll_t& c, bool *empty) override;
-  int collection_bits(const coll_t& c) override;
+  int collection_empty(CollectionHandle& c, bool *empty) override;
+  int collection_bits(CollectionHandle& c) override;
 
-  int collection_list(const coll_t& cid,
-		      const ghobject_t& start,
-		      const ghobject_t& end,
-		      int max,
-		      vector<ghobject_t> *ls, ghobject_t *next) override;
   int collection_list(CollectionHandle &c,
 		      const ghobject_t& start,
 		      const ghobject_t& end,
 		      int max,
-		      vector<ghobject_t> *ls, ghobject_t *next) override;
+		      std::vector<ghobject_t> *ls, ghobject_t *next) override;
 
-  int omap_get(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
-    ) override;
+  int collection_list_legacy(CollectionHandle &c,
+                             const ghobject_t& start,
+                             const ghobject_t& end,
+                             int max,
+                             std::vector<ghobject_t> *ls,
+                             ghobject_t *next) override;
+
   int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
     ) override;
+  int _omap_get(
+    Collection *c,     ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
+    );
+  int _onode_omap_get(
+    const OnodeRef &o,           ///< [in] Object containing omap
+    ceph::buffer::list *header,          ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
+  );
+
 
   /// Get omap header
   int omap_get_header(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
-    ) override;
-  int omap_get_header(
     CollectionHandle &c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
+    ceph::buffer::list *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
     ) override;
 
   /// Get keys defined on oid
   int omap_get_keys(
-    const coll_t& cid,              ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
-    ) override;
-  int omap_get_keys(
     CollectionHandle &c,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
+    std::set<std::string> *keys      ///< [out] Keys defined on oid
     ) override;
 
   /// Get key values
   int omap_get_values(
-    const coll_t& cid,                    ///< [in] Collection containing oid
+    CollectionHandle &c,         ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    const std::set<std::string> &keys,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
+
+#ifdef WITH_SEASTAR
   int omap_get_values(
     CollectionHandle &c,         ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    const std::optional<std::string> &start_after,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
+#endif
 
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
-    ) override;
-  int omap_check_keys(
     CollectionHandle &c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) override;
 
-  ObjectMap::ObjectMapIterator get_omap_iterator(
-    const coll_t& cid,              ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
-    ) override;
   ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
@@ -2291,13 +2945,13 @@ public:
   }
 
   struct BSPerfTracker {
-    PerfCounters::avg_tracker<uint64_t> os_commit_latency;
-    PerfCounters::avg_tracker<uint64_t> os_apply_latency;
+    PerfCounters::avg_tracker<uint64_t> os_commit_latency_ns;
+    PerfCounters::avg_tracker<uint64_t> os_apply_latency_ns;
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.os_commit_latency = os_commit_latency.avg();
-      ret.os_apply_latency = os_apply_latency.avg();
+      ret.os_commit_latency_ns = os_commit_latency_ns.current_avg();
+      ret.os_apply_latency_ns = os_apply_latency_ns.current_avg();
       return ret;
     }
 
@@ -2311,43 +2965,130 @@ public:
   const PerfCounters* get_perf_counters() const override {
     return logger;
   }
+  const PerfCounters* get_bluefs_perf_counters() const {
+    return bluefs->get_perf_counters();
+  }
+  KeyValueDB* get_kv() {
+    return db;
+  }
 
   int queue_transactions(
-    Sequencer *osr,
-    vector<Transaction>& tls,
+    CollectionHandle& ch,
+    std::vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 
   // error injection
   void inject_data_error(const ghobject_t& o) override {
-    RWLock::WLocker l(debug_read_error_lock);
+    std::unique_lock l(debug_read_error_lock);
     debug_data_error_objects.insert(o);
   }
   void inject_mdata_error(const ghobject_t& o) override {
-    RWLock::WLocker l(debug_read_error_lock);
+    std::unique_lock l(debug_read_error_lock);
     debug_mdata_error_objects.insert(o);
   }
+
+  /// methods to inject various errors fsck can repair
+  void inject_broken_shared_blob_key(const std::string& key,
+			 const ceph::buffer::list& bl);
+  void inject_leaked(uint64_t len);
+  void inject_false_free(coll_t cid, ghobject_t oid);
+  void inject_statfs(const std::string& key, const store_statfs_t& new_statfs);
+  void inject_global_statfs(const store_statfs_t& new_statfs);
+  void inject_misreference(coll_t cid1, ghobject_t oid1,
+			   coll_t cid2, ghobject_t oid2,
+			   uint64_t offset);
+  // resets global per_pool_omap in DB
+  void inject_legacy_omap();
+  // resets per_pool_omap | pgmeta_omap for onode
+  void inject_legacy_omap(coll_t cid, ghobject_t oid);
+
+  void compact() override {
+    ceph_assert(db);
+    db->compact();
+  }
+  bool has_builtin_csum() const override {
+    return true;
+  }
+
+  inline void log_latency(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    double lat_threshold,
+    const char* info = "") const;
+
+  inline void log_latency_fn(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    double lat_threshold,
+    std::function<std::string (const ceph::timespan& lat)> fn) const;
+
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
-    RWLock::RLocker l(debug_read_error_lock);
+    std::shared_lock l(debug_read_error_lock);
     return debug_data_error_objects.count(o);
   }
   bool _debug_mdata_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
-    RWLock::RLocker l(debug_read_error_lock);
+    std::shared_lock l(debug_read_error_lock);
     return debug_mdata_error_objects.count(o);
   }
   void _debug_obj_on_delete(const ghobject_t& o) {
     if (cct->_conf->bluestore_debug_inject_read_err) {
-      RWLock::WLocker l(debug_read_error_lock);
+      std::unique_lock l(debug_read_error_lock);
       debug_data_error_objects.erase(o);
       debug_mdata_error_objects.erase(o);
     }
+  }
+private:
+  ceph::mutex qlock = ceph::make_mutex("BlueStore::Alerts::qlock");
+  std::string failed_cmode;
+  std::set<std::string> failed_compressors;
+  std::string spillover_alert;
+  std::string legacy_statfs_alert;
+  std::string no_per_pg_omap_alert;
+  std::string disk_size_mismatch_alert;
+  std::string spurious_read_errors_alert;
+
+  void _log_alerts(osd_alert_list_t& alerts);
+  bool _set_compression_alert(bool cmode, const char* s) {
+    std::lock_guard l(qlock);
+    if (cmode) {
+      bool ret = failed_cmode.empty();
+      failed_cmode = s;
+      return ret;
+    }
+    return failed_compressors.emplace(s).second;
+  }
+  void _clear_compression_alert() {
+    std::lock_guard l(qlock);
+    failed_compressors.clear();
+    failed_cmode.clear();
+  }
+
+  void _set_spillover_alert(const std::string& s) {
+    std::lock_guard l(qlock);
+    spillover_alert = s;
+  }
+  void _clear_spillover_alert() {
+    std::lock_guard l(qlock);
+    spillover_alert.clear();
+  }
+
+  void _check_legacy_statfs_alert();
+  void _check_no_per_pg_omap_alert();
+  void _set_disk_size_mismatch_alert(const std::string& s) {
+    std::lock_guard l(qlock);
+    disk_size_mismatch_alert = s;
+  }
+  void _set_spurious_read_errors_alert(const string& s) {
+    std::lock_guard l(qlock);
+    spurious_read_errors_alert = s;
   }
 
 private:
@@ -2358,9 +3099,9 @@ private:
     OnodeRef& o,
     const bluestore_blob_t* blob,
     uint64_t blob_xoffset,
-    const bufferlist& bl,
+    const ceph::buffer::list& bl,
     uint64_t logical_offset) const;
-  int _decompress(bufferlist& source, bufferlist* result);
+  int _decompress(ceph::buffer::list& source, ceph::buffer::list* result);
 
 
   // --------------------------------------------------------
@@ -2373,25 +3114,30 @@ private:
     unsigned csum_order = 0;        ///< target checksum chunk order
 
     old_extent_map_t old_extents;   ///< must deref these blobs
+    interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
       BlobRef b;
       uint64_t blob_length;
       uint64_t b_off;
-      bufferlist bl;
+      ceph::buffer::list bl;
       uint64_t b_off0; ///< original offset in a blob prior to padding
       uint64_t length0; ///< original data length prior to padding
 
       bool mark_unused;
       bool new_blob; ///< whether new blob was created
 
+      bool compressed = false;
+      ceph::buffer::list compressed_bl;
+      size_t compressed_len = 0;
+
       write_item(
 	uint64_t logical_offs,
         BlobRef b,
         uint64_t blob_len,
         uint64_t o,
-        bufferlist& bl,
+        ceph::buffer::list& bl,
         uint64_t o0,
         uint64_t l0,
         bool _mark_unused,
@@ -2407,7 +3153,7 @@ private:
          mark_unused(_mark_unused),
 	 new_blob(_new_blob) {}
     };
-    vector<write_item> writes;                 ///< blobs we're writing
+    std::vector<write_item> writes;                 ///< blobs we're writing
 
     /// partial clone of the context
     void fork(const WriteContext& other) {
@@ -2421,7 +3167,7 @@ private:
       BlobRef b,
       uint64_t blob_len,
       uint64_t o,
-      bufferlist& bl,
+      ceph::buffer::list& bl,
       uint64_t o0,
       uint64_t len0,
       bool _mark_unused,
@@ -2449,14 +3195,21 @@ private:
     CollectionRef &c,
     OnodeRef o,
     uint64_t offset, uint64_t length,
-    bufferlist::iterator& blp,
+    ceph::buffer::list::iterator& blp,
     WriteContext *wctx);
+  void _do_write_big_apply_deferred(
+    TransContext* txc,
+    CollectionRef& c,
+    OnodeRef o,
+    BigDeferredWriteContext& dctx,
+    bufferlist::iterator& blp,
+    WriteContext* wctx);
   void _do_write_big(
     TransContext *txc,
     CollectionRef &c,
     OnodeRef o,
     uint64_t offset, uint64_t length,
-    bufferlist::iterator& blp,
+    ceph::buffer::list::iterator& blp,
     WriteContext *wctx);
   int _do_alloc_write(
     TransContext *txc,
@@ -2467,33 +3220,42 @@ private:
     TransContext *txc,
     CollectionRef& c,
     OnodeRef o,
-    WriteContext *wctx);
-
-  int _do_transaction(Transaction *t,
-		      TransContext *txc,
-		      ThreadPool::TPHandle *handle);
+    WriteContext *wctx,
+    std::set<SharedBlob*> *maybe_unshared_blobs=0);
 
   int _write(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o,
 	     uint64_t offset, size_t len,
-	     bufferlist& bl,
+	     ceph::buffer::list& bl,
 	     uint32_t fadvise_flags);
-  void _pad_zeros(bufferlist *bl, uint64_t *offset,
+  void _pad_zeros(ceph::buffer::list *bl, uint64_t *offset,
 		  uint64_t chunk_size);
+
+  void _choose_write_options(CollectionRef& c,
+                             OnodeRef o,
+                             uint32_t fadvise_flags,
+                             WriteContext *wctx);
+
+  int _do_gc(TransContext *txc,
+             CollectionRef& c,
+             OnodeRef o,
+             const WriteContext& wctx,
+             uint64_t *dirty_start,
+             uint64_t *dirty_end);
 
   int _do_write(TransContext *txc,
 		CollectionRef &c,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
-		bufferlist& bl,
+		ceph::buffer::list& bl,
 		uint32_t fadvise_flags);
   void _do_write_data(TransContext *txc,
                       CollectionRef& c,
                       OnodeRef o,
                       uint64_t offset,
                       uint64_t length,
-                      bufferlist& bl,
+                      ceph::buffer::list& bl,
                       WriteContext *wctx);
 
   int _touch(TransContext *txc,
@@ -2510,8 +3272,9 @@ private:
   void _do_truncate(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef o,
-		   uint64_t offset);
-  void _truncate(TransContext *txc,
+		   uint64_t offset,
+		   std::set<SharedBlob*> *maybe_unshared_blobs=0);
+  int _truncate(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,
 		uint64_t offset);
@@ -2524,39 +3287,39 @@ private:
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o,
-	       const string& name,
-	       bufferptr& val);
+	       const std::string& name,
+	       ceph::buffer::ptr& val);
   int _setattrs(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,
-		const map<string,bufferptr>& aset);
+		const std::map<std::string,ceph::buffer::ptr>& aset);
   int _rmattr(TransContext *txc,
 	      CollectionRef& c,
 	      OnodeRef& o,
-	      const string& name);
+	      const std::string& name);
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o);
-  void _do_omap_clear(TransContext *txc, uint64_t id);
+  void _do_omap_clear(TransContext *txc, OnodeRef &o);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
 		  OnodeRef& o);
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
 		    OnodeRef& o,
-		    bufferlist& bl);
+		    ceph::buffer::list& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,
 		      OnodeRef& o,
-		      bufferlist& header);
+		      ceph::buffer::list& header);
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& o,
-		   bufferlist& bl);
+		   ceph::buffer::list& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			OnodeRef& o,
-			const string& first, const string& last);
+			const std::string& first, const std::string& last);
   int _set_alloc_hint(
     TransContext *txc,
     CollectionRef& c,
@@ -2587,14 +3350,128 @@ private:
 			 unsigned bits, CollectionRef *c);
   int _remove_collection(TransContext *txc, const coll_t &cid,
                          CollectionRef *c);
+  void _do_remove_collection(TransContext *txc, CollectionRef *c);
   int _split_collection(TransContext *txc,
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
+  int _merge_collection(TransContext *txc,
+			CollectionRef *c,
+			CollectionRef& d,
+			unsigned bits);
+
+  void _collect_allocation_stats(uint64_t need, uint32_t alloc_size,
+                                 size_t extents);
+  void _record_allocation_stats();
+private:
+  uint64_t probe_count = 0;
+  std::atomic<uint64_t> alloc_stats_count = {0};
+  std::atomic<uint64_t> alloc_stats_fragments = { 0 };
+  std::atomic<uint64_t> alloc_stats_size = { 0 };
+  // 
+  std::array<std::tuple<uint64_t, uint64_t, uint64_t>, 5> alloc_stats_history =
+  { std::make_tuple(0ul, 0ul, 0ul) };
+
+  inline bool _use_rotational_settings();
+
+public:
+  struct sb_info_t {
+    coll_t cid;
+    int64_t pool_id = INT64_MIN;
+    std::list<ghobject_t> oids;
+    BlueStore::SharedBlobRef sb;
+    bluestore_extent_ref_map_t ref_map;
+    bool compressed = false;
+    bool passed = false;
+    bool updated = false;
+  };
+  typedef btree::btree_set<
+    uint64_t, std::less<uint64_t>,
+    mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
+
+  typedef mempool::bluestore_fsck::map<uint64_t, sb_info_t> sb_info_map_t;
+  struct FSCK_ObjectCtx {
+    int64_t& errors;
+    int64_t& warnings;
+    uint64_t& num_objects;
+    uint64_t& num_extents;
+    uint64_t& num_blobs;
+    uint64_t& num_sharded_objects;
+    uint64_t& num_spanning_blobs;
+
+    mempool_dynamic_bitset* used_blocks;
+    uint64_t_btree_t* used_omap_head;
+
+    ceph::mutex* sb_info_lock;
+    sb_info_map_t& sb_info;
+
+    store_statfs_t& expected_store_statfs;
+    per_pool_statfs& expected_pool_statfs;
+    BlueStoreRepairer* repairer;
+
+    FSCK_ObjectCtx(int64_t& e,
+                   int64_t& w,
+                   uint64_t& _num_objects,
+                   uint64_t& _num_extents,
+                   uint64_t& _num_blobs,
+                   uint64_t& _num_sharded_objects,
+                   uint64_t& _num_spanning_blobs,
+                   mempool_dynamic_bitset* _ub,
+                   uint64_t_btree_t* _used_omap_head,
+                   ceph::mutex* _sb_info_lock,
+                   sb_info_map_t& _sb_info,
+                   store_statfs_t& _store_statfs,
+                   per_pool_statfs& _pool_statfs,
+                   BlueStoreRepairer* _repairer) :
+      errors(e),
+      warnings(w),
+      num_objects(_num_objects),
+      num_extents(_num_extents),
+      num_blobs(_num_blobs),
+      num_sharded_objects(_num_sharded_objects),
+      num_spanning_blobs(_num_spanning_blobs),
+      used_blocks(_ub),
+      used_omap_head(_used_omap_head),
+      sb_info_lock(_sb_info_lock),
+      sb_info(_sb_info),
+      expected_store_statfs(_store_statfs),
+      expected_pool_statfs(_pool_statfs),
+      repairer(_repairer) {
+    }
+  };
+
+  OnodeRef fsck_check_objects_shallow(
+    FSCKDepth depth,
+    int64_t pool_id,
+    CollectionRef c,
+    const ghobject_t& oid,
+    const std::string& key,
+    const ceph::buffer::list& value,
+    mempool::bluestore_fsck::list<std::string>* expecting_shards,
+    std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
+    const BlueStore::FSCK_ObjectCtx& ctx);
+
+private:
+  void _fsck_check_object_omap(FSCKDepth depth,
+    OnodeRef& o,
+    const BlueStore::FSCK_ObjectCtx& ctx);
+
+  void _fsck_check_objects(FSCKDepth depth,
+    FSCK_ObjectCtx& ctx);
 };
 
-inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {
-  return out << *s.parent;
+inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_statfs& s) {
+  return out 
+    << " allocated:"
+      << s.values[BlueStore::volatile_statfs::STATFS_ALLOCATED]
+    << " stored:"
+      << s.values[BlueStore::volatile_statfs::STATFS_STORED]
+    << " compressed:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED]
+    << " compressed_orig:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ORIGINAL]
+    << " compressed_alloc:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ALLOCATED];
 }
 
 static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
@@ -2610,5 +3487,387 @@ static inline void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
 static inline void intrusive_ptr_release(BlueStore::OpSequencer *o) {
   o->put();
 }
+
+class BlueStoreRepairer
+{
+public:
+  // to simplify future potential migration to mempools
+  using fsck_interval = interval_set<uint64_t>;
+
+  // Structure to track what pextents are used for specific cid/oid.
+  // Similar to Bloom filter positive and false-positive matches are 
+  // possible only.
+  // Maintains two lists of bloom filters for both cids and oids
+  //   where each list entry is a BF for specific disk pextent
+  //   The length of the extent per filter is measured on init.
+  // Allows to filter out 'uninteresting' pextents to speadup subsequent
+  //  'is_used' access. 
+  struct StoreSpaceTracker {
+    const uint64_t BLOOM_FILTER_SALT_COUNT = 2;
+    const uint64_t BLOOM_FILTER_TABLE_SIZE = 32; // bytes per single filter
+    const uint64_t BLOOM_FILTER_EXPECTED_COUNT = 16; // arbitrary selected
+    static const uint64_t DEF_MEM_CAP = 128 * 1024 * 1024;
+
+    typedef mempool::bluestore_fsck::vector<bloom_filter> bloom_vector;
+    bloom_vector collections_bfs;
+    bloom_vector objects_bfs;
+    
+    bool was_filtered_out = false; 
+    uint64_t granularity = 0; // extent length for a single filter
+
+    StoreSpaceTracker() {
+    }
+    StoreSpaceTracker(const StoreSpaceTracker& from) :
+      collections_bfs(from.collections_bfs),
+      objects_bfs(from.objects_bfs),
+      granularity(from.granularity) {
+    }
+
+    void init(uint64_t total,
+	      uint64_t min_alloc_size,
+	      uint64_t mem_cap = DEF_MEM_CAP) {
+      ceph_assert(!granularity); // not initialized yet
+      ceph_assert(min_alloc_size && isp2(min_alloc_size));
+      ceph_assert(mem_cap);
+      
+      total = round_up_to(total, min_alloc_size);
+      granularity = total * BLOOM_FILTER_TABLE_SIZE * 2 / mem_cap;
+
+      if (!granularity) {
+	granularity = min_alloc_size;
+      } else {
+	granularity = round_up_to(granularity, min_alloc_size);
+      }
+
+      uint64_t entries = round_up_to(total, granularity) / granularity;
+      collections_bfs.resize(entries,
+        bloom_filter(BLOOM_FILTER_SALT_COUNT,
+                     BLOOM_FILTER_TABLE_SIZE,
+                     0,
+                     BLOOM_FILTER_EXPECTED_COUNT));
+      objects_bfs.resize(entries, 
+        bloom_filter(BLOOM_FILTER_SALT_COUNT,
+                     BLOOM_FILTER_TABLE_SIZE,
+                     0,
+                     BLOOM_FILTER_EXPECTED_COUNT));
+    }
+    inline uint32_t get_hash(const coll_t& cid) const {
+      return cid.hash_to_shard(1);
+    }
+    inline void set_used(uint64_t offset, uint64_t len,
+			 const coll_t& cid, const ghobject_t& oid) {
+      ceph_assert(granularity); // initialized
+      
+      // can't call this func after filter_out has been applied
+      ceph_assert(!was_filtered_out);
+      if (!len) {
+	return;
+      }
+      auto pos = offset / granularity;
+      auto end_pos = (offset + len - 1) / granularity;
+      while (pos <= end_pos) {
+        collections_bfs[pos].insert(get_hash(cid));
+        objects_bfs[pos].insert(oid.hobj.get_hash());
+        ++pos;
+      }
+    }
+    // filter-out entries unrelated to the specified(broken) extents.
+    // 'is_used' calls are permitted after that only
+    size_t filter_out(const fsck_interval& extents);
+
+    // determines if collection's present after filtering-out 
+    inline bool is_used(const coll_t& cid) const {
+      ceph_assert(was_filtered_out);
+      for(auto& bf : collections_bfs) {
+        if (bf.contains(get_hash(cid))) {
+          return true;
+        }
+      }
+      return false;
+    }
+    // determines if object's present after filtering-out 
+    inline bool is_used(const ghobject_t& oid) const {
+      ceph_assert(was_filtered_out);
+      for(auto& bf : objects_bfs) {
+        if (bf.contains(oid.hobj.get_hash())) {
+          return true;
+        }
+      }
+      return false;
+    }
+    // determines if collection's present before filtering-out 
+    inline bool is_used(const coll_t& cid, uint64_t offs) const {
+      ceph_assert(granularity); // initialized
+      ceph_assert(!was_filtered_out);
+      auto &bf = collections_bfs[offs / granularity];
+      if (bf.contains(get_hash(cid))) {
+        return true;
+      }
+      return false;
+    }
+    // determines if object's present before filtering-out 
+    inline bool is_used(const ghobject_t& oid, uint64_t offs) const {
+      ceph_assert(granularity); // initialized
+      ceph_assert(!was_filtered_out);
+      auto &bf = objects_bfs[offs / granularity];
+      if (bf.contains(oid.hobj.get_hash())) {
+        return true;
+      }
+      return false;
+    }
+  };
+public:
+  void fix_per_pool_omap(KeyValueDB *db, int);
+  bool remove_key(KeyValueDB *db, const std::string& prefix, const std::string& key);
+  bool fix_shared_blob(KeyValueDB *db,
+		         uint64_t sbid,
+		       const ceph::buffer::list* bl);
+  bool fix_statfs(KeyValueDB *db, const std::string& key,
+    const store_statfs_t& new_statfs);
+
+  bool fix_leaked(KeyValueDB *db,
+		  FreelistManager* fm,
+		  uint64_t offset, uint64_t len);
+  bool fix_false_free(KeyValueDB *db,
+		      FreelistManager* fm,
+		      uint64_t offset, uint64_t len);
+
+  void init(uint64_t total_space, uint64_t lres_tracking_unit_size);
+
+  bool preprocess_misreference(KeyValueDB *db);
+
+  unsigned apply(KeyValueDB* db);
+
+  void note_misreference(uint64_t offs, uint64_t len, bool inc_error) {
+    misreferenced_extents.union_insert(offs, len);
+    if (inc_error) {
+      ++to_repair_cnt;
+    }
+  }
+  // In fact this is the only repairer's method which is thread-safe!!
+  void inc_repaired() {
+    ++to_repair_cnt;
+  }
+
+  StoreSpaceTracker& get_space_usage_tracker() {
+    return space_usage_tracker;
+  }
+  const fsck_interval& get_misreferences() const {
+    return misreferenced_extents;
+  }
+  KeyValueDB::Transaction get_fix_misreferences_txn() {
+    return fix_misreferences_txn;
+  }
+
+private:
+  std::atomic<unsigned> to_repair_cnt = { 0 };
+  KeyValueDB::Transaction fix_per_pool_omap_txn;
+  KeyValueDB::Transaction fix_fm_leaked_txn;
+  KeyValueDB::Transaction fix_fm_false_free_txn;
+  KeyValueDB::Transaction remove_key_txn;
+  KeyValueDB::Transaction fix_statfs_txn;
+  KeyValueDB::Transaction fix_shared_blob_txn;
+
+  KeyValueDB::Transaction fix_misreferences_txn;
+
+  StoreSpaceTracker space_usage_tracker;
+
+  // non-shared extents with multiple references
+  fsck_interval misreferenced_extents;
+
+};
+
+class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
+{
+  template <class T, size_t MaxX, size_t MaxY>
+  class matrix_2d {
+    T values[MaxX][MaxY];
+  public:
+    matrix_2d() {
+      clear();
+    }
+    T& at(size_t x, size_t y) {
+      ceph_assert(x < MaxX);
+      ceph_assert(y < MaxY);
+
+      return values[x][y];
+    }
+    size_t get_max_x() const {
+      return MaxX;
+    }
+    size_t get_max_y() const {
+      return MaxY;
+    }
+    void clear() {
+      memset(values, 0, sizeof(values));
+    }
+  };
+
+  enum {
+    // use 0/nullptr as unset indication
+    LEVEL_FIRST = 1,
+    LEVEL_LOG = LEVEL_FIRST, // BlueFS log
+    LEVEL_WAL,
+    LEVEL_DB,
+    LEVEL_SLOW,
+    LEVEL_MAX
+  };
+  // add +1 row for corresponding per-device totals
+  // add +1 column for per-level actual (taken from file size) total
+  typedef matrix_2d<uint64_t, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_FIRST + 1> per_level_per_dev_usage_t;
+
+  per_level_per_dev_usage_t per_level_per_dev_usage;
+  // file count per level, add +1 to keep total file count
+  uint64_t per_level_files[LEVEL_MAX - LEVEL_FIRST + 1] = { 0 };
+
+  // Note: maximum per-device totals below might be smaller than corresponding
+  // perf counters by up to a single alloc unit (1M) due to superblock extent.
+  // The later is not accounted here.
+  per_level_per_dev_usage_t per_level_per_dev_max;
+
+  uint64_t l_totals[LEVEL_MAX - LEVEL_FIRST];
+  uint64_t db_avail4slow = 0;
+  enum {
+    OLD_POLICY,
+    USE_SOME_EXTRA
+  };
+
+public:
+  RocksDBBlueFSVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total,
+    uint64_t _level0_size,
+    uint64_t _level_base,
+    uint64_t _level_multiplier,
+    double reserved_factor,
+    uint64_t reserved,
+    bool new_pol)
+  {
+    l_totals[LEVEL_LOG - LEVEL_FIRST] = 0; // not used at the moment
+    l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
+    l_totals[LEVEL_DB - LEVEL_FIRST] = _db_total;
+    l_totals[LEVEL_SLOW - LEVEL_FIRST] = _slow_total;
+
+    if (!new_pol) {
+      return;
+    }
+
+    // Calculating how much extra space is available at DB volume.
+    // Depending on the presence of explicit reserved size specification it might be either
+    // * DB volume size - reserved
+    // or
+    // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
+    if (!reserved) {
+      uint64_t prev_levels = _level0_size;
+      uint64_t cur_level = _level_base;
+      uint64_t cur_threshold = 0;
+      do {
+        uint64_t next_level = cur_level * _level_multiplier;
+        uint64_t next_threshold = prev_levels + cur_level + next_level * reserved_factor;
+        if (_db_total <= next_threshold) {
+          db_avail4slow = cur_threshold ? _db_total - cur_threshold : 0;
+          break;
+        } else {
+          prev_levels += cur_level;
+          cur_level = next_level;
+          cur_threshold = next_threshold;
+        }
+      } while (true);
+    } else {
+      db_avail4slow = _db_total - reserved;
+    }
+  }
+
+  void* get_hint_for_log() const override {
+    return  reinterpret_cast<void*>(LEVEL_LOG);
+  }
+  void* get_hint_by_dir(const std::string& dirname) const override;
+
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      auto& max = per_level_per_dev_max.at(p.bdev, pos);
+      cur += p.length;
+      if (cur > max) {
+        max = cur;
+      }
+      {
+        //update per-device totals
+        auto& cur = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+        auto& max = per_level_per_dev_max.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+        cur += p.length;
+        if (cur > max) {
+          max = cur;
+        }
+      }
+    }
+    {
+      //update per-level actual totals
+      auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+      auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+      cur += fnode.size;
+      if (cur > max) {
+        max = cur;
+      }
+    }
+    ++per_level_files[pos];
+    ++per_level_files[LEVEL_MAX - LEVEL_FIRST];
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      ceph_assert(cur >= p.length);
+      cur -= p.length;
+
+      //update per-device totals
+      auto& cur2 = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_FIRST);
+      ceph_assert(cur2 >= p.length);
+      cur2 -= p.length;
+    }
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fnode.size);
+    cur -= fnode.size;
+    ceph_assert(per_level_files[pos] > 0);
+    --per_level_files[pos];
+    ceph_assert(per_level_files[LEVEL_MAX - LEVEL_FIRST] > 0);
+    --per_level_files[LEVEL_MAX - LEVEL_FIRST];
+  }
+  void add_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+    cur += fsize;
+    if (cur > max) {
+      max = cur;
+    }
+  }
+  void sub_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - LEVEL_FIRST;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fsize);
+    per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos) -= fsize;
+  }
+
+  uint8_t select_prefer_bdev(void* h) override;
+  void get_paths(
+    const std::string& base,
+    BlueFSVolumeSelector::paths& res) const override;
+
+  void dump(std::ostream& sout) override;
+};
 
 #endif

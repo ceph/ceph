@@ -4,11 +4,12 @@
 #ifndef CEPH_JOURNAL_FUTURE_H
 #define CEPH_JOURNAL_FUTURE_H
 
-#include "include/int_types.h"
-#include <string>
 #include <iosfwd>
-#include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
+#include <string>
+
+#include "include/ceph_assert.h"
+#include "include/int_types.h"
+#include "common/ref.h"
 
 class Context;
 
@@ -18,13 +19,16 @@ class FutureImpl;
 
 class Future {
 public:
-  typedef boost::intrusive_ptr<FutureImpl> FutureImplPtr;
+  Future();
+  Future(const Future&);
+  Future& operator=(const Future&);
+  Future(Future&&);
+  Future& operator=(Future&&);
+  Future(ceph::ref_t<FutureImpl> future_impl);
+  ~Future();
 
-  Future() {}
-  Future(const FutureImplPtr &future_impl) : m_future_impl(future_impl) {}
-
-  inline bool is_valid() const {
-    return m_future_impl.get() != nullptr;
+  bool is_valid() const {
+    return bool(m_future_impl);
   }
 
   void flush(Context *on_safe);
@@ -37,22 +41,17 @@ private:
   friend class Journaler;
   friend std::ostream& operator<<(std::ostream&, const Future&);
 
-  inline FutureImplPtr get_future_impl() const {
+  const auto& get_future_impl() const {
     return m_future_impl;
   }
 
-  FutureImplPtr m_future_impl;
+  ceph::ref_t<FutureImpl> m_future_impl;
 };
-
-void intrusive_ptr_add_ref(FutureImpl *p);
-void intrusive_ptr_release(FutureImpl *p);
 
 std::ostream &operator<<(std::ostream &os, const Future &future);
 
 } // namespace journal
 
-using journal::intrusive_ptr_add_ref;
-using journal::intrusive_ptr_release;
 using journal::operator<<;
 
 #endif // CEPH_JOURNAL_FUTURE_H

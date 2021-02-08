@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_MONGOOSE_H
 #define CEPH_RGW_MONGOOSE_H
@@ -19,6 +19,7 @@ class RGWCivetWeb : public rgw::io::RestfulClient,
 
   bool explicit_keepalive;
   bool explicit_conn_close;
+  bool got_eof_on_read;
 
   rgw::io::StaticOutputBufferer<> txbuf;
 
@@ -27,12 +28,12 @@ class RGWCivetWeb : public rgw::io::RestfulClient,
   size_t dump_date_header();
 
 public:
-  void init_env(CephContext *cct) override;
+  [[nodiscard]] int init_env(CephContext *cct) override;
 
   size_t send_status(int status, const char *status_name) override;
   size_t send_100_continue() override;
-  size_t send_header(const boost::string_ref& name,
-                     const boost::string_ref& value) override;
+  size_t send_header(const std::string_view& name,
+                     const std::string_view& value) override;
   size_t send_content_length(uint64_t len) override;
   size_t complete_header() override;
 
@@ -52,7 +53,7 @@ public:
     return env;
   }
 
-  RGWCivetWeb(mg_connection *_conn);
+  explicit RGWCivetWeb(mg_connection *_conn);
 };
 
 #endif

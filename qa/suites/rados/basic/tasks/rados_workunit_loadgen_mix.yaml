@@ -1,10 +1,10 @@
 overrides:
   ceph:
-    log-whitelist:
-    - wrongly marked me down
+    log-ignorelist:
+    - but it is still running
+    - overall HEALTH_
+    - \(POOL_APP_NOT_ENABLED\)
 tasks:
-- install:
-- ceph:
 - workunit:
     clients:
       all:

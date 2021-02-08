@@ -1,45 +1,51 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_OS_BLUESTORE_BITMAPALLOCATOR_H
-#define CEPH_OS_BLUESTORE_BITMAPALLOCATOR_H
+#ifndef CEPH_OS_BLUESTORE_BITMAPFASTALLOCATOR_H
+#define CEPH_OS_BLUESTORE_BITMAPFASTALLOCATOR_H
 
 #include <mutex>
 
 #include "Allocator.h"
-#include "BitAllocator.h"
-#include "include/btree_interval_set.h"
+#include "os/bluestore/bluestore_types.h"
+#include "fastbmap_allocator_impl.h"
+#include "include/mempool.h"
+#include "common/debug.h"
 
-class BitMapAllocator : public Allocator {
+class BitmapAllocator : public Allocator,
+  public AllocatorLevel02<AllocatorLevel01Loose> {
   CephContext* cct;
 
-  int64_t m_block_size;
-
-  BitAllocator *m_bit_alloc; // Bit allocator instance
-
-  void insert_free(uint64_t offset, uint64_t len);
-
-  int64_t allocate_dis(
-    uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents);
-
 public:
-  BitMapAllocator(CephContext* cct, int64_t device_size, int64_t block_size);
-  ~BitMapAllocator() override;
+  BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit, const std::string& name);
+  ~BitmapAllocator() override
+  {
+  }
 
-  int reserve(uint64_t need) override;
-  void unreserve(uint64_t unused) override;
-
+  const char* get_type() const override
+  {
+    return "bitmap";
+  }
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents) override;
+    int64_t hint, PExtentVector *extents) override;
 
   void release(
-    uint64_t offset, uint64_t length) override;
+    const interval_set<uint64_t>& release_set) override;
 
-  uint64_t get_free() override;
+  using Allocator::release;
+
+  uint64_t get_free() override
+  {
+    return get_available();
+  }
 
   void dump() override;
+  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
+  double get_fragmentation() override
+  {
+    return _get_fragmentation();
+  }
 
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;

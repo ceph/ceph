@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 fname=$1
 [ -z "$fname" ] && exit

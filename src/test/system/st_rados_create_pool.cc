@@ -13,6 +13,7 @@
 */
 
 #include "cross_process_sem.h"
+#include "include/ceph_assert.h"
 #include "include/rados/librados.h"
 #include "st_rados_create_pool.h"
 #include "systest_runnable.h"
@@ -117,15 +118,15 @@ out:
 
 std::string get_temp_pool_name(const char* prefix)
 {
-  assert(prefix);
+  ceph_assert(prefix);
   char hostname[80];
   int ret = 0;
   ret = gethostname(hostname, sizeof(hostname));
-  assert(!ret);
+  ceph_assert(!ret);
   char poolname[256];
   ret = snprintf(poolname, sizeof(poolname),
                  "%s.%s-%d", prefix, hostname, getpid());
-  assert(ret > 0);
-  assert((unsigned int)ret < sizeof(poolname));
+  ceph_assert(ret > 0);
+  ceph_assert((unsigned int)ret < sizeof(poolname));
   return poolname;
 }

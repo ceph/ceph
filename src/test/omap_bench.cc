@@ -14,10 +14,9 @@
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/ceph_context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "include/utime.h"
-#include "global/global_context.h"
 #include "common/ceph_argparse.h"
 #include "test/omap_bench.h"
 
@@ -127,9 +126,9 @@ int OmapBench::setup(int argc, const char** argv) {
 //Writer functions
 Writer::Writer(OmapBench *omap_bench) : ob(omap_bench) {
   stringstream name;
-  ob->data_lock.Lock();
+  ob->data_lock.lock();
   name << omap_bench->prefix << ++(ob->data.started_ops);
-  ob->data_lock.Unlock();
+  ob->data_lock.unlock();
   oid = name.str();
 }
 void Writer::start_time() {
@@ -158,19 +157,18 @@ AioWriter::~AioWriter() {
 librados::AioCompletion * AioWriter::get_aioc() {
   return aioc;
 }
-void AioWriter::set_aioc(librados::callback_t complete,
-    librados::callback_t safe) {
-  aioc = ob->rados.aio_create_completion(this, complete, safe);
+void AioWriter::set_aioc(librados::callback_t complete) {
+  aioc = ob->rados.aio_create_completion(this, complete);
 }
 
 
 //Helper methods
-void OmapBench::aio_is_safe(rados_completion_t c, void *arg) {
+void OmapBench::aio_is_complete(rados_completion_t c, void *arg) {
   AioWriter *aiow = reinterpret_cast<AioWriter *>(arg);
   aiow->stop_time();
-  Mutex * data_lock = &aiow->ob->data_lock;
-  Mutex * thread_is_free_lock = &aiow->ob->thread_is_free_lock;
-  Cond * thread_is_free = &aiow->ob->thread_is_free;
+  ceph::mutex * data_lock = &aiow->ob->data_lock;
+  ceph::mutex * thread_is_free_lock = &aiow->ob->thread_is_free_lock;
+  ceph::condition_variable* thread_is_free = &aiow->ob->thread_is_free;
   int &busythreads_count = aiow->ob->busythreads_count;
   o_bench_data &data = aiow->ob->data;
   int INCREMENT = aiow->ob->increment;
@@ -181,7 +179,7 @@ void OmapBench::aio_is_safe(rados_completion_t c, void *arg) {
   }
   double time = aiow->get_time();
   delete aiow;
-  data_lock->Lock();
+  data_lock->lock();
   data.avg_latency = (data.avg_latency * data.completed_ops + time)
       / (data.completed_ops + 1);
   data.completed_ops++;
@@ -197,12 +195,12 @@ void OmapBench::aio_is_safe(rados_completion_t c, void *arg) {
     data.mode.first = time/INCREMENT;
     data.mode.second = data.freq_map[time/INCREMENT];
   }
-  data_lock->Unlock();
+  data_lock->unlock();
 
-  thread_is_free_lock->Lock();
+  thread_is_free_lock->lock();
   busythreads_count--;
-  thread_is_free->Signal();
-  thread_is_free_lock->Unlock();
+  thread_is_free->notify_all();
+  thread_is_free_lock->unlock();
 }
 
 string OmapBench::random_string(int len) {
@@ -366,24 +364,20 @@ int OmapBench::generate_small_non_random_omap(const int omap_entries,
 
 //tests
 int OmapBench::test_write_objects_in_parallel(omap_generator_t omap_gen) {
-  comp = NULL;
   AioWriter *this_aio_writer;
 
-  Mutex::Locker l(thread_is_free_lock);
+  std::unique_lock l{thread_is_free_lock};
   for (int i = 0; i < objects; i++) {
-    assert(busythreads_count <= threads);
+    ceph_assert(busythreads_count <= threads);
     //wait for a writer to be free
     if (busythreads_count == threads) {
-      int err = thread_is_free.Wait(thread_is_free_lock);
-      assert(busythreads_count < threads);
-      if (err < 0) {
-	return err;
-      }
+      thread_is_free.wait(l);
+      ceph_assert(busythreads_count < threads);
     }
 
     //set up the write
     this_aio_writer = new AioWriter(this);
-    this_aio_writer->set_aioc(NULL,safe);
+    this_aio_writer->set_aioc(comp);
 
     //perform the write
     busythreads_count++;
@@ -400,10 +394,7 @@ int OmapBench::test_write_objects_in_parallel(omap_generator_t omap_gen) {
       return err;
     }
   }
-  while(busythreads_count > 0) {
-    thread_is_free.Wait(thread_is_free_lock);
-  }
-
+  thread_is_free.wait(l, [this] { return busythreads_count <= 0;});
   return 0;
 }
 

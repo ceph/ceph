@@ -52,7 +52,7 @@ root root {
 
 # rules
 rule data {
-	ruleset 1
+	id 1
 	type replicated
 	min_size 2
 	max_size 2

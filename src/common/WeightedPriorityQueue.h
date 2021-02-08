@@ -21,6 +21,8 @@
 #include <boost/intrusive/rbtree.hpp>
 #include <boost/intrusive/avl_set.hpp>
 
+#include "include/ceph_assert.h"
+
 namespace bi = boost::intrusive;
 
 template <typename T, typename S>
@@ -54,10 +56,10 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       public:
         unsigned cost;
         T item;
-        ListPair(unsigned c, T& i) :
+        ListPair(unsigned c, T&& i) :
           cost(c),
-          item(i)
-          {}
+          item(std::move(i))
+	{}
     };
     class Klass : public bi::set_base_hook<>
     {
@@ -67,29 +69,32 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         K key;		// klass
         ListPairs lp;
         Klass(K& k) :
-          key(k)
-          {}
+          key(k) {
+        }
+        ~Klass() {
+          lp.clear_and_dispose(DelItem<ListPair>());
+        }
       friend bool operator< (const Klass &a, const Klass &b)
         { return a.key < b.key; }
       friend bool operator> (const Klass &a, const Klass &b)
         { return a.key > b.key; }
       friend bool operator== (const Klass &a, const Klass &b)
         { return a.key == b.key; }
-      void insert(unsigned cost, T& item, bool front) {
+      void insert(unsigned cost, T&& item, bool front) {
         if (front) {
-          lp.push_front(*new ListPair(cost, item));
+          lp.push_front(*new ListPair(cost, std::move(item)));
         } else {
-          lp.push_back(*new ListPair(cost, item));
+          lp.push_back(*new ListPair(cost, std::move(item)));
         }
       }
       //Get the cost of the next item to dequeue
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return lp.begin()->cost;
       }
       T pop() {
-	assert(!lp.empty());
-	T ret = lp.begin()->item;
+	ceph_assert(!lp.empty());
+	T ret = std::move(lp.begin()->item);
         lp.erase_and_dispose(lp.begin(), DelItem<ListPair>());
         return ret;
       }
@@ -99,35 +104,16 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       unsigned get_size() const {
 	return lp.size();
       }
-      unsigned filter_list_pairs(std::function<bool (T)>& f) {
-        unsigned count = 0;
-        // intrusive containers can't erase with a reverse_iterator
-        // so we have to walk backwards on our own. Since there is
-        // no iterator before begin, we have to test at the end.
-        for (Lit i = --lp.end();; --i) {
-          if (f(i->item)) {
-            i = lp.erase_and_dispose(i, DelItem<ListPair>());
-            ++count;
-          }
-          if (i == lp.begin()) {
-            break;
-          }
-        }
-        return count;
-      }
-      unsigned filter_class(std::list<T>* out) {
-        unsigned count = 0;
+      void filter_class(std::list<T>* out) {
         for (Lit i = --lp.end();; --i) {
           if (out) {
-            out->push_front(i->item);
+            out->push_front(std::move(i->item));
           }
           i = lp.erase_and_dispose(i, DelItem<ListPair>());
-          ++count;
           if (i == lp.begin()) {
             break;
           }
         }
-        return count;
       }
     };
     class SubQueue : public bi::set_base_hook<>
@@ -145,8 +131,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	Kit next;
 	SubQueue(unsigned& p) :
 	  key(p),
-	  next(klasses.begin())
-	  {}
+	  next(klasses.begin()) {
+	}
+	~SubQueue() {
+	  klasses.clear_and_dispose(DelItem<Klass>());
+	}
       friend bool operator< (const SubQueue &a, const SubQueue &b)
         { return a.key < b.key; }
       friend bool operator> (const SubQueue &a, const SubQueue &b)
@@ -156,7 +145,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       bool empty() const {
         return klasses.empty();
       }
-      void insert(K cl, unsigned cost, T& item, bool front = false) {
+      void insert(K cl, unsigned cost, T&& item, bool front = false) {
         typename Klasses::insert_commit_data insert_data;
       	std::pair<Kit, bool> ret =
           klasses.insert_unique_check(cl, MapKey<Klass, K>(), insert_data);
@@ -164,10 +153,10 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	  ret.first = klasses.insert_unique_commit(*new Klass(cl), insert_data);
           check_end();
 	}
-	ret.first->insert(cost, item, front);
+	ret.first->insert(cost, std::move(item), front);
       }
       unsigned get_cost() const {
-        assert(!empty());
+        ceph_assert(!empty());
         return next->get_cost();
       }
       T pop() {
@@ -180,36 +169,23 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         check_end();
 	return ret;
       }
-      unsigned filter_list_pairs(std::function<bool (T)>& f) {
-	unsigned count = 0;
-        // intrusive containers can't erase with a reverse_iterator
-        // so we have to walk backwards on our own. Since there is
-        // no iterator before begin, we have to test at the end.
-        for (Kit i = klasses.begin(); i != klasses.end();) {
-          count += i->filter_list_pairs(f);
-          if (i->empty()) {
-	    if (next == i) {
-	      ++next;
-	    }
-            i = klasses.erase_and_dispose(i, DelItem<Klass>());
-          } else {
-            ++i;
-          }
-        }
-        check_end();
-	return count;
-      }
-      unsigned filter_class(K& cl, std::list<T>* out) {
-	unsigned count = 0;
+      void filter_class(K& cl, std::list<T>* out) {
         Kit i = klasses.find(cl, MapKey<Klass, K>());
         if (i != klasses.end()) {
-          count = i->filter_class(out);
+          i->filter_class(out);
 	  Kit tmp = klasses.erase_and_dispose(i, DelItem<Klass>());
 	  if (next == i) {
             next = tmp;
           }
           check_end();
         }
+      }
+      // this is intended for unit tests and should be never used on hot paths
+      unsigned get_size_slow() const {
+	unsigned count = 0;
+	for (const auto& klass : klasses) {
+	  count += klass.get_size();
+	}
 	return count;
       }
       void dump(ceph::Formatter *f) const {
@@ -226,16 +202,17 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       unsigned total_prio;
       unsigned max_cost;
       public:
-	unsigned size;
 	Queue() :
 	  total_prio(0),
-	  max_cost(0),
-	  size(0)
-	  {}
-	bool empty() const {
-	  return !size;
+	  max_cost(0) {
 	}
-	void insert(unsigned p, K cl, unsigned cost, T& item, bool front = false) {
+	~Queue() {
+	  queues.clear_and_dispose(DelItem<SubQueue>());
+	}
+	bool empty() const {
+	  return queues.empty();
+	}
+	void insert(unsigned p, K cl, unsigned cost, T&& item, bool front = false) {
 	  typename SubQueues::insert_commit_data insert_data;
       	  std::pair<typename SubQueues::iterator, bool> ret =
       	    queues.insert_unique_check(p, MapKey<SubQueue, unsigned>(), insert_data);
@@ -243,14 +220,12 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	    ret.first = queues.insert_unique_commit(*new SubQueue(p), insert_data);
 	    total_prio += p;
       	  }
-      	  ret.first->insert(cl, cost, item, front);
+	  ret.first->insert(cl, cost, std::move(item), front);
 	  if (cost > max_cost) {
 	    max_cost = cost;
 	  }
-	  ++size;
 	}
 	T pop(bool strict = false) {
-	  --size;
 	  Sit i = --queues.end();
 	  if (strict) {
 	    T ret = i->pop();
@@ -264,7 +239,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      // Pick a new priority out of the total priority.
 	      unsigned prio = rand() % total_prio + 1;
 	      unsigned tp = total_prio - i->key;
-	      // Find the priority coresponding to the picked number.
+	      // Find the priority corresponding to the picked number.
 	      // Subtract high priorities to low priorities until the picked number
 	      // is more than the total and try to dequeue that priority.
 	      // Reverse the direction from previous implementation because there is a higher
@@ -291,20 +266,9 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	  }
 	  return ret;
 	}
-       void filter_list_pairs(std::function<bool (T)>& f) {
-	  for (Sit i = queues.begin(); i != queues.end();) {
-            size -= i->filter_list_pairs(f);
-	    if (i->empty()) {
-	      total_prio -= i->key;
-	      i = queues.erase_and_dispose(i, DelItem<SubQueue>());
-	    } else {
-	      ++i;
-	    }
-      	  }
-	}
 	void filter_class(K& cl, std::list<T>* out) {
 	  for (Sit i = queues.begin(); i != queues.end();) {
-	    size -= i->filter_class(cl, out);
+	    i->filter_class(cl, out);
 	    if (i->empty()) {
 	      total_prio -= i->key;
 	      i = queues.erase_and_dispose(i, DelItem<SubQueue>());
@@ -312,6 +276,14 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      ++i;
 	    }
 	  }
+	}
+	// this is intended for unit tests and should be never used on hot paths
+	unsigned get_size_slow() const {
+	  unsigned count = 0;
+	  for (const auto& queue : queues) {
+	    count += queue.get_size_slow();
+	  }
+	  return count;
 	}
 	void dump(ceph::Formatter *f) const {
 	  for (typename SubQueues::const_iterator i = queues.begin();
@@ -335,38 +307,34 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       {
 	std::srand(time(0));
       }
-    unsigned length() const final {
-      return strict.size + normal.size;
-    }
-    void remove_by_filter(std::function<bool (T)> f) final {
-      strict.filter_list_pairs(f);
-      normal.filter_list_pairs(f);
-    }
     void remove_by_class(K cl, std::list<T>* removed = 0) final {
       strict.filter_class(cl, removed);
       normal.filter_class(cl, removed);
     }
     bool empty() const final {
-      return !(strict.size + normal.size);
+      return strict.empty() && normal.empty();
     }
-    void enqueue_strict(K cl, unsigned p, T item) final {
-      strict.insert(p, cl, 0, item);
+    void enqueue_strict(K cl, unsigned p, T&& item) final {
+      strict.insert(p, cl, 0, std::move(item));
     }
-    void enqueue_strict_front(K cl, unsigned p, T item) final {
-      strict.insert(p, cl, 0, item, true);
+    void enqueue_strict_front(K cl, unsigned p, T&& item) final {
+      strict.insert(p, cl, 0, std::move(item), true);
     }
-    void enqueue(K cl, unsigned p, unsigned cost, T item) final {
-      normal.insert(p, cl, cost, item);
+    void enqueue(K cl, unsigned p, unsigned cost, T&& item) final {
+      normal.insert(p, cl, cost, std::move(item));
     }
-    void enqueue_front(K cl, unsigned p, unsigned cost, T item) final {
-      normal.insert(p, cl, cost, item, true);
+    void enqueue_front(K cl, unsigned p, unsigned cost, T&& item) final {
+      normal.insert(p, cl, cost, std::move(item), true);
     }
     T dequeue() override {
-      assert(strict.size + normal.size > 0);
+      ceph_assert(!empty());
       if (!strict.empty()) {
 	return strict.pop(true);
       }
       return normal.pop();
+    }
+    unsigned get_size_slow() {
+      return strict.get_size_slow() + normal.get_size_slow();
     }
     void dump(ceph::Formatter *f) const override {
       f->open_array_section("high_queues");
@@ -375,6 +343,10 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       f->open_array_section("queues");
       normal.dump(f);
       f->close_section();
+    }
+
+    void print(std::ostream &ostream) const final {
+      ostream << "WeightedPriorityQueue";
     }
 };
 

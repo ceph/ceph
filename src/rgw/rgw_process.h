@@ -1,18 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef RGW_PROCESS_H
 #define RGW_PROCESS_H
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_auth_registry.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
@@ -28,8 +27,12 @@
 
 extern void signal_shutdown();
 
+namespace rgw::dmclock {
+  class Scheduler;
+}
+
 struct RGWProcessEnv {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;
@@ -38,12 +41,13 @@ struct RGWProcessEnv {
 };
 
 class RGWFrontendConfig;
+class RGWRequest;
 
 class RGWProcess {
   deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
-  RGWRados* store;
+  rgw::sal::RGWRadosStore* store;
   rgw_auth_registry_ptr_t auth_registry;
   OpsLogSocket* olog;
   ThreadPool m_tp;
@@ -55,17 +59,12 @@ protected:
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
-    RGWWQ(RGWProcess* p, time_t timeout, time_t suicide_timeout, ThreadPool* tp)
+    RGWWQ(RGWProcess* p, ceph::timespan timeout, ceph::timespan suicide_timeout,
+	  ThreadPool* tp)
       : ThreadPool::WorkQueue<RGWRequest>("RGWWQ", timeout, suicide_timeout,
 					  tp), process(p) {}
 
-    bool _enqueue(RGWRequest* req) override {
-      process->m_req_queue.push_back(req);
-      perfcounter->inc(l_rgw_qlen);
-      dout(20) << "enqueued request req=" << hex << req << dec << dendl;
-      _dump_queue();
-      return true;
-    }
+    bool _enqueue(RGWRequest* req) override;
 
     void _dequeue(RGWRequest* req) override {
       ceph_abort();
@@ -75,30 +74,16 @@ protected:
       return process->m_req_queue.empty();
     }
 
-    RGWRequest* _dequeue() override {
-      if (process->m_req_queue.empty())
-	return NULL;
-      RGWRequest *req = process->m_req_queue.front();
-      process->m_req_queue.pop_front();
-      dout(20) << "dequeued request req=" << hex << req << dec << dendl;
-      _dump_queue();
-      perfcounter->inc(l_rgw_qlen, -1);
-      return req;
-    }
+    RGWRequest* _dequeue() override;
 
     using ThreadPool::WorkQueue<RGWRequest>::_process;
 
-    void _process(RGWRequest *req, ThreadPool::TPHandle &) override  {
-      perfcounter->inc(l_rgw_qactive);
-      process->handle_request(req);
-      process->req_throttle.put(1);
-      perfcounter->inc(l_rgw_qactive, -1);
-    }
+    void _process(RGWRequest *req, ThreadPool::TPHandle &) override;
 
     void _dump_queue();
 
     void _clear() override {
-      assert(process->m_req_queue.empty());
+      ceph_assert(process->m_req_queue.empty());
     }
   } req_wq;
 
@@ -117,8 +102,10 @@ public:
       conf(conf),
       sock_fd(-1),
       uri_prefix(pe->uri_prefix),
-      req_wq(this, g_conf->rgw_op_thread_timeout,
-	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {
+      req_wq(this,
+	     ceph::make_timespan(g_conf()->rgw_op_thread_timeout),
+	     ceph::make_timespan(g_conf()->rgw_op_thread_suicide_timeout),
+	     &m_tp) {
   }
   
   virtual ~RGWProcess() = default;
@@ -130,7 +117,7 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config(RGWRados* const store,
+  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) {
     this->store = store;
     this->auth_registry = std::move(auth_registry);
@@ -166,7 +153,7 @@ public:
 class RGWProcessControlThread : public Thread {
   RGWProcess *pprocess;
 public:
-  RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
+  explicit RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
 
   void *entry() override {
     pprocess->run();
@@ -184,24 +171,28 @@ public:
   void checkpoint();
   void handle_request(RGWRequest* req) override;
   void gen_request(const string& method, const string& resource,
-		  int content_length, std::atomic<int64_t>* fail_flag);
+		  int content_length, std::atomic<bool>* fail_flag);
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
-
 /* process stream request */
-extern int process_request(RGWRados* store,
+extern int process_request(rgw::sal::RGWRadosStore* store,
                            RGWREST* rest,
                            RGWRequest* req,
                            const std::string& frontend_prefix,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
-                           OpsLogSocket* olog);
+                           OpsLogSocket* olog,
+                           optional_yield y,
+                           rgw::dmclock::Scheduler *scheduler,
+                           std::string* user,
+                           int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
                                      RGWRequest* req,
                                      req_state* s,
+				     optional_yield y,
                                      bool skip_retarget = false);
 
 #if defined(def_dout_subsys)

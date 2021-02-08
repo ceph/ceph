@@ -1,0 +1,51 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <ItemGroup Label="ProjectConfigurations">
+        <ProjectConfiguration Include="Release|x64">
+            <Configuration>Release</Configuration>
+            <Platform>x64</Platform>
+        </ProjectConfiguration>
+    </ItemGroup>
+    <ItemGroup><ClCompile Include="..\src\librados-config.cc" />
+<ClCompile Include="..\src\libcephfs.cc" />
+<ClCompile Include="..\src\krbd.cc" />
+<ClCompile Include="..\src\cls_crypto.cc" />
+<ClCompile Include="..\src\cls_acl.cc" />
+<ClCompile Include="..\src\ceph_ver.c" />
+<ClCompile Include="..\src\ceph_syn.cc" />
+<ClCompile Include="..\src\ceph_osd.cc" />
+<ClCompile Include="..\src\ceph_mon.cc" />
+<ClCompile Include="..\src\ceph_mgr.cc" />
+<ClCompile Include="..\src\ceph_mds.cc" />
+<ClCompile Include="..\src\ceph_fuse.cc" />
+<ClCompile Include="..\src\btrfs_ioc_test.c" />
+</ItemGroup>
+<ItemGroup><ClInclude Include="..\src\perf_histogram.h" />
+</ItemGroup>
+<PropertyGroup Label="Globals">
+        <VCProjectVersion>16.0</VCProjectVersion>
+        <Keyword>Win32Proj</Keyword>
+        <ProjectGuid>{cdb19003-6506-11eb-8593-e45e37b96bbb}</ProjectGuid>
+        <RootNamespace>src</RootNamespace>
+        <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+        <ProjectName>src</ProjectName>
+    </PropertyGroup>
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+        <ConfigurationType>Application</ConfigurationType>
+        <UseDebugLibraries>false</UseDebugLibraries>
+        <PlatformToolset>v142</PlatformToolset>
+        <WholeProgramOptimization>true</WholeProgramOptimization>
+        <CharacterSet>Unicode</CharacterSet>
+    </PropertyGroup>
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+    <ImportGroup Label="ExtensionSettings">
+    </ImportGroup>
+    <ImportGroup Label="Shared">
+    </ImportGroup>
+    <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    </ImportGroup>
+    <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+    <ImportGroup Label="ExtensionTargets">
+    </ImportGroup>
+</Project>

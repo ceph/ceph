@@ -11,76 +11,97 @@
  * Foundation.  See file COPYING.
  *
  */
+// #define BOOST_SPIRIT_DEBUG
 
 #include <algorithm>
-#include <errno.h>
-#include <list>
+#include <cctype>
+#include <experimental/iterator>
+#include <fstream>
+#include <iostream>
+#include <iterator>
 #include <map>
 #include <sstream>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <string>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <iostream>
+
+#if __has_include(<filesystem>)
+#include <filesystem>
+namespace fs = std::filesystem;
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
+#else
+#error std::filesystem not available!
+#endif
+
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/trim_all.hpp>
+#include <boost/spirit/include/qi.hpp>
+#include <boost/spirit/include/phoenix.hpp>
+#include <boost/spirit/include/support_line_pos_iterator.hpp>
 
 #include "include/buffer.h"
 #include "common/errno.h"
 #include "common/utf8.h"
 #include "common/ConfUtils.h"
 
-using std::cerr;
 using std::ostringstream;
-using std::pair;
 using std::string;
 
 #define MAX_CONFIG_FILE_SZ 0x40000000
 
-////////////////////////////// ConfLine //////////////////////////////
-ConfLine::
-ConfLine(const std::string &key_, const std::string &val_,
-      const std::string &newsection_, const std::string &comment_, int line_no_)
-  : key(key_), val(val_), newsection(newsection_)
-{
-  // If you want to implement writable ConfFile support, you'll need to save
-  // the comment and line_no arguments here.
-}
+conf_line_t::conf_line_t(const std::string& key, const std::string& val)
+  : key{ConfFile::normalize_key_name(key)},
+    val{boost::algorithm::trim_copy_if(
+          val,
+	  [](unsigned char c) {
+	    return std::isspace(c);
+	  })}
+{}
 
-bool ConfLine::
-operator<(const ConfLine &rhs) const
+bool conf_line_t::operator<(const conf_line_t &rhs) const
 {
   // We only compare keys.
   // If you have more than one line with the same key in a given section, the
   // last one wins.
-  if (key < rhs.key)
-    return true;
-  else
-    return false;
+  return key < rhs.key;
 }
 
-std::ostream &operator<<(std::ostream& oss, const ConfLine &l)
+std::ostream &operator<<(std::ostream& oss, const conf_line_t &l)
 {
-  oss << "ConfLine(key = '" << l.key << "', val='"
-      << l.val << "', newsection='" << l.newsection << "')";
+  oss << "conf_line_t(key = '" << l.key << "', val='" << l.val << "')";
   return oss;
 }
+
+conf_section_t::conf_section_t(const std::string& heading,
+			       const std::vector<conf_line_t>& lines)
+  : heading{heading}
+{
+  for (auto& line : lines) {
+    auto [where, inserted] = insert(line);
+    if (!inserted) {
+      erase(where);
+      insert(line);
+    }
+  }
+}
+
 ///////////////////////// ConfFile //////////////////////////
-ConfFile::
-ConfFile()
-{
-}
 
-ConfFile::
-~ConfFile()
+ConfFile::ConfFile(const std::vector<conf_section_t>& sections)
 {
-}
-
-void ConfFile::
-clear()
-{
-  sections.clear();
+  for (auto& section : sections) {
+    auto [old_sec, sec_inserted] = emplace(section.heading, section);
+    if (!sec_inserted) {
+      // merge lines in section into old_sec
+      for (auto& line : section) {
+	auto [old_line, line_inserted] = old_sec->second.emplace(line);
+	// and replace the existing ones if any
+	if (!line_inserted) {
+	  old_sec->second.erase(old_line);
+	  old_sec->second.insert(line);
+	}
+      }
+    }
+  }
 }
 
 /* We load the whole file into memory and then parse it.  Although this is not
@@ -90,165 +111,191 @@ clear()
  * In general, configuration files should be a few kilobytes at maximum, so
  * loading the whole configuration into memory shouldn't be a problem.
  */
-int ConfFile::
-parse_file(const std::string &fname, std::deque<std::string> *errors,
-	   std::ostream *warnings)
+int ConfFile::parse_file(const std::string &fname,
+			 std::ostream *warnings)
 {
   clear();
-
-  int ret = 0;
-  size_t sz;
-  char *buf = NULL;
-  FILE *fp = fopen(fname.c_str(), "r");
-  if (!fp) {
-    ostringstream oss;
-    oss << __func__ << ": cannot open " << fname << ": " << cpp_strerror(errno);
-    errors->push_back(oss.str());
-    ret = -errno;
-    return ret;
-  }
-
-  struct stat st_buf;
-  if (fstat(fileno(fp), &st_buf)) {
-    ret = -errno;
-    ostringstream oss;
-    oss << __func__ << ": failed to fstat '" << fname << "': " << cpp_strerror(ret);
-    errors->push_back(oss.str());
-    goto done;
-  }
-
-  if (st_buf.st_size > MAX_CONFIG_FILE_SZ) {
-    ostringstream oss;
-    oss << __func__ << ": config file '" << fname << "' is " << st_buf.st_size
-	<< " bytes, but the maximum is " << MAX_CONFIG_FILE_SZ;
-    errors->push_back(oss.str());
-    ret = -EINVAL;
-    goto done;
-  }
-
-  sz = (size_t)st_buf.st_size;
-  buf = (char*)malloc(sz);
-  if (!buf) {
-    ret = -ENOMEM;
-    goto done;
-  }
-
-  if (fread(buf, 1, sz, fp) != sz) {
-    if (ferror(fp)) {
-      ret = -errno;
-      ostringstream oss;
-      oss << __func__ << ": fread error while reading '" << fname << "': "
-	  << cpp_strerror(ret);
-      errors->push_back(oss.str());
-      goto done;
+  try {
+    if (auto file_size = fs::file_size(fname); file_size > MAX_CONFIG_FILE_SZ) {
+      *warnings << __func__ << ": config file '" << fname
+		<< "' is " << file_size << " bytes, "
+		<< "but the maximum is " << MAX_CONFIG_FILE_SZ;
+      return -EINVAL;
     }
-    else {
-      ostringstream oss;
-      oss << __func__ << ": unexpected EOF while reading '" << fname << "': "
-	  << "possible concurrent modification?";
-      errors->push_back(oss.str());
-      ret = -EIO;
-      goto done;
+  } catch (const fs::filesystem_error& e) {
+    std::error_code ec;
+    auto is_other = fs::is_other(fname, ec);
+    if (!ec && is_other) {
+      // /dev/null?
+      return 0;
+    } else {
+      *warnings << __func__ << ": " << e.what();
+      return -e.code().value();
     }
   }
-
-  load_from_buffer(buf, sz, errors, warnings);
-  ret = 0;
-
-done:
-  free(buf);
-  fclose(fp);
-  return ret;
+  std::ifstream ifs{fname};
+  std::string buffer{std::istreambuf_iterator<char>(ifs),
+			               std::istreambuf_iterator<char>()};
+  if (parse_buffer(buffer, warnings)) {
+    return 0;
+  } else {
+    return -EINVAL;
+  }
 }
 
-int ConfFile::
-parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors,
-		 std::ostream *warnings)
+namespace {
+
+namespace qi = boost::spirit::qi;
+namespace phoenix = boost::phoenix;
+
+template<typename Iterator, typename Skipper>
+struct IniGrammer : qi::grammar<Iterator, ConfFile(), Skipper>
+{
+  struct error_handler_t {
+    std::ostream& os;
+    template<typename Iter>
+    auto operator()(Iter first, Iter last, Iter where,
+		    const boost::spirit::info& what) const {
+      auto line_start = boost::spirit::get_line_start(first, where);
+      os << "parse error: expected '" << what
+	 << "' in line " << boost::spirit::get_line(where)
+	 << " at position " << boost::spirit::get_column(line_start, where) << "\n";
+      return qi::fail;
+    }
+  };
+  IniGrammer(Iterator begin, std::ostream& err)
+    : IniGrammer::base_type{conf_file},
+      report_error{error_handler_t{err}}
+  {
+    using qi::_1;
+    using qi::_2;
+    using qi::_val;
+    using qi::char_;
+    using qi::eoi;
+    using qi::eol;
+    using qi::blank;
+    using qi::lexeme;
+    using qi::lit;
+    using qi::raw;
+
+    blanks = *blank;
+    comment_start = lit('#') | lit(';');
+    continue_marker = lit('\\') >> eol;
+
+    text_char %=
+      (lit('\\') >> (char_ - eol)) |
+      (char_ - (comment_start | eol));
+
+    key %= raw[+(text_char - char_("=[ ")) % +blank];
+    quoted_value %=
+      lexeme[lit('"') >> *(text_char - '"') > '"'] |
+      lexeme[lit('\'') >> *(text_char - '\'') > '\''];
+    unquoted_value %= *text_char;
+    comment = *blank >> comment_start > *(char_ - eol);
+    empty_line = -(blanks|comment) >> eol;
+    value %= quoted_value | unquoted_value;
+    key_val =
+      (blanks >> key >> blanks >> '=' > blanks > value > +empty_line)
+      [_val = phoenix::construct<conf_line_t>(_1, _2)];
+
+    heading %= lit('[') > +(text_char - ']') > ']' > +empty_line;
+    section =
+      (heading >> *(key_val - heading) >> *eol)
+      [_val = phoenix::construct<conf_section_t>(_1, _2)];
+    conf_file =
+      (key_val [_val = phoenix::construct<ConfFile>(_1)]
+       |
+       (*eol >> (*section)[_val = phoenix::construct<ConfFile>(_1)])
+      ) > eoi;
+
+    empty_line.name("empty_line");
+    key.name("key");
+    quoted_value.name("quoted value");
+    unquoted_value.name("unquoted value");
+    key_val.name("key=val");
+    heading.name("section name");
+    section.name("section");
+
+    qi::on_error<qi::fail>(
+      conf_file,
+      report_error(qi::_1, qi::_2, qi::_3, qi::_4));
+
+    BOOST_SPIRIT_DEBUG_NODE(heading);
+    BOOST_SPIRIT_DEBUG_NODE(section);
+    BOOST_SPIRIT_DEBUG_NODE(key);
+    BOOST_SPIRIT_DEBUG_NODE(quoted_value);
+    BOOST_SPIRIT_DEBUG_NODE(unquoted_value);
+    BOOST_SPIRIT_DEBUG_NODE(key_val);
+    BOOST_SPIRIT_DEBUG_NODE(conf_file);
+  }
+
+  qi::rule<Iterator> blanks;
+  qi::rule<Iterator> empty_line;
+  qi::rule<Iterator> comment_start;
+  qi::rule<Iterator> continue_marker;
+  qi::rule<Iterator, char()> text_char;
+  qi::rule<Iterator, std::string(), Skipper> key;
+  qi::rule<Iterator, std::string(), Skipper> quoted_value;
+  qi::rule<Iterator, std::string(), Skipper> unquoted_value;
+  qi::rule<Iterator> comment;
+  qi::rule<Iterator, std::string(), Skipper> value;
+  qi::rule<Iterator, conf_line_t(), Skipper> key_val;
+  qi::rule<Iterator, std::string(), Skipper> heading;
+  qi::rule<Iterator, conf_section_t(), Skipper> section;
+  qi::rule<Iterator, ConfFile(), Skipper> conf_file;
+  boost::phoenix::function<error_handler_t> report_error;
+};
+}
+
+bool ConfFile::parse_buffer(std::string_view buf, std::ostream* err)
+{
+  assert(err);
+#ifdef _WIN32
+  // We'll need to ensure that there's a new line at the end of the buffer,
+  // otherwise the config parsing will fail.
+  std::string _buf = std::string(buf) + "\n";
+#else
+  std::string_view _buf = buf;
+#endif
+  if (int err_pos = check_utf8(_buf.data(), _buf.size()); err_pos > 0) {
+    *err << "parse error: invalid UTF-8 found at line "
+	 << std::count(_buf.begin(), std::next(_buf.begin(), err_pos), '\n') + 1;
+    return false;
+  }
+  using iter_t = boost::spirit::line_pos_iterator<decltype(_buf.begin())>;
+  iter_t first{_buf.begin()};
+  using skipper_t = qi::rule<iter_t>;
+  IniGrammer<iter_t, skipper_t> grammar{first, *err};
+  skipper_t skipper = grammar.continue_marker | grammar.comment;
+  return qi::phrase_parse(first, iter_t{_buf.end()},
+			  grammar, skipper, *this);
+}
+
+int ConfFile::parse_bufferlist(ceph::bufferlist *bl,
+			       std::ostream *warnings)
 {
   clear();
-
-  load_from_buffer(bl->c_str(), bl->length(), errors, warnings);
-  return 0;
+  ostringstream oss;
+  if (!warnings) {
+    warnings = &oss;
+  }
+  return parse_buffer({bl->c_str(), bl->length()}, warnings) ? 0 : -EINVAL;
 }
 
-int ConfFile::
-read(const std::string &section, const std::string &key, std::string &val) const
+int ConfFile::read(std::string_view section_name,
+		   std::string_view key,
+		   std::string &val) const
 {
   string k(normalize_key_name(key));
 
-  const_section_iter_t s = sections.find(section);
-  if (s == sections.end())
-    return -ENOENT;
-  ConfLine exemplar(k, "", "", "", 0);
-  ConfSection::const_line_iter_t l = s->second.lines.find(exemplar);
-  if (l == s->second.lines.end())
-    return -ENOENT;
-  val = l->val;
-  return 0;
-}
-
-ConfFile::const_section_iter_t ConfFile::
-sections_begin() const
-{
-  return sections.begin();
-}
-
-ConfFile::const_section_iter_t ConfFile::
-sections_end() const
-{
-  return sections.end();
-}
-
-void ConfFile::
-trim_whitespace(std::string &str, bool strip_internal)
-{
-  // strip preceding
-  const char *in = str.c_str();
-  while (true) {
-    char c = *in;
-    if ((!c) || (!isspace(c)))
-      break;
-    ++in;
-  }
-  char output[strlen(in) + 1];
-  strcpy(output, in);
-
-  // strip trailing
-  char *o = output + strlen(output);
-  while (true) {
-    if (o == output)
-      break;
-    --o;
-    if (!isspace(*o)) {
-      ++o;
-      *o = '\0';
-      break;
+  if (auto s = base_type::find(section_name); s != end()) {
+    conf_line_t exemplar{k, {}};
+    if (auto line = s->second.find(exemplar); line != s->second.end()) {
+      val = line->val;
+      return 0;
     }
   }
-
-  if (!strip_internal) {
-    str.assign(output);
-    return;
-  }
-
-  // strip internal
-  char output2[strlen(output) + 1];
-  char *out2 = output2;
-  bool prev_was_space = false;
-  for (char *u = output; *u; ++u) {
-    char c = *u;
-    if (isspace(c)) {
-      if (!prev_was_space)
-	*out2++ = c;
-      prev_was_space = true;
-    }
-    else {
-      *out2++ = c;
-      prev_was_space = false;
-    }
-  }
-  *out2++ = '\0';
-  str.assign(output2);
+  return -ENOENT;
 }
 
 /* Normalize a key name.
@@ -258,342 +305,43 @@ trim_whitespace(std::string &str, bool strip_internal)
  * normal form is so that in common/config.cc, we can use a macro to stringify
  * the field names of md_config_t and get a key in normal form.
  */
-std::string ConfFile::
-normalize_key_name(const std::string &key)
+std::string ConfFile::normalize_key_name(std::string_view key)
 {
-  string k(key);
-  ConfFile::trim_whitespace(k, true);
-  std::replace(k.begin(), k.end(), ' ', '_');
+  std::string k{key};
+  boost::algorithm::trim_fill_if(k, "_", isspace);
   return k;
+}
+
+void ConfFile::check_old_style_section_names(const std::vector<std::string>& prefixes,
+					     std::ostream& os)
+{
+  // Warn about section names that look like old-style section names
+  std::vector<std::string> old_style_section_names;
+  for (auto& [name, section] : *this) {
+    for (auto& prefix : prefixes) {
+      if (name.find(prefix) == 0 && name.size() > 3 && name[3] != '.') {
+	old_style_section_names.push_back(name);
+      }
+    }
+  }
+  if (!old_style_section_names.empty()) {
+    os << "ERROR! old-style section name(s) found: ";
+    std::copy(std::begin(old_style_section_names),
+              std::end(old_style_section_names),
+              std::experimental::make_ostream_joiner(os, ", "));
+    os << ". Please use the new style section names that include a period.";
+  }
 }
 
 std::ostream &operator<<(std::ostream &oss, const ConfFile &cf)
 {
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    oss << "[" << s->first << "]\n";
-    for (ConfSection::const_line_iter_t l = s->second.lines.begin();
-	 l != s->second.lines.end(); ++l) {
-      if (!l->key.empty()) {
-	oss << "\t" << l->key << " = \"" << l->val << "\"\n";
+  for (auto& [name, section] : cf) {
+    oss << "[" << name << "]\n";
+    for (auto& [key, val] : section) {
+      if (!key.empty()) {
+	oss << "\t" << key << " = \"" << val << "\"\n";
       }
     }
   }
   return oss;
-}
-
-void ConfFile::
-load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
-		 std::ostream *warnings)
-{
-  errors->clear();
-
-  section_iter_t::value_type vt("global", ConfSection());
-  pair < section_iter_t, bool > vr(sections.insert(vt));
-  assert(vr.second);
-  section_iter_t cur_section = vr.first;
-  std::string acc;
-
-  const char *b = buf;
-  int line_no = 0;
-  size_t line_len = -1;
-  size_t rem = sz;
-  while (1) {
-    b += line_len + 1;
-    if ((line_len + 1) > rem)
-      break;
-    rem -= line_len + 1;
-    if (rem == 0)
-      break;
-    line_no++;
-
-    // look for the next newline
-    const char *end = (const char*)memchr(b, '\n', rem);
-    if (!end) {
-      ostringstream oss;
-      oss << "read_conf: ignoring line " << line_no << " because it doesn't "
-	  << "end with a newline! Please end the config file with a newline.";
-      errors->push_back(oss.str());
-      break;
-    }
-
-    // find length of line, and search for NULLs
-    line_len = 0;
-    bool found_null = false;
-    for (const char *tmp = b; tmp != end; ++tmp) {
-      line_len++;
-      if (*tmp == '\0') {
-	found_null = true;
-      }
-    }
-
-    if (found_null) {
-      ostringstream oss;
-      oss << "read_conf: ignoring line " << line_no << " because it has "
-	  << "an embedded null.";
-      errors->push_back(oss.str());
-      acc.clear();
-      continue;
-    }
-
-    if (check_utf8(b, line_len)) {
-      ostringstream oss;
-      oss << "read_conf: ignoring line " << line_no << " because it is not "
-	  << "valid UTF8.";
-      errors->push_back(oss.str());
-      acc.clear();
-      continue;
-    }
-
-    if ((line_len >= 1) && (b[line_len-1] == '\\')) {
-      // A backslash at the end of a line serves as a line continuation marker.
-      // Combine the next line with this one.
-      // Remove the backslash itself from the text.
-      acc.append(b, line_len - 1);
-      continue;
-    }
-
-    acc.append(b, line_len);
-
-    //cerr << "acc = '" << acc << "'" << std::endl;
-    ConfLine *cline = process_line(line_no, acc.c_str(), errors);
-    acc.clear();
-    if (!cline)
-      continue;
-    const std::string &csection(cline->newsection);
-    if (!csection.empty()) {
-      std::map <std::string, ConfSection>::value_type nt(csection, ConfSection());
-      pair < section_iter_t, bool > nr(sections.insert(nt));
-      cur_section = nr.first;
-    }
-    else {
-      if (cur_section->second.lines.count(*cline)) {
-	// replace an existing key/line in this section, so that
-	//  [mysection]
-	//    foo = 1
-	//    foo = 2
-	// will result in foo = 2.
-	cur_section->second.lines.erase(*cline);
-	if (cline->key.length() && warnings)
-	  *warnings << "warning: line " << line_no << ": '" << cline->key << "' in section '"
-		    << cur_section->first << "' redefined " << std::endl;
-      }
-      // add line to current section
-      //std::cerr << "cur_section = " << cur_section->first << ", " << *cline << std::endl;
-      cur_section->second.lines.insert(*cline);
-    }
-    delete cline;
-  }
-
-  if (!acc.empty()) {
-    ostringstream oss;
-    oss << "read_conf: don't end with lines that end in backslashes!";
-    errors->push_back(oss.str());
-  }
-}
-
-/*
- * A simple state-machine based parser.
- * This probably could/should be rewritten with something like boost::spirit
- * or yacc if the grammar ever gets more complex.
- */
-ConfLine* ConfFile::
-process_line(int line_no, const char *line, std::deque<std::string> *errors)
-{
-  enum acceptor_state_t {
-    ACCEPT_INIT,
-    ACCEPT_SECTION_NAME,
-    ACCEPT_KEY,
-    ACCEPT_VAL_START,
-    ACCEPT_UNQUOTED_VAL,
-    ACCEPT_QUOTED_VAL,
-    ACCEPT_COMMENT_START,
-    ACCEPT_COMMENT_TEXT,
-  };
-  const char *l = line;
-  acceptor_state_t state = ACCEPT_INIT;
-  string key, val, newsection, comment;
-  bool escaping = false;
-  while (true) {
-    char c = *l++;
-    switch (state) {
-      case ACCEPT_INIT:
-	if (c == '\0')
-	  return NULL; // blank line. Not an error, but not interesting either.
-	else if (c == '[')
-	  state = ACCEPT_SECTION_NAME;
-	else if ((c == '#') || (c == ';'))
-	  state = ACCEPT_COMMENT_TEXT;
-	else if (c == ']') {
-	  ostringstream oss;
-	  oss << "unexpected right bracket at char " << (l - line)
-	      << ", line " << line_no;
-	  errors->push_back(oss.str());
-	  return NULL;
-	}
-	else if (isspace(c)) {
-	  // ignore whitespace here
-	}
-	else {
-	  // try to accept this character as a key
-	  state = ACCEPT_KEY;
-	  --l;
-	}
-	break;
-      case ACCEPT_SECTION_NAME:
-	if (c == '\0') {
-	  ostringstream oss;
-	  oss << "error parsing new section name: expected right bracket "
-	      << "at char " << (l - line) << ", line " << line_no;
-	  errors->push_back(oss.str());
-	  return NULL;
-	}
-	else if ((c == ']') && (!escaping)) {
-	  trim_whitespace(newsection, true);
-	  if (newsection.empty()) {
-	    ostringstream oss;
-	    oss << "error parsing new section name: no section name found? "
-	        << "at char " << (l - line) << ", line " << line_no;
-	    errors->push_back(oss.str());
-	    return NULL;
-	  }
-	  state = ACCEPT_COMMENT_START;
-	}
-	else if (((c == '#') || (c == ';')) && (!escaping)) {
-	  ostringstream oss;
-	  oss << "unexpected comment marker while parsing new section name, at "
-	      << "char " << (l - line) << ", line " << line_no;
-	  errors->push_back(oss.str());
-	  return NULL;
-	}
-	else if ((c == '\\') && (!escaping)) {
-	  escaping = true;
-	}
-	else {
-	  escaping = false;
-	  newsection += c;
-	}
-	break;
-      case ACCEPT_KEY:
-	if ((((c == '#') || (c == ';')) && (!escaping)) || (c == '\0')) {
-	  ostringstream oss;
-	  if (c == '\0') {
-	    oss << "end of key=val line " << line_no
-	        << " reached, no \"=val\" found...missing =?";
-	  } else {
-	    oss << "unexpected character while parsing putative key value, "
-		<< "at char " << (l - line) << ", line " << line_no;
-	  }
-	  errors->push_back(oss.str());
-	  return NULL;
-	}
-	else if ((c == '=') && (!escaping)) {
-	  key = normalize_key_name(key);
-	  if (key.empty()) {
-	    ostringstream oss;
-	    oss << "error parsing key name: no key name found? "
-	        << "at char " << (l - line) << ", line " << line_no;
-	    errors->push_back(oss.str());
-	    return NULL;
-	  }
-	  state = ACCEPT_VAL_START;
-	}
-	else if ((c == '\\') && (!escaping)) {
-	  escaping = true;
-	}
-	else {
-	  escaping = false;
-	  key += c;
-	}
-	break;
-      case ACCEPT_VAL_START:
-	if (c == '\0')
-	  return new ConfLine(key, val, newsection, comment, line_no);
-	else if ((c == '#') || (c == ';'))
-	  state = ACCEPT_COMMENT_TEXT;
-	else if (c == '"')
-	  state = ACCEPT_QUOTED_VAL;
-	else if (isspace(c)) {
-	  // ignore whitespace
-	}
-	else {
-	  // try to accept character as a val
-	  state = ACCEPT_UNQUOTED_VAL;
-	  --l;
-	}
-	break;
-      case ACCEPT_UNQUOTED_VAL:
-	if (c == '\0') {
-	  if (escaping) {
-	    ostringstream oss;
-	    oss << "error parsing value name: unterminated escape sequence "
-	        << "at char " << (l - line) << ", line " << line_no;
-	    errors->push_back(oss.str());
-	    return NULL;
-	  }
-	  trim_whitespace(val, false);
-	  return new ConfLine(key, val, newsection, comment, line_no);
-	}
-	else if (((c == '#') || (c == ';')) && (!escaping)) {
-	  trim_whitespace(val, false);
-	  state = ACCEPT_COMMENT_TEXT;
-	}
-	else if ((c == '\\') && (!escaping)) {
-	  escaping = true;
-	}
-	else {
-	  escaping = false;
-	  val += c;
-	}
-	break;
-      case ACCEPT_QUOTED_VAL:
-	if (c == '\0') {
-	  ostringstream oss;
-	  oss << "found opening quote for value, but not the closing quote. "
-	      << "line " << line_no;
-	  errors->push_back(oss.str());
-	  return NULL;
-	}
-	else if ((c == '"') && (!escaping)) {
-	  state = ACCEPT_COMMENT_START;
-	}
-	else if ((c == '\\') && (!escaping)) {
-	  escaping = true;
-	}
-	else {
-	  escaping = false;
-	  // Add anything, including whitespace.
-	  val += c;
-	}
-	break;
-      case ACCEPT_COMMENT_START:
-	if (c == '\0') {
-	  return new ConfLine(key, val, newsection, comment, line_no);
-	}
-	else if ((c == '#') || (c == ';')) {
-	  state = ACCEPT_COMMENT_TEXT;
-	}
-	else if (isspace(c)) {
-	  // ignore whitespace
-	}
-	else {
-	  ostringstream oss;
-	  oss << "unexpected character at char " << (l - line) << " of line "
-	      << line_no;
-	  errors->push_back(oss.str());
-	  return NULL;
-	}
-	break;
-      case ACCEPT_COMMENT_TEXT:
-	if (c == '\0')
-	  return new ConfLine(key, val, newsection, comment, line_no);
-	else
-	  comment += c;
-	break;
-      default:
-	ceph_abort();
-	break;
-    }
-    assert(c != '\0'); // We better not go past the end of the input string.
-  }
 }

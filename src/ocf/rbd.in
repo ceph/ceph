@@ -3,7 +3,7 @@
 #   OCF resource agent for mapping and unmapping
 #   RADOS Block Devices (RBDs)
 #
-#   License:      GNU Lesser General Public License (LGPL) 2.1
+#   License:      GNU Lesser General Public License (LGPL) 2.1 or 3.0
 #   (c) 2012 Florian Haas, hastexo
 #
 
@@ -40,6 +40,12 @@ resource. Maps and unmaps RBDs as needed.
       </longdesc>
       <shortdesc lang="en">RBD device name</shortdesc>
       <content type="string"/>
+    </parameter>
+    <parameter name="pool_namespace" unique="0" required="0">
+      <longdesc lang="en">
+      Name of the RADOS pool namespace where the RBD has been created
+      </longdesc>
+      <shortdesc lang="en">RADOS pool namespace name</shortdesc>
     </parameter>
     <parameter name="pool" unique="0" required="0">
       <longdesc lang="en">
@@ -108,9 +114,7 @@ Expects to have a fully populated OCF RA-compliant environment set.
 EOF
 }
 
-# rbd command wrapper: builds an option string for invoking RBD based
-# on resource parameters, and invokes rbd through ocf_run.
-do_rbd() {
+get_rbd_options() {
     local rbd_options
 
     if [ -n "${OCF_RESKEY_cephconf}" ]; then
@@ -120,25 +124,36 @@ do_rbd() {
         rbd_options="$rbd_options -m ${OCF_RESKEY_mon}"
     fi
 
+    echo "${rbd_options}"
+}
+
+
+# rbd command wrapper: builds an option string for invoking RBD based
+# on resource parameters, and invokes rbd through ocf_run.
+do_rbd() {
+    local rbd_options="$(get_rbd_options)"
+
     ocf_run rbd $rbd_options $@
 }
 
-# Convenience function that uses "rbd showmapped" to retrieve the
+# Convenience function that uses "rbd device list" to retrieve the
 # mapped device name from the pool, RBD name, and snapshot.
 find_rbd_dev() {
+    local rbd_options="$(get_rbd_options)"
     local sedpat
 
-    # Example output from "rbd showmapped" (tab separated):
-    # id        pool    image   snap    device
-    # 0         rbd     test    -       /dev/rbd0
+    # Example output from "rbd device list" (tab separated):
+    # id        pool    namespace	image   snap    device
+    # 0         rbd     		test    -       /dev/rbd0
+    # 1         rbd     ns1		test    -       /dev/rbd1
 
     # Build the sed pattern, substituting "-" for the snapshot name if
     # it's unset
-    sedpat="[0-9]\+[ \t]\+${OCF_RESKEY_pool}[ \t]\+${OCF_RESKEY_name}[ \t]\+${OCF_RESKEY_snap:--}[ \t]\+\(/dev/rbd[0-9]\+\).*"
+    sedpat="[0-9]\+[ \t]\+${OCF_RESKEY_pool}[ \t]\+${OCF_RESKEY_pool_namespace}[ \t]\+${OCF_RESKEY_name}[ \t]\+${OCF_RESKEY_snap:--}[ \t]\+\(/dev/rbd[0-9]\+\).*"
 
-    # Run rbd showmapped, filter out the header line, then try to
+    # Run "rbd device list", filter out the header line, then try to
     # extract the device name
-    rbd showmapped | tail -n +2 | sed -n -e "s,$sedpat,\1,p"
+    rbd $rbd_options device list | tail -n +2 | sed -n -e "s,$sedpat,\1,p"
 }
 
 rbd_validate_all() {
@@ -206,12 +221,16 @@ rbd_start() {
         rbd_map_options="$rbd_map_options --keyfile ${OCF_RESKEY_secret}"
     fi
 
-    rbd_name="${OCF_RESKEY_pool}/${OCF_RESKEY_name}"
+    rbd_name="${OCF_RESKEY_pool}"
+    if [ -n "${OCF_RESKEY_pool_namespace}" ]; then
+        rbd_name="${rbd_name}/${OCF_RESKEY_pool_namespace}"
+    fi
+    rbd_name="${rbd_name}/${OCF_RESKEY_name}"
     if [ -n "${OCF_RESKEY_snap}" ]; then
-        rbd_name="$rbd_name@${OCF_RESKEY_snap}"
+        rbd_name="${rbd_name}@${OCF_RESKEY_snap}"
     fi
 
-    do_rbd map $rbd_name $rbd_map_options || exit $OCF_ERR_GENERIC
+    do_rbd device map $rbd_name $rbd_map_options || exit $OCF_ERR_GENERIC
 
     # After the resource has been started, check whether it started up
     # correctly. If the resource starts asynchronously, the agent may
@@ -249,7 +268,7 @@ rbd_stop() {
     # exit with an $OCF_ERR_ error code if anything goes seriously
     # wrong)
     rbd_dev=`find_rbd_dev`
-    do_rbd unmap $rbd_dev || exit $OCF_ERR_GENERIC
+    do_rbd device unmap $rbd_dev || exit $OCF_ERR_GENERIC
 
     # After the resource has been stopped, check whether it shut down
     # correctly. If the resource stops asynchronously, the agent may

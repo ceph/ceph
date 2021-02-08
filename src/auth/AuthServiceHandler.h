@@ -15,11 +15,15 @@
 #ifndef CEPH_AUTHSERVICEHANDLER_H
 #define CEPH_AUTHSERVICEHANDLER_H
 
-#include "include/types.h"
-#include "Auth.h"
+#include <stddef.h>              // for NULL
+#include <stdint.h>              // for uint64_t
+#include "common/entity_name.h"  // for EntityName
+#include "include/common_fwd.h"
+#include "include/buffer_fwd.h"  // for ceph::buffer::list
 
-class CephContext;
 class KeyServer;
+class CryptoKey;
+struct AuthCapsInfo;
 
 struct AuthServiceHandler {
 protected:
@@ -32,8 +36,19 @@ public:
 
   virtual ~AuthServiceHandler() { }
 
-  virtual int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result, AuthCapsInfo& caps) = 0;
-  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) = 0;
+  virtual int start_session(const EntityName& name,
+			    size_t connection_secret_required_length,
+			    ceph::buffer::list *result,
+			    AuthCapsInfo *caps,
+			    CryptoKey *session_key,
+			    std::string *connection_secret) = 0;
+  virtual int handle_request(ceph::buffer::list::const_iterator& indata,
+			     size_t connection_secret_required_length,
+			     ceph::buffer::list *result,
+			     uint64_t *global_id,
+			     AuthCapsInfo *caps,
+			     CryptoKey *session_key,
+			     std::string *connection_secret) = 0;
 
   EntityName& get_entity_name() { return entity_name; }
 };

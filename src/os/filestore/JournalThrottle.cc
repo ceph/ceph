@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "JournalThrottle.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 bool JournalThrottle::set_params(
   double _low_threshhold,
@@ -53,7 +53,7 @@ std::pair<uint64_t, uint64_t> JournalThrottle::flush(uint64_t mono_id)
     }
   }
   throttle.put(to_put_bytes);
-  return make_pair(to_put_ops, to_put_bytes);
+  return std::make_pair(to_put_ops, to_put_bytes);
 }
 
 uint64_t JournalThrottle::get_current()

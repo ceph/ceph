@@ -1,12 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_cache.h"
+#include "rgw_meta_sync_status.h"
+#include "rgw_data_sync.h"
+#include "rgw_multi.h"
 
 #include "common/Formatter.h"
 
@@ -44,11 +48,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     if (explicit_iter != manifest->objs.begin()) {
       --explicit_iter;
     }
-    if (ofs >= manifest->obj_size) {
+    if (ofs < manifest->obj_size) {
+      update_explicit_pos();
+    } else {
       ofs = manifest->obj_size;
-      return;
     }
-    update_explicit_pos();
     update_location();
     return;
   }
@@ -98,9 +102,9 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 
   if (!rule.part_size) {
     stripe_size = rule.stripe_max_size;
-    stripe_size = MIN(manifest->get_obj_size() - stripe_ofs, stripe_size);
+    stripe_size = std::min(manifest->get_obj_size() - stripe_ofs, stripe_size);
   } else {
-    uint64_t next = MIN(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
+    uint64_t next = std::min(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
     stripe_size = next - stripe_ofs;
   }
 
@@ -112,12 +116,17 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 void RGWObjManifest::obj_iterator::update_location()
 {
   if (manifest->explicit_objs) {
-    location = explicit_iter->second.loc;
+    if (manifest->empty()) {
+      location = rgw_obj_select{};
+    } else {
+      location = explicit_iter->second.loc;
+    }
     return;
   }
 
   if (ofs < manifest->get_head_size()) {
     location = manifest->get_obj();
+    location.set_placement_rule(manifest->get_head_placement_rule());
     return;
   }
 
@@ -141,6 +150,8 @@ void RGWObjManifest::obj_iterator::update_explicit_pos()
 void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
 {
   RGWObjManifest *m = new RGWObjManifest;
+  map<uint64_t, RGWObjManifestPart> objs;
+  uint64_t total_size = 0;
   for (int i = 0; i<10; i++) {
     RGWObjManifestPart p;
     rgw_bucket b;
@@ -148,12 +159,11 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
     p.loc = rgw_obj(b, "object");
     p.loc_ofs = 0;
     p.size = 512 * 1024;
-    m->objs[(uint64_t)i * 512 * 1024] = p;
+    total_size += p.size;
+    objs[total_size] = p;
   }
-  m->obj_size = 5 * 1024 * 1024;
-
+  m->set_explicit(total_size, objs);
   o.push_back(m);
-
   o.push_back(new RGWObjManifest);
 }
 
@@ -228,6 +238,7 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->user_agent = "user_agent";
   e->referrer = "referrer";
   e->bucket_id = "10";
+  e->trans_id = "trans_id";
   o.push_back(e);
   o.push_back(new rgw_log_entry);
 }
@@ -355,14 +366,15 @@ void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
 
 void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
 {
+  using ceph::encode;
   ObjectCacheInfo *i = new ObjectCacheInfo;
   i->status = 0;
   i->flags = CACHE_FLAG_MODIFY_XATTRS;
   string s = "this is a string";
   string s2 = "this is a another string";
   bufferlist data, data2;
-  ::encode(s, data);
-  ::encode(s2, data2);
+  encode(s, data);
+  encode(s2, data2);
   i->data = data;
   i->xattrs["x1"] = data;
   i->xattrs["x2"] = data2;
@@ -400,7 +412,6 @@ void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 {
   RGWUserInfo *i = new RGWUserInfo;
-  i->auid = 1;
   i->user_id = "user_id";
   i->display_name =  "display_name";
   i->user_email = "user@email";
@@ -452,6 +463,27 @@ void RGWZone::generate_test_instances(list<RGWZone*> &o)
   o.push_back(new RGWZone);
 }
 
+void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+{
+  RGWRealm *z = new RGWRealm;
+  o.push_back(z);
+  o.push_back(new RGWRealm);
+}
+
+void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
+{
+  RGWPeriod *z = new RGWPeriod;
+  o.push_back(z);
+  o.push_back(new RGWPeriod);
+}
+
+void RGWPeriodLatestEpochInfo::generate_test_instances(list<RGWPeriodLatestEpochInfo*> &o)
+{
+  RGWPeriodLatestEpochInfo *z = new RGWPeriodLatestEpochInfo;
+  o.push_back(z);
+  o.push_back(new RGWPeriodLatestEpochInfo);
+}
+
 void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
 {
   o.push_back(new RGWZoneParams);
@@ -496,3 +528,91 @@ void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
   o.push_back(new rgw_obj);
 }
 
+void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
+{
+  auto info = new rgw_meta_sync_info;
+  info->state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+  info->period = "periodid";
+  info->realm_epoch = 5;
+  o.push_back(info);
+  o.push_back(new rgw_meta_sync_info);
+}
+
+void rgw_meta_sync_marker::generate_test_instances(list<rgw_meta_sync_marker*>& o)
+{
+  auto marker = new rgw_meta_sync_marker;
+  marker->state = rgw_meta_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->realm_epoch = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_meta_sync_marker);
+}
+
+void rgw_meta_sync_status::generate_test_instances(list<rgw_meta_sync_status*>& o)
+{
+  o.push_back(new rgw_meta_sync_status);
+}
+
+void rgw_data_sync_info::generate_test_instances(list<rgw_data_sync_info*>& o)
+{
+  auto info = new rgw_data_sync_info;
+  info->state = rgw_data_sync_info::StateBuildingFullSyncMaps;
+  info->num_shards = 8;
+  o.push_back(info);
+  o.push_back(new rgw_data_sync_info);
+}
+
+void rgw_data_sync_marker::generate_test_instances(list<rgw_data_sync_marker*>& o)
+{
+  auto marker = new rgw_data_sync_marker;
+  marker->state = rgw_data_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->pos = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_data_sync_marker);
+}
+
+void rgw_data_sync_status::generate_test_instances(list<rgw_data_sync_status*>& o)
+{
+  o.push_back(new rgw_data_sync_status);
+}
+
+void objexp_hint_entry::generate_test_instances(list<objexp_hint_entry*>& o)
+{
+  auto it = new objexp_hint_entry;
+  it->tenant = "tenant1";
+  it->bucket_name = "bucket1";
+  it->bucket_id = "1234";
+  it->obj_key = rgw_obj_key("obj");
+  o.push_back(it);
+  o.push_back(new objexp_hint_entry);
+}
+
+void RGWBucketEntryPoint::generate_test_instances(list<RGWBucketEntryPoint*>& o)
+{
+  RGWBucketEntryPoint *bp = new RGWBucketEntryPoint();
+  init_bucket(&bp->bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
+  bp->owner = "owner";
+  bp->creation_time = ceph::real_clock::from_ceph_timespec({init_le32(2), init_le32(3)});
+
+  o.push_back(bp);
+  o.push_back(new RGWBucketEntryPoint);
+}
+
+void rgw_user::generate_test_instances(list<rgw_user*>& o)
+{
+  rgw_user *u = new rgw_user("tenant", "user");
+
+  o.push_back(u);
+  o.push_back(new rgw_user);
+}
+
+void obj_version::generate_test_instances(list<obj_version*>& o)
+{
+  obj_version *v = new obj_version;
+  v->ver = 5;
+  v->tag = "tag";
+
+  o.push_back(v);
+  o.push_back(new obj_version);
+}

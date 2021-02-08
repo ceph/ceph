@@ -4,10 +4,10 @@
 
 .. index:: Ceph Block Device; OpenStack
 
-You may use Ceph Block Device images with OpenStack through ``libvirt``, which
-configures the QEMU interface to ``librbd``. Ceph stripes block device images as
-objects across the cluster, which means that large Ceph Block Device images have
-better performance than a standalone server!
+You can attach Ceph Block Device images to OpenStack instances through ``libvirt``,
+which configures the QEMU interface to ``librbd``. Ceph stripes block volumes
+across multiple OSDs within the cluster, which means that large volumes can
+realize better performance than local drives on a standalone server!
 
 To use Ceph Block Devices with OpenStack, you must install QEMU, ``libvirt``,
 and OpenStack first. We recommend using a separate physical node for your
@@ -16,7 +16,9 @@ quad-core processor. The following diagram depicts the OpenStack/Ceph
 technology stack.
 
 
-.. ditaa::  +---------------------------------------------------+
+.. ditaa::
+
+            +---------------------------------------------------+
             |                    OpenStack                      |
             +---------------------------------------------------+
             |                     libvirt                       |
@@ -47,48 +49,55 @@ Three parts of OpenStack integrate with Ceph's block devices:
   Cinder services.
 
 - **Guest Disks**: Guest disks are guest operating system disks. By default,
-  when you boot a virtual machine, its disk appears as a file on the filesystem
+  when you boot a virtual machine, its disk appears as a file on the file system
   of the hypervisor (usually under ``/var/lib/nova/instances/<uuid>/``). Prior
   to OpenStack Havana, the only way to boot a VM in Ceph was to use the
   boot-from-volume functionality of Cinder. However, now it is possible to boot
   every virtual machine inside Ceph directly without using Cinder, which is
   advantageous because it allows you to perform maintenance operations easily
   with the live-migration process. Additionally, if your hypervisor dies it is
-  also convenient to trigger ``nova evacuate`` and  run the virtual machine
-  elsewhere almost seamlessly.
+  also convenient to trigger ``nova evacuate`` and reinstate the virtual machine
+  elsewhere almost seamlessly. In doing so,
+  :ref:`exclusive locks <rbd-exclusive-locks>` prevent multiple
+  compute nodes from concurrently accessing the guest disk.
 
-You can use OpenStack Glance to store images in a Ceph Block Device, and you
+
+You can use OpenStack Glance to store images as Ceph Block Devices, and you
 can use Cinder to boot a VM using a copy-on-write clone of an image.
 
 The instructions below detail the setup for Glance, Cinder and Nova, although
 they do not have to be used together. You may store images in Ceph block devices
 while running VMs using a local disk, or vice versa.
 
-.. important:: Ceph doesn’t support QCOW2 for hosting a virtual machine disk.
-   Thus if you want to boot virtual machines in Ceph (ephemeral backend or boot
-   from volume), the Glance image format must be ``RAW``.
-
-.. tip:: This document describes using Ceph Block Devices with OpenStack Havana.
-   For earlier versions of OpenStack see
-   `Block Devices and OpenStack (Dumpling)`_.
+.. important:: Using QCOW2 for hosting a virtual machine disk is NOT recommended.
+   If you want to boot virtual machines in Ceph (ephemeral backend or boot
+   from volume), please use the ``raw`` image format within Glance.
 
 .. index:: pools; OpenStack
 
 Create a Pool
 =============
 
-By default, Ceph block devices use the ``rbd`` pool. You may use any available
-pool. We recommend creating a pool for Cinder and a pool for Glance. Ensure
-your Ceph cluster is running, then create the pools. ::
+By default, Ceph block devices live within the ``rbd`` pool. You may use any
+suitable pool by specifying it explicitly. We recommend creating a pool for
+Cinder and a pool for Glance. Ensure your Ceph cluster is running, then create the pools. ::
 
-    ceph osd pool create volumes 128
-    ceph osd pool create images 128
-    ceph osd pool create backups 128
-    ceph osd pool create vms 128
+    ceph osd pool create volumes
+    ceph osd pool create images
+    ceph osd pool create backups
+    ceph osd pool create vms
 
 See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
+
+Newly created pools must be initialized prior to use. Use the ``rbd`` tool
+to initialize the pools::
+
+        rbd pool init volumes
+        rbd pool init images
+        rbd pool init backups
+        rbd pool init vms
 
 .. _Create a Pool: ../../rados/operations/pools#createpool
 .. _Placement Groups: ../../rados/operations/placement-groups
@@ -106,7 +115,7 @@ The nodes running ``glance-api``, ``cinder-volume``, ``nova-compute`` and
 Install Ceph client packages
 ----------------------------
 
-On the ``glance-api`` node, you'll need the Python bindings for ``librbd``::
+On the ``glance-api`` node, you will need the Python bindings for ``librbd``::
 
   sudo apt-get install python-rbd
   sudo yum install python-rbd
@@ -124,17 +133,9 @@ Setup Ceph Client Authentication
 If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
-    ceph auth get-or-create client.glance mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=images'
-    ceph auth get-or-create client.cinder-backup mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=backups'
-
-If you run an OpenStack version before Mitaka, create the following ``client.cinder`` key::
-
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rx pool=images'
-
-Since Mitaka introduced the support of RBD snapshots while doing a snapshot of a Nova instance,
-we need to allow the ``client.cinder`` key write access to the ``images`` pool; therefore, create the following key::
-
-    ceph auth get-or-create client.cinder mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=volumes, allow rwx pool=vms, allow rwx pool=images'
+    ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images' mgr 'profile rbd pool=images'
+    ceph auth get-or-create client.cinder mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd pool=vms, profile rbd-read-only pool=images' mgr 'profile rbd pool=volumes, profile rbd pool=vms'
+    ceph auth get-or-create client.cinder-backup mon 'profile rbd' osd 'profile rbd pool=backups' mgr 'profile rbd pool=backups'
 
 Add the keyrings for ``client.cinder``, ``client.glance``, and
 ``client.cinder-backup`` to the appropriate nodes and change their ownership::
@@ -196,35 +197,6 @@ Configuring Glance
 Glance can use multiple back ends to store images. To use Ceph block devices by
 default, configure Glance like the following.
 
-Prior to Juno
-~~~~~~~~~~~~~~
-
-Edit ``/etc/glance/glance-api.conf`` and add under the ``[DEFAULT]`` section::
-
-    default_store = rbd
-    rbd_store_user = glance
-    rbd_store_pool = images
-    rbd_store_chunk_size = 8
-
-
-Juno
-~~~~
-
-Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
-
-    [DEFAULT]
-    ...
-    default_store = rbd
-    ...
-    [glance_store]
-    stores = rbd
-    rbd_store_pool = images
-    rbd_store_user = glance
-    rbd_store_ceph_conf = /etc/ceph/ceph.conf
-    rbd_store_chunk_size = 8
-
-.. important:: Glance has not completely moved to 'store' yet.
-    So we still need to configure the store in the DEFAULT section until Kilo.
 
 Kilo and after
 ~~~~~~~~~~~~~~
@@ -252,14 +224,6 @@ Any OpenStack version except Mitaka
 
 If you want to enable copy-on-write cloning of images, also add under the ``[DEFAULT]`` section::
 
-    show_image_direct_url = True
-
-For Mitaka only
-^^^^^^^^^^^^^^^
-
-To enable image locations and take advantage of copy-on-write cloning for images, add under the ``[DEFAULT]`` section::
-
-    show_multiple_locations = True
     show_image_direct_url = True
 
 Disable cache management (any OpenStack version)
@@ -292,6 +256,7 @@ specify the pool name for the block device. On your OpenStack node, edit
     [DEFAULT]
     ...
     enabled_backends = ceph
+    glance_api_version = 2
     ...
     [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
@@ -302,9 +267,8 @@ specify the pool name for the block device. On your OpenStack node, edit
     rbd_max_clone_depth = 5
     rbd_store_chunk_size = 4
     rados_connect_timeout = -1
-    glance_api_version = 2
 
-If you're using `cephx authentication`_, also configure the user and uuid of
+If you are using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
     [ceph]
@@ -345,25 +309,26 @@ authenticating with the Ceph cluster. ::
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
-These two flags are also used by the Nova ephemeral backend.
+These two flags are also used by the Nova ephemeral back end.
 
 
 Configuring Nova
 ----------------
 
-In order to boot all the virtual machines directly into Ceph, you must
+In order to boot virtual machines directly from Ceph volumes, you must
 configure the ephemeral backend for Nova.
 
-It is recommended to enable the RBD cache in your Ceph configuration file
-(enabled by default since Giant). Moreover, enabling the admin socket
-brings a lot of benefits while troubleshooting. Having one socket
-per virtual machine using a Ceph block device will help investigating performance and/or wrong behaviors.
+It is recommended to enable the RBD cache in your Ceph configuration file; this
+has been enabled by default since the Giant release. Moreover, enabling the
+client admin socket allows the collection of metrics and can be invaluable
+for troubleshooting.
 
-This socket can be accessed like this::
+This socket can be accessed on the hypvervisor (Nova compute) node::
 
     ceph daemon /var/run/ceph/ceph-client.cinder.19195.32310016.asok help
 
-Now on every compute nodes edit your Ceph configuration file::
+To enable RBD cache and admin sockets, ensure that on each hypervisor's
+``ceph.conf`` contains::
 
     [client]
         rbd cache = true
@@ -372,7 +337,7 @@ Now on every compute nodes edit your Ceph configuration file::
         log file = /var/log/qemu/qemu-guest-$pid.log
         rbd concurrent management ops = 20
 
-Configure the permissions of these paths::
+Configure permissions for these directories::
 
     mkdir -p /var/run/ceph/guests/ /var/log/qemu/
     chown qemu:libvirtd /var/run/ceph/guests /var/log/qemu/
@@ -380,93 +345,15 @@ Configure the permissions of these paths::
 Note that user ``qemu`` and group ``libvirtd`` can vary depending on your system.
 The provided example works for RedHat based systems.
 
-.. tip:: If your virtual machine is already running you can simply restart it to get the socket
-
-
-Havana and Icehouse
-~~~~~~~~~~~~~~~~~~~
-
-Havana and Icehouse require patches to implement copy-on-write cloning and fix
-bugs with image size and live migration of ephemeral disks on rbd. These are
-available in branches based on upstream Nova `stable/havana`_  and
-`stable/icehouse`_. Using them is not mandatory but **highly recommended** in
-order to take advantage of the copy-on-write clone functionality.
-
-On every Compute node, edit ``/etc/nova/nova.conf`` and add::
-
-    libvirt_images_type = rbd
-    libvirt_images_rbd_pool = vms
-    libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
-    disk_cachemodes="network=writeback"
-    rbd_user = cinder
-    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
-
-It is also a good practice to disable file injection. While booting an
-instance, Nova usually attempts to open the rootfs of the virtual machine.
-Then, Nova injects values such as password, ssh keys etc. directly into the
-filesystem. However, it is better to rely on the metadata service and
-``cloud-init``.
-
-On every Compute node, edit ``/etc/nova/nova.conf`` and add::
-
-    libvirt_inject_password = false
-    libvirt_inject_key = false
-    libvirt_inject_partition = -2
-
-To ensure a proper live-migration, use the following flags::
-
-    libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST,VIR_MIGRATE_TUNNELLED"
-
-Juno
-~~~~
-
-In Juno, Ceph block device was moved under the ``[libvirt]`` section.
-On every Compute node, edit ``/etc/nova/nova.conf`` under the ``[libvirt]``
-section and add::
-
-    [libvirt]
-    images_type = rbd
-    images_rbd_pool = vms
-    images_rbd_ceph_conf = /etc/ceph/ceph.conf
-    rbd_user = cinder
-    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
-    disk_cachemodes="network=writeback"
-
-
-It is also a good practice to disable file injection. While booting an
-instance, Nova usually attempts to open the rootfs of the virtual machine.
-Then, Nova injects values such as password, ssh keys etc. directly into the
-filesystem. However, it is better to rely on the metadata service and
-``cloud-init``.
-
-On every Compute node, edit ``/etc/nova/nova.conf`` and add the following
-under the ``[libvirt]`` section::
-
-    inject_password = false
-    inject_key = false
-    inject_partition = -2
-
-To ensure a proper live-migration, use the following flags (under the ``[libvirt]`` section)::
-
-    live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST,VIR_MIGRATE_TUNNELLED"
-
-Kilo
-~~~~
-
-Enable discard support for virtual machine ephemeral root disk::
-
-    [libvirt]
-    ...
-    ...
-    hw_disk_discard = unmap # enable discard support (be careful of performance)
+.. tip:: If your virtual machine is already running you can simply restart it to enable the admin socket
 
 
 Restart OpenStack
 =================
 
 To activate the Ceph block device driver and load the block device pool name
-into the configuration, you must restart OpenStack. Thus, for Debian based
-systems execute these commands on the appropriate nodes::
+into the configuration, you must restart the related OpenStack services.
+For Debian based systems execute these commands on the appropriate nodes::
 
     sudo glance-control api restart
     sudo service nova-compute restart
@@ -491,14 +378,13 @@ You can create a volume from an image using the Cinder command line tool::
 
     cinder create --image-id {id of image} --display-name {name of volume} {size of volume}
 
-Note that image must be RAW format. You can use `qemu-img`_ to convert
-from one format to another. For example::
+You can use `qemu-img`_ to convert from one format to another. For example::
 
     qemu-img convert -f {source-format} -O {output-format} {source-filename} {output-filename}
     qemu-img convert -f qcow2 -O raw precise-cloudimg.img precise-cloudimg.raw
 
 When Glance and Cinder are both using Ceph block devices, the image is a
-copy-on-write clone, so it can create a new volume quickly. In the OpenStack
+copy-on-write clone, so new volumes are created quickly. In the OpenStack
 dashboard, you can boot from that volume by performing the following steps:
 
 #. Launch a new instance.
@@ -507,6 +393,3 @@ dashboard, you can boot from that volume by performing the following steps:
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
-.. _Block Devices and OpenStack (Dumpling): http://docs.ceph.com/docs/dumpling/rbd/rbd-openstack
-.. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
-.. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse

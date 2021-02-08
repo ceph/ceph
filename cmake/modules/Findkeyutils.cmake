@@ -5,23 +5,23 @@
 # KEYUTILS_INCLUDE_DIR - the keyutils include directories
 # KEYUTILS_LIBRARIES - link these to use keyutils
 
-if(KEYUTILS_INCLUDE_DIR AND KEYUTILS_LIBRARIES)
-	set(KEYUTILS_FIND_QUIETLY TRUE)
-endif(KEYUTILS_INCLUDE_DIR AND KEYUTILS_LIBRARIES)
-
-# include dir
 find_path(KEYUTILS_INCLUDE_DIR keyutils.h PATHS
   /opt/local/include
   /usr/local/include
 )
 
-# finally the library itself
-find_library(LIBKEYUTILS NAMES keyutils)
-set(KEYUTILS_LIBRARIES ${LIBKEYUTILS})
+find_library(KEYUTILS_LIBRARIES NAMES keyutils)
 
-# handle the QUIETLY and REQUIRED arguments and set KEYUTILS_FOUND to TRUE if
-# all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(keyutils DEFAULT_MSG KEYUTILS_LIBRARIES KEYUTILS_INCLUDE_DIR)
+find_package_handle_standard_args(keyutils
+  DEFAULT_MSG KEYUTILS_LIBRARIES KEYUTILS_INCLUDE_DIR)
 
 mark_as_advanced(KEYUTILS_LIBRARIES KEYUTILS_INCLUDE_DIR)
+
+if(KEYUTILS_FOUND AND NOT (TARGET keyutils::keyutils))
+  add_library(keyutils::keyutils UNKNOWN IMPORTED)
+  set_target_properties(keyutils::keyutils PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${KEYUTILS_INCLUDE_DIR}"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+    IMPORTED_LOCATION "${KEYUTILS_LIBRARIES}")
+endif()

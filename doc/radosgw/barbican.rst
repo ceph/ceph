@@ -39,6 +39,8 @@ Create a key in Barbican
 See Barbican documentation for `How to Create a Secret`_. Requests to
 Barbican must include a valid Keystone token in the ``X-Auth-Token`` header.
 
+.. note:: Server-side encryption keys must be 256-bit long and base64 encoded.
+
 Example request::
 
    POST /v1/secrets HTTP/1.1
@@ -67,7 +69,8 @@ In the response, ``d1e7ef3b-f841-4b7c-90b2-b7d90ca2d723`` is the key id that
 can be used in any `SSE-KMS`_ request.
 
 This newly created key is not accessible by user ``rgwcrypt-user``. This
-privilege must be added with an ACL.
+privilege must be added with an ACL. See `How to Set/Replace ACL`_ for more
+details.
 
 Example request (assuming that the Keystone id of ``rgwcrypt-user`` is
 ``906aa90bd8a946c89cdff80d0869460f``)::
@@ -93,9 +96,10 @@ Response::
 Configure the Ceph Object Gateway
 =================================
 
-Edit the Ceph configuration file to add information about the Barbican server
-and Keystone user::
+Edit the Ceph configuration file to enable Barbican as a KMS and add information
+about the Barbican server and Keystone user::
 
+   rgw crypt s3 kms backend = barbican
    rgw barbican url = http://barbican.example.com:9311
    rgw keystone barbican user = rgwcrypt-user
    rgw keystone barbican password = rgwcrypt-password

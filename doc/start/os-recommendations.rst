@@ -13,29 +13,25 @@ Linux Kernel
 
 - **Ceph Kernel Client**
 
-  If you are using the kernel client, the general advice is to *track* "stable"
-  or "longterm maintenance" kernel series provided by either http://kernel.org
-  or your distribution on the kernel client machines.
+  If you are using the kernel client to map RBD block devices or mount
+  CephFS, the general advice is to use a "stable" or "longterm
+  maintenance" kernel series provided by either http://kernel.org or
+  your Linux distribution on any client hosts.
 
   For RBD, if you choose to *track* long-term kernels, we currently recommend
-  4.x-based "longterm maintenance" kernel series:
+  4.x-based "longterm maintenance" kernel series or later:
 
-  - 4.9.z
-  - 4.4.z
+  - 4.19.z
+  - 4.14.z
+  - 5.x
 
-  These are considered pretty old, but if you must:
+  For CephFS, see the section about `Mounting CephFS using Kernel Driver`_
+  for kernel version guidance.
 
-  - 3.16.z
-  - 3.10.z
+  Older kernel client versions may not support your `CRUSH tunables`_ profile
+  or other newer features of the Ceph cluster, requiring the storage cluster
+  to be configured with those features disabled.
 
-  For CephFS, see `CephFS best practices`_ for kernel version guidance.
-
-  Older kernel client versions may not support your `CRUSH tunables`_ profile.
-
-- **B-tree File System (Btrfs)**
-
-  If you use the ``btrfs`` file system with Ceph, we recommend using a
-  recent Linux kernel (3.14 or later).
 
 Platforms
 =========
@@ -45,15 +41,64 @@ platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
-Infernalis (9.2.z) and Jewel (10.2.z)
--------------------------------------
+Octopus (15.2.z)
+-----------------
 
 +----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
 +==========+==========+====================+==============+=========+============+
-| CentOS   | 7        | N/A                | linux-3.10.0 |         | B, I, C    |
+| CentOS   | 8        | N/A                | linux-4.18   |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| CentOS   | 7        | N/A                | linux-3.10.0 | 4, 5    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 10       | Buster             | linux-4.19   |         | B          |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 8        | Ootpa              | linux-4.18   |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 18.04    | Bionic Beaver      | linux-4.15   | 4       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| openSUSE | 15.2     | Leap               | linux-5.3    | 6       |            |
++----------+----------+--------------------+--------------+---------+------------+
+| openSUSE |          | Tumbleweed         |              |         |            |
++----------+----------+--------------------+--------------+---------+------------+
+
+
+Nautilus (14.2.z)
+-----------------
+
++----------+----------+--------------------+--------------+---------+------------+
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
++==========+==========+====================+==============+=========+============+
+| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 9.0      | Stretch            | linux-4.9    | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 16.04    | Xenial Xerus       | linux-4.4.0  | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 18.04    | Bionic Beaver      | linux-4.15   | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| openSUSE | 15.1     | Leap               | linux-4.12   | 6       |            |
++----------+----------+--------------------+--------------+---------+------------+
+
+Luminous (12.2.z)
+-----------------
+
++----------+----------+--------------------+--------------+---------+------------+
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
++==========+==========+====================+==============+=========+============+
+| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 9.0      | Stretch            | linux-4.9    | 1, 2    | B, I       |
 +----------+----------+--------------------+--------------+---------+------------+
 | Fedora   | 22       | N/A                | linux-3.14.0 |         | B, I       |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -61,66 +106,36 @@ Infernalis (9.2.z) and Jewel (10.2.z)
 +----------+----------+--------------------+--------------+---------+------------+
 | Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
-
-Hammer (0.94)
--------------
-
-+----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
-+==========+==========+====================+==============+=========+============+
-| CentOS   | 6        | N/A                | linux-2.6.32 | 1, 2    |            |
-+----------+----------+--------------------+--------------+---------+------------+
-| CentOS   | 7        | N/A                | linux-3.10.0 |         | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2    |            |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 12.04    | Precise Pangolin   | linux-3.2.0  | 1, 2    |            |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-
-Firefly (0.80)
---------------
-
-+----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
-+==========+==========+====================+==============+=========+============+
-| CentOS   | 6        | N/A                | linux-2.6.32 | 1, 2    | B, I       |
-+----------+----------+--------------------+--------------+---------+------------+
-| CentOS   | 7        | N/A                | linux-3.10.0 |         | B          |
-+----------+----------+--------------------+--------------+---------+------------+
-| Debian   | 7.0      | Wheezy             | linux-3.2.0  | 1, 2    | B          |
-+----------+----------+--------------------+--------------+---------+------------+
-| Fedora   | 19       | Schrödinger's Cat  | linux-3.10.0 |         | B          |
-+----------+----------+--------------------+--------------+---------+------------+
-| Fedora   | 20       | Heisenbug          | linux-3.14.0 |         | B          |
-+----------+----------+--------------------+--------------+---------+------------+
-| RHEL     | 6        | Santiago           | linux-2.6.32 | 1, 2    | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 12.04    | Precise Pangolin   | linux-3.2.0  | 1, 2    | B, I, C    |
-+----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
+| Ubuntu   | 16.04    | Xenial Xerus       | linux-4.4.0  | 3       | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
 
 Notes
 -----
 
-- **1**: The default kernel has an older version of ``btrfs`` that we do not
-  recommend for ``ceph-osd`` storage nodes.  Upgrade to a recommended
-  kernel or use ``XFS``.
+- **1**: The default kernel has an older version of ``Btrfs`` that we do not
+  recommend for ``ceph-osd`` storage nodes.  We recommend using ``BlueStore``
+  starting with Luminous, and ``XFS`` for previous releases with ``Filestore``.
 
 - **2**: The default kernel has an old Ceph client that we do not recommend
   for kernel client (kernel RBD or the Ceph file system).  Upgrade to a
   recommended kernel.
 
+- **3**: The default kernel regularly fails in QA when the ``Btrfs``
+  file system is used.  We recommend using ``BlueStore`` starting from
+  Luminous, and ``XFS`` for previous releases with ``Filestore``.
+
+- **4**: ``btrfs`` is no longer tested on this release. We recommend
+  using ``bluestore``.
+
+- **5**: Some additional features related to dashboard are not available.
+
+- **6**: Packages are built regularly, but not distributed by upstream Ceph.
 
 Testing
 -------
 
 - **B**: We build release packages for this platform. For some of these
-  platforms, we may also continuously build all ceph branches and exercise
+  platforms, we may also continuously build all Ceph branches and perform
   basic unit tests.
 
 - **I**: We do basic installation and functionality tests of releases on this
@@ -132,4 +147,4 @@ Testing
 
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
 
-.. _CephFS best practices: ../../cephfs/best-practices
+.. _Mounting CephFS using Kernel Driver: ../../cephfs/mount-using-kernel-driver#which-kernel-version

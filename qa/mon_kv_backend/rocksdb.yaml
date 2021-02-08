@@ -1,7 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      global:
-        enable experimental unrecoverable data corrupting features: '*'
-      mon:
-        mon keyvaluedb: rocksdb

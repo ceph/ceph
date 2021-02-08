@@ -9,15 +9,14 @@
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
- * 
+ *
  */
-
-
 
 #ifndef CEPH_CDENTRY_H
 #define CEPH_CDENTRY_H
 
 #include <string>
+#include <string_view>
 #include <set>
 
 #include "include/counter.h"
@@ -27,21 +26,20 @@
 #include "include/elist.h"
 #include "include/filepath.h"
 
+#include "BatchOp.h"
 #include "MDSCacheObject.h"
+#include "MDSContext.h"
 #include "SimpleLock.h"
-#include "LocalLock.h"
+#include "LocalLockC.h"
 #include "ScrubHeader.h"
 
 class CInode;
 class CDir;
 class Locker;
-class Message;
 class CDentry;
 class LogSegment;
 
 class Session;
-
-
 
 // define an ordering
 bool operator<(const CDentry& l, const CDentry& r);
@@ -49,14 +47,15 @@ bool operator<(const CDentry& l, const CDentry& r);
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject, public Counter<CDentry> {
 public:
+  MEMPOOL_CLASS_HELPERS();
   friend class CDir;
 
   struct linkage_t {
-    CInode *inode;
-    inodeno_t remote_ino;
-    unsigned char remote_d_type;
+    CInode *inode = nullptr;
+    inodeno_t remote_ino = 0;
+    unsigned char remote_d_type = 0;
     
-    linkage_t() : inode(0), remote_ino(0), remote_d_type(0) {}
+    linkage_t() {}
 
     // dentry type is primary || remote || null
     // inode ptr is required for primary, optional for remote, undefined for null
@@ -70,7 +69,7 @@ public:
     unsigned char get_remote_d_type() const { return remote_d_type; }
     std::string get_remote_d_type_string() const;
 
-    void set_remote(inodeno_t ino, unsigned char d_type) { 
+    void set_remote(inodeno_t ino, unsigned char d_type) {
       remote_ino = ino;
       remote_d_type = d_type;
       inode = 0;
@@ -86,8 +85,10 @@ public:
   static const int STATE_BADREMOTEINO = (1<<3);
   static const int STATE_EVALUATINGSTRAY = (1<<4);
   static const int STATE_PURGINGPINNED =  (1<<5);
+  static const int STATE_BOTTOMLRU =    (1<<6);
   // stray dentry needs notification of releasing reference
   static const int STATE_STRAY =	STATE_NOTIFYREF;
+  static const int MASK_STATE_IMPORT_KEPT = STATE_BOTTOMLRU;
 
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
@@ -98,30 +99,38 @@ public:
   static const unsigned EXPORT_NONCE = 1;
 
 
-  CDentry(const std::string& n, __u32 h,
+  CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
 	  snapid_t f, snapid_t l) :
-    name(n), hash(h),
+    hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    dir(0),
-    version(0), projected_version(0) {
-  }
-  CDentry(const std::string& n, __u32 h, inodeno_t ino, unsigned char dt,
+    name(n),
+    alternate_name(std::move(alternate_name))
+  {}
+  CDentry(std::string_view n, __u32 h,
+          mempool::mds_co::string alternate_name,
+          inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
-    name(n), hash(h),
+    hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type),
-    dir(0),
-    version(0), projected_version(0) {
+    name(n),
+    alternate_name(std::move(alternate_name))
+  {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
   }
 
-  const char *pin_name(int p) const override {
+  ~CDentry() override {
+    ceph_assert(batch_ops.empty());
+  }
+
+  std::string_view pin_name(int p) const override {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     case PIN_FRAGMENTING: return "fragmenting";
@@ -134,7 +143,7 @@ public:
   // -- wait --
   //static const int WAIT_LOCK_OFFSET = 8;
 
-  void add_waiter(uint64_t tag, MDSInternalContextBase *c) override;
+  void add_waiter(uint64_t tag, MDSContext *c) override;
 
   bool is_lt(const MDSCacheObject *r) const override {
     return *this < *static_cast<const CDentry*>(r);
@@ -146,7 +155,16 @@ public:
 
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
-  const std::string& get_name() const { return name; }
+  std::string_view get_name() const { return std::string_view(name); }
+  std::string_view get_alternate_name() const {
+    return std::string_view(alternate_name);
+  }
+  void set_alternate_name(mempool::mds_co::string altn) {
+    alternate_name = std::move(altn);
+  }
+  void set_alternate_name(std::string_view altn) {
+    alternate_name = mempool::mds_co::string(altn);
+  }
 
   __u32 get_hash() const { return hash; }
 
@@ -203,10 +221,10 @@ public:
   void _put() override;
 
   // auth pins
-  bool can_auth_pin() const override;
+  bool can_auth_pin(int *err_ret=nullptr) const override;
   void auth_pin(void *by) override;
   void auth_unpin(void *by) override;
-  void adjust_nested_auth_pins(int adjustment, int diradj, void *by);
+  void adjust_nested_auth_pins(int diradj, void *by);
   bool is_frozen() const override;
   bool is_freezing() const override;
   int get_num_dir_auth_pins() const;
@@ -233,39 +251,26 @@ public:
 
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t projected_dirv, LogSegment *ls);
+  void mark_dirty(version_t pv, LogSegment *ls);
   void mark_clean();
 
   void mark_new();
   bool is_new() const { return state_test(STATE_NEW); }
   void clear_new() { state_clear(STATE_NEW); }
   
-  // -- replication
-  void encode_replica(mds_rank_t mds, bufferlist& bl) {
-    if (!is_replicated())
-      lock.replicate_relax();
-
-    __u32 nonce = add_replica(mds);
-    ::encode(nonce, bl);
-    ::encode(first, bl);
-    ::encode(linkage.remote_ino, bl);
-    ::encode(linkage.remote_d_type, bl);
-    __s32 ls = lock.get_replica_state();
-    ::encode(ls, bl);
-  }
-  void decode_replica(bufferlist::iterator& p, bool is_new);
-
   // -- exporting
   // note: this assumes the dentry already exists.  
   // i.e., the name is already extracted... so we just need the other state.
-  void encode_export(bufferlist& bl) {
-    ::encode(first, bl);
-    ::encode(state, bl);
-    ::encode(version, bl);
-    ::encode(projected_version, bl);
-    ::encode(lock, bl);
-    ::encode(replica_map, bl);
+  void encode_export(ceph::buffer::list& bl) {
+    ENCODE_START(1, 1, bl);
+    encode(first, bl);
+    encode(state, bl);
+    encode(version, bl);
+    encode(projected_version, bl);
+    encode(lock, bl);
+    encode(get_replicas(), bl);
     get(PIN_TEMPEXPORTING);
+    ENCODE_FINISH(bl);
   }
   void finish_export() {
     // twiddle
@@ -279,33 +284,35 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
-    ::decode(first, blp);
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls) {
+    DECODE_START(1, blp);
+    decode(first, blp);
     __u32 nstate;
-    ::decode(nstate, blp);
-    ::decode(version, blp);
-    ::decode(projected_version, blp);
-    ::decode(lock, blp);
-    ::decode(replica_map, blp);
+    decode(nstate, blp);
+    decode(version, blp);
+    decode(projected_version, blp);
+    decode(lock, blp);
+    decode(get_replicas(), blp);
 
     // twiddle
-    state = 0;
+    state &= MASK_STATE_IMPORT_KEPT;
     state_set(CDentry::STATE_AUTH);
     if (nstate & STATE_DIRTY)
       _mark_dirty(ls);
-    if (!replica_map.empty())
+    if (is_replicated())
       get(PIN_REPLICATED);
     replica_nonce = 0;
+    DECODE_FINISH(blp);
   }
 
   // -- locking --
   SimpleLock* get_lock(int type) override {
-    assert(type == CEPH_LOCK_DN);
+    ceph_assert(type == CEPH_LOCK_DN);
     return &lock;
   }
   void set_object_info(MDSCacheObjectInfo &info) override;
-  void encode_lock_state(int type, bufferlist& bl) override;
-  void decode_lock_state(int type, bufferlist& bl) override;
+  void encode_lock_state(int type, ceph::buffer::list& bl) override;
+  void decode_lock_state(int type, const ceph::buffer::list& bl) override;
 
   // ---------------------------------------------
   // replicas (on clients)
@@ -335,26 +342,32 @@ public:
   void remove_client_lease(ClientLease *r, Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   void remove_client_leases(Locker *locker);
 
-  ostream& print_db_line_prefix(ostream& out) override;
-  void print(ostream& out) override;
-  void dump(Formatter *f) const;
+  std::ostream& print_db_line_prefix(std::ostream& out) override;
+  void print(std::ostream& out) override;
+  void dump(ceph::Formatter *f) const;
 
+  static void encode_remote(inodeno_t& ino, unsigned char d_type,
+                            std::string_view alternate_name,
+                            bufferlist &bl);
+  static void decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
+                            mempool::mds_co::string& alternate_name,
+                            ceph::buffer::list::const_iterator& bl);
 
-  std::string name;
   __u32 hash;
   snapid_t first, last;
 
-  elist<CDentry*>::item item_dirty;
+  elist<CDentry*>::item item_dirty, item_dir_dirty;
   elist<CDentry*>::item item_stray;
 
   // lock
   static LockType lock_type;
   static LockType versionlock_type;
 
-  SimpleLock lock;
-  LocalLock versionlock;
+  SimpleLock lock; // FIXME referenced containers not in mempool
+  LocalLockC versionlock; // FIXME referenced containers not in mempool
 
-  map<client_t,ClientLease*> client_lease_map;
+  mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
+  std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
 
 protected:
@@ -365,15 +378,19 @@ protected:
   friend class CInode;
   friend class C_MDC_XlockRequest;
 
-  CDir *dir;     // containing dirfrag
-  linkage_t linkage;
-  list<linkage_t> projected;
+  CDir *dir = nullptr;     // containing dirfrag
+  linkage_t linkage; /* durable */
+  mempool::mds_co::list<linkage_t> projected;
 
-  version_t version;  // dir version when last touched.
-  version_t projected_version;  // what it will be when i unlock/commit.
+  version_t version = 0;  // dir version when last touched.
+  version_t projected_version = 0;  // what it will be when i unlock/commit.
+
+private:
+  mempool::mds_co::string name;
+  mempool::mds_co::string alternate_name;
 };
 
-ostream& operator<<(ostream& out, const CDentry& dn);
+std::ostream& operator<<(std::ostream& out, const CDentry& dn);
 
 
 #endif

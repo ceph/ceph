@@ -1,13 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 
 script_root=`dirname $0`
 
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
 if [ -e CMakeCache.txt ]; then
     script_root=$PWD
-elif [ -e $script_root/../build/CMakeCache.txt ]; then
-    script_root=`(cd $script_root/../build; pwd)`
+elif [ -e $script_root/../${BUILD_DIR}/CMakeCache.txt ]; then
+    script_root=`(cd $script_root/../${BUILD_DIR}; pwd)`
 fi
 
 [ "$#" -lt 1 ] && echo "usage: $0 <name> [entity [id]]" && exit 1
@@ -27,22 +29,30 @@ else
   pfiles=`ls $pidpath/$entity.$id.pid` || true
 fi
 
+MAX_RETRIES=20
+
 for pidfile in $pfiles; do
   pid=`cat $pidfile`
   fname=`echo $pidfile | sed 's/.*\///g'`
-  echo $pid
   [ "$pid" == "" ] && exit
   [ $pid -eq 0 ] && exit
   echo pid=$pid
   extra_check=""
   entity=`echo $fname | sed 's/\..*//g'`
+  name=`echo $fname | sed 's/\.pid$//g'`
   [ "$entity" == "radosgw" ] && extra_check="-e lt-radosgw"
-  echo entity=$entity pid=$pid
+  echo entity=$entity pid=$pid name=$name
+  counter=0
+  signal=""
   while ps -p $pid -o args= | grep -q -e $entity $extracheck ; do
+    if [[ "$counter" -gt MAX_RETRIES ]]; then
+        signal="-9"
+    fi
     cmd="kill $signal $pid"
-    printf "$cmd..."
+    printf "$cmd...\n"
     $cmd
     sleep 1
+    counter=$((counter+1))
     continue
   done
 done

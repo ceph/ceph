@@ -17,9 +17,10 @@ namespace cache {
  * Example passthrough client-side, image extent cache
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class PassthroughImageCache : public ImageCache {
+class PassthroughImageCache : public ImageCache<ImageCtxT> {
 public:
-  PassthroughImageCache(ImageCtx &image_ctx);
+  using typename ImageCache<ImageCtxT>::Extents;
+  explicit PassthroughImageCache(ImageCtx &image_ctx);
 
   /// client AIO methods
   void aio_read(Extents&& image_extents, ceph::bufferlist *bl,
@@ -27,11 +28,16 @@ public:
   void aio_write(Extents&& image_extents, ceph::bufferlist&& bl,
                  int fadvise_flags, Context *on_finish) override;
   void aio_discard(uint64_t offset, uint64_t length,
-                   bool skip_partial_discard, Context *on_finish);
+                   uint32_t discard_granularity_bytes,
+                   Context *on_finish) override;
   void aio_flush(Context *on_finish) override;
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,
                      int fadvise_flags, Context *on_finish) override;
+  void aio_compare_and_write(Extents&& image_extents,
+                             ceph::bufferlist&& cmp_bl, ceph::bufferlist&& bl,
+                             uint64_t *mismatch_offset,int fadvise_flags,
+                             Context *on_finish) override;
 
   /// internal state methods
   void init(Context *on_finish) override;

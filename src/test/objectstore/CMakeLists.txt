@@ -1,23 +1,16 @@
-#ceph_perf_objectstore
 add_executable(ceph_perf_objectstore 
-  ObjectStoreTransactionBenchmark.cc
-  )
-set_target_properties(ceph_perf_objectstore PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+  ObjectStoreTransactionBenchmark.cc)
 target_link_libraries(ceph_perf_objectstore os osdc global ${UNITTEST_LIBS})
 install(TARGETS ceph_perf_objectstore
   DESTINATION bin)
 
-#ceph_test_objectstore
 add_library(store_test_fixture OBJECT store_test_fixture.cc)
-set_target_properties(store_test_fixture PROPERTIES
-  COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+target_include_directories(store_test_fixture PRIVATE
+  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
 
 add_executable(ceph_test_objectstore
   store_test.cc
   $<TARGET_OBJECTS:store_test_fixture>)
-set_target_properties(ceph_test_objectstore PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_objectstore
   os
   ceph-common
@@ -30,12 +23,8 @@ target_link_libraries(ceph_test_objectstore
 install(TARGETS ceph_test_objectstore
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-#ceph_test_keyvaluedb
 add_executable(ceph_test_keyvaluedb
-  test_kv.cc
-  )
-set_target_properties(ceph_test_keyvaluedb PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+  test_kv.cc)
 target_link_libraries(ceph_test_keyvaluedb
   os
   ceph-common
@@ -47,19 +36,6 @@ target_link_libraries(ceph_test_keyvaluedb
   )
 install(TARGETS ceph_test_keyvaluedb
   DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-# ceph_test_objectstore_workloadgen
-add_executable(ceph_test_objectstore_workloadgen
-  workload_generator.cc
-  TestObjectStoreState.cc
-  )
-target_link_libraries(ceph_test_objectstore_workloadgen
-  os
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
 
 # ceph_test_filestore_idempotent
 add_executable(ceph_test_filestore_idempotent
@@ -96,7 +72,7 @@ install(TARGETS ceph_test_filestore_idempotent_sequence
 add_executable(unittest_chain_xattr
   chain_xattr.cc
   )
-add_ceph_unittest(unittest_chain_xattr ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_chain_xattr)
+add_ceph_unittest(unittest_chain_xattr)
 target_link_libraries(unittest_chain_xattr os global)
 
 # unittest_rocksdb_option
@@ -104,49 +80,92 @@ add_executable(unittest_rocksdb_option
   TestRocksdbOptionParse.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_rocksdb_option ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rocksdb_option)
+add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
-if(HAVE_LIBAIO)
-  # unittest_bit_alloc
-  add_executable(unittest_bit_alloc
-    BitAllocator_test.cc
-    $<TARGET_OBJECTS:unit-main>
-    )
-  add_ceph_unittest(unittest_bit_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bit_alloc)
-  target_link_libraries(unittest_bit_alloc os global)
+if(WITH_EVENTTRACE)
+  add_dependencies(os eventtrace_tp)
+endif()
+
+if(WITH_BLUESTORE)
 
   add_executable(unittest_alloc
     Allocator_test.cc
     $<TARGET_OBJECTS:unit-main>
     )
-  add_ceph_unittest(unittest_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_alloc)
+  add_ceph_unittest(unittest_alloc)
   target_link_libraries(unittest_alloc os global)
+
+  add_executable(unittest_alloc_bench
+    Allocator_bench.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  target_link_libraries(unittest_alloc_bench ${UNITTEST_LIBS} os global)
+
+  add_executable(unittest_fastbmap_allocator
+    fastbmap_allocator_test.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_fastbmap_allocator)
+  target_link_libraries(unittest_fastbmap_allocator os global)
+
+  set_target_properties(unittest_fastbmap_allocator PROPERTIES COMPILE_FLAGS
+  "${UNITTEST_CXX_FLAGS}")
+
+  add_executable(unittest_hybrid_allocator
+    hybrid_allocator_test.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_hybrid_allocator)
+  target_link_libraries(unittest_hybrid_allocator os global)
+
+  set_target_properties(unittest_hybrid_allocator PROPERTIES COMPILE_FLAGS
+  "${UNITTEST_CXX_FLAGS}")
+
+  add_executable(unittest_alloc_aging EXCLUDE_FROM_ALL
+    Allocator_aging_fragmentation.cc)
+  target_link_libraries(unittest_alloc_aging os global GTest::Main)
 
   # unittest_bluefs
   add_executable(unittest_bluefs
     test_bluefs.cc
     )
-  add_ceph_unittest(unittest_bluefs ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bluefs)
+  add_ceph_unittest(unittest_bluefs)
   target_link_libraries(unittest_bluefs os global)
 
   # unittest_bluestore_types
   add_executable(unittest_bluestore_types
     test_bluestore_types.cc
     )
-  add_ceph_unittest(unittest_bluestore_types ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_bluestore_types)
+  add_ceph_unittest(unittest_bluestore_types)
   target_link_libraries(unittest_bluestore_types os global)
-endif(HAVE_LIBAIO)
+
+  # unittest_bdev
+  add_executable(unittest_bdev
+    test_bdev.cc
+    )
+  add_ceph_unittest(unittest_bdev)
+  target_link_libraries(unittest_bdev os global)
+
+endif(WITH_BLUESTORE)
 
 # unittest_transaction
 add_executable(unittest_transaction
   test_transaction.cc)
-add_ceph_unittest(unittest_transaction ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_transaction)
-target_link_libraries(unittest_transaction os ceph-common ${XIO_LIBRARY})
+add_ceph_unittest(unittest_transaction)
+target_link_libraries(unittest_transaction os ceph-common)
 
 # unittest_memstore_clone
 add_executable(unittest_memstore_clone
   test_memstore_clone.cc
   $<TARGET_OBJECTS:store_test_fixture>)
-add_ceph_unittest(unittest_memstore_clone ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_memstore_clone)
+add_ceph_unittest(unittest_memstore_clone)
 target_link_libraries(unittest_memstore_clone os global)
+
+if(WITH_BLUESTORE)
+  add_executable(ceph_test_alloc_replay
+    allocator_replay_test.cc)
+  target_link_libraries(ceph_test_alloc_replay os global ${UNITTEST_LIBS})
+  install(TARGETS ceph_test_alloc_replay
+    DESTINATION bin)
+endif()

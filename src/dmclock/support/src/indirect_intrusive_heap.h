@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -61,11 +68,11 @@ namespace crimson {
     class Iterator {
       friend IndIntruHeap<I, T, heap_info, C, K>;
 
-      IndIntruHeap<I, T, heap_info, C, K>& heap;
+      IndIntruHeap<I, T, heap_info, C, K>* heap;
       HeapIndex                            index;
 
       Iterator(IndIntruHeap<I, T, heap_info, C, K>& _heap, HeapIndex _index) :
-	heap(_heap),
+	heap(&_heap),
 	index(_index)
       {
 	// empty
@@ -99,14 +106,14 @@ namespace crimson {
       }
 
       Iterator& operator++() {
-	if (index <= heap.count) {
+	if (index <= heap->count) {
 	  ++index;
 	}
 	return *this;
       }
 
       bool operator==(const Iterator& other) const {
-	return &heap == &other.heap && index == other.index;
+	return heap == other.heap && index == other.index;
       }
 
       bool operator!=(const Iterator& other) const {
@@ -114,11 +121,11 @@ namespace crimson {
       }
 
       T& operator*() {
-	return *heap.data[index];
+	return *heap->data[index];
       }
 
       T* operator->() {
-	return &(*heap.data[index]);
+	return &(*heap->data[index]);
       }
 
 #if 0
@@ -133,12 +140,12 @@ namespace crimson {
     class ConstIterator {
       friend IndIntruHeap<I, T, heap_info, C, K>;
 
-      const IndIntruHeap<I, T, heap_info, C, K>& heap;
+      const IndIntruHeap<I, T, heap_info, C, K>* heap;
       HeapIndex                                  index;
 
       ConstIterator(const IndIntruHeap<I, T, heap_info, C, K>& _heap,
 		    HeapIndex _index) :
-	heap(_heap),
+	heap(&_heap),
 	index(_index)
       {
 	// empty
@@ -172,14 +179,14 @@ namespace crimson {
       }
 
       ConstIterator& operator++() {
-	if (index <= heap.count) {
+	if (index <= heap->count) {
 	  ++index;
 	}
 	return *this;
       }
 
       bool operator==(const ConstIterator& other) const {
-	return &heap == &other.heap && index == other.index;
+	return heap == other.heap && index == other.index;
       }
 
       bool operator!=(const ConstIterator& other) const {
@@ -187,11 +194,11 @@ namespace crimson {
       }
 
       const T& operator*() {
-	return *heap.data[index];
+	return *heap->data[index];
       }
 
       const T* operator->() {
-	return &(*heap.data[index]);
+	return &(*heap->data[index]);
       }
     }; // class ConstIterator
 
@@ -243,7 +250,7 @@ namespace crimson {
     }
 
     void pop() {
-      remove(0);
+      remove(HeapIndex(0));
     }
 
     void remove(Iterator& i) {
@@ -337,6 +344,16 @@ namespace crimson {
       return cend();
     }
 
+    Iterator at(const I& ind_item) {
+      auto ind = intru_data_of(ind_item);
+      if (ind >= count) {
+        throw std::out_of_range(
+          std::to_string(ind) + " >= " + std::to_string(count));
+      }
+      assert(data[ind] == ind_item);
+      return Iterator(*this, ind);
+    }
+
     void promote(T& item) {
       sift_up(item.*heap_info);
     }
@@ -409,14 +426,13 @@ namespace crimson {
 
   protected:
 
-    static IndIntruHeapData& intru_data_of(I& item) {
+    static IndIntruHeapData& intru_data_of(const I& item) {
       return (*item).*heap_info;
     }
 
     void remove(HeapIndex i) {
       std::swap(data[i], data[--count]);
       intru_data_of(data[i]) = i;
-      data.pop_back();
 
       // the following needs to be sift (and not sift_down) as it can
       // go up or down the heap; imagine the heap vector contains 0,
@@ -424,6 +440,8 @@ namespace crimson {
       // would have to be sifted upwards
       // sift(i);
       sift(i);
+
+      data.pop_back();
     }
 
     // default value of filter parameter to display_sorted

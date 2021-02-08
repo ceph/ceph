@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_period_history.h"
-#include "rgw_rados.h"
+#include "rgw_zone.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -85,7 +85,7 @@ class RGWPeriodHistory::Impl final {
   ~Impl();
 
   Cursor get_current() const { return current_cursor; }
-  Cursor attach(RGWPeriod&& period);
+  Cursor attach(RGWPeriod&& period, optional_yield y);
   Cursor insert(RGWPeriod&& period);
   Cursor lookup(epoch_t realm_epoch);
 
@@ -137,6 +137,8 @@ RGWPeriodHistory::Impl::Impl(CephContext* cct, Puller* puller,
 
     // get a cursor to the current period
     current_cursor = make_cursor(current_history, current_period.get_realm_epoch());
+  } else {
+    current_history = histories.end();
   }
 }
 
@@ -146,7 +148,7 @@ RGWPeriodHistory::Impl::~Impl()
   histories.clear_and_dispose(std::default_delete<History>{});
 }
 
-Cursor RGWPeriodHistory::Impl::attach(RGWPeriod&& period)
+Cursor RGWPeriodHistory::Impl::attach(RGWPeriod&& period, optional_yield y)
 {
   if (current_history == histories.end()) {
     return Cursor{-EINVAL};
@@ -182,7 +184,7 @@ Cursor RGWPeriodHistory::Impl::attach(RGWPeriod&& period)
     }
 
     // pull the period outside of the lock
-    int r = puller->pull(predecessor_id, period);
+    int r = puller->pull(predecessor_id, period, y);
     if (r < 0) {
       return Cursor{r};
     }
@@ -301,7 +303,7 @@ Cursor RGWPeriodHistory::Impl::insert_locked(RGWPeriod&& period)
 RGWPeriodHistory::Impl::Set::iterator
 RGWPeriodHistory::Impl::merge(Set::iterator dst, Set::iterator src)
 {
-  assert(dst->get_newest_epoch() + 1 == src->get_oldest_epoch());
+  ceph_assert(dst->get_newest_epoch() + 1 == src->get_oldest_epoch());
 
   // always merge into current_history
   if (src == current_history) {
@@ -337,9 +339,9 @@ Cursor RGWPeriodHistory::get_current() const
 {
   return impl->get_current();
 }
-Cursor RGWPeriodHistory::attach(RGWPeriod&& period)
+Cursor RGWPeriodHistory::attach(RGWPeriod&& period, optional_yield y)
 {
-  return impl->attach(std::move(period));
+  return impl->attach(std::move(period), y);
 }
 Cursor RGWPeriodHistory::insert(RGWPeriod&& period)
 {

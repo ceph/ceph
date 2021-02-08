@@ -1,7 +1,8 @@
-#/bin/bash -fv
+#!/usr/bin/env bash
 #
 # Install a simple ceph cluster upon which openstack images will be stored.
 #
+set -fv
 ceph_node=${1}
 source copy_func.sh
 copy_file files/$OS_CEPH_ISO $ceph_node .

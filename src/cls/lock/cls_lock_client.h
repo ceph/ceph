@@ -4,12 +4,10 @@
 #ifndef CEPH_CLS_LOCK_CLIENT_H
 #define CEPH_CLS_LOCK_CLIENT_H
 
+#include <chrono>
 
-#include "include/types.h"
-#include "include/rados/librados.hpp"
-
+#include "include/rados/librados_fwd.hpp"
 #include "cls/lock/cls_lock_types.h"
-
 
 namespace rados {
   namespace cls {
@@ -46,16 +44,16 @@ namespace rados {
 			    const entity_name_t& locker);
 
       extern int list_locks(librados::IoCtx *ioctx, const std::string& oid,
-			    list<std::string> *locks);
+			    std::list<std::string> *locks);
       extern void get_lock_info_start(librados::ObjectReadOperation *rados_op,
 				      const std::string& name);
-      extern int get_lock_info_finish(ceph::bufferlist::iterator *out,
-				      map<locker_id_t, locker_info_t> *lockers,
+      extern int get_lock_info_finish(ceph::bufferlist::const_iterator *out,
+				      std::map<locker_id_t, locker_info_t> *lockers,
 				      ClsLockType *type, std::string *tag);
 
       extern int get_lock_info(librados::IoCtx *ioctx, const std::string& oid,
 			       const std::string& name,
-			       map<locker_id_t, locker_info_t> *lockers,
+			       std::map<locker_id_t, locker_info_t> *lockers,
 			       ClsLockType *type, std::string *tag);
 
       extern void assert_locked(librados::ObjectOperation *rados_op,
@@ -84,26 +82,53 @@ namespace rados {
 	void set_tag(const std::string& t) { tag = t; }
 	void set_description(const std::string& desc) { description = desc; }
 	void set_duration(const utime_t& e) { duration = e; }
-	void set_renew(bool renew) {
+	void set_duration(const ceph::timespan& d) {
+	  duration = utime_t(ceph::real_clock::zero() + d);
+	}
+
+	void set_may_renew(bool renew) {
 	  if (renew) {
-	    flags |= LOCK_FLAG_RENEW;
+	    flags |= LOCK_FLAG_MAY_RENEW;
+	    flags &= ~LOCK_FLAG_MUST_RENEW; // if may then not must
 	  } else {
-	    flags &= ~LOCK_FLAG_RENEW;
+	    flags &= ~LOCK_FLAG_MAY_RENEW;
 	  }
 	}
 
-        void assert_locked_exclusive(librados::ObjectOperation *rados_op);
+	void set_must_renew(bool renew) {
+	  if (renew) {
+	    flags |= LOCK_FLAG_MUST_RENEW;
+	    flags &= ~LOCK_FLAG_MAY_RENEW; // if must then not may
+	  } else {
+	    flags &= ~LOCK_FLAG_MUST_RENEW;
+	  }
+	}
+
         void assert_locked_shared(librados::ObjectOperation *rados_op);
+        void assert_locked_exclusive(librados::ObjectOperation *rados_op);
+        void assert_locked_exclusive_ephemeral(librados::ObjectOperation *rados_op);
 
 	/* ObjectWriteOperation */
-	void lock_exclusive(librados::ObjectWriteOperation *ioctx);
 	void lock_shared(librados::ObjectWriteOperation *ioctx);
+	void lock_exclusive(librados::ObjectWriteOperation *ioctx);
+
+	// Be careful when using an exclusive ephemeral lock; it is
+	// intended strictly for cases when a lock object exists
+	// solely for a lock in a given process and the object is no
+	// longer needed when the lock is unlocked or expired, as the
+	// cls back-end will make an effort to delete it.
+	void lock_exclusive_ephemeral(librados::ObjectWriteOperation *ioctx);
 	void unlock(librados::ObjectWriteOperation *ioctx);
-	void break_lock(librados::ObjectWriteOperation *ioctx, const entity_name_t& locker);
+	void break_lock(librados::ObjectWriteOperation *ioctx,
+			const entity_name_t& locker);
 
 	/* IoCtx */
-	int lock_exclusive(librados::IoCtx *ioctx, const std::string& oid);
 	int lock_shared(librados::IoCtx *ioctx, const std::string& oid);
+	int lock_exclusive(librados::IoCtx *ioctx, const std::string& oid);
+
+	// NB: see above comment on exclusive ephemeral locks
+	int lock_exclusive_ephemeral(librados::IoCtx *ioctx,
+				     const std::string& oid);
 	int unlock(librados::IoCtx *ioctx, const std::string& oid);
 	int break_lock(librados::IoCtx *ioctx, const std::string& oid,
 		       const entity_name_t& locker);

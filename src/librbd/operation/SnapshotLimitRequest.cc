@@ -29,7 +29,7 @@ template <typename I>
 bool SnapshotLimitRequest<I>::should_complete(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << "r=" << r << dendl;
+  ldout(cct, 5) << this << " " << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
@@ -40,14 +40,13 @@ bool SnapshotLimitRequest<I>::should_complete(int r) {
 template <typename I>
 void SnapshotLimitRequest<I>::send_limit_snaps() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   {
-    RWLock::RLocker md_locker(image_ctx.md_lock);
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    std::shared_lock image_locker{image_ctx.image_lock};
 
     librados::ObjectWriteOperation op;
     cls_client::snapshot_set_limit(&op, m_snap_limit);
@@ -56,7 +55,7 @@ void SnapshotLimitRequest<I>::send_limit_snaps() {
       this->create_callback_completion();
     int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
 					 &op);
-    assert(r == 0);
+    ceph_assert(r == 0);
     rados_completion->release();
   }
 }

@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/usr/bin/env bash
 #
 # Copyright (C) 2015 Red Hat <contact@redhat.com>
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
@@ -18,7 +18,7 @@
 # Test that it works from sources with:
 #
 #  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
-#  PLUGIN_DIRECTORY=src/.libs \
+#  PLUGIN_DIRECTORY=build/lib \
 #      qa/workunits/erasure-code/bench.sh fplot jerasure |
 #      tee qa/workunits/erasure-code/bench.js
 #
@@ -38,7 +38,7 @@
 #
 #  TOTAL_SIZE=$((4 * 1024 * 1024 * 1024)) \
 #  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
-#  PLUGIN_DIRECTORY=src/.libs \
+#  PLUGIN_DIRECTORY=build/lib \
 #      qa/workunits/erasure-code/bench.sh fplot jerasure |
 #      tee qa/workunits/erasure-code/bench.js
 #
@@ -111,6 +111,10 @@ function bench_run() {
     k2ms[4]="2 3"
     k2ms[6]="2 3 4"
     k2ms[10]="3 4"
+    local isa2technique_vandermonde='reed_sol_van'
+    local isa2technique_cauchy='cauchy'
+    local jerasure2technique_vandermonde='reed_sol_van'
+    local jerasure2technique_cauchy='cauchy_good'
     for technique in ${TECHNIQUES} ; do
         for plugin in ${PLUGINS} ; do
             eval technique_parameter=\$${plugin}2technique_${technique}
@@ -182,7 +186,7 @@ fi
 # Local Variables:
 # compile-command: "\
 #   CEPH_ERASURE_CODE_BENCHMARK=../../../src/ceph_erasure_code_benchmark \
-#   PLUGIN_DIRECTORY=../../../src/.libs \
+#   PLUGIN_DIRECTORY=../../../build/lib \
 #   ./bench.sh
 # "
 # End:

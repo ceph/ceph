@@ -1,4 +1,5 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
 # If these files exist, assume we are a source install.
 if [[ -f ../share/known_hosts_drop.ceph.com && -f ../share/id_rsa_drop.ceph.com ]]

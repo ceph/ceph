@@ -5,7 +5,6 @@
 #define CEPH_TEST_RADOS_TESTCASE_H
 
 #include "include/rados/librados.h"
-#include "include/rados/librados.hpp"
 #include "gtest/gtest.h"
 
 #include <string>
@@ -21,7 +20,7 @@
  */
 class RadosTestNS : public ::testing::Test {
 public:
-  RadosTestNS() {}
+  RadosTestNS(bool c=false) : cleanup(c) {}
   ~RadosTestNS() override {}
 protected:
   static void SetUpTestCase();
@@ -32,48 +31,18 @@ protected:
 
   void SetUp() override;
   void TearDown() override;
-  rados_t cluster;
-  rados_ioctx_t ioctx;
+  rados_t cluster = nullptr;
+  rados_ioctx_t ioctx = nullptr;
+  bool cleanup;
 };
 
-class RadosTestPPNS : public ::testing::Test {
-public:
-  RadosTestPPNS() : cluster(s_cluster) {}
-  ~RadosTestPPNS() override {}
-protected:
-  static void SetUpTestCase();
-  static void TearDownTestCase();
-  static void cleanup_all_objects(librados::IoCtx ioctx);
-  static librados::Rados s_cluster;
-  static std::string pool_name;
-
-  void SetUp() override;
-  void TearDown() override;
-  librados::Rados &cluster;
-  librados::IoCtx ioctx;
-};
-
-class RadosTestParamPPNS : public ::testing::TestWithParam<const char*> {
-public:
-  RadosTestParamPPNS() : cluster(s_cluster) {}
-  ~RadosTestParamPPNS() override {}
-  static void SetUpTestCase();
-  static void TearDownTestCase();
-protected:
-  static void cleanup_all_objects(librados::IoCtx ioctx);
-  static librados::Rados s_cluster;
-  static std::string pool_name;
-  static std::string cache_pool_name;
-
-  void SetUp() override;
-  void TearDown() override;
-  librados::Rados &cluster;
-  librados::IoCtx ioctx;
+struct RadosTestNSCleanup : public RadosTestNS {
+  RadosTestNSCleanup() : RadosTestNS(true) {}
 };
 
 class RadosTestECNS : public RadosTestNS {
 public:
-  RadosTestECNS() {}
+  RadosTestECNS(bool c=false) : cleanup(c) {}
   ~RadosTestECNS() override {}
 protected:
   static void SetUpTestCase();
@@ -83,26 +52,14 @@ protected:
 
   void SetUp() override;
   void TearDown() override;
-  rados_t cluster;
-  rados_ioctx_t ioctx;
-  uint64_t alignment;
+  rados_t cluster = nullptr; 
+  rados_ioctx_t ioctx = nullptr;
+  uint64_t alignment = 0;
+  bool cleanup;
 };
 
-class RadosTestECPPNS : public RadosTestPPNS {
-public:
-  RadosTestECPPNS() : cluster(s_cluster) {}
-  ~RadosTestECPPNS() override {}
-protected:
-  static void SetUpTestCase();
-  static void TearDownTestCase();
-  static librados::Rados s_cluster;
-  static std::string pool_name;
-
-  void SetUp() override;
-  void TearDown() override;
-  librados::Rados &cluster;
-  librados::IoCtx ioctx;
-  uint64_t alignment;
+struct RadosTestECNSCleanup : public RadosTestECNS {
+  RadosTestECNSCleanup() : RadosTestECNS(true) {}
 };
 
 /**
@@ -115,7 +72,7 @@ protected:
  */
 class RadosTest : public ::testing::Test {
 public:
-  RadosTest() {}
+  RadosTest(bool c=false) : cleanup(c) {}
   ~RadosTest() override {}
 protected:
   static void SetUpTestCase();
@@ -127,53 +84,15 @@ protected:
 
   void SetUp() override;
   void TearDown() override;
-  rados_t cluster;
-  rados_ioctx_t ioctx;
+  rados_t cluster = nullptr;
+  rados_ioctx_t ioctx = nullptr;
   std::string nspace;
-};
-
-class RadosTestPP : public ::testing::Test {
-public:
-  RadosTestPP() : cluster(s_cluster) {}
-  ~RadosTestPP() override {}
-protected:
-  static void SetUpTestCase();
-  static void TearDownTestCase();
-  static void cleanup_default_namespace(librados::IoCtx ioctx);
-  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
-  static librados::Rados s_cluster;
-  static std::string pool_name;
-
-  void SetUp() override;
-  void TearDown() override;
-  librados::Rados &cluster;
-  librados::IoCtx ioctx;
-  std::string nspace;
-};
-
-class RadosTestParamPP : public ::testing::TestWithParam<const char*> {
-public:
-  RadosTestParamPP() : cluster(s_cluster) {}
-  ~RadosTestParamPP() override {}
-  static void SetUpTestCase();
-  static void TearDownTestCase();
-protected:
-  static void cleanup_default_namespace(librados::IoCtx ioctx);
-  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
-  static librados::Rados s_cluster;
-  static std::string pool_name;
-  static std::string cache_pool_name;
-
-  void SetUp() override;
-  void TearDown() override;
-  librados::Rados &cluster;
-  librados::IoCtx ioctx;
-  std::string nspace;
+  bool cleanup;
 };
 
 class RadosTestEC : public RadosTest {
 public:
-  RadosTestEC() {}
+  RadosTestEC(bool c=false) : cleanup(c) {}
   ~RadosTestEC() override {}
 protected:
   static void SetUpTestCase();
@@ -183,28 +102,11 @@ protected:
 
   void SetUp() override;
   void TearDown() override;
-  rados_t cluster;
-  rados_ioctx_t ioctx;
+  rados_t cluster = nullptr;
+  rados_ioctx_t ioctx = nullptr;
+  bool cleanup;
   std::string nspace;
-  uint64_t alignment;
-};
-
-class RadosTestECPP : public RadosTestPP {
-public:
-  RadosTestECPP() : cluster(s_cluster) {}
-  ~RadosTestECPP() override {}
-protected:
-  static void SetUpTestCase();
-  static void TearDownTestCase();
-  static librados::Rados s_cluster;
-  static std::string pool_name;
-
-  void SetUp() override;
-  void TearDown() override;
-  librados::Rados &cluster;
-  librados::IoCtx ioctx;
-  std::string nspace;
-  uint64_t alignment;
+  uint64_t alignment = 0;
 };
 
 /**

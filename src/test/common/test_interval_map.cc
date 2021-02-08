@@ -49,7 +49,7 @@ struct bufferlist_test_type {
       bufferlist merge(bufferlist &&left, bufferlist &&right) const {
 	bufferlist bl;
 	left.claim_append(right);
-	return left;
+	return std::move(left);
       }
       uint64_t length(const bufferlist &r) const {
 	return r.length();
@@ -72,7 +72,7 @@ struct bufferlist_test_type {
 
 using IntervalMapTypes = ::testing::Types< bufferlist_test_type<uint64_t> >;
 
-TYPED_TEST_CASE(IntervalMapTest, IntervalMapTypes);
+TYPED_TEST_SUITE(IntervalMapTest, IntervalMapTypes);
 
 #define USING(_can_merge)					 \
   using TT = typename TestFixture::TestType;                     \

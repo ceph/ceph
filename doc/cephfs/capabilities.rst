@@ -4,7 +4,7 @@ Capabilities in CephFS
 When a client wants to operate on an inode, it will query the MDS in various
 ways, which will then grant the client a set of **capabilities**. These
 grant the client permissions to operate on the inode in various ways. One
-of the major differences from other network filesystems (e.g NFS or SMB) is
+of the major differences from other network file systems (e.g NFS or SMB) is
 that the capabilities granted are quite granular, and it's possible that
 multiple clients can hold different capabilities on the same inodes.
 
@@ -75,8 +75,8 @@ Graphically:
 
 The second bit is currently unused.
 
-Abilities granted by each cap:
-------------------------------
+Abilities granted by each cap
+-----------------------------
 While that is how capabilities are granted (and communicated), the important
 bit is what they actually allow the client to do:
 
@@ -98,12 +98,13 @@ bit is what they actually allow the client to do:
   file data. It also covers certain metadata relating to file data -- the
   size, mtime, atime and ctime, in particular.
 
-Shorthand:
-----------
+Shorthand
+---------
 Note that the client logging can also present a compact representation of the
 capabilities. For example:
 
 ::
+
         pAsLsXsFs
 
 The 'p' represents the pin. Each capital letter corresponds to the shift

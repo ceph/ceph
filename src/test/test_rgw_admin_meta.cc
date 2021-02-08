@@ -33,18 +33,8 @@ extern "C"{
 #include "global/global_init.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
-#define GTEST
-#ifdef GTEST
 #include <gtest/gtest.h>
-#else
-#define TEST(x, y) void y()
-#define ASSERT_EQ(v, s) if(v != s)cout << "Error at " << __LINE__ << "(" << #v << "!= " << #s << "\n"; \
-                                else cout << "(" << #v << "==" << #s << ") PASSED\n";
-#define EXPECT_EQ(v, s) ASSERT_EQ(v, s)
-#define ASSERT_TRUE(c) if(c)cout << "Error at " << __LINE__ << "(" << #c << ")" << "\n"; \
-                          else cout << "(" << #c << ") PASSED\n";
-#define EXPECT_TRUE(c) ASSERT_TRUE(c) 
-#endif
+
 using namespace std;
 
 #define CURL_VERBOSE 0
@@ -132,8 +122,7 @@ int test_helper::extract_input(int argc, char *argv[]){
       ERR_CHECK_NEXT_PARAM(rgw_admin_path);
     }else return -1;
   }
-  if(host.length() <= 0 ||
-     rgw_admin_path.length() <= 0)
+  if(host.empty() || rgw_admin_path.empty())
     return -1;
   return 0;
 }
@@ -189,7 +178,7 @@ static void calc_hmac_sha1(const char *key, int key_len,
   admin_meta::buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 }
 
-static int get_s3_auth(string method, string creds, string date, string res, string& out){
+static int get_s3_auth(const string &method, string creds, const string &date, string res, string& out){
   string aid, secret, auth_hdr;
   string tmp_res;
   size_t off = creds.find(":");
@@ -909,7 +898,8 @@ int main(int argc, char *argv[]){
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_test = new admin_meta::test_helper();
   finisher = new Finisher(g_ceph_context);

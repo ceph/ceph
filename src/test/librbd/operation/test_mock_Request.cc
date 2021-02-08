@@ -109,7 +109,7 @@ struct TestMockOperationRequest : public TestMockFixture {
     EXPECT_CALL(mock_request, send_op())
       .WillOnce(Invoke([&mock_image_ctx, &mock_request, r]() {
                   mock_image_ctx.image_ctx->op_work_queue->queue(
-                    new FunctionContext([&mock_request, r](int _) {
+                    new LambdaContext([&mock_request, r](int _) {
                       mock_request.send_op_impl(r);
                     }), 0);
                 }));
@@ -136,7 +136,7 @@ TEST_F(TestMockOperationRequest, SendJournalDisabled) {
   expect_send_op(*mock_request, 0);
 
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_request->send();
   }
 
@@ -164,7 +164,7 @@ TEST_F(TestMockOperationRequest, SendAffectsIOJournalDisabled) {
   expect_is_journal_appending(mock_journal, false);
 
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_request->send();
   }
 

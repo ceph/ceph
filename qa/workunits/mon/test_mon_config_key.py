@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # test_mon_config_key - Test 'ceph config-key' interface
 #
@@ -43,9 +43,9 @@ SIZES = [
     (50, 0),
     (100, 0),
     (1000, 0),
-    (4096, 0),
-    (4097, -errno.EFBIG),
-    (8192, -errno.EFBIG)
+    (64 * 1024, 0),
+    (64 * 1024 + 1, -errno.EFBIG),
+    (128 * 1024, -errno.EFBIG)
 ]
 
 # tests will be randomly selected from the keys here, and the test
@@ -444,7 +444,8 @@ def main():
                 read_data = json.load(temp_file)
             except ValueError:
                 temp_file.seek(0)
-                assert False, "{op} output was not valid JSON:\n{filedata}".format(op, temp_file.readlines())
+                assert False, "{op} output was not valid JSON:\n{filedata}".format(
+                    op=op, filedata=temp_file.readlines())
 
             if sop == 'existing':
                 assert key in read_data, "key '{k}' not found in list/dump output".format(k=key)

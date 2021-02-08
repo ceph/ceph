@@ -8,13 +8,13 @@
 #include <boost/scoped_ptr.hpp>
 #include <list>
 #include <map>
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 class FileStoreTracker {
   const static uint64_t SIZE = 4 * 1024;
   ObjectStore *store;
   KeyValueDB *db;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("Tracker Lock");
   uint64_t restart_seq;
 
   struct OutTransaction {
@@ -24,7 +24,7 @@ class FileStoreTracker {
 public:
   FileStoreTracker(ObjectStore *store, KeyValueDB *db)
     : store(store), db(db),
-      lock("Tracker Lock"), restart_seq(0) {}
+      restart_seq(0) {}
 
   class Transaction {
     class Op {

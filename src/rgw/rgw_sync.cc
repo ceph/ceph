@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <boost/optional.hpp>
 
@@ -12,17 +12,25 @@
 #include "common/errno.h"
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_sync.h"
 #include "rgw_metadata.h"
+#include "rgw_mdlog_types.h"
 #include "rgw_rest_conn.h"
 #include "rgw_tools.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_http_client.h"
-#include "rgw_boost_asio_yield.h"
+#include "rgw_sync_trace.h"
 
 #include "cls/lock/cls_lock_client.h"
+
+#include "services/svc_zone.h"
+#include "services/svc_mdlog.h"
+#include "services/svc_meta.h"
+#include "services/svc_cls.h"
+
+#include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -33,7 +41,7 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
-RGWSyncErrorLogger::RGWSyncErrorLogger(RGWRados *_store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
+RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RGWRadosStore *_store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
   for (int i = 0; i < num_shards; i++) {
     oids.push_back(get_shard_oid(oid_prefix, i));
   }
@@ -49,8 +57,8 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const 
 
   rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
-  ::encode(info, bl);
-  store->time_log_prepare_entry(entry, real_clock::now(), section, name, bl);
+  encode(info, bl);
+  store->svc()->cls->timelog.prepare_entry(entry, real_clock::now(), section, name, bl);
 
   uint32_t shard_id = ++counter % num_shards;
 
@@ -87,13 +95,13 @@ int RGWBackoffControlCR::operate() {
     // retry the operation until it succeeds
     while (true) {
       yield {
-        Mutex::Locker l(lock);
+	std::lock_guard l{lock};
         cr = alloc_cr();
         cr->get();
         call(cr);
       }
       {
-        Mutex::Locker l(lock);
+	std::lock_guard l{lock};
         cr->put();
         cr = NULL;
       }
@@ -236,20 +244,20 @@ int RGWRemoteMetaLog::read_log_info(rgw_mdlog_info *log_info)
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
                                   { NULL, NULL } };
 
-  int ret = conn->get_json_resource("/admin/log", pairs, *log_info);
+  int ret = conn->get_json_resource("/admin/log", pairs, null_yield, *log_info);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog info" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to fetch mdlog info" << dendl;
     return ret;
   }
 
-  ldout(store->ctx(), 20) << "remote mdlog, num_shards=" << log_info->num_shards << dendl;
+  ldpp_dout(dpp, 20) << "remote mdlog, num_shards=" << log_info->num_shards << dendl;
 
   return 0;
 }
 
 int RGWRemoteMetaLog::read_master_log_shards_info(const string &master_period, map<int, RGWMetadataLogInfo> *shards_info)
 {
-  if (store->is_meta_master()) {
+  if (store->svc()->zone->is_meta_master()) {
     return 0;
   }
 
@@ -264,7 +272,7 @@ int RGWRemoteMetaLog::read_master_log_shards_info(const string &master_period, m
 
 int RGWRemoteMetaLog::read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result)
 {
-  if (store->is_meta_master()) {
+  if (store->svc()->zone->is_meta_master()) {
     return 0;
   }
 
@@ -273,17 +281,19 @@ int RGWRemoteMetaLog::read_master_log_shards_next(const string& period, map<int,
 
 int RGWRemoteMetaLog::init()
 {
-  conn = store->rest_master_conn;
+  conn = store->svc()->zone->get_master_conn();
 
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
   init_sync_env(&sync_env);
+
+  tn = sync_env.sync_tracer->add_node(sync_env.sync_tracer->root_node, "meta");
 
   return 0;
 }
@@ -298,18 +308,18 @@ void RGWRemoteMetaLog::finish()
 
 int RGWMetaSyncStatusManager::init()
 {
-  if (store->is_meta_master()) {
+  if (store->svc()->zone->is_meta_master()) {
     return 0;
   }
 
-  if (!store->rest_master_conn) {
+  if (!store->svc()->zone->get_master_conn()) {
     lderr(store->ctx()) << "no REST connection to master zone" << dendl;
     return -EIO;
   }
 
-  int r = rgw_init_ioctx(store->get_rados_handle(), store->get_zone_params().log_pool, ioctx, true);
+  int r = rgw_init_ioctx(store->getRados()->get_rados_handle(), store->svc()->zone->get_zone_params().log_pool, ioctx, true);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->get_zone_params().log_pool << " ret=" << r << dendl;
+    lderr(store->ctx()) << "ERROR: failed to open log pool (" << store->svc()->zone->get_zone_params().log_pool << " ret=" << r << dendl;
     return r;
   }
 
@@ -331,10 +341,10 @@ int RGWMetaSyncStatusManager::init()
   int num_shards = sync_status.sync_info.num_shards;
 
   for (int i = 0; i < num_shards; i++) {
-    shard_objs[i] = rgw_raw_obj(store->get_zone_params().log_pool, sync_env.shard_obj_name(i));
+    shard_objs[i] = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env.shard_obj_name(i));
   }
 
-  RWLock::WLocker wl(ts_to_shard_lock);
+  std::unique_lock wl{ts_to_shard_lock};
   for (int i = 0; i < num_shards; i++) {
     clone_markers.push_back(string());
     utime_shard ut;
@@ -345,15 +355,27 @@ int RGWMetaSyncStatusManager::init()
   return 0;
 }
 
-void RGWMetaSyncEnv::init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+unsigned RGWMetaSyncStatusManager::get_subsys() const
+{
+  return dout_subsys;
+}
+
+std::ostream&  RGWMetaSyncStatusManager::gen_prefix(std::ostream& out) const
+{
+  return out << "meta sync: ";
+}
+
+void RGWMetaSyncEnv::init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RGWRadosStore *_store, RGWRESTConn *_conn,
                           RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
-                          RGWSyncErrorLogger *_error_logger) {
+                          RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer) {
+  dpp = _dpp;
   cct = _cct;
   store = _store;
   conn = _conn;
   async_rados = _async_rados;
   http_manager = _http_manager;
   error_logger = _error_logger;
+  sync_tracer = _sync_tracer;
 }
 
 string RGWMetaSyncEnv::status_oid()
@@ -370,13 +392,10 @@ string RGWMetaSyncEnv::shard_obj_name(int shard_id)
 }
 
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWMetadataLog *mdlog;
   int shard_id;
-  string *marker;
   int max_entries;
-  list<cls_log_entry> *entries;
-  bool *truncated;
 
 protected:
   int _send_request() override {
@@ -385,22 +404,24 @@ protected:
 
     void *handle;
 
-    mdlog->init_list_entries(shard_id, from_time, end_time, *marker, &handle);
+    mdlog->init_list_entries(shard_id, from_time, end_time, marker, &handle);
 
-    int ret = mdlog->list_entries(handle, max_entries, *entries, marker, truncated);
+    int ret = mdlog->list_entries(handle, max_entries, entries, &marker, &truncated);
 
     mdlog->complete_list_entries(handle);
 
     return ret;
   }
 public:
-  RGWAsyncReadMDLogEntries(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+  string marker;
+  list<cls_log_entry> entries;
+  bool truncated;
+
+  RGWAsyncReadMDLogEntries(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                            RGWMetadataLog* mdlog, int _shard_id,
-                           string* _marker, int _max_entries,
-                           list<cls_log_entry> *_entries, bool *_truncated)
+                           std::string _marker, int _max_entries)
     : RGWAsyncRadosRequest(caller, cn), store(_store), mdlog(mdlog),
-      shard_id(_shard_id), marker(_marker), max_entries(_max_entries),
-      entries(_entries), truncated(_truncated) {}
+      shard_id(_shard_id), max_entries(_max_entries), marker(std::move(_marker)) {}
 };
 
 class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
@@ -413,7 +434,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
   list<cls_log_entry> *entries;
   bool *truncated;
 
-  RGWAsyncReadMDLogEntries *req;
+  RGWAsyncReadMDLogEntries *req{nullptr};
 
 public:
   RGWReadMDLogEntriesCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
@@ -432,17 +453,16 @@ public:
   int send_request() override {
     marker = *pmarker;
     req = new RGWAsyncReadMDLogEntries(this, stack->create_completion_notifier(),
-                                       sync_env->store, mdlog, shard_id, &marker,
-                                       max_entries, entries, truncated);
+                                       sync_env->store, mdlog, shard_id, marker,
+                                       max_entries);
     sync_env->async_rados->queue(req);
     return 0;
   }
 
   int request_complete() override {
-    int ret = req->get_ret_status();
-    if (ret >= 0 && !entries->empty()) {
-     *pmarker = marker;
-    }
+    *pmarker = std::move(req->marker);
+    *entries = std::move(req->entries);
+    *truncated = req->truncated;
     return req->get_ret_status();
   }
 };
@@ -464,7 +484,7 @@ public:
 
   int operate() override {
     auto store = env->store;
-    RGWRESTConn *conn = store->rest_master_conn;
+    RGWRESTConn *conn = store->svc()->zone->get_master_conn();
     reenter(this) {
       yield {
 	char buf[16];
@@ -480,11 +500,11 @@ public:
         http_op = new RGWRESTReadResource(conn, p, pairs, NULL,
                                           env->http_manager);
 
-        http_op->set_user_info((void *)stack);
+        init_new_io(http_op);
 
         int ret = http_op->aio_read();
         if (ret < 0) {
-          ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
+          ldpp_dout(env->dpp, 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
           http_op->put();
           return set_cr_error(ret);
@@ -493,7 +513,7 @@ public:
         return io_block(0);
       }
       yield {
-        int ret = http_op->wait(shard_info);
+        int ret = http_op->wait(shard_info, null_yield);
         http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
@@ -504,6 +524,14 @@ public:
     return 0;
   }
 };
+
+RGWCoroutine* create_read_remote_mdlog_shard_info_cr(RGWMetaSyncEnv *env,
+                                                     const std::string& period,
+                                                     int shard_id,
+                                                     RGWMetadataLogInfo* info)
+{
+  return new RGWReadRemoteMDLogShardInfoCR(env, period, shard_id, info);
+}
 
 class RGWListRemoteMDLogShardCR : public RGWSimpleCoroutine {
   RGWMetaSyncEnv *sync_env;
@@ -524,7 +552,6 @@ public:
 
   int send_request() override {
     RGWRESTConn *conn = sync_env->conn;
-    RGWRados *store = sync_env->store;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", shard_id);
@@ -544,11 +571,11 @@ public:
     string p = "/admin/log/";
 
     http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
-    http_op->set_user_info((void *)stack);
+    init_new_io(http_op);
 
     int ret = http_op->aio_read();
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
+      ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to read from " << p << dendl;
       log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
       http_op->put();
       return ret;
@@ -558,15 +585,26 @@ public:
   }
 
   int request_complete() override {
-    int ret = http_op->wait(result);
+    int ret = http_op->wait(result, null_yield);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
-      ldout(sync_env->store->ctx(), 0) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
+      ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
       return ret;
     }
     return 0;
   }
 };
+
+RGWCoroutine* create_list_remote_mdlog_shard_cr(RGWMetaSyncEnv *env,
+                                                const std::string& period,
+                                                int shard_id,
+                                                const std::string& marker,
+                                                uint32_t max_entries,
+                                                rgw_mdlog_shard_data *result)
+{
+  return new RGWListRemoteMDLogShardCR(env, period, shard_id, marker,
+                                       max_entries, result);
+}
 
 bool RGWReadRemoteMDLogInfoCR::spawn_next() {
   if (shard_id >= num_shards) {
@@ -592,8 +630,8 @@ class RGWInitSyncStatusCoroutine : public RGWCoroutine {
 
   rgw_meta_sync_info status;
   vector<RGWMetadataLogInfo> shards_info;
-  RGWContinuousLeaseCR *lease_cr;
-  RGWCoroutinesStack *lease_stack;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
 public:
   RGWInitSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
                              const rgw_meta_sync_info &status)
@@ -604,7 +642,6 @@ public:
   ~RGWInitSyncStatusCoroutine() override {
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
   }
 
@@ -615,16 +652,15 @@ public:
         set_status("acquiring sync lock");
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-        RGWRados *store = sync_env->store;
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                            rgw_raw_obj(store->get_zone_params().log_pool, sync_env->status_oid()),
-                                            lock_name, lock_duration, this);
-        lease_cr->get();
-        lease_stack = spawn(lease_cr, false);
+	rgw::sal::RGWRadosStore *store = sync_env->store;
+        lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                                rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
+                                                lock_name, lock_duration, this));
+        lease_stack.reset(spawn(lease_cr.get(), false));
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 5) << "lease cr failed, done early " << dendl;
+          ldpp_dout(sync_env->dpp, 5) << "lease cr failed, done early " << dendl;
           set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
@@ -633,15 +669,15 @@ public:
       }
       yield {
         set_status("writing sync status");
-        RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, sync_env->status_oid()),
+	rgw::sal::RGWRadosStore *store = sync_env->store;
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc()->sysobj,
+                                                           rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
 
       if (retcode < 0) {
         set_status("failed to write sync status");
-        ldout(cct, 0) << "ERROR: failed to write sync status, retcode=" << retcode << dendl;
+        ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to write sync status, retcode=" << retcode << dendl;
         yield lease_cr->go_down();
         return set_cr_error(retcode);
       }
@@ -654,7 +690,7 @@ public:
 	}
       }
 
-      drain_all_but_stack(lease_stack); /* the lease cr still needs to run */
+      drain_all_but_stack(lease_stack.get()); /* the lease cr still needs to run */
 
       yield {
         set_status("updating sync status");
@@ -663,19 +699,19 @@ public:
           RGWMetadataLogInfo& info = shards_info[i];
 	  marker.next_step_marker = info.marker;
 	  marker.timestamp = info.last_update;
-          RGWRados *store = sync_env->store;
+	  rgw::sal::RGWRadosStore *store = sync_env->store;
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
-                                                                store,
-                                                                rgw_raw_obj(store->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
+                                                                store->svc()->sysobj,
+                                                                rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->shard_obj_name(i)),
                                                                 marker), true);
         }
       }
       yield {
         set_status("changing sync state: build full sync maps");
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
-        RGWRados *store = sync_env->store;
-        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, sync_env->status_oid()),
+	rgw::sal::RGWRadosStore *store = sync_env->store;
+        call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store->svc()->sysobj,
+                                                           rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
                                                            status));
       }
       set_status("drop lock lease");
@@ -716,9 +752,9 @@ bool RGWReadSyncStatusMarkersCR::spawn_next()
     return false;
   }
   using CR = RGWSimpleRadosReadCR<rgw_meta_sync_marker>;
-  rgw_raw_obj obj{env->store->get_zone_params().log_pool,
+  rgw_raw_obj obj{env->store->svc()->zone->get_zone_params().log_pool,
                   env->shard_obj_name(shard_id)};
-  spawn(new CR(env->async_rados, env->store, obj, &markers[shard_id]), false);
+  spawn(new CR(env->async_rados, env->store->svc()->sysobj, obj, &markers[shard_id]), false);
   shard_id++;
   return true;
 }
@@ -742,13 +778,13 @@ int RGWReadSyncStatusCoroutine::operate()
     using ReadInfoCR = RGWSimpleRadosReadCR<rgw_meta_sync_info>;
     yield {
       bool empty_on_enoent = false; // fail on ENOENT
-      rgw_raw_obj obj{sync_env->store->get_zone_params().log_pool,
+      rgw_raw_obj obj{sync_env->store->svc()->zone->get_zone_params().log_pool,
                       sync_env->status_oid()};
-      call(new ReadInfoCR(sync_env->async_rados, sync_env->store, obj,
+      call(new ReadInfoCR(sync_env->async_rados, sync_env->store->svc()->sysobj, obj,
                           &sync_status->sync_info, empty_on_enoent));
     }
     if (retcode < 0) {
-      ldout(sync_env->cct, 4) << "failed to read sync status info with "
+      ldpp_dout(sync_env->dpp, 4) << "failed to read sync status info with "
           << cpp_strerror(retcode) << dendl;
       return set_cr_error(retcode);
     }
@@ -757,7 +793,7 @@ int RGWReadSyncStatusCoroutine::operate()
     yield call(new ReadMarkersCR(sync_env, sync_status->sync_info.num_shards,
                                  sync_status->sync_markers));
     if (retcode < 0) {
-      ldout(sync_env->cct, 4) << "failed to read sync status markers with "
+      ldpp_dout(sync_env->dpp, 4) << "failed to read sync status markers with "
           << cpp_strerror(retcode) << dendl;
       return set_cr_error(retcode);
     }
@@ -776,30 +812,46 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 
   list<string> sections;
   list<string>::iterator sections_iter;
-  list<string> result;
+
+  struct meta_list_result {
+    list<string> keys;
+    string marker;
+    uint64_t count{0};
+    bool truncated{false};
+
+    void decode_json(JSONObj *obj) {
+      JSONDecoder::decode_json("keys", keys, obj);
+      JSONDecoder::decode_json("marker", marker, obj);
+      JSONDecoder::decode_json("count", count, obj);
+      JSONDecoder::decode_json("truncated", truncated, obj);
+    }
+  } result;
   list<string>::iterator iter;
 
   std::unique_ptr<RGWShardedOmapCRManager> entries_index;
 
-  RGWContinuousLeaseCR *lease_cr;
-  RGWCoroutinesStack *lease_stack;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
   bool lost_lock;
   bool failed;
 
+  string marker;
+
   map<uint32_t, rgw_meta_sync_marker>& markers;
+
+  RGWSyncTraceNodeRef tn;
 
 public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
-                    map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                    map<uint32_t, rgw_meta_sync_marker>& _markers,
+                    RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
 						      ret_status(0), lease_cr(nullptr), lease_stack(nullptr),
                                                       lost_lock(false), failed(false), markers(_markers) {
+    tn = sync_env->sync_tracer->add_node(_tn_parent, "fetch_all_meta");
   }
 
   ~RGWFetchAllMetaCR() override {
-    if (lease_cr) {
-      lease_cr->put();
-    }
   }
 
   void append_section_from_set(set<string>& all_sections, const string& name) {
@@ -835,16 +887,15 @@ public:
         set_status(string("acquiring lock (") + sync_env->status_oid() + ")");
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados,
-                                            sync_env->store,
-                                            rgw_raw_obj(sync_env->store->get_zone_params().log_pool, sync_env->status_oid()),
-                                            lock_name, lock_duration, this);
-        lease_cr->get();
-        lease_stack = spawn(lease_cr, false);
+        lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados,
+                                                sync_env->store,
+                                                rgw_raw_obj(sync_env->store->svc()->zone->get_zone_params().log_pool, sync_env->status_oid()),
+                                                lock_name, lock_duration, this));
+        lease_stack.reset(spawn(lease_cr.get(), false));
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 5) << "lease cr failed, done early " << dendl;
+          ldpp_dout(sync_env->dpp, 5) << "lease cr failed, done early " << dendl;
           set_status("failed acquiring lock");
           return set_cr_error(lease_cr->get_ret_status());
         }
@@ -852,14 +903,14 @@ public:
         yield;
       }
       entries_index.reset(new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store, this, num_shards,
-                                                      sync_env->store->get_zone_params().log_pool,
+                                                      sync_env->store->svc()->zone->get_zone_params().log_pool,
                                                       mdlog_sync_full_sync_index_prefix));
       yield {
 	call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
 				       "/admin/metadata", NULL, &sections));
       }
       if (get_ret_status() < 0) {
-        ldout(cct, 0) << "ERROR: failed to fetch metadata sections" << dendl;
+        ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to fetch metadata sections" << dendl;
         yield entries_index->finish();
         yield lease_cr->go_down();
         drain_all();
@@ -868,41 +919,52 @@ public:
       rearrange_sections();
       sections_iter = sections.begin();
       for (; sections_iter != sections.end(); ++sections_iter) {
-        yield {
-	  string entrypoint = string("/admin/metadata/") + *sections_iter;
-          /* FIXME: need a better scaling solution here, requires streaming output */
-	  call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
-				       entrypoint, NULL, &result));
-	}
-        if (get_ret_status() < 0) {
-          ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
-          yield entries_index->finish();
-          yield lease_cr->go_down();
-          drain_all();
-          return set_cr_error(get_ret_status());
-        }
-        iter = result.begin();
-        for (; iter != result.end(); ++iter) {
-          if (!lease_cr->is_locked()) {
-            lost_lock = true;
-            break;
+        do {
+          yield {
+#define META_FULL_SYNC_CHUNK_SIZE "1000"
+            string entrypoint = string("/admin/metadata/") + *sections_iter;
+            rgw_http_param_pair pairs[] = { { "max-entries", META_FULL_SYNC_CHUNK_SIZE },
+              { "marker", result.marker.c_str() },
+              { NULL, NULL } };
+            result.keys.clear();
+            call(new RGWReadRESTResourceCR<meta_list_result >(cct, conn, sync_env->http_manager,
+                                                              entrypoint, pairs, &result));
           }
-          yield; // allow entries_index consumer to make progress
+          ret_status = get_ret_status();
+          if (ret_status == -ENOENT) {
+            set_retcode(0); /* reset coroutine status so that we don't return it */
+            ret_status = 0;
+          }
+          if (ret_status < 0) {
+            tn->log(0, SSTR("ERROR: failed to fetch metadata section: " << *sections_iter));
+            yield entries_index->finish();
+            yield lease_cr->go_down();
+            drain_all();
+            return set_cr_error(ret_status);
+          }
+          iter = result.keys.begin();
+          for (; iter != result.keys.end(); ++iter) {
+            if (!lease_cr->is_locked()) {
+              lost_lock = true;
+              break;
+            }
+            yield; // allow entries_index consumer to make progress
 
-          ldout(cct, 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
-          string s = *sections_iter + ":" + *iter;
-          int shard_id;
-          RGWRados *store = sync_env->store;
-          int ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
-          if (ret < 0) {
-            ldout(cct, 0) << "ERROR: could not determine shard id for " << *sections_iter << ":" << *iter << dendl;
-            ret_status = ret;
-            break;
+            tn->log(20, SSTR("list metadata: section=" << *sections_iter << " key=" << *iter));
+            string s = *sections_iter + ":" + *iter;
+            int shard_id;
+	    rgw::sal::RGWRadosStore *store = sync_env->store;
+            int ret = store->ctl()->meta.mgr->get_shard_id(*sections_iter, *iter, &shard_id);
+            if (ret < 0) {
+              tn->log(0, SSTR("ERROR: could not determine shard id for " << *sections_iter << ":" << *iter));
+              ret_status = ret;
+              break;
+            }
+            if (!entries_index->append(s, shard_id)) {
+              break;
+            }
           }
-          if (!entries_index->append(s, shard_id)) {
-            break;
-          }
-	}
+        } while (result.truncated);
       }
       yield {
         if (!entries_index->finish()) {
@@ -914,13 +976,13 @@ public:
           int shard_id = (int)iter->first;
           rgw_meta_sync_marker& marker = iter->second;
           marker.total_entries = entries_index->get_total_entries(shard_id);
-          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store,
-                                                                rgw_raw_obj(sync_env->store->get_zone_params().log_pool, sync_env->shard_obj_name(shard_id)),
+          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store->svc()->sysobj,
+                                                                rgw_raw_obj(sync_env->store->svc()->zone->get_zone_params().log_pool, sync_env->shard_obj_name(shard_id)),
                                                                 marker), true);
         }
       }
 
-      drain_all_but_stack(lease_stack); /* the lease cr still needs to run */
+      drain_all_but_stack(lease_stack.get()); /* the lease cr still needs to run */
 
       yield lease_cr->go_down();
 
@@ -966,31 +1028,38 @@ class RGWReadRemoteMetadataCR : public RGWCoroutine {
 
   bufferlist *pbl;
 
+  RGWSyncTraceNodeRef tn;
+
 public:
   RGWReadRemoteMetadataCR(RGWMetaSyncEnv *_sync_env,
-                                                      const string& _section, const string& _key, bufferlist *_pbl) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                                                      const string& _section, const string& _key, bufferlist *_pbl,
+                                                      const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
                                                       http_op(NULL),
                                                       section(_section),
                                                       key(_key),
 						      pbl(_pbl) {
+    tn = sync_env->sync_tracer->add_node(_tn_parent, "read_remote_meta",
+                                         section + ":" + key);
   }
 
   int operate() override {
     RGWRESTConn *conn = sync_env->conn;
     reenter(this) {
       yield {
+        string key_encode;
+        url_encode(key, key_encode);
         rgw_http_param_pair pairs[] = { { "key" , key.c_str()},
 	                                { NULL, NULL } };
 
-        string p = string("/admin/metadata/") + section + "/" + key;
+        string p = string("/admin/metadata/") + section + "/" + key_encode;
 
         http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
 
-        http_op->set_user_info((void *)stack);
+        init_new_io(http_op);
 
         int ret = http_op->aio_read();
         if (ret < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to fetch mdlog data" << dendl;
+          ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to fetch mdlog data" << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
           http_op->put();
           return set_cr_error(ret);
@@ -999,7 +1068,7 @@ public:
         return io_block(0);
       }
       yield {
-        int ret = http_op->wait_bl(pbl);
+        int ret = http_op->wait(pbl, null_yield);
         http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
@@ -1012,12 +1081,13 @@ public:
 };
 
 class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   string raw_key;
   bufferlist bl;
+  const DoutPrefixProvider *dpp;
 protected:
   int _send_request() override {
-    int ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, dpp, RGWMDLogSyncType::APPLY_ALWAYS, true);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1025,10 +1095,11 @@ protected:
     return 0;
   }
 public:
-  RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+  RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                        const string& _raw_key,
-                       bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                          raw_key(_raw_key), bl(_bl) {}
+                       bufferlist& _bl,
+                       const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                          raw_key(_raw_key), bl(_bl), dpp(dpp) {}
 };
 
 
@@ -1054,7 +1125,7 @@ public:
 
   int send_request() override {
     req = new RGWAsyncMetaStoreEntry(this, stack->create_completion_notifier(),
-			           sync_env->store, raw_key, bl);
+			           sync_env->store, raw_key, bl, sync_env->dpp);
     sync_env->async_rados->queue(req);
     return 0;
   }
@@ -1065,11 +1136,12 @@ public:
 };
 
 class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   string raw_key;
+  const DoutPrefixProvider *dpp;
 protected:
   int _send_request() override {
-    int ret = store->meta_mgr->remove(raw_key);
+    int ret = store->ctl()->meta.mgr->remove(raw_key, null_yield, dpp);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1077,9 +1149,9 @@ protected:
     return 0;
   }
 public:
-  RGWAsyncMetaRemoveEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                       const string& _raw_key) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                          raw_key(_raw_key) {}
+  RGWAsyncMetaRemoveEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
+                       const string& _raw_key, const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                          raw_key(_raw_key), dpp(dpp) {}
 };
 
 
@@ -1103,7 +1175,7 @@ public:
 
   int send_request() override {
     req = new RGWAsyncMetaRemoveEntry(this, stack->create_completion_notifier(),
-			           sync_env->store, raw_key);
+			           sync_env->store, raw_key, sync_env->dpp);
     sync_env->async_rados->queue(req);
     return 0;
   }
@@ -1119,20 +1191,38 @@ public:
 
 #define META_SYNC_UPDATE_MARKER_WINDOW 10
 
+
+int RGWLastCallerWinsCR::operate() {
+  RGWCoroutine *call_cr;
+  reenter(this) {
+    while (cr) {
+      call_cr = cr;
+      cr = nullptr;
+      yield call(call_cr);
+      /* cr might have been modified at this point */
+    }
+    return set_cr_done();
+  }
+  return 0;
+}
+
 class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, string> {
   RGWMetaSyncEnv *sync_env;
 
   string marker_oid;
   rgw_meta_sync_marker sync_marker;
 
+  RGWSyncTraceNodeRef tn;
 
 public:
   RGWMetaSyncShardMarkerTrack(RGWMetaSyncEnv *_sync_env,
                          const string& _marker_oid,
-                         const rgw_meta_sync_marker& _marker) : RGWSyncShardMarkerTrack(META_SYNC_UPDATE_MARKER_WINDOW),
+                         const rgw_meta_sync_marker& _marker,
+                         RGWSyncTraceNodeRef& _tn) : RGWSyncShardMarkerTrack(META_SYNC_UPDATE_MARKER_WINDOW),
                                                                 sync_env(_sync_env),
                                                                 marker_oid(_marker_oid),
-                                                                sync_marker(_marker) {}
+                                                                sync_marker(_marker),
+                                                                tn(_tn){}
 
   RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
@@ -1144,14 +1234,32 @@ public:
       sync_marker.timestamp = timestamp;
     }
 
-    ldout(sync_env->cct, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
-    RGWRados *store = sync_env->store;
+    ldpp_dout(sync_env->dpp, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << " realm_epoch=" << sync_marker.realm_epoch << dendl;
+    tn->log(20, SSTR("new marker=" << new_marker));
+    rgw::sal::RGWRadosStore *store = sync_env->store;
     return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados,
-                                                           store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, marker_oid),
+                                                           store->svc()->sysobj,
+                                                           rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
   }
+
+  RGWOrderCallCR *allocate_order_control_cr() override {
+    return new RGWLastCallerWinsCR(sync_env->cct);
+  }
 };
+
+RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
+		           const string& _raw_key, const string& _entry_marker,
+                           const RGWMDLogStatus& _op_status,
+                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct),
+                                                      sync_env(_sync_env),
+						      raw_key(_raw_key), entry_marker(_entry_marker),
+                                                      op_status(_op_status),
+                                                      pos(0), sync_status(0),
+                                                      marker_tracker(_marker_tracker), tries(0) {
+  error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
+  tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", raw_key);
+}
 
 int RGWMetaSyncSingleEntryCR::operate() {
   reenter(this) {
@@ -1159,25 +1267,25 @@ int RGWMetaSyncSingleEntryCR::operate() {
 
     if (error_injection &&
         rand() % 10000 < cct->_conf->rgw_sync_meta_inject_err_probability * 10000.0) {
-      ldout(sync_env->cct, 0) << __FILE__ << ":" << __LINE__ << ": injecting meta sync error on key=" << raw_key << dendl;
       return set_cr_error(-EIO);
     }
 
     if (op_status != MDLOG_STATUS_COMPLETE) {
-      ldout(sync_env->cct, 20) << "skipping pending operation" << dendl;
+      tn->log(20, "skipping pending operation");
       yield call(marker_tracker->finish(entry_marker));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
       return set_cr_done();
     }
+    tn->set_flag(RGW_SNS_FLAG_ACTIVE);
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       yield {
         pos = raw_key.find(':');
         section = raw_key.substr(0, pos);
         key = raw_key.substr(pos + 1);
-        ldout(sync_env->cct, 20) << "fetching remote metadata: " << section << ":" << key << (tries == 0 ? "" : " (retry)") << dendl;
-        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
+        tn->log(10, SSTR("fetching remote metadata entry" << (tries == 0 ? "" : " (retry)")));
+        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn));
       }
 
       sync_status = retcode;
@@ -1188,12 +1296,12 @@ int RGWMetaSyncSingleEntryCR::operate() {
       }
 
       if ((sync_status == -EAGAIN || sync_status == -ECANCELED) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
-        ldout(sync_env->cct, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
+        ldpp_dout(sync_env->dpp, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
         continue;
       }
 
       if (sync_status < 0) {
-        ldout(sync_env->cct, 10) << *this << ": failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << dendl;
+        tn->log(10, SSTR("failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status));
         log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
         yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), section, key, -sync_status,
                                                         string("failed to read remote metadata entry: ") + cpp_strerror(-sync_status)));
@@ -1206,12 +1314,14 @@ int RGWMetaSyncSingleEntryCR::operate() {
     retcode = 0;
     for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
       if (sync_status != -ENOENT) {
+        tn->log(10, SSTR("storing local metadata entry"));
           yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
       } else {
+        tn->log(10, SSTR("removing local metadata entry"));
           yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
       }
       if ((retcode == -EAGAIN || retcode == -ECANCELED) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
-        ldout(sync_env->cct, 20) << *this << ": failed to store metadata: " << section << ":" << key << ", got retcode=" << retcode << dendl;
+        ldpp_dout(sync_env->dpp, 20) << *this << ": failed to store metadata: " << section << ":" << key << ", got retcode=" << retcode << dendl;
         continue;
       }
       break;
@@ -1225,8 +1335,10 @@ int RGWMetaSyncSingleEntryCR::operate() {
       sync_status = retcode;
     }
     if (sync_status < 0) {
+      tn->log(10, SSTR("failed, status=" << sync_status));
       return set_cr_error(sync_status);
     }
+    tn->log(10, "success");
     return set_cr_done();
   }
   return 0;
@@ -1294,8 +1406,9 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string max_marker;
   const std::string& period_marker; //< max marker stored in next period
 
-  map<string, bufferlist> entries;
-  map<string, bufferlist>::iterator iter;
+  RGWRadosGetOmapKeysCR::ResultPtr omapkeys;
+  std::set<std::string> entries;
+  std::set<std::string>::iterator iter;
 
   string oid;
 
@@ -1309,14 +1422,15 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string raw_key;
   rgw_mdlog_entry mdlog_entry;
 
-  Mutex inc_lock;
-  Cond inc_cond;
+  ceph::mutex inc_lock = ceph::make_mutex("RGWMetaSyncShardCR::inc_lock");
+  ceph::condition_variable inc_cond;
 
   boost::asio::coroutine incremental_cr;
   boost::asio::coroutine full_cr;
 
-  RGWContinuousLeaseCR *lease_cr = nullptr;
-  RGWCoroutinesStack *lease_stack = nullptr;
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
+
   bool lost_lock = false;
 
   bool *reset_backoff;
@@ -1331,17 +1445,19 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   int total_entries = 0;
 
+  RGWSyncTraceNodeRef tn;
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
                      const std::string& period, epoch_t realm_epoch,
                      RGWMetadataLog* mdlog, uint32_t _shard_id,
                      rgw_meta_sync_marker& _marker,
-                     const std::string& period_marker, bool *_reset_backoff)
+                     const std::string& period_marker, bool *_reset_backoff,
+                     RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), pool(_pool),
       period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(period_marker), inc_lock("RGWMetaSyncShardCR::inc_lock"),
-      reset_backoff(_reset_backoff) {
+      period_marker(period_marker),
+      reset_backoff(_reset_backoff), tn(_tn) {
     *reset_backoff = false;
   }
 
@@ -1349,7 +1465,6 @@ public:
     delete marker_tracker;
     if (lease_cr) {
       lease_cr->abort();
-      lease_cr->put();
     }
   }
 
@@ -1365,14 +1480,14 @@ public:
       case rgw_meta_sync_marker::FullSync:
         r  = full_sync();
         if (r < 0) {
-          ldout(sync_env->cct, 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
+          ldpp_dout(sync_env->dpp, 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
           return set_cr_error(r);
         }
         return 0;
       case rgw_meta_sync_marker::IncrementalSync:
         r  = incremental_sync();
         if (r < 0) {
-          ldout(sync_env->cct, 10) << "sync: incremental_sync: shard_id=" << shard_id << " r=" << r << dendl;
+          ldpp_dout(sync_env->dpp, 10) << "sync: incremental_sync: shard_id=" << shard_id << " r=" << r << dendl;
           return set_cr_error(r);
         }
         return 0;
@@ -1396,11 +1511,11 @@ public:
       string& pos = iter->second;
 
       if (child_ret < 0) {
-        ldout(sync_env->cct, 0) << *this << ": child operation stack=" << child << " entry=" << pos << " returned " << child_ret << dendl;
+        ldpp_dout(sync_env->dpp, 0) << *this << ": child operation stack=" << child << " entry=" << pos << " returned " << child_ret << dendl;
       }
 
       map<string, string>::iterator prev_iter = pos_to_prev.find(pos);
-      assert(prev_iter != pos_to_prev.end());
+      ceph_assert(prev_iter != pos_to_prev.end());
 
       /*
        * we should get -EAGAIN for transient errors, for which we want to retry, so we don't
@@ -1417,7 +1532,7 @@ public:
         }
         pos_to_prev.erase(prev_iter);
       } else {
-        assert(pos_to_prev.size() > 1);
+        ceph_assert(pos_to_prev.size() > 1);
         pos_to_prev.erase(prev_iter);
         prev_iter = pos_to_prev.begin();
         if (can_adjust_marker) {
@@ -1425,7 +1540,7 @@ public:
         }
       }
 
-      ldout(sync_env->cct, 0) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
+      ldpp_dout(sync_env->dpp, 4) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
       stack_to_pos.erase(iter);
     }
   }
@@ -1435,32 +1550,30 @@ public:
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
       set_status("full_sync");
+      tn->log(10, "start full sync");
       oid = full_sync_index_shard_oid(shard_id);
       can_adjust_marker = true;
       /* grab lock */
       yield {
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-        if (lease_cr) {
-          lease_cr->put();
-        }
-        RGWRados *store = sync_env->store;
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                            rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-                                            lock_name, lock_duration, this);
-        lease_cr->get();
-        lease_stack = spawn(lease_cr, false);
+	rgw::sal::RGWRadosStore *store = sync_env->store;
+        lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                                rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
+                                                lock_name, lock_duration, this));
+        lease_stack.reset(spawn(lease_cr.get(), false));
         lost_lock = false;
       }
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
-          ldout(cct, 5) << "lease cr failed, done early " << dendl;
           drain_all();
+          tn->log(5, "failed to take lease");
           return lease_cr->get_ret_status();
         }
         set_sleeping(true);
         yield;
       }
+      tn->log(10, "took lease");
 
       /* lock succeeded, a retry now should avoid previous backoff status */
       *reset_backoff = true;
@@ -1468,7 +1581,7 @@ public:
       /* prepare marker tracker */
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
                                                          sync_env->shard_obj_name(shard_id),
-                                                         sync_marker));
+                                                         sync_marker, tn));
 
       marker = sync_marker.marker;
 
@@ -1477,36 +1590,46 @@ public:
       /* sync! */
       do {
         if (!lease_cr->is_locked()) {
+          tn->log(10, "lost lease");
           lost_lock = true;
           break;
         }
+        omapkeys = std::make_shared<RGWRadosGetOmapKeysCR::Result>();
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
-                                             marker, &entries, max_entries));
+                                             marker, max_entries, omapkeys));
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
+          ldpp_dout(sync_env->dpp, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
+          tn->log(0, SSTR("ERROR: failed to list omap keys, status=" << retcode));
           yield lease_cr->go_down();
           drain_all();
           return retcode;
         }
+        entries = std::move(omapkeys->entries);
+        tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
+        if (entries.size() > 0) {
+          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+        }
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
-          ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
+          marker = *iter;
+          tn->log(20, SSTR("full sync: " << marker));
           total_entries++;
-          if (!marker_tracker->start(iter->first, total_entries, real_time())) {
-            ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << iter->first << ". Duplicate entry?" << dendl;
+          if (!marker_tracker->start(marker, total_entries, real_time())) {
+            tn->log(0, SSTR("ERROR: cannot start syncing " << marker << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
             yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker), false);
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, marker, marker, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
               // stack_to_pos holds a reference to the stack
-              stack_to_pos[stack] = iter->first;
-              pos_to_prev[iter->first] = marker;
+              stack_to_pos[stack] = marker;
+              pos_to_prev[marker] = marker;
             }
           }
-          marker = iter->first;
         }
         collect_children();
-      } while ((int)entries.size() == max_entries && can_adjust_marker);
+      } while (omapkeys->more && can_adjust_marker);
+
+      tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
       while (num_spawned() > 1) {
         yield wait_for_child();
@@ -1523,16 +1646,18 @@ public:
 	  temp_marker->marker = std::move(temp_marker->next_step_marker);
 	  temp_marker->next_step_marker.clear();
 	  temp_marker->realm_epoch = realm_epoch;
-	  ldout(sync_env->cct, 0) << *this << ": saving marker pos=" << temp_marker->marker << " realm_epoch=" << realm_epoch << dendl;
+	  ldpp_dout(sync_env->dpp, 4) << *this << ": saving marker pos=" << temp_marker->marker << " realm_epoch=" << realm_epoch << dendl;
 
 	  using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
-	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store,
+	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
 				       rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
 				       *temp_marker));
         }
 
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
+          ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
+          yield lease_cr->go_down();
+          drain_all();
           return retcode;
         }
       }
@@ -1544,8 +1669,7 @@ public:
 
       yield lease_cr->go_down();
 
-      lease_cr->put();
-      lease_cr = NULL;
+      lease_cr.reset();
 
       drain_all();
 
@@ -1557,8 +1681,10 @@ public:
         return -EBUSY;
       }
 
+      tn->log(10, "full sync complete");
+
       // apply the sync marker update
-      assert(temp_marker);
+      ceph_assert(temp_marker);
       sync_marker = std::move(*temp_marker);
       temp_marker = boost::none;
       // must not yield after this point!
@@ -1570,33 +1696,34 @@ public:
   int incremental_sync() {
     reenter(&incremental_cr) {
       set_status("incremental_sync");
+      tn->log(10, "start incremental sync");
       can_adjust_marker = true;
       /* grab lock */
       if (!lease_cr) { /* could have had  a lease_cr lock from previous state */
         yield {
           uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
           string lock_name = "sync_lock";
-          RGWRados *store = sync_env->store;
-          lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                              rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-                                              lock_name, lock_duration, this);
-          lease_cr->get();
-          lease_stack = spawn(lease_cr, false);
+	  rgw::sal::RGWRadosStore *store = sync_env->store;
+          lease_cr.reset( new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                                   rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
+                                                   lock_name, lock_duration, this));
+          lease_stack.reset(spawn(lease_cr.get(), false));
           lost_lock = false;
         }
         while (!lease_cr->is_locked()) {
           if (lease_cr->is_done()) {
-            ldout(cct, 5) << "lease cr failed, done early " << dendl;
             drain_all();
+            tn->log(10, "failed to take lease");
             return lease_cr->get_ret_status();
           }
           set_sleeping(true);
           yield;
         }
       }
+      tn->log(10, "took lease");
       // if the period has advanced, we can't use the existing marker
       if (sync_marker.realm_epoch < realm_epoch) {
-        ldout(sync_env->cct, 0) << "clearing marker=" << sync_marker.marker
+        ldpp_dout(sync_env->dpp, 4) << "clearing marker=" << sync_marker.marker
             << " from old realm_epoch=" << sync_marker.realm_epoch
             << " (now " << realm_epoch << ')' << dendl;
         sync_marker.realm_epoch = realm_epoch;
@@ -1605,7 +1732,7 @@ public:
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
                                                          sync_env->shard_obj_name(shard_id),
-                                                         sync_marker));
+                                                         sync_marker, tn));
 
       /*
        * mdlog_marker: the remote sync marker positiion
@@ -1619,38 +1746,40 @@ public:
       do {
         if (!lease_cr->is_locked()) {
           lost_lock = true;
+          tn->log(10, "lost lease");
           break;
         }
 #define INCREMENTAL_MAX_ENTRIES 100
-	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
         if (!period_marker.empty() && period_marker <= mdlog_marker) {
-          ldout(cct, 10) << "mdlog_marker past period_marker=" << period_marker << dendl;
+          tn->log(10, SSTR("finished syncing current period: mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker << " period_marker=" << period_marker));
           done_with_period = true;
           break;
         }
 	if (mdlog_marker <= max_marker) {
 	  /* we're at the tip, try to bring more entries */
-          ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
+          ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
           yield call(new RGWCloneMetaLogCoroutine(sync_env, mdlog,
                                                   period, shard_id,
                                                   mdlog_marker, &mdlog_marker));
 	}
         if (retcode < 0) {
-          ldout(sync_env->cct, 10) << *this << ": failed to fetch more log entries, retcode=" << retcode << dendl;
+          tn->log(10, SSTR(*this << ": failed to fetch more log entries, retcode=" << retcode));
           yield lease_cr->go_down();
           drain_all();
           *reset_backoff = false; // back off and try again later
           return retcode;
         }
         *reset_backoff = true; /* if we got to this point, all systems function */
-	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (mdlog_marker > max_marker) {
+          tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
+          tn->log(20, SSTR("mdlog_marker=" << mdlog_marker << " sync_marker=" << sync_marker.marker));
           marker = max_marker;
           yield call(new RGWReadMDLogEntriesCR(sync_env, mdlog, shard_id,
                                                &max_marker, INCREMENTAL_MAX_ENTRIES,
                                                &log_entries, &truncated));
           if (retcode < 0) {
-            ldout(sync_env->cct, 10) << *this << ": failed to list mdlog entries, retcode=" << retcode << dendl;
+            tn->log(10, SSTR("failed to list mdlog entries, retcode=" << retcode));
             yield lease_cr->go_down();
             drain_all();
             *reset_backoff = false; // back off and try again later
@@ -1660,25 +1789,25 @@ public:
             if (!period_marker.empty() && period_marker <= log_iter->id) {
               done_with_period = true;
               if (period_marker < log_iter->id) {
-                ldout(cct, 10) << "found key=" << log_iter->id
-                    << " past period_marker=" << period_marker << dendl;
+                tn->log(10, SSTR("found key=" << log_iter->id
+                    << " past period_marker=" << period_marker));
                 break;
               }
-              ldout(cct, 10) << "found key at period_marker=" << period_marker << dendl;
+              ldpp_dout(sync_env->dpp, 10) << "found key at period_marker=" << period_marker << dendl;
               // sync this entry, then return control to RGWMetaSyncCR
             }
             if (!mdlog_entry.convert_from(*log_iter)) {
-              ldout(sync_env->cct, 0) << __func__ << ":" << __LINE__ << ": ERROR: failed to convert mdlog entry, shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << " ... skipping entry" << dendl;
+              tn->log(0, SSTR("ERROR: failed to convert mdlog entry, shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << " ... skipping entry"));
               continue;
             }
-            ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << dendl;
+            tn->log(20, SSTR("log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
             if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
-              ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
+              ldpp_dout(sync_env->dpp, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
               yield {
-                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker), false);
-                assert(stack);
+                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn), false);
+                ceph_assert(stack);
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
                 pos_to_prev[log_iter->id] = marker;
@@ -1688,17 +1817,20 @@ public:
           }
         }
         collect_children();
-	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " max_marker=" << max_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
+	ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " max_marker=" << max_marker << " sync_marker.marker=" << sync_marker.marker << " period_marker=" << period_marker << dendl;
         if (done_with_period) {
           // return control to RGWMetaSyncCR and advance to the next period
-          ldout(sync_env->cct, 10) << *this << ": done with period" << dendl;
+          tn->log(10, SSTR(*this << ": done with period"));
           break;
         }
 	if (mdlog_marker == max_marker && can_adjust_marker) {
+          tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 #define INCREMENTAL_INTERVAL 20
 	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
 	}
       } while (can_adjust_marker);
+
+      tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
       while (num_spawned() > 1) {
         yield wait_for_child();
@@ -1736,26 +1868,32 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
   rgw_meta_sync_marker sync_marker;
   const std::string period_marker;
 
+  RGWSyncTraceNodeRef tn;
+
   static constexpr bool exit_on_error = false; // retry on all errors
 public:
   RGWMetaSyncShardControlCR(RGWMetaSyncEnv *_sync_env, const rgw_pool& _pool,
                             const std::string& period, epoch_t realm_epoch,
                             RGWMetadataLog* mdlog, uint32_t _shard_id,
                             const rgw_meta_sync_marker& _marker,
-                            std::string&& period_marker)
+                            std::string&& period_marker,
+                            RGWSyncTraceNodeRef& _tn_parent)
     : RGWBackoffControlCR(_sync_env->cct, exit_on_error), sync_env(_sync_env),
       pool(_pool), period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(std::move(period_marker)) {}
+      period_marker(std::move(period_marker)) {
+    tn = sync_env->sync_tracer->add_node(_tn_parent, "shard",
+                                         std::to_string(shard_id));
+  }
 
   RGWCoroutine *alloc_cr() override {
     return new RGWMetaSyncShardCR(sync_env, pool, period, realm_epoch, mdlog,
-                                  shard_id, sync_marker, period_marker, backoff_ptr());
+                                  shard_id, sync_marker, period_marker, backoff_ptr(), tn);
   }
 
   RGWCoroutine *alloc_finisher_cr() override {
-    RGWRados *store = sync_env->store;
-    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store,
+    rgw::sal::RGWRadosStore *store = sync_env->store;
+    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store->svc()->sysobj,
                                                           rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                           &sync_marker);
   }
@@ -1767,6 +1905,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
   RGWPeriodHistory::Cursor cursor; //< sync position in period history
   RGWPeriodHistory::Cursor next; //< next period in history
   rgw_meta_sync_status sync_status;
+  RGWSyncTraceNodeRef tn;
 
   std::mutex mutex; //< protect access to shard_crs
 
@@ -1780,28 +1919,32 @@ class RGWMetaSyncCR : public RGWCoroutine {
   int ret{0};
 
 public:
-  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWPeriodHistory::Cursor cursor,
-                const rgw_meta_sync_status& _sync_status)
+  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, const RGWPeriodHistory::Cursor &cursor,
+                const rgw_meta_sync_status& _sync_status, RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-      pool(sync_env->store->get_zone_params().log_pool),
-      cursor(cursor), sync_status(_sync_status) {}
+      pool(sync_env->store->svc()->zone->get_zone_params().log_pool),
+      cursor(cursor), sync_status(_sync_status), tn(_tn) {}
+
+  ~RGWMetaSyncCR() {
+  }
 
   int operate() override {
     reenter(this) {
       // loop through one period at a time
+      tn->log(1, "start");
       for (;;) {
-        if (cursor == sync_env->store->period_history->get_current()) {
+        if (cursor == sync_env->store->svc()->mdlog->get_period_history()->get_current()) {
           next = RGWPeriodHistory::Cursor{};
           if (cursor) {
-            ldout(cct, 10) << "RGWMetaSyncCR on current period="
+            ldpp_dout(sync_env->dpp, 10) << "RGWMetaSyncCR on current period="
                 << cursor.get_period().get_id() << dendl;
           } else {
-            ldout(cct, 10) << "RGWMetaSyncCR with no period" << dendl;
+            ldpp_dout(sync_env->dpp, 10) << "RGWMetaSyncCR with no period" << dendl;
           }
         } else {
           next = cursor;
           next.next();
-          ldout(cct, 10) << "RGWMetaSyncCR on period="
+          ldpp_dout(sync_env->dpp, 10) << "RGWMetaSyncCR on period="
               << cursor.get_period().get_id() << ", next="
               << next.get_period().get_id() << dendl;
         }
@@ -1810,7 +1953,9 @@ public:
           // get the mdlog for the current period (may be empty)
           auto& period_id = sync_status.sync_info.period;
           auto realm_epoch = sync_status.sync_info.realm_epoch;
-          auto mdlog = sync_env->store->meta_mgr->get_log(period_id);
+          auto mdlog = sync_env->store->svc()->mdlog->get_log(period_id);
+
+          tn->log(1, SSTR("realm epoch=" << realm_epoch << " period id=" << period_id));
 
           // prevent wakeup() from accessing shard_crs while we're spawning them
           std::lock_guard<std::mutex> lock(mutex);
@@ -1826,7 +1971,7 @@ public:
               period_marker = next.get_period().get_sync_status()[shard_id];
               if (period_marker.empty()) {
                 // no metadata changes have occurred on this shard, skip it
-                ldout(cct, 10) << "RGWMetaSyncCR: skipping shard " << shard_id
+                ldpp_dout(sync_env->dpp, 10) << "RGWMetaSyncCR: skipping shard " << shard_id
                     << " with empty period marker" << dendl;
                 continue;
               }
@@ -1835,7 +1980,7 @@ public:
             using ShardCR = RGWMetaSyncShardControlCR;
             auto cr = new ShardCR(sync_env, pool, period_id, realm_epoch,
                                   mdlog, shard_id, marker,
-                                  std::move(period_marker));
+                                  std::move(period_marker), tn);
             auto stack = spawn(cr, false);
             shard_crs[shard_id] = RefPair{cr, stack};
           }
@@ -1855,14 +2000,14 @@ public:
           return set_cr_error(ret);
         }
         // advance to the next period
-        assert(next);
+        ceph_assert(next);
         cursor = next;
 
         // write the updated sync info
         sync_status.sync_info.period = cursor.get_period().get_id();
         sync_status.sync_info.realm_epoch = cursor.get_epoch();
         yield call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados,
-                                                                 sync_env->store,
+                                                                 sync_env->store->svc()->sysobj,
                                                                  rgw_raw_obj(pool, sync_env->status_oid()),
                                                                  sync_status.sync_info));
       }
@@ -1881,29 +2026,32 @@ public:
 };
 
 void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
+  env->dpp = dpp;
   env->cct = store->ctx();
   env->store = store;
   env->conn = conn;
   env->async_rados = async_rados;
   env->http_manager = &http_manager;
   env->error_logger = error_logger;
+  env->sync_tracer = store->getRados()->get_sync_tracer();
 }
 
 int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 {
-  if (store->is_meta_master()) {
+  if (store->svc()->zone->is_meta_master()) {
     return 0;
   }
   // cannot run concurrently with run_sync(), so run in a separate manager
-  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  RGWCoroutinesManager crs(store->ctx(), store->getRados()->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWMetaSyncEnv sync_env_local = sync_env;
   sync_env_local.http_manager = &http_manager;
+  tn->log(20, "read sync status");
   ret = crs.run(new RGWReadSyncStatusCoroutine(&sync_env_local, sync_status));
   http_manager.stop();
   return ret;
@@ -1911,7 +2059,7 @@ int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 
 int RGWRemoteMetaLog::init_sync_status()
 {
-  if (store->is_meta_master()) {
+  if (store->svc()->zone->is_meta_master()) {
     return 0;
   }
 
@@ -1924,7 +2072,7 @@ int RGWRemoteMetaLog::init_sync_status()
 
   rgw_meta_sync_info sync_info;
   sync_info.num_shards = mdlog_info.num_shards;
-  auto cursor = store->period_history->get_current();
+  auto cursor = store->svc()->mdlog->get_period_history()->get_current();
   if (cursor) {
     sync_info.period = cursor.get_period().get_id();
     sync_info.realm_epoch = cursor.get_epoch();
@@ -1935,14 +2083,16 @@ int RGWRemoteMetaLog::init_sync_status()
 
 int RGWRemoteMetaLog::store_sync_info(const rgw_meta_sync_info& sync_info)
 {
-  return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store,
-                                                           rgw_raw_obj(store->get_zone_params().log_pool, sync_env.status_oid()),
+  tn->log(20, "store sync info");
+  return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store->svc()->sysobj,
+                                                           rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sync_env.status_oid()),
                                                            sync_info));
 }
 
 // return a cursor to the period at our sync position
-static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
-                                              const rgw_meta_sync_info& info)
+static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
+                                              const rgw_meta_sync_info& info,
+					      optional_yield y)
 {
   if (info.period.empty()) {
     // return an empty cursor with error=0
@@ -1950,7 +2100,7 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
   }
 
   // look for an existing period in our history
-  auto cursor = store->period_history->lookup(info.realm_epoch);
+  auto cursor = store->svc()->mdlog->get_period_history()->lookup(info.realm_epoch);
   if (cursor) {
     // verify that the period ids match
     auto& existing = cursor.get_period().get_id();
@@ -1965,14 +2115,14 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->period_puller->pull(info.period, period);
+  int r = store->svc()->mdlog->pull_period(info.period, period, y);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
     return RGWPeriodHistory::Cursor{r};
   }
   // attach the period to our history
-  cursor = store->period_history->attach(std::move(period));
+  cursor = store->svc()->mdlog->get_period_history()->attach(std::move(period), y);
   if (!cursor) {
     r = cursor.get_error();
     lderr(store->ctx()) << "ERROR: failed to read period history back to "
@@ -1981,9 +2131,9 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
   return cursor;
 }
 
-int RGWRemoteMetaLog::run_sync()
+int RGWRemoteMetaLog::run_sync(optional_yield y)
 {
-  if (store->is_meta_master()) {
+  if (store->svc()->zone->is_meta_master()) {
     return 0;
   }
 
@@ -1993,13 +2143,13 @@ int RGWRemoteMetaLog::run_sync()
   rgw_mdlog_info mdlog_info;
   for (;;) {
     if (going_down) {
-      ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "(): going down" << dendl;
       return 0;
     }
     r = read_log_info(&mdlog_info);
     if (r == -EIO || r == -ENOENT) {
       // keep retrying if master isn't alive or hasn't initialized the log
-      ldout(store->ctx(), 10) << __func__ << "(): waiting for master.." << dendl;
+      ldpp_dout(dpp, 10) << __func__ << "(): waiting for master.." << dendl;
       backoff.backoff_sleep();
       continue;
     }
@@ -2014,12 +2164,12 @@ int RGWRemoteMetaLog::run_sync()
   rgw_meta_sync_status sync_status;
   do {
     if (going_down) {
-      ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "(): going down" << dendl;
       return 0;
     }
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, &sync_status));
     if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
       return r;
     }
 
@@ -2030,16 +2180,23 @@ int RGWRemoteMetaLog::run_sync()
       if (sync_status.sync_info.period.empty() ||
           sync_status.sync_info.realm_epoch < mdlog_info.realm_epoch) {
         sync_status.sync_info.state = rgw_meta_sync_info::StateInit;
-        ldout(store->ctx(), 1) << "epoch=" << sync_status.sync_info.realm_epoch
+        string reason;
+        if (sync_status.sync_info.period.empty()) {
+          reason = "period is empty";
+        } else {
+          reason = SSTR("sync_info realm epoch is behind: " << sync_status.sync_info.realm_epoch << " < " << mdlog_info.realm_epoch);
+        }
+        tn->log(1, "initialize sync (reason: " + reason + ")");
+        ldpp_dout(dpp, 1) << "epoch=" << sync_status.sync_info.realm_epoch
            << " in sync status comes before remote's oldest mdlog epoch="
            << mdlog_info.realm_epoch << ", restarting sync" << dendl;
       }
     }
 
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
-      ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): init" << dendl;
       sync_status.sync_info.num_shards = mdlog_info.num_shards;
-      auto cursor = store->period_history->get_current();
+      auto cursor = store->svc()->mdlog->get_period_history()->get_current();
       if (cursor) {
         // run full sync, then start incremental from the current period/epoch
         sync_status.sync_info.period = cursor.get_period().get_id();
@@ -2052,7 +2209,7 @@ int RGWRemoteMetaLog::run_sync()
       }
       backoff.reset();
       if (r < 0) {
-        ldout(store->ctx(), 0) << "ERROR: failed to init sync status r=" << r << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: failed to init sync status r=" << r << dendl;
         return r;
       }
     }
@@ -2068,48 +2225,48 @@ int RGWRemoteMetaLog::run_sync()
   do {
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, &sync_status));
     if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
+      tn->log(0, SSTR("ERROR: failed to fetch sync status r=" << r));
       return r;
     }
 
     switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
       case rgw_meta_sync_info::StateBuildingFullSyncMaps:
-        ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
-        r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers));
+        tn->log(20, "building full sync maps");
+        r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers, tn));
         if (r == -EBUSY || r == -EAGAIN) {
           backoff.backoff_sleep();
           continue;
         }
         backoff.reset();
         if (r < 0) {
-          ldout(store->ctx(), 0) << "ERROR: failed to fetch all metadata keys" << dendl;
+          tn->log(0, SSTR("ERROR: failed to fetch all metadata keys (r=" << r << ")"));
           return r;
         }
 
         sync_status.sync_info.state = rgw_meta_sync_info::StateSync;
         r = store_sync_info(sync_status.sync_info);
         if (r < 0) {
-          ldout(store->ctx(), 0) << "ERROR: failed to update sync status" << dendl;
+          tn->log(0, SSTR("ERROR: failed to update sync status (r=" << r << ")"));
           return r;
         }
         /* fall through */
       case rgw_meta_sync_info::StateSync:
-        ldout(store->ctx(), 20) << __func__ << "(): sync" << dendl;
+        tn->log(20, "sync");
         // find our position in the period history (if any)
-        cursor = get_period_at(store, sync_status.sync_info);
+        cursor = get_period_at(store, sync_status.sync_info, y);
         r = cursor.get_error();
         if (r < 0) {
           return r;
         }
-        meta_sync_cr = new RGWMetaSyncCR(&sync_env, cursor, sync_status);
+        meta_sync_cr = new RGWMetaSyncCR(&sync_env, cursor, sync_status, tn);
         r = run(meta_sync_cr);
         if (r < 0) {
-          ldout(store->ctx(), 0) << "ERROR: failed to fetch all metadata keys" << dendl;
+          tn->log(0, "ERROR: failed to fetch all metadata keys");
           return r;
         }
         break;
       default:
-        ldout(store->ctx(), 0) << "ERROR: bad sync state!" << dendl;
+        tn->log(0, "ERROR: bad sync state!");
         return -EIO;
     }
   } while (!going_down);
@@ -2130,32 +2287,32 @@ int RGWCloneMetaLogCoroutine::operate()
   reenter(this) {
     do {
       yield {
-        ldout(cct, 20) << __func__ << ": shard_id=" << shard_id << ": init request" << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": shard_id=" << shard_id << ": init request" << dendl;
         return state_init();
       }
       yield {
-        ldout(cct, 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status" << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status" << dendl;
         return state_read_shard_status();
       }
       yield {
-        ldout(cct, 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status complete" << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status complete" << dendl;
         return state_read_shard_status_complete();
       }
       yield {
-        ldout(cct, 20) << __func__ << ": shard_id=" << shard_id << ": sending rest request" << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": shard_id=" << shard_id << ": sending rest request" << dendl;
         return state_send_rest_request();
       }
       yield {
-        ldout(cct, 20) << __func__ << ": shard_id=" << shard_id << ": receiving rest response" << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": shard_id=" << shard_id << ": receiving rest response" << dendl;
         return state_receive_rest_response();
       }
       yield {
-        ldout(cct, 20) << __func__ << ": shard_id=" << shard_id << ": storing mdlog entries" << dendl;
+        ldpp_dout(sync_env->dpp, 20) << __func__ << ": shard_id=" << shard_id << ": storing mdlog entries" << dendl;
         return state_store_mdlog_entries();
       }
     } while (truncated);
     yield {
-      ldout(cct, 20) << __func__ << ": shard_id=" << shard_id << ": storing mdlog entries complete" << dendl;
+      ldpp_dout(sync_env->dpp, 20) << __func__ << ": shard_id=" << shard_id << ": storing mdlog entries complete" << dendl;
       return state_store_mdlog_entries_complete();
     }
   }
@@ -2177,19 +2334,21 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
   completion.reset(new RGWMetadataLogInfoCompletion(
     [this](int ret, const cls_log_header& header) {
       if (ret < 0) {
-        ldout(cct, 1) << "ERROR: failed to read mdlog info with "
-            << cpp_strerror(ret) << dendl;
+        if (ret != -ENOENT) {
+          ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to read mdlog info with "
+                                      << cpp_strerror(ret) << dendl;
+        }
       } else {
         shard_info.marker = header.max_marker;
         shard_info.last_update = header.max_time.to_real_time();
       }
       // wake up parent stack
-      stack->get_completion_mgr()->complete(nullptr, stack);
+      io_complete();
     }), add_ref);
 
   int ret = mdlog->get_info_async(shard_id, completion.get());
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
+    ldpp_dout(sync_env->dpp, 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
     return set_cr_error(ret);
   }
 
@@ -2200,7 +2359,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status_complete()
 {
   completion.reset();
 
-  ldout(cct, 20) << "shard_id=" << shard_id << " marker=" << shard_info.marker << " last_update=" << shard_info.last_update << dendl;
+  ldpp_dout(sync_env->dpp, 20) << "shard_id=" << shard_id << " marker=" << shard_info.marker << " last_update=" << shard_info.last_update << dendl;
 
   marker = shard_info.marker;
 
@@ -2228,15 +2387,15 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
 
   http_op = new RGWRESTReadResource(conn, "/admin/log", pairs, NULL, sync_env->http_manager);
 
-  http_op->set_user_info((void *)stack);
+  init_new_io(http_op);
 
   int ret = http_op->aio_read();
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to fetch mdlog data" << dendl;
+    ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to fetch mdlog data" << dendl;
     log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
     http_op->put();
     http_op = NULL;
-    return ret;
+    return set_cr_error(ret);
   }
 
   return io_block(0);
@@ -2244,10 +2403,10 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
 
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 {
-  int ret = http_op->wait(&data);
+  int ret = http_op->wait(&data, null_yield);
   if (ret < 0) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-    ldout(cct, 5) << "failed to wait for op, ret=" << ret << dendl;
+    ldpp_dout(sync_env->dpp, 5) << "failed to wait for op, ret=" << ret << dendl;
     http_op->put();
     http_op = NULL;
     return set_cr_error(ret);
@@ -2255,7 +2414,7 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
   http_op->put();
   http_op = NULL;
 
-  ldout(cct, 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
+  ldpp_dout(sync_env->dpp, 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
 
   truncated = ((int)data.entries.size() == max_entries);
 
@@ -2281,7 +2440,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
   vector<rgw_mdlog_entry>::iterator iter;
   for (iter = data.entries.begin(); iter != data.entries.end(); ++iter) {
     rgw_mdlog_entry& entry = *iter;
-    ldout(cct, 20) << "entry: name=" << entry.name << dendl;
+    ldpp_dout(sync_env->dpp, 20) << "entry: name=" << entry.name << dendl;
 
     cls_log_entry dest_entry;
     dest_entry.id = entry.id;
@@ -2289,7 +2448,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     dest_entry.name = entry.name;
     dest_entry.timestamp = utime_t(entry.timestamp);
   
-    ::encode(entry.log_data, dest_entry.data);
+    encode(entry.log_data, dest_entry.data);
 
     dest_entries.push_back(dest_entry);
 
@@ -2301,7 +2460,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
   int ret = mdlog->store_entries_in_shard(dest_entries, shard_id, cn->completion());
   if (ret < 0) {
     cn->put();
-    ldout(cct, 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
+    ldpp_dout(sync_env->dpp, 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
     return set_cr_error(ret);
   }
   return io_block(0);
@@ -2311,5 +2470,3 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
 {
   return set_cr_done();
 }
-
-

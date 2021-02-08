@@ -7,6 +7,7 @@
 #include "librbd/ImageCtx.h"
 #include <string>
 
+class AsyncOpTracker;
 class Context;
 
 namespace librbd {
@@ -15,10 +16,15 @@ struct ImageCtx;
 
 namespace exclusive_lock {
 
+template <typename> struct ImageDispatch;
+
 template <typename ImageCtxT = ImageCtx>
 class PreReleaseRequest {
 public:
-  static PreReleaseRequest* create(ImageCtxT &image_ctx, bool shutting_down,
+  static PreReleaseRequest* create(ImageCtxT &image_ctx,
+                                   ImageDispatch<ImageCtxT>* image_dispatch,
+                                   bool shutting_down,
+                                   AsyncOpTracker &async_op_tracker,
                                    Context *on_finish);
 
   ~PreReleaseRequest();
@@ -31,16 +37,28 @@ private:
    * <start>
    *    |
    *    v
-   * PREPARE_LOCK
-   *    |
-   *    v
    * CANCEL_OP_REQUESTS
    *    |
    *    v
-   * BLOCK_WRITES
+   * SET_REQUIRE_LOCK
+   *    |
+   *    v
+   * WAIT_FOR_OPS
+   *    |
+   *    v
+   * PREPARE_LOCK
+   *    |
+   *    v
+   * PROCESS_PLUGIN_RELEASE
+   *    |
+   *    v
+   * SHUT_DOWN_IMAGE_CACHE
    *    |
    *    v
    * INVALIDATE_CACHE
+   *    |
+   *    v
+   * FLUSH_IO
    *    |
    *    v
    * FLUSH_NOTIFIES . . . . . . . . . . . . . .
@@ -57,29 +75,42 @@ private:
    * @endverbatim
    */
 
-  PreReleaseRequest(ImageCtxT &image_ctx, bool shutting_down,
+  PreReleaseRequest(ImageCtxT &image_ctx,
+                    ImageDispatch<ImageCtxT>* image_dispatch,
+                    bool shutting_down, AsyncOpTracker &async_op_tracker,
                     Context *on_finish);
 
   ImageCtxT &m_image_ctx;
-  Context *m_on_finish;
+  ImageDispatch<ImageCtxT>* m_image_dispatch;
   bool m_shutting_down;
+  AsyncOpTracker &m_async_op_tracker;
+  Context *m_on_finish;
 
-  int m_error_result;
+  int m_error_result = 0;
 
-  decltype(m_image_ctx.object_map) m_object_map;
-  decltype(m_image_ctx.journal) m_journal;
-
-  void send_prepare_lock();
-  void handle_prepare_lock(int r);
+  decltype(m_image_ctx.object_map) m_object_map = nullptr;
+  decltype(m_image_ctx.journal) m_journal = nullptr;
 
   void send_cancel_op_requests();
   void handle_cancel_op_requests(int r);
 
-  void send_block_writes();
-  void handle_block_writes(int r);
+  void send_set_require_lock();
+  void handle_set_require_lock(int r);
 
-  void send_invalidate_cache(bool purge_on_error);
+  void send_wait_for_ops();
+  void handle_wait_for_ops(int r);
+
+  void send_prepare_lock();
+  void handle_prepare_lock(int r);
+
+  void send_process_plugin_release_lock();
+  void handle_process_plugin_release_lock(int r);
+
+  void send_invalidate_cache();
   void handle_invalidate_cache(int r);
+
+  void send_flush_io();
+  void handle_flush_io(int r);
 
   void send_flush_notifies();
   void handle_flush_notifies(int r);

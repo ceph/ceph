@@ -18,7 +18,7 @@
 #include "include/Context.h"
 #include "Client.h"
 #include "barrier.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
@@ -80,19 +80,19 @@ Barrier::~Barrier()
 
 /* BarrierContext */
 BarrierContext::BarrierContext(Client *c, uint64_t ino) :
-  cl(c), ino(ino), lock("BarrierContext")
+  cl(c), ino(ino)
 { };
 
 void BarrierContext::write_nobarrier(C_Block_Sync &cbs)
 {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
   cbs.state = CBlockSync_State_Unclaimed;
   outstanding_writes.push_back(cbs);
 }
 
 void BarrierContext::write_barrier(C_Block_Sync &cbs)
 {
-  Mutex::Locker locker(lock);
+  std::unique_lock locker(lock);
   barrier_interval &iv = cbs.iv;
 
   { /* find blocking commit--intrusive no help here */
@@ -104,7 +104,7 @@ void BarrierContext::write_barrier(C_Block_Sync &cbs)
       Barrier &barrier = *iter;
       while (boost::icl::intersects(barrier.span, iv)) {
 	/*  wait on this */
-	barrier.cond.Wait(lock);
+	barrier.cond.wait(locker);
 	done = true;
       }
     }
@@ -117,7 +117,7 @@ void BarrierContext::write_barrier(C_Block_Sync &cbs)
 
 void BarrierContext::commit_barrier(barrier_interval &civ)
 {
-    Mutex::Locker locker(lock);
+    std::unique_lock locker(lock);
 
     /* we commit outstanding writes--if none exist, we don't care */
     if (outstanding_writes.size() == 0)
@@ -152,14 +152,14 @@ void BarrierContext::commit_barrier(barrier_interval &civ)
     if (barrier) {
       active_commits.push_back(*barrier);
       /* and wait on this */
-      barrier->cond.Wait(lock);
+      barrier->cond.wait(locker);
     }
 
 } /* commit_barrier */
 
 void BarrierContext::complete(C_Block_Sync &cbs)
 {
-    Mutex::Locker locker(lock);
+    std::lock_guard locker(lock);
     BlockSyncList::iterator iter =
       BlockSyncList::s_iterator_to(cbs);
 
@@ -173,7 +173,7 @@ void BarrierContext::complete(C_Block_Sync &cbs)
       Barrier *barrier = iter->barrier;
       barrier->write_list.erase(iter);
       /* signal waiters */
-      barrier->cond.Signal();
+      barrier->cond.notify_all();
 	/* dispose cleared barrier */
       if (barrier->write_list.size() == 0) {
 	BarrierList::iterator iter2 =
@@ -184,7 +184,7 @@ void BarrierContext::complete(C_Block_Sync &cbs)
     }
     break;
     default:
-      assert(false);
+      ceph_abort();
       break;
     }
 

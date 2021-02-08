@@ -8,7 +8,7 @@
 #include "include/krbd.h"
 #include "include/stringify.h"
 #include "include/uuid.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
@@ -27,11 +27,7 @@ namespace kernel {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-namespace {
-
-std::map<std::string, std::string> map_options; // used for both map and unmap
-
-} // anonymous namespace
+typedef std::map<std::string, std::string> MapOptions;
 
 static std::string map_option_uuid_cb(const char *value_char)
 {
@@ -64,13 +60,48 @@ static std::string map_option_int_cb(const char *value_char)
   return stringify(d);
 }
 
-static void put_map_option(const std::string &key, std::string val)
+static std::string map_option_string_cb(const char *value_char)
 {
-  map_options[key] = val;
+  return value_char;
+}
+
+static std::string map_option_read_from_replica_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "no") || !strcmp(value_char, "balance") ||
+      !strcmp(value_char, "localize")) {
+    return value_char;
+  }
+  return "";
+}
+
+static std::string map_option_compression_hint_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "none") || !strcmp(value_char, "compressible") ||
+      !strcmp(value_char, "incompressible")) {
+    return value_char;
+  }
+  return "";
+}
+
+static std::string map_option_ms_mode_cb(const char *value_char)
+{
+  if (!strcmp(value_char, "legacy") || !strcmp(value_char, "crc") ||
+      !strcmp(value_char, "secure") || !strcmp(value_char, "prefer-crc") ||
+      !strcmp(value_char, "prefer-secure")) {
+    return value_char;
+  }
+  return "";
+}
+
+static void put_map_option(const std::string &key, const std::string &val,
+                           MapOptions* map_options)
+{
+  (*map_options)[key] = val;
 }
 
 static int put_map_option_value(const std::string &opt, const char *value_char,
-                                std::string (*parse_cb)(const char *))
+                                std::string (*parse_cb)(const char *),
+                                MapOptions* map_options)
 {
   if (!value_char || *value_char == '\0') {
     std::cerr << "rbd: " << opt << " option requires a value" << std::endl;
@@ -84,12 +115,18 @@ static int put_map_option_value(const std::string &opt, const char *value_char,
     return -EINVAL;
   }
 
-  put_map_option(opt, opt + "=" + value);
+  put_map_option(opt, opt + "=" + value, map_options);
   return 0;
 }
 
-static int parse_map_options(char *options)
+static int parse_map_options(const std::string &options_string,
+                             MapOptions* map_options)
 {
+  char *options = strdup(options_string.c_str());
+  BOOST_SCOPE_EXIT(options) {
+    free(options);
+  } BOOST_SCOPE_EXIT_END;
+
   for (char *this_char = strtok(options, ", ");
        this_char != NULL;
        this_char = strtok(NULL, ",")) {
@@ -99,42 +136,82 @@ static int parse_map_options(char *options)
       *value_char++ = '\0';
 
     if (!strcmp(this_char, "fsid")) {
-      if (put_map_option_value("fsid", value_char, map_option_uuid_cb))
+      if (put_map_option_value("fsid", value_char, map_option_uuid_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "ip")) {
-      if (put_map_option_value("ip", value_char, map_option_ip_cb))
+      if (put_map_option_value("ip", value_char, map_option_ip_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "share") || !strcmp(this_char, "noshare")) {
-      put_map_option("share", this_char);
+      put_map_option("share", this_char, map_options);
     } else if (!strcmp(this_char, "crc") || !strcmp(this_char, "nocrc")) {
-      put_map_option("crc", this_char);
+      put_map_option("crc", this_char, map_options);
     } else if (!strcmp(this_char, "cephx_require_signatures") ||
                !strcmp(this_char, "nocephx_require_signatures")) {
-      put_map_option("cephx_require_signatures", this_char);
+      put_map_option("cephx_require_signatures", this_char, map_options);
     } else if (!strcmp(this_char, "tcp_nodelay") ||
                !strcmp(this_char, "notcp_nodelay")) {
-      put_map_option("tcp_nodelay", this_char);
+      put_map_option("tcp_nodelay", this_char, map_options);
     } else if (!strcmp(this_char, "cephx_sign_messages") ||
                !strcmp(this_char, "nocephx_sign_messages")) {
-      put_map_option("cephx_sign_messages", this_char);
+      put_map_option("cephx_sign_messages", this_char, map_options);
     } else if (!strcmp(this_char, "mount_timeout")) {
-      if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
+      if (put_map_option_value("mount_timeout", value_char, map_option_int_cb,
+                               map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "osd_request_timeout")) {
+      if (put_map_option_value("osd_request_timeout", value_char,
+                               map_option_int_cb, map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "lock_timeout")) {
+      if (put_map_option_value("lock_timeout", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "osdkeepalive")) {
-      if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb))
+      if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "osd_idle_ttl")) {
-      if (put_map_option_value("osd_idle_ttl", value_char, map_option_int_cb))
+      if (put_map_option_value("osd_idle_ttl", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "rw") || !strcmp(this_char, "ro")) {
-      put_map_option("rw", this_char);
+      put_map_option("rw", this_char, map_options);
     } else if (!strcmp(this_char, "queue_depth")) {
-      if (put_map_option_value("queue_depth", value_char, map_option_int_cb))
+      if (put_map_option_value("queue_depth", value_char, map_option_int_cb,
+                               map_options))
         return -EINVAL;
     } else if (!strcmp(this_char, "lock_on_read")) {
-      put_map_option("lock_on_read", this_char);
+      put_map_option("lock_on_read", this_char, map_options);
     } else if (!strcmp(this_char, "exclusive")) {
-      put_map_option("exclusive", this_char);
+      put_map_option("exclusive", this_char, map_options);
+    } else if (!strcmp(this_char, "notrim")) {
+      put_map_option("notrim", this_char, map_options);
+    } else if (!strcmp(this_char, "abort_on_full")) {
+      put_map_option("abort_on_full", this_char, map_options);
+    } else if (!strcmp(this_char, "alloc_size")) {
+      if (put_map_option_value("alloc_size", value_char, map_option_int_cb,
+                               map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "crush_location")) {
+      if (put_map_option_value("crush_location", value_char,
+                               map_option_string_cb, map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "read_from_replica")) {
+      if (put_map_option_value("read_from_replica", value_char,
+                               map_option_read_from_replica_cb, map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "compression_hint")) {
+      if (put_map_option_value("compression_hint", value_char,
+                               map_option_compression_hint_cb, map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "ms_mode")) {
+      if (put_map_option_value("ms_mode", value_char, map_option_ms_mode_cb,
+                               map_options))
+        return -EINVAL;
+    } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
+      put_map_option("udev", this_char, map_options);
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return -EINVAL;
@@ -144,8 +221,14 @@ static int parse_map_options(char *options)
   return 0;
 }
 
-static int parse_unmap_options(char *options)
+static int parse_unmap_options(const std::string &options_string,
+                               MapOptions* unmap_options)
 {
+  char *options = strdup(options_string.c_str());
+  BOOST_SCOPE_EXIT(options) {
+    free(options);
+  } BOOST_SCOPE_EXIT_END;
+
   for (char *this_char = strtok(options, ", ");
        this_char != NULL;
        this_char = strtok(NULL, ",")) {
@@ -155,9 +238,12 @@ static int parse_unmap_options(char *options)
       *value_char++ = '\0';
 
     if (!strcmp(this_char, "force")) {
-      put_map_option("force", this_char);
+      put_map_option("force", this_char, unmap_options);
+    } else if (!strcmp(this_char, "udev") || !strcmp(this_char, "noudev")) {
+      put_map_option("udev", this_char, unmap_options);
     } else {
-      std::cerr << "rbd: unknown unmap option '" << this_char << "'" << std::endl;
+      std::cerr << "rbd: unknown unmap option '" << this_char << "'"
+                << std::endl;
       return -EINVAL;
     }
   }
@@ -165,13 +251,12 @@ static int parse_unmap_options(char *options)
   return 0;
 }
 
-static int do_kernel_showmapped(Formatter *f)
-{
+static int do_kernel_list(Formatter *f) {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   int r;
 
-  r = krbd_create_from_context(g_ceph_context, &krbd);
+  r = krbd_create_from_context(g_ceph_context, 0, &krbd);
   if (r < 0)
     return r;
 
@@ -180,9 +265,9 @@ static int do_kernel_showmapped(Formatter *f)
   krbd_destroy(krbd);
   return r;
 #else
-  return -1;
+  std::cerr << "rbd: kernel device is not supported" << std::endl;
+  return -EOPNOTSUPP;
 #endif
-
 }
 
 static int get_unsupported_features(librbd::Image &image,
@@ -217,8 +302,11 @@ static int get_unsupported_features(librbd::Image &image,
  * based on errno return by krbd_map(). also note that even if some librbd calls
  * fail, we at least dump the "try dmesg..." message to aid debugging.
  */
-static void print_error_description(const char *poolname, const char *imgname,
-				    const char *snapname, int maperrno)
+static void print_error_description(const char *poolname,
+                                    const char *nspace_name,
+                                    const char *imgname,
+                                    const char *snapname,
+                                    int maperrno)
 {
   int r;
   uint8_t oldformat;
@@ -229,7 +317,7 @@ static void print_error_description(const char *poolname, const char *imgname,
   if (maperrno == -ENOENT)
     goto done;
 
-  r = utils::init_and_open_image(poolname, imgname, "", snapname,
+  r = utils::init_and_open_image(poolname, nspace_name, imgname, "", snapname,
 				 true, &rados, &ioctx, &image);
   if (r < 0)
     goto done;
@@ -259,8 +347,12 @@ static void print_error_description(const char *poolname, const char *imgname,
       } else {
         std::cout << "You can disable features unsupported by the kernel "
                   << "with \"rbd feature disable ";
-        if (poolname != at::DEFAULT_POOL_NAME)
+        if (poolname != utils::get_default_pool_name() || *nspace_name) {
           std::cout << poolname << "/";
+        }
+        if (*nspace_name) {
+          std::cout << nspace_name << "/";
+        }
         std::cout << imgname;
       }
     } else {
@@ -282,26 +374,28 @@ static void print_error_description(const char *poolname, const char *imgname,
   std::cout << "In some cases useful info is found in syslog - try \"dmesg | tail\"." << std::endl;
 }
 
-static int do_kernel_map(const char *poolname, const char *imgname,
-                         const char *snapname)
+static int do_kernel_map(const char *poolname, const char *nspace_name,
+                         const char *imgname, const char *snapname,
+                         MapOptions&& map_options)
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   std::ostringstream oss;
+  uint32_t flags = 0;
   char *devnode;
   int r;
 
-  r = krbd_create_from_context(g_ceph_context, &krbd);
-  if (r < 0)
-    return r;
-
-  for (std::map<std::string, std::string>::iterator it = map_options.begin();
-       it != map_options.end(); ) {
+  for (auto it = map_options.begin(); it != map_options.end(); ) {
     // for compatibility with < 3.7 kernels, assume that rw is on by
     // default and omit it even if it was specified by the user
     // (see ceph.git commit fb0f1986449b)
     if (it->first == "rw" && it->second == "rw") {
-      map_options.erase(it);
+      it = map_options.erase(it);
+    } else if (it->first == "udev") {
+      if (it->second == "noudev") {
+        flags |= KRBD_CTX_F_NOUDEV;
+      }
+      it = map_options.erase(it);
     } else {
       if (it != map_options.begin())
         oss << ",";
@@ -310,9 +404,24 @@ static int do_kernel_map(const char *poolname, const char *imgname,
     }
   }
 
-  r = krbd_map(krbd, poolname, imgname, snapname, oss.str().c_str(), &devnode);
+  r = krbd_create_from_context(g_ceph_context, flags, &krbd);
+  if (r < 0)
+    return r;
+
+  r = krbd_is_mapped(krbd, poolname, nspace_name, imgname, snapname, &devnode);
   if (r < 0) {
-    print_error_description(poolname, imgname, snapname, r);
+    std::cerr << "rbd: warning: can't get image map information: "
+	      << cpp_strerror(r) << std::endl;
+  } else if (r > 0) {
+    std::cerr << "rbd: warning: image already mapped as " << devnode
+              << std::endl;
+    free(devnode);
+  }
+
+  r = krbd_map(krbd, poolname, nspace_name, imgname, snapname,
+               oss.str().c_str(), &devnode);
+  if (r < 0) {
+    print_error_description(poolname, nspace_name, imgname, snapname, r);
     goto out;
   }
 
@@ -323,48 +432,55 @@ out:
   krbd_destroy(krbd);
   return r;
 #else
-  return -1;
+  std::cerr << "rbd: kernel device is not supported" << std::endl;
+  return -EOPNOTSUPP;
 #endif
 }
 
 static int do_kernel_unmap(const char *dev, const char *poolname,
-                           const char *imgname, const char *snapname)
+                           const char *nspace_name, const char *imgname,
+                           const char *snapname, MapOptions&& unmap_options)
 {
 #if defined(WITH_KRBD)
   struct krbd_ctx *krbd;
   std::ostringstream oss;
+  uint32_t flags = 0;
   int r;
 
-  r = krbd_create_from_context(g_ceph_context, &krbd);
+  for (auto it = unmap_options.begin(); it != unmap_options.end(); ) {
+    if (it->first == "udev") {
+      if (it->second == "noudev") {
+        flags |= KRBD_CTX_F_NOUDEV;
+      }
+      it = unmap_options.erase(it);
+    } else {
+      if (it != unmap_options.begin())
+        oss << ",";
+      oss << it->second;
+      ++it;
+    }
+  }
+
+  r = krbd_create_from_context(g_ceph_context, flags, &krbd);
   if (r < 0)
     return r;
-
-  for (auto it = map_options.cbegin(); it != map_options.cend(); ++it) {
-    if (it != map_options.cbegin())
-      oss << ",";
-    oss << it->second;
-  }
 
   if (dev)
     r = krbd_unmap(krbd, dev, oss.str().c_str());
   else
-    r = krbd_unmap_by_spec(krbd, poolname, imgname, snapname,
+    r = krbd_unmap_by_spec(krbd, poolname, nspace_name, imgname, snapname,
                            oss.str().c_str());
 
   krbd_destroy(krbd);
   return r;
 #else
-  return -1;
+  std::cerr << "rbd: kernel device is not supported" << std::endl;
+  return -EOPNOTSUPP;
 #endif
-
 }
 
-void get_show_arguments(po::options_description *positional,
-                        po::options_description *options) {
-  at::add_format_options(options);
-}
-
-int execute_show(const po::variables_map &vm) {
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
@@ -373,70 +489,82 @@ int execute_show(const po::variables_map &vm) {
 
   utils::init_context();
 
-  r = do_kernel_showmapped(formatter.get());
+  r = do_kernel_list(formatter.get());
   if (r < 0) {
-    std::cerr << "rbd: showmapped failed: " << cpp_strerror(r) << std::endl;
+    std::cerr << "rbd: device list failed: " << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;
 }
 
-void get_map_arguments(po::options_description *positional,
-                       po::options_description *options) {
-  at::add_image_or_snap_spec_options(positional, options,
-                                     at::ARGUMENT_MODIFIER_NONE);
-  options->add_options()
-    ("options,o", po::value<std::string>(), "map options")
-    ("read-only", po::bool_switch(), "map read-only")
-    ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions");
-}
-
-int execute_map(const po::variables_map &vm) {
+int execute_map(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string nspace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &nspace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
-  if (vm["read-only"].as<bool>()) {
-    put_map_option("rw", "ro");
-  }
-  if (vm["exclusive"].as<bool>()) {
-    put_map_option("exclusive", "exclusive");
-  }
-
-  // parse default options first so they can be overwritten by cli options
-  char *default_map_options = strdup(g_conf->rbd_default_map_options.c_str());
-  BOOST_SCOPE_EXIT( (default_map_options) ) {
-    free(default_map_options);
-  } BOOST_SCOPE_EXIT_END;
-
-  if (parse_map_options(default_map_options)) {
-    std::cerr << "rbd: couldn't parse default map options" << std::endl;
-    return -EINVAL;
-  }
-
+  MapOptions map_options;
   if (vm.count("options")) {
-    char *cli_map_options = strdup(vm["options"].as<std::string>().c_str());
-    BOOST_SCOPE_EXIT( (cli_map_options) ) {
-      free(cli_map_options);
-    } BOOST_SCOPE_EXIT_END;
-
-    if (parse_map_options(cli_map_options)) {
-      std::cerr << "rbd: couldn't parse map options" << std::endl;
-      return -EINVAL;
+    for (auto &options : vm["options"].as<std::vector<std::string>>()) {
+      r = parse_map_options(options, &map_options);
+      if (r < 0) {
+        std::cerr << "rbd: couldn't parse map options" << std::endl;
+        return r;
+      }
     }
   }
 
-  utils::init_context();
+  // parse options common to all device types after parsing krbd-specific
+  // options so that common options win (in particular "-o rw --read-only"
+  // should result in read-only mapping)
+  if (vm["read-only"].as<bool>()) {
+    put_map_option("rw", "ro", &map_options);
+  }
+  if (vm["exclusive"].as<bool>()) {
+    put_map_option("exclusive", "exclusive", &map_options);
+  }
+  if (vm["quiesce"].as<bool>()) {
+    std::cerr << "rbd: warning: quiesce is not supported" << std::endl;
+  }
+  if (vm.count("quiesce-hook")) {
+    std::cerr << "rbd: warning: quiesce-hook is not supported" << std::endl;
+  }
 
-  r = do_kernel_map(pool_name.c_str(), image_name.c_str(), snap_name.c_str());
+  // connect to the cluster to get the default pool and the default map
+  // options
+  librados::Rados rados;
+  r = utils::init_rados(&rados);
+  if (r < 0) {
+    return r;
+  }
+
+  utils::normalize_pool_name(&pool_name);
+
+  MapOptions default_map_options;
+  r = parse_map_options(
+      g_conf().get_val<std::string>("rbd_default_map_options"),
+      &default_map_options);
+  if (r < 0) {
+    std::cerr << "rbd: couldn't parse default map options" << std::endl;
+    return r;
+  }
+  for (auto& [key, value] : default_map_options) {
+    if (map_options.count(key) == 0) {
+      map_options[key] = value;
+    }
+  }
+
+  r = do_kernel_map(pool_name.c_str(), nspace_name.c_str(), image_name.c_str(),
+                    snap_name.c_str(), std::move(map_options));
   if (r < 0) {
     std::cerr << "rbd: map failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -445,20 +573,8 @@ int execute_map(const po::variables_map &vm) {
   return 0;
 }
 
-void get_unmap_arguments(po::options_description *positional,
-                   po::options_description *options) {
-  positional->add_options()
-    ("image-or-snap-or-device-spec",
-     "image, snapshot, or device specification\n"
-     "[<pool-name>/]<image-name>[@<snapshot-name>] or <device-path>");
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
-  options->add_options()
-    ("options,o", po::value<std::string>(), "unmap options");
-}
-
-int execute_unmap(const po::variables_map &vm) {
+int execute_unmap(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();
@@ -466,14 +582,15 @@ int execute_unmap(const po::variables_map &vm) {
 
   size_t arg_index = 0;
   std::string pool_name;
+  std::string nspace_name;
   std::string image_name;
   std::string snap_name;
   int r;
   if (device_name.empty()) {
     r = utils::get_pool_image_snapshot_names(
-      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-      &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
-      utils::SPEC_VALIDATION_NONE, false);
+      vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &nspace_name,
+      &image_name, &snap_name, false, utils::SNAPSHOT_PRESENCE_PERMITTED,
+      utils::SPEC_VALIDATION_NONE);
     if (r < 0) {
       return r;
     }
@@ -485,42 +602,38 @@ int execute_unmap(const po::variables_map &vm) {
     return -EINVAL;
   }
 
+  MapOptions unmap_options;
   if (vm.count("options")) {
-    char *cli_unmap_options = strdup(vm["options"].as<std::string>().c_str());
-    BOOST_SCOPE_EXIT( (cli_unmap_options) ) {
-      free(cli_unmap_options);
-    } BOOST_SCOPE_EXIT_END;
-
-    if (parse_unmap_options(cli_unmap_options)) {
-      std::cerr << "rbd: couldn't parse unmap options" << std::endl;
-      return -EINVAL;
+    for (auto &options : vm["options"].as<std::vector<std::string>>()) {
+      r = parse_unmap_options(options, &unmap_options);
+      if (r < 0) {
+        std::cerr << "rbd: couldn't parse unmap options" << std::endl;
+        return r;
+      }
     }
   }
 
-  utils::init_context();
+  if (device_name.empty() && pool_name.empty()) {
+    // connect to the cluster to get the default pool
+    librados::Rados rados;
+    r = utils::init_rados(&rados);
+    if (r < 0) {
+      return r;
+    }
+
+    utils::normalize_pool_name(&pool_name);
+  }
 
   r = do_kernel_unmap(device_name.empty() ? nullptr : device_name.c_str(),
-                      pool_name.c_str(), image_name.c_str(),
-                      snap_name.empty() ? nullptr : snap_name.c_str());
+                      pool_name.c_str(), nspace_name.c_str(),
+                      image_name.c_str(), snap_name.c_str(),
+                      std::move(unmap_options));
   if (r < 0) {
     std::cerr << "rbd: unmap failed: " << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;
 }
-
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
-Shell::Action action_show(
-  {"showmapped"}, {}, "Show the rbd images mapped by the kernel.", "",
-  &get_show_arguments, &execute_show);
-
-Shell::Action action_map(
-  {"map"}, {}, "Map image to a block device using the kernel.", "",
-  &get_map_arguments, &execute_map);
-
-Shell::Action action_unmap(
-  {"unmap"}, {}, "Unmap a rbd device that was used by the kernel.", "",
-  &get_unmap_arguments, &execute_unmap);
 
 } // namespace kernel
 } // namespace action

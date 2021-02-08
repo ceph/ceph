@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import contextlib
 import logging
-from cStringIO import StringIO
 import textwrap
-from configparser import ConfigParser
 import time
+from configparser import ConfigParser
+from io import BytesIO, StringIO
 
 from teuthology.orchestra import run
 from teuthology import misc
@@ -51,15 +51,15 @@ def install(ctx, config):
 
     This was created using documentation found here:
         https://github.com/openstack-dev/devstack/blob/master/README.md
-        http://docs.ceph.com/docs/master/rbd/rbd-openstack/
+        http://docs.ceph.com/en/latest/rbd/rbd-openstack/
     """
     if config is None:
         config = {}
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
-    an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
+    an_osd_node = next(iter(ctx.cluster.only(is_osd_node).remotes.keys()))
 
     devstack_branch = config.get("branch", "master")
     install_devstack(devstack_node, devstack_branch)
@@ -117,8 +117,8 @@ def distribute_ceph_conf(devstack_node, ceph_node):
     log.info("Copying ceph.conf to DevStack node...")
 
     ceph_conf_path = '/etc/ceph/ceph.conf'
-    ceph_conf = misc.get_file(ceph_node, ceph_conf_path, sudo=True)
-    misc.sudo_write_file(devstack_node, ceph_conf_path, ceph_conf)
+    ceph_conf = ceph_node.read_file(ceph_conf_path, sudo=True)
+    devstack_node.write_file(ceph_conf_path, ceph_conf, sudo=True)
 
 
 def generate_ceph_keys(ceph_node):
@@ -140,13 +140,12 @@ def distribute_ceph_keys(devstack_node, ceph_node):
     log.info("Copying Ceph keys to DevStack node...")
 
     def copy_key(from_remote, key_name, to_remote, dest_path, owner):
-        key_stringio = StringIO()
+        key_stringio = BytesIO()
         from_remote.run(
             args=['sudo', 'ceph', 'auth', 'get-or-create', key_name],
             stdout=key_stringio)
         key_stringio.seek(0)
-        misc.sudo_write_file(to_remote, dest_path,
-                             key_stringio, owner=owner)
+        to_remote.write_file(dest_path, key_stringio, owner=owner, sudo=True)
     keys = [
         dict(name='client.glance',
              path='/etc/ceph/ceph.client.glance.keyring',
@@ -172,14 +171,8 @@ def distribute_ceph_keys(devstack_node, ceph_node):
 def set_libvirt_secret(devstack_node, ceph_node):
     log.info("Setting libvirt secret...")
 
-    cinder_key_stringio = StringIO()
-    ceph_node.run(args=['sudo', 'ceph', 'auth', 'get-key', 'client.cinder'],
-                  stdout=cinder_key_stringio)
-    cinder_key = cinder_key_stringio.getvalue().strip()
-
-    uuid_stringio = StringIO()
-    devstack_node.run(args=['uuidgen'], stdout=uuid_stringio)
-    uuid = uuid_stringio.getvalue().strip()
+    cinder_key = ceph_node.sh('sudo ceph auth get-key client.cinder').strip()
+    uuid = devstack_node.sh('uuidgen').strip()
 
     secret_path = '/tmp/secret.xml'
     secret_template = textwrap.dedent("""
@@ -189,8 +182,8 @@ def set_libvirt_secret(devstack_node, ceph_node):
             <name>client.cinder secret</name>
         </usage>
     </secret>""")
-    misc.sudo_write_file(devstack_node, secret_path,
-                         secret_template.format(uuid=uuid))
+    secret_data = secret_template.format(uuid=uuid)
+    devstack_node.write_file(secret_path, secret_data)
     devstack_node.run(args=['sudo', 'virsh', 'secret-define', '--file',
                             secret_path])
     devstack_node.run(args=['sudo', 'virsh', 'secret-set-value', '--secret',
@@ -254,11 +247,11 @@ def update_devstack_config_files(devstack_node, secret_uuid):
     for update in updates:
         file_name = update['name']
         options = update['options']
-        config_str = misc.get_file(devstack_node, file_name, sudo=True)
-        config_stream = StringIO(config_str)
+        config_data = devstack_node.read_file(file_name, sudo=True)
+        config_stream = StringIO(config_data)
         backup_config(devstack_node, file_name)
         new_config_stream = update_config(file_name, config_stream, options)
-        misc.sudo_write_file(devstack_node, file_name, new_config_stream)
+        devstack_node.write_file(file_name, new_config_stream, sudo=True)
 
 
 def set_apache_servername(node):
@@ -269,8 +262,8 @@ def set_apache_servername(node):
 
     hostname = node.hostname
     config_file = '/etc/apache2/conf.d/servername'
-    misc.sudo_write_file(node, config_file,
-                         "ServerName {name}".format(name=hostname))
+    config_data = "ServerName {name}".format(name=hostname)
+    node.write_file(config_file, config_data, sudo=True)
 
 
 def start_devstack(devstack_node):
@@ -305,7 +298,7 @@ def exercise(ctx, config):
     if not isinstance(config, dict):
         raise TypeError("config must be a dict")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
 
     # TODO: save the log *and* preserve failures
     #devstack_archive_dir = create_devstack_archive(ctx, devstack_node)
@@ -332,8 +325,8 @@ def create_devstack_archive(ctx, devstack_node):
 def smoke(ctx, config):
     log.info("Running a basic smoketest...")
 
-    devstack_node = ctx.cluster.only(is_devstack_node).remotes.keys()[0]
-    an_osd_node = ctx.cluster.only(is_osd_node).remotes.keys()[0]
+    devstack_node = next(iter(ctx.cluster.only(is_devstack_node).remotes.keys()))
+    an_osd_node = next(iter(ctx.cluster.only(is_osd_node).remotes.keys()))
 
     try:
         create_volume(devstack_node, an_osd_node, 'smoke0', 1)
@@ -352,21 +345,17 @@ def create_volume(devstack_node, ceph_node, vol_name, size):
         size=size))
     args = ['source', 'devstack/openrc', run.Raw('&&'), 'cinder', 'create',
             '--display-name', vol_name, size]
-    out_stream = StringIO()
-    devstack_node.run(args=args, stdout=out_stream, wait=True)
-    vol_info = parse_os_table(out_stream.getvalue())
+    cinder_create = devstack_node.sh(args, wait=True)
+    vol_info = parse_os_table(cinder_create)
     log.debug("Volume info: %s", str(vol_info))
 
-    out_stream = StringIO()
     try:
-        ceph_node.run(args="rbd --id cinder ls -l volumes", stdout=out_stream,
-                      wait=True)
+        rbd_output = ceph_node.sh("rbd --id cinder ls -l volumes", wait=True)
     except run.CommandFailedError:
         log.debug("Original rbd call failed; retrying without '--id cinder'")
-        ceph_node.run(args="rbd ls -l volumes", stdout=out_stream,
-                      wait=True)
+        rbd_output = ceph_node.sh("rbd ls -l volumes", wait=True)
 
-    assert vol_info['id'] in out_stream.getvalue(), \
+    assert vol_info['id'] in rbd_output, \
         "Volume not found on Ceph cluster"
     assert vol_info['size'] == size, \
         "Volume size on Ceph cluster is different than specified"

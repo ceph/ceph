@@ -12,11 +12,10 @@
  *
  */
 
-#include "objclass/objclass.h"
 #include "cls/numops/cls_numops_client.h"
 #include "include/encoding.h"
+#include "include/rados/librados.hpp"
 
-#include <cstdlib>
 #include <errno.h>
 #include <sstream>
 
@@ -30,12 +29,12 @@ namespace rados {
               double value_to_add)
       {
         bufferlist in, out;
-        ::encode(key, in);
+        encode(key, in);
 
         std::stringstream stream;
         stream << value_to_add;
 
-        ::encode(stream.str(), in);
+        encode(stream.str(), in);
 
         return ioctx->exec(oid, "numops", "add", in, out);
       }
@@ -54,12 +53,12 @@ namespace rados {
               double value_to_multiply)
       {
         bufferlist in, out;
-        ::encode(key, in);
+        encode(key, in);
 
         std::stringstream stream;
         stream << value_to_multiply;
 
-        ::encode(stream.str(), in);
+        encode(stream.str(), in);
 
         return ioctx->exec(oid, "numops", "mul", in, out);
       }

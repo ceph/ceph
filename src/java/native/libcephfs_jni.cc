@@ -265,7 +265,7 @@ static void handle_error(JNIEnv *env, int rc)
 /*
  * Cast a jlong to ceph_mount_info. Each JNI function is expected to pass in
  * the class instance variable instance_ptr. Passing a parameter is faster
- * than reaching back into Java via an upcall to retreive this pointer.
+ * than reaching back into Java via an upcall to retrieve this pointer.
  */
 static inline struct ceph_mount_info *get_ceph_mount(jlong j_mntp)
 {
@@ -1321,11 +1321,11 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1stat
 		return -1;
 	}
 
-	ldout(cct, 10) << "jni: lstat: path " << c_path << dendl;
+	ldout(cct, 10) << "jni: stat: path " << c_path << dendl;
 
 	ret = ceph_statx(cmount, c_path, &stx, CEPH_J_CEPHSTAT_MASK, 0);
 
-	ldout(cct, 10) << "jni: lstat exit ret " << ret << dendl;
+	ldout(cct, 10) << "jni: stat exit ret " << ret << dendl;
 
 	env->ReleaseStringUTFChars(j_path, c_path);
 
@@ -1368,9 +1368,13 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1setattr
 	stx.stx_mode = env->GetIntField(j_cephstat, cephstat_mode_fid);
 	stx.stx_uid = env->GetIntField(j_cephstat, cephstat_uid_fid);
 	stx.stx_gid = env->GetIntField(j_cephstat, cephstat_gid_fid);
-	stx.stx_mtime.tv_sec = env->GetLongField(j_cephstat, cephstat_m_time_fid);
-	stx.stx_atime.tv_sec = env->GetLongField(j_cephstat, cephstat_a_time_fid);
-
+	long mtime_msec = env->GetLongField(j_cephstat, cephstat_m_time_fid);
+	long atime_msec = env->GetLongField(j_cephstat, cephstat_a_time_fid);
+	stx.stx_mtime.tv_sec = mtime_msec / 1000;
+	stx.stx_mtime.tv_nsec = (mtime_msec % 1000) * 1000000;
+	stx.stx_atime.tv_sec = atime_msec / 1000;
+	stx.stx_atime.tv_nsec = (atime_msec % 1000) * 1000000;
+	
 	ldout(cct, 10) << "jni: setattr: path " << c_path << " mask " << mask << dendl;
 
 	ret = ceph_setattrx(cmount, c_path, &stx, mask, 0);
@@ -2579,6 +2583,51 @@ out:
 
 	return pool;
 }
+
+/**
+ * Class: com_ceph_fs_CephMount
+ * Method: native_ceph_get_default_data_pool_name
+ * Signature: (J)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1get_1default_1data_1pool_1name
+  (JNIEnv *env, jclass clz, jlong j_mntp)
+{
+	struct ceph_mount_info *cmount = get_ceph_mount(j_mntp);
+	CephContext *cct = ceph_get_mount_context(cmount);
+	jstring pool = NULL;
+	int ret, buflen = 0;
+	char *buf = NULL;
+        
+	CHECK_MOUNTED(cmount, NULL);
+	 
+	ldout(cct, 10) << "jni: get_default_data_pool_name" << dendl;
+
+	ret = ceph_get_default_data_pool_name(cmount, NULL, 0);
+	if (ret < 0)
+		goto out;
+	buflen = ret;
+	buf = new (std::nothrow) char[buflen+1]; /* +1 for '\0' */
+	if (!buf) {
+		cephThrowOutOfMemory(env, "head allocation failed");
+		goto out;
+	}
+	memset(buf, 0, (buflen+1)*sizeof(*buf));
+	ret = ceph_get_default_data_pool_name(cmount, buf, buflen);
+	
+	ldout(cct, 10) << "jni: get_default_data_pool_name: ret " << ret << dendl;
+	
+	if (ret < 0)
+		handle_error(env, ret);
+	else
+		pool = env->NewStringUTF(buf);
+
+out:
+	if (buf)
+	delete [] buf;
+
+	return pool;        
+}
+
 
 /*
  * Class:     com_ceph_fs_CephMount

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #ifndef CEPH_RGW_ACL_S3_H
 #define CEPH_RGW_ACL_S3_H
@@ -13,10 +13,7 @@
 #include "rgw_xml.h"
 #include "rgw_acl.h"
 
-
-using namespace std;
-
-class RGWRados;
+class RGWUserCtl;
 
 class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
@@ -86,16 +83,21 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
-  int rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest);
+  int rebuild(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
+              std::string &err_msg);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
-  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, string canned_acl) {
+  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const string& canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    int ret = _acl.create_canned(_owner, bucket_owner, canned_acl);
-    owner = _owner;
+    if (_owner.get_id() == rgw_user("anonymous")) {
+      owner = bucket_owner;
+    } else {
+      owner = _owner;
+    }
+    int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
     return ret;
   }
-  int create_from_headers(RGWRados *store, RGWEnv *env, ACLOwner& _owner);
+  int create_from_headers(const DoutPrefixProvider *dpp, RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner);
 };
 
 /**

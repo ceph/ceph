@@ -41,21 +41,22 @@
 #include <xmmintrin.h>
 #endif
 
-#include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/ceph_hash.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "common/ceph_argparse.h"
 #include "common/Cycles.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Thread.h"
 #include "common/Timer.h"
 #include "msg/async/Event.h"
 #include "global/global_init.h"
 
 #include "test/perf_helper.h"
+
+#include <atomic>
 
 using namespace ceph;
 
@@ -95,15 +96,15 @@ void discard(void* value) {
 // Test functions start here
 //----------------------------------------------------------------------
 
-// Measure the cost of atomic_t::compare_and_swap
+// Measure the cost of atomic compare-and-swap
 double atomic_int_cmp()
 {
   int count = 1000000;
-  atomic_t value(11);
-  int test = 11;
+  std::atomic<unsigned> value = { 11 };
+  unsigned int test = 11;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.compare_and_swap(test, test+2);
+    value.compare_exchange_strong(test, test+2);
     test += 2;
   }
   uint64_t stop = Cycles::rdtsc();
@@ -111,43 +112,43 @@ double atomic_int_cmp()
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of atomic_t::inc
+// Measure the cost of incrementing an atomic
 double atomic_int_inc()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<int64_t> value = { 11 };
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.inc();
+    value++;
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Final value: %d\n", value.load());
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of reading an atomic_t
+// Measure the cost of reading an atomic
 double atomic_int_read()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<int64_t> value = { 11 };
   int total = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    total += value.read();
+    total += value;
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Total: %d\n", total);
   return Cycles::to_seconds(stop - start)/count;
 }
 
-// Measure the cost of storing a new value in a atomic_t
+// Measure the cost of storing a new value in an atomic
 double atomic_int_set()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<int64_t> value = { 11 };
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.set(88);
+    value = 88;
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -158,11 +159,11 @@ double atomic_int_set()
 double mutex_nonblock()
 {
   int count = 1000000;
-  Mutex m("mutex_nonblock::m");
+  ceph::mutex m = ceph::make_mutex("mutex_nonblock::m");
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    m.Lock();
-    m.Unlock();
+    m.lock();
+    m.unlock();
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -187,18 +188,18 @@ struct DummyBlock {
   int a = 1, b = 2, c = 3, d = 4;
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(a, bl);
-    ::encode(b, bl);
-    ::encode(c, bl);
-    ::encode(d, bl);
+    encode(a, bl);
+    encode(b, bl);
+    encode(c, bl);
+    encode(d, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(a, bl);
-    ::decode(b, bl);
-    ::decode(c, bl);
-    ::decode(d, bl);
+    decode(a, bl);
+    decode(b, bl);
+    decode(c, bl);
+    decode(d, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -213,9 +214,9 @@ double buffer_encode_decode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
-    bufferlist::iterator iter = b.begin();
-    ::decode(dummy_block, iter);
+    encode(dummy_block, b);
+    auto iter = b.cbegin();
+    decode(dummy_block, iter);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -245,7 +246,7 @@ double buffer_copy()
   char copy[10];
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    b.copy(2, 6, copy);
+    b.cbegin(2).copy(6, copy);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -260,37 +261,21 @@ double buffer_encode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
     uint64_t start = Cycles::rdtsc();
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
     total += Cycles::rdtsc() - start;
   }
   return Cycles::to_seconds(total)/(count*10);
-}
-
-// Measure the cost of retrieving an object from the beginning of a buffer.
-double buffer_get_contiguous()
-{
-  int count = 1000000;
-  int value = 11;
-  bufferlist b;
-  b.append((char*)&value, sizeof(value));
-  int sum = 0;
-  uint64_t start = Cycles::rdtsc();
-  for (int i = 0; i < count; i++) {
-    sum += *reinterpret_cast<int*>(b.get_contiguous(0, sizeof(value)));
-  }
-  uint64_t stop = Cycles::rdtsc();
-  return Cycles::to_seconds(stop - start)/count;
 }
 
 // Measure the cost of creating an iterator and iterating over 10
@@ -307,7 +292,7 @@ double buffer_iterator()
   int sum = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    bufferlist::iterator it = b.begin();
+    auto it = b.cbegin();
     while (!it.end()) {
       sum += (static_cast<const char*>(it.get_current_ptr().c_str()))[it.get_remaining()-1];
       ++it;
@@ -320,11 +305,11 @@ double buffer_iterator()
 
 // Implements the CondPingPong test.
 class CondPingPong {
-  Mutex mutex;
-  Cond cond;
-  int prod;
-  int cons;
-  const int count;
+  ceph::mutex mutex = ceph::make_mutex("CondPingPong::mutex");
+  ceph::condition_variable cond;
+  int prod = 0;
+  int cons = 0;
+  const int count = 10000;
 
   class Consumer : public Thread {
     CondPingPong *p;
@@ -337,7 +322,7 @@ class CondPingPong {
   } consumer;
 
  public:
-  CondPingPong(): mutex("CondPingPong::mutex"), prod(0), cons(0), count(10000), consumer(this) {}
+  CondPingPong(): consumer(this) {}
 
   double run() {
     consumer.create("consumer");
@@ -349,22 +334,20 @@ class CondPingPong {
   }
 
   void produce() {
-    Mutex::Locker l(mutex);
+    std::unique_lock l{mutex};
     while (cons < count) {
-      while (cons < prod)
-        cond.Wait(mutex);
+      cond.wait(l, [this] { return cons >= prod; });
       ++prod;
-      cond.Signal();
+      cond.notify_all();
     }
   }
 
   void consume() {
-    Mutex::Locker l(mutex);
+    std::unique_lock l{mutex};
     while (cons < count) {
-      while (cons == prod)
-        cond.Wait(mutex);
+      cond.wait(l, [this] { return cons != prod; });
       ++cons;
-      cond.Signal();
+      cond.notify_all();
     }
   }
 };
@@ -395,6 +378,18 @@ double div32()
                          "=a"(quotient), "=d"(remainder) :
                          "a"(numeratorLo), "d"(numeratorHi), "r"(divisor) :
                          "cc");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  uint64_t numerator = 0xa5a5a5a555aa55aaUL;
+  uint32_t divisor = 0xaa55aa55U;
+  uint32_t result;
+  for (int i = 0; i < count; i++) {
+    asm volatile("udiv %0, %1, %2" : "=r"(result) :
+                  "r"(numerator), "r"(divisor));
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -483,12 +478,12 @@ class CenterWorker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  atomic_t *count;
+  std::atomic<int64_t> *count;
 
  public:
-  explicit CountEvent(atomic_t *atomic): count(atomic) {}
-  void do_request(int id) override {
-    count->dec();
+  explicit CountEvent(std::atomic<int64_t> *atomic): count(atomic) {}
+  void do_request(uint64_t id) override {
+    (*count)--;
   }
 };
 
@@ -497,20 +492,20 @@ double eventcenter_dispatch()
   int count = 100000;
 
   CenterWorker worker(g_ceph_context);
-  atomic_t flag(1);
+  std::atomic<int64_t> flag = { 1 };
   worker.create("evt_center_disp");
   EventCallbackRef count_event(new CountEvent(&flag));
 
   worker.center.dispatch_event_external(count_event);
   // Start a new thread and wait for it to ready.
-  while (flag.read())
+  while (flag)
     usleep(100);
 
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    flag.set(1);
+    flag = 1;
     worker.center.dispatch_event_external(count_event);
-    while (flag.read())
+    while (flag)
       ;
   }
   uint64_t stop = Cycles::rdtsc();
@@ -627,20 +622,27 @@ static inline void prefetch(const void *object, uint64_t num_bytes)
     for (uint64_t i = 0; i < offset + num_bytes; i += 64)
         _mm_prefetch(p + i, _MM_HINT_T0);
 }
+#elif defined(__aarch64__)
+static inline void prefetch(const void *object, uint64_t num_bytes)
+{
+    uint64_t offset = reinterpret_cast<uint64_t>(object) & 0x3fUL;
+    const char* ptr = reinterpret_cast<const char*>(object) - offset;
+    for (uint64_t i = 0; i < offset + num_bytes; i += 64, ptr += 64)
+        asm volatile("prfm pldl1keep, %a0\n" : : "p" (ptr));
+}
 #endif
 
 // Measure the cost of the prefetch instruction.
 double perf_prefetch()
 {
-#ifdef HAVE_SSE
+#if defined(HAVE_SSE) || defined(__aarch64__)
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
-  uint64_t start, stop;
 
   for (int i = 0; i < count; i++) {
     PerfHelper::flush_cache();
-    start = Cycles::rdtsc();
+    uint64_t start = Cycles::rdtsc();
     prefetch(&buf[576], 64);
     prefetch(&buf[0],   64);
     prefetch(&buf[512], 64);
@@ -657,7 +659,7 @@ double perf_prefetch()
     prefetch(&buf[832], 64);
     prefetch(&buf[64],  64);
     prefetch(&buf[192], 64);
-    stop = Cycles::rdtsc();
+    uint64_t stop = Cycles::rdtsc();
     total_ticks += stop - start;
   }
   return Cycles::to_seconds(total_ticks) / count / 16;
@@ -710,6 +712,14 @@ double lfence()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    asm volatile("dmb ishld" ::: "memory");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
 #else
   return -1;
 #endif
@@ -726,6 +736,14 @@ double sfence()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#elif defined(__aarch64__)
+  int count = 1000000;
+  uint64_t start = Cycles::rdtsc();
+  for (int i = 0; i < count; i++) {
+    asm volatile("dmb ishst" ::: "memory");
+  }
+  uint64_t stop = Cycles::rdtsc();
+  return Cycles::to_seconds(stop - start)/count;
 #else
   return -1;
 #endif
@@ -736,7 +754,7 @@ double sfence()
 double test_spinlock()
 {
   int count = 1000000;
-  Spinlock lock;
+  ceph::spinlock lock;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     lock.lock();
@@ -775,17 +793,18 @@ class FakeContext : public Context {
 double perf_timer()
 {
   int count = 1000000;
-  Mutex lock("perf_timer::lock");
+  ceph::mutex lock = ceph::make_mutex("perf_timer::lock");
   SafeTimer timer(g_ceph_context, lock);
   FakeContext **c = new FakeContext*[count];
   for (int i = 0; i < count; i++) {
     c[i] = new FakeContext();
   }
   uint64_t start = Cycles::rdtsc();
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   for (int i = 0; i < count; i++) {
-    timer.add_event_after(12345, c[i]);
-    timer.cancel_event(c[i]);
+    if (timer.add_event_after(12345, c[i])) {
+      timer.cancel_event(c[i]);
+    }
   }
   uint64_t stop = Cycles::rdtsc();
   delete[] c;
@@ -929,8 +948,6 @@ TestInfo tests[] = {
     "copy out 2 small ptrs from buffer"},
   {"buffer_encode10", buffer_encode,
     "buffer encoding 10 structures onto existing ptr"},
-  {"buffer_get_contiguous", buffer_get_contiguous,
-    "Buffer::get_contiguous"},
   {"buffer_iterator", buffer_iterator,
     "iterate over buffer with 5 ptrs"},
   {"cond_ping_pong", cond_ping_pong,
@@ -1019,7 +1036,8 @@ int main(int argc, char *argv[])
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   Cycles::init();
 

@@ -21,103 +21,97 @@
 #include "common/Thread.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
 
-class ErasureCodePluginRegistryTest : public ::testing::Test {
-protected:
-
-  class Thread_factory : public Thread {
-  public:
-    static void cleanup(void *arg) {
-      ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-      if (instance.lock.is_locked())
-        instance.lock.Unlock();
-    }
-
-    void *entry() override {
-      ErasureCodeProfile profile;
-      ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-      ErasureCodeInterfaceRef erasure_code;
-      pthread_cleanup_push(cleanup, NULL);
-      instance.factory("hangs",
-		       g_conf->get_val<std::string>("erasure_code_dir"),
-		       profile, &erasure_code, &cerr);
-      pthread_cleanup_pop(0);
-      return NULL;
-    }
-  };
-
-};
+class ErasureCodePluginRegistryTest : public ::testing::Test {};
 
 TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
 
-  EXPECT_TRUE(instance.lock.TryLock());
-  instance.lock.Unlock();
-
+  {
+    unique_lock l{instance.lock, std::try_to_lock};
+    EXPECT_TRUE(l.owns_lock());
+  }
   // 
   // Test that the loading of a plugin is protected by a mutex.
-  //
-  useconds_t delay = 0;
-  const useconds_t DELAY_MAX = 20 * 1000 * 1000;
-  Thread_factory sleep_forever;
-  sleep_forever.create("sleep_forever");
-  do {
-    cout << "Trying (1) with delay " << delay << "us\n";
-    if (delay > 0)
-      usleep(delay);
-    if (!instance.loading)
-      delay = ( delay + 1 ) * 2;
-  } while(!instance.loading && delay < DELAY_MAX);
-  ASSERT_TRUE(delay < DELAY_MAX);
 
-  EXPECT_FALSE(instance.lock.TryLock());
-
-  EXPECT_EQ(0, pthread_cancel(sleep_forever.get_thread_id()));
-  EXPECT_EQ(0, sleep_forever.join());
+  std::thread sleep_for_10_secs([] {
+    ErasureCodeProfile profile;
+    ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+    ErasureCodeInterfaceRef erasure_code;
+    instance.factory("hangs",
+		     g_conf().get_val<std::string>("erasure_code_dir"),
+		     profile, &erasure_code, &cerr);
+  });
+  auto wait_until = [&instance](bool loading, unsigned max_secs) {
+    auto delay = 0ms;
+    const auto DELAY_MAX = std::chrono::seconds(max_secs);
+    for (; delay < DELAY_MAX; delay = (delay + 1ms) * 2) {
+      cout << "Trying (1) with delay " << delay << "us\n";
+      if (delay.count() > 0) {
+	std::this_thread::sleep_for(delay);
+      }
+      if (instance.loading == loading) {
+	return true;
+      }
+    }
+    return false;
+  };
+  // should be loading in 5 seconds
+  ASSERT_TRUE(wait_until(true, 5));
+  {
+    unique_lock l{instance.lock, std::try_to_lock};
+    EXPECT_TRUE(!l.owns_lock());
+  }
+  // should finish loading in 15 seconds
+  ASSERT_TRUE(wait_until(false, 15));
+  {
+    unique_lock l{instance.lock, std::try_to_lock};
+    EXPECT_TRUE(l.owns_lock());
+  }
+  sleep_for_10_secs.join();
 }
 
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
   ErasureCodeProfile profile;
-  const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
+  string directory = g_conf().get_val<std::string>("erasure_code_dir");
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EIO, instance.factory("invalid",
-				   g_conf->get_val<std::string>("erasure_code_dir"),
+				   g_conf().get_val<std::string>("erasure_code_dir"),
 				   profile, &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EXDEV, instance.factory("missing_version",
-				     g_conf->get_val<std::string>("erasure_code_dir"),
+				     g_conf().get_val<std::string>("erasure_code_dir"),
 				     profile,
 				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point",
-				      g_conf->get_val<std::string>("erasure_code_dir"),
+				      g_conf().get_val<std::string>("erasure_code_dir"),
 				      profile,
 				      &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ESRCH, instance.factory("fail_to_initialize",
-				     g_conf->get_val<std::string>("erasure_code_dir"),
+				     g_conf().get_val<std::string>("erasure_code_dir"),
 				     profile,
 				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EBADF, instance.factory("fail_to_register",
-				     g_conf->get_val<std::string>("erasure_code_dir"),
+				     g_conf().get_val<std::string>("erasure_code_dir"),
 				     profile,
 				     &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(0, instance.factory("example",
-				g_conf->get_val<std::string>("erasure_code_dir"),
+				g_conf().get_val<std::string>("erasure_code_dir"),
 				profile, &erasure_code, &cerr));
   EXPECT_TRUE(erasure_code.get());
   ErasureCodePlugin *plugin = 0;
   {
-    Mutex::Locker l(instance.lock);
+    std::lock_guard l{instance.lock};
     EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, &cerr));
     EXPECT_EQ(-ENOENT, instance.remove("does not exist"));
     EXPECT_EQ(0, instance.remove("example"));
@@ -127,10 +121,10 @@ TEST_F(ErasureCodePluginRegistryTest, all)
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 && 
+ * compile-command: "cd ../../../build ; make -j4 &&
  *   make unittest_erasure_code_plugin && 
  *   valgrind --tool=memcheck \
- *      ./unittest_erasure_code_plugin \
+ *      ./bin/unittest_erasure_code_plugin \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:
  */

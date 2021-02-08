@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -ex
 #
 # rbd_mirror_stress.sh - stress test rbd-mirror daemon
 #
@@ -12,6 +12,8 @@ IMAGE_COUNT=50
 export LOCKDEP=0
 
 . $(dirname $0)/rbd_mirror_helpers.sh
+
+setup
 
 create_snap()
 {
@@ -75,7 +77,7 @@ wait_for_pool_healthy()
 
     for s in `seq 1 40`; do
         test $s -ne 1 && sleep 30
-        state=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'health:' | cut -d' ' -f 2)
+        state=$(rbd --cluster ${cluster} -p ${pool} mirror pool status | grep 'image health:' | cut -d' ' -f 3)
         test "${state}" = "ERROR" && break
         test "${state}" = "OK" && return 0
     done
@@ -83,8 +85,8 @@ wait_for_pool_healthy()
     return 1
 }
 
-start_mirror ${CLUSTER1}
-start_mirror ${CLUSTER2}
+start_mirrors ${CLUSTER1}
+start_mirrors ${CLUSTER2}
 
 testlog "TEST: add image and test replay after client crashes"
 image=test
@@ -95,7 +97,7 @@ for i in `seq 1 10`
 do
   stress_write_image ${CLUSTER2} ${POOL} ${image}
 
-  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
 
   snap_name="snap${i}"
   create_snap ${CLUSTER2} ${POOL} ${image} ${snap_name}
@@ -182,5 +184,3 @@ do
   purge_snapshots ${CLUSTER2} ${POOL} ${image}
   remove_image_retry ${CLUSTER2} ${POOL} ${image}
 done
-
-echo OK

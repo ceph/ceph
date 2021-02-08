@@ -1,8 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
+
 
 #include <atomic>
 #include <thread>
@@ -36,6 +45,7 @@ TEST(test_client, full_bore_timing) {
   sim::TestResponse resp(0);
   dmc::PhaseType resp_params = dmc::PhaseType::priority;
   test::DmcClient* client;
+  const sim::Cost request_cost = 1u;
 
   auto start = now();
   client =
@@ -45,7 +55,7 @@ TEST(test_client, full_bore_timing) {
 			     const ClientId& client_id,
 			     const dmc::ReqParams& req_params) {
 			  ++count;
-			  client->receive_response(resp, client_id, resp_params);
+			  client->receive_response(resp, client_id, resp_params, request_cost);
 			},
 			[&] (const uint64_t seed) -> ServerId& {
 			  return server_id;
@@ -61,6 +71,8 @@ TEST(test_client, full_bore_timing) {
   int milliseconds = (end - start) / std::chrono::milliseconds(1);
   EXPECT_LT(10000, milliseconds) << "timing too fast to be correct";
   EXPECT_GT(12000, milliseconds) << "timing suspiciously slow";
+
+  delete client;
 }
 
 
@@ -74,6 +86,7 @@ TEST(test_client, paused_timing) {
 
   sim::TestResponse resp(0);
   dmc::PhaseType resp_params = dmc::PhaseType::priority;
+  const uint64_t request_cost = 1u;
   test::DmcClient* client;
 
   auto start = now();
@@ -85,7 +98,7 @@ TEST(test_client, paused_timing) {
 			     const dmc::ReqParams& req_params) {
 			  ++count;
 			  if (auto_respond.load()) {
-			    client->receive_response(resp, client_id, resp_params);
+			    client->receive_response(resp, client_id, resp_params, request_cost);
 			  } else {
 			    ++unresponded_count;
 			  }
@@ -105,7 +118,7 @@ TEST(test_client, paused_timing) {
       auto_respond = true;
       // respond to those 50 calls
       for(int i = 0; i < 50; ++i) {
-	client->receive_response(resp, my_client_id, resp_params);
+	client->receive_response(resp, my_client_id, resp_params, 1);
 	--unresponded_count;
       }
     });
@@ -120,4 +133,6 @@ TEST(test_client, paused_timing) {
   EXPECT_LT(15000 - 500, milliseconds) << "timing too fast to be correct";
   EXPECT_GT(17000 - 500, milliseconds) << "timing suspiciously slow";
   t.join();
+
+  delete client;
 }

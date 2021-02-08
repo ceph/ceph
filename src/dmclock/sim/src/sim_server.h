@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -28,13 +35,16 @@ namespace crimson {
 	ClientId                     client;
 	std::unique_ptr<TestRequest> request;
 	RespPm                       additional;
+	Cost                         request_cost;
 
 	QueueItem(const ClientId&                _client,
 		  std::unique_ptr<TestRequest>&& _request,
-		  const RespPm&                  _additional) :
+		  const RespPm&                  _additional,
+		  const Cost                     _request_cost) :
 	  client(_client),
 	  request(std::move(_request)),
-	  additional(_additional)
+	  additional(_additional),
+	  request_cost(_request_cost)
 	{
 	  // empty
 	}
@@ -62,7 +72,8 @@ namespace crimson {
       using ClientRespFunc = std::function<void(ClientId,
 						const TestResponse&,
 						const ServerId&,
-						const RespPm&)>;
+						const RespPm&,
+						const Cost)>;
 
       using ServerAccumFunc = std::function<void(Accum& accumulator,
 						 const RespPm& additional)>;
@@ -98,7 +109,7 @@ namespace crimson {
 
       using CanHandleRequestFunc = std::function<bool(void)>;
       using HandleRequestFunc =
-	std::function<void(const ClientId&,std::unique_ptr<TestRequest>,const RespPm&)>;
+	std::function<void(const ClientId&,std::unique_ptr<TestRequest>,const RespPm&, uint64_t)>;
       using CreateQueueF = std::function<Q*(CanHandleRequestFunc,HandleRequestFunc)>;
 					
 
@@ -115,7 +126,8 @@ namespace crimson {
 						 this,
 						 std::placeholders::_1,
 						 std::placeholders::_2,
-						 std::placeholders::_3))),
+						 std::placeholders::_3,
+						 std::placeholders::_4))),
 	client_resp_f(_client_resp_f),
 	iops(_iops),
 	thread_pool_size(_thread_pool_size),
@@ -125,10 +137,10 @@ namespace crimson {
 	op_time =
 	  std::chrono::microseconds((int) (0.5 +
 					   thread_pool_size * 1000000.0 / iops));
-	std::chrono::milliseconds delay(1000);
+	std::chrono::milliseconds finishing_check_period(1000);
 	threads = new std::thread[thread_pool_size];
 	for (size_t i = 0; i < thread_pool_size; ++i) {
-	  threads[i] = std::thread(&SimulatedServer::run, this, delay);
+	  threads[i] = std::thread(&SimulatedServer::run, this, finishing_check_period);
 	}
       }
 
@@ -143,16 +155,22 @@ namespace crimson {
 	}
 
 	delete[] threads;
+
+	delete priority_queue;
       }
 
-      void post(const TestRequest& request,
+      void post(TestRequest&& request,
 		const ClientId& client_id,
-		const ReqPm& req_params)
+		const ReqPm& req_params,
+		const Cost request_cost)
       {
 	time_stats(internal_stats.mtx,
 		   internal_stats.add_request_time,
 		   [&](){
-		     priority_queue->add_request(request, client_id, req_params);
+		     priority_queue->add_request(std::move(request),
+						 client_id,
+						 req_params,
+						 request_cost);
 		   });
 	count_stats(internal_stats.mtx,
 		    internal_stats.add_request_count);
@@ -171,13 +189,15 @@ namespace crimson {
 
       void inner_post(const ClientId& client,
 		      std::unique_ptr<TestRequest> request,
-		      const RespPm& additional) {
+		      const RespPm& additional,
+		      const Cost request_cost) {
 	Lock l(inner_queue_mtx);
 	assert(!finishing);
 	accum_f(accumulator, additional);
 	inner_queue.emplace_back(QueueItem(client,
 					   std::move(request),
-					   additional));
+					   additional,
+					   request_cost));
 	inner_queue_cv.notify_one();
       }
 
@@ -192,18 +212,18 @@ namespace crimson {
 	    auto client = front.client;
 	    auto req = std::move(front.request);
 	    auto additional = front.additional;
+	    auto request_cost = front.request_cost;
 	    inner_queue.pop_front();
 
 	    l.unlock();
 
 	    // simulation operation by sleeping; then call function to
 	    // notify server of completion
-	    std::this_thread::sleep_for(op_time);
+	    std::this_thread::sleep_for(op_time * request_cost);
 
-	    TestResponse resp(req->epoch);
 	    // TODO: rather than assuming this constructor exists, perhaps
 	    // pass in a function that does this mapping?
-	    client_resp_f(client, resp, id, additional);
+	    client_resp_f(client, TestResponse{req->epoch}, id, additional, request_cost);
 
 	    time_stats(internal_stats.mtx,
 		       internal_stats.request_complete_time,

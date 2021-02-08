@@ -37,15 +37,19 @@ int EventOutput::binary() const
   }
 
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
-    LogEvent *le = i->second.log_event;
-    bufferlist le_bin;
-    le->encode(le_bin, CEPH_FEATURES_SUPPORTED_DEFAULT);
-
+    bufferlist bin;
     std::stringstream filename;
-    filename << "0x" << std::hex << i->first << std::dec << "_" << le->get_type_str() << ".bin";
+    if (auto& le = i->second.log_event; le) {
+      le->encode(bin, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      filename << "0x" << std::hex << i->first << std::dec << "_" << le->get_type_str() << ".bin";
+    } else if (auto& pi = i->second.pi; pi) {
+      pi->encode(bin);
+      filename << "0x" << std::hex << i->first << std::dec << "_" << pi->get_type_str() << ".bin";
+    }
+
     std::string const file_path = path + std::string("/") + filename.str();
     std::ofstream bin_file(file_path.c_str(), std::ofstream::out | std::ofstream::binary);
-    le_bin.write_stream(bin_file);
+    bin.write_stream(bin_file);
     bin_file.close();
     if (bin_file.fail()) {
       return -EIO;
@@ -63,12 +67,15 @@ int EventOutput::json() const
   jf.open_array_section("journal");
   {
     for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
-      LogEvent *le = i->second.log_event;
-      jf.open_object_section("log_event");
-      {
-        le->dump(&jf);
+      if (auto& le = i->second.log_event; le) {
+	jf.open_object_section("log_event");
+	le->dump(&jf);
+	jf.close_section();  // log_event
+      } else if (auto& pi = i->second.pi; pi) {
+	jf.open_object_section("purge_action");
+	pi->dump(&jf);
+	jf.close_section();
       }
-      jf.close_section();  // log_event
     }
   }
   jf.close_section();  // journal
@@ -86,24 +93,30 @@ int EventOutput::json() const
 void EventOutput::list() const
 {
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
-    std::vector<std::string> ev_paths;
-    EMetaBlob const *emb = i->second.log_event->get_metablob();
-    if (emb) {
-      emb->get_paths(ev_paths);
-    }
+    if (auto& le = i->second.log_event; le) {
+      std::vector<std::string> ev_paths;
+      EMetaBlob const *emb = le->get_metablob();
+      if (emb) {
+	emb->get_paths(ev_paths);
+      }
 
-    std::string detail;
-    if (i->second.log_event->get_type() == EVENT_UPDATE) {
-      EUpdate *eu = reinterpret_cast<EUpdate*>(i->second.log_event);
-      detail = eu->type;
-    }
+      std::string detail;
+      if (le->get_type() == EVENT_UPDATE) {
+	auto& eu = reinterpret_cast<EUpdate&>(*le);
+	detail = eu.type;
+      }
 
-    std::cout << "0x"
-      << std::hex << i->first << std::dec << " "
-      << i->second.log_event->get_type_str() << ": "
-      << " (" << detail << ")" << std::endl;
-    for (std::vector<std::string>::iterator i = ev_paths.begin(); i != ev_paths.end(); ++i) {
-        std::cout << "  " << *i << std::endl;
+      std::cout << le->get_stamp() << " 0x"
+	<< std::hex << i->first << std::dec << " "
+	<< le->get_type_str() << ": "
+	<< " (" << detail << ")" << std::endl;
+      for (std::vector<std::string>::iterator i = ev_paths.begin(); i != ev_paths.end(); ++i) {
+	std::cout << "  " << *i << std::endl;
+      }
+    } else if (auto& pi = i->second.pi; pi) {
+      std::cout << pi->stamp << " 0x"
+	<< std::hex << i->first << std::dec << " "
+	<< pi->get_type_str() << std::endl;
     }
   }
 }
@@ -112,7 +125,11 @@ void EventOutput::summary() const
 {
   std::map<std::string, int> type_count;
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
-    std::string const type = i->second.log_event->get_type_str();
+    std::string type;
+    if (auto& le = i->second.log_event; le)
+      type = le->get_type_str();
+    else if (auto& pi = i->second.pi; pi)
+      type = pi->get_type_str();
     if (type_count.count(type) == 0) {
       type_count[type] = 0;
     }

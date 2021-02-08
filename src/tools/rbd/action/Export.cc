@@ -101,16 +101,16 @@ private:
     bufferlist bl;
     __u8 tag = exists ? RBD_DIFF_WRITE : RBD_DIFF_ZERO;
     uint64_t len = 0;
-    ::encode(tag, bl);
+    encode(tag, bl);
     if (export_format == 2) {
       if (tag == RBD_DIFF_WRITE)
 	len = 8 + 8 + length;
       else
 	len = 8 + 8;
-      ::encode(len, bl);
+      encode(len, bl);
     }
-    ::encode(offset, bl);
-    ::encode(length, bl);
+    encode(offset, bl);
+    encode(length, bl);
     int r = bl.write_fd(edc->fd);
 
     edc->pc.update_progress(offset, edc->totalsize);
@@ -142,34 +142,47 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
     uint64_t len = 0;
     if (fromsnapname) {
       tag = RBD_DIFF_FROM_SNAP;
-      ::encode(tag, bl);
+      encode(tag, bl);
       std::string from(fromsnapname);
       if (export_format == 2) {
 	len = from.length() + 4;
-	::encode(len, bl);
+	encode(len, bl);
       }
-      ::encode(from, bl);
+      encode(from, bl);
     }
 
     if (endsnapname) {
       tag = RBD_DIFF_TO_SNAP;
-      ::encode(tag, bl);
+      encode(tag, bl);
       std::string to(endsnapname);
       if (export_format == 2) {
-	len = to.length() + 4;
-	::encode(len, bl);
+        len = to.length() + 4;
+        encode(len, bl);
       }
-      ::encode(to, bl);
+      encode(to, bl);
+    }
+
+    if (endsnapname && export_format == 2) {
+      tag = RBD_SNAP_PROTECTION_STATUS;
+      encode(tag, bl);
+      bool is_protected = false;
+      r = image.snap_is_protected(endsnapname, &is_protected);
+      if (r < 0) {
+        return r;
+      }
+      len = 8;
+      encode(len, bl);
+      encode(is_protected, bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
-    ::encode(tag, bl);
+    encode(tag, bl);
     uint64_t endsize = info.size;
     if (export_format == 2) {
       len = 8;
-      ::encode(len, bl);
+      encode(len, bl);
     }
-    ::encode(endsize, bl);
+    encode(endsize, bl);
 
     r = bl.write_fd(fd);
     if (r < 0) {
@@ -177,8 +190,8 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
     }
   }
   ExportDiffContext edc(&image, fd, info.size,
-                        g_conf->rbd_concurrent_management_ops, no_progress,
-			export_format);
+                        g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
+                        no_progress, export_format);
   r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
@@ -193,7 +206,7 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   {
     __u8 tag = RBD_DIFF_END;
     bufferlist bl;
-    ::encode(tag, bl);
+    encode(tag, bl);
     r = bl.write_fd(fd);
   }
 
@@ -216,7 +229,7 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (strcmp(path, "-") == 0)
     fd = STDOUT_FILENO;
   else
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0644);
   if (fd < 0)
     return -errno;
 
@@ -248,21 +261,23 @@ void get_arguments_diff(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute_diff(const po::variables_map &vm) {
+int execute_diff(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
   std::string path;
-  r = utils::get_path(vm, utils::get_positional_argument(vm, 1), &path);
+  r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
@@ -275,8 +290,8 @@ int execute_diff(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -301,26 +316,25 @@ Shell::Action action_diff(
 class C_Export : public Context
 {
 public:
-  C_Export(SimpleThrottle &simple_throttle, librbd::Image &image,
+  C_Export(OrderedThrottle &ordered_throttle, librbd::Image &image,
 	   uint64_t fd_offset, uint64_t offset, uint64_t length, int fd)
-    : m_aio_completion(
-        new librbd::RBD::AioCompletion(this, &utils::aio_context_callback)),
-      m_throttle(simple_throttle), m_image(image), m_dest_offset(fd_offset),
+    : m_throttle(ordered_throttle), m_image(image), m_dest_offset(fd_offset),
       m_offset(offset), m_length(length), m_fd(fd)
   {
   }
 
   void send()
   {
-    m_throttle.start_op();
-
+    auto ctx = m_throttle.start_op(this);
+    auto aio_completion = new librbd::RBD::AioCompletion(
+      ctx, &utils::aio_context_callback);
     int op_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
     int r = m_image.aio_read2(m_offset, m_length, m_bufferlist,
-                              m_aio_completion, op_flags);
+                              aio_completion, op_flags);
     if (r < 0) {
       cerr << "rbd: error requesting read from source image" << std::endl;
-      m_aio_completion->release();
+      aio_completion->release();
       m_throttle.end_op(r);
     }
   }
@@ -338,7 +352,7 @@ public:
       return;
     }
 
-    assert(m_bufferlist.length() == static_cast<size_t>(r));
+    ceph_assert(m_bufferlist.length() == static_cast<size_t>(r));
     if (m_fd != STDOUT_FILENO) {
       if (m_bufferlist.is_zero()) {
         return;
@@ -361,8 +375,7 @@ public:
   }
 
 private:
-  librbd::RBD::AioCompletion *m_aio_completion;
-  SimpleThrottle &m_throttle;
+  OrderedThrottle &m_throttle;
   librbd::Image &m_image;
   bufferlist m_bufferlist;
   uint64_t m_dest_offset;
@@ -370,6 +383,8 @@ private:
   uint64_t m_length;
   int m_fd;
 };
+
+const uint32_t MAX_KEYS = 64;
 
 static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd,
 		        uint64_t period, int max_concurrent_ops, utils::ProgressContext &pc)
@@ -384,39 +399,78 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   // encode order
   tag = RBD_EXPORT_IMAGE_ORDER;
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(uint64_t(info.order), bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(uint64_t(info.order), bl);
 
   // encode features
   tag = RBD_EXPORT_IMAGE_FEATURES;
   uint64_t features;
   image.features(&features);
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(features, bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(features, bl);
 
   // encode stripe_unit and stripe_count
   tag = RBD_EXPORT_IMAGE_STRIPE_UNIT;
   uint64_t stripe_unit;
   stripe_unit = image.get_stripe_unit();
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(stripe_unit, bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(stripe_unit, bl);
 
   tag = RBD_EXPORT_IMAGE_STRIPE_COUNT;
   uint64_t stripe_count;
   stripe_count = image.get_stripe_count();
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(stripe_count, bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(stripe_count, bl);
+
+  //retrieve metadata of image
+  std::map<std::string, string> imagemetas;
+  std::string last_key;
+  bool more_results = true;
+  while (more_results) {
+    std::map<std::string, bufferlist> pairs;
+    r = image.metadata_list(last_key, MAX_KEYS, &pairs);
+    if (r < 0) {
+      std::cerr << "failed to retrieve metadata of image : " << cpp_strerror(r)
+                << std::endl;
+      return r;
+    }
+
+    if (!pairs.empty()) {
+      last_key = pairs.rbegin()->first;
+
+      for (auto kv : pairs) {
+        std::string key = kv.first;
+        std::string val(kv.second.c_str(), kv.second.length());
+        imagemetas[key] = val;
+      }
+    }
+    more_results = (pairs.size() == MAX_KEYS);
+  }
+
+  //encode imageMeta key and value
+  for (std::map<std::string, string>::iterator it = imagemetas.begin();
+       it != imagemetas.end(); ++it) {
+    string key = it->first;
+    string value = it->second;
+
+    tag = RBD_EXPORT_IMAGE_META;
+    length = key.length() + value.length() + 4 * 2;
+    encode(tag, bl);
+    encode(length, bl);
+    encode(key, bl);
+    encode(value, bl);
+  }
 
   // encode end tag
   tag = RBD_EXPORT_IMAGE_END;
-  ::encode(tag, bl);
+  encode(tag, bl);
 
   // write bl to fd.
   r = bl.write_fd(fd);
@@ -435,7 +489,7 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   }
 
   uint64_t diff_num = snaps.size() + 1;
-  ::encode(diff_num, bl);
+  encode(diff_num, bl);
 
   r = bl.write_fd(fd);
   if (r < 0) {
@@ -461,19 +515,21 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   return r;
 }
 
-static int do_export_v1(librbd::Image& image, librbd::image_info_t &info, int fd,
-		        uint64_t period, int max_concurrent_ops, utils::ProgressContext &pc)
+static int do_export_v1(librbd::Image& image, librbd::image_info_t &info,
+                        int fd, uint64_t period, int max_concurrent_ops,
+                        utils::ProgressContext &pc)
 {
   int r = 0;
   size_t file_size = 0;
-  SimpleThrottle throttle(max_concurrent_ops, false);
+  OrderedThrottle throttle(max_concurrent_ops, false);
   for (uint64_t offset = 0; offset < info.size; offset += period) {
     if (throttle.pending_error()) {
       break;
     }
 
     uint64_t length = min(period, info.size - offset);
-    C_Export *ctx = new C_Export(throttle, image, file_size + offset, offset, length, fd);
+    C_Export *ctx = new C_Export(throttle, image, file_size + offset, offset,
+                                 length, fd);
     ctx->send();
 
     pc.update_progress(offset, info.size);
@@ -495,7 +551,8 @@ static int do_export_v1(librbd::Image& image, librbd::image_info_t &info, int fd
   return r;
 }
 
-static int do_export(librbd::Image& image, const char *path, bool no_progress, int export_format)
+static int do_export(librbd::Image& image, const char *path, bool no_progress,
+                     int export_format)
 {
   librbd::image_info_t info;
   int64_t r = image.stat(info, sizeof(info));
@@ -503,14 +560,12 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress, i
     return r;
 
   int fd;
-  int max_concurrent_ops;
+  int max_concurrent_ops = g_conf().get_val<uint64_t>("rbd_concurrent_management_ops");
   bool to_stdout = (strcmp(path, "-") == 0);
   if (to_stdout) {
     fd = STDOUT_FILENO;
-    max_concurrent_ops = 1;
   } else {
-    max_concurrent_ops = max(g_conf->rbd_concurrent_management_ops, 1);
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0644);
     if (fd < 0) {
       return -errno;
     }
@@ -546,21 +601,23 @@ void get_arguments(po::options_description *positional,
   at::add_export_format_option(options);
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
   std::string path;
-  r = utils::get_path(vm, utils::get_positional_argument(vm, 1), &path);
+  r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
@@ -568,12 +625,12 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
-  
+
   int format = 1;
   if (vm.count("export-format"))
     format = vm["export-format"].as<uint64_t>();

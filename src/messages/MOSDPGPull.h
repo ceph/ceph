@@ -18,16 +18,17 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGPull : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 
-  vector<PullOp> pulls;
+  std::vector<PullOp> pulls;
 
 public:
   pg_shard_t from;
   spg_t pgid;
-  epoch_t map_epoch, min_epoch;
-  uint64_t cost;
+  epoch_t map_epoch = 0, min_epoch = 0;
+  uint64_t cost = 0;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -39,23 +40,20 @@ public:
     return pgid;
   }
 
-  void take_pulls(vector<PullOp> *outpulls) {
-    outpulls->swap(pulls);
+  std::vector<PullOp> take_pulls() {
+    return std::move(pulls);
   }
-  void set_pulls(vector<PullOp> *inpulls) {
-    inpulls->swap(pulls);
+  void set_pulls(std::vector<PullOp>&& pull_ops) {
+    pulls = std::move(pull_ops);
   }
 
   MOSDPGPull()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
-      cost(0)
-    {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION}
+  {}
 
   void compute_cost(CephContext *cct) {
     cost = 0;
-    for (vector<PullOp>::iterator i = pulls.begin();
-	 i != pulls.end();
-	 ++i) {
+    for (auto i = pulls.begin(); i != pulls.end(); ++i) {
       cost += i->cost(cct);
     }
   }
@@ -65,38 +63,44 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(pulls, p);
-    ::decode(cost, p);
-    ::decode(pgid.shard, p);
-    ::decode(from, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(pgid.pgid, p);
+    decode(map_epoch, p);
+    decode(pulls, p);
+    decode(cost, p);
+    decode(pgid.shard, p);
+    decode(from, p);
     if (header.version >= 3) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
     } else {
       min_epoch = map_epoch;
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid.pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(pulls, payload, features);
-    ::encode(cost, payload);
-    ::encode(pgid.shard, payload);
-    ::encode(from, payload);
-    ::encode(min_epoch, payload);
+    using ceph::encode;
+    encode(pgid.pgid, payload);
+    encode(map_epoch, payload);
+    encode(pulls, payload, features);
+    encode(cost, payload);
+    encode(pgid.shard, payload);
+    encode(from, payload);
+    encode(min_epoch, payload);
   }
 
-  const char *get_type_name() const override { return "MOSDPGPull"; }
+  std::string_view get_type_name() const override { return "MOSDPGPull"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "MOSDPGPull(" << pgid
 	<< " e" << map_epoch << "/" << min_epoch
 	<< " cost " << cost
 	<< ")";
   }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -3,11 +3,25 @@ tasks:
 - ceph:
     fs: ext4
     log-whitelist:
-    - reached quota
-    - wrongly marked me down
-    - objects unfound and apparently lost
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(TOO_FEW_PGS\)
+      - reached quota
+      - but it is still running
+      - slow request
+    conf:
+      mon:
+        mon warn on pool no app: false
 - thrashosds:
     chance_pgnum_grow: 2
+    chance_pgnum_shrink: 2
     chance_pgpnum_fix: 1
     timeout: 1200
 - workunit:

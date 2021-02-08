@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 if [[ -z "${IMAGE_NAME}" ]]; then
   echo image name must be provided
@@ -18,7 +19,6 @@ wait_for_qemu() {
 
 wait_for_qemu
 rbd feature disable ${IMAGE_NAME} journaling
-rbd feature disable ${IMAGE_NAME} fast-diff
 rbd feature disable ${IMAGE_NAME} object-map
 rbd feature disable ${IMAGE_NAME} exclusive-lock
 
@@ -27,14 +27,12 @@ while is_qemu_running ; do
   rbd feature enable ${IMAGE_NAME} exclusive-lock || break
   rbd feature enable ${IMAGE_NAME} journaling || break
   rbd feature enable ${IMAGE_NAME} object-map || break
-  rbd feature enable ${IMAGE_NAME} fast-diff || break
   if is_qemu_running ; then
     sleep 60
   fi
 
   echo "*** Disabling all features"
   rbd feature disable ${IMAGE_NAME} journaling || break
-  rbd feature disable ${IMAGE_NAME} fast-diff || break
   rbd feature disable ${IMAGE_NAME} object-map || break
   rbd feature disable ${IMAGE_NAME} exclusive-lock || break
   if is_qemu_running ; then

@@ -44,8 +44,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.fs.rados(["rmxattr", dir_objname, "parent"])
 
         # readdir (fetch dirfrag) should fix testdir1's backtrace
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
+        self.mount_a.mount_wait()
         self.mount_a.run_shell(["ls", "testdir1"])
 
         # flush journal entries to dirfrag objects
@@ -81,7 +80,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.assertTrue(writer.finished)
 
         # The MDS should report its readonly health state to the mon
-        self.wait_for_health("MDS in read-only mode", timeout=30)
+        self.wait_for_health("MDS_READ_ONLY", timeout=30)
 
         # restart mds to make it writable
         self.fs.mds_fail_restart()

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Copyright (C) 2015 Red Hat <contact@redhat.com>
 #
@@ -17,28 +17,65 @@
 
 #######################################################################
 
+function distro_id() {
+    source /etc/os-release
+    echo $ID
+}
+
+function distro_version() {
+    source /etc/os-release
+    echo $VERSION
+}
+
 function install() {
     for package in "$@" ; do
         install_one $package
     done
-    return 0
 }
 
 function install_one() {
-    case $(lsb_release -si) in
-        Ubuntu|Debian|Devuan)
-            sudo apt-get install -y "$@"
+    case $(distro_id) in
+        ubuntu|debian|devuan)
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
             ;;
-        CentOS|Fedora|RedHatEnterpriseServer)
+        centos|fedora|rhel)
             sudo yum install -y "$@"
             ;;
-        *SUSE*)
+        opensuse*|suse|sles)
             sudo zypper --non-interactive install "$@"
             ;;
         *)
-            echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
+            echo "$(distro_id) is unknown, $@ will have to be installed manually."
             ;;
     esac
+}
+
+function install_pkg_on_ubuntu {
+    local project=$1
+    shift
+    local sha1=$1
+    shift
+    local codename=$1
+    shift
+    local force=$1
+    shift
+    local pkgs=$@
+    local missing_pkgs
+    if [ $force = "force" ]; then
+	missing_pkgs="$@"
+    else
+	for pkg in $pkgs; do
+	    if ! dpkg -s $pkg &> /dev/null; then
+		missing_pkgs+=" $pkg"
+	    fi
+	done
+    fi
+    if test -n "$missing_pkgs"; then
+	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
+	sudo curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
+	sudo env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+	sudo env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
+    fi
 }
 
 #######################################################################
@@ -47,20 +84,8 @@ function control_osd() {
     local action=$1
     local id=$2
 
-    local init=$(ceph-detect-init)
+    sudo systemctl $action ceph-osd@$id
 
-    case $init in
-        upstart)
-            sudo service ceph-osd $action id=$id
-            ;;
-        systemd)
-            sudo systemctl $action ceph-osd@$id
-            ;;
-        *)
-            echo ceph-detect-init returned an unknown init system: $init >&2
-            return 1
-            ;;
-    esac
     return 0
 }
 
@@ -74,8 +99,9 @@ function pool_read_write() {
 
     ceph osd pool delete $test_pool $test_pool --yes-i-really-really-mean-it || return 1
     ceph osd pool create $test_pool 4 || return 1
-    ceph osd pool set $test_pool size $size || return 1
+    ceph osd pool set $test_pool size $size --yes-i-really-mean-it || return 1
     ceph osd pool set $test_pool min_size $size || return 1
+    ceph osd pool application enable $test_pool rados
 
     echo FOO > $dir/BAR
     timeout $timeout rados --pool $test_pool put BAR $dir/BAR || return 1

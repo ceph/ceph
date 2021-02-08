@@ -12,93 +12,44 @@
  * 
  */
 
-#include <errno.h>
+#ifndef _WIN32
 #include <sys/utsname.h>
-#include <boost/lexical_cast.hpp>
+#endif
+
+#include <fstream>
+#include <boost/algorithm/string.hpp>
 
 #include "include/compat.h"
 #include "include/util.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/strtol.h"
 #include "common/version.h"
 
 #ifdef HAVE_SYS_VFS_H
 #include <sys/vfs.h>
 #endif
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/param.h>
 #include <sys/mount.h>
+#if defined(__APPLE__)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
 #endif
 
-int64_t unit_to_bytesize(string val, ostream *pss)
-{
-  if (val.empty()) {
-    if (pss)
-      *pss << "value is empty!";
-    return -EINVAL;
-  }
+#include <string>
 
-  char c = val[val.length()-1];
-  int modifier = 0;
-  if (!::isdigit(c)) {
-    if (val.length() < 2) {
-      if (pss)
-        *pss << "invalid value: " << val;
-      return -EINVAL;
-    }
-    val = val.substr(0,val.length()-1);
-    switch (c) {
-    case 'B':
-      break;
-    case 'k':
-    case 'K':
-      modifier = 10;
-      break;
-    case 'M':
-      modifier = 20;
-      break;
-    case 'G':
-      modifier = 30;
-      break;
-    case 'T':
-      modifier = 40;
-      break;
-    case 'P':
-      modifier = 50;
-      break;
-    case 'E':
-      modifier = 60;
-      break;
-    default:
-      if (pss)
-        *pss << "unrecognized modifier '" << c << "'" << std::endl;
-      return -EINVAL;
-    }
-  }
+#include <stdio.h>
 
-  if (val[0] == '+' || val[0] == '-') {
-    if (pss)
-      *pss << "expected numerical value, got: " << val;
-    return -EINVAL;
-  }
+using std::list;
+using std::map;
+using std::string;
 
-  string err;
-  int64_t r = strict_strtoll(val.c_str(), 10, &err);
-  if ((r == 0) && !err.empty()) {
-    if (pss)
-      *pss << err;
-    return -1;
-  }
-  if (r < 0) {
-    if (pss)
-      *pss << "unable to parse positive integer '" << val << "'";
-    return -1;
-  }
-  return (r * (1LL << modifier));
-}
+using ceph::bufferlist;
+using ceph::Formatter;
 
+#ifndef _WIN32
 int get_fs_stats(ceph_data_stats_t &stats, const char *path)
 {
   if (!path)
@@ -116,6 +67,24 @@ int get_fs_stats(ceph_data_stats_t &stats, const char *path)
   stats.avail_percent = (((float)stats.byte_avail/stats.byte_total)*100);
   return 0;
 }
+#else
+int get_fs_stats(ceph_data_stats_t &stats, const char *path)
+{
+  ULARGE_INTEGER avail_bytes, total_bytes, total_free_bytes;
+
+  if (!GetDiskFreeSpaceExA(path, &avail_bytes,
+                           &total_bytes, &total_free_bytes)) {
+    return -EINVAL;
+  }
+
+  stats.byte_total = total_bytes.QuadPart;
+  stats.byte_used = total_bytes.QuadPart - total_free_bytes.QuadPart;
+  // may not be equal to total_free_bytes due to quotas
+  stats.byte_avail = avail_bytes.QuadPart;
+  stats.avail_percent = ((float)stats.byte_avail / stats.byte_total) * 100;
+  return 0;
+}
+#endif
 
 static char* value_sanitize(char *value)
 {
@@ -132,7 +101,7 @@ static char* value_sanitize(char *value)
 }
 
 static bool value_set(char *buf, const char *prefix,
-			    map<string, string> *pm, const char *key)
+		      map<string, string> *pm, const char *key)
 {
   if (strncmp(buf, prefix, strlen(prefix))) {
     return false;
@@ -154,6 +123,7 @@ static void file_values_parse(const map<string, string>& kvm, FILE *fp, map<stri
 
 static bool os_release_parse(map<string, string> *m, CephContext *cct)
 {
+#if defined(__linux__)
   static const map<string, string> kvm = {
     { "distro", "ID=" },
     { "distro_description", "PRETTY_NAME=" },
@@ -170,6 +140,15 @@ static bool os_release_parse(map<string, string> *m, CephContext *cct)
   file_values_parse(kvm, fp, m, cct);
 
   fclose(fp);
+#elif defined(__FreeBSD__)
+  struct utsname u;
+  int r = uname(&u);
+  if (!r) {
+     m->insert(std::make_pair("distro", u.sysname));
+     m->insert(std::make_pair("distro_description", u.version));
+     m->insert(std::make_pair("distro_version", u.release));
+  }
+#endif
 
   return true;
 }
@@ -180,17 +159,80 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
     lderr(cct) << "distro_detect - /etc/os-release is required" << dendl;
   }
 
-  for (const char* rk: {"distro", "distro_version"}) {
+  for (const char* rk: {"distro", "distro_description"}) {
     if (m->find(rk) == m->end())
       lderr(cct) << "distro_detect - can't detect " << rk << dendl;
   }
 }
 
+int get_cgroup_memory_limit(uint64_t *limit)
+{
+#ifndef _WIN32
+  // /sys/fs/cgroup/memory/memory.limit_in_bytes
+
+  // the magic value 9223372036854771712 or 0x7ffffffffffff000
+  // appears to mean no limit.
+  FILE *f = fopen(PROCPREFIX "/sys/fs/cgroup/memory/memory.limit_in_bytes", "r");
+  if (!f) {
+    return -errno;
+  }
+  char buf[100];
+  int ret = 0;
+  long long value;
+  char *line = fgets(buf, sizeof(buf), f);
+  if (!line) {
+    ret = -EINVAL;
+    goto out;
+  }
+  if (sscanf(line, "%lld", &value) != 1) {
+    ret = -EINVAL;
+  }
+  if (value == 0x7ffffffffffff000) {
+    *limit = 0;  // no limit
+  } else {
+    *limit = value;
+  }
+out:
+  fclose(f);
+  return ret;
+#else
+  return 0;
+#endif
+}
+
+#ifdef _WIN32
+int get_windows_version(POSVERSIONINFOEXW ver) {
+  using  get_version_func_t = DWORD (WINAPI *)(OSVERSIONINFOEXW*);
+
+  // We'll load the library directly to avoid depending on the NTDDK.
+  HMODULE ntdll_lib = LoadLibraryW(L"Ntdll.dll");
+  if (!ntdll_lib) {
+    return -EINVAL;
+  }
+
+  // The standard "GetVersion" returned values depend on the application
+  // manifest. We'll get the "real" version by using the Rtl* version.
+  auto get_version_func = (
+    get_version_func_t)GetProcAddress(ntdll_lib, "RtlGetVersion");
+  int ret = 0;
+  if (!get_version_func || get_version_func(ver)) {
+    // RtlGetVersion returns non-zero values in case of errors.
+    ret = -EINVAL;
+  }
+
+  FreeLibrary(ntdll_lib);
+  return ret;
+}
+#endif
+
 void collect_sys_info(map<string, string> *m, CephContext *cct)
 {
   // version
   (*m)["ceph_version"] = pretty_version_to_str();
+  (*m)["ceph_version_short"] = ceph_version_to_str();
+  (*m)["ceph_release"] = ceph_release_to_str();
 
+  #ifndef _WIN32
   // kernel info
   struct utsname u;
   int r = uname(&u);
@@ -201,67 +243,152 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     (*m)["hostname"] = u.nodename;
     (*m)["arch"] = u.machine;
   }
+  #else
+  OSVERSIONINFOEXW ver = {0};
+  ver.dwOSVersionInfoSize = sizeof(ver);
+  get_windows_version(&ver);
 
+  char version_str[64];
+  snprintf(version_str, 64, "%lu.%lu (%lu)",
+           ver.dwMajorVersion, ver.dwMinorVersion, ver.dwBuildNumber);
+
+  char hostname[64];
+  DWORD hostname_sz = sizeof(hostname);
+  GetComputerNameA(hostname, &hostname_sz);
+
+  SYSTEM_INFO sys_info;
+  const char* arch_str;
+  GetNativeSystemInfo(&sys_info);
+
+  switch (sys_info.wProcessorArchitecture) {
+    case PROCESSOR_ARCHITECTURE_AMD64:
+      arch_str = "x86_64";
+      break;
+    case PROCESSOR_ARCHITECTURE_INTEL:
+      arch_str = "x86";
+      break;
+    case PROCESSOR_ARCHITECTURE_ARM:
+      arch_str = "arm";
+      break;
+    default:
+      arch_str = "unknown";
+      break;
+  }
+
+  (*m)["os"] = "Windows";
+  (*m)["kernel_version"] = version_str;
+  (*m)["kernel_description"] = version_str;
+  (*m)["hostname"] = hostname;
+  (*m)["arch"] = arch_str;
+  #endif
+
+  // but wait, am i in a container?
+  bool in_container = false;
+
+  if (const char *pod_name = getenv("POD_NAME")) {
+    (*m)["pod_name"] = pod_name;
+    in_container = true;
+  }
+  if (const char *container_name = getenv("CONTAINER_NAME")) {
+    (*m)["container_name"] = container_name;
+    in_container = true;
+  }
+  if (const char *container_image = getenv("CONTAINER_IMAGE")) {
+    (*m)["container_image"] = container_image;
+    in_container = true;
+  }
+  if (in_container) {
+    if (const char *node_name = getenv("NODE_NAME")) {
+      (*m)["container_hostname"] = (*m)["hostname"];
+      (*m)["hostname"] = node_name;
+    }
+    if (const char *ns = getenv("POD_NAMESPACE")) {
+      (*m)["pod_namespace"] = ns;
+    }
+  }
+
+#ifdef __APPLE__
   // memory
-  FILE *f = fopen(PROCPREFIX "/proc/meminfo", "r");
-  if (f) {
+  {
+    uint64_t size;
+    size_t len = sizeof(size);
+    r = sysctlbyname("hw.memsize", &size, &len, NULL, 0);
+    if (r == 0) {
+      (*m)["mem_total_kb"] = std::to_string(size);
+    }
+  }
+  {
+    xsw_usage vmusage;
+    size_t len = sizeof(vmusage);
+    r = sysctlbyname("vm.swapusage", &vmusage, &len, NULL, 0);
+    if (r == 0) {
+      (*m)["mem_swap_kb"] = std::to_string(vmusage.xsu_total);
+    }
+  }
+  // processor
+  {
     char buf[100];
-    while (!feof(f)) {
-      char *line = fgets(buf, sizeof(buf), f);
-      if (!line)
-	break;
-      char key[40];
-      long long value;
-      int r = sscanf(line, "%s %lld", key, &value);
-      if (r == 2) {
-	if (strcmp(key, "MemTotal:") == 0)
-	  (*m)["mem_total_kb"] = boost::lexical_cast<string>(value);
-	else if (strcmp(key, "SwapTotal:") == 0)
-	  (*m)["mem_swap_kb"] = boost::lexical_cast<string>(value);
+    size_t len = sizeof(buf);
+    r = sysctlbyname("machdep.cpu.brand_string", buf, &len, NULL, 0);
+    if (r == 0) {
+      buf[len - 1] = '\0';
+      (*m)["cpu"] = buf;
+    }
+  }
+#elif !defined(_WIN32)
+  // memory
+  if (std::ifstream f{PROCPREFIX "/proc/meminfo"}; !f.fail()) {
+    for (std::string line; std::getline(f, line); ) {
+      std::vector<string> parts;
+      boost::split(parts, line, boost::is_any_of(":\t "), boost::token_compress_on);
+      if (parts.size() != 3) {
+	continue;
+      }
+      if (parts[0] == "MemTotal") {
+	(*m)["mem_total_kb"] = parts[1];
+      } else if (parts[0] == "SwapTotal") {
+	(*m)["mem_swap_kb"] = parts[1];
       }
     }
-    fclose(f);
+  }
+  uint64_t cgroup_limit;
+  if (get_cgroup_memory_limit(&cgroup_limit) == 0 &&
+      cgroup_limit > 0) {
+    (*m)["mem_cgroup_limit"] = std::to_string(cgroup_limit);
   }
 
   // processor
-  f = fopen(PROCPREFIX "/proc/cpuinfo", "r");
-  if (f) {
-    char buf[100];
-    while (!feof(f)) {
-      char *line = fgets(buf, sizeof(buf), f);
-      if (!line)
-	break;
-      if (strncmp(line, "model name", 10) == 0) {
-	char *c = strchr(buf, ':');
-	c++;
-	while (*c == ' ')
-	  ++c;
-	char *nl = c;
-	while (*nl != '\n')
-	  ++nl;
-	*nl = '\0';
-	(*m)["cpu"] = c;
+  if (std::ifstream f{PROCPREFIX "/proc/cpuinfo"}; !f.fail()) {
+    for (std::string line; std::getline(f, line); ) {
+      std::vector<string> parts;
+      boost::split(parts, line, boost::is_any_of(":"));
+      if (parts.size() != 2) {
+	continue;
+      }
+      boost::trim(parts[0]);
+      boost::trim(parts[1]);
+      if (parts[0] == "model name") {
+	(*m)["cpu"] = parts[1];
 	break;
       }
     }
-    fclose(f);
   }
-
+#endif
   // distro info
   distro_detect(m, cct);
 }
 
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type)
 {
-  assert(f);
+  ceph_assert(f);
 
   f->open_object_section(type);
-  for (map<string, list<int> >::const_iterator host = services.begin();
+  for (auto host = services.begin();
        host != services.end(); ++host) {
     f->open_array_section(host->first.c_str());
     const list<int>& hosted = host->second;
-    for (list<int>::const_iterator s = hosted.begin();
-	 s != hosted.end(); ++s) {
+    for (auto s = hosted.cbegin();
+	 s != hosted.cend(); ++s) {
       f->dump_int(type, *s);
     }
     f->close_section();
@@ -269,10 +396,25 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   f->close_section();
 }
 
+void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type)
+{
+  ceph_assert(f);
+
+  f->open_object_section(type);
+  for (const auto& host : services) {
+    f->open_array_section(host.first.c_str());
+    const auto& hosted = host.second;
+    for (const auto& s : hosted) {
+      f->dump_string(type, s);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
 
 // If non-printable characters found then convert bufferlist to
 // base64 encoded string indicating whether it did.
-string cleanbin(bufferlist &bl, bool &base64)
+string cleanbin(bufferlist &bl, bool &base64, bool show)
 {
   bufferlist::iterator it;
   for (it = bl.begin(); it != bl.end(); ++it) {
@@ -288,6 +430,8 @@ string cleanbin(bufferlist &bl, bool &base64)
   bufferlist b64;
   bl.encode_base64(b64);
   string encoded(b64.c_str(), b64.length());
+  if (show)
+    encoded = "Base64:" + encoded;
   base64 = true;
   return encoded;
 }
@@ -299,8 +443,18 @@ string cleanbin(string &str)
   bool base64;
   bufferlist bl;
   bl.append(str);
-  string result = cleanbin(bl, base64);
-  if (base64)
-    result = "Base64:" + result;
+  string result = cleanbin(bl, base64, true);
   return result;
+}
+
+std::string bytes2str(uint64_t count) {
+  static char s[][2] = {"\0", "k", "M", "G", "T", "P", "E", "\0"};
+  int i = 0;
+  while (count >= 1024 && *s[i+1]) {
+    count >>= 10;
+    i++;
+  }
+  char str[128];
+  snprintf(str, sizeof str, "%" PRIu64 "%sB", count, s[i]);
+  return std::string(str);
 }

@@ -1,3 +1,5 @@
+.. _ecpool:
+
 =============
  Erasure code
 =============
@@ -16,28 +18,25 @@ The simplest erasure coded pool is equivalent to `RAID5
 <https://en.wikipedia.org/wiki/Standard_RAID_levels#RAID_5>`_ and
 requires at least three hosts::
 
-    $ ceph osd pool create ecpool 12 12 erasure
+    $ ceph osd pool create ecpool erasure
     pool 'ecpool' created
     $ echo ABCDEFGHI | rados --pool ecpool put NYAN -
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI
 
-.. note:: the 12 in *pool create* stands for 
-          `the number of placement groups <../pools>`_.
-
 Erasure code profiles
 ---------------------
 
-The default erasure code profile sustains the loss of a single OSD. It
-is equivalent to a replicated pool of size two but requires 1.5TB
-instead of 2TB to store 1TB of data. The default profile can be
+The default erasure code profile sustains the loss of a two OSDs. It
+is equivalent to a replicated pool of size three but requires 2TB
+instead of 3TB to store 1TB of data. The default profile can be
 displayed with::
 
     $ ceph osd erasure-code-profile get default
     k=2
-    m=1
+    m=2
     plugin=jerasure
-    ruleset-failure-domain=host
+    crush-failure-domain=host
     technique=reed_sol_van
 
 Choosing the right profile is important because it cannot be modified
@@ -45,16 +44,16 @@ after the pool is created: a new pool with a different profile needs
 to be created and all objects from the previous pool moved to the new.
 
 The most important parameters of the profile are *K*, *M* and
-*ruleset-failure-domain* because they define the storage overhead and
+*crush-failure-domain* because they define the storage overhead and
 the data durability. For instance, if the desired architecture must
-sustain the loss of two racks with a storage overhead of 40% overhead,
+sustain the loss of two racks with a storage overhead of 67% overhead,
 the following profile can be defined::
 
     $ ceph osd erasure-code-profile set myprofile \
        k=3 \
        m=2 \
-       ruleset-failure-domain=rack
-    $ ceph osd pool create ecpool 12 12 erasure myprofile
+       crush-failure-domain=rack
+    $ ceph osd pool create ecpool erasure myprofile
     $ echo ABCDEFGHI | rados --pool ecpool put NYAN -
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI
@@ -62,7 +61,7 @@ the following profile can be defined::
 The *NYAN* object will be divided in three (*K=3*) and two additional
 *chunks* will be created (*M=2*). The value of *M* defines how many
 OSD can be lost simultaneously without losing any data. The
-*ruleset-failure-domain=rack* will create a CRUSH ruleset that ensures
+*crush-failure-domain=rack* will create a CRUSH rule that ensures
 no two *chunks* are stored in the same rack.
 
 .. ditaa::
@@ -121,7 +120,7 @@ By default, erasure coded pools only work with uses like RGW that
 perform full object writes and appends.
 
 Since Luminous, partial writes for an erasure coded pool may be
-enabled with a per-pool setting. This lets RBD and Cephfs store their
+enabled with a per-pool setting. This lets RBD and CephFS store their
 data in an erasure coded pool::
 
     ceph osd pool set ec_pool allow_ec_overwrites true
@@ -132,14 +131,14 @@ during deep-scrub. In addition to being unsafe, using filestore with
 ec overwrites yields low performance compared to bluestore.
 
 Erasure coded pools do not support omap, so to use them with RBD and
-Cephfs you must instruct them to store their data in an ec pool, and
+CephFS you must instruct them to store their data in an ec pool, and
 their metadata in a replicated pool. For RBD, this means using the
 erasure coded pool as the ``--data-pool`` during image creation::
 
     rbd create --size 1G --data-pool ec_pool replicated_pool/image_name
 
-For Cephfs, using an erasure coded pool means setting that pool in
-a `file layout<../../cephfs/file-layouts>`_.
+For CephFS, an erasure coded pool can be set as the default data pool during
+file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
 
 
 Erasure coded pool and cache tiering
@@ -162,6 +161,21 @@ the *hot-storage* and benefit from its flexibility and speed.
 
 More information can be found in the `cache tiering
 <../cache-tiering>`_ documentation.
+
+Erasure coded pool recovery
+---------------------------
+If an erasure coded pool loses some shards, it must recover them from the others.
+This generally involves reading from the remaining shards, reconstructing the data, and
+writing it to the new peer.
+In Octopus, erasure coded pools can recover as long as there are at least *K* shards
+available. (With fewer than *K* shards, you have actually lost data!)
+
+Prior to Octopus, erasure coded pools required at least *min_size* shards to be
+available, even if *min_size* is greater than *K*. (We generally recommend min_size
+be *K+2* or more to prevent loss of writes and data.)
+This conservative decision was made out of an abundance of caution when designing the new pool
+mode but also meant pools with lost OSDs but no data loss were unable to recover and go active
+without manual intervention to change the *min_size*.
 
 Glossary
 --------
@@ -193,3 +207,4 @@ Table of content
 	erasure-code-isa
 	erasure-code-lrc
 	erasure-code-shec
+	erasure-code-clay

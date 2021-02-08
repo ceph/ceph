@@ -13,55 +13,85 @@
 
 #ifndef TRACKEDREQUEST_H_
 #define TRACKEDREQUEST_H_
-#include <sstream>
-#include <stdint.h>
-#include <boost/intrusive/list.hpp>
-#include <atomic>
 
-#include "include/utime.h"
-#include "common/Mutex.h"
+#include <atomic>
+#include "common/ceph_mutex.h"
 #include "common/histogram.h"
-#include "common/zipkin_trace.h"
+#include "common/Thread.h"
+#include "common/Clock.h"
+#include "include/spinlock.h"
 #include "msg/Message.h"
-#include "include/memory.h"
-#include "common/RWLock.h"
 
 #define OPTRACKER_PREALLOC_EVENTS 20
 
 class TrackedOp;
+class OpHistory;
+
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 
+class OpHistoryServiceThread : public Thread
+{
+private:
+  std::list<std::pair<utime_t, TrackedOpRef>> _external_queue;
+  OpHistory* _ophistory;
+  mutable ceph::spinlock queue_spinlock;
+  bool _break_thread;
+public:
+  explicit OpHistoryServiceThread(OpHistory* parent)
+    : _ophistory(parent),
+      _break_thread(false) { }
+
+  void break_thread();
+  void insert_op(const utime_t& now, TrackedOpRef op) {
+    queue_spinlock.lock();
+    _external_queue.emplace_back(now, op);
+    queue_spinlock.unlock();
+  }
+
+  void *entry() override;
+};
+
+
 class OpHistory {
-  set<pair<utime_t, TrackedOpRef> > arrived;
-  set<pair<double, TrackedOpRef> > duration;
-  set<pair<utime_t, TrackedOpRef> > slow_op;
-  Mutex ops_history_lock;
+  std::set<std::pair<utime_t, TrackedOpRef> > arrived;
+  std::set<std::pair<double, TrackedOpRef> > duration;
+  std::set<std::pair<utime_t, TrackedOpRef> > slow_op;
+  ceph::mutex ops_history_lock = ceph::make_mutex("OpHistory::ops_history_lock");
   void cleanup(utime_t now);
-  bool shutdown;
-  uint32_t history_size;
-  uint32_t history_duration;
-  uint32_t history_slow_op_size;
-  uint32_t history_slow_op_threshold;
+  std::atomic_size_t history_size{0};
+  std::atomic_uint32_t history_duration{0};
+  std::atomic_size_t history_slow_op_size{0};
+  std::atomic_uint32_t history_slow_op_threshold{0};
+  std::atomic_bool shutdown{false};
+  OpHistoryServiceThread opsvc;
+  friend class OpHistoryServiceThread;
 
 public:
-  OpHistory() : ops_history_lock("OpHistory::Lock"), shutdown(false),
-    history_size(0), history_duration(0),
-    history_slow_op_size(0), history_slow_op_threshold(0) {}
-  ~OpHistory() {
-    assert(arrived.empty());
-    assert(duration.empty());
-    assert(slow_op.empty());
+  OpHistory() : opsvc(this) {
+    opsvc.create("OpHistorySvc");
   }
-  void insert(utime_t now, TrackedOpRef op);
-  void dump_ops(utime_t now, Formatter *f);
-  void dump_ops_by_duration(utime_t now, Formatter *f);
-  void dump_slow_ops(utime_t now, Formatter *f);
+  ~OpHistory() {
+    ceph_assert(arrived.empty());
+    ceph_assert(duration.empty());
+    ceph_assert(slow_op.empty());
+  }
+  void insert(const utime_t& now, TrackedOpRef op)
+  {
+    if (shutdown)
+      return;
+
+    opsvc.insert_op(now, op);
+  }
+
+  void _insert_delayed(const utime_t& now, TrackedOpRef op);
+  void dump_ops(utime_t now, ceph::Formatter *f, std::set<std::string> filters = {""}, bool by_duration=false);
+  void dump_slow_ops(utime_t now, ceph::Formatter *f, std::set<std::string> filters = {""});
   void on_shutdown();
-  void set_size_and_duration(uint32_t new_size, uint32_t new_duration) {
+  void set_size_and_duration(size_t new_size, uint32_t new_duration) {
     history_size = new_size;
     history_duration = new_duration;
   }
-  void set_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
+  void set_slow_op_size_and_threshold(size_t new_size, uint32_t new_threshold) {
     history_slow_op_size = new_size;
     history_slow_op_threshold = new_threshold;
   }
@@ -70,14 +100,14 @@ public:
 struct ShardedTrackingData;
 class OpTracker {
   friend class OpHistory;
-  atomic64_t seq;
-  vector<ShardedTrackingData*> sharded_in_flight_list;
-  uint32_t num_optracker_shards;
+  std::atomic<int64_t> seq = { 0 };
+  std::vector<ShardedTrackingData*> sharded_in_flight_list;
   OpHistory history;
+  uint32_t num_optracker_shards;
   float complaint_time;
   int log_threshold;
-  bool tracking_enabled;
-  RWLock       lock;
+  std::atomic<bool> tracking_enabled;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("OpTracker::lock");
 
 public:
   CephContext *cct;
@@ -93,28 +123,58 @@ public:
   void set_history_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
     history.set_slow_op_size_and_threshold(new_size, new_threshold);
   }
+  bool is_tracking() const {
+    return tracking_enabled;
+  }
   void set_tracking(bool enable) {
-    RWLock::WLocker l(lock);
     tracking_enabled = enable;
   }
-  bool dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
-  bool dump_historic_ops(Formatter *f, bool by_duration = false);
-  bool dump_historic_slow_ops(Formatter *f);
+  bool dump_ops_in_flight(ceph::Formatter *f, bool print_only_blocked = false, std::set<std::string> filters = {""});
+  bool dump_historic_ops(ceph::Formatter *f, bool by_duration = false, std::set<std::string> filters = {""});
+  bool dump_historic_slow_ops(ceph::Formatter *f, std::set<std::string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
+  void record_history_op(TrackedOpRef&& i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
 
   /**
+   * walk through ops in flight
+   *
+   * @param oldest_sec the amount of time since the oldest op was initiated
+   * @param check a function consuming tracked ops, the function returns
+   *              false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool visit_ops_in_flight(utime_t* oldest_secs,
+			   std::function<bool(TrackedOp&)>&& visit);
+  /**
+   * walk through slow ops in flight
+   *
+   * @param[out] oldest_sec the amount of time since the oldest op was initiated
+   * @param[out] num_slow_ops total number of slow ops
+   * @param[out] num_warned_ops total number of warned ops
+   * @param on_warn a function consuming tracked ops, the function returns
+   *                false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool with_slow_ops_in_flight(utime_t* oldest_secs,
+			       int* num_slow_ops,
+			       int* num_warned_ops,
+			       std::function<void(TrackedOp&)>&& on_warn);
+  /**
    * Look for Ops which are too old, and insert warning
    * strings for each Op that is too old.
    *
-   * @param warning_strings A vector<string> reference which is filled
-   * with a warning string for each old Op.
+   * @param summary[out] a std::string summarizing slow Ops.
+   * @param warning_strings[out] A std::vector<std::string> reference which is filled
+   * with a warning std::string for each old Op.
+   * @param slow[out] total number of slow ops
    * @return True if there are any Ops to warn on, false otherwise.
    */
-  bool check_ops_in_flight(std::vector<string> &warning_strings,
-			   int *slow = NULL);
+  bool check_ops_in_flight(std::string* summary,
+			   std::vector<std::string> &warning_strings,
+			   int* slow = nullptr);
 
   void on_shutdown() {
     history.on_shutdown();
@@ -126,10 +186,16 @@ public:
   {
     typename T::Ref retval(new T(params, this));
     retval->tracking_start();
+    if (is_tracking()) {
+      retval->mark_event("throttled", params->get_throttle_stamp());
+      retval->mark_event("header_read", params->get_recv_stamp());
+      retval->mark_event("all_read", params->get_recv_complete_stamp());
+      retval->mark_event("dispatched", params->get_dispatch_stamp());
+    }
+
     return retval;
   }
 };
-
 
 class TrackedOp : public boost::intrusive::list_base_hook<> {
 private:
@@ -162,36 +228,27 @@ protected:
 
   struct Event {
     utime_t stamp;
-    string str;
-    const char *cstr = nullptr;
+    std::string str;
 
-    Event(utime_t t, const string& s) : stamp(t), str(s) {}
-    Event(utime_t t, const char *s) : stamp(t), cstr(s) {}
+    Event(utime_t t, std::string_view s) : stamp(t), str(s) {}
 
     int compare(const char *s) const {
-      if (cstr)
-	return strcmp(cstr, s);
-      else
-	return str.compare(s);
+      return str.compare(s);
     }
 
     const char *c_str() const {
-      if (cstr)
-	return cstr;
-      else
-	return str.c_str();
+      return str.c_str();
     }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->dump_stream("time") << stamp;
-      f->dump_string("event", c_str());
+      f->dump_string("event", str);
     }
   };
 
-  vector<Event> events;    ///< list of events and their times
-  mutable Mutex lock = {"TrackedOp::lock"}; ///< to protect the events list
-  const char *current = 0; ///< the current state the event is in
-  uint64_t seq = 0;        ///< a unique value set by the OpTracker
+  std::vector<Event> events;    ///< std::list of events and their times
+  mutable ceph::mutex lock = ceph::make_mutex("TrackedOp::lock"); ///< to protect the events list
+  uint64_t seq = 0;        ///< a unique value std::set by the OpTracker
 
   uint32_t warn_interval_multiplier = 1; //< limits output of a given op warning
 
@@ -200,11 +257,11 @@ protected:
     STATE_LIVE,
     STATE_HISTORY
   };
-  atomic<int> state = {STATE_UNTRACKED};
+  std::atomic<int> state = {STATE_UNTRACKED};
 
-  mutable string desc_str;   ///< protected by lock
+  mutable std::string desc_str;   ///< protected by lock
   mutable const char *desc = nullptr;  ///< readable without lock
-  mutable atomic<bool> want_new_desc = {false};
+  mutable std::atomic<bool> want_new_desc = {false};
 
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
@@ -214,13 +271,15 @@ protected:
   }
 
   /// output any type-specific data you want to get when dump() is called
-  virtual void _dump(Formatter *f) const {}
+  virtual void _dump(ceph::Formatter *f) const {}
   /// if you want something else to happen when events are marked, implement
   virtual void _event_marked() {}
   /// return a unique descriptor of the Op; eg the message it's attached to
-  virtual void _dump_op_descriptor_unlocked(ostream& stream) const = 0;
+  virtual void _dump_op_descriptor_unlocked(std::ostream& stream) const = 0;
   /// called when the last non-OpTracker reference is dropped
-  virtual void _unregistered() {};
+  virtual void _unregistered() {}
+
+  virtual bool filter_out(const std::set<std::string>& filters) { return true; }
 
 public:
   ZTracer::Trace osd_trace;
@@ -234,7 +293,9 @@ public:
     ++nref;
   }
   void put() {
-    if (--nref == 0) {
+  again:
+    auto nref_snap = nref.load();
+    if (nref_snap == 1) {
       switch (state.load()) {
       case STATE_UNTRACKED:
 	_unregistered();
@@ -244,6 +305,14 @@ public:
       case STATE_LIVE:
 	mark_event("done");
 	tracker->unregister_inflight_op(this);
+	_unregistered();
+	if (!tracker->is_tracking()) {
+	  delete this;
+	} else {
+	  state = TrackedOp::STATE_HISTORY;
+	  tracker->record_history_op(
+	    TrackedOpRef(this, /* add_ref = */ false));
+	}
 	break;
 
       case STATE_HISTORY:
@@ -253,19 +322,21 @@ public:
       default:
 	ceph_abort();
       }
+    } else if (!nref.compare_exchange_weak(nref_snap, nref_snap - 1)) {
+      goto again;
     }
   }
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       _gen_desc();
     }
     return desc;
   }
 private:
   void _gen_desc() const {
-    ostringstream ss;
+    std::ostringstream ss;
     _dump_op_descriptor_unlocked(ss);
     desc_str = ss.str();
     desc = desc_str.c_str();
@@ -281,28 +352,29 @@ public:
   }
 
   double get_duration() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
     else
       return ceph_clock_now() - get_initiated();
   }
 
-  void mark_event_string(const string &event,
-			 utime_t stamp=ceph_clock_now());
-  void mark_event(const char *event,
-		  utime_t stamp=ceph_clock_now());
+  void mark_event(std::string_view event, utime_t stamp=ceph_clock_now());
 
-  virtual const char *state_string() const {
-    Mutex::Locker l(lock);
-    return events.rbegin()->c_str();
+  void mark_nowarn() {
+    warn_interval_multiplier = 0;
   }
 
-  void dump(utime_t now, Formatter *f) const;
+  virtual std::string_view state_string() const {
+    std::lock_guard l(lock);
+    return events.empty() ? std::string_view() : std::string_view(events.rbegin()->str);
+  }
+
+  void dump(utime_t now, ceph::Formatter *f) const;
 
   void tracking_start() {
     if (tracker->register_inflight_op(this)) {
-      events.push_back(Event(initiated_at, "initiated"));
+      events.emplace_back(initiated_at, "initiated");
       state = STATE_LIVE;
     }
   }

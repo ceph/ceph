@@ -41,7 +41,7 @@ class Transaction {
       count++;
     }
   };
-  static Tick write_ticks, setattr_ticks, omap_setkeys_ticks, omap_rmkeys_ticks;
+  static Tick write_ticks, setattr_ticks, omap_setkeys_ticks, omap_rmkey_ticks;
   static Tick encode_ticks, decode_ticks, iterate_ticks;
 
   void write(coll_t cid, const ghobject_t& oid, uint64_t off, uint64_t len,
@@ -63,11 +63,11 @@ class Transaction {
     t.omap_setkeys(cid, oid, attrset);
     omap_setkeys_ticks.add(Cycles::rdtsc() - start_time);
   }
-  void omap_rmkeys(coll_t cid, const ghobject_t &oid,
-                   const set<string> &keys) {
+  void omap_rmkey(coll_t cid, const ghobject_t &oid,
+                   const string &key) {
     uint64_t start_time = Cycles::rdtsc();
-    t.omap_rmkeys(cid, oid, keys);
-    omap_rmkeys_ticks.add(Cycles::rdtsc() - start_time);
+    t.omap_rmkey(cid, oid, key);
+    omap_rmkey_ticks.add(Cycles::rdtsc() - start_time);
   }
 
   void apply_encode_decode() {
@@ -77,7 +77,7 @@ class Transaction {
     t.encode(bl);
     encode_ticks.add(Cycles::rdtsc() - start_time);
 
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     start_time = Cycles::rdtsc();
     d.decode(bliter);
     decode_ticks.add(Cycles::rdtsc() - start_time);
@@ -130,7 +130,7 @@ class Transaction {
     cerr << " write op: " << Cycles::to_microseconds(write_ticks.ticks) << "us count: " << write_ticks.count << std::endl;
     cerr << " setattr op: " << Cycles::to_microseconds(setattr_ticks.ticks) << "us count: " << setattr_ticks.count << std::endl;
     cerr << " omap_setkeys op: " << Cycles::to_microseconds(Transaction::omap_setkeys_ticks.ticks) << "us count: " << Transaction::omap_setkeys_ticks.count << std::endl;
-    cerr << " omap_rmkeys op: " << Cycles::to_microseconds(Transaction::omap_rmkeys_ticks.ticks) << "us count: " << Transaction::omap_rmkeys_ticks.count << std::endl;
+    cerr << " omap_rmkey op: " << Cycles::to_microseconds(Transaction::omap_rmkey_ticks.ticks) << "us count: " << Transaction::omap_rmkey_ticks.count << std::endl;
     cerr << " encode op: " << Cycles::to_microseconds(Transaction::encode_ticks.ticks) << "us count: " << Transaction::encode_ticks.count << std::endl;
     cerr << " decode op: " << Cycles::to_microseconds(Transaction::decode_ticks.ticks) << "us count: " << Transaction::decode_ticks.count << std::endl;
     cerr << " iterate op: " << Cycles::to_microseconds(Transaction::iterate_ticks.ticks) << "us count: " << Transaction::iterate_ticks.count << std::endl;
@@ -207,15 +207,13 @@ class PerfCase {
         Transaction t;
         map<string, bufferlist> pglog_attrset;
         map<string, bufferlist> info_attrset;
-        set<string> keys;
-        keys.insert(pglog_attr);
         pglog_attrset[pglog_attr] = data[pglog_attr];
         info_attrset[info_epoch_attr] = data[info_epoch_attr];
         info_attrset[info_info_attr] = data[info_info_attr];
         start_time = Cycles::rdtsc();
         t.omap_setkeys(meta_cid, pglog_oid, pglog_attrset);
         t.omap_setkeys(meta_cid, info_oid, info_attrset);
-        t.omap_rmkeys(meta_cid, pglog_oid, keys);
+        t.omap_rmkey(meta_cid, pglog_oid, pglog_attr);
         t.apply_encode_decode();
         t.apply_iterate();
         ticks += Cycles::rdtsc() - start_time;
@@ -233,7 +231,7 @@ const coll_t PerfCase::meta_cid;
 const coll_t PerfCase::cid;
 const ghobject_t PerfCase::pglog_oid(hobject_t(sobject_t(object_t("cid_pglog"), 0)));
 const ghobject_t PerfCase::info_oid(hobject_t(sobject_t(object_t("infos"), 0)));
-Transaction::Tick Transaction::write_ticks, Transaction::setattr_ticks, Transaction::omap_setkeys_ticks, Transaction::omap_rmkeys_ticks;
+Transaction::Tick Transaction::write_ticks, Transaction::setattr_ticks, Transaction::omap_setkeys_ticks, Transaction::omap_rmkey_ticks;
 Transaction::Tick Transaction::encode_ticks, Transaction::decode_ticks, Transaction::iterate_ticks;
 
 void usage(const string &name) {
@@ -247,9 +245,10 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
   Cycles::init();
 
   cerr << "args: " << args << std::endl;

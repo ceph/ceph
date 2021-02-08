@@ -15,43 +15,96 @@
 #ifndef CEPH_MMDSRESOLVE_H
 #define CEPH_MMDSRESOLVE_H
 
-#include "msg/Message.h"
-
 #include "include/types.h"
+#include "mds/Capability.h"
+#include "messages/MMDSOp.h"
 
-class MMDSResolve : public Message {
+class MMDSResolve final : public MMDSOp {
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
+
 public:
-  map<dirfrag_t, vector<dirfrag_t> > subtrees;
-  map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
+  std::map<dirfrag_t, std::vector<dirfrag_t>> subtrees;
+  std::map<dirfrag_t, std::vector<dirfrag_t>> ambiguous_imports;
 
-  struct slave_request {
-    bufferlist inode_caps;
-    bool committing;
-    slave_request() : committing(false) {}
-    void encode(bufferlist &bl) const {
-      ::encode(inode_caps, bl);
-      ::encode(committing, bl);
+  class peer_inode_cap {
+  public:
+    inodeno_t ino;
+    std::map<client_t,Capability::Export> cap_exports;
+    peer_inode_cap() {}
+    peer_inode_cap(inodeno_t a, map<client_t, Capability::Export> b) : ino(a), cap_exports(b) {}
+    void encode(ceph::buffer::list &bl) const 
+    {
+      ENCODE_START(1, 1, bl);
+      encode(ino, bl);
+      encode(cap_exports, bl);
+      ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(inode_caps, bl);
-      ::decode(committing, bl);
+    void decode(ceph::buffer::list::const_iterator &blp)
+    {
+      DECODE_START(1, blp);
+      decode(ino, blp);
+      decode(cap_exports, blp);
+      DECODE_FINISH(blp);
     }
   };
-  WRITE_CLASS_ENCODER(slave_request)
+  WRITE_CLASS_ENCODER(peer_inode_cap)
 
-  map<metareqid_t, slave_request> slave_requests;
+  struct peer_request {
+    ceph::buffer::list inode_caps;
+    bool committing;
+    peer_request() : committing(false) {}
+    void encode(ceph::buffer::list &bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(inode_caps, bl);
+      encode(committing, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(ceph::buffer::list::const_iterator &blp) {
+      DECODE_START(1, blp);
+      decode(inode_caps, blp);
+      decode(committing, blp);
+      DECODE_FINISH(blp);
+    }
+  };
 
-  MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
-private:
-  ~MMDSResolve() override {}
+  std::map<metareqid_t, peer_request> peer_requests;
+
+  // table client information
+  struct table_client {
+    __u8 type;
+    std::set<version_t> pending_commits;
+
+    table_client() : type(0) {}
+    table_client(int _type, const std::set<version_t>& commits)
+      : type(_type), pending_commits(commits) {}
+
+    void encode(ceph::buffer::list& bl) const {
+      using ceph::encode;
+      encode(type, bl);
+      encode(pending_commits, bl);
+    }
+    void decode(ceph::buffer::list::const_iterator& bl) {
+      using ceph::decode;
+      decode(type, bl);
+      decode(pending_commits, bl);
+    }
+  };
+
+  std::list<table_client> table_clients;
+
+protected:
+  MMDSResolve() : MMDSOp{MSG_MDS_RESOLVE, HEAD_VERSION, COMPAT_VERSION}
+ {}
+  ~MMDSResolve() final {}
 
 public:
-  const char *get_type_name() const override { return "mds_resolve"; }
+  std::string_view get_type_name() const override { return "mds_resolve"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mds_resolve(" << subtrees.size()
 	<< "+" << ambiguous_imports.size()
-	<< " subtrees +" << slave_requests.size() << " slave requests)";
+	<< " subtrees +" << peer_requests.size() << " peer requests)";
   }
   
   void add_subtree(dirfrag_t im) {
@@ -61,34 +114,47 @@ public:
     subtrees[im].push_back(ex);
   }
 
-  void add_ambiguous_import(dirfrag_t im, const vector<dirfrag_t>& m) {
+  void add_ambiguous_import(dirfrag_t im, const std::vector<dirfrag_t>& m) {
     ambiguous_imports[im] = m;
   }
 
-  void add_slave_request(metareqid_t reqid, bool committing) {
-    slave_requests[reqid].committing = committing;
+  void add_peer_request(metareqid_t reqid, bool committing) {
+    peer_requests[reqid].committing = committing;
   }
 
-  void add_slave_request(metareqid_t reqid, bufferlist& bl) {
-    slave_requests[reqid].inode_caps.claim(bl);
+  void add_peer_request(metareqid_t reqid, ceph::buffer::list& bl) {
+    peer_requests[reqid].inode_caps = std::move(bl);
+  }
+
+  void add_table_commits(int table, const std::set<version_t>& pending_commits) {
+    table_clients.push_back(table_client(table, pending_commits));
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(subtrees, payload);
-    ::encode(ambiguous_imports, payload);
-    ::encode(slave_requests, payload);
+    using ceph::encode;
+    encode(subtrees, payload);
+    encode(ambiguous_imports, payload);
+    encode(peer_requests, payload);
+    encode(table_clients, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(subtrees, p);
-    ::decode(ambiguous_imports, p);
-    ::decode(slave_requests, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(subtrees, p);
+    decode(ambiguous_imports, p);
+    decode(peer_requests, p);
+    decode(table_clients, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
-inline ostream& operator<<(ostream& out, const MMDSResolve::slave_request) {
+inline std::ostream& operator<<(std::ostream& out, const MMDSResolve::peer_request&) {
     return out;
 }
 
-WRITE_CLASS_ENCODER(MMDSResolve::slave_request)
+WRITE_CLASS_ENCODER(MMDSResolve::peer_request)
+WRITE_CLASS_ENCODER(MMDSResolve::table_client)
+WRITE_CLASS_ENCODER(MMDSResolve::peer_inode_cap)
 #endif

@@ -15,12 +15,16 @@ import json
 import socket
 import struct
 import time
-from collections import OrderedDict
+try:
+    from collections.abc import OrderedDict
+except ImportError:
+    from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
 from prettytable import PrettyTable, HEADER
 from signal import signal, SIGWINCH
 from termios import TIOCGWINSZ
+from typing import Optional
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -29,7 +33,9 @@ LONG_RUNNING_AVG = 0x4
 READ_CHUNK_SIZE = 4096
 
 
-def admin_socket(asok_path, cmd, format=''):
+def admin_socket(asok_path: str,
+                 cmd: str,
+                 format: Optional[str] = '') -> bytes:
     """
     Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
     path to the admin socket; cmd is a list of strings; format may be
@@ -87,36 +93,37 @@ def admin_socket(asok_path, cmd, format=''):
     return ret
 
 
-def _gettermsize():
-    try:
-        rows, cols = struct.unpack('hhhh', ioctl(0, TIOCGWINSZ, 8*'\x00'))[0:2]
-    except IOError:
-        return 25, 80
-
-    return rows,cols
-
-
 class Termsize(object):
-
+    DEFAULT_SIZE = (25, 80)
     def __init__(self):
-        self.rows, self.cols = _gettermsize()
+        self.rows, self.cols = self._gettermsize()
         self.changed = False
 
+    def _gettermsize(self):
+        try:
+            fd = sys.stdin.fileno()
+            sz = struct.pack('hhhh', 0, 0, 0, 0)
+            rows, cols = struct.unpack('hhhh', ioctl(fd, TIOCGWINSZ, sz))[:2]
+            return rows, cols
+        except IOError:
+            return self.DEFAULT_SIZE
+
     def update(self):
-        rows, cols = _gettermsize()
-        self.changed = self.changed or (
-            (self.rows != rows) or (self.cols != cols)
-        )
+        rows, cols = self._gettermsize()
+        if not self.changed:
+            self.changed = (self.rows, self.cols) != (rows, cols)
         self.rows, self.cols = rows, cols
 
     def reset_changed(self):
         self.changed = False
 
     def __str__(self):
-        return '%s(%dx%d, changed %s)' % (self.__class__, self.rows, self.cols, self.changed)
+        return '%s(%dx%d, changed %s)' % (self.__class__,
+                                          self.rows, self.cols, self.changed)
 
     def __repr__(self):
-        return 'Termsize(%d,%d,%s)' % (self.__class__, self.rows, self.cols, self.changed)
+        return 'Termsize(%d,%d,%s)' % (self.__class__,
+                                       self.rows, self.cols, self.changed)
 
 
 class DaemonWatcher(object):
@@ -183,9 +190,11 @@ class DaemonWatcher(object):
         Format a number without units, so as to fit into `width` characters, substituting
         an appropriate unit suffix.
         """
-        units = [' ', 'k', 'M', 'G', 'T', 'P']
+        units = [' ', 'k', 'M', 'G', 'T', 'P', 'E', 'Z']
         unit = 0
         while len("%s" % (int(n) // (1000**unit))) > width - 1:
+            if unit >= len(units) - 1:
+                break
             unit += 1
 
         if unit > 0:
@@ -202,7 +211,7 @@ class DaemonWatcher(object):
             else:
                 color = self.YELLOW, False
             return self.bold(self.colorize(formatted[0:-1], color[0], color[1])) \
-                + self.bold(self.colorize(formatted[-1], self.BLACK, False))
+                + self.bold(self.colorize(formatted[-1], self.YELLOW, False))
         else:
             return formatted
 

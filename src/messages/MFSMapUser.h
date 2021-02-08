@@ -19,41 +19,46 @@
 #include "mds/FSMapUser.h"
 #include "include/ceph_features.h"
 
-class MFSMapUser : public Message {
- public:
+class MFSMapUser final : public Message {
+public:
   epoch_t epoch;
 
   version_t get_epoch() const { return epoch; }
-  const FSMapUser & get_fsmap() { return fsmap; }
+  const FSMapUser& get_fsmap() const { return fsmap; }
 
   MFSMapUser() :
-    Message(CEPH_MSG_FS_MAP_USER), epoch(0) {}
+    Message{CEPH_MSG_FS_MAP_USER}, epoch(0) {}
   MFSMapUser(const uuid_d &f, const FSMapUser &fsmap_) :
-    Message(CEPH_MSG_FS_MAP_USER), epoch(fsmap_.epoch)
-  {
-    fsmap = fsmap_;
-  }
+    Message{CEPH_MSG_FS_MAP_USER},
+    epoch(fsmap_.epoch),
+    fsmap{fsmap_}
+  {}
 private:
   FSMapUser fsmap;
 
-  ~MFSMapUser() override {}
+  ~MFSMapUser() final {}
 
 public:
-  const char *get_type_name() const override { return "fsmap.user"; }
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "fsmap.user"; }
+  void print(std::ostream& out) const override {
     out << "fsmap.user(e " << epoch << ")";
   }
 
   // marshalling
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(fsmap, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(fsmap, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(fsmap, payload, features);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(fsmap, payload, features);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

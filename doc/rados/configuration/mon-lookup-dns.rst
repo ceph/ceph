@@ -1,5 +1,5 @@
 ===============================
-Looking op Monitors through DNS
+Looking up Monitors through DNS
 ===============================
 
 Since version 11.0.0 RADOS supports looking up Monitors through DNS.
@@ -11,6 +11,13 @@ Using DNS SRV TCP records clients are able to look up the monitors.
 This allows for less configuration on clients and monitors. Using a DNS update clients and daemons can be made aware of changes in the monitor topology.
 
 By default clients and daemons will look for the TCP service called *ceph-mon* which is configured by the *mon_dns_srv_name* configuration directive.
+
+
+``mon dns srv name``
+
+:Description: the service name used querying the DNS for the monitor hosts/addresses
+:Type: String
+:Default: ``ceph-mon``
 
 Example
 -------
@@ -35,12 +42,15 @@ With those records now existing we can create the SRV TCP records with the name 
 
 ::
 
-    _ceph-mon._tcp.example.com. 60 IN SRV 10 60 6789 mon1.example.com.
-    _ceph-mon._tcp.example.com. 60 IN SRV 10 60 6789 mon2.example.com.
-    _ceph-mon._tcp.example.com. 60 IN SRV 10 60 6789 mon3.example.com.
+    _ceph-mon._tcp.example.com. 60 IN SRV 10 20 6789 mon1.example.com.
+    _ceph-mon._tcp.example.com. 60 IN SRV 10 30 6789 mon2.example.com.
+    _ceph-mon._tcp.example.com. 60 IN SRV 20 50 6789 mon3.example.com.
 
-In this case the Monitors are running on port *6789*.
+Now all Monitors are running on port *6789*, with priorities 10, 10, 20 and weights 20, 30, 50 respectively.
 
-The current implementation in clients and daemons does *not* honor nor respect the weight or priority set in SRV records.
+Monitor clients choose monitor by referencing the SRV records. If a cluster has multiple Monitor SRV records
+with the same priority value, clients and daemons will load balance the connections to Monitors in proportion
+to the values of the SRV weight fields.
 
-All records returned will be treated equally in a Round Robin fashion.
+For the above example, this will result in approximate 40% of the clients and daemons connecting to mon1,
+60% of them connecting to mon2. However, if neither of them is reachable, then mon3 will be reconsidered as a fallback.

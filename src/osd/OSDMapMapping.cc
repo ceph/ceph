@@ -8,6 +8,8 @@
 
 #include "common/debug.h"
 
+using std::vector;
+
 MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMapMapping, osdmapmapping,
 			      osdmap_mapping);
 
@@ -35,10 +37,11 @@ void OSDMapMapping::_init_mappings(const OSDMap& osdmap)
       }
     }
     pools.emplace(p.first, PoolMapping(p.second.get_size(),
-				       p.second.get_pg_num()));
+				       p.second.get_pg_num(),
+				       p.second.is_erasure()));
   }
   pools.erase(q, pools.end());
-  assert(pools.size() == osdmap.get_pools().size());
+  ceph_assert(pools.size() == osdmap.get_pools().size());
 }
 
 void OSDMapMapping::update(const OSDMap& osdmap)
@@ -92,11 +95,11 @@ void OSDMapMapping::_finish(const OSDMap& osdmap)
 void OSDMapMapping::_dump()
 {
   for (auto& p : pools) {
-    cout << "pool " << p.first << std::endl;
+    std::cout << "pool " << p.first << std::endl;
     for (unsigned i = 0; i < p.second.table.size(); ++i) {
-      cout << " " << p.second.table[i];
+      std::cout << " " << p.second.table[i];
       if (i % p.second.row_size() == p.second.row_size() - 1)
-	cout << std::endl;
+	std::cout << std::endl;
     }
   }
 }
@@ -108,11 +111,11 @@ void OSDMapMapping::_update_range(
   unsigned pg_end)
 {
   auto i = pools.find(pool);
-  assert(i != pools.end());
-  assert(pg_begin <= pg_end);
-  assert(pg_end <= i->second.pg_num);
+  ceph_assert(i != pools.end());
+  ceph_assert(pg_begin <= pg_end);
+  ceph_assert(pg_end <= i->second.pg_num);
   for (unsigned ps = pg_begin; ps < pg_end; ++ps) {
-    vector<int> up, acting;
+    std::vector<int> up, acting;
     int up_primary, acting_primary;
     osdmap.pg_to_up_acting_osds(
       pg_t(ps, pool),
@@ -128,13 +131,13 @@ void ParallelPGMapper::Job::finish_one()
 {
   Context *fin = nullptr;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     if (--shards == 0) {
       if (!aborted) {
 	finish = ceph_clock_now();
 	complete();
       }
-      cond.Signal();
+      cond.notify_all();
       fin = onfinish;
       onfinish = nullptr;
     }
@@ -146,24 +149,59 @@ void ParallelPGMapper::Job::finish_one()
 
 void ParallelPGMapper::WQ::_process(Item *i, ThreadPool::TPHandle &h)
 {
-  ldout(m->cct, 20) << __func__ << " " << i->job << " " << i->pool
-		    << " [" << i->begin << "," << i->end << ")" << dendl;
-  i->job->process(i->pool, i->begin, i->end);
+  ldout(m->cct, 20) << __func__ << " " << i->job << " pool " << i->pool
+                    << " [" << i->begin << "," << i->end << ")"
+                    << " pgs " << i->pgs
+                    << dendl;
+  if (!i->pgs.empty())
+    i->job->process(i->pgs);
+  else
+    i->job->process(i->pool, i->begin, i->end);
   i->job->finish_one();
   delete i;
 }
 
 void ParallelPGMapper::queue(
   Job *job,
-  unsigned pgs_per_item)
+  unsigned pgs_per_item,
+  const vector<pg_t>& input_pgs)
 {
+  bool any = false;
+  if (!input_pgs.empty()) {
+    unsigned i = 0;
+    vector<pg_t> item_pgs;
+    item_pgs.reserve(pgs_per_item);
+    for (auto& pg : input_pgs) {
+      if (i < pgs_per_item) {
+        ++i;
+        item_pgs.push_back(pg);
+      }
+      if (i >= pgs_per_item) {
+        job->start_one();
+        wq.queue(new Item(job, item_pgs));
+        i = 0;
+        item_pgs.clear();
+        any = true;
+      }
+    }
+    if (!item_pgs.empty()) {
+      job->start_one();
+      wq.queue(new Item(job, item_pgs));
+      any = true;
+    }
+    ceph_assert(any);
+    return;
+  }
+  // no input pgs, load all from map
   for (auto& p : job->osdmap->get_pools()) {
     for (unsigned ps = 0; ps < p.second.get_pg_num(); ps += pgs_per_item) {
-      unsigned ps_end = MIN(ps + pgs_per_item, p.second.get_pg_num());
+      unsigned ps_end = std::min(ps + pgs_per_item, p.second.get_pg_num());
       job->start_one();
       wq.queue(new Item(job, p.first, ps, ps_end));
       ldout(cct, 20) << __func__ << " " << job << " " << p.first << " [" << ps
 		     << "," << ps_end << ")" << dendl;
+      any = true;
     }
   }
+  ceph_assert(any);
 }

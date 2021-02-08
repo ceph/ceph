@@ -6,10 +6,10 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/rados/librados_fwd.hpp"
+#include <string>
 
 class Context;
-
-namespace librados { class IoCtx; }
 
 namespace librbd {
 

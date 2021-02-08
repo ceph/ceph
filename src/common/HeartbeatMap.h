@@ -15,17 +15,14 @@
 #ifndef CEPH_HEARTBEATMAP_H
 #define CEPH_HEARTBEATMAP_H
 
+#include <list>
+#include <atomic>
+#include <string>
 #include <pthread.h>
 
-#include <string>
-#include <list>
-#include <time.h>
-
-#include "include/atomic.h"
-
-#include "RWLock.h"
-
-class CephContext;
+#include "common/ceph_time.h"
+#include "common/ceph_mutex.h"
+#include "include/common_fwd.h"
 
 namespace ceph {
 
@@ -42,13 +39,17 @@ namespace ceph {
 
 struct heartbeat_handle_d {
   const std::string name;
-  pthread_t thread_id;
-  atomic_t timeout, suicide_timeout;
-  time_t grace, suicide_grace;
+  pthread_t thread_id = 0;
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+  std::atomic<time> timeout = clock::zero();
+  std::atomic<time> suicide_timeout = clock::zero();
+  ceph::timespan grace = ceph::timespan::zero();
+  ceph::timespan suicide_grace = ceph::timespan::zero();
   std::list<heartbeat_handle_d*>::iterator list_item;
 
   explicit heartbeat_handle_d(const std::string& n)
-    : name(n), thread_id(0), grace(0), suicide_grace(0)
+    : name(n)
   { }
 };
 
@@ -59,7 +60,9 @@ class HeartbeatMap {
   void remove_worker(const heartbeat_handle_d *h);
 
   // reset the timeout so that it expects another touch within grace amount of time
-  void reset_timeout(heartbeat_handle_d *h, time_t grace, time_t suicide_grace);
+  void reset_timeout(heartbeat_handle_d *h,
+		     ceph::timespan grace,
+		     ceph::timespan suicide_grace);
   // clear the timeout so that it's not checked on
   void clear_timeout(heartbeat_handle_d *h);
 
@@ -79,14 +82,17 @@ class HeartbeatMap {
   ~HeartbeatMap();
 
  private:
+  using clock = ceph::coarse_mono_clock;
   CephContext *m_cct;
-  RWLock m_rwlock;
-  time_t m_inject_unhealthy_until;
+  ceph::shared_mutex m_rwlock =
+    ceph::make_shared_mutex("HeartbeatMap::m_rwlock");
+  clock::time_point m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
-  atomic_t m_unhealthy_workers;
-  atomic_t m_total_workers;
+  std::atomic<unsigned> m_unhealthy_workers = { 0 };
+  std::atomic<unsigned> m_total_workers = { 0 };
 
-  bool _check(const heartbeat_handle_d *h, const char *who, time_t now);
+  bool _check(const heartbeat_handle_d *h, const char *who,
+	      ceph::coarse_mono_time now);
 };
 
 }

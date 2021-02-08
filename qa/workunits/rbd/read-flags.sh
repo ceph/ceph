@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 # create a snapshot, then export it and check that setting read flags works
 # by looking at --debug-ms output

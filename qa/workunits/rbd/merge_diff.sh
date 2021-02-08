@@ -1,4 +1,7 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
+
+export RBD_FORCE_ALLOW_V1=1
 
 pool=rbd
 gen=$pool/gen

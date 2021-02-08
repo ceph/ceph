@@ -1,0 +1,17 @@
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><ItemGroup><ClInclude Include="..\src\perf_histogram.h" />
+</ItemGroup>
+<ItemGroup><ClCompile Include="..\src\librados-config.cc" />
+<ClCompile Include="..\src\libcephfs.cc" />
+<ClCompile Include="..\src\krbd.cc" />
+<ClCompile Include="..\src\cls_crypto.cc" />
+<ClCompile Include="..\src\cls_acl.cc" />
+<ClCompile Include="..\src\ceph_ver.c" />
+<ClCompile Include="..\src\ceph_syn.cc" />
+<ClCompile Include="..\src\ceph_osd.cc" />
+<ClCompile Include="..\src\ceph_mon.cc" />
+<ClCompile Include="..\src\ceph_mgr.cc" />
+<ClCompile Include="..\src\ceph_mds.cc" />
+<ClCompile Include="..\src\ceph_fuse.cc" />
+<ClCompile Include="..\src\btrfs_ioc_test.c" />
+</ItemGroup>
+</Project>

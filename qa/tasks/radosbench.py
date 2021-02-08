@@ -7,6 +7,7 @@ import logging
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 
+
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
@@ -21,15 +22,18 @@ def task(ctx, config):
         time: <seconds to run>
         pool: <pool to use>
         size: write size to use
+        concurrency: max number of outstanding writes (16)
+        objectsize: object size to use
         unique_pool: use a unique pool, defaults to False
         ec_pool: create an ec pool, defaults to False
-        create_pool: create pool, defaults to False
+        create_pool: create pool, defaults to True
         erasure_code_profile:
           name: teuthologyprofile
           k: 2
           m: 1
-          ruleset-failure-domain: osd
+          crush-failure-domain: osd
         cleanup: false (defaults to true)
+        type: <write|seq|rand> (defaults to write)
     example:
 
     tasks:
@@ -46,14 +50,15 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
     manager = ctx.managers['ceph']
+    runtype = config.get('type', 'write')
 
     create_pool = config.get('create_pool', True)
     for role in config.get('clients', ['client.0']):
-        assert isinstance(role, basestring)
+        assert isinstance(role, str)
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
-        (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+        (remote,) = ctx.cluster.only(role).remotes.keys()
 
         if config.get('ec_pool', False):
             profile = config.get('erasure_code_profile', {})
@@ -65,6 +70,10 @@ def task(ctx, config):
         cleanup = []
         if not config.get('cleanup', True):
             cleanup = ['--no-cleanup']
+        write_to_omap = []
+        if config.get('write-omap', False):
+            write_to_omap = ['--write-omap']
+            log.info('omap writes')
 
         pool = config.get('pool', 'data')
         if create_pool:
@@ -72,6 +81,36 @@ def task(ctx, config):
                 manager.create_pool(pool, erasure_code_profile_name=profile_name)
             else:
                 pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
+
+        concurrency = config.get('concurrency', 16)
+        osize = config.get('objectsize', 65536)
+        if osize == 0:
+            objectsize = []
+        else:
+            objectsize = ['--object-size', str(osize)]
+        size = ['-b', str(config.get('size', 65536))]
+        # If doing a reading run then populate data
+        if runtype != "write":
+            proc = remote.run(
+                args=[
+                    "/bin/sh", "-c",
+                    " ".join(['adjust-ulimits',
+                              'ceph-coverage',
+                              '{tdir}/archive/coverage',
+                              'rados',
+                              '--no-log-to-stderr',
+                              '--name', role] +
+                              ['-t', str(concurrency)]
+                              + size + objectsize +
+                              ['-p' , pool,
+                          'bench', str(60), "write", "--no-cleanup"
+                          ]).format(tdir=testdir),
+                ],
+            logger=log.getChild('radosbench.{id}'.format(id=id_)),
+            wait=True
+            )
+            size = []
+            objectsize = []
 
         proc = remote.run(
             args=[
@@ -81,11 +120,11 @@ def task(ctx, config):
                           '{tdir}/archive/coverage',
                           'rados',
 			  '--no-log-to-stderr',
-                          '--name', role,
-                          '-b', str(config.get('size', 4<<20)),
-                          '-p' , pool,
-                          'bench', str(config.get('time', 360)), 'write',
-                          ] + cleanup).format(tdir=testdir),
+                          '--name', role]
+                          + size + objectsize +
+                          ['-p' , pool,
+                          'bench', str(config.get('time', 360)), runtype,
+                          ] + write_to_omap + cleanup).format(tdir=testdir),
                 ],
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             stdin=run.PIPE,
@@ -96,9 +135,9 @@ def task(ctx, config):
     try:
         yield
     finally:
-        timeout = config.get('time', 360) * 5 + 180
+        timeout = config.get('time', 360) * 30 + 300
         log.info('joining radosbench (timing out after %ss)', timeout)
-        run.wait(radosbench.itervalues(), timeout=timeout)
+        run.wait(radosbench.values(), timeout=timeout)
 
-        if pool is not 'data' and create_pool:
+        if pool != 'data' and create_pool:
             manager.remove_pool(pool)

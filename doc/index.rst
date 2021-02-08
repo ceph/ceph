@@ -3,7 +3,7 @@
 =================
 
 Ceph uniquely delivers **object, block, and file storage in one unified
-system**. 
+system**.
 
 .. raw:: html
 
@@ -19,9 +19,9 @@ system**.
 - Striped objects
 - Cloud solution integration
 - Multi-site deployment
-- Disaster recovery
+- Multi-site replication
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Ceph Block Device</h3>
 
@@ -36,17 +36,17 @@ system**.
 - KVM/libvirt support
 - Back-end for cloud solutions
 - Incremental backup
-- Disaster recovery
+- Disaster recovery (multisite asynchronous replication)
 
-.. raw:: html 
+.. raw:: html
 
-	</td><td><h3>Ceph Filesystem</h3>
-	
+	</td><td><h3>Ceph File System</h3>
+
 - POSIX-compliant semantics
 - Separates metadata from data
 - Dynamic rebalancing
 - Subdirectory snapshots
-- Configurable striping 
+- Configurable striping
 - Kernel driver support
 - FUSE support
 - NFS/CIFS deployable
@@ -55,22 +55,22 @@ system**.
 .. raw:: html
 
 	</td></tr><tr><td>
-	
+
 See `Ceph Object Store`_ for additional details.
 
 .. raw:: html
 
 	</td><td>
-	
+
 See `Ceph Block Device`_ for additional details.
-	
+
 .. raw:: html
 
 	</td><td>
-	
-See `Ceph Filesystem`_ for additional details.	
-	
-.. raw::	html 
+
+See `Ceph File System`_ for additional details.
+
+.. raw::	html
 
 	</td></tr></tbody></table>
 
@@ -82,26 +82,31 @@ about Ceph, see our `Architecture`_ section.
 
 
 .. _Ceph Object Store: radosgw
-.. _Ceph Block Device: rbd/rbd
-.. _Ceph Filesystem: cephfs
-.. _Getting Started: start
+.. _Ceph Block Device: rbd
+.. _Ceph File System: cephfs
+.. _Getting Started: install
 .. _Architecture: architecture
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 3
    :hidden:
 
    start/intro
-   start/index
    install/index
+   cephadm/index
    rados/index
    cephfs/index
-   rbd/rbd
+   rbd/index
    radosgw/index
    mgr/index
+   mgr/dashboard
    api/index
    architecture
-   Development <dev/index>
-   release-notes
-   releases
+   Developer Guide <dev/developer_guide/index>
+   dev/internals
+   governance
+   foundation
+   ceph-volume/index
+   releases/general
+   releases/index
    Glossary <glossary>

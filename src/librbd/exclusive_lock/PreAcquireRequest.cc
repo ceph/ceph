@@ -8,6 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ImageState.h"
+#include "librbd/asio/ContextWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -78,7 +79,7 @@ void PreAcquireRequest<I>::handle_flush_notifies(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   finish();
 }
 

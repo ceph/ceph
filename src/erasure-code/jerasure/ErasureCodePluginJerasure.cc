@@ -26,15 +26,15 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-static ostream& _prefix(std::ostream* _dout)
+static std::ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodePluginJerasure: ";
 }
 
 int ErasureCodePluginJerasure::factory(const std::string& directory,
-		      ErasureCodeProfile &profile,
-		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss) {
+				       ceph::ErasureCodeProfile &profile,
+				       ceph::ErasureCodeInterfaceRef *erasure_code,
+				       std::ostream *ss) {
     ErasureCodeJerasure *interface;
     std::string t;
     if (profile.find("technique") != profile.end())
@@ -54,11 +54,10 @@ int ErasureCodePluginJerasure::factory(const std::string& directory,
     } else if (t == "liber8tion") {
       interface = new ErasureCodeJerasureLiber8tion();
     } else {
-      derr << "technique=" << t << " is not a valid coding technique. "
+      *ss << "technique=" << t << " is not a valid coding technique. "
 	   << " Choose one of the following: "
 	   << "reed_sol_van, reed_sol_r6_op, cauchy_orig, "
-	   << "cauchy_good, liberation, blaum_roth, liber8tion"
-	   << dendl;
+	   << "cauchy_good, liberation, blaum_roth, liber8tion";
       return -ENOENT;
     }
     dout(20) << __func__ << ": " << profile << dendl;
@@ -67,17 +66,15 @@ int ErasureCodePluginJerasure::factory(const std::string& directory,
       delete interface;
       return r;
     }
-    *erasure_code = ErasureCodeInterfaceRef(interface);
+    *erasure_code = ceph::ErasureCodeInterfaceRef(interface);
     return 0;
 }
-
-#ifndef BUILDING_FOR_EMBEDDED
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
 int __erasure_code_init(char *plugin_name, char *directory)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  auto& instance = ceph::ErasureCodePluginRegistry::instance();
   int w[] = { 4, 8, 16, 32 };
   int r = jerasure_init(4, w);
   if (r) {
@@ -85,5 +82,3 @@ int __erasure_code_init(char *plugin_name, char *directory)
   }
   return instance.add(plugin_name, new ErasureCodePluginJerasure());
 }
-
-#endif

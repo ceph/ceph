@@ -1,35 +1,15 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
+
 ############################################
 #			Helper functions
 ############################################
-function install() {
-    for package in "$@" ; do
-        install_one $package
-    done
-    return 0
-}
+source $(dirname $0)/../ceph-helpers-root.sh
 
-function install_one() {
-    case $(lsb_release -si) in
-        Ubuntu|Debian|Devuan)
-            sudo apt-get install -y --force-yes "$@"
-            ;;
-        CentOS|Fedora|RedHatEnterpriseServer)
-            sudo yum install -y "$@"
-            ;;
-        *SUSE*)
-            sudo zypper --non-interactive install "$@"
-            ;;
-        *)
-            echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
-            ;;
-    esac
-}
 ############################################
 #			Install required tools
 ############################################
 echo "Install required tools"
-install git automake
 
 CURRENT_PATH=`pwd`
 
@@ -38,15 +18,28 @@ CURRENT_PATH=`pwd`
 ############################################
 # install prerequisites
 # for rocksdb
-case $(lsb_release -si) in
-	Ubuntu|Debian|Devuan)
-		install g++-4.7 libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev librados-dev
+case $(distro_id) in
+	ubuntu|debian|devuan)
+		install git g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev cmake
 		;;
-	CentOS|Fedora|RedHatEnterpriseServer)
-		install gcc-c++.x86_64 gflags-devel snappy-devel zlib zlib-devel bzip2 bzip2-devel librados2-devel.x86_64
+	centos|fedora|rhel)
+        case $(distro_id) in
+            centos)
+                # centos needs PowerTools repo for snappy-devel
+                test -x /usr/bin/dnf && sudo dnf config-manager --set-enabled PowerTools || true
+                ;;
+            rhel)
+                # RHEL needs CRB repo for snappy-devel
+                sudo subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
+                ;;
+        esac
+        install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake
+        ;;
+	opensuse*|suse|sles)
+		install git gcc-c++ snappy-devel zlib-devel libbz2-devel libradospp-devel
 		;;
 	*)
-        echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
+        echo "$(distro_id) is unknown, $@ will have to be installed manually."
         ;;
 esac
 
@@ -67,11 +60,23 @@ echo "Compile rocksdb"
 if [ -e rocksdb ]; then
 	rm -fr rocksdb
 fi
-git clone https://github.com/facebook/rocksdb.git
+
+pushd $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../
+git submodule update --init src/rocksdb
+popd
+git clone $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../src/rocksdb rocksdb
 
 # compile code
 cd rocksdb
-make env_librados_test ROCKSDB_USE_LIBRADOS=1 -j8
+if type cmake3 > /dev/null 2>&1 ; then
+    CMAKE=cmake3
+else
+    CMAKE=cmake
+fi
+
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=Debug -DWITH_TESTS=ON -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
+make rocksdb_env_librados_test -j8
 
 echo "Copy ceph.conf"
 # prepare ceph.conf

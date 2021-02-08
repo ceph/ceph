@@ -8,22 +8,19 @@
   rbd: image name was not specified
   [22]
   $ rbd clone foo
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd clone foo@snap
   rbd: destination image name was not specified
   [22]
   $ rbd clone foo bar
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd clone foo bar@snap
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd children
   rbd: image name was not specified
-  [22]
-  $ rbd children foo
-  rbd: snap name was not specified
   [22]
   $ rbd flatten
   rbd: image name was not specified
@@ -76,6 +73,15 @@
   $ rbd cp foo@snap
   rbd: destination image name was not specified
   [22]
+  $ rbd deep cp
+  rbd: image name was not specified
+  [22]
+  $ rbd deep cp foo
+  rbd: destination image name was not specified
+  [22]
+  $ rbd deep cp foo@snap
+  rbd: destination image name was not specified
+  [22]
   $ rbd mv
   rbd: image name was not specified
   [22]
@@ -116,19 +122,19 @@
   rbd: image name was not specified
   [22]
   $ rbd snap create foo
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd snap rollback
   rbd: image name was not specified
   [22]
   $ rbd snap rollback foo
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd snap rm
   rbd: image name was not specified
   [22]
   $ rbd snap rm foo
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd snap purge
   rbd: image name was not specified
@@ -137,13 +143,13 @@
   rbd: image name was not specified
   [22]
   $ rbd snap protect foo
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd snap unprotect
   rbd: image name was not specified
   [22]
   $ rbd snap unprotect foo
-  rbd: snap name was not specified
+  rbd: snapshot name was not specified
   [22]
   $ rbd watch
   rbd: image name was not specified
@@ -151,10 +157,10 @@
   $ rbd status
   rbd: image name was not specified
   [22]
-  $ rbd map
+  $ rbd device map
   rbd: image name was not specified
   [22]
-  $ rbd unmap
+  $ rbd device unmap
   rbd: unmap requires either image name or device path
   [22]
   $ rbd feature disable

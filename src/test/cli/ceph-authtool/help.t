@@ -1,6 +1,5 @@
 # TODO synchronize with man page
   $ ceph-authtool --help
-  no command specified
   usage: ceph-authtool keyringfile [OPTIONS]...
   where the options are:
     -l, --list                    will list all keys and capabilities present in
@@ -17,10 +16,10 @@
     --import-keyring FILE         will import the content of a given keyring
                                   into the keyringfile
     -n NAME, --name NAME          specify entityname to operate on
-    -u AUID, --set-uid AUID       sets the auid (authenticated user id) for the
-                                  specified entityname
     -a BASE64, --add-key BASE64   will add an encoded key to the keyring
     --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem
     --caps CAPSFILE               will set all of capabilities associated with a
                                   given key, for all subsystems
+    --mode MODE                   will set the desired file mode to the keyring
+                                  e.g: '0644', defaults to '0600'
   [1]

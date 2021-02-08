@@ -5,9 +5,9 @@ import logging
 import json
 import time
 
-import ceph_manager
+from tasks import ceph_manager
+from tasks.util.rados import rados
 from teuthology import misc as teuthology
-from util.rados import rados
 
 log = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'peer task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -30,9 +30,7 @@ def task(ctx, config):
 
     while len(manager.get_osd_status()['up']) < 3:
         time.sleep(10)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2])
     manager.wait_for_clean()
 
     for i in range(3):
@@ -47,8 +45,7 @@ def task(ctx, config):
     # kludge to make sure they get a map
     rados(ctx, mon, ['-p', 'data', 'get', 'dummy', '-'])
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     manager.wait_for_recovery()
 
     # kill another and revive 2, so that some pgs can't peer.
@@ -57,20 +54,18 @@ def task(ctx, config):
     manager.revive_osd(2)
     manager.wait_till_osd_is_up(2)
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
 
     manager.wait_for_active_or_down()
 
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 2])
 
     # look for down pgs
     num_down_pgs = 0
     pgs = manager.get_pg_stats()
     for pg in pgs:
         out = manager.raw_cluster_cmd('pg', pg['pgid'], 'query')
-	log.debug("out string %s",out)
+        log.debug("out string %s",out)
         j = json.loads(out)
         log.info("pg is %s, query json is %s", pg, j)
 
@@ -91,7 +86,5 @@ def task(ctx, config):
     # bring it all back
     manager.revive_osd(1)
     manager.wait_till_osd_is_up(1)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1, 2])
     manager.wait_for_clean()

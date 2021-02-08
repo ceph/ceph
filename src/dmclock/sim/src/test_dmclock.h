@@ -3,6 +3,13 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -29,13 +36,14 @@ namespace crimson {
     };
 
     using DmcQueue = dmc::PushPriorityQueue<ClientId,sim::TestRequest>;
+    using DmcServiceTracker = dmc::ServiceTracker<ServerId,dmc::OrigTracker>;
 
     using DmcServer = sim::SimulatedServer<DmcQueue,
 					   dmc::ReqParams,
 					   dmc::PhaseType,
 					   DmcAccum>;
 
-    using DmcClient = sim::SimulatedClient<dmc::ServiceTracker<ServerId>,
+    using DmcClient = sim::SimulatedClient<DmcServiceTracker,
 					   dmc::ReqParams,
 					   dmc::PhaseType,
 					   DmcAccum>;

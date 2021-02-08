@@ -4,8 +4,6 @@
  *
  */
 
-#include <errno.h>
-
 /*
  * Some non-inline ceph helpers
  */
@@ -16,10 +14,8 @@ int ceph_flags_to_mode(int flags)
 	/* because CEPH_FILE_MODE_PIN is zero, so mode = -1 is error */
 	int mode = -1;
 
-#ifdef O_DIRECTORY  /* fixme */
 	if ((flags & CEPH_O_DIRECTORY) == CEPH_O_DIRECTORY)
 		return CEPH_FILE_MODE_PIN;
-#endif
 
 	switch (flags & O_ACCMODE) {
 	case CEPH_O_WRONLY:
@@ -33,6 +29,9 @@ int ceph_flags_to_mode(int flags)
 		mode = CEPH_FILE_MODE_RDWR;
 		break;
 	}
+
+	if (flags & CEPH_O_LAZY)
+		mode |= CEPH_FILE_MODE_LAZY;
 
 	return mode;
 }
@@ -77,8 +76,14 @@ int ceph_flags_sys2wire(int flags)
        ceph_sys2wire(O_CREAT);
        ceph_sys2wire(O_EXCL);
        ceph_sys2wire(O_TRUNC);
+
+       #ifndef _WIN32
        ceph_sys2wire(O_DIRECTORY);
        ceph_sys2wire(O_NOFOLLOW);
+       // In some cases, FILE_FLAG_BACKUP_SEMANTICS may be used instead
+       // of O_DIRECTORY. We may need some workarounds in order to handle
+       // the fact that those flags are not available on Windows.
+       #endif
 
 #undef ceph_sys2wire
 

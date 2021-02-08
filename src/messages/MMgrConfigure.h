@@ -16,37 +16,66 @@
 #define CEPH_MMGRCONFIGURE_H_
 
 #include "msg/Message.h"
+#include "mgr/MetricTypes.h"
+#include "mgr/OSDPerfMetricTypes.h"
 
 /**
  * This message is sent from ceph-mgr to MgrClient, instructing it
  * it about what data to send back to ceph-mgr at what frequency.
  */
-class MMgrConfigure : public Message
-{
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMgrConfigure : public Message {
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
-  uint32_t stats_period;
+  uint32_t stats_period = 0;
+
+  // Default 0 means if unspecified will include all stats
+  uint32_t stats_threshold = 0;
+
+  std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> osd_perf_metric_queries;
+
+  boost::optional<MetricConfigMessage> metric_config_message;
 
   void decode_payload() override
   {
-    bufferlist::iterator p = payload.begin();
-    ::decode(stats_period, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(stats_period, p);
+    if (header.version >= 2) {
+      decode(stats_threshold, p);
+    }
+    if (header.version >= 3) {
+      decode(osd_perf_metric_queries, p);
+    }
+    if (header.version >= 4) {
+      decode(metric_config_message, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(stats_period, payload);
+    using ceph::encode;
+    encode(stats_period, payload);
+    encode(stats_threshold, payload);
+    encode(osd_perf_metric_queries, payload);
+    encode(metric_config_message, payload);
   }
 
-  const char *get_type_name() const override { return "mgrconfigure"; }
-  void print(ostream& out) const override {
-    out << get_type_name() << "()";
+  std::string_view get_type_name() const override { return "mgrconfigure"; }
+  void print(std::ostream& out) const override {
+    out << get_type_name() << "(period=" << stats_period
+			   << ", threshold=" << stats_threshold << ")";
   }
 
+private:
   MMgrConfigure()
-    : Message(MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION)
+    : Message{MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION}
   {}
+  using RefCountedObject::put;
+  using RefCountedObject::get;
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

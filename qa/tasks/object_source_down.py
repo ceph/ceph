@@ -2,10 +2,10 @@
 Test Object locations going down
 """
 import logging
-import ceph_manager
 import time
 from teuthology import misc as teuthology
-from util.rados import rados
+from tasks import ceph_manager
+from tasks.util.rados import rados
 
 log = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'lost_unfound task only accepts a dict for configuration'
     first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    (mon,) = ctx.cluster.only(first_mon).remotes.keys()
 
     manager = ceph_manager.CephManager(
         mon,
@@ -76,8 +76,7 @@ def task(ctx, config):
     manager.mark_in_osd(0)
     manager.wait_till_active()
 
-    manager.raw_cluster_cmd('tell', 'osd.2', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([2, 0])
 
     manager.mark_out_osd(2)
     manager.wait_till_active()
@@ -86,8 +85,7 @@ def task(ctx, config):
     manager.mark_in_osd(1)
     manager.wait_till_active()
 
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     log.info("Getting unfound objects")
     unfound = manager.get_num_unfound_objects()
     assert not unfound
@@ -97,8 +95,7 @@ def task(ctx, config):
     manager.kill_osd(3)
     manager.mark_down_osd(3)
 
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+    manager.flush_pg_stats([0, 1])
     log.info("Getting unfound objects")
     unfound = manager.get_num_unfound_objects()
     assert unfound

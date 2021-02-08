@@ -23,7 +23,4 @@ set_source_files_properties(${test_srcs}
 add_executable(dmclock-data-struct-tests ${test_srcs})
 
 target_link_libraries(dmclock-data-struct-tests
-  LINK_PRIVATE gtest gtest_main pthread)
-
-add_test(NAME dmclock-data-struct-tests
-  COMMAND $<TARGET_FILE:dmclock-data-struct-tests>)
+  LINK_PRIVATE GTest::GTest GTest::Main Threads::Threads)

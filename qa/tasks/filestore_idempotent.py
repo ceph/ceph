@@ -13,7 +13,7 @@ def task(ctx, config):
     """
     Test filestore/filejournal handling of non-idempotent events.
 
-    Currently this is a kludge; we require the ceph task preceeds us just
+    Currently this is a kludge; we require the ceph task precedes us just
     so that we get the tarball installed to run the test binary.
 
     :param ctx: Context
@@ -31,14 +31,16 @@ def task(ctx, config):
     clients = config.keys()
 
     # just use the first client...
-    client = clients[0];
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+    client = next(iter(clients))
+    (remote,) = ctx.cluster.only(client).remotes.keys()
 
     testdir = teuthology.get_testdir(ctx)
 
     dir = '%s/ceph.data/test.%s' % (testdir, client)
 
-    seed = str(int(random.uniform(1,100)))
+    seed = int(random.uniform(1,100))
+    start = 800 + random.randint(800,1200)
+    end = start + 50
 
     try:
         log.info('creating a working dir')
@@ -61,7 +63,7 @@ def task(ctx, config):
             args=[
                 'cd', dir,
                 run.Raw('&&'),
-                './run_seed_to_range.sh', seed, '50', '300',
+                './run_seed_to_range.sh', str(seed), str(start), str(end),
                 ],
             wait=False,
             check_status=False)

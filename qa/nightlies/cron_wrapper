@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # /nightlies/cron_wrapper.sh
 
 # check for no argument case and stop

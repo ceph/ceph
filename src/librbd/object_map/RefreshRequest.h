@@ -7,8 +7,10 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "common/bit_vector.hpp"
+#include "common/ceph_mutex.h"
 
 class Context;
+class RWLock;
 
 namespace librbd {
 
@@ -20,13 +22,16 @@ template <typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
   static RefreshRequest *create(ImageCtxT &image_ctx,
+				ceph::shared_mutex* object_map_lock,
                                 ceph::BitVector<2> *object_map,
                                 uint64_t snap_id, Context *on_finish) {
-    return new RefreshRequest(image_ctx, object_map, snap_id, on_finish);
+    return new RefreshRequest(image_ctx, object_map_lock, object_map, snap_id,
+                              on_finish);
   }
 
-  RefreshRequest(ImageCtxT &image_ctx, ceph::BitVector<2> *object_map,
-                 uint64_t snap_id, Context *on_finish);
+  RefreshRequest(ImageCtxT &image_ctx, ceph::shared_mutex* object_map_lock,
+                 ceph::BitVector<2> *object_map, uint64_t snap_id,
+                 Context *on_finish);
 
   void send();
 
@@ -58,6 +63,7 @@ private:
    */
 
   ImageCtxT &m_image_ctx;
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> *m_object_map;
   uint64_t m_snap_id;
   Context *m_on_finish;

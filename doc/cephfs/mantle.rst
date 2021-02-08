@@ -35,7 +35,7 @@ Quickstart with vstart
     Most of the time this guide will work but sometimes all MDSs lock up and you
     cannot actually see them spill. It is much better to run this on a cluster.
 
-As a pre-requistie, we assume you've installed `mdtest
+As a prerequisite, we assume you have installed `mdtest
 <https://sourceforge.net/projects/mdtest/>`_ or pulled the `Docker image
 <https://hub.docker.com/r/michaelsevilla/mdtest/>`_. We use mdtest because we
 need to generate enough load to get over the MIN_OFFLOAD threshold that is
@@ -76,7 +76,6 @@ Mantle with `vstart.sh`
 
 ::
 
-    bin/ceph fs set cephfs allow_multimds true --yes-i-really-mean-it
     bin/ceph fs set cephfs max_mds 5
     bin/ceph fs set cephfs_a balancer greedyspill.lua
 
@@ -90,7 +89,7 @@ Mantle with `vstart.sh`
 
 
    Note that if you look at the last MDS (which could be a, b, or c -- it's
-   random), you will see an an attempt to index a nil value. This is because the
+   random), you will see an attempt to index a nil value. This is because the
    last MDS tries to check the load of its neighbor, which does not exist.
 
 5. Run a simple benchmark. In our case, we use the Docker mdtest image to
@@ -107,7 +106,7 @@ Mantle with `vstart.sh`
     done
 
 
-6. When you're done, you can kill all the clients with:
+6. When you are done, you can kill all the clients with:
 
 ::
 
@@ -198,7 +197,7 @@ Here we use `lua_pcall` instead of `lua_call` because we want to handle errors
 in the MDBalancer. We do not want the error propagating up the call chain. The
 cls_lua class wants to handle the error itself because it must fail gracefully.
 For Mantle, we don't care if a Lua error crashes our balancer -- in that case,
-we'll fall back to the original balancer.
+we will fall back to the original balancer.
 
 The performance improvement of using `lua_call` over `lua_pcall` would not be
 leveraged here because the balancer is invoked every 10 seconds by default. 

@@ -35,8 +35,8 @@ using namespace std;
 
 Messenger *messenger = 0;
 
-Mutex test_lock("mylock");
-Cond cond;
+ceph::mutex test_lock = ceph::make_mutex("mylock");
+ceph::condition_variable cond;
 
 uint64_t received = 0;
 
@@ -51,10 +51,10 @@ private:
 
     //cerr << "got ping from " << m->get_source() << std::endl;
     dout(0) << "got ping from " << m->get_source() << dendl;
-    test_lock.Lock();
+    test_lock.lock();
     ++received;
-    cond.Signal();
-    test_lock.Unlock();
+    cond.notify_all();
+    test_lock.unlock();
 
     m->put();
     return true;
@@ -71,10 +71,10 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   dout(0) << "i am mon " << args[0] << dendl;
@@ -86,13 +86,13 @@ int main(int argc, const char **argv, const char *envp[]) {
   
   // start up network
   int whoami = mc.monmap.get_rank(args[0]);
-  assert(whoami >= 0);
+  ceph_assert(whoami >= 0);
   ostringstream ss;
   ss << mc.monmap.get_addr(whoami);
   std::string sss(ss.str());
-  g_ceph_context->_conf->set_val("public_addr", sss.c_str());
-  g_ceph_context->_conf->apply_changes(NULL);
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  g_ceph_context->_conf.set_val("public_addr", sss.c_str());
+  g_ceph_context->_conf.apply_changes(nullptr);
+  std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *rank = Messenger::create(g_ceph_context,
 				      public_msgr_type,
 				      entity_name_t::MON(whoami), "tester",
@@ -112,13 +112,13 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (whoami == 0)
     isend = 100;
 
-  test_lock.Lock();
+  std::unique_lock l{test_lock};
   uint64_t sent = 0;
   while (1) {
     while (received + isend <= sent) {
       //cerr << "wait r " << received << " s " << sent << " is " << isend << std::endl;
       dout(0) << "wait r " << received << " s " << sent << " is " << isend << dendl;
-      cond.Wait(test_lock);
+      cond.wait(l);
     }
 
     int t = rand() % mc.get_num_mon();
@@ -128,14 +128,14 @@ int main(int argc, const char **argv, const char *envp[]) {
     if (rand() % 10 == 0) {
       //cerr << "mark_down " << t << std::endl;
       dout(0) << "mark_down " << t << dendl;
-      messenger->mark_down(mc.get_mon_addr(t));
+      messenger->mark_down_addrs(mc.get_mon_addrs(t));
     } 
     //cerr << "pinging " << t << std::endl;
     dout(0) << "pinging " << t << dendl;
-    messenger->send_message(new MPing, mc.get_mon_inst(t));
+    messenger->send_to_mon(new MPing, mc.get_mon_addrs(t));
     cerr << isend << "\t" << ++sent << "\t" << received << "\r";
   }
-  test_lock.Unlock();
+  l.unlock();
 
   // wait for messenger to finish
   rank->wait();

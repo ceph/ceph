@@ -6,10 +6,12 @@
 #include <memory>
 #include <string>
 
+#include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/env_mirror.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "kv/RocksDBStore.h"
 
 class BlueFS;
 
@@ -113,6 +115,10 @@ public:
                             const std::string& target) override;
   // Hard Link file src to target.
   rocksdb::Status LinkFile(const std::string& src, const std::string& target) override;
+
+  // Tell if two files are identical
+  rocksdb::Status AreFilesSame(const std::string& first,
+			       const std::string& second, bool* res) override;
 
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores nullptr in

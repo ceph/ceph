@@ -11,7 +11,7 @@ tasks:
       k: 4
       m: 2
       l: 3
-      ruleset-failure-domain: osd
+      crush-failure-domain: osd
     op_weights:
       read: 100
       write: 0

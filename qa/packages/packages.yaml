@@ -2,17 +2,19 @@
 ceph:
   deb:
   - ceph
+  - cephadm
   - ceph-mds
   - ceph-mgr
   - ceph-common
   - ceph-fuse
   - ceph-test
   - radosgw
-  - python-ceph
+  - python3-rados
+  - python3-rgw
+  - python3-cephfs
+  - python3-rbd
   - libcephfs2
   - libcephfs-dev
-  - libcephfs-java
-  - libcephfs-jni
   - librados2
   - librbd1
   - rbd-fuse
@@ -36,14 +38,46 @@ ceph:
   - ceph-radosgw
   - ceph-test
   - ceph
+  - ceph-base
+  - cephadm
+  - ceph-immutable-object-cache
   - ceph-mgr
+  - ceph-mgr-dashboard
+  - ceph-mgr-diskprediction-local
+  - ceph-mgr-rook
+  - ceph-mgr-cephadm
   - ceph-fuse
-  - cephfs-java
-  - libcephfs_jni1
+  - librados-devel
   - libcephfs2
   - libcephfs-devel
   - librados2
   - librbd1
-  - python-ceph
+  - python3-rados
+  - python3-rgw
+  - python3-cephfs
+  - python3-rbd
   - rbd-fuse
-  - ceph-debuginfo
+  - rbd-mirror
+  - rbd-nbd
+  - ceph-base-debuginfo
+  - ceph-common-debuginfo
+  - ceph-immutable-object-cache-debuginfo
+  - ceph-radosgw-debuginfo
+  - ceph-test-debuginfo
+  - ceph-base-debuginfo
+  - ceph-mgr-debuginfo
+  - ceph-mds-debuginfo
+  - ceph-mon-debuginfo
+  - ceph-osd-debuginfo
+  - ceph-fuse-debuginfo
+  - librados-devel-debuginfo
+  - libcephfs2-debuginfo
+  - librados2-debuginfo
+  - librbd1-debuginfo
+  - python3-cephfs-debuginfo
+  - python3-rados-debuginfo
+  - python3-rbd-debuginfo
+  - python3-rgw-debuginfo
+  - rbd-fuse-debuginfo
+  - rbd-mirror-debuginfo
+  - rbd-nbd-debuginfo

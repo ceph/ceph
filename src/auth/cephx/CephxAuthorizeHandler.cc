@@ -4,13 +4,20 @@
 
 #define dout_subsys ceph_subsys_auth
 
-
-
-bool CephxAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
-					      bufferlist& authorizer_data, bufferlist& authorizer_reply,
-                                              EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info, CryptoKey& session_key,  uint64_t *auid)
+bool CephxAuthorizeHandler::verify_authorizer(
+  CephContext *cct,
+  const KeyStore& keys,
+  const ceph::bufferlist& authorizer_data,
+  size_t connection_secret_required_len,
+  ceph::bufferlist *authorizer_reply,
+  EntityName *entity_name,
+  uint64_t *global_id,
+  AuthCapsInfo *caps_info,
+  CryptoKey *session_key,
+  std::string *connection_secret,
+  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
-  bufferlist::iterator iter = authorizer_data.begin();
+  auto iter = authorizer_data.cbegin();
 
   if (!authorizer_data.length()) {
     ldout(cct, 1) << "verify authorizer, authorizer_data.length()=0" << dendl;
@@ -19,14 +26,17 @@ bool CephxAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *keys,
 
   CephXServiceTicketInfo auth_ticket_info;
 
-  bool isvalid = cephx_verify_authorizer(cct, keys, iter, auth_ticket_info, authorizer_reply);
+  bool isvalid = cephx_verify_authorizer(cct, keys, iter,
+					 connection_secret_required_len,
+					 auth_ticket_info,
+					 challenge, connection_secret,
+					 authorizer_reply);
 
   if (isvalid) {
-    caps_info = auth_ticket_info.ticket.caps;
-    entity_name = auth_ticket_info.ticket.name;
-    global_id = auth_ticket_info.ticket.global_id;
-    session_key = auth_ticket_info.session_key;
-    if (auid) *auid = auth_ticket_info.ticket.auid;
+    *caps_info = auth_ticket_info.ticket.caps;
+    *entity_name = auth_ticket_info.ticket.name;
+    *global_id = auth_ticket_info.ticket.global_id;
+    *session_key = auth_ticket_info.session_key;
   }
 
   return isvalid;

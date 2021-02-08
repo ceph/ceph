@@ -5,19 +5,20 @@
  *
  * Copyright (C) 2013 Inktank <info@inktank.com>
  *
- * LGPL2.1 (see COPYING-LGPL2.1) or later
+ * LGPL-2.1 (see COPYING-LGPL2.1) or later
  */
 
+#include <gtest/gtest.h>
 #include <iostream>
 #include <memory>
-#include <gtest/gtest.h>
+#include <set>
 
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "include/stringify.h"
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
-
-#include <set>
 
 std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
                               int num_host, int num_osd)
@@ -52,18 +53,16 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
   }
   int ret;
   int ruleno = 0;
-  int ruleset = 0;
-  ruleno = ruleset;
-  ret = c->add_rule(4, ruleset, 123, 1, 20, ruleno);
-  assert(ret == ruleno);
+  ret = c->add_rule(ruleno, 4, 123, 1, 20);
+  ceph_assert(ret == ruleno);
   ret = c->set_rule_step(ruleno, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = c->set_rule_step(ruleno, 1, CRUSH_RULE_TAKE, rootno, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = c->set_rule_step(ruleno, 2, CRUSH_RULE_CHOOSELEAF_INDEP, CRUSH_CHOOSE_N, 1);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = c->set_rule_step(ruleno, 3, CRUSH_RULE_EMIT, 0, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   c->set_rule_name(ruleno, "data");
 
   c->finalize();
@@ -84,17 +83,35 @@ int get_num_dups(const vector<int>& v)
 {
   std::set<int> s;
   int dups = 0;
-  for (unsigned i=0; i<v.size(); ++i) {
-    if (s.count(v[i]))
+  for (auto n : v) {
+    if (s.count(n))
       ++dups;
-    else if (v[i] != CRUSH_ITEM_NONE)
-      s.insert(v[i]);
+    else if (n != CRUSH_ITEM_NONE)
+      s.insert(n);
   }
   return dups;
 }
 
-TEST(CRUSH, indep_toosmall) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 1, 3, 1));
+class CRUSHTest : public ::testing::Test
+{
+public:
+  void SetUp() final
+  {
+    CephInitParameters params(CEPH_ENTITY_TYPE_CLIENT);
+    cct = common_preinit(params, CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  }
+  void TearDown() final
+  {
+    cct->put();
+    cct = nullptr;
+  }
+protected:
+  CephContext *cct = nullptr;
+};
+
+TEST_F(CRUSHTest, indep_toosmall) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 1, 3, 1));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
@@ -112,8 +129,8 @@ TEST(CRUSH, indep_toosmall) {
   }
 }
 
-TEST(CRUSH, indep_basic) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_basic) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
 
@@ -131,8 +148,8 @@ TEST(CRUSH, indep_basic) {
   }
 }
 
-TEST(CRUSH, indep_out_alt) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_out_alt) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -157,8 +174,8 @@ TEST(CRUSH, indep_out_alt) {
   }
 }
 
-TEST(CRUSH, indep_out_contig) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_out_contig) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
   // mark a bunch of osds out
@@ -183,8 +200,8 @@ TEST(CRUSH, indep_out_contig) {
 }
 
 
-TEST(CRUSH, indep_out_progressive) {
-  std::unique_ptr<CrushWrapper> c(build_indep_map(g_ceph_context, 3, 3, 3));
+TEST_F(CRUSHTest, indep_out_progressive) {
+  std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   c->set_choose_total_tries(100);
   vector<__u32> tweight(c->get_max_devices(), 0x10000);
   c->dump_tree(&cout, NULL);
@@ -246,7 +263,7 @@ TEST(CRUSH, indep_out_progressive) {
 
 }
 
-TEST(CRUSH, straw_zero) {
+TEST_F(CRUSHTest, straw_zero) {
   // zero weight items should have no effect on placement.
 
   std::unique_ptr<CrushWrapper> c(new CrushWrapper);
@@ -271,9 +288,9 @@ TEST(CRUSH, straw_zero) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(0, ruleset0);
+  EXPECT_EQ(0, rule0);
 
   string root_name1("root1");
   int root1;
@@ -282,25 +299,25 @@ TEST(CRUSH, straw_zero) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(1, ruleset1);
+  EXPECT_EQ(1, rule1);
 
   c->finalize();
 
   vector<unsigned> reweight(n, 0x10000);
   for (int i=0; i<10000; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(rule0, i, out0, 1, reweight, 0);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(rule1, i, out1, 1, reweight, 0);
     ASSERT_EQ(1u, out1.size());
     ASSERT_EQ(out0[0], out1[0]);
     //cout << i << "\t" << out0 << "\t" << out1 << std::endl;
   }
 }
 
-TEST(CRUSH, straw_same) {
+TEST_F(CRUSHTest, straw_same) {
   // items with the same weight should map about the same as items
   // with very similar weights.
   //
@@ -336,9 +353,9 @@ TEST(CRUSH, straw_same) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(0, ruleset0);
+  EXPECT_EQ(0, rule0);
 
   for (int i=0; i <n; ++i) {
     items[i] = i;
@@ -352,9 +369,9 @@ TEST(CRUSH, straw_same) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(1, ruleset1);
+  EXPECT_EQ(1, rule1);
 
   if (0) {
     crush_bucket_straw *sb0 = reinterpret_cast<crush_bucket_straw*>(c->get_crush_map()->buckets[-1-root0]);
@@ -387,9 +404,9 @@ TEST(CRUSH, straw_same) {
   int max = 100000;
   for (int i=0; i<max; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(rule0, i, out0, 1, reweight, 0);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(rule1, i, out1, 1, reweight, 0);
     ASSERT_EQ(1u, out1.size());
     sum0[out0[0]]++;
     sum1[out1[0]]++;
@@ -436,7 +453,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   c->set_item_name(root0, root_name0);
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
 
   int sum[n];
@@ -455,7 +472,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out;
-    c->do_rule(ruleset0, i, out, 1, reweight, 0);
+    c->do_rule(rule0, i, out, 1, reweight, 0);
     sum[out[0]]++;
   }
 
@@ -494,7 +511,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   return stddev;
 }
 
-TEST(CRUSH, straw2_stddev)
+TEST_F(CRUSHTest, straw2_stddev)
 {
   int n = 15;
   int weights[n];
@@ -511,7 +528,7 @@ TEST(CRUSH, straw2_stddev)
   }
 }
 
-TEST(CRUSH, straw2_reweight) {
+TEST_F(CRUSHTest, straw2_reweight) {
   // when we adjust the weight of an item in a straw2 bucket,
   // we should *only* see movement from or to that item, never
   // between other items.
@@ -561,9 +578,9 @@ TEST(CRUSH, straw2_reweight) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(0, ruleset0);
+  EXPECT_EQ(0, rule0);
 
   int changed = 1;
   weights[changed] = weights[changed] / 10 * (rand() % 10);
@@ -577,9 +594,9 @@ TEST(CRUSH, straw2_reweight) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
-  EXPECT_EQ(1, ruleset1);
+  EXPECT_EQ(1, rule1);
 
   int sum[n];
   double totalweight = 0;
@@ -597,10 +614,10 @@ TEST(CRUSH, straw2_reweight) {
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight, 0);
+    c->do_rule(rule0, i, out0, 1, reweight, 0);
     ASSERT_EQ(1u, out0.size());
 
-    c->do_rule(ruleset1, i, out1, 1, reweight, 0);
+    c->do_rule(rule1, i, out1, 1, reweight, 0);
     ASSERT_EQ(1u, out1.size());
 
     sum[out1[0]]++;

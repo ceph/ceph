@@ -19,10 +19,10 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-class MOSDFailure : public PaxosServiceMessage {
-
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 3;
+class MOSDFailure final : public PaxosServiceMessage {
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 4;
 
  public:
   enum {
@@ -32,28 +32,36 @@ class MOSDFailure : public PaxosServiceMessage {
   };
   
   uuid_d fsid;
-  entity_inst_t target_osd;
-  __u8 flags;
-  epoch_t       epoch;
-  int32_t failed_for;  // known to be failed since at least this long
+  int32_t target_osd;
+  entity_addrvec_t target_addrs;
+  __u8 flags = 0;
+  epoch_t epoch = 0;
+  int32_t failed_for = 0;  // known to be failed since at least this long
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
-  MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, epoch_t e)
+  MOSDFailure(const uuid_d &fs, int osd, const entity_addrvec_t& av,
+	      int duration, epoch_t e)
     : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
-      fsid(fs), target_osd(f),
+      fsid(fs),
+      target_osd(osd),
+      target_addrs(av),
       flags(FLAG_FAILED),
       epoch(e), failed_for(duration) { }
-  MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, 
+  MOSDFailure(const uuid_d &fs, int osd, const entity_addrvec_t& av,
+	      int duration,
               epoch_t e, __u8 extra_flags)
     : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
-      fsid(fs), target_osd(f),
+      fsid(fs),
+      target_osd(osd),
+      target_addrs(av),
       flags(extra_flags),
       epoch(e), failed_for(duration) { }
 private:
-  ~MOSDFailure() override {}
+  ~MOSDFailure() final {}
 
-public: 
-  entity_inst_t get_target() { return target_osd; }
+public:
+  int get_target_osd() { return target_osd; }
+  const entity_addrvec_t& get_target_addrs() { return target_addrs; }
   bool if_osd_failed() const { 
     return flags & FLAG_FAILED; 
   }
@@ -63,32 +71,60 @@ public:
   epoch_t get_epoch() const { return epoch; }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(target_osd, p);
-    ::decode(epoch, p);
-    ::decode(flags, p);
-    ::decode(failed_for, p);
+    decode(fsid, p);
+    if (header.version < 4) {
+      entity_inst_t i;
+      decode(i, p);
+      target_osd = i.name.num();
+      target_addrs.v.push_back(i.addr);
+    } else {
+      decode(target_osd, p);
+      decode(target_addrs, p);
+    }
+    decode(epoch, p);
+    decode(flags, p);
+    decode(failed_for, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(target_osd, payload, features);
-    ::encode(epoch, payload);
-    ::encode(flags, payload);
-    ::encode(failed_for, payload);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      header.version = 3;
+      header.compat_version = 3;
+      encode(fsid, payload);
+      encode(entity_inst_t(entity_name_t::OSD(target_osd),
+			   target_addrs.legacy_addr()), payload, features);
+      encode(epoch, payload);
+      encode(flags, payload);
+      encode(failed_for, payload);
+      return;
+    }
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
+    encode(fsid, payload);
+    encode(target_osd, payload, features);
+    encode(target_addrs, payload, features);
+    encode(epoch, payload);
+    encode(flags, payload);
+    encode(failed_for, payload);
   }
 
-  const char *get_type_name() const override { return "osd_failure"; }
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "osd_failure"; }
+  void print(std::ostream& out) const override {
     out << "osd_failure("
 	<< (if_osd_failed() ? "failed " : "recovered ")
 	<< (is_immediate() ? "immediate " : "timeout ")
-	<< target_osd << " for " << failed_for << "sec e" << epoch
+	<< "osd." << target_osd << " " << target_addrs
+	<< " for " << failed_for << "sec e" << epoch
 	<< " v" << version << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

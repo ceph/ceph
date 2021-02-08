@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rbd_replay/ActionTypes.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/byteorder.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
@@ -22,15 +22,16 @@ bool byte_swap_required(__u8 version) {
 #endif
 }
 
-void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
+void decode_big_endian_string(std::string &str, bufferlist::const_iterator &it) {
+  using ceph::decode;
 #if defined(CEPH_LITTLE_ENDIAN)
   uint32_t length;
-  ::decode(length, it);
-  length = swab32(length);
+  decode(length, it);
+  length = swab(length);
   str.clear();
   it.copy(length, str);
 #else
-  assert(false);
+  ceph_abort();
 #endif
 }
 
@@ -41,7 +42,8 @@ public:
 
   template <typename Action>
   inline void operator()(const Action &action) const {
-    ::encode(static_cast<uint8_t>(Action::ACTION_TYPE), m_bl);
+    using ceph::encode;
+    encode(static_cast<uint8_t>(Action::ACTION_TYPE), m_bl);
     action.encode(m_bl);
   }
 private:
@@ -50,7 +52,7 @@ private:
 
 class DecodeVisitor : public boost::static_visitor<void> {
 public:
-  DecodeVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
   }
 
@@ -60,7 +62,7 @@ public:
   }
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpVisitor : public boost::static_visitor<void> {
@@ -80,20 +82,22 @@ private:
 } // anonymous namespace
 
 void Dependency::encode(bufferlist &bl) const {
-  ::encode(id, bl);
-  ::encode(time_delta, bl);
+  using ceph::encode;
+  encode(id, bl);
+  encode(time_delta, bl);
 }
 
-void Dependency::decode(bufferlist::iterator &it) {
+void Dependency::decode(bufferlist::const_iterator &it) {
   decode(1, it);
 }
 
-void Dependency::decode(__u8 version, bufferlist::iterator &it) {
-  ::decode(id, it);
-  ::decode(time_delta, it);
+void Dependency::decode(__u8 version, bufferlist::const_iterator &it) {
+  using ceph::decode;
+  decode(id, it);
+  decode(time_delta, it);
   if (byte_swap_required(version)) {
-    id = swab32(id);
-    time_delta = swab64(time_delta);
+    id = swab(id);
+    time_delta = swab(time_delta);
   }
 }
 
@@ -108,35 +112,37 @@ void Dependency::generate_test_instances(std::list<Dependency *> &o) {
 }
 
 void ActionBase::encode(bufferlist &bl) const {
-  ::encode(id, bl);
-  ::encode(thread_id, bl);
-  ::encode(dependencies, bl);
+  using ceph::encode;
+  encode(id, bl);
+  encode(thread_id, bl);
+  encode(dependencies, bl);
 }
 
-void ActionBase::decode(__u8 version, bufferlist::iterator &it) {
-  ::decode(id, it);
-  ::decode(thread_id, it);
+void ActionBase::decode(__u8 version, bufferlist::const_iterator &it) {
+  using ceph::decode;
+  decode(id, it);
+  decode(thread_id, it);
   if (version == 0) {
     uint32_t num_successors;
-    ::decode(num_successors, it);
+    decode(num_successors, it);
 
     uint32_t num_completion_successors;
-    ::decode(num_completion_successors, it);
+    decode(num_completion_successors, it);
   }
 
   if (byte_swap_required(version)) {
-    id = swab32(id);
-    thread_id = swab64(thread_id);
+    id = swab(id);
+    thread_id = swab(thread_id);
 
     uint32_t dep_count;
-    ::decode(dep_count, it);
-    dep_count = swab32(dep_count);
+    decode(dep_count, it);
+    dep_count = swab(dep_count);
     dependencies.resize(dep_count);
     for (uint32_t i = 0; i < dep_count; ++i) {
       dependencies[i].decode(0, it);
     }
   } else {
-    ::decode(dependencies, it);
+    decode(dependencies, it);
   }
 }
 
@@ -153,15 +159,17 @@ void ActionBase::dump(Formatter *f) const {
 }
 
 void ImageActionBase::encode(bufferlist &bl) const {
+  using ceph::encode;
   ActionBase::encode(bl);
-  ::encode(imagectx_id, bl);
+  encode(imagectx_id, bl);
 }
 
-void ImageActionBase::decode(__u8 version, bufferlist::iterator &it) {
+void ImageActionBase::decode(__u8 version, bufferlist::const_iterator &it) {
+  using ceph::decode;
   ActionBase::decode(version, it);
-  ::decode(imagectx_id, it);
+  decode(imagectx_id, it);
   if (byte_swap_required(version)) {
-    imagectx_id = swab64(imagectx_id);
+    imagectx_id = swab(imagectx_id);
   }
 }
 
@@ -171,18 +179,20 @@ void ImageActionBase::dump(Formatter *f) const {
 }
 
 void IoActionBase::encode(bufferlist &bl) const {
+  using ceph::encode;
   ImageActionBase::encode(bl);
-  ::encode(offset, bl);
-  ::encode(length, bl);
+  encode(offset, bl);
+  encode(length, bl);
 }
 
-void IoActionBase::decode(__u8 version, bufferlist::iterator &it) {
+void IoActionBase::decode(__u8 version, bufferlist::const_iterator &it) {
+  using ceph::decode;
   ImageActionBase::decode(version, it);
-  ::decode(offset, it);
-  ::decode(length, it);
+  decode(offset, it);
+  decode(length, it);
   if (byte_swap_required(version)) {
-    offset = swab64(offset);
-    length = swab64(length);
+    offset = swab(offset);
+    length = swab(length);
   }
 }
 
@@ -193,22 +203,24 @@ void IoActionBase::dump(Formatter *f) const {
 }
 
 void OpenImageAction::encode(bufferlist &bl) const {
+  using ceph::encode;
   ImageActionBase::encode(bl);
-  ::encode(name, bl);
-  ::encode(snap_name, bl);
-  ::encode(read_only, bl);
+  encode(name, bl);
+  encode(snap_name, bl);
+  encode(read_only, bl);
 }
 
-void OpenImageAction::decode(__u8 version, bufferlist::iterator &it) {
+void OpenImageAction::decode(__u8 version, bufferlist::const_iterator &it) {
+  using ceph::decode;
   ImageActionBase::decode(version, it);
   if (byte_swap_required(version)) {
     decode_big_endian_string(name, it);
     decode_big_endian_string(snap_name, it);
   } else {
-    ::decode(name, it);
-    ::decode(snap_name, it);
+    decode(name, it);
+    decode(snap_name, it);
   }
-  ::decode(read_only, it);
+  decode(read_only, it);
 }
 
 void OpenImageAction::dump(Formatter *f) const {
@@ -219,22 +231,24 @@ void OpenImageAction::dump(Formatter *f) const {
 }
 
 void AioOpenImageAction::encode(bufferlist &bl) const {
+  using ceph::encode;
   ImageActionBase::encode(bl);
-  ::encode(name, bl);
-  ::encode(snap_name, bl);
-  ::encode(read_only, bl);
+  encode(name, bl);
+  encode(snap_name, bl);
+  encode(read_only, bl);
 }
 
-void AioOpenImageAction::decode(__u8 version, bufferlist::iterator &it) {
+void AioOpenImageAction::decode(__u8 version, bufferlist::const_iterator &it) {
+  using ceph::decode;
   ImageActionBase::decode(version, it);
   if (byte_swap_required(version)) {
     decode_big_endian_string(name, it);
     decode_big_endian_string(snap_name, it);
   } else {
-    ::decode(name, it);
-    ::decode(snap_name, it);
+    decode(name, it);
+    decode(snap_name, it);
   }
-  ::decode(read_only, it);
+  decode(read_only, it);
 }
 
 void AioOpenImageAction::dump(Formatter *f) const {
@@ -245,10 +259,10 @@ void AioOpenImageAction::dump(Formatter *f) const {
 }
 
 void UnknownAction::encode(bufferlist &bl) const {
-  assert(false);
+  ceph_abort();
 }
 
-void UnknownAction::decode(__u8 version, bufferlist::iterator &it) {
+void UnknownAction::decode(__u8 version, bufferlist::const_iterator &it) {
 }
 
 void UnknownAction::dump(Formatter *f) const {
@@ -260,19 +274,20 @@ void ActionEntry::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ActionEntry::decode(bufferlist::iterator &it) {
+void ActionEntry::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
-  decode(struct_v, it);
+  decode_versioned(struct_v, it);
   DECODE_FINISH(it);
 }
 
-void ActionEntry::decode_unversioned(bufferlist::iterator &it) {
-  decode(0, it);
+void ActionEntry::decode_unversioned(bufferlist::const_iterator &it) {
+  decode_versioned(0, it);
 }
 
-void ActionEntry::decode(__u8 version, bufferlist::iterator &it) {
+void ActionEntry::decode_versioned(__u8 version, bufferlist::const_iterator &it) {
+  using ceph::decode;
   uint8_t action_type;
-  ::decode(action_type, it);
+  decode(action_type, it);
 
   // select the correct action variant based upon the action_type
   switch (action_type) {
@@ -364,11 +379,8 @@ void ActionEntry::generate_test_instances(std::list<ActionEntry *> &o) {
   o.push_back(new ActionEntry(AioCloseImageAction(1, 123456789, dependencies, 3)));
 }
 
-} // namespace action
-} // namespace rbd_replay
-
 std::ostream &operator<<(std::ostream &out,
-                         const rbd_replay::action::ActionType &type) {
+                         const ActionType &type) {
   using namespace rbd_replay::action;
 
   switch (type) {
@@ -415,3 +427,5 @@ std::ostream &operator<<(std::ostream &out,
   return out;
 }
 
+} // namespace action
+} // namespace rbd_replay
