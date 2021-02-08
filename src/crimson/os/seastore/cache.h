@@ -163,7 +163,7 @@ public:
 	offset,
 	length,
 	ref->get_bptr()).safe_then(
-	  [this, ref=std::move(ref)]() mutable {
+	  [ref=std::move(ref)]() mutable {
 	    /* TODO: crc should be checked against LBA manager */
 	    ref->last_committed_crc = ref->get_crc32c();
 

@@ -371,7 +371,7 @@ class OrderedExclusivePhase : public PipelineStageI {
     return name;
   }
 
-  class ExitBarrier : public PipelineExitBarrierI {
+  class ExitBarrier final : public PipelineExitBarrierI {
     OrderedExclusivePhase *phase;
   public:
     ExitBarrier(OrderedExclusivePhase *phase) : phase(phase) {}
