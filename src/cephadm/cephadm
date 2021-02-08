@@ -3150,7 +3150,7 @@ def check_subnet(subnets:str) -> Tuple[int, List[int], str]:
             errors.append(f"{subnet} is not in CIDR format (address/netmask)")
             continue
         try:
-            v = ipaddress.ip_network(unicode(subnet)).version
+            v = ipaddress.ip_network(subnet).version
             versions.add(v)
         except ValueError as e:
             rc = 1
