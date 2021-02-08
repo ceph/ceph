@@ -10113,7 +10113,9 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::shared_ptr<std::map<std:
   ObjectContextRef obc = get_object_context(soid, false);
   C_GatherBuilder gather(cct);
 
-  auto cgop = CLSGatherOp(ctx, obc, op);
+  auto [iter, inserted] = cls_gather_ops.emplace(soid, CLSGatherOp(ctx, obc, op));
+  ceph_assert(inserted);
+  auto &cgop = iter->second;
   for (std::map<std::string, bufferlist>::iterator it = src_obj_buffs->begin(); it != src_obj_buffs->end(); it++) {
     std::string oid = it->first;
     ObjectOperation obj_op;
@@ -10127,7 +10129,6 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::shared_ptr<std::map<std:
     cgop.objecter_tids.push_back(tid);
     dout(10) << __func__ << " src=" << oid << ", tgt=" << soid << dendl;
   }
-  cls_gather_ops[soid] = cgop;
   
   C_gather *fin = new C_gather(this, soid, ctx);
   gather.set_finisher(new C_OnFinisher(fin,
