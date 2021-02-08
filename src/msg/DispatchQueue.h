@@ -212,11 +212,6 @@ class DispatchQueue {
   uint64_t get_id() {
     return next_id++;
   }
-
-  Messenger* get_messenger() const {
-    return msgr;
-  }
-
   void start();
   void entry();
   void wait();
