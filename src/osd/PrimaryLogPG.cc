@@ -10093,7 +10093,7 @@ struct C_gather : public Context {
       pg->unlock();
       return;
     }
-    pg->cls_gather_set_result(oid, r);
+    pg->cls_gather_set_result(p, r);
     pg->execute_ctx(ctx);
     pg->unlock();
   }
@@ -10945,16 +10945,16 @@ bool PrimaryLogPG::is_present_clone(hobject_t coid)
 // cls gather
 //
 
-void PrimaryLogPG::cls_gather_set_result(hobject_t oid, int r)
+void PrimaryLogPG::cls_gather_set_result(map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p, int r)
 {
-  map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = cls_gather_ops.find(oid);
   ceph_assert(p != cls_gather_ops.end());
   p->second.rval = r;
 }
 
-void PrimaryLogPG::cancel_cls_gather(CLSGatherOp cgop, bool requeue,
+void PrimaryLogPG::cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, bool requeue,
 				     vector<ceph_tid_t> *tids)
 {
+  auto &cgop = iter->second;
   for (std::vector<ceph_tid_t>::iterator p = cgop.objecter_tids.begin(); p != cgop.objecter_tids.end(); p++) {
     tids->push_back(*p);
     dout(10) << __func__ << " " << cgop.obc->obs.oi.soid << " tid " << *p << dendl;
@@ -10966,7 +10966,7 @@ void PrimaryLogPG::cancel_cls_gather(CLSGatherOp cgop, bool requeue,
     if (cgop.op)
       requeue_op(cgop.op);
   }
-  cls_gather_ops.erase(cgop.obc->obs.oi.soid);
+  cls_gather_ops.erase(iter);
 }
 
 void PrimaryLogPG::cancel_cls_gather_ops(bool requeue, vector<ceph_tid_t> *tids)
@@ -10974,7 +10974,7 @@ void PrimaryLogPG::cancel_cls_gather_ops(bool requeue, vector<ceph_tid_t> *tids)
   dout(10) << __func__ << dendl;
   map<hobject_t,CLSGatherOp>::iterator p = cls_gather_ops.begin();
   while (p != cls_gather_ops.end()) {
-    cancel_cls_gather((p++)->second, requeue, tids);
+    cancel_cls_gather(p++, requeue, tids);
   }
 }
 
