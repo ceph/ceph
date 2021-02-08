@@ -10082,7 +10082,9 @@ struct C_gather : public Context {
   PrimaryLogPGRef pg;
   hobject_t oid;
   PrimaryLogPG::OpContext *ctx;
-  C_gather(PrimaryLogPG *pg_, hobject_t oid_, PrimaryLogPG::OpContext *ctx_) : pg(pg_), oid(oid_), ctx(ctx_) {}
+  epoch_t last_peering_reset;
+  C_gather(PrimaryLogPG *pg_, hobject_t oid_, PrimaryLogPG::OpContext *ctx_, epoch_t lpr_) :
+    pg(pg_), oid(oid_), ctx(ctx_), last_peering_reset(lpr_) {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
@@ -10090,6 +10092,9 @@ struct C_gather : public Context {
     map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = pg->cls_gather_ops.find(oid);
     if (p == pg->cls_gather_ops.end()) {
       // op was cancelled
+      return;
+    }
+    if (last_peering_reset != pg->get_last_peering_reset()) {
       return;
     }
     pg->cls_gather_set_result(p, r);
@@ -10128,7 +10133,7 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
     dout(10) << __func__ << " src=" << oid << ", tgt=" << soid << dendl;
   }
   
-  C_gather *fin = new C_gather(this, soid, ctx);
+  C_gather *fin = new C_gather(this, soid, ctx, get_last_peering_reset());
   gather.set_finisher(new C_OnFinisher(fin,
 				       osd->get_objecter_finisher(get_pg_shard())));
   gather.activate();
