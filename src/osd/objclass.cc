@@ -702,8 +702,8 @@ uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
 }
 
 struct GatherFinisher : public PrimaryLogPG::OpFinisher {
-  std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs;
-  GatherFinisher(std::shared_ptr<std::map<std::string, bufferlist> > sob) : src_obj_buffs(sob) {}
+  std::map<std::string, bufferlist> *src_obj_buffs;
+  GatherFinisher(std::map<std::string, bufferlist> *sob) : src_obj_buffs(sob) {}
   int execute() override {
     return 0;
   }
@@ -713,7 +713,7 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
 		   const char *cls, const char *method, bufferlist& inbl)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
-  std::shared_ptr<std::map<std::string, bufferlist> > src_obj_buffs(new std::map<std::string, bufferlist>);
+  std::map<std::string, bufferlist> *src_obj_buffs = new std::map<std::string, bufferlist>;
   for (std::set<std::string>::const_iterator it = src_objs.begin(); it != src_objs.end(); ++it) {
     (*src_obj_buffs)[*it] = bufferlist();
   }
@@ -737,6 +737,7 @@ int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, b
   } else {
     GatherFinisher *gf = (GatherFinisher*)op_finisher;
     *results = *gf->src_obj_buffs;
+    delete gf->src_obj_buffs;
     r = (*pctx)->pg->finish_cls_gather(*pctx);
   }
   return r;
