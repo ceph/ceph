@@ -398,8 +398,10 @@ def CLICheckNonemptyFileInput(func):
     def check(*args, **kwargs):
         if not 'inbuf' in kwargs:
             return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
-        if not kwargs['inbuf'] or (isinstance(kwargs['inbuf'], str)
-                                   and not kwargs['inbuf'].strip('\n')):
+        if isinstance(kwargs['inbuf'], str):
+            # Delete new line separator at EOF (it may have been added by a text editor).
+            kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
+        if not kwargs['inbuf']:
             return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
         return func(*args, **kwargs)
     return check
