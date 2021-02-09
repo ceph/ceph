@@ -7713,7 +7713,7 @@ def main():
     except Error as e:
         if ctx.verbose:
             raise
-        sys.stderr.write('ERROR: %s\n' % e)
+        logger.error('ERROR: %s' % e)
         sys.exit(1)
     if not r:
         r = 0
