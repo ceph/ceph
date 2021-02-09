@@ -86,7 +86,11 @@ def normalize_hostnames(ctx):
     remote.shortname and socket.gethostname() in cephadm.
     """
     log.info('Normalizing hostnames...')
-    ctx.cluster.sh('sudo hostname $(hostname -s)')
+    ctx.cluster.run(args=[
+        'sudo',
+        'hostname',
+        run.Raw('$(hostname -s)'),
+    ])
 
     try:
         yield
@@ -230,10 +234,28 @@ def ceph_log(ctx, config):
                 not (ctx.config.get('archive-on-error') and ctx.summary['success']):
             # and logs
             log.info('Compressing logs...')
-            ctx.cluster.sh(
-                'sudo find /var/log/ceph -name *.log -print0 | '
-                'sudo xargs -0 --no-run-if-empty -- gzip --',
-                wait=False)
+            run.wait(
+                ctx.cluster.run(
+                    args=[
+                        'sudo',
+                        'find',
+                        '/var/log/ceph',   # all logs, not just for the cluster
+                        '/var/log/rbd-target-api', # ceph-iscsi
+                        '-name',
+                        '*.log',
+                        '-print0',
+                        run.Raw('|'),
+                        'sudo',
+                        'xargs',
+                        '-0',
+                        '--no-run-if-empty',
+                        '--',
+                        'gzip',
+                        '--',
+                    ],
+                    wait=False,
+                ),
+            )
 
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
@@ -306,8 +328,12 @@ def ceph_bootstrap(ctx, config, registry):
     first_mon_role = ctx.ceph[cluster_name].first_mon_role
     mons = ctx.ceph[cluster_name].mons
 
-    ctx.cluster.sh('sudo mkdir -p /etc/ceph')
-    ctx.cluster.sh('sudo chmod 777 /etc/ceph')
+    ctx.cluster.run(args=[
+        'sudo', 'mkdir', '-p', '/etc/ceph',
+        ]);
+    ctx.cluster.run(args=[
+        'sudo', 'chmod', '777', '/etc/ceph',
+        ]);
     if registry:
         add_mirror_to_cluster(ctx, registry)
     try:
@@ -395,11 +421,15 @@ def ceph_bootstrap(ctx, config, registry):
             f'{testdir}/{cluster_name}.pub').decode('ascii').strip()
 
         log.info('Installing pub ssh key for root users...')
-        ctx.cluster.sh(
-            'sudo install -d -m 0700 /root/.ssh &&'
-            f'echo {ssh_pub_key} |'
-            'sudo tee -a /root/.ssh/authorized_keys &&'
-            'sudo chmod 0600 /root/.ssh/authorized_keys')
+        ctx.cluster.run(args=[
+            'sudo', 'install', '-d', '-m', '0700', '/root/.ssh',
+            run.Raw('&&'),
+            'echo', ssh_pub_key,
+            run.Raw('|'),
+            'sudo', 'tee', '-a', '/root/.ssh/authorized_keys',
+            run.Raw('&&'),
+            'sudo', 'chmod', '0600', '/root/.ssh/authorized_keys',
+        ])
 
         # set options
         if config.get('allow_ptrace', True):
