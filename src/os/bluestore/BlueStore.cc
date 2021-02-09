@@ -6286,9 +6286,10 @@ void BlueStore::_set_per_pool_omap()
     auto s = bl.to_str();
     if (s == stringify(OMAP_PER_POOL)) {
       per_pool_omap = OMAP_PER_POOL;
-    } else {
-      ceph_assert(s == stringify(OMAP_PER_PG));
+    } else if (s == stringify(OMAP_PER_PG)) {
       per_pool_omap = OMAP_PER_PG;
+    } else {
+      ceph_assert(s == stringify(OMAP_BULK));
     }
     dout(10) << __func__ << " per_pool_omap = " << per_pool_omap << dendl;
   } else {
@@ -6591,7 +6592,11 @@ int BlueStore::mkfs()
     }
     {
       bufferlist bl;
-      bl.append(stringify(OMAP_PER_PG));
+      if (cct->_conf.get_val<bool>("bluestore_debug_legacy_omap")) {
+	bl.append(stringify(OMAP_BULK));
+      } else {
+	bl.append(stringify(OMAP_PER_PG));
+      }
       t->set(PREFIX_SUPER, "per_pool_omap", bl);
     }
     ondisk_format = latest_ondisk_format;
