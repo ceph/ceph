@@ -216,16 +216,26 @@ def run_with_watchdog(process, job_config):
             log.warning("Job ran longer than {max}s. Killing...".format(
                 max=teuth_config.max_job_time))
             try:
+                # kill processes but do not unlock yet so we can save
+                # the logs, coredumps, etc.
+                kill_job(job_info['name'], job_info['job_id'],
+                         teuth_config.archive_base, job_config['owner'],
+                         save_logs=True)
+            except Exception:
+                log.exception('Failed to kill job')
+
+            try:
                 transfer_archives(job_info['name'], job_info['job_id'],
                                   teuth_config.archive_base, job_config)
             except Exception:
                 log.exception('Could not save logs')
 
             try:
+                # this time remove everything and unlock the machines
                 kill_job(job_info['name'], job_info['job_id'],
                          teuth_config.archive_base, job_config['owner'])
             except Exception:
-                log.exception('Failed to kill job')
+                log.exception('Failed to kill job and unlock machines')
 
         # calling this without a status just updates the jobs updated time
         report.try_push_job_info(job_info)
