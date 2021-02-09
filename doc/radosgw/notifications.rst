@@ -29,6 +29,7 @@ mechanism. This API is similar to the one defined as the S3-compatible API of th
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
+.. note:: To enable bucket notifications API, the `rgw_enable_apis` configuration parameter should contain: "notifications".
 
 Notification Reliability
 ------------------------
