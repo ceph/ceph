@@ -13,14 +13,14 @@ class Inode;
 
 struct Fh {
   InodeRef  inode;
-  int	    _ref;
-  loff_t    pos;
-  int       mds;        // have to talk to mds we opened with (for now)
+  int       _ref = 1;
+  loff_t    pos = 0;
+  int       mds = 0;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
   uint64_t  gen;
 
   int flags;
-  bool pos_locked;           // pos is currently in use
+  bool pos_locked = false;           // pos is currently in use
   std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
 
   UserPerm actor_perms; // perms I opened the file with
