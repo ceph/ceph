@@ -2814,6 +2814,8 @@ public:
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
       // sucess
+    } else if (r == -EBUSY) {
+      // could fail if snap is not oldest
     } else {
       ceph_abort_msg("shouldn't happen");
     }
