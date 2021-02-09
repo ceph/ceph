@@ -430,12 +430,10 @@ class Module(MgrModule):
     def remote_from_orchestrator_cli_self_test(self, what):
         import orchestrator
         if what == 'OrchestratorError':
-            c = orchestrator.TrivialReadCompletion(result=None)
-            c.fail(orchestrator.OrchestratorError('hello, world'))
+            c = orchestrator.OrchResult(result=None, exception=orchestrator.OrchestratorError('hello, world'))
             return c
         elif what == "ZeroDivisionError":
-            c = orchestrator.TrivialReadCompletion(result=None)
-            c.fail(ZeroDivisionError('hello, world'))
+            c = orchestrator.OrchResult(result=None, exception=ZeroDivisionError('hello, world'))
             return c
         assert False, repr(what)
 
