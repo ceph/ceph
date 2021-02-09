@@ -9762,6 +9762,7 @@ Client::C_Readahead::~C_Readahead() {
 }
 
 void Client::C_Readahead::finish(int r) {
+  std::scoped_lock cl(client->client_lock);
   lgeneric_subdout(client->cct, client, 20) << "client." << client->get_nodeid() << " " << "C_Readahead on " << f->inode << dendl;
   client->put_cap_ref(f->inode.get(), CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
 }
