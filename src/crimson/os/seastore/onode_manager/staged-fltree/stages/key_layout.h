@@ -128,9 +128,9 @@ inline MatchKindCMP compare_to(const snap_gen_t& l, const snap_gen_t& r) {
  * The layout to store char array as an oid or an ns string which may be
  * compressed.
  *
- * (TODO) If compressed, the physical block only stores an unsigned
- * int of string_size_t, with value MIN denoting Type::MIN, and value MAX
- * denoting Type::MAX.
+ * (TODO) If compressed, the physical block only stores an unsigned int of
+ * string_size_t, with value MARKER_MIN denoting Type::MIN, and value
+ * MARKER_MAX denoting Type::MAX.
  *
  * If not compressed (Type::STR), the physical block stores the char array and
  * a valid string_size_t value.
@@ -139,10 +139,11 @@ struct string_key_view_t {
   enum class Type {MIN, STR, MAX};
   // presumably the maximum string length is 2KiB
   using string_size_t = uint16_t;
-  static constexpr auto MAX = std::numeric_limits<string_size_t>::max();
-  static constexpr auto MIN = MAX - 1;
+  static constexpr auto MARKER_MAX = std::numeric_limits<string_size_t>::max();
+  static constexpr auto MARKER_MIN = std::numeric_limits<string_size_t>::max() - 1;
+  static constexpr auto VALID_UPPER_BOUND = std::numeric_limits<string_size_t>::max() - 2;
   static bool is_valid_size(size_t size) {
-    return size < MIN;
+    return size <= VALID_UPPER_BOUND;
   }
 
   string_key_view_t(const char* p_end) {
@@ -152,14 +153,14 @@ struct string_key_view_t {
       auto _p_key = p_length - length;
       p_key = static_cast<const char*>(_p_key);
     } else {
-      assert(length == MAX || length == MIN);
+      assert(length == MARKER_MAX || length == MARKER_MIN);
       p_key = nullptr;
     }
   }
   Type type() const {
-    if (length == MIN) {
+    if (length == MARKER_MIN) {
       return Type::MIN;
-    } else if (length == MAX) {
+    } else if (length == MARKER_MAX) {
       return Type::MAX;
     } else {
       assert(is_valid_size(length));
@@ -230,9 +231,9 @@ struct string_key_view_t {
     p_append -= sizeof(string_size_t);
     string_size_t len;
     if (dedup_type == Type::MIN) {
-      len = MIN;
+      len = MARKER_MIN;
     } else if (dedup_type == Type::MAX) {
-      len = MAX;
+      len = MARKER_MAX;
     } else {
       ceph_abort("impossible path");
     }
@@ -290,9 +291,9 @@ class string_view_masked_t {
   bool operator!=(const string_view_masked_t& x) const { return !(*this == x); }
   void encode(ceph::bufferlist& bl) const {
     if (get_type() == Type::MIN) {
-      ceph::encode(string_key_view_t::MIN, bl);
+      ceph::encode(string_key_view_t::MARKER_MIN, bl);
     } else if (get_type() == Type::MAX) {
-      ceph::encode(string_key_view_t::MAX, bl);
+      ceph::encode(string_key_view_t::MARKER_MAX, bl);
     } else {
       ceph::encode(size(), bl);
       ceph::encode_nohead(view, bl);
@@ -304,9 +305,9 @@ class string_view_masked_t {
       std::string& str_storage, ceph::bufferlist::const_iterator& delta) {
     string_size_t size;
     ceph::decode(size, delta);
-    if (size == string_key_view_t::MIN) {
+    if (size == string_key_view_t::MARKER_MIN) {
       return min();
-    } else if (size == string_key_view_t::MAX) {
+    } else if (size == string_key_view_t::MARKER_MAX) {
       return max();
     } else {
       ceph::decode_nohead(size, str_storage, delta);
