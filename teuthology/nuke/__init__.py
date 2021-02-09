@@ -278,6 +278,7 @@ def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
 def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
              check_locks, noipmi):
     ret = None
+    keep_logs = ctx.keep_logs
     ctx = argparse.Namespace(
         config=dict(targets=target),
         owner=ctx.owner,
@@ -289,7 +290,7 @@ def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
         noipmi=noipmi,
     )
     try:
-        nuke_helper(ctx, should_unlock)
+        nuke_helper(ctx, should_unlock, keep_logs)
     except Exception:
         log.exception('Could not nuke %s' % target)
         # not re-raising the so that parallel calls aren't killed
@@ -300,7 +301,7 @@ def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
     return ret
 
 
-def nuke_helper(ctx, should_unlock):
+def nuke_helper(ctx, should_unlock, keep_logs):
     # ensure node is up with ipmi
     (target,) = ctx.config['targets'].keys()
     host = target.split('@')[-1]
@@ -352,7 +353,8 @@ def nuke_helper(ctx, should_unlock):
     undo_multipath(ctx)
     reset_syslog_dir(ctx)
     remove_ceph_data(ctx)
-    remove_testing_tree(ctx)
+    if not keep_logs:
+        remove_testing_tree(ctx)
     remove_yum_timedhosts(ctx)
     # Once again remove packages after reboot
     remove_installed_packages(ctx)
