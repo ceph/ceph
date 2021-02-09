@@ -3661,35 +3661,41 @@ void BlueStore::Onode::dump(Formatter* f) const
   extent_map.dump(f);
 }
 
-
-const string& BlueStore::Onode::get_omap_prefix()
+const std::string& BlueStore::Onode::calc_omap_prefix(uint8_t flags)
 {
-  if (onode.is_pgmeta_omap()) {
+  if (bluestore_onode_t::is_pgmeta_omap(flags)) {
     return PREFIX_PGMETA_OMAP;
   }
-  if (onode.is_perpool_omap()) {
+  if (bluestore_onode_t::is_perpool_omap(flags)) {
     return PREFIX_PERPOOL_OMAP;
   }
   return PREFIX_OMAP;
 }
 
 // '-' < '.' < '~'
-
-void BlueStore::Onode::get_omap_header(string *out)
+void BlueStore::Onode::calc_omap_header(
+  uint8_t flags,
+  const Onode* o,
+  std::string* out)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(c->pool(), out);
+  if (bluestore_onode_t::is_perpool_omap(flags) &&
+      !bluestore_onode_t::is_pgmeta_omap(flags)) {
+    _key_encode_u64(o->c->pool(), out);
   }
-  _key_encode_u64(onode.nid, out);
+  _key_encode_u64(o->onode.nid, out);
   out->push_back('-');
 }
 
-void BlueStore::Onode::get_omap_key(const string& key, string *out)
+void BlueStore::Onode::calc_omap_key(uint8_t flags,
+				    const Onode* o,
+				    const std::string& key,
+				    std::string* out)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(c->pool(), out);
+  if (bluestore_onode_t::is_perpool_omap(flags) &&
+      !bluestore_onode_t::is_pgmeta_omap(flags)) {
+    _key_encode_u64(o->c->pool(), out);
   }
-  _key_encode_u64(onode.nid, out);
+  _key_encode_u64(o->onode.nid, out);
   out->push_back('.');
   out->append(key);
 }
@@ -3703,12 +3709,16 @@ void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
   out->append(old.c_str() + out->length(), old.size() - out->length());
 }
 
-void BlueStore::Onode::get_omap_tail(string *out)
+void BlueStore::Onode::calc_omap_tail(
+  uint8_t flags,
+  const Onode* o,
+  std::string* out)
 {
-  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(c->pool(), out);
+  if (bluestore_onode_t::is_perpool_omap(flags) &&
+     !bluestore_onode_t::is_pgmeta_omap(flags)) {
+    _key_encode_u64(o->c->pool(), out);
   }
-  _key_encode_u64(onode.nid, out);
+  _key_encode_u64(o->onode.nid, out);
   out->push_back('~');
 }
 
@@ -3720,7 +3730,6 @@ void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
     *user_key = key.substr(sizeof(uint64_t) + 1);
   }
 }
-
 
 // =======================================================
 // WriteContext
@@ -8171,12 +8180,69 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
     !o->onode.is_perpool_omap() &&
     !o->onode.is_pgmeta_omap()) {
     dout(10) << "fsck converting " << o->oid << " omap to per-pool" << dendl;
-    bufferlist h;
-    map<string, bufferlist> kv;
-    int r = _onode_omap_get(o, &h, &kv);
-    if (r < 0) {
-      derr << " got " << r << " " << cpp_strerror(r) << dendl;
-    } else {
+    bufferlist header;
+    {
+      KeyValueDB::Transaction txn = db->get_transaction();
+      uint64_t txn_cost = 0;
+      const string& prefix = Onode::calc_omap_prefix(o->onode.flags);
+      uint8_t new_flags = o->onode.flags |
+	bluestore_onode_t::FLAG_PERPOOL_OMAP;
+      const string& new_omap_prefix = Onode::calc_omap_prefix(new_flags);
+
+      KeyValueDB::Iterator it = db->get_iterator(prefix);
+      string head, tail;
+      o->get_omap_header(&head);
+      o->get_omap_tail(&tail);
+      it->lower_bound(head);
+      // head
+      if (it->valid() && it->key() == head) {
+	dout(30) << __func__ << "  got header" << dendl;
+	header = it->value();
+	if (header.length()) {
+	  string new_head;
+	  Onode::calc_omap_header(new_flags, o.get(), &new_head);
+	  txn->set(new_omap_prefix, new_head, header);
+	  txn_cost += new_head.length() + header.length();
+	}
+      }
+      // tail
+      {
+	string new_tail;
+	Onode::calc_omap_tail(new_flags, o.get(), &new_tail);
+	bufferlist empty;
+	txn->set(new_omap_prefix, new_tail, empty);
+	txn_cost += new_tail.length() + new_tail.length();
+      }
+      // values
+      string final_key;
+      Onode::calc_omap_key(new_flags, o.get(), string(), &final_key);
+      size_t base_key_len = final_key.size();
+      while (it->valid() && it->key() < tail) {
+	string user_key;
+	o->decode_omap_key(it->key(), &user_key);
+	dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
+	  << " -> " << user_key << dendl;
+
+	final_key.resize(base_key_len);
+	final_key += it->key();
+	auto v = it->value();
+	txn->set(new_omap_prefix, final_key, v);
+	txn_cost += final_key.length() + v.length();
+
+	// submit a portion if cost exceeds 16MB
+	if (txn_cost >= 16 * (1 << 20) ) {
+	  db->submit_transaction_sync(txn);
+	  txn = db->get_transaction();
+	  txn_cost = 0;
+	}
+	it->next();
+      }
+      if (txn_cost > 0) {
+	db->submit_transaction_sync(txn);
+      }
+    }
+    // finalize: remove legacy data
+    {
       KeyValueDB::Transaction txn = db->get_transaction();
       // remove old keys
       const string& old_omap_prefix = o->get_omap_prefix();
@@ -8188,27 +8254,6 @@ void BlueStore::_fsck_check_object_omap(FSCKDepth depth,
       // set flag
       o->onode.set_flag(bluestore_onode_t::FLAG_PERPOOL_OMAP);
       _record_onode(o, txn);
-      const string& new_omap_prefix = o->get_omap_prefix();
-      // head
-      if (h.length()) {
-        string new_head;
-        o->get_omap_header(&new_head);
-        txn->set(new_omap_prefix, new_head, h);
-      }
-      // tail
-      string new_tail;
-      o->get_omap_tail(&new_tail);
-      bufferlist empty;
-      txn->set(new_omap_prefix, new_tail, empty);
-      // values
-      string final_key;
-      o->get_omap_key(string(), &final_key);
-      size_t base_key_len = final_key.size();
-      for (auto& i : kv) {
-        final_key.resize(base_key_len);
-        final_key += i.first;
-        txn->set(new_omap_prefix, final_key, i.second);
-      }
       db->submit_transaction_sync(txn);
       repairer->inc_repaired();
       repairer->request_compaction();
@@ -14900,7 +14945,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     if (o->oid.is_pgmeta()) {
       o->onode.set_omap_flags_pgmeta();
     } else {
-      o->onode.set_omap_flags();
+      o->onode.set_omap_flags(!per_pool_omap);
     }
     txc->write_onode(o);
 
@@ -14945,7 +14990,7 @@ int BlueStore::_omap_setheader(TransContext *txc,
     if (o->oid.is_pgmeta()) {
       o->onode.set_omap_flags_pgmeta();
     } else {
-      o->onode.set_omap_flags();
+      o->onode.set_omap_flags(!per_pool_omap);
     }
     txc->write_onode(o);
 
@@ -15101,7 +15146,7 @@ int BlueStore::_clone(TransContext *txc,
     if (newo->oid.is_pgmeta()) {
       newo->onode.set_omap_flags_pgmeta();
     } else {
-      newo->onode.set_omap_flags();
+      newo->onode.set_omap_flags(!per_pool_omap);
     }
     const string& prefix = newo->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);

@@ -955,6 +955,13 @@ struct bluestore_onode_t {
   bool has_omap() const {
     return has_flag(FLAG_OMAP);
   }
+
+  static bool is_pgmeta_omap(uint8_t flags) {
+    return flags & FLAG_PGMETA_OMAP;
+  }
+  static bool is_perpool_omap(uint8_t flags) {
+    return flags & FLAG_PERPOOL_OMAP;
+  }
   bool is_pgmeta_omap() const {
     return has_flag(FLAG_PGMETA_OMAP);
   }
@@ -962,8 +969,8 @@ struct bluestore_onode_t {
     return has_flag(FLAG_PERPOOL_OMAP);
   }
 
-  void set_omap_flags() {
-    set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
+  void set_omap_flags(bool legacy) {
+    set_flag(FLAG_OMAP | (legacy ? 0 : FLAG_PERPOOL_OMAP));
   }
   void set_omap_flags_pgmeta() {
     set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
