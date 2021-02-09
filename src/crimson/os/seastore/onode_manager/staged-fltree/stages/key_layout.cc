@@ -23,9 +23,9 @@ void string_key_view_t::append_dedup(
 {
   p_append -= sizeof(string_size_t);
   if (dedup_type == Type::MIN) {
-    mut.copy_in_absolute(p_append, MIN);
+    mut.copy_in_absolute(p_append, MARKER_MIN);
   } else if (dedup_type == Type::MAX) {
-    mut.copy_in_absolute(p_append, MAX);
+    mut.copy_in_absolute(p_append, MARKER_MAX);
   } else {
     ceph_abort("impossible path");
   }
