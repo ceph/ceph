@@ -5020,6 +5020,15 @@ options:
   desc: inject crc verification errors into bluestore device reads
   default: 0
   with_legacy: true
+- name: bluestore_debug_legacy_omap
+  type: bool
+  level: dev
+  desc: Allows mkfs to create OSD in legacy OMAP naming mode (neither per-pool nor per-pg).
+    This is intended primarily for developers' purposes. The resulting OSD might/would
+    be transformed to the currrently default 'per-pg' format when BlueStore's quick-fix or
+    repair are applied.
+  default: false
+  with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pool_stats
   type: bool
   level: advanced
