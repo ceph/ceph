@@ -40,7 +40,7 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
                         participate in a `multi-site <../multisite>`_
                         configuration.
 :Type: String
-:Default: ``s3, swift, swift_auth, admin`` All APIs.
+:Default: ``s3, s3website, swift, swift_auth, admin, sts, iam, notifications`` All APIs.
 
 
 ``rgw_cache_enabled``
