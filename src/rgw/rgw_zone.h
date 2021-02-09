@@ -1070,7 +1070,8 @@ class RGWPeriod
   const std::string get_period_oid_prefix() const;
 
   // gather the metadata sync status for each shard; only for use on master zone
-  int update_sync_status(rgw::sal::RGWRadosStore *store,
+  int update_sync_status(const DoutPrefixProvider *dpp,
+                         rgw::sal::RGWRadosStore *store,
                          const RGWPeriod &current_period,
                          std::ostream& error_stream, bool force_if_stale);
 

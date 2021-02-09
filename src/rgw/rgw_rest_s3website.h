@@ -35,7 +35,7 @@ protected:
   RGWOp *op_copy() override { return NULL; }
   RGWOp *op_options() override { return NULL; }
 
-  int serve_errordoc(int http_ret, const string &errordoc_key, optional_yield y);
+  int serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string &errordoc_key, optional_yield y);
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_S3Website() override = default;

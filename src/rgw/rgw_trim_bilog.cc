@@ -446,10 +446,10 @@ class BucketTrimInstanceCR : public RGWCoroutine {
     source_policy = make_shared<rgw_bucket_get_sync_policy_result>();
   }
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int BucketTrimInstanceCR::operate()
+int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     ldout(cct, 4) << "starting trim on bucket=" << bucket_instance << dendl;
@@ -637,7 +637,7 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
   const std::string start_marker;
   MetadataListCallback callback;
 
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
  public:
   AsyncMetadataList(CephContext *cct, RGWCoroutine *caller,
                     RGWAioCompletionNotifier *cn, RGWMetadataManager *mgr,
@@ -648,7 +648,7 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
   {}
 };
 
-int AsyncMetadataList::_send_request()
+int AsyncMetadataList::_send_request(const DoutPrefixProvider *dpp)
 {
   void* handle = nullptr;
   std::list<std::string> keys;
@@ -753,7 +753,7 @@ class MetadataListCR : public RGWSimpleCoroutine {
     request_cleanup();
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     req = new AsyncMetadataList(cct, this, stack->create_completion_notifier(),
                                 mgr, section, start_marker, callback);
     async_rados->queue(req);
@@ -794,12 +794,12 @@ class BucketTrimCR : public RGWCoroutine {
       observer(observer), obj(obj), counter(config.counter_size), dpp(dpp)
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
 const std::string BucketTrimCR::section{"bucket.instance"};
 
-int BucketTrimCR::operate()
+int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     start_time = ceph::mono_clock::now();
@@ -954,10 +954,10 @@ class BucketTrimPollCR : public RGWCoroutine {
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       dpp(dpp) {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int BucketTrimPollCR::operate()
+int BucketTrimPollCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     for (;;) {

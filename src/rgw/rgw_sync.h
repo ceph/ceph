@@ -170,7 +170,7 @@ public:
   virtual RGWCoroutine *alloc_cr() = 0;
   virtual RGWCoroutine *alloc_finisher_cr() { return NULL; }
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
 struct RGWMetaSyncEnv {
@@ -211,7 +211,7 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWMetaSyncEnv sync_env;
 
   void init_sync_env(RGWMetaSyncEnv *env);
-  int store_sync_info(const rgw_meta_sync_info& sync_info);
+  int store_sync_info(const DoutPrefixProvider *dpp, const rgw_meta_sync_info& sync_info);
 
   std::atomic<bool> going_down = { false };
 
@@ -231,12 +231,12 @@ public:
   int init();
   void finish();
 
-  int read_log_info(rgw_mdlog_info *log_info);
-  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info);
-  int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
-  int read_sync_status(rgw_meta_sync_status *sync_status);
-  int init_sync_status();
-  int run_sync(optional_yield y);
+  int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info);
+  int read_master_log_shards_info(const DoutPrefixProvider *dpp, const string& master_period, map<int, RGWMetadataLogInfo> *shards_info);
+  int read_master_log_shards_next(const DoutPrefixProvider *dpp, const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
+  int read_sync_status(const DoutPrefixProvider *dpp, rgw_meta_sync_status *sync_status);
+  int init_sync_status(const DoutPrefixProvider *dpp);
+  int run_sync(const DoutPrefixProvider *dpp, optional_yield y);
 
   void wakeup(int shard_id);
 
@@ -275,23 +275,23 @@ public:
   RGWMetaSyncStatusManager(rgw::sal::RGWRadosStore *_store, RGWAsyncRadosProcessor *async_rados)
     : store(_store), master_log(this, store, async_rados, this)
   {}
-  int init();
+  int init(const DoutPrefixProvider *dpp);
 
-  int read_sync_status(rgw_meta_sync_status *sync_status) {
-    return master_log.read_sync_status(sync_status);
+  int read_sync_status(const DoutPrefixProvider *dpp, rgw_meta_sync_status *sync_status) {
+    return master_log.read_sync_status(dpp, sync_status);
   }
-  int init_sync_status() { return master_log.init_sync_status(); }
-  int read_log_info(rgw_mdlog_info *log_info) {
-    return master_log.read_log_info(log_info);
+  int init_sync_status(const DoutPrefixProvider *dpp) { return master_log.init_sync_status(dpp); }
+  int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info) {
+    return master_log.read_log_info(dpp, log_info);
   }
-  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info) {
-    return master_log.read_master_log_shards_info(master_period, shards_info);
+  int read_master_log_shards_info(const DoutPrefixProvider *dpp, const string& master_period, map<int, RGWMetadataLogInfo> *shards_info) {
+    return master_log.read_master_log_shards_info(dpp, master_period, shards_info);
   }
-  int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
-    return master_log.read_master_log_shards_next(period, shard_markers, result);
+  int read_master_log_shards_next(const DoutPrefixProvider *dpp, const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
+    return master_log.read_master_log_shards_next(dpp, period, shard_markers, result);
   }
 
-  int run(optional_yield y) { return master_log.run_sync(y); }
+  int run(const DoutPrefixProvider *dpp, optional_yield y) { return master_log.run_sync(dpp, y); }
 
 
   // implements DoutPrefixProvider
@@ -325,7 +325,7 @@ public:
     }
   }
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 
   void call_cr(RGWCoroutine *_cr) override {
     if (cr) {
@@ -507,7 +507,7 @@ public:
                            const RGWMDLogStatus& _op_status,
                            RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent);
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
 class RGWShardCollectCR : public RGWCoroutine {
@@ -523,7 +523,7 @@ public:
                                                              status(0) {}
 
   virtual bool spawn_next() = 0;
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
 // factory functions for meta sync coroutines needed in mdlog trimming

@@ -620,7 +620,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 } /* namespace rgw */
 
 
-void RGW_SWIFT_Auth_Get::execute(optional_yield y)
+void RGW_SWIFT_Auth_Get::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   int ret = -EPERM;
 

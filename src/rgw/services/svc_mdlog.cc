@@ -127,7 +127,7 @@ class ReadHistoryCR : public RGWCoroutine {
       async_processor(svc.rados->get_async_processor())
   {}
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       yield {
         rgw_raw_obj obj{svc.zone->get_zone_params().log_pool,
@@ -174,7 +174,7 @@ class WriteHistoryCR : public RGWCoroutine {
       async_processor(svc.rados->get_async_processor())
   {}
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       state.oldest_period_id = cursor.get_period().get_id();
       state.oldest_realm_epoch = cursor.get_epoch();
@@ -216,7 +216,7 @@ class TrimHistoryCR : public RGWCoroutine {
     next.next(); // advance past cursor
   }
 
-  int operate() {
+  int operate(const DoutPrefixProvider *dpp) {
     reenter(this) {
       // read an existing history, and write the new history if it's newer
       yield call(new ReadHistoryCR(svc, &existing, objv));

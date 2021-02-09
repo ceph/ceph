@@ -94,7 +94,7 @@ class RGWStore {
 			    optional_yield y) = 0;
     virtual RGWBucketList* list_buckets(void) = 0;
     virtual bool is_meta_master() = 0;
-    virtual int forward_request_to_master(RGWUser* user, obj_version *objv,
+    virtual int forward_request_to_master(const DoutPrefixProvider *dpp, RGWUser* user, obj_version *objv,
 					  bufferlist& in_data, JSONParser *jp, req_info& info,
 					  optional_yield y) = 0;
     virtual int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx, RGWBucket* bucket, RGWObject* obj,

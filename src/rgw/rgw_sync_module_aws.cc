@@ -734,7 +734,7 @@ public:
                                                                                  src_properties(_src_properties) {
   }
 
-  int init() override {
+  int init(const DoutPrefixProvider *dpp) override {
     /* init input connection */
 
 
@@ -753,7 +753,7 @@ public:
     }
 
     RGWRESTStreamRWRequest *in_req;
-    int ret = conn->get_obj(src_obj, req_params, false /* send */, &in_req);
+    int ret = conn->get_obj(dpp, src_obj, req_params, false /* send */, &in_req);
     if (ret < 0) {
       ldout(sc->cct, 0) << "ERROR: " << __func__ << "(): conn->get_obj() returned ret=" << ret << dendl;
       return ret;
@@ -761,7 +761,7 @@ public:
 
     set_req(in_req);
 
-    return RGWStreamReadHTTPResourceCRF::init();
+    return RGWStreamReadHTTPResourceCRF::init(dpp);
   }
 
   int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override {
@@ -956,7 +956,7 @@ public:
     }
   }
 
-  void send_ready(const rgw_rest_obj& rest_obj) override {
+  void send_ready(const DoutPrefixProvider *dpp, const rgw_rest_obj& rest_obj) override {
     RGWRESTStreamS3PutObj *r = static_cast<RGWRESTStreamS3PutObj *>(req);
 
     map<string, string> new_attrs;
@@ -968,7 +968,7 @@ public:
 
     RGWAccessControlPolicy policy;
 
-    r->send_ready(target->conn->get_key(), new_attrs, policy, false);
+    r->send_ready(dpp, target->conn->get_key(), new_attrs, policy, false);
   }
 
   void handle_headers(const map<string, string>& headers) {
@@ -1015,7 +1015,7 @@ public:
                                                    dest_obj(_dest_obj),
                                                    src_properties(_src_properties) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       /* init input */
       in_crf.reset(new RGWRESTStreamGetCRF(cct, get_env(), this, sc,
@@ -1076,7 +1076,7 @@ public:
                                                    part_info(_part_info),
                                                    petag(_petag) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       /* init input */
       in_crf.reset(new RGWRESTStreamGetCRF(cct, get_env(), this, sc,
@@ -1125,7 +1125,7 @@ public:
                                                    dest_obj(_dest_obj),
                                                    upload_id(_upload_id) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
 
       yield {
@@ -1185,7 +1185,7 @@ public:
                                                    attrs(_attrs),
                                                    upload_id(_upload_id) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
 
       yield {
@@ -1287,7 +1287,7 @@ public:
                                                    upload_id(_upload_id),
                                                    req_enc(_parts) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
 
       yield {
@@ -1367,7 +1367,7 @@ public:
                                                             status_obj(_status_obj),
                                                             upload_id(_upload_id) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       yield call(new RGWAWSAbortMultipartCR(sc, dest_conn, dest_obj, upload_id));
       if (retcode < 0) {
@@ -1436,7 +1436,7 @@ public:
   }
 
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->svc->sysobj,
                                                                  status_obj, &status, false));
@@ -1593,7 +1593,7 @@ public:
   ~RGWAWSHandleRemoteObjCBCR(){
   }
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ret = decode_attr(attrs, RGW_ATTR_PG_VER, &src_pg_ver, (uint64_t)0);
       if (ret < 0) {
@@ -1736,7 +1736,7 @@ public:
                           AWSSyncInstanceEnv& _instance) : RGWCoroutine(_sc->cct), sc(_sc),
                                                         sync_pipe(_sync_pipe), key(_key),
                                                         mtime(_mtime), instance(_instance) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sc->cct, 0) << ": remove remote obj: z=" << sc->source_zone
                               << " b=" <<sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;

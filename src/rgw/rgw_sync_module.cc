@@ -39,7 +39,7 @@ RGWCallStatRemoteObjCR::RGWCallStatRemoteObjCR(RGWDataSyncCtx *_sc,
                                                                                                  src_bucket(_src_bucket), key(_key) {
 }
 
-int RGWCallStatRemoteObjCR::operate() {
+int RGWCallStatRemoteObjCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
     yield {
       call(new RGWStatRemoteObjCR(sync_env->async_rados, sync_env->store,

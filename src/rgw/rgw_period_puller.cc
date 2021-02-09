@@ -24,7 +24,7 @@ RGWPeriodPuller::RGWPeriodPuller(RGWSI_Zone *zone_svc, RGWSI_SysObj *sysobj_svc)
 namespace {
 
 // pull the given period over the connection
-int pull_period(RGWRESTConn* conn, const std::string& period_id,
+int pull_period(const DoutPrefixProvider *dpp, RGWRESTConn* conn, const std::string& period_id,
                 const std::string& realm_id, RGWPeriod& period,
 		optional_yield y)
 {
@@ -40,7 +40,7 @@ int pull_period(RGWRESTConn* conn, const std::string& period_id,
 
   bufferlist data;
 #define MAX_REST_RESPONSE (128 * 1024)
-  int r = conn->forward(user, info, nullptr, MAX_REST_RESPONSE, nullptr, &data, y);
+  int r = conn->forward(dpp, user, info, nullptr, MAX_REST_RESPONSE, nullptr, &data, y);
   if (r < 0) {
     return r;
   }
@@ -81,7 +81,7 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period,
     ldout(cct, 14) << "pulling period " << period_id
         << " from master" << dendl;
     // request the period from the master zone
-    r = pull_period(svc.zone->get_master_conn(), period_id,
+    r = pull_period(dpp, svc.zone->get_master_conn(), period_id,
                     svc.zone->get_realm().get_id(), period, y);
     if (r < 0) {
       lderr(cct) << "failed to pull period " << period_id << dendl;

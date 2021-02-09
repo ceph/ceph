@@ -70,10 +70,10 @@ class PurgePeriodLogsCR : public RGWCoroutine {
     svc.mdlog = store->svc()->mdlog;
   }
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int PurgePeriodLogsCR::operate()
+int PurgePeriodLogsCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     // read our current oldest log period
@@ -351,10 +351,10 @@ class MetaMasterTrimCR : public RGWCoroutine {
     : RGWCoroutine(env.store->ctx()), env(env)
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int MetaMasterTrimCR::operate()
+int MetaMasterTrimCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     // TODO: detect this and fail before we spawn the trim thread?
@@ -425,10 +425,10 @@ class MetaPeerTrimShardCR : public RGWCoroutine {
       period_id(period_id), shard_id(shard_id), last_trim(last_trim)
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int MetaPeerTrimShardCR::operate()
+int MetaPeerTrimShardCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     // query master's first mdlog entry for this shard
@@ -552,10 +552,10 @@ class MetaPeerTrimCR : public RGWCoroutine {
  public:
   explicit MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int MetaPeerTrimCR::operate()
+int MetaPeerTrimCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     ldout(cct, 10) << "fetching master mdlog info" << dendl;
@@ -617,10 +617,10 @@ class MetaTrimPollCR : public RGWCoroutine {
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int MetaTrimPollCR::operate()
+int MetaTrimPollCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     for (;;) {

@@ -2300,8 +2300,8 @@ public:
     return 0;
   }
 
-  void execute(optional_yield y) override {
-    RGWGetObj::execute(y);
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override {
+    RGWGetObj::execute(dpp, y);
     _size = get_state()->obj_size;
   }
 

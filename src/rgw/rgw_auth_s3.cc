@@ -77,7 +77,7 @@ get_canon_amz_hdr(const meta_map_t& meta_map)
  * ?get the canonical representation of the object's location
  */
 static std::string
-get_canon_resource(const char* const request_uri,
+get_canon_resource(const DoutPrefixProvider *dpp, const char* const request_uri,
                    const std::map<std::string, std::string>& sub_resources)
 {
   std::string dest;
@@ -107,7 +107,7 @@ get_canon_resource(const char* const request_uri,
     }
   }
 
-  dout(10) << "get_canon_resource(): dest=" << dest << dendl;
+  ldpp_dout(dpp, 10) << "get_canon_resource(): dest=" << dest << dendl;
   return dest;
 }
 
@@ -116,6 +116,7 @@ get_canon_resource(const char* const request_uri,
  * compute a request's signature
  */
 void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
   const char* const method,
   const char* const content_md5,
   const char* const content_type,
@@ -150,7 +151,7 @@ void rgw_create_s3_canonical_header(
 
   dest.append(get_canon_amz_hdr(meta_map));
   dest.append(get_canon_amz_hdr(qs_map));
-  dest.append(get_canon_resource(request_uri, sub_resources));
+  dest.append(get_canon_resource(dpp, request_uri, sub_resources));
 
   dest_str = dest;
 }
@@ -174,7 +175,8 @@ static inline void get_v2_qs_map(const req_info& info,
  * get the header authentication  information required to
  * compute a request's signature
  */
-bool rgw_create_s3_canonical_header(const req_info& info,
+bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
+                                    const req_info& info,
                                     utime_t* const header_time,
                                     std::string& dest,
                                     const bool qsr)
@@ -235,7 +237,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
     request_uri = info.effective_uri;
   }
 
-  rgw_create_s3_canonical_header(info.method, content_md5, content_type,
+  rgw_create_s3_canonical_header(dpp, info.method, content_md5, content_type,
                                  date.c_str(), meta_map, qs_map,
 				 request_uri.c_str(), sub_resources, dest);
   return true;

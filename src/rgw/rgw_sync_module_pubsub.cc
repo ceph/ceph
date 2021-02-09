@@ -366,11 +366,11 @@ class RGWSingletonCR : public RGWCoroutine {
     return true;
   }
 
-  int operate_wrapper() override {
+  int operate_wrapper(const DoutPrefixProvider *dpp) override {
     reenter(&wrapper_state) {
       while (!is_done()) {
         ldout(cct, 20) << __func__ << "(): operate_wrapper() -> operate()" << dendl;
-        operate_ret = operate();
+        operate_ret = operate(dpp);
         if (operate_ret < 0) {
           ldout(cct, 20) << *this << ": operate() returned r=" << operate_ret << dendl;
         }
@@ -465,7 +465,7 @@ class PSSubscription {
       retention_days = conf->events_retention_days;
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
 
         rule.init_simple_days_rule("Pubsub Expiration", "" /* all objects in bucket */, retention_days);
@@ -530,7 +530,7 @@ class PSSubscription {
                                     sub_conf(sub->sub_conf) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         get_bucket_info.tenant = conf->user.tenant;
         get_bucket_info.bucket_name = sub_conf->data_bucket_name;
@@ -612,7 +612,7 @@ class PSSubscription {
                                      oid_prefix(sub->sub_conf->data_oid_prefix) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       rgw_object_simple_put_params put_obj;
       reenter(this) {
 
@@ -662,7 +662,7 @@ class PSSubscription {
                                      sub_conf(_sub->sub_conf) {
     }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         ceph_assert(sub_conf->push_endpoint);
         yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
@@ -766,7 +766,7 @@ class PSManager
     }
     ~GetSubCR() { }
 
-    int operate() override {
+    int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         if (owner.empty()) {
           ldout(sync_env->cct, 1) << "ERROR: missing user info when getting subscription: " << sub_name << dendl;
@@ -887,7 +887,7 @@ public:
                        PSEnvRef& _env) : RGWCoroutine(_sc->cct),
                                                     sc(_sc), sync_env(_sc->env),
                                                     env(_env), conf(env->conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldpp_dout(sync_env->dpp, 1) << ": init pubsub config zone=" << sc->source_zone << dendl;
 
@@ -962,7 +962,7 @@ public:
                                                           topics(_topics) {
     *topics = std::make_shared<vector<PSTopicConfigRef> >();
   }
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ps.get_bucket_meta_obj(bucket, &bucket_obj);
       ps.get_meta_obj(&user_obj);
@@ -1041,7 +1041,7 @@ public:
                                           has_subscriptions(false),
                                           event_handled(false) {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sc->cct, 20) << ": handle event: obj: z=" << sc->source_zone
                                << " event=" << json_str("event", *event, false)
@@ -1159,7 +1159,7 @@ public:
                                                                       versioned_epoch(_versioned_epoch),
                                                                       topics(_topics) {
   }
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sc->cct, 20) << ": stat of remote obj: z=" << sc->source_zone
                                << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
@@ -1238,7 +1238,7 @@ public:
 
   ~RGWPSHandleObjCreateCR() override {}
 
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       yield call(new RGWPSFindBucketTopicsCR(sc, env, sync_pipe.dest_bucket_info.owner,
                                              sync_pipe.info.source_bs.bucket, key,
@@ -1285,7 +1285,7 @@ public:
                                                              bucket(_sync_pipe.dest_bucket_info.bucket),
                                                              key(_key),
                                                              mtime(_mtime), event_type(_event_type) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sc->cct, 20) << ": remove remote obj: z=" << sc->source_zone
                                << " b=" << bucket << " k=" << key << " mtime=" << mtime << dendl;

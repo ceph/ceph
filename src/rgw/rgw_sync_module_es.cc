@@ -647,7 +647,7 @@ public:
                           ElasticConfigRef _conf) : RGWCoroutine(_sc->cct),
                                                     sc(_sc), sync_env(_sc->env),
                                                     conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sync_env->cct, 5) << conf->id << ": get elasticsearch info for zone: " << sc->source_zone << dendl;
       yield call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
@@ -678,7 +678,7 @@ public:
                          ElasticConfigRef _conf) : RGWCoroutine(_sc->cct),
                                                    sc(_sc), sync_env(_sc->env),
                                                    conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sc->cct, 5) << conf->id << ": put elasticsearch index for zone: " << sc->source_zone << dendl;
 
@@ -752,7 +752,7 @@ public:
                           ElasticConfigRef _conf) : RGWCoroutine(_sc->cct),
                                                     sc(_sc), sync_env(_sc->env),
                                                     conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
 
       yield call(new RGWElasticGetESInfoCBCR(sc, conf));
@@ -782,7 +782,7 @@ public:
                           ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sc, _sync_pipe.info.source_bs.bucket, _key),
                                                                                sync_pipe(_sync_pipe), conf(_conf),
                                                                                versioned_epoch(_versioned_epoch) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": stat of remote obj: z=" << sc->source_zone
                                << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key
@@ -840,7 +840,7 @@ public:
                           ElasticConfigRef _conf) : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
                                                         sync_pipe(_sync_pipe), key(_key),
                                                         mtime(_mtime), conf(_conf) {}
-  int operate() override {
+  int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": remove remote obj: z=" << sc->source_zone
                                << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;

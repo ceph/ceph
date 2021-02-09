@@ -57,7 +57,7 @@ protected:
   int sock_fd;
   std::string uri_prefix;
 
-  struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
+  struct RGWWQ : public DoutPrefixProvider, public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
     RGWWQ(RGWProcess* p, ceph::timespan timeout, ceph::timespan suicide_timeout,
 	  ThreadPool* tp)
@@ -85,6 +85,11 @@ protected:
     void _clear() override {
       ceph_assert(process->m_req_queue.empty());
     }
+
+  CephContext *get_cct() const override { return process->cct; }
+  unsigned get_subsys() const { return ceph_subsys_rgw; }
+  std::ostream& gen_prefix(std::ostream& out) const { return out << "rgw process thread: ";}
+
   } req_wq;
 
 public:
@@ -111,7 +116,7 @@ public:
   virtual ~RGWProcess() = default;
 
   virtual void run() = 0;
-  virtual void handle_request(RGWRequest *req) = 0;
+  virtual void handle_request(const DoutPrefixProvider *dpp, RGWRequest *req) = 0;
 
   void pause() {
     m_tp.pause();
@@ -147,7 +152,7 @@ public:
   }
 
   void run() override;
-  void handle_request(RGWRequest* req) override;
+  void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;
 };
 
 class RGWProcessControlThread : public Thread {
@@ -169,7 +174,7 @@ public:
   RGWProcess(cct, pe, num_threads, _conf) {}
   void run() override;
   void checkpoint();
-  void handle_request(RGWRequest* req) override;
+  void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;
   void gen_request(const string& method, const string& resource,
 		  int content_length, std::atomic<bool>* fail_flag);
 

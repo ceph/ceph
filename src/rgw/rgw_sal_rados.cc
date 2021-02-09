@@ -165,7 +165,7 @@ int RGWRadosBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_chi
 
   if (forward_to_master) {
     bufferlist in_data;
-    ret = store->forward_request_to_master(owner, &ot.read_version, in_data, nullptr, *req_info, y);
+    ret = store->forward_request_to_master(dpp, owner, &ot.read_version, in_data, nullptr, *req_info, y);
     if (ret < 0) {
       if (ret == -ENOENT) {
 	/* adjust error, we want to return with NoSuchBucket and not
@@ -940,7 +940,8 @@ bool RGWRadosStore::is_meta_master()
   return svc()->zone->is_meta_master();
 }
 
-int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
+int RGWRadosStore::forward_request_to_master(const DoutPrefixProvider *dpp,
+                                             RGWUser* user, obj_version *objv,
 					     bufferlist& in_data,
 					     JSONParser *jp, req_info& info,
 					     optional_yield y)
@@ -958,7 +959,7 @@ int RGWRadosStore::forward_request_to_master(RGWUser* user, obj_version *objv,
   bufferlist response;
   string uid_str = user->get_id().to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = svc()->zone->get_master_conn()->forward(rgw_user(uid_str), info,
+  int ret = svc()->zone->get_master_conn()->forward(dpp, rgw_user(uid_str), info,
                                                     objv, MAX_REST_RESPONSE,
 						    &in_data, &response, y);
   if (ret < 0)
@@ -1059,7 +1060,7 @@ int RGWRadosStore::create_bucket(const DoutPrefixProvider *dpp,
 
   if (!svc()->zone->is_meta_master()) {
     JSONParser jp;
-    ret = forward_request_to_master(&u, NULL, in_data, &jp, req_info, y);
+    ret = forward_request_to_master(dpp, &u, NULL, in_data, &jp, req_info, y);
     if (ret < 0) {
       return ret;
     }

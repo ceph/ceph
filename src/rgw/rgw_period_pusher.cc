@@ -45,10 +45,10 @@ class PushAndRetryCR : public RGWCoroutine {
       counter(0)
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int PushAndRetryCR::operate()
+int PushAndRetryCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     for (;;) {
@@ -110,10 +110,10 @@ class PushAllCR : public RGWCoroutine {
       conns(std::move(conns))
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 };
 
-int PushAllCR::operate()
+int PushAllCR::operate(const DoutPrefixProvider *dpp)
 {
   reenter(this) {
     // spawn a coroutine to push the period over each connection
@@ -131,6 +131,7 @@ int PushAllCR::operate()
 
 /// A background thread to run the PushAllCR coroutine and exit.
 class RGWPeriodPusher::CRThread {
+  const DoutPrefixProvider *dpp;
   RGWCoroutinesManager coroutines;
   RGWHTTPManager http;
   boost::intrusive_ptr<PushAllCR> push_all;
@@ -145,7 +146,7 @@ class RGWPeriodPusher::CRThread {
   {
     http.start();
     // must spawn the CR thread after start
-    thread = std::thread([this]() noexcept { coroutines.run(push_all.get()); });
+    thread = std::thread([this]() noexcept { coroutines.run(dpp, push_all.get()); });
   }
   ~CRThread()
   {

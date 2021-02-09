@@ -1596,7 +1596,7 @@ static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
 
   ceph::bufferlist response;
   rgw_user user;
-  int ret = conn->forward(user, info, nullptr, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+  int ret = conn->forward(dpp(), user, info, nullptr, MAX_REST_RESPONSE, &in_data, &response, null_yield);
 
   int parse_ret = parser.parse(response.c_str(), response.length());
   if (parse_ret < 0) {
@@ -1622,7 +1622,7 @@ static int send_to_url(const string& url, const string& access,
   RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params);
 
   bufferlist response;
-  int ret = req.forward_request(key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
+  int ret = req.forward_request(dpp(), key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
 
   int parse_ret = parser.parse(response.c_str(), response.length());
   if (parse_ret < 0) {
@@ -1894,14 +1894,14 @@ static void get_md_sync_status(list<string>& status)
 {
   RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
 
-  int ret = sync.init();
+  int ret = sync.init(dpp());
   if (ret < 0) {
     status.push_back(string("failed to retrieve sync info: sync.init() failed: ") + cpp_strerror(-ret));
     return;
   }
 
   rgw_meta_sync_status sync_status;
-  ret = sync.read_sync_status(&sync_status);
+  ret = sync.read_sync_status(dpp(), &sync_status);
   if (ret < 0) {
     status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
     return;
@@ -1960,7 +1960,7 @@ static void get_md_sync_status(list<string>& status)
   map<int, RGWMetadataLogInfo> master_shards_info;
   string master_period = store->svc()->zone->get_current_period_id();
 
-  ret = sync.read_master_log_shards_info(master_period, &master_shards_info);
+  ret = sync.read_master_log_shards_info(dpp(), master_period, &master_shards_info);
   if (ret < 0) {
     status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
     return;
@@ -1998,7 +1998,7 @@ static void get_md_sync_status(list<string>& status)
     push_ss(ss, status) << "behind shards: " << "[" << shards_behind_set << "]";
 
     map<int, rgw_mdlog_shard_data> master_pos;
-    ret = sync.read_master_log_shards_next(sync_status.sync_info.period, shards_behind, &master_pos);
+    ret = sync.read_master_log_shards_next(dpp(), sync_status.sync_info.period, shards_behind, &master_pos);
     if (ret < 0) {
       derr << "ERROR: failed to fetch master next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
@@ -2046,7 +2046,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   }
   RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr);
 
-  int ret = sync.init();
+  int ret = sync.init(dpp());
   if (ret < 0) {
     push_ss(ss, status, tab) << string("failed to retrieve sync info: ") + cpp_strerror(-ret);
     flush_ss(ss, status);
@@ -2054,14 +2054,14 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
   }
 
   rgw_data_sync_status sync_status;
-  ret = sync.read_sync_status(&sync_status);
+  ret = sync.read_sync_status(dpp(), &sync_status);
   if (ret < 0 && ret != -ENOENT) {
     push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
     return;
   }
 
   set<int> recovering_shards;
-  ret = sync.read_recovering_shards(sync_status.sync_info.num_shards, recovering_shards);
+  ret = sync.read_recovering_shards(dpp(), sync_status.sync_info.num_shards, recovering_shards);
   if (ret < 0 && ret != ENOENT) {
     push_ss(ss, status, tab) << string("failed read recovering shards: ") + cpp_strerror(-ret);
     return;
@@ -2118,7 +2118,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
 
   map<int, RGWDataChangesLogInfo> source_shards_info;
 
-  ret = sync.read_source_log_shards_info(&source_shards_info);
+  ret = sync.read_source_log_shards_info(dpp(), &source_shards_info);
   if (ret < 0) {
     push_ss(ss, status, tab) << string("failed to fetch source sync status: ") + cpp_strerror(-ret);
     return;
@@ -2153,7 +2153,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
     push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]" ;
 
     map<int, rgw_datalog_shard_data> master_pos;
-    ret = sync.read_source_log_shards_next(shards_behind, &master_pos);
+    ret = sync.read_source_log_shards_next(dpp(), shards_behind, &master_pos);
     if (ret < 0) {
       derr << "ERROR: failed to fetch next positions (" << cpp_strerror(-ret) << ")" << dendl;
     } else {
@@ -2248,7 +2248,7 @@ std::ostream& operator<<(std::ostream& out, const indented& h) {
   return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
 }
 
-static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZone& zone,
+static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, const RGWZone& zone,
                                      const RGWZone& source, RGWRESTConn *conn,
                                      const RGWBucketInfo& bucket_info,
                                      rgw_sync_bucket_pipe pipe,
@@ -2279,7 +2279,7 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   pipe.dest.bucket = bucket_info.bucket;
 
   std::vector<rgw_bucket_shard_sync_info> status;
-  r = rgw_bucket_sync_status(dpp(), store, pipe, bucket_info, &source_bucket_info, &status);
+  r = rgw_bucket_sync_status(dpp, store, pipe, bucket_info, &source_bucket_info, &status);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
     return r;
@@ -2310,7 +2310,7 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
 
   BucketIndexShardsManager remote_markers;
-  r = rgw_read_remote_bilog_info(conn, source_bucket, remote_markers, null_yield);
+  r = rgw_read_remote_bilog_info(dpp, conn, source_bucket, remote_markers, null_yield);
   if (r < 0) {
     lderr(store->ctx()) << "failed to read remote log: " << cpp_strerror(r) << dendl;
     return r;
@@ -2618,7 +2618,7 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
 	continue;
       }
       if (pipe.source.zone.value_or(rgw_zone_id()) == z->second.id) {
-	bucket_source_sync_status(store, zone, z->second,
+	bucket_source_sync_status(dpp(), store, zone, z->second,
 				  c->second,
 				  info, pipe,
 				  width, out);
@@ -7720,7 +7720,7 @@ next:
     }
 
     auto num_shards = g_conf()->rgw_md_log_max_shards;
-    ret = crs.run(create_admin_meta_log_trim_cr(dpp(), store, &http, num_shards));
+    ret = crs.run(dpp(), create_admin_meta_log_trim_cr(dpp(), store, &http, num_shards));
     if (ret < 0) {
       cerr << "automated mdlog trim failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
@@ -7781,14 +7781,14 @@ next:
   if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
     RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
 
-    int ret = sync.init();
+    int ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
 
     rgw_meta_sync_status sync_status;
-    ret = sync.read_sync_status(&sync_status);
+    ret = sync.read_sync_status(dpp(), &sync_status);
     if (ret < 0) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
@@ -7822,12 +7822,12 @@ next:
   if (opt_cmd == OPT::METADATA_SYNC_INIT) {
     RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
 
-    int ret = sync.init();
+    int ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
-    ret = sync.init_sync_status();
+    ret = sync.init_sync_status(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
@@ -7838,13 +7838,13 @@ next:
   if (opt_cmd == OPT::METADATA_SYNC_RUN) {
     RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
 
-    int ret = sync.init();
+    int ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
 
-    ret = sync.run(null_yield);
+    ret = sync.run(dpp(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
       return -ret;
@@ -7858,7 +7858,7 @@ next:
     }
     RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr);
 
-    int ret = sync.init();
+    int ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
@@ -7869,7 +7869,7 @@ next:
       set<string> pending_buckets;
       set<string> recovering_buckets;
       rgw_data_sync_marker sync_marker;
-      ret = sync.read_shard_status(shard_id, pending_buckets, recovering_buckets, &sync_marker, 
+      ret = sync.read_shard_status(dpp(), shard_id, pending_buckets, recovering_buckets, &sync_marker, 
                                    max_entries_specified ? max_entries : 20);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: sync.read_shard_status() returned ret=" << ret << std::endl;
@@ -7883,7 +7883,7 @@ next:
       formatter->close_section();
       formatter->flush(cout);
     } else {
-      ret = sync.read_sync_status(&sync_status);
+      ret = sync.read_sync_status(dpp(), &sync_status);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
         return -ret;
@@ -7922,13 +7922,13 @@ next:
 
     RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr);
 
-    int ret = sync.init();
+    int ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
 
-    ret = sync.init_sync_status();
+    ret = sync.init_sync_status(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
@@ -7951,13 +7951,13 @@ next:
 
     RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr, sync_module);
 
-    ret = sync.init();
+    ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
 
-    ret = sync.run();
+    ret = sync.run(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
       return -ret;
@@ -7991,12 +7991,12 @@ next:
 
     RGWBucketPipeSyncStatusManager sync(store, source_zone, opt_sb, bucket);
 
-    ret = sync.init();
+    ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
-    ret = sync.init_sync_status();
+    ret = sync.init_sync_status(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init_sync_status() returned ret=" << ret << std::endl;
       return -ret;
@@ -8105,12 +8105,12 @@ next:
     }
     RGWBucketPipeSyncStatusManager sync(store, source_zone, opt_source_bucket, bucket);
 
-    ret = sync.init();
+    ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
-    ret = sync.read_sync_status();
+    ret = sync.read_sync_status(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
@@ -8138,13 +8138,13 @@ next:
     }
     RGWBucketPipeSyncStatusManager sync(store, source_zone, opt_source_bucket, bucket);
 
-    ret = sync.init();
+    ret = sync.init(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
 
-    ret = sync.run();
+    ret = sync.run(dpp());
     if (ret < 0) {
       cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
       return -ret;
@@ -8702,7 +8702,7 @@ next:
       cerr << "trim manager init failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
     }
-    ret = crs.run(trim.create_admin_bucket_trim_cr(&http));
+    ret = crs.run(dpp(), trim.create_admin_bucket_trim_cr(&http));
     if (ret < 0) {
       cerr << "automated bilog trim failed with " << cpp_strerror(ret) << std::endl;
       return -ret;
@@ -8804,7 +8804,7 @@ next:
 
     auto num_shards = g_conf()->rgw_data_log_num_shards;
     std::vector<std::string> markers(num_shards);
-    ret = crs.run(create_admin_data_log_trim_cr(store, &http, num_shards, markers));
+    ret = crs.run(dpp(), create_admin_data_log_trim_cr(dpp(), store, &http, num_shards, markers));
     if (ret < 0) {
       cerr << "automated datalog trim failed with " << cpp_strerror(ret) << std::endl;
       return -ret;

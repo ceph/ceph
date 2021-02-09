@@ -3377,7 +3377,7 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-void RGWGetLC_ObjStore_S3::execute(optional_yield y)
+void RGWGetLC_ObjStore_S3::execute(const DoutPrefixProvider *dpp, optional_yield y)
 {
   config.set_ctx(s->cct);
 
@@ -5010,7 +5010,7 @@ RGWOp* RGWHandler_REST_S3Website::op_head()
   return get_obj_op(false);
 }
 
-int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errordoc_key, optional_yield y) {
+int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string& errordoc_key, optional_yield y) {
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
@@ -5075,7 +5075,7 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
    *   x-amz-error-message: The specified key does not exist.
    *   x-amz-error-detail-Key: foo
    */
-  getop->execute(y);
+  getop->execute(dpp, y);
   getop->complete();
   return 0;
 }
@@ -5123,7 +5123,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
        On success, it will return zero, and no further content should be sent to the socket
        On failure, we need the double-error handler
      */
-    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(http_error_code, s->bucket->get_info().website_conf.error_doc, y);
+    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(s, http_error_code, s->bucket->get_info().website_conf.error_doc, y);
     if (new_err_no != -1) {
       err_no = new_err_no;
     }
@@ -5500,7 +5500,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   /* Let's canonize the HTTP headers that are covered by the AWS auth v2. */
   std::string string_to_sign;
   utime_t header_time;
-  if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
+  if (! rgw_create_s3_canonical_header(s, s->info, &header_time, string_to_sign,
         qsr)) {
     ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;

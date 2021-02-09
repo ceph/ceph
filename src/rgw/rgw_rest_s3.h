@@ -366,7 +366,7 @@ protected:
 public:
   RGWGetLC_ObjStore_S3() {}
   ~RGWGetLC_ObjStore_S3() override {}
-  void execute(optional_yield y) override;
+  void execute(const DoutPrefixProvider *dpp, optional_yield y) override;
 
  void send_response() override;
 };

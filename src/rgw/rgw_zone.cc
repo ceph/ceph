@@ -1359,26 +1359,27 @@ void RGWPeriod::fork()
   realm_epoch++;
 }
 
-static int read_sync_status(rgw::sal::RGWRadosStore *store, rgw_meta_sync_status *sync_status)
+static int read_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, rgw_meta_sync_status *sync_status)
 {
   // initialize a sync status manager to read the status
   RGWMetaSyncStatusManager mgr(store, store->svc()->rados->get_async_processor());
-  int r = mgr.init();
+  int r = mgr.init(dpp);
   if (r < 0) {
     return r;
   }
-  r = mgr.read_sync_status(sync_status);
+  r = mgr.read_sync_status(dpp, sync_status);
   mgr.stop();
   return r;
 }
 
-int RGWPeriod::update_sync_status(rgw::sal::RGWRadosStore *store, /* for now */
+int RGWPeriod::update_sync_status(const DoutPrefixProvider *dpp,
+                                  rgw::sal::RGWRadosStore *store, /* for now */
 				  const RGWPeriod &current_period,
                                   std::ostream& error_stream,
                                   bool force_if_stale)
 {
   rgw_meta_sync_status status;
-  int r = read_sync_status(store, &status);
+  int r = read_sync_status(dpp, store, &status);
   if (r < 0) {
     ldout(cct, 0) << "period failed to read sync status: "
         << cpp_strerror(-r) << dendl;
@@ -1457,7 +1458,7 @@ int RGWPeriod::commit(const DoutPrefixProvider *dpp,
   // did the master zone change?
   if (master_zone != current_period.get_master_zone()) {
     // store the current metadata sync status in the period
-    int r = update_sync_status(store, current_period, error_stream, force_if_stale);
+    int r = update_sync_status(dpp, store, current_period, error_stream, force_if_stale);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "failed to update metadata sync status: "
           << cpp_strerror(-r) << dendl;

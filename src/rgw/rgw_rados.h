@@ -1095,7 +1095,8 @@ public:
 
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw::sal::RGWObject* obj, const DoutPrefixProvider *dpp, optional_yield y);
 
-  int stat_remote_obj(RGWObjectCtx& obj_ctx,
+  int stat_remote_obj(const DoutPrefixProvider *dpp,
+               RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,

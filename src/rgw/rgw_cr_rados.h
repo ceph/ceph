@@ -17,6 +17,8 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 class RGWAsyncRadosRequest : public RefCountedObject {
   RGWCoroutine *caller;
   RGWAioCompletionNotifier *notifier;
@@ -26,7 +28,7 @@ class RGWAsyncRadosRequest : public RefCountedObject {
   ceph::mutex lock = ceph::make_mutex("RGWAsyncRadosRequest::lock");
 
 protected:
-  virtual int _send_request() = 0;
+  virtual int _send_request(const DoutPrefixProvider *dpp) = 0;
 public:
   RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn)
     : caller(_caller), notifier(_cn), retcode(0) {
@@ -37,9 +39,9 @@ public:
     }
   }
 
-  void send_request() {
+  void send_request(const DoutPrefixProvider *dpp) {
     get();
-    retcode = _send_request();
+    retcode = _send_request(dpp);
     {
       std::lock_guard l{lock};
       if (notifier) {
@@ -74,7 +76,7 @@ protected:
   ThreadPool m_tp;
   Throttle req_throttle;
 
-  struct RGWWQ : public ThreadPool::WorkQueue<RGWAsyncRadosRequest> {
+  struct RGWWQ : public DoutPrefixProvider, public ThreadPool::WorkQueue<RGWAsyncRadosRequest> {
     RGWAsyncRadosProcessor *processor;
     RGWWQ(RGWAsyncRadosProcessor *p,
 	  ceph::timespan timeout, ceph::timespan suicide_timeout,
@@ -93,6 +95,11 @@ protected:
     void _clear() override {
       ceph_assert(processor->m_req_queue.empty());
     }
+
+  CephContext *get_cct() const { return processor->cct; }
+  unsigned get_subsys() const { return ceph_subsys_rgw; }
+  std::ostream& gen_prefix(std::ostream& out) const { return out << "rgw async rados processor: ";}
+
   } req_wq;
 
 public:
@@ -100,12 +107,13 @@ public:
   ~RGWAsyncRadosProcessor() {}
   void start();
   void stop();
-  void handle_request(RGWAsyncRadosRequest *req);
+  void handle_request(const DoutPrefixProvider *dpp, RGWAsyncRadosRequest *req);
   void queue(RGWAsyncRadosRequest *req);
 
   bool is_going_down() {
     return going_down;
   }
+
 };
 
 template <class P>
@@ -121,7 +129,7 @@ class RGWSimpleWriteOnlyAsyncCR : public RGWSimpleCoroutine {
     P params;
     const DoutPrefixProvider *dpp;
   protected:
-    int _send_request() override;
+    int _send_request(const DoutPrefixProvider *dpp) override;
   public:
     Request(RGWCoroutine *caller,
             RGWAioCompletionNotifier *cn,
@@ -153,7 +161,7 @@ class RGWSimpleWriteOnlyAsyncCR : public RGWSimpleCoroutine {
     }
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     req = new Request(this,
                       stack->create_completion_notifier(),
                       store,
@@ -184,9 +192,10 @@ class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
     std::shared_ptr<R> result;
     const DoutPrefixProvider *dpp;
   protected:
-    int _send_request() override;
+    int _send_request(const DoutPrefixProvider *dpp) override;
   public:
-    Request(RGWCoroutine *caller,
+    Request(const DoutPrefixProvider *dpp,
+            RGWCoroutine *caller,
             RGWAioCompletionNotifier *cn,
             rgw::sal::RGWRadosStore *_store,
             const P& _params,
@@ -220,8 +229,9 @@ class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
     }
   }
 
-  int send_request() override {
-    req = new Request(this,
+  int send_request(const DoutPrefixProvider *dpp) override {
+    req = new Request(dpp,
+                      this,
                       stack->create_completion_notifier(),
                       store,
                       params,
@@ -254,14 +264,15 @@ private:
   class Request : public RGWAsyncRadosRequest {
     std::shared_ptr<Action> action;
   protected:
-    int _send_request() override {
+    int _send_request(const DoutPrefixProvider *dpp) override {
       if (!action) {
 	return 0;
       }
       return action->operate();
     }
   public:
-    Request(RGWCoroutine *caller,
+    Request(const DoutPrefixProvider *dpp,
+            RGWCoroutine *caller,
             RGWAioCompletionNotifier *cn,
             std::shared_ptr<Action>& _action) : RGWAsyncRadosRequest(caller, cn),
                                            action(_action) {}
@@ -290,8 +301,8 @@ private:
     }
   }
 
-  int send_request() override {
-    req = new Request(this,
+  int send_request(const DoutPrefixProvider *dpp) override {
+    req = new Request(dpp, this,
                       stack->create_completion_notifier(),
                       action);
 
@@ -310,7 +321,7 @@ class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
   const bool want_attrs;
   const bool raw_attrs;
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
@@ -328,7 +339,7 @@ class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
   bufferlist bl;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
@@ -343,7 +354,7 @@ class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
   map<string, bufferlist> attrs;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
@@ -360,7 +371,7 @@ class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
   uint32_t duration_secs;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                         RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
@@ -374,7 +385,7 @@ class RGWAsyncUnlockSystemObj : public RGWAsyncRadosRequest {
   string cookie;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                         RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
@@ -412,7 +423,7 @@ public:
     }
   }
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 
   virtual int handle_data(T& data) {
@@ -421,7 +432,7 @@ public:
 };
 
 template <class T>
-int RGWSimpleRadosReadCR<T>::send_request()
+int RGWSimpleRadosReadCR<T>::send_request(const DoutPrefixProvider *dpp)
 {
   req = new RGWAsyncGetSystemObj(this, stack->create_completion_notifier(), svc,
 			         objv_tracker, obj, false, false);
@@ -491,7 +502,7 @@ public:
     }
   }
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -524,8 +535,8 @@ public:
     }
   }
 
-  int send_request() override {
-    req = new RGWAsyncPutSystemObj(this, stack->create_completion_notifier(),
+  int send_request(const DoutPrefixProvider *dpp) override {
+    req = new RGWAsyncPutSystemObj(dpp, this, stack->create_completion_notifier(),
 			           svc, objv_tracker, obj, false, std::move(bl));
     async_rados->queue(req);
     return 0;
@@ -568,8 +579,8 @@ public:
     }
   }
 
-  int send_request() override {
-    req = new RGWAsyncPutSystemObjAttrs(this, stack->create_completion_notifier(),
+  int send_request(const DoutPrefixProvider *dpp) override {
+    req = new RGWAsyncPutSystemObjAttrs(dpp, this, stack->create_completion_notifier(),
 			           svc, objv_tracker, obj, std::move(attrs));
     async_rados->queue(req);
     return 0;
@@ -598,7 +609,7 @@ public:
 		      const rgw_raw_obj& _obj,
 		      map<string, bufferlist>& _entries);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -615,7 +626,7 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
                         const string& _marker, int _max_entries,
                         ResultPtr result);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 
  private:
@@ -640,7 +651,7 @@ class RGWRadosGetOmapValsCR : public RGWSimpleCoroutine {
                         const string& _marker, int _max_entries,
                         ResultPtr result);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 
  private:
@@ -668,7 +679,7 @@ public:
 		      const rgw_raw_obj& _obj,
 		      const set<string>& _keys);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
 
   int request_complete() override;
 };
@@ -684,7 +695,7 @@ public:
   RGWRadosRemoveCR(rgw::sal::RGWRadosStore *store, const rgw_raw_obj& obj,
                    RGWObjVersionTracker* objv_tracker = nullptr);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -710,7 +721,7 @@ public:
   }
   void request_cleanup() override;
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 
   static std::string gen_random_cookie(CephContext* cct) {
@@ -741,7 +752,7 @@ public:
   }
   void request_cleanup() override;
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -766,7 +777,7 @@ public:
   RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RGWRadosStore *_store,
                 const rgw_raw_obj& _obj,
                 uint64_t _window_size = OMAP_APPEND_MAX_ENTRIES_DEFAULT);
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
   void flush_pending();
   bool append(const string& s);
   bool finish();
@@ -831,7 +842,7 @@ class RGWAsyncGetBucketInstanceInfo : public RGWAsyncRadosRequest {
   const DoutPrefixProvider *dpp;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncGetBucketInstanceInfo(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
                                 rgw::sal::RGWRadosStore *_store, const rgw_bucket& bucket,
@@ -869,7 +880,7 @@ public:
     }
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, bucket, dpp);
     async_rados->queue(req);
     return 0;
@@ -895,7 +906,7 @@ class RGWRadosBILogTrimCR : public RGWSimpleCoroutine {
                       int shard_id, const std::string& start_marker,
                       const std::string& end_marker);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -922,7 +933,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   const DoutPrefixProvider *dpp;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncFetchRemoteObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                          const rgw_zone_id& _source_zone,
@@ -1025,7 +1036,7 @@ public:
     }
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncFetchRemoteObj(this, stack->create_completion_notifier(), store,
 				     source_zone, user_id, src_bucket, dest_placement_rule, dest_bucket_info,
                                      key, dest_key, versioned_epoch, copy_if_newer, filter,
@@ -1053,7 +1064,7 @@ class RGWAsyncStatRemoteObj : public RGWAsyncRadosRequest {
   map<string, string> *pheaders;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncStatRemoteObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                          const rgw_zone_id& _source_zone,
@@ -1124,7 +1135,7 @@ public:
     }
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncStatRemoteObj(this, stack->create_completion_notifier(), store, source_zone,
                                     src_bucket, key, pmtime, psize, petag, pattrs, pheaders);
     async_rados->queue(req);
@@ -1155,7 +1166,7 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   rgw_zone_set zones_trace;
 
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncRemoveObj(const DoutPrefixProvider *_dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, 
                          rgw::sal::RGWRadosStore *_store,
@@ -1255,7 +1266,7 @@ public:
     }
   }
 
-  int send_request() override {
+  int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncRemoveObj(dpp, this, stack->create_completion_notifier(), store, source_zone, bucket_info,
                                 key, owner, owner_display_name, versioned, versioned_epoch,
                                 delete_marker, del_if_older, timestamp, zones_trace);
@@ -1295,7 +1306,7 @@ public:
     interval(_interval), caller(_caller)
   {}
 
-  int operate() override;
+  int operate(const DoutPrefixProvider *dpp) override;
 
   bool is_locked() const {
     return locked;
@@ -1327,7 +1338,7 @@ public:
   RGWRadosTimelogAddCR(rgw::sal::RGWRadosStore *_store, const string& _oid,
 		        const cls_log_entry& entry);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -1347,7 +1358,7 @@ class RGWRadosTimelogTrimCR : public RGWSimpleCoroutine {
                         const std::string& from_marker,
                         const std::string& to_marker);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -1372,7 +1383,7 @@ class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   uint64_t *pepoch;
   RGWObjVersionTracker *objv_tracker;
 protected:
-  int _send_request() override;
+  int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncStatObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *store,
                   const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
@@ -1402,7 +1413,7 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   }
   void request_cleanup() override;
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
@@ -1421,7 +1432,7 @@ public:
                    bufferlist& request, uint64_t timeout_ms,
                    bufferlist *response);
 
-  int send_request() override;
+  int send_request(const DoutPrefixProvider *dpp) override;
   int request_complete() override;
 };
 
