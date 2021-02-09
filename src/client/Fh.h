@@ -2,18 +2,21 @@
 #define CEPH_CLIENT_FH_H
 
 #include "common/Readahead.h"
+#include "common/RefCountedObj.h"
 #include "include/types.h"
 #include "InodeRef.h"
 #include "UserPerm.h"
 #include "mds/flock.h"
+#include "FhRef.h"
 
+class Client;
 class Inode;
 
 // file handle for any open file state
 
-struct Fh {
+struct Fh : public RefCountedObject {
+  Client    *client;
   InodeRef  inode;
-  int       _ref = 1;
   loff_t    pos = 0;
   int       mds = 0;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
@@ -51,11 +54,8 @@ struct Fh {
   }
 
   Fh() = delete;
-  Fh(InodeRef in, int flags, int cmode, uint64_t gen, const UserPerm &perms);
+  Fh(Client *client, InodeRef in, int flags, int cmode, uint64_t gen, const UserPerm &perms);
   ~Fh();
-
-  void get() { ++_ref; }
-  int put() { return --_ref; }
 };
 
 

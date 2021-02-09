@@ -18,9 +18,10 @@
 
 #include "Fh.h"
 
-Fh::Fh(InodeRef in, int flags, int cmode, uint64_t _gen, const UserPerm &perms) :
-    inode(in), mode(cmode), gen(_gen), flags(flags), actor_perms(perms),
-    readahead()
+Fh::Fh(Client *client, InodeRef in, int flags, int cmode, uint64_t _gen,
+       const UserPerm &perms) :
+    client(client), inode(in), mode(cmode), gen(_gen), flags(flags),
+    actor_perms(perms), readahead()
 {
   inode->add_fh(this);
 }

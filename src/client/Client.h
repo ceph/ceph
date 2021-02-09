@@ -40,6 +40,7 @@
 
 #include "RWRef.h"
 #include "InodeRef.h"
+#include "Fh.h"
 #include "MetaSession.h"
 #include "UserPerm.h"
 
@@ -243,6 +244,7 @@ public:
   friend class SyntheticClient;
   friend void intrusive_ptr_release(Inode *in);
   friend void intrusive_ptr_release(MetaRequest *request);
+  friend void intrusive_ptr_release(Fh *fh);
   template <typename T> friend struct RWRefState;
   template <typename T> friend class RWRef;
 
@@ -893,6 +895,8 @@ protected:
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequestRef &request);
 
+  void put_fh(Fh *fh);
+
   int verify_reply_trace(int r, MetaSession *session, MetaRequest *request,
 			 const MConstRef<MClientReply>& reply,
 			 InodeRef *ptarget, bool *pcreated,
@@ -949,7 +953,8 @@ protected:
   /*
    * Resolve file descriptor, or return NULL.
    */
-  Fh *get_filehandle(int fd) {
+  FhRef get_filehandle(int fd) {
+    std::scoped_lock cl(client_lock);
     auto it = fd_map.find(fd);
     if (it == fd_map.end())
       return NULL;
@@ -1191,7 +1196,7 @@ private:
     void finish(int r) override;
 
     Client *client;
-    Fh *f;
+    FhRef f;
   };
 
   /*
@@ -1248,8 +1253,8 @@ private:
   void _ll_drop_pins();
 
   Fh *_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms);
+  void delay_put_fh(bool wakeup=false);
   int _release_fh(Fh *fh);
-  void _put_fh(Fh *fh);
 
   int _do_remount(bool retry_on_error);
 
@@ -1485,6 +1490,8 @@ private:
   map<ceph_tid_t, MetaRequest*> mds_requests;
   ceph::spinlock delay_r_lock;
   std::list<MetaRequest*> delay_r_release;
+  ceph::spinlock delay_fh_lock;
+  std::list<Fh*> delay_fh_release;
 
   // cap flushing
   ceph_tid_t last_flush_tid = 1;
