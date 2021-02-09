@@ -2386,10 +2386,10 @@ public:
 
     string target_oid;
     if (!oid_tgt.empty()) {
-      target_oid = oid_tgt;
+      target_oid = context->prefix+oid_tgt;
     } else {
       bufferlist bl;
-      int r = context->io_ctx.read(context->prefix+oid, bl, offset, length);
+      int r = context->io_ctx.read(context->prefix+oid, bl, length, offset);
       ceph_assert(r > 0);
       string fp_oid = ceph::crypto::digest<ceph::crypto::SHA256>(bl).to_str();
       r = context->low_tier_io_ctx.write(fp_oid, bl, bl.length(), 0);
@@ -2403,7 +2403,7 @@ public:
 	  << " offset: " << tgt_offset << std::endl;
 
     op.set_chunk(offset, length, context->low_tier_io_ctx, 
-		 context->prefix+target_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+		 target_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
