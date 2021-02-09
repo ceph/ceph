@@ -182,6 +182,9 @@ class CephadmServe:
 
         refresh(self.mgr.cache.get_hosts())
 
+        checker = CephadmConfigChecks(self.mgr)
+        checker.run_checks()
+
         health_changed = False
         for k in [
                 'CEPHADM_HOST_CHECK_FAILED',
