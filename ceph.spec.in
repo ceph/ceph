@@ -23,7 +23,7 @@
 #################################################################################
 %bcond_with make_check
 %bcond_without ceph_test_package
-%ifarch s390 s390x
+%ifarch s390
 %bcond_with tcmalloc
 %else
 %bcond_without tcmalloc
@@ -58,7 +58,7 @@
 %bcond_with libradosstriper
 %bcond_with ocf
 %endif
-%ifarch x86_64 aarch64 ppc64le
+%ifarch x86_64 aarch64 ppc64le s390x
 %bcond_without lttng
 %else
 %bcond_with lttng
