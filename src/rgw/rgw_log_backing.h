@@ -88,6 +88,7 @@ bs::error_code log_remove(librados::IoCtx& ioctx,
 			  /// A function taking a shard number and
 			  /// returning an oid.
 			  const fu2::unique_function<std::string(int) const>& get_oid,
+			  bool leave_zero,
 			  optional_yield y);
 
 
