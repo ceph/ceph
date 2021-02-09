@@ -104,9 +104,9 @@ class Values {
 
 class KVPool {
   struct kv_conf_t {
-    unsigned index2;
-    unsigned index1;
-    unsigned index0;
+    index_t index2;
+    index_t index1;
+    index_t index0;
     size_t ns_size;
     size_t oid_size;
     value_item_t value;
@@ -114,16 +114,21 @@ class KVPool {
     ghobject_t get_ghobj() const {
       assert(index1 < 10);
       std::ostringstream os_ns;
-      os_ns << "ns" << index1;
-      unsigned current_size = (unsigned)os_ns.tellp();
-      assert(ns_size >= current_size);
-      os_ns << std::string(ns_size - current_size, '_');
-
       std::ostringstream os_oid;
-      os_oid << "oid" << index1;
-      current_size = (unsigned)os_oid.tellp();
-      assert(oid_size >= current_size);
-      os_oid << std::string(oid_size - current_size, '_');
+      if (index1 == 0) {
+        assert(!ns_size);
+        assert(!oid_size);
+      } else {
+        os_ns << "ns" << index1;
+        auto current_size = (size_t)os_ns.tellp();
+        assert(ns_size >= current_size);
+        os_ns << std::string(ns_size - current_size, '_');
+
+        os_oid << "oid" << index1;
+        current_size = (size_t)os_oid.tellp();
+        assert(oid_size >= current_size);
+        os_oid << std::string(oid_size - current_size, '_');
+      }
 
       return ghobject_t(shard_id_t(index2), index2, index2,
                         os_ns.str(), os_oid.str(), index0, index0);
@@ -136,22 +141,31 @@ class KVPool {
 
   KVPool(const std::vector<size_t>& str_sizes,
          const std::vector<size_t>& value_sizes,
-         const std::pair<unsigned, unsigned>& range2,
-         const std::pair<unsigned, unsigned>& range1,
-         const std::pair<unsigned, unsigned>& range0)
+         const std::pair<index_t, index_t>& range2,
+         const std::pair<index_t, index_t>& range1,
+         const std::pair<index_t, index_t>& range0)
       : str_sizes{str_sizes}, values{value_sizes} {
     ceph_assert(range2.first < range2.second);
-    ceph_assert(range2.second - 1 <= (unsigned)std::numeric_limits<shard_t>::max());
+    ceph_assert(range2.second - 1 <= (index_t)std::numeric_limits<shard_t>::max());
     ceph_assert(range2.second - 1 <= std::numeric_limits<crush_hash_t>::max());
     ceph_assert(range1.first < range1.second);
     ceph_assert(range1.second - 1 <= 9);
     ceph_assert(range0.first < range0.second);
     std::random_device rd;
-    for (unsigned i = range2.first; i < range2.second; ++i) {
-      for (unsigned j = range1.first; j < range1.second; ++j) {
-        auto ns_size = (unsigned)str_sizes[rd() % str_sizes.size()];
-        auto oid_size = (unsigned)str_sizes[rd() % str_sizes.size()];
-        for (unsigned k = range0.first; k < range0.second; ++k) {
+    for (index_t i = range2.first; i < range2.second; ++i) {
+      for (index_t j = range1.first; j < range1.second; ++j) {
+        size_t ns_size;
+        size_t oid_size;
+        if (j == 0) {
+          // store ns0, oid0 as empty strings for test purposes
+          ns_size = 0;
+          oid_size = 0;
+        } else {
+          ns_size = str_sizes[rd() % str_sizes.size()];
+          oid_size = str_sizes[rd() % str_sizes.size()];
+          assert(ns_size && oid_size);
+        }
+        for (index_t k = range0.first; k < range0.second; ++k) {
           kvs.emplace_back(kv_conf_t{i, j, k, ns_size, oid_size, values.pick()});
         }
       }
@@ -174,7 +188,7 @@ class KVPool {
       return std::make_pair(conf.get_ghobj(), conf.value);
     }
     bool is_end() const { return !p_kvs || i >= p_kvs->size(); }
-    size_t index() const { return i; }
+    index_t index() const { return i; }
 
     iterator_t& operator++() {
       assert(!is_end());
@@ -192,7 +206,7 @@ class KVPool {
     iterator_t(const kv_vector_t& kvs) : p_kvs{&kvs} {}
 
     const kv_vector_t* p_kvs = nullptr;
-    size_t i = 0;
+    index_t i = 0;
     friend class KVPool;
   };
 
