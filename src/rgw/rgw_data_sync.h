@@ -611,7 +611,7 @@ void decode_json_obj(BucketSyncState& state, JSONObj *obj);
 struct rgw_bucket_sync_status {
   BucketSyncState state = BucketSyncState::Init;
   rgw_bucket_full_sync_status full;
-  uint64_t incremental_gen;
+  uint64_t incremental_gen = 0;
   std::vector<bool> shards_done_with_gen;
 
   void encode(bufferlist& bl) const {
