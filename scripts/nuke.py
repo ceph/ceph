@@ -5,7 +5,7 @@ import teuthology.nuke
 doc = """
 usage:
   teuthology-nuke --help
-  teuthology-nuke [-v] [--owner OWNER] [-n NAME] [-u] [-i] [-r] [-s]
+  teuthology-nuke [-v] [--owner OWNER] [-n NAME] [-u] [-i] [-r|-R] [-s] [-k]
                        [-p PID] [--dry-run] (-t CONFIG... | -a DIR)
   teuthology-nuke [-v] [-u] [-i] [-r] [-s] [--dry-run] --owner OWNER --stale
   teuthology-nuke [-v] [--dry-run] --stale-openstack
@@ -27,12 +27,14 @@ optional arguments:
                         targets that would be nuked
   --owner OWNER         job owner
   -p PID, --pid PID     pid of the process to be killed
-  -r, --reboot-all      reboot all machines
+  -r, --reboot-all      reboot all machines (default)
+  -R, --no-reboot       do not reboot the machines
   -s, --synch-clocks    synchronize clocks on all machines
   -u, --unlock          Unlock each successfully nuked machine, and output
                         targets thatcould not be nuked.
   -n NAME, --name NAME  Name of run to cleanup
   -i, --noipmi          Skip ipmi checking
+  -k, --keep-logs       Preserve test directories and logs on the machines
 
 Examples:
 teuthology-nuke -t target.yaml --unlock --owner user@host

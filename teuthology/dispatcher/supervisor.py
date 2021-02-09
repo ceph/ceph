@@ -161,10 +161,10 @@ def reimage(job_config):
     targets = job_config['targets']
     try:
         reimaged = reimage_machines(ctx, targets, job_config['machine_type'])
-    except Exception:
-        log.info('Reimaging error. Nuking machines...')
+    except Exception as e:
+        log.exception('Reimaging error. Nuking machines...')
         # Reimage failures should map to the 'dead' status instead of 'fail'
-        report.try_push_job_info(ctx.config, dict(status='dead'))
+        report.try_push_job_info(ctx.config, dict(status='dead', failure_reason='Error reimaging machines: ' + str(e)))
         nuke(ctx, True)
         raise
     ctx.config['targets'] = reimaged
@@ -208,13 +208,24 @@ def run_with_watchdog(process, job_config):
 
     # Sleep once outside of the loop to avoid double-posting jobs
     time.sleep(teuth_config.watchdog_interval)
+    hit_max_timeout = False
     while process.poll() is None:
         # Kill jobs that have been running longer than the global max
         run_time = datetime.utcnow() - job_start_time
         total_seconds = run_time.days * 60 * 60 * 24 + run_time.seconds
         if total_seconds > teuth_config.max_job_time:
+            hit_max_timeout = True
             log.warning("Job ran longer than {max}s. Killing...".format(
                 max=teuth_config.max_job_time))
+            try:
+                # kill processes but do not unlock yet so we can save
+                # the logs, coredumps, etc.
+                kill_job(job_info['name'], job_info['job_id'],
+                         teuth_config.archive_base, job_config['owner'],
+                         save_logs=True)
+            except Exception:
+                log.exception('Failed to kill job')
+
             try:
                 transfer_archives(job_info['name'], job_info['job_id'],
                                   teuth_config.archive_base, job_config)
@@ -222,10 +233,11 @@ def run_with_watchdog(process, job_config):
                 log.exception('Could not save logs')
 
             try:
+                # this time remove everything and unlock the machines
                 kill_job(job_info['name'], job_info['job_id'],
                          teuth_config.archive_base, job_config['owner'])
             except Exception:
-                log.exception('Failed to kill job')
+                log.exception('Failed to kill job and unlock machines')
 
         # calling this without a status just updates the jobs updated time
         report.try_push_job_info(job_info)
@@ -239,7 +251,10 @@ def run_with_watchdog(process, job_config):
     # the status, but if it was a pass or fail it will have already been
     # reported to paddles. In that case paddles ignores the 'dead' status.
     # If the job was killed, paddles will use the 'dead' status.
-    report.try_push_job_info(job_info, dict(status='dead'))
+    extra_info = dict(status='dead')
+    if hit_max_timeout:
+        extra_info['failure_reason'] = 'hit max job timeout'
+    report.try_push_job_info(job_info, extra_info)
 
 
 def create_fake_context(job_config, block=False):

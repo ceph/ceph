@@ -232,10 +232,10 @@ def main(args):
         else:
             subprocess.check_call(["kill", "-9", str(ctx.pid)])
 
-    nuke(ctx, ctx.unlock, ctx.synch_clocks, ctx.reboot_all, ctx.noipmi)
+    nuke(ctx, ctx.unlock, ctx.synch_clocks, ctx.noipmi)
 
 
-def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
+def nuke(ctx, should_unlock, sync_clocks=True, noipmi=False):
     if 'targets' not in ctx.config:
         return
     total_unnuked = {}
@@ -260,7 +260,6 @@ def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
                 {target: hostkey},
                 should_unlock,
                 sync_clocks,
-                reboot_all,
                 ctx.config.get('check-locks', True),
                 noipmi,
             )
@@ -275,21 +274,22 @@ def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
                                   default_flow_style=False).splitlines()))
 
 
-def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
+def nuke_one(ctx, target, should_unlock, synch_clocks,
              check_locks, noipmi):
     ret = None
+    keep_logs = ctx.keep_logs
+    should_reboot = not ctx.no_reboot
     ctx = argparse.Namespace(
         config=dict(targets=target),
         owner=ctx.owner,
         check_locks=check_locks,
         synch_clocks=synch_clocks,
-        reboot_all=reboot_all,
         teuthology_config=config.to_dict(),
         name=ctx.name,
         noipmi=noipmi,
     )
     try:
-        nuke_helper(ctx, should_unlock)
+        nuke_helper(ctx, should_unlock, keep_logs, should_reboot)
     except Exception:
         log.exception('Could not nuke %s' % target)
         # not re-raising the so that parallel calls aren't killed
@@ -300,7 +300,7 @@ def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
     return ret
 
 
-def nuke_helper(ctx, should_unlock):
+def nuke_helper(ctx, should_unlock, keep_logs, should_reboot):
     # ensure node is up with ipmi
     (target,) = ctx.config['targets'].keys()
     host = target.split('@')[-1]
@@ -339,7 +339,8 @@ def nuke_helper(ctx, should_unlock):
     # Try to remove packages before reboot
     remove_installed_packages(ctx)
     remotes = ctx.cluster.remotes.keys()
-    reboot(ctx, remotes)
+    if should_reboot:
+        reboot(ctx, remotes)
     # shutdown daemons again incase of startup
     shutdown_daemons(ctx)
     remove_osd_mounts(ctx)
@@ -352,7 +353,8 @@ def nuke_helper(ctx, should_unlock):
     undo_multipath(ctx)
     reset_syslog_dir(ctx)
     remove_ceph_data(ctx)
-    remove_testing_tree(ctx)
+    if not keep_logs:
+        remove_testing_tree(ctx)
     remove_yum_timedhosts(ctx)
     # Once again remove packages after reboot
     remove_installed_packages(ctx)
