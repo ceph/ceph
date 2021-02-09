@@ -173,6 +173,23 @@ private:
   ack_level_t ack_level;
   amqp::connection_ptr_t conn;
 
+  bool get_verify_ssl(const RGWHTTPArgs& args) {
+    bool exists;
+    auto str_verify_ssl = args.get("verify-ssl", &exists);
+    if (!exists) {
+      // verify server certificate by default
+      return true;
+    }
+    boost::algorithm::to_lower(str_verify_ssl);
+    if (str_verify_ssl == "true") {
+      return true;
+    }
+    if (str_verify_ssl == "false") {
+      return false;
+    }
+    throw configuration_error("'verify-ssl' must be true/false, not: " + str_verify_ssl);
+  }
+
   std::string get_exchange(const RGWHTTPArgs& args) {
     bool exists;
     const auto exchange = args.get("amqp-exchange", &exists);
@@ -297,7 +314,7 @@ public:
         topic(_topic),
         exchange(get_exchange(args)),
         ack_level(get_ack_level(args)),
-        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker))) {
+        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker), get_verify_ssl(args), args.get_optional("ca-location"))) {
     if (!conn) { 
       throw configuration_error("AMQP: failed to create connection to: " + endpoint);
     }
@@ -691,7 +708,7 @@ const std::string& get_schema(const std::string& endpoint) {
   if (schema == "http" || schema == "https") {
     return WEBHOOK_SCHEMA;
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  } else if (schema == "amqp") {
+  } else if (schema == "amqp" || schema == "amqps") {
     return AMQP_SCHEMA;
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
@@ -725,9 +742,6 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
       throw configuration_error("AMQP: unknown version: " + version);
       return nullptr;
     }
-  } else if (schema == "amqps") {
-    throw configuration_error("AMQP: ssl not supported");
-    return nullptr;
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   } else if (schema == KAFKA_SCHEMA) {

@@ -32,7 +32,7 @@ if(WITH_RADOSGW)
     cls_rgw_client)
   if(WITH_RADOSGW_AMQP_ENDPOINT)
     list(APPEND DENCODER_EXTRALIBS
-      rabbitmq)
+      rabbitmq ssl)
   endif()
   if(WITH_RADOSGW_KAFKA_ENDPOINT)
     list(APPEND DENCODER_EXTRALIBS
