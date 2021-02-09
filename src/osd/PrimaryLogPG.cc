@@ -3560,11 +3560,7 @@ bool PrimaryLogPG::inc_refcount_by_set(OpContext* ctx, object_manifest_t& set_ch
   return false;
 }
 
-void PrimaryLogPG::dec_refcount_by_dirty(OpContext* ctx)
-{
-  object_ref_delta_t refs;
-  ObjectContextRef cobc = nullptr;
-  ObjectContextRef obc = ctx->obc;
+void PrimaryLogPG::update_chunk_map_by_dirty(OpContext* ctx) {
   for (auto &p : ctx->obs->oi.manifest.chunk_map) {
     if (!ctx->clean_regions.is_clean_region(p.first, p.second.length)) {
       ctx->new_obs.oi.manifest.chunk_map.erase(p.first);
@@ -3575,6 +3571,13 @@ void PrimaryLogPG::dec_refcount_by_dirty(OpContext* ctx)
       }
     }
   }
+}
+
+void PrimaryLogPG::dec_refcount_by_dirty(OpContext* ctx)
+{
+  object_ref_delta_t refs;
+  ObjectContextRef cobc = nullptr;
+  ObjectContextRef obc = ctx->obc;
   // Look over previous snapshot, then figure out whether updated chunk needs to be deleted
   cobc = get_prev_clone_obc(obc);
   obc->obs.oi.manifest.calc_refs_to_drop_on_modify(
@@ -8747,12 +8750,14 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
   // Drop the reference if deduped chunk is modified
   if (ctx->new_obs.oi.is_dirty() &&
     (ctx->obs->oi.has_manifest() && ctx->obs->oi.manifest.is_chunked()) &&
-    // If a clone is creating, ignore dropping the reference for manifest object
-    !ctx->delta_stats.num_object_clones &&
     ctx->new_obs.oi.size != 0 && // missing, redirect and delete
     !ctx->cache_operation &&
     log_op_type != pg_log_entry_t::PROMOTE) {
-    dec_refcount_by_dirty(ctx);
+    update_chunk_map_by_dirty(ctx);
+    // If a clone is creating, ignore dropping the reference for manifest object
+    if (!ctx->delta_stats.num_object_clones) {
+      dec_refcount_by_dirty(ctx);
+    }
   }
 
   // finish and log the op.
