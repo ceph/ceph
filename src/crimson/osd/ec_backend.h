@@ -30,7 +30,7 @@ private:
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
 		      const hobject_t& hoid,
 		      ceph::os::Transaction&& txn,
-		      const osd_op_params_t& req,
+		      osd_op_params_t&& req,
 		      epoch_t min_epoch, epoch_t max_epoch,
 		      std::vector<pg_log_entry_t>&& log_entries) final;
   CollectionRef coll;

@@ -567,10 +567,9 @@ seastar::future<> PG::WaitForActiveBlocker::stop()
 }
 
 seastar::future<> PG::submit_transaction(const OpInfo& op_info,
-					 const std::vector<OSDOp>& ops,
 					 ObjectContextRef&& obc,
 					 ceph::os::Transaction&& txn,
-					 const osd_op_params_t& osd_op_p)
+					 osd_op_params_t&& osd_op_p)
 {
   if (__builtin_expect(stopping, false)) {
     return seastar::make_exception_future<>(
@@ -584,6 +583,7 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
   }
 
   std::vector<pg_log_entry_t> log_entries;
+  const auto& ops = osd_op_p.req->ops;
   log_entries.emplace_back(obc->obs.exists ?
 		      pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
 		    obc->obs.oi.soid, osd_op_p.at_version, obc->obs.oi.version,
@@ -620,8 +620,8 @@ seastar::future<> PG::submit_transaction(const OpInfo& op_info,
   });
 }
 
-osd_op_params_t&& PG::fill_op_params_bump_pg_version(
-  osd_op_params_t&& osd_op_p,
+void PG::fill_op_params_bump_pg_version(
+  osd_op_params_t& osd_op_p,
   Ref<MOSDOp> m,
   const bool user_modify)
 {
@@ -633,7 +633,6 @@ osd_op_params_t&& PG::fill_op_params_bump_pg_version(
   if (user_modify) {
     osd_op_p.user_at_version = osd_op_p.at_version.version;
   }
-  return std::move(osd_op_p);
 }
 
 seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
@@ -683,11 +682,12 @@ seastar::future<Ref<MOSDOpReply>> PG::handle_failed_op(
   }, load_obc_ertr::assert_all{ "can't live with object state messed up" });
 }
 
-seastar::future<> PG::rep_repair_primary_object(
+seastar::future<> PG::repair_object(
   Ref<MOSDOp> m,
   const hobject_t& oid,
   eversion_t& v) 
 {
+  // see also PrimaryLogPG::rep_repair_primary_object()
   assert(is_primary());
   logger().debug("{}: {} peers osd.{}", __func__, oid, get_acting_recovery_backfill());
   // Add object to PG's missing set if it isn't there already
@@ -727,13 +727,6 @@ PG::do_osd_ops(
       *m,
       obc->obs.oi.soid);
     return std::move(*ox).flush_changes(
-      [m] (auto&& obc) -> osd_op_errorator::future<> {
-	logger().debug(
-	  "do_osd_ops: {} - object {} txn is empty, bypassing mutate",
-	  *m,
-	  obc->obs.oi.soid);
-        return osd_op_errorator::now();
-      },
       [this, m, &op_info] (auto&& txn,
 			   auto&& obc,
 			   auto&& osd_op_p,
@@ -742,21 +735,14 @@ PG::do_osd_ops(
 	  "do_osd_ops: {} - object {} submitting txn",
 	  *m,
 	  obc->obs.oi.soid);
-        auto filled_osd_op_p = fill_op_params_bump_pg_version(
-          std::move(osd_op_p),
-          std::move(m),
-          user_modify);
+        fill_op_params_bump_pg_version(osd_op_p, std::move(m), user_modify);
 	return submit_transaction(
           op_info,
-          filled_osd_op_p.req->ops,
           std::move(obc),
           std::move(txn),
-          std::move(filled_osd_op_p));
+          std::move(osd_op_p));
       });
-  }).safe_then([this,
-                m,
-                obc,
-                rvec = op_info.allows_returnvec()]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
+  }).safe_then([this, m, obc, rvec = op_info.allows_returnvec()] {
     // TODO: should stop at the first op which returns a negative retval,
     //       cmpext uses it for returning the index of first unmatched byte
     int result = m->ops.empty() ? 0 : m->ops.back().rval.code;
@@ -773,12 +759,12 @@ PG::do_osd_ops(
       "do_osd_ops: {} - object {} sending reply",
       *m,
       obc->obs.oi.soid);
-    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-  }, crimson::ct_error::object_corrupted::handle([m,
-                                     obc,
-                                     this] () {
-    return rep_repair_primary_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([]() -> PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>> {
-      return crimson::ct_error::eagain::make();
+    return PG::do_osd_ops_ertr::make_ready_future<Ref<MOSDOpReply>>(
+      std::move(reply));
+  }, crimson::ct_error::object_corrupted::handle([m, obc, this] {
+    return repair_object(m, obc->obs.oi.soid, obc->obs.oi.version).then([] {
+      return PG::do_osd_ops_ertr::future<Ref<MOSDOpReply>>(
+      crimson::ct_error::eagain::make());
     });
   }), OpsExecuter::osd_op_errorator::all_same_way([ox = std::move(ox),
                                      m,
