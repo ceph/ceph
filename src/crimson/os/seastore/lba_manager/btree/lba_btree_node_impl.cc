@@ -211,7 +211,7 @@ LBAInternalNode::find_hole_ret LBAInternalNode::find_hole(
   return seastar::do_with(
     begin,
     L_ADDR_NULL,
-    [this, c, min_addr, len, end](auto &i, auto &ret) {
+    [this, c, min_addr, len, end=end](auto &i, auto &ret) {
       return crimson::do_until([=, &i, &ret]() -> find_hole_ertr::future<bool> {
 	if (i == end) {
 	  return seastar::make_ready_future<bool>(true);

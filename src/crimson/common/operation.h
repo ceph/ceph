@@ -425,7 +425,7 @@ class OrderedConcurrentPhase : public PipelineStageI {
     return name;
   }
 
-  class ExitBarrier : public PipelineExitBarrierI {
+  class ExitBarrier final : public PipelineExitBarrierI {
     OrderedConcurrentPhase *phase;
     std::optional<seastar::future<>> barrier;
   public:
