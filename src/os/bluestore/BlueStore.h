@@ -1146,11 +1146,25 @@ public:
       return !pinned;
     }
 
-    const std::string& get_omap_prefix();
-    void get_omap_header(std::string *out);
-    void get_omap_key(const std::string& key, std::string *out);
+    const std::string& get_omap_prefix(uint8_t flags);
+    void get_omap_header(uint8_t flags, std::string* out);
+    void get_omap_key(uint8_t flags, const std::string& key, std::string* out);
+    void get_omap_tail(uint8_t flags, std::string* out);
+
+    const std::string& get_omap_prefix() {
+      return get_omap_prefix(onode.flags);
+    }
+    void get_omap_header(std::string* out) {
+      get_omap_header(onode.flags, out);
+    }
+    void get_omap_key(const std::string& key, std::string* out) {
+      get_omap_key(onode.flags, key, out);
+    }
+    void get_omap_tail(std::string* out) {
+      get_omap_tail(onode.flags, out);
+    }
+
     void rewrite_omap_key(const std::string& old, std::string *out);
-    void get_omap_tail(std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
 
     // Return the offset of an object on disk.  This function is intended *only*
