@@ -1136,7 +1136,9 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   if (name.compare(0, 4, "rgw.") == 0) {
     name = name.substr(4);
   }
-  int ret = rados.service_daemon_register(daemon_type, name, metadata);
+  std::string instance_id = stringify(rados.get_instance_id());
+  std::string rgw_service_map_name = name + "." + instance_id;
+  int ret = rados.service_daemon_register(daemon_type, rgw_service_map_name, metadata);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: service_daemon_register() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
