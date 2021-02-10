@@ -5037,6 +5037,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestFlushSnap) {
 
   // set-chunk (dedup)
   manifest_set_chunk(cluster, ioctx, cache_ioctx, 2, 2, "bar", "foo");
+  manifest_set_chunk(cluster, ioctx, cache_ioctx, 6, 2, "bar", "foo");
 
   // create a snapshot, clone
   vector<uint64_t> my_snaps(1);
