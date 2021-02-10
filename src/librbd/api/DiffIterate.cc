@@ -30,12 +30,6 @@ namespace api {
 
 namespace {
 
-enum ObjectDiffState {
-  OBJECT_DIFF_STATE_NONE    = 0,
-  OBJECT_DIFF_STATE_UPDATED = 1,
-  OBJECT_DIFF_STATE_HOLE    = 2
-};
-
 struct DiffContext {
   DiffIterate<>::Callback callback;
   void *callback_arg;
@@ -128,8 +122,9 @@ private:
         auto state = snapshot_extent.get_val().state;
 
         // ignore DNE object (and parent)
-        if (key == io::WriteReadSnapIds{0, 0} &&
-            state != io::SPARSE_EXTENT_STATE_DATA) {
+        if ((state == io::SPARSE_EXTENT_STATE_DNE) ||
+            (key == io::INITIAL_WRITE_READ_SNAP_IDS &&
+             state == io::SPARSE_EXTENT_STATE_ZEROED)) {
           continue;
         }
 
@@ -282,7 +277,8 @@ int DiffIterate<I>::execute() {
         ldout(cct, 20) << "object " << object << dendl;
 
         const uint64_t object_no = extents.front().objectno;
-        if (object_diff_state[object_no] == OBJECT_DIFF_STATE_NONE &&
+        uint8_t diff_state = object_diff_state[object_no];
+        if (diff_state == object_map::DIFF_STATE_HOLE &&
             from_snap_id == 0 && !diff_context.parent_diff.empty()) {
           // no data in child object -- report parent diff instead
           for (auto& oe : extents) {
@@ -300,9 +296,9 @@ int DiffIterate<I>::execute() {
               }
             }
           }
-        } else if (object_diff_state[object_no] != OBJECT_DIFF_STATE_NONE) {
-          bool updated = (object_diff_state[object_no] ==
-                            OBJECT_DIFF_STATE_UPDATED);
+        } else if (diff_state == object_map::DIFF_STATE_HOLE_UPDATED ||
+                   diff_state == object_map::DIFF_STATE_DATA_UPDATED) {
+          bool updated = (diff_state == object_map::DIFF_STATE_DATA_UPDATED);
           for (auto& oe : extents) {
             r = m_callback(off + oe.offset, oe.length, updated, m_callback_arg);
             if (r < 0) {

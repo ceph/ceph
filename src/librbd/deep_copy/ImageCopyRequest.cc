@@ -177,21 +177,28 @@ int ImageCopyRequest<I>::send_next_object_copy() {
 
   uint64_t ono = m_object_no++;
 
+  uint8_t object_diff_state = object_map::DIFF_STATE_HOLE;
   if (m_object_diff_state.size() > 0) {
     std::set<uint64_t> src_objects;
     map_src_objects(ono, &src_objects);
 
-    bool skip = true;
     for (auto src_ono : src_objects) {
-      if (src_ono >= m_object_diff_state.size() ||
-          m_object_diff_state[src_ono] != object_map::DIFF_STATE_NONE) {
-        skip = false;
-        break;
+      if (src_ono >= m_object_diff_state.size()) {
+        object_diff_state = object_map::DIFF_STATE_DATA_UPDATED;
+      } else {
+        auto state = m_object_diff_state[src_ono];
+        if ((state == object_map::DIFF_STATE_HOLE_UPDATED &&
+             object_diff_state != object_map::DIFF_STATE_DATA_UPDATED) ||
+            (state == object_map::DIFF_STATE_DATA &&
+             object_diff_state == object_map::DIFF_STATE_HOLE) ||
+            (state == object_map::DIFF_STATE_DATA_UPDATED)) {
+          object_diff_state = state;
+        }
       }
     }
 
-    if (skip) {
-      ldout(m_cct, 20) << "skipping clean object " << ono << dendl;
+    if (object_diff_state == object_map::DIFF_STATE_HOLE) {
+      ldout(m_cct, 20) << "skipping non-existent object " << ono << dendl;
       return 1;
     }
   }
@@ -202,6 +209,10 @@ int ImageCopyRequest<I>::send_next_object_copy() {
   uint32_t flags = 0;
   if (m_flatten) {
     flags |= OBJECT_COPY_REQUEST_FLAG_FLATTEN;
+  }
+  if (object_diff_state == object_map::DIFF_STATE_DATA) {
+    // no source objects have been updated and at least one has clean data
+    flags |= OBJECT_COPY_REQUEST_FLAG_EXISTS_CLEAN;
   }
 
   Context *ctx = new LambdaContext(

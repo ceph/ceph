@@ -1,0 +1,16 @@
+meta:
+- desc: run the rbd_mirror_stress.sh workunit to test the rbd-mirror daemon
+tasks:
+- workunit:
+    clients:
+      cluster1.client.mirror: [rbd/rbd_mirror_stress.sh]
+    env:
+      # override workunit setting of CEPH_ARGS='--cluster'
+      CEPH_ARGS: ''
+      MIRROR_POOL_MODE: 'image'
+      MIRROR_IMAGE_MODE: 'snapshot'
+      RBD_IMAGE_FEATURES: 'layering,exclusive-lock,object-map,fast-diff'
+      RBD_MIRROR_INSTANCES: '4'
+      RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
+      RBD_MIRROR_USE_RBD_MIRROR: '1'
+    timeout: 6h

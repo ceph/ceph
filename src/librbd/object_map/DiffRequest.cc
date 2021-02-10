@@ -175,58 +175,67 @@ void DiffRequest<I>::handle_load_object_map(int r) {
     m_object_map.resize(num_objs);
   }
 
-  if (m_object_diff_state->size() < num_objs) {
+  size_t prev_object_diff_state_size = m_object_diff_state->size();
+  if (prev_object_diff_state_size < num_objs) {
     // the diff state should be the largest of all snapshots in the set
     m_object_diff_state->resize(num_objs);
   }
   if (m_object_map.size() < m_object_diff_state->size()) {
     // the image was shrunk so expanding the object map will flag end objects
     // as non-existent and they will be compared against the previous object
-    // map
+    // diff state
     m_object_map.resize(m_object_diff_state->size());
   }
 
-  uint64_t overlap = std::min(m_object_map.size(), m_prev_object_map.size());
+  uint64_t overlap = std::min(m_object_map.size(), prev_object_diff_state_size);
   auto it = m_object_map.begin();
   auto overlap_end_it = it + overlap;
-  auto pre_it = m_prev_object_map.begin();
   auto diff_it = m_object_diff_state->begin();
   uint64_t i = 0;
-  for (; it != overlap_end_it; ++it, ++pre_it, ++diff_it, ++i) {
-    ldout(cct, 20) << "object state: " << i << " "
-                   << static_cast<uint32_t>(*pre_it)
-                   << "->" << static_cast<uint32_t>(*it) << dendl;
-    if (*it == OBJECT_NONEXISTENT) {
-      if (*pre_it != OBJECT_NONEXISTENT) {
-        *diff_it = DIFF_STATE_HOLE;
-      }
-    } else if (*it == OBJECT_EXISTS ||
-               (*pre_it != *it &&
-                !(*pre_it == OBJECT_EXISTS &&
-                  *it == OBJECT_EXISTS_CLEAN))) {
-      *diff_it = DIFF_STATE_UPDATED;
+  for (; it != overlap_end_it; ++it, ++diff_it, ++i) {
+    uint8_t object_map_state = *it;
+    uint8_t prev_object_diff_state = *diff_it;
+    if (object_map_state == OBJECT_EXISTS ||
+        object_map_state == OBJECT_PENDING ||
+        (object_map_state == OBJECT_EXISTS_CLEAN &&
+         prev_object_diff_state != DIFF_STATE_DATA &&
+         prev_object_diff_state != DIFF_STATE_DATA_UPDATED)) {
+      *diff_it = DIFF_STATE_DATA_UPDATED;
+    } else if (object_map_state == OBJECT_NONEXISTENT &&
+               prev_object_diff_state != DIFF_STATE_HOLE &&
+               prev_object_diff_state != DIFF_STATE_HOLE_UPDATED) {
+      *diff_it = DIFF_STATE_HOLE_UPDATED;
     }
+
+    ldout(cct, 20) << "object state: " << i << " "
+                   << static_cast<uint32_t>(prev_object_diff_state)
+                   << "->" << static_cast<uint32_t>(*diff_it) << " ("
+                   << static_cast<uint32_t>(object_map_state) << ")"
+                   << dendl;
   }
   ldout(cct, 20) << "computed overlap diffs" << dendl;
 
   bool diff_from_start = (m_snap_id_start == 0);
   auto end_it = m_object_map.end();
-  if (m_object_map.size() > m_prev_object_map.size() &&
-      (diff_from_start || m_prev_object_map_valid)) {
+  if (m_object_map.size() > prev_object_diff_state_size) {
     for (; it != end_it; ++it,++diff_it, ++i) {
-      ldout(cct, 20) << "object state: " << i << " "
-                     << "->" << static_cast<uint32_t>(*it) << dendl;
-      if (*it == OBJECT_NONEXISTENT) {
-        *diff_it = DIFF_STATE_NONE;
+      uint8_t object_map_state = *it;
+      if (object_map_state == OBJECT_NONEXISTENT) {
+        *diff_it = DIFF_STATE_HOLE;
+      } else if (diff_from_start || object_map_state != OBJECT_EXISTS_CLEAN) {
+        *diff_it = DIFF_STATE_DATA_UPDATED;
       } else {
-        *diff_it = DIFF_STATE_UPDATED;
+        *diff_it = DIFF_STATE_DATA;
       }
+
+      ldout(cct, 20) << "object state: " << i << " "
+                     << "->" << static_cast<uint32_t>(*diff_it) << " ("
+                     << static_cast<uint32_t>(*it) << ")" << dendl;
     }
   }
   ldout(cct, 20) << "computed resize diffs" << dendl;
 
-  m_prev_object_map = m_object_map;
-  m_prev_object_map_valid = true;
+  m_object_diff_state_valid = true;
 
   std::shared_lock image_locker{m_image_ctx->image_lock};
   load_object_map(&image_locker);
