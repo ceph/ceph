@@ -15,8 +15,11 @@ from .access_control import LocalAuthenticator, UserDoesNotExist
 from .. import mgr, logger
 
 cherrypy.config.update({
-    'response.headers.server': 'Ceph-Dashboard'
-    })
+    'response.headers.server': 'Ceph-Dashboard',
+    'response.headers.content-security-policy': "frame-ancestors 'self';",
+    'response.headers.x-content-type-options': 'nosniff',
+    'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
+})
 
 
 class JwtManager(object):
