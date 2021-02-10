@@ -48,6 +48,7 @@ class TestPrometheus(MgrTestCase):
         r = requests.get(original_uri + "metrics", allow_redirects=False)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.headers["content-type"], "text/plain;charset=utf-8")
+        self.assertEqual(r.headers["server"], "Ceph-Prometheus")
 
     def test_urls(self):
         self._assign_ports("prometheus", "server_port")
