@@ -73,12 +73,7 @@ class Module(MgrModule):
         Option(name=TrashPurgeScheduleHandler.MODULE_OPTION_NAME),
     ]
 
-    mirror_snapshot_schedule = None
-    perf = None
-    task = None
-    trash_purge_schedule = None
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         self.rados.wait_for_latest_osdmap()
         self.mirror_snapshot_schedule = MirrorSnapshotScheduleHandler(self)
