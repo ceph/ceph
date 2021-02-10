@@ -4218,7 +4218,7 @@ void Client::remove_session_caps(MetaSession *s, int err)
 
 int Client::_do_remount(bool retry_on_error)
 {
-  uint64_t max_retries = g_conf().get_val<uint64_t>("mds_max_retries_on_remount_failure");
+  uint64_t max_retries = cct->_conf.get_val<uint64_t>("mds_max_retries_on_remount_failure");
 
   errno = 0;
   int r = remount_cb(callback_handle);
