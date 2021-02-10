@@ -2756,6 +2756,7 @@ public:
   librados::ObjectReadOperation op;
   string oid;
   std::shared_ptr<int> in_use;
+  int snap;
 
   TierFlushOp(int n,
 	       RadosTestContext *context,
@@ -2763,7 +2764,8 @@ public:
 	       TestOpStat *stat)
     : TestOp(n, context, stat),
       completion(NULL),
-      oid(oid)
+      oid(oid),
+      snap(-1)
   {}
 
   void _begin() override
@@ -2772,6 +2774,17 @@ public:
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
+
+    if (0 && !(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2785,6 +2798,10 @@ public:
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, flags, NULL);
     ceph_assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info) override
@@ -2800,7 +2817,7 @@ public:
     } else {
       ceph_abort_msg("shouldn't happen");
     }
-    context->update_object_version(oid, completion->get_version64());
+    context->update_object_version(oid, completion->get_version64(), snap);
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
