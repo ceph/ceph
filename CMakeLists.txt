@@ -4,21 +4,16 @@ project(ceph
   VERSION 17.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy
-    CMP0028
-    CMP0046
-    CMP0048
-    CMP0051
-    CMP0054
-    CMP0056
-    CMP0065
-    CMP0074
-    CMP0075
-    CMP0093)
-  if(POLICY ${policy})
-    cmake_policy(SET ${policy} NEW)
-  endif()
-endforeach()
+cmake_policy(SET CMP0028 NEW)
+cmake_policy(SET CMP0046 NEW)
+cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0051 NEW)
+cmake_policy(SET CMP0054 NEW)
+cmake_policy(SET CMP0056 NEW)
+cmake_policy(SET CMP0065 NEW)
+cmake_policy(SET CMP0074 NEW)
+cmake_policy(SET CMP0075 NEW)
+cmake_policy(SET CMP0093 NEW)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
