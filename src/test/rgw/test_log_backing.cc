@@ -241,7 +241,7 @@ TEST_F(LogBacking, GenerationSingle)
 
   ASSERT_EQ(0, lg->got_entries[0].gen_id);
   ASSERT_EQ(log_type::fifo, lg->got_entries[0].type);
-  ASSERT_FALSE(lg->got_entries[0].empty);
+  ASSERT_FALSE(lg->got_entries[0].pruned);
 
   auto ec = lg->empty_to(0, null_yield);
   ASSERT_TRUE(ec);
@@ -258,7 +258,7 @@ TEST_F(LogBacking, GenerationSingle)
 
   ASSERT_EQ(0, lg->got_entries[0].gen_id);
   ASSERT_EQ(log_type::fifo, lg->got_entries[0].type);
-  ASSERT_FALSE(lg->got_entries[0].empty);
+  ASSERT_FALSE(lg->got_entries[0].pruned);
 
   lg->got_entries.clear();
 
@@ -268,7 +268,7 @@ TEST_F(LogBacking, GenerationSingle)
   ASSERT_EQ(1, lg->got_entries.size());
   ASSERT_EQ(1, lg->got_entries[1].gen_id);
   ASSERT_EQ(log_type::omap, lg->got_entries[1].type);
-  ASSERT_FALSE(lg->got_entries[1].empty);
+  ASSERT_FALSE(lg->got_entries[1].pruned);
 
   lg.reset();
 
@@ -280,11 +280,11 @@ TEST_F(LogBacking, GenerationSingle)
   ASSERT_EQ(2, lg->got_entries.size());
   ASSERT_EQ(0, lg->got_entries[0].gen_id);
   ASSERT_EQ(log_type::fifo, lg->got_entries[0].type);
-  ASSERT_FALSE(lg->got_entries[0].empty);
+  ASSERT_FALSE(lg->got_entries[0].pruned);
 
   ASSERT_EQ(1, lg->got_entries[1].gen_id);
   ASSERT_EQ(log_type::omap, lg->got_entries[1].type);
-  ASSERT_FALSE(lg->got_entries[1].empty);
+  ASSERT_FALSE(lg->got_entries[1].pruned);
 
   ec = lg->empty_to(0, null_yield);
   ASSERT_FALSE(ec);
@@ -301,7 +301,7 @@ TEST_F(LogBacking, GenerationSingle)
   ASSERT_EQ(1, lg->got_entries.size());
   ASSERT_EQ(1, lg->got_entries[1].gen_id);
   ASSERT_EQ(log_type::omap, lg->got_entries[1].type);
-  ASSERT_FALSE(lg->got_entries[1].empty);
+  ASSERT_FALSE(lg->got_entries[1].pruned);
 
   ec = lg->remove_empty(null_yield);
   ASSERT_FALSE(ec);
@@ -311,7 +311,7 @@ TEST_F(LogBacking, GenerationSingle)
 
   ASSERT_EQ(1, entries[1].gen_id);
   ASSERT_EQ(log_type::omap, entries[1].type);
-  ASSERT_FALSE(entries[1].empty);
+  ASSERT_FALSE(entries[1].pruned);
 
   lg.reset();
 }
@@ -329,7 +329,7 @@ TEST_F(LogBacking, GenerationWN)
   ASSERT_EQ(1, lg1->got_entries.size());
   ASSERT_EQ(1, lg1->got_entries[1].gen_id);
   ASSERT_EQ(log_type::omap, lg1->got_entries[1].type);
-  ASSERT_FALSE(lg1->got_entries[1].empty);
+  ASSERT_FALSE(lg1->got_entries[1].pruned);
 
   lg1->got_entries.clear();
 
@@ -342,11 +342,11 @@ TEST_F(LogBacking, GenerationWN)
 
   ASSERT_EQ(0, lg2->got_entries[0].gen_id);
   ASSERT_EQ(log_type::fifo, lg2->got_entries[0].type);
-  ASSERT_FALSE(lg2->got_entries[0].empty);
+  ASSERT_FALSE(lg2->got_entries[0].pruned);
 
   ASSERT_EQ(1, lg2->got_entries[1].gen_id);
   ASSERT_EQ(log_type::omap, lg2->got_entries[1].type);
-  ASSERT_FALSE(lg2->got_entries[1].empty);
+  ASSERT_FALSE(lg2->got_entries[1].pruned);
 
   lg2->got_entries.clear();
 
@@ -356,12 +356,12 @@ TEST_F(LogBacking, GenerationWN)
   ASSERT_EQ(1, lg1->got_entries.size());
   ASSERT_EQ(2, lg1->got_entries[2].gen_id);
   ASSERT_EQ(log_type::fifo, lg1->got_entries[2].type);
-  ASSERT_FALSE(lg1->got_entries[2].empty);
+  ASSERT_FALSE(lg1->got_entries[2].pruned);
 
   ASSERT_EQ(1, lg2->got_entries.size());
   ASSERT_EQ(2, lg2->got_entries[2].gen_id);
   ASSERT_EQ(log_type::fifo, lg2->got_entries[2].type);
-  ASSERT_FALSE(lg2->got_entries[2].empty);
+  ASSERT_FALSE(lg2->got_entries[2].pruned);
 
   lg1->got_entries.clear();
   lg2->got_entries.clear();
