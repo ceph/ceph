@@ -3990,7 +3990,19 @@ void Client::wait_on_list(list<ceph::condition_variable*>& ls)
 {
   ceph::condition_variable cond;
   ls.push_back(&cond);
+
   std::unique_lock l{client_lock, std::adopt_lock};
+  cond.wait(l);
+  l.release();
+  ls.remove(&cond);
+}
+
+void Client::wait_on_list(list<ceph::condition_variable*>& ls, ceph::mutex &lock)
+{
+  ceph::condition_variable cond;
+  ls.push_back(&cond);
+
+  std::unique_lock l{lock, std::adopt_lock};
   cond.wait(l);
   l.release();
   ls.remove(&cond);

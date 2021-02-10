@@ -638,6 +638,7 @@ public:
   int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
 
   entity_name_t get_myname() { return messenger->get_myname(); }
+  void wait_on_list(std::list<ceph::condition_variable*>& ls, ceph::mutex &lock);
   void wait_on_list(std::list<ceph::condition_variable*>& ls);
   void signal_cond_list(std::list<ceph::condition_variable*>& ls);
 
