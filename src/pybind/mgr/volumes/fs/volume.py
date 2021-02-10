@@ -566,15 +566,18 @@ class VolumeClient(object):
     ### group snapshot
 
     def create_subvolume_group_snapshot(self, **kwargs):
-        ret       = 0, "", ""
+        ret       = -errno.ENOSYS, "", "subvolume group snapshots are not supported"
         volname   = kwargs['vol_name']
         groupname = kwargs['group_name']
-        snapname  = kwargs['snap_name']
+        # snapname  = kwargs['snap_name']
 
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    group.create_snapshot(snapname)
+                    # as subvolumes are marked with the vxattr ceph.dir.subvolume deny snapshots
+                    # at the subvolume group (see: https://tracker.ceph.com/issues/46074)
+                    # group.create_snapshot(snapname)
+                    pass
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

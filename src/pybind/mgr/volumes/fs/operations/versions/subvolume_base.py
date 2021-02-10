@@ -114,6 +114,11 @@ class SubvolumeBase(object):
     def subvol_type(self):
         return SubvolumeTypes.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_TYPE))
 
+    @property
+    def purgeable(self):
+        """ Boolean declaring if subvolume can be purged """
+        raise NotImplementedError
+
     def load_config(self):
         if self.legacy_mode:
             self.metadata_mgr = MetadataManager(self.fs, self.legacy_config_path, 0o640)
@@ -280,6 +285,12 @@ class SubvolumeBase(object):
         with open_trashcan(self.fs, self.vol_spec) as trashcan:
             trashcan.dump(path)
             log.info("subvolume path '{0}' moved to trashcan".format(path))
+
+    def _link_dir(self, path, bname):
+        create_trashcan(self.fs, self.vol_spec)
+        with open_trashcan(self.fs, self.vol_spec) as trashcan:
+            trashcan.link(path, bname)
+            log.info("subvolume path '{0}' linked in trashcan bname {1}".format(path, bname))
 
     def trash_base_dir(self):
         if self.legacy_mode:

@@ -54,6 +54,17 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def features(self):
         return [SubvolumeFeatures.FEATURE_SNAPSHOT_CLONE.value, SubvolumeFeatures.FEATURE_SNAPSHOT_AUTOPROTECT.value]
 
+    def mark_subvolume(self):
+        # set subvolume attr, on subvolume root, marking it as a CephFS subvolume
+        # subvolume root is where snapshots would be taken, and hence is the <uuid> dir for v1 subvolumes
+        try:
+            # MDS treats this as a noop for already marked subvolume
+            self.fs.setxattr(self.path, 'ceph.dir.subvolume', b'1', 0)
+        except cephfs.InvalidValue as e:
+            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
     def snapshot_base_path(self):
         """ Base path for all snapshots """
         return os.path.join(self.path, self.vol_spec.snapshot_dir_prefix.encode('utf-8'))
@@ -77,6 +88,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, mode)
+            self.mark_subvolume()
             attrs = {
                 'uid': uid,
                 'gid': gid,
@@ -138,6 +150,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
+            self.mark_subvolume()
             self.set_attrs(subvol_path, attrs)
 
             # persist subvolume metadata and clone source
@@ -200,6 +213,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             subvol_path = self.path
             log.debug("refreshed metadata, checking subvolume path '{0}'".format(subvol_path))
             st = self.fs.stat(subvol_path)
+            # unconditionally mark as subvolume, to handle pre-existing subvolumes without the mark
+            self.mark_subvolume()
 
             self.uid = int(st.st_uid)
             self.gid = int(st.st_gid)
