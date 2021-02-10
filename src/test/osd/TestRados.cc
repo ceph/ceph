@@ -224,17 +224,9 @@ public:
 	  oid2 << " " << string(300, 'm');
 	}
 
-	/* make a chunk (random offset, random length --> 
-	 * target object's random offset)
-	 */
-	uint32_t rand_offset = 0, rand_length = 0;
-	get_rand_off_len(context, oid.str(), rand_offset, rand_length);
-	uint32_t rand_tgt_offset = rand_offset;
-	cout << m_op << ": " << "set_chunk oid " << oid.str() << " offset: " << rand_offset 
-	     << " length: " << rand_length <<  " target oid " << oid2.str() 
-	     << " tgt_offset: " << rand_tgt_offset << std::endl;
-	op = new SetChunkOp(m_op, &context, oid.str(), rand_offset, rand_length, oid2.str(), 
-			    rand_tgt_offset, m_stats);
+	cout << m_op << ": " << "set_chunk oid " << oid.str() 
+	     <<  " target oid " << oid2.str()  << std::endl;
+	op = new SetChunkOp(m_op, &context, oid.str(), oid2.str(), m_stats);
 	return true;
       }
     } else if (m_op == make_manifest_end + 1) {
@@ -260,23 +252,6 @@ public:
     } 
 
     return false;
-  }
-
-  void get_rand_off_len(RadosTestContext &context, string oid, uint32_t &rand_offset, uint32_t &rand_length) {
-    ObjectDesc contents;
-    context.find_object(oid, &contents);
-    uint32_t max_len = contents.most_recent_gen()->get_length(contents.most_recent());
-    rand_offset = rand() % max_len;
-    rand_length = rand() % max_len;
-    rand_offset = rand_offset - (rand_offset % 512);
-    rand_length = rand_length - (rand_length % 512);
-
-    while (rand_offset + rand_length > max_len || rand_length == 0) {
-      rand_offset = rand() % max_len;
-      rand_length = rand() % max_len;
-      rand_offset = rand_offset - (rand_offset % 512);
-      rand_length = rand_length - (rand_length % 512);
-    }
   }
 
 private:
@@ -449,12 +424,9 @@ private:
       {
 	ceph_assert(m_enable_dedup);
 	oid = *(rand_choose(context.oid_not_in_use));
-	uint32_t rand_offset = 0, rand_length = 0;
-	get_rand_off_len(context, oid, rand_offset, rand_length);
-	cout << m_op << ": " << "set_chunk oid " << oid << " offset: " << rand_offset 
-	     << " length: " << rand_length <<  " target oid " << ""
-	     << " tgt_offset: " << rand_offset << std::endl;
-	return new SetChunkOp(m_op, &context, oid, rand_offset, rand_length, "", rand_offset, m_stats);
+	cout << m_op << ": " << "set_chunk oid " << oid 
+	     <<  " target oid " << std::endl;
+	return new SetChunkOp(m_op, &context, oid, "", m_stats);
       }
 
     case TEST_OP_TIER_EVICT:
