@@ -55,7 +55,9 @@ struct rgw_data_change {
   uint64_t gen = 0;
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 2, bl);
+    // require decoders to recognize v2 when gen>0
+    const uint8_t compat = (gen == 0) ? 1 : 2;
+    ENCODE_START(2, compat, bl);
     auto t = std::uint8_t(entity_type);
     encode(t, bl);
     encode(key, bl);
@@ -71,10 +73,11 @@ struct rgw_data_change {
      entity_type = DataLogEntityType(t);
      decode(key, bl);
      decode(timestamp, bl);
-     if (struct_v < 2)
+     if (struct_v < 2) {
        gen = 0;
-     else
+     } else {
        decode(gen, bl);
+     }
      DECODE_FINISH(bl);
   }
 
