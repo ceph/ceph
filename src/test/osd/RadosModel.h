@@ -2330,32 +2330,59 @@ public:
   uint64_t offset;
   uint32_t length;
   uint32_t tgt_offset;
+  int snap;
+  std::shared_ptr<int> in_use;
   SetChunkOp(int n,
 	     RadosTestContext *context,
 	     const string &oid,
-	     uint64_t offset,
-	     uint32_t length,
 	     const string &oid_tgt,
-	     uint32_t tgt_offset,
 	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       oid(oid), oid_tgt(oid_tgt),
       comp(NULL), done(0), 
-      r(0), offset(offset), length(length), 
-      tgt_offset(tgt_offset)
+      r(0), offset(0), length(0), 
+      tgt_offset(0),
+      snap(0)
   {}
+
+  void get_rand_off_len(uint64_t &rand_offset, uint32_t &rand_length, uint32_t max_len) {
+    rand_offset = rand() % max_len;
+    rand_length = rand() % max_len;
+    rand_offset = rand_offset - (rand_offset % 512);
+    rand_length = rand_length - (rand_length % 512);
+
+    while (rand_offset + rand_length > max_len || rand_length == 0) {
+      rand_offset = rand() % max_len;
+      rand_length = rand() % max_len;
+      rand_offset = rand_offset - (rand_offset % 512);
+      rand_length = rand_length - (rand_length % 512);
+    }
+  }
 
   void _begin() override
   {
     std::lock_guard l{context->state_lock};
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    context->find_object(oid, &src_value); 
+    context->find_object(oid, &src_value, snap); 
     context->find_object(oid_tgt, &tgt_value);
 
-    if (src_value.version != 0 && !src_value.deleted())
+    uint32_t max_len = src_value.most_recent_gen()->get_length(src_value.most_recent());
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+      get_rand_off_len(offset, length, max_len);
+    } else if (src_value.version != 0 && !src_value.deleted()) {
       op.assert_version(src_value.version);
+      get_rand_off_len(offset, length, max_len);
+    }
+    tgt_offset = offset;
 
     string target_oid;
     if (!oid_tgt.empty()) {
@@ -2371,7 +2398,9 @@ public:
       tgt_offset = 0;
     }
 
-    cout << num << ": target oid " << target_oid << " offset " << tgt_offset << std::endl;
+    cout << num << ": " << "set_chunk oid " << oid << " offset: " << offset
+	  << " length: " << length <<  " target oid " << target_oid
+	  << " offset: " << tgt_offset << std::endl;
 
     op.set_chunk(offset, length, context->low_tier_io_ctx, 
 		 context->prefix+target_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
@@ -2383,6 +2412,9 @@ public:
 						&write_callback);
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
 				librados::OPERATION_ORDER_READS_WRITES, NULL);
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info) override
@@ -2408,9 +2440,11 @@ public:
 	  ceph_abort();
 	}
       } else {
-	ChunkDesc info {tgt_offset, length, oid_tgt};
-	context->update_object_chunk_target(oid, offset, info);
-	context->update_object_version(oid, comp->get_version64());
+	if (snap == -1) {
+	  ChunkDesc info {tgt_offset, length, oid_tgt};
+	  context->update_object_chunk_target(oid, offset, info);
+	  context->update_object_version(oid, comp->get_version64());
+	}
       }
     }
 
