@@ -232,8 +232,8 @@ def ceph_log(ctx, config):
             log.info('Compressing logs...')
             ctx.cluster.sh(
                 'sudo find /var/log/ceph -name *.log -print0 | '
-                'sudo xargs -0 --no-run-if-empty -- gzip --',
-                wait=False)
+                'sudo xargs -0 --no-run-if-empty -- gzip --'
+            )
 
             log.info('Archiving logs...')
             path = os.path.join(ctx.archive, 'remote')
