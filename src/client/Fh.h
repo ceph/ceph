@@ -23,7 +23,6 @@ struct Fh {
 
   int       _ref = 1;
   loff_t    pos = 0;
-  int       mds = 0;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
 
   bool pos_locked = false;           // pos is currently in use
