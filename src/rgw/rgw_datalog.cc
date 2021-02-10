@@ -390,7 +390,7 @@ bs::error_code DataLogBackends::handle_init(entries_t e) noexcept {
   std::unique_lock l(m);
 
   for (const auto& [gen_id, gen] : e) {
-    if (gen.empty) {
+    if (gen.pruned) {
       lderr(datalog.cct)
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
 	<< ": ERROR: given empty generation: gen_id=" << gen_id << dendl;
