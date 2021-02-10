@@ -230,7 +230,7 @@ class MetricCollectionThread(threading.Thread):
 
                 try:
                     data = self.mod.collect()
-                except:
+                except Exception:
                     # Log any issues encountered during the data collection and continue
                     self.mod.log.exception("failed to collect metrics:")
                     self.event.wait(self.mod.scrape_interval)
@@ -951,9 +951,9 @@ class Module(MgrModule):
         else:
             namespace_regex = '^(.*)$'
 
-        if 'query' in self.rbd_stats and \
-           (pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex'] or
-                namespace_regex != self.rbd_stats['query']['key_descriptor'][1]['regex']):
+        if ('query' in self.rbd_stats
+            and (pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex']
+                 or namespace_regex != self.rbd_stats['query']['key_descriptor'][1]['regex'])):
             self.remove_osd_perf_query(self.rbd_stats['query_id'])
             del self.rbd_stats['query_id']
             del self.rbd_stats['query']
@@ -1076,8 +1076,8 @@ class Module(MgrModule):
                         if nspace_name not in nspace_names:
                             del pool['images'][nspace_name]
                     for nspace_name in nspace_names:
-                        if (nspace_name and
-                                not rbd.namespace_exists(ioctx, nspace_name)):
+                        if nspace_name and\
+                           not rbd.namespace_exists(ioctx, nspace_name):
                             self.log.debug('unknown namespace %s for pool %s' %
                                            (nspace_name, pool_name))
                             continue
