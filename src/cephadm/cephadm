@@ -2283,6 +2283,8 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         mounts['/run/udev'] = '/run/udev'
     if daemon_type == 'osd':
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
+        # selinux-policy in the container may not match the host.
+        mounts['/usr/share/empty'] = '/sys/fs/selinux:ro'
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
 
