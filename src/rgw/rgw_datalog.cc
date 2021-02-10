@@ -882,38 +882,36 @@ void DataLogBackends::trim_entries(int shard_id, std::string_view marker,
 }
 
 int DataLogBackends::trim_generations(std::optional<uint64_t>& through) {
-  if (size() == 1) {
-    return 0;
-  }
-
-  std::vector<mapped_type> candidates;
-  {
-    std::scoped_lock l(m);
-    auto e = cend() - 1;
-    for (auto i = cbegin(); i < e; ++i) {
-      candidates.push_back(i->second);
+  if (size() != 1) {
+    std::vector<mapped_type> candidates;
+    {
+      std::scoped_lock l(m);
+      auto e = cend() - 1;
+      for (auto i = cbegin(); i < e; ++i) {
+	candidates.push_back(i->second);
+      }
     }
-  }
 
-  std::optional<uint64_t> highest;
-  for (auto& be : candidates) {
-    auto r = be->is_empty();
-    if (r < 0) {
-      return r;
-    } else if (r == 1) {
-      highest = be->gen_id;
-    } else {
-      break;
+    std::optional<uint64_t> highest;
+    for (auto& be : candidates) {
+      auto r = be->is_empty();
+      if (r < 0) {
+	return r;
+      } else if (r == 1) {
+	highest = be->gen_id;
+      } else {
+	break;
+      }
     }
-  }
 
-  through = highest;
-  if (!highest) {
-    return 0;
-  }
-  auto ec = empty_to(*highest, null_yield);
-  if (ec) {
-    return ceph::from_error_code(ec);
+    through = highest;
+    if (!highest) {
+      return 0;
+    }
+    auto ec = empty_to(*highest, null_yield);
+    if (ec) {
+      return ceph::from_error_code(ec);
+    }
   }
 
   return ceph::from_error_code(remove_empty(null_yield));
