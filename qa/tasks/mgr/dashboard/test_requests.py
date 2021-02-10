@@ -20,4 +20,8 @@ class RequestsTest(DashboardTestCase):
         self.assertNotIn('Content-Encoding', self._resp.headers)
         self.assertHeaders({
             'Content-Type': 'application/json',
+            'server': 'Ceph-Dashboard',
+            'Content-Security-Policy': "frame-ancestors 'self';",
+            'X-Content-Type-Options': 'nosniff',
+            'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload'
         })

@@ -15,6 +15,13 @@ import jwt
 from .access_control import LocalAuthenticator, UserDoesNotExist
 from .. import mgr
 
+cherrypy.config.update({
+    'response.headers.server': 'Ceph-Dashboard',
+    'response.headers.content-security-policy': "frame-ancestors 'self';",
+    'response.headers.x-content-type-options': 'nosniff',
+    'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
+})
+
 
 class JwtManager(object):
     JWT_TOKEN_BLACKLIST_KEY = "jwt_token_black_list"
