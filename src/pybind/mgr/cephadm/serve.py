@@ -53,6 +53,7 @@ class CephadmServe:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
+        self.config_checker = CephadmConfigChecks(self.mgr)
 
     def serve(self) -> None:
         """
@@ -62,6 +63,8 @@ class CephadmServe:
         of cephadm. This loop will then attempt to apply this new state.
         """
         self.log.debug("serve starting")
+        self.config_checker.load_network_config()
+
         while self.mgr.run:
 
             try:
@@ -182,8 +185,7 @@ class CephadmServe:
 
         refresh(self.mgr.cache.get_hosts())
 
-        checker = CephadmConfigChecks(self.mgr)
-        checker.run_checks()
+        self.config_checker.run_checks()
 
         health_changed = False
         for k in [
