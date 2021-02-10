@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
-DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-master-devel'
-DEFAULT_IMAGE_IS_MASTER = True
+DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-pacific-devel'
+DEFAULT_IMAGE_IS_MASTER = False
 LATEST_STABLE_RELEASE = 'pacific'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
@@ -3892,7 +3892,7 @@ def command_bootstrap(ctx):
     logger.info('Please consider enabling telemetry to help improve Ceph:\n\n'
                 '\tceph telemetry on\n\n'
                 'For more information see:\n\n'
-                '\thttps://docs.ceph.com/docs/master/mgr/telemetry/\n')
+                '\thttps://docs.ceph.com/docs/pacific/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
     return 0
 
