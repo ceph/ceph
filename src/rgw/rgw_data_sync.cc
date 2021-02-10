@@ -1735,7 +1735,7 @@ public:
           if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
             tn->log(0, SSTR("ERROR: cannot start syncing " << log_iter->log_id << ". Duplicate entry?"));
           } else {
-            spawn(sync_single_entry(source_bs, std::nullopt, log_iter->log_id,
+            spawn(sync_single_entry(source_bs, log_iter->entry.gen, log_iter->log_id,
                                     log_iter->log_timestamp, false), false);
           }
 

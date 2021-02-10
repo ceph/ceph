@@ -36,7 +36,7 @@ void rgw_data_change::dump(ceph::Formatter *f) const
   encode_json("key", key, f);
   utime_t ut(timestamp);
   encode_json("timestamp", ut, f);
-  encode_json("gen_id", gen_id, f);
+  encode_json("gen", gen, f);
 }
 
 void rgw_data_change::decode_json(JSONObj *obj) {
@@ -51,7 +51,7 @@ void rgw_data_change::decode_json(JSONObj *obj) {
   utime_t ut;
   JSONDecoder::decode_json("timestamp", ut, obj);
   timestamp = ut.to_real_time();
-  JSONDecoder::decode_json("gen_id", gen_id, obj);
+  JSONDecoder::decode_json("gen", gen, obj);
 }
 
 void rgw_data_change_log_entry::dump(Formatter *f) const
@@ -613,7 +613,7 @@ int RGWDataChangesLog::renew_entries()
   l.unlock();
 
   auto ut = real_clock::now();
-  for (const auto& [bs, gen_id] : entries) {
+  for (const auto& [bs, gen] : entries) {
     auto index = choose_oid(bs);
 
     rgw_data_change change;
@@ -621,7 +621,7 @@ int RGWDataChangesLog::renew_entries()
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = ut;
-    change.gen_id = gen_id;
+    change.gen = gen;
     encode(change, bl);
 
     m[index].first.push_back(bs);
@@ -780,7 +780,7 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = now;
-    change.gen_id = gen.gen;
+    change.gen = gen.gen;
     encode(change, bl);
 
     ldout(cct, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
