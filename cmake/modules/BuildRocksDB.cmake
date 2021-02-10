@@ -16,9 +16,6 @@ function(build_rocksdb)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES JeMalloc::JeMalloc)
   endif()
 
-  if (WITH_CCACHE AND CCACHE_FOUND)
-    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
-  endif()
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
 
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_SNAPPY=${SNAPPY_FOUND})
