@@ -17,15 +17,19 @@ class Inode;
 struct Fh : public RefCountedObject {
   Client    *client;
   InodeRef  inode;
+  int       flags;
+  uint64_t  gen;
+  UserPerm  actor_perms; // perms I opened the file with
+
+  // the members above once ininitalized in the constructor
+  // they won't change, and putting them under the client_lock
+  // makes no sense.
+
   loff_t    pos = 0;
   int       mode;       // the mode i opened the file with
-  uint64_t  gen;
 
-  int flags;
   bool pos_locked = false;           // pos is currently in use
   std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
-
-  UserPerm actor_perms; // perms I opened the file with
 
   Readahead readahead;
 

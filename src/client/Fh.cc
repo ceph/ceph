@@ -20,8 +20,8 @@
 
 Fh::Fh(Client *client, InodeRef in, int flags, int cmode, uint64_t _gen,
        const UserPerm &perms) :
-    client(client), inode(in), mode(cmode), gen(_gen), flags(flags),
-    actor_perms(perms), readahead()
+    client(client), inode(in), flags(flags), gen(_gen), actor_perms(perms),
+    mode(cmode), readahead()
 {
   inode->add_fh(this);
 }
