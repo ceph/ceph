@@ -118,15 +118,16 @@ seastar::future<> ClientRequest::process_pg_op(
 
 seastar::future<> ClientRequest::process_op(Ref<PG> &pg)
 {
-  return with_blocking_future(handle.enter(pp(*pg).recover_missing)).then([&] {
+  return with_blocking_future(handle.enter(pp(*pg).recover_missing)).then(
+    [this, pg]() mutable {
     return do_recover_missing(pg);
-  }).then([&] {
+  }).then([this, pg]() mutable {
     return with_blocking_future(handle.enter(pp(*pg).get_obc));
-  }).then([this, &pg]() -> PG::load_obc_ertr::future<> {
+  }).then([this, pg]() mutable -> PG::load_obc_ertr::future<> {
     op_info.set_from_op(&*m, *pg->get_osdmap());
-    return pg->with_locked_obc(m, op_info, this, [this, &pg](auto obc) {
+    return pg->with_locked_obc(m, op_info, this, [this, pg](auto obc) mutable {
       return with_blocking_future(handle.enter(pp(*pg).process)).then(
-	[this, &pg, obc] {
+	[this, pg, obc]() mutable {
         return do_process(pg, obc);
       });
     });
@@ -177,7 +178,7 @@ ClientRequest::do_process(Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
   }
   return pg->do_osd_ops(m, obc, op_info).safe_then([this](Ref<MOSDOpReply> reply) {
     return conn->send(std::move(reply));
-  }, crimson::ct_error::eagain::handle([this, &pg] {
+  }, crimson::ct_error::eagain::handle([this, pg]() mutable {
     return process_op(pg);
   }));
 }
