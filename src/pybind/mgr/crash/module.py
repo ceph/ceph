@@ -42,13 +42,13 @@ class Module(MgrModule):
         Option(
             name='warn_recent_interval',
             type='secs',
-            default=60*60*24*14,
+            default=60 * 60 * 24 * 14,
             desc='time interval in which to warn about recent crashes',
             runtime=True),
         Option(
             name='retain_interval',
             type='secs',
-            default=60*60*24 * 365,
+            default=60 * 60 * 24 * 365,
             desc='how long to retain crashes before pruning them',
             runtime=True),
     ]
@@ -97,8 +97,8 @@ class Module(MgrModule):
             seconds=self.warn_recent_interval)
         recent = {
             crashid: crash for crashid, crash in self.crashes.items()
-            if (self.time_from_string(cast(str, crash['timestamp'])) > cutoff and
-                'archived' not in crash)
+            if (self.time_from_string(cast(str, crash['timestamp'])) > cutoff
+                and 'archived' not in crash)
         }
         num = len(recent)
         health_checks: Dict[str, Dict[str, Union[int, str, List[str]]]] = {}
@@ -284,7 +284,7 @@ class Module(MgrModule):
         """
         Remove crashes older than <keep> days
         """
-        self._prune(keep * 60*60*24)
+        self._prune(keep * datetime.timedelta(days=1).total_seconds())
         return 0, '', ''
 
     def _prune(self, seconds: float) -> None:
