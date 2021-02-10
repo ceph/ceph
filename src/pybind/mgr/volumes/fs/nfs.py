@@ -27,7 +27,6 @@ def available_clusters(mgr):
     '''
     # TODO check cephadm cluster list with rados pool conf objects
     completion = mgr.describe_service(service_type='nfs')
-    mgr._orchestrator_wait([completion])
     orchestrator.raise_if_exception(completion)
     return [cluster.spec.service_id for cluster in completion.result
             if cluster.spec.service_id]
@@ -662,7 +661,6 @@ class NFSCluster:
                               pool=self.pool_name, namespace=self.pool_ns,
                               placement=PlacementSpec.from_string(placement))
         completion = self.mgr.apply_nfs(spec)
-        self.mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
 
     def create_empty_rados_obj(self):
@@ -678,7 +676,6 @@ class NFSCluster:
     def _restart_nfs_service(self):
         completion = self.mgr.service_action(action='restart',
                                              service_name='nfs.'+self.cluster_id)
-        self.mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
 
     @cluster_setter
@@ -725,7 +722,6 @@ class NFSCluster:
             if cluster_id in cluster_list:
                 self.mgr.fs_export.delete_all_exports(cluster_id)
                 completion = self.mgr.remove_service('nfs.' + self.cluster_id)
-                self.mgr._orchestrator_wait([completion])
                 orchestrator.raise_if_exception(completion)
                 self.delete_config_obj()
                 return 0, "NFS Cluster Deleted Successfully", ""
@@ -744,7 +740,6 @@ class NFSCluster:
     def _show_nfs_cluster_info(self, cluster_id):
         self._set_cluster_id(cluster_id)
         completion = self.mgr.list_daemons(daemon_type='nfs')
-        self.mgr._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         host_ip = []
         # Here completion.result is a list DaemonDescription objects
