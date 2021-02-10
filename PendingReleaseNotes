@@ -1,3 +1,11 @@
+15.2.9
+-----
+* mgr-pg_autoscaler: Autoscaler will now start out by scaling each
+  pool to have a full complements of pgs from the start and will only
+  decrease it when other pools need more pgs due to increased usage.
+  This improves out of the box performance of Ceph by allowing more PGs 
+  to be created for a given pool.
+
 15.2.8
 ------
 * $pid expansion in config paths like `admin_socket` will now properly expand
