@@ -851,7 +851,7 @@ class Module(MgrModule):
         # '*' can be used to indicate all pools or namespaces
         pools_string = cast(str, self.get_localized_module_option('rbd_stats_pools'))
         pool_keys = []
-        for x in re.split('[\s,]+', pools_string):
+        for x in re.split(r'[\s,]+', pools_string):
             if not x:
                 continue
 
@@ -940,7 +940,7 @@ class Module(MgrModule):
                     {'type': 'pool_id', 'regex': pool_id_regex},
                     {'type': 'namespace', 'regex': namespace_regex},
                     {'type': 'object_name',
-                     'regex': '^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
+                     'regex': r'^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
                 ],
                 'performance_counter_descriptors': list(counters_info),
             }
@@ -1089,7 +1089,7 @@ class Module(MgrModule):
         new_metrics = {}
         for metric_path in self.metrics.keys():
             # Address RGW sync perf. counters.
-            match = re.search('^data-sync-from-(.*)\.', metric_path)
+            match = re.search(r'^data-sync-from-(.*)\.', metric_path)
             if match:
                 new_path = re.sub('from-([^.]*)', 'from-zone', metric_path)
                 if new_path not in new_metrics:
