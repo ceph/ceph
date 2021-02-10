@@ -7,19 +7,20 @@ import traceback
 
 from datetime import datetime
 from threading import Condition, Lock, Thread
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from .common import get_rbd_pools
 from .schedule import LevelSpec, Interval, StartTime, Schedule, Schedules
 
 MIRRORING_OID = "rbd_mirroring"
 
-def namespace_validator(ioctx):
+def namespace_validator(ioctx: rados.Ioctx) -> None:
     mode = rbd.RBD().mirror_mode_get(ioctx)
     if mode != rbd.RBD_MIRROR_MODE_IMAGE:
         raise ValueError("namespace {} is not in mirror image mode".format(
             ioctx.get_namespace()))
 
-def image_validator(image):
+def image_validator(image: rbd.Image) -> None:
     mode = image.mirror_image_get_mode()
     if mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
         raise rbd.InvalidArgument("Invalid mirror image mode")
@@ -28,18 +29,18 @@ class Watchers:
 
     lock = Lock()
 
-    def __init__(self, handler):
+    def __init__(self, handler: Any) -> None:
         self.rados = handler.module.rados
         self.log = handler.log
-        self.watchers = {}
-        self.updated = {}
-        self.error = {}
-        self.epoch = {}
+        self.watchers: Dict[Tuple[str, str], rados.Watch] = {}
+        self.updated: Dict[int, bool] = {}
+        self.error: Dict[int, str] = {}
+        self.epoch: Dict[int, int] = {}
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.unregister_all()
 
-    def _clean_watcher(self, pool_id, namespace, watch_id):
+    def _clean_watcher(self, pool_id: str, namespace: str, watch_id: int) -> None:
         assert self.lock.locked()
 
         del self.watchers[pool_id, namespace]
@@ -47,7 +48,7 @@ class Watchers:
         self.error.pop(watch_id, None)
         self.epoch.pop(watch_id, None)
 
-    def check(self, pool_id, namespace, epoch):
+    def check(self, pool_id: str, namespace: str, epoch: int) -> bool:
         error = None
         with self.lock:
             watch = self.watchers.get((pool_id, namespace))
@@ -66,16 +67,16 @@ class Watchers:
         else:
             return True
 
-    def register(self, pool_id, namespace):
+    def register(self, pool_id: str, namespace: str) -> bool:
 
-        def callback(notify_id, notifier_id, watch_id, data):
+        def callback(notify_id: str, notifier_id: str, watch_id: int, data: str) -> None:
             self.log.debug("watcher {}: got notify {} from {}".format(
                 watch_id, notify_id, notifier_id))
 
             with self.lock:
                 self.updated[watch_id] = True
 
-        def error_callback(watch_id, error):
+        def error_callback(watch_id: int, error: str) -> None:
             self.log.debug("watcher {}: got errror {}".format(
                 watch_id, error))
 
@@ -100,7 +101,7 @@ class Watchers:
             self.updated[watch.get_id()] = True
         return True
 
-    def unregister(self, pool_id, namespace):
+    def unregister(self, pool_id: str, namespace: str) -> None:
 
         with self.lock:
             watch = self.watchers[pool_id, namespace]
@@ -121,14 +122,14 @@ class Watchers:
         with self.lock:
             self._clean_watcher(pool_id, namespace, watch_id)
 
-    def unregister_all(self):
+    def unregister_all(self) -> None:
         with self.lock:
             watchers = list(self.watchers)
 
         for pool_id, namespace in watchers:
             self.unregister(pool_id, namespace)
 
-    def unregister_stale(self, current_epoch):
+    def unregister_stale(self, current_epoch: int) -> None:
         with self.lock:
             watchers = list(self.watchers)
 
@@ -144,28 +145,30 @@ class Watchers:
             self.unregister(pool_id, namespace)
 
 
+ImageSpecT = Tuple[str, str, str]
+
 class CreateSnapshotRequests:
 
     lock = Lock()
     condition = Condition(lock)
 
-    def __init__(self, handler):
+    def __init__(self, handler: Any) -> None:
         self.handler = handler
         self.rados = handler.module.rados
         self.log = handler.log
-        self.pending = set()
-        self.queue = []
-        self.ioctxs = {}
+        self.pending: Set[ImageSpecT] = set()
+        self.queue: List[ImageSpecT] = []
+        self.ioctxs: Dict[Tuple[str, str], Tuple[rados.Ioctx, Set[ImageSpecT]]] = {}
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.wait_for_pending()
 
-    def wait_for_pending(self):
+    def wait_for_pending(self) -> None:
         with self.lock:
             while self.pending:
                 self.condition.wait()
 
-    def add(self, pool_id, namespace, image_id):
+    def add(self, pool_id: str, namespace: str, image_id: str) -> None:
         image_spec = (pool_id, namespace, image_id)
 
         self.log.debug("CreateSnapshotRequests.add: {}/{}/{}".format(
@@ -189,7 +192,7 @@ class CreateSnapshotRequests:
 
         self.open_image(image_spec)
 
-    def open_image(self, image_spec):
+    def open_image(self, image_spec: ImageSpecT) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug("CreateSnapshotRequests.open_image: {}/{}/{}".format(
@@ -198,7 +201,7 @@ class CreateSnapshotRequests:
         try:
             ioctx = self.get_ioctx(image_spec)
 
-            def cb(comp, image):
+            def cb(comp: rados.Completion, image: rbd.Image) -> None:
                 self.handle_open_image(image_spec, comp, image)
 
             rbd.RBD().aio_open_image(cb, ioctx, image_id=image_id)
@@ -208,7 +211,10 @@ class CreateSnapshotRequests:
                     pool_id, namespace, image_id, e))
             self.finish(image_spec)
 
-    def handle_open_image(self, image_spec, comp, image):
+    def handle_open_image(self,
+                          image_spec: ImageSpecT,
+                          comp: rados.Completion,
+                          image: rbd.Image) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
@@ -224,13 +230,13 @@ class CreateSnapshotRequests:
 
         self.get_mirror_mode(image_spec, image)
 
-    def get_mirror_mode(self, image_spec, image):
+    def get_mirror_mode(self, image_spec: ImageSpecT, image: rbd.Image) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug("CreateSnapshotRequests.get_mirror_mode: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
-        def cb(comp, mode):
+        def cb(comp: rados.Completion, mode: str) -> None:
             self.handle_get_mirror_mode(image_spec, image, comp, mode)
 
         try:
@@ -241,7 +247,11 @@ class CreateSnapshotRequests:
                     pool_id, namespace, image_id, e))
             self.close_image(image_spec, image)
 
-    def handle_get_mirror_mode(self, image_spec, image, comp, mode):
+    def handle_get_mirror_mode(self,
+                               image_spec: ImageSpecT,
+                               image: rbd.Image,
+                               comp: rados.Completion,
+                               mode: str) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
@@ -265,13 +275,13 @@ class CreateSnapshotRequests:
 
         self.get_mirror_info(image_spec, image)
 
-    def get_mirror_info(self, image_spec, image):
+    def get_mirror_info(self, image_spec: ImageSpecT, image: rbd.Image) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug("CreateSnapshotRequests.get_mirror_info: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
-        def cb(comp, info):
+        def cb(comp: rados.Completion, info: str) -> None:
             self.handle_get_mirror_info(image_spec, image, comp, info)
 
         try:
@@ -282,7 +292,11 @@ class CreateSnapshotRequests:
                     pool_id, namespace, image_id, e))
             self.close_image(image_spec, image)
 
-    def handle_get_mirror_info(self, image_spec, image, comp, info):
+    def handle_get_mirror_info(self,
+                               image_spec: ImageSpecT,
+                               image: rbd.Image,
+                               comp: rados.Completion,
+                               info: str) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
@@ -298,14 +312,14 @@ class CreateSnapshotRequests:
 
         self.create_snapshot(image_spec, image)
 
-    def create_snapshot(self, image_spec, image):
+    def create_snapshot(self, image_spec: ImageSpecT, image: rbd.Image) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
             "CreateSnapshotRequests.create_snapshot for {}/{}/{}".format(
                 pool_id, namespace, image_id))
 
-        def cb(comp, snap_id):
+        def cb(comp: rados.Completion, snap_id: str) -> None:
             self.handle_create_snapshot(image_spec, image, comp, snap_id)
 
         try:
@@ -317,7 +331,11 @@ class CreateSnapshotRequests:
             self.close_image(image_spec, image)
 
 
-    def handle_create_snapshot(self, image_spec, image, comp, snap_id):
+    def handle_create_snapshot(self,
+                               image_spec: ImageSpecT,
+                               image: rbd.Image,
+                               comp: rados.Completion,
+                               snap_id: str) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
@@ -331,14 +349,14 @@ class CreateSnapshotRequests:
 
         self.close_image(image_spec, image)
 
-    def close_image(self, image_spec, image):
+    def close_image(self, image_spec: ImageSpecT, image: rbd.Image) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
             "CreateSnapshotRequests.close_image {}/{}/{}".format(
                 pool_id, namespace, image_id))
 
-        def cb(comp):
+        def cb(comp: rados.Completion) -> None:
             self.handle_close_image(image_spec, comp)
 
         try:
@@ -349,7 +367,9 @@ class CreateSnapshotRequests:
                     pool_id, namespace, image_id, e))
             self.finish(image_spec)
 
-    def handle_close_image(self, image_spec, comp):
+    def handle_close_image(self,
+                           image_spec: ImageSpecT,
+                           comp: rados.Completion) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
@@ -363,7 +383,7 @@ class CreateSnapshotRequests:
 
         self.finish(image_spec)
 
-    def finish(self, image_spec):
+    def finish(self, image_spec: ImageSpecT) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug("CreateSnapshotRequests.finish: {}/{}/{}".format(
@@ -379,7 +399,7 @@ class CreateSnapshotRequests:
 
         self.open_image(image_spec)
 
-    def get_ioctx(self, image_spec):
+    def get_ioctx(self, image_spec: ImageSpecT) -> rados.Ioctx:
         pool_id, namespace, image_id = image_spec
         nspec = (pool_id, namespace)
 
@@ -390,11 +410,12 @@ class CreateSnapshotRequests:
                 ioctx.set_namespace(namespace)
                 images = set()
                 self.ioctxs[nspec] = (ioctx, images)
+            assert images is not None
             images.add(image_spec)
 
         return ioctx
 
-    def put_ioctx(self, image_spec):
+    def put_ioctx(self, image_spec: ImageSpecT) -> None:
         pool_id, namespace, image_id = image_spec
         nspec = (pool_id, namespace)
 
@@ -414,7 +435,7 @@ class MirrorSnapshotScheduleHandler:
     condition = Condition(lock)
     thread = None
 
-    def __init__(self, module):
+    def __init__(self, module: Any) -> None:
         self.module = module
         self.log = module.log
         self.last_refresh_images = datetime(1970, 1, 1)
@@ -425,11 +446,11 @@ class MirrorSnapshotScheduleHandler:
         self.thread = Thread(target=self.run)
         self.thread.start()
 
-    def _cleanup(self):
+    def _cleanup(self) -> None:
         self.watchers.unregister_all()
         self.create_snapshot_requests.wait_for_pending()
 
-    def run(self):
+    def run(self) -> None:
         try:
             self.log.info("MirrorSnapshotScheduleHandler: starting")
             while True:
@@ -448,14 +469,16 @@ class MirrorSnapshotScheduleHandler:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
 
-    def init_schedule_queue(self):
-        self.queue = {}
-        self.images = {}
+    def init_schedule_queue(self) -> None:
+        # schedule_time => image_spec
+        self.queue: Dict[str, List[ImageSpecT]] = {}
+        # pool_id => {namespace => image_id}
+        self.images: Dict[str, Dict[str, Dict[str, str]]] = {}
         self.watchers = Watchers(self)
         self.refresh_images()
         self.log.debug("scheduler queue is initialized")
 
-    def load_schedules(self):
+    def load_schedules(self) -> None:
         self.log.info("MirrorSnapshotScheduleHandler: load_schedules")
 
         schedules = Schedules(self)
@@ -463,7 +486,7 @@ class MirrorSnapshotScheduleHandler:
         with self.lock:
             self.schedules = schedules
 
-    def refresh_images(self):
+    def refresh_images(self) -> None:
         if (datetime.now() - self.last_refresh_images).seconds < 60:
             return
 
@@ -480,7 +503,7 @@ class MirrorSnapshotScheduleHandler:
                 return
 
         epoch = int(datetime.now().strftime('%s'))
-        images = {}
+        images: Dict[str, Dict[str, Dict[str, str]]] = {}
 
         for pool_id, pool_name in get_rbd_pools(self.module).items():
             if not self.schedules.intersects(
@@ -496,7 +519,10 @@ class MirrorSnapshotScheduleHandler:
         self.watchers.unregister_stale(epoch)
         self.last_refresh_images = datetime.now()
 
-    def load_pool_images(self, ioctx, epoch, images):
+    def load_pool_images(self,
+                         ioctx: rados.Ioctx,
+                         epoch: int,
+                         images: Dict[str, Dict[str, Dict[str, str]]]) -> None:
         pool_id = str(ioctx.get_pool_id())
         pool_name = ioctx.get_pool_name()
         images[pool_id] = {}
@@ -507,7 +533,7 @@ class MirrorSnapshotScheduleHandler:
             namespaces = [''] + rbd.RBD().namespace_list(ioctx)
             for namespace in namespaces:
                 if not self.schedules.intersects(
-                        LevelSpec.from_pool_spec(pool_id, pool_name, namespace)):
+                        LevelSpec.from_pool_spec(int(pool_id), pool_name, namespace)):
                     continue
                 self.log.debug("load_pool_images: pool={}, namespace={}".format(
                     pool_name, namespace))
@@ -546,7 +572,7 @@ class MirrorSnapshotScheduleHandler:
                 "load_pool_images: exception when scanning pool {}: {}".format(
                     pool_name, e))
 
-    def rebuild_queue(self):
+    def rebuild_queue(self) -> None:
         with self.lock:
             now = datetime.now()
 
@@ -567,7 +593,8 @@ class MirrorSnapshotScheduleHandler:
 
             self.condition.notify()
 
-    def refresh_queue(self, current_images):
+    def refresh_queue(self,
+                      current_images: Dict[str, Dict[str, Dict[str, str]]]) -> None:
         now = datetime.now()
 
         for pool_id in self.images:
@@ -588,7 +615,7 @@ class MirrorSnapshotScheduleHandler:
 
         self.condition.notify()
 
-    def enqueue(self, now, pool_id, namespace, image_id):
+    def enqueue(self, now: datetime, pool_id: str, namespace: str, image_id: str) -> None:
 
         schedule = self.schedules.find(pool_id, namespace, image_id)
         if not schedule:
@@ -603,9 +630,9 @@ class MirrorSnapshotScheduleHandler:
         if image_spec not in self.queue[schedule_time]:
             self.queue[schedule_time].append((pool_id, namespace, image_id))
 
-    def dequeue(self):
+    def dequeue(self) -> Tuple[Optional[Tuple[str, str, str]], float]:
         if not self.queue:
-            return None, 1000
+            return None, 1000.0
 
         now = datetime.now()
         schedule_time = sorted(self.queue)[0]
@@ -619,9 +646,9 @@ class MirrorSnapshotScheduleHandler:
         image = images.pop(0)
         if not images:
             del self.queue[schedule_time]
-        return image, 0
+        return image, 0.0
 
-    def remove_from_queue(self, pool_id, namespace, image_id):
+    def remove_from_queue(self, pool_id: str, namespace: str, image_id: str) -> None:
         empty_slots = []
         for schedule_time, images in self.queue.items():
             if (pool_id, namespace, image_id) in images:
@@ -631,7 +658,10 @@ class MirrorSnapshotScheduleHandler:
         for schedule_time in empty_slots:
             del self.queue[schedule_time]
 
-    def add_schedule(self, level_spec, interval, start_time):
+    def add_schedule(self,
+                     level_spec: LevelSpec,
+                     interval: str,
+                     start_time: Optional[str]) -> Tuple[int, str, str]:
         self.log.debug(
             "add_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
@@ -643,7 +673,10 @@ class MirrorSnapshotScheduleHandler:
         self.rebuild_queue()
         return 0, "", ""
 
-    def remove_schedule(self, level_spec, interval, start_time):
+    def remove_schedule(self,
+                        level_spec: LevelSpec,
+                        interval: Optional[str],
+                        start_time: Optional[str]) -> Tuple[int, str, str]:
         self.log.debug(
             "remove_schedule: level_spec={}, interval={}, start_time={}".format(
                 level_spec.name, interval, start_time))
@@ -655,7 +688,7 @@ class MirrorSnapshotScheduleHandler:
         self.rebuild_queue()
         return 0, "", ""
 
-    def list(self, level_spec):
+    def list(self, level_spec: LevelSpec) -> Tuple[int, str, str]:
         self.log.debug("list: level_spec={}".format(level_spec.name))
 
         with self.lock:
@@ -663,7 +696,7 @@ class MirrorSnapshotScheduleHandler:
 
         return 0, json.dumps(result, indent=4, sort_keys=True), ""
 
-    def status(self, level_spec):
+    def status(self, level_spec: LevelSpec) -> Tuple[int, str, str]:
         self.log.debug("status: level_spec={}".format(level_spec.name))
 
         scheduled_images = []
