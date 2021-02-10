@@ -31,6 +31,7 @@ compare_image_snaps()
     local pool=$1
     local image=$2
     local snap_name=$3
+    local ret=0
 
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
@@ -38,8 +39,13 @@ compare_image_snaps()
     rm -f ${rmt_export} ${loc_export}
     rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
     rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
-    cmp ${rmt_export} ${loc_export}
+    if ! cmp ${rmt_export} ${loc_export}
+    then
+        show_diff ${rmt_export} ${loc_export}
+        ret=1
+    fi
     rm -f ${rmt_export} ${loc_export}
+    return ${ret}
 }
 
 wait_for_pool_images()
@@ -90,9 +96,10 @@ start_mirrors ${CLUSTER2}
 
 testlog "TEST: add image and test replay after client crashes"
 image=test
-create_image ${CLUSTER2} ${POOL} ${image} '512M'
+create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${MIRROR_IMAGE_MODE} '512M'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
+clean_snap_name=
 for i in `seq 1 10`
 do
   stress_write_image ${CLUSTER2} ${POOL} ${image}
@@ -104,12 +111,35 @@ do
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
   wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
   wait_for_snap_present ${CLUSTER1} ${POOL} ${image} ${snap_name}
+
+  if [ -n "${clean_snap_name}" ]; then
+      compare_image_snaps ${POOL} ${image} ${clean_snap_name}
+  fi
+  compare_image_snaps ${POOL} ${image} ${snap_name}
+
+  clean_snap_name="snap${i}-clean"
+  create_snap ${CLUSTER2} ${POOL} ${image} ${clean_snap_name}
+done
+
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_snap_present ${CLUSTER1} ${POOL} ${image} ${clean_snap_name}
+
+for i in `seq 1 10`
+do
+  snap_name="snap${i}"
+  compare_image_snaps ${POOL} ${image} ${snap_name}
+
+  snap_name="snap${i}-clean"
   compare_image_snaps ${POOL} ${image} ${snap_name}
 done
 
 for i in `seq 1 10`
 do
   snap_name="snap${i}"
+  remove_snapshot ${CLUSTER2} ${POOL} ${image} ${snap_name}
+
+  snap_name="snap${i}-clean"
   remove_snapshot ${CLUSTER2} ${POOL} ${image} ${snap_name}
 done
 
@@ -121,7 +151,7 @@ snap_name="snap"
 for i in `seq 1 ${IMAGE_COUNT}`
 do
   image="image_${i}"
-  create_image ${CLUSTER2} ${POOL} ${image} '128M'
+  create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${MIRROR_IMAGE_MODE} '128M'
   if [ -n "${RBD_MIRROR_REDUCE_WRITES}" ]; then
     write_image ${CLUSTER2} ${POOL} ${image} 100
   else
