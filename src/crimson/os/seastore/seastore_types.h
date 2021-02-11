@@ -364,6 +364,46 @@ struct record_t {
   std::vector<delta_info_t> deltas;
 };
 
+/**
+ * coll_root_t
+ *
+ * Information for locating CollectionManager information, addr should be
+ * embedded into the TransactionManager root.
+ */
+class coll_root_t {
+  laddr_t coll_root_laddr;
+  segment_off_t size = 0;
+  
+  enum state_t : uint8_t {
+    CLEAN = 0,   /// No pending mutations
+    MUTATED = 1, /// coll_root_laddr state must be written back to persistence
+    NONE = 0xFF  /// Not yet mounted, should not be exposed to user
+  } state = NONE;
+  
+public:
+  coll_root_t() : state(state_t::NONE) {}
+  
+  coll_root_t(laddr_t laddr, segment_off_t size)
+    : coll_root_laddr(laddr), size(size), state(state_t::CLEAN) {}
+  
+  bool must_update() const {
+    return state == MUTATED;
+  }
+  
+  void update(laddr_t addr, segment_off_t s) {
+    state = state_t::MUTATED;
+    coll_root_laddr = addr;
+    size = s;
+  }
+  
+  laddr_t get_location() const {
+    return coll_root_laddr;
+  }
+  auto get_size() const {
+    return size;
+  }
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
