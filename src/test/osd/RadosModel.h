@@ -2844,6 +2844,7 @@ public:
   librados::ObjectReadOperation op;
   string oid;
   std::shared_ptr<int> in_use;
+  int snap;
 
   TierEvictOp(int n,
 	       RadosTestContext *context,
@@ -2851,12 +2852,26 @@ public:
 	       TestOpStat *stat)
     : TestOp(n, context, stat),
       completion(NULL),
-      oid(oid)
+      oid(oid),
+      snap(-1)
   {}
 
   void _begin() override
   {
     context->state_lock.lock();
+
+    if (0 && !(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+
+    cout << num << ": tier_evict oid " << oid << " snap " << snap << std::endl;
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2870,6 +2885,10 @@ public:
 					&op, librados::OPERATION_IGNORE_CACHE,
 					NULL);
     ceph_assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info) override
