@@ -3601,13 +3601,12 @@ def prepare_dashboard(
     fw.open_ports([port])
     fw.apply_rules()
 
-    logger.info('Ceph Dashboard is now available at:\n\n'
-                '\t     URL: https://%s:%s/\n'
-                '\t    User: %s\n'
-                '\tPassword: %s\n' % (
-                    get_fqdn(), port,
-                    ctx.initial_dashboard_user,
-                    password))
+    logger.info('Ceph Dashboard is now available at:\n\n')
+    # let's print the dashboard infos to stdout and make it compatible to yaml:
+    print(f"""dashboard:
+  url: https://{get_fqdn()}:{port}/
+  user: {ctx.initial_dashboard_user}
+  password: {password})""")
 
 
 def prepare_bootstrap_config(
