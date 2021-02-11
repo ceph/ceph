@@ -100,6 +100,8 @@ Other frequently used/useful options are ``-d`` (or ``--distro``),
 run). Run ``teuthology-suite --help`` to read description of these and every
 other options available.
 
+.. _teuthology_testing_qa_changes:
+
 Testing QA changes (without re-building binaires)
 *************************************************
 
@@ -145,22 +147,25 @@ config printed at the very beginning of the teuthology job.
 About Suites and Filters
 ************************
 
-See `Suites Inventory`_ for a list of suites of integration tests present
-right now. Alternatively, each directory under ``qa/suites`` in Ceph
-repository is an integration test suite, so looking within that directory
-to decide an appropriate argument for ``-s`` also works.
+See `Suites Inventory`_ for a list of available suites of integration tests.
+Each directory under ``qa/suites`` in the Ceph repository is an integration
+test suite, and arguments appropriate to follow ``-s`` can be found there.
 
-For picking an argument for ``--filter``, look within
-``qa/suites/<suite-name>/<subsuite-name>/tasks`` to get keywords for filtering
-tests. Each YAML file in there can trigger a bunch of tests; using the name of
-the file, without the extension part of the file name, as an argument to the
-``--filter`` will trigger those tests.
-For example, the sample command above uses ``cephfs-shell`` since there's a file
-named ``cephfs-shell.yaml`` in ``qa/suites/fs/basic_functional/tasks/``. In
-case, the file name doesn't hint what bunch of tests it would trigger, look at
-the contents of the file for ``modules`` attribute. For ``cephfs-shell.yaml``
-the ``modules`` attribute is ``tasks.cephfs.test_cephfs_shell`` which means
-it'll trigger all tests in ``qa/tasks/cephfs/test_cephfs_shell.py``.
+Keywords for filtering tests can be found in
+``qa/suites/<suite-name>/<subsuite-name>/tasks`` and can be used as arguments
+for ``--filter``. Each YAML file in that directory can trigger tests; using the
+name of the file without its filename extension as an argument to the
+``--filter`` triggers those tests. 
+
+For example, in the command above in the :ref:`Testing QA Changes
+<teuthology_testing_qa_changes>` section, `cephfs-shell`` is specified. 
+This works because there is a file named ``cephfs-shell.yaml`` in
+``qa/suites/fs/basic_functional/tasks/``.
+
+If the filename doesn't suggest what kind of tests it triggers, search the
+contents of the file for the ``modules`` attribute. For ``cephfs-shell.yaml``
+the ``modules`` attribute is ``tasks.cephfs.test_cephfs_shell``. This means
+that it triggers all tests in ``qa/tasks/cephfs/test_cephfs_shell.py``.
 
 Viewing Tests Results
 ---------------------
