@@ -327,7 +327,8 @@ public:
   using read_onode_root_ret = read_onode_root_ertr::future<laddr_t>;
   read_onode_root_ret read_onode_root(Transaction &t) {
     return cache->get_root(t).safe_then([](auto croot) {
-      return croot->get_root().onode_root;
+      laddr_t ret = croot->get_root().onode_root;
+      return ret;
     });
   }
 
@@ -352,10 +353,7 @@ public:
     coll_root_t>;
   read_collection_root_ret read_collection_root(Transaction &t) {
     return cache->get_root(t).safe_then([](auto croot) {
-      return coll_root_t{
-	croot->get_root().collection_root,
-	croot->get_root().collection_root_size
-      };
+      return croot->get_root().collection_root.get();
     });
   }
 
@@ -367,8 +365,7 @@ public:
   void write_collection_root(Transaction &t, coll_root_t cmroot) {
     auto croot = cache->get_root_fast(t);
     croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
-    croot->get_root().collection_root = cmroot.get_location();
-    croot->get_root().collection_root_size = cmroot.get_size();
+    croot->get_root().collection_root.update(cmroot);
   }
 
   ~TransactionManager();

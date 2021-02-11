@@ -31,12 +31,12 @@ struct omap_node_meta_t {
 };
 
 struct omap_node_meta_le_t {
-  depth_le_t depth = init_les32(0);
+  depth_le_t depth = init_depth_le(0);
 
   omap_node_meta_le_t() = default;
   omap_node_meta_le_t(const omap_node_meta_le_t &) = default;
   explicit omap_node_meta_le_t(const omap_node_meta_t &val)
-    : depth(init_les32(val.depth)) {}
+    : depth(init_depth_le(val.depth)) {}
 
   operator omap_node_meta_t() const {
     return omap_node_meta_t{ depth };
