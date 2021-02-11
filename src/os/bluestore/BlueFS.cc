@@ -1745,8 +1745,9 @@ int64_t BlueFS::_read_random(
 	      << dendl;
 
       if (out) {
-	// NOTE: h->bl is normally a contiguous buffer so c_str() is free.
-	memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
+	auto p = buf->bl.begin();
+	p.seek(off - buf->bl_off);
+	p.copy(r, out);
 	out += r;
       }
 
@@ -1864,8 +1865,9 @@ int64_t BlueFS::_read(
       outbl->claim_append(t);
     }
     if (out) {
-      // NOTE: h->bl is normally a contiguous buffer so c_str() is free.
-      memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
+      auto p = buf->bl.begin();
+      p.seek(off - buf->bl_off);
+      p.copy(r, out);
       out += r;
     }
 
