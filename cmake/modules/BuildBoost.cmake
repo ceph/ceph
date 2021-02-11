@@ -167,6 +167,21 @@ function(do_build_boost version)
       URL_HASH SHA256=${boost_sha256}
       DOWNLOAD_NO_PROGRESS 1)
   endif()
+
+  foreach(c ${Boost_BUILD_COMPONENTS})
+    string(TOUPPER ${c} upper_c)
+    if(c MATCHES "^python")
+      set(c "python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}")
+    endif()
+    if(Boost_USE_STATIC_LIBS)
+      set(Boost_${upper_c}_LIBRARY_OUT
+        ${boost_root_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${c}${CMAKE_STATIC_LIBRARY_SUFFIX})
+    else()
+      set(Boost_${upper_c}_LIBRARY_OUT
+        ${boost_root_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}boost_${c}${CMAKE_SHARED_LIBRARY_SUFFIX})
+    endif()
+    list(APPEND Boost_LIBRARIES_OUT ${Boost_${upper_c}_LIBRARY_OUT})
+  endforeach()
   # build all components in a single shot
   include(ExternalProject)
   ExternalProject_Add(Boost
@@ -175,7 +190,9 @@ function(do_build_boost version)
     BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND ${install_command}
-    PREFIX "${boost_root_dir}")
+    PREFIX "${boost_root_dir}"
+    BUILD_BYPRODUCTS ${Boost_LIBRARIES_OUT}
+    )
 endfunction()
 
 set(Boost_context_DEPENDENCIES thread chrono system date_time)
