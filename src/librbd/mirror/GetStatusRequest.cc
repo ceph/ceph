@@ -50,8 +50,10 @@ void GetStatusRequest<I>::handle_get_info(int r) {
   ldout(cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
-               << dendl;
+    if (r != -ENOENT) {
+      lderr(cct) << "failed to retrieve mirroring state: " << cpp_strerror(r)
+                 << dendl;
+    }
     finish(r);
     return;
   } else if (m_mirror_image->state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
