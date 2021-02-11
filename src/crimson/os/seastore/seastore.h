@@ -15,6 +15,7 @@
 #include "include/uuid.h"
 
 #include "os/Transaction.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/onode_manager.h"
@@ -166,6 +167,34 @@ private:
       });
   }
 
+  template <typename Ret, typename F>
+  auto repeat_with_onode(
+    CollectionRef ch,
+    const ghobject_t &oid,
+    F &&f) {
+    return seastar::do_with(
+      oid,
+      Ret{},
+      TransactionRef(),
+      OnodeRef(),
+      std::forward<F>(f),
+      [=](auto &oid, auto &ret, auto &t, auto &onode, auto &f) {
+	return repeat_eagain([&, this] {
+	  t = make_transaction();
+	  return onode_manager->get_onode(
+	    *t, oid
+	  ).safe_then([&, this](auto onode_ret) {
+	    onode = std::move(onode_ret);
+	    return f(*t, *onode);
+	  }).safe_then([&ret](auto _ret) {
+	    ret = _ret;
+	  });
+	}).safe_then([&ret] {
+	  return seastar::make_ready_future<Ret>(ret);
+	});
+      });
+  }
+
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
@@ -216,6 +245,9 @@ private:
   tm_ret _create_collection(
     internal_context_t &ctx,
     const coll_t& cid, int bits);
+  tm_ret _remove_collection(
+    internal_context_t &ctx,
+    const coll_t& cid);
 
   boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);
 };
