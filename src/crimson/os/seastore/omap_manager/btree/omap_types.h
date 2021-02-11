@@ -55,6 +55,9 @@ struct omap_inner_key_t {
   inline bool operator==(const omap_inner_key_t b) const {
     return key_off == b.key_off && key_len == b.key_len && laddr == b.laddr;
   }
+  inline bool operator!=(const omap_inner_key_t b) const {
+    return key_off != b.key_off || key_len != b.key_len || laddr != b.laddr;
+  }
   DENC(omap_inner_key_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.key_off, p);
@@ -105,6 +108,10 @@ struct omap_leaf_key_t {
   inline bool operator==(const omap_leaf_key_t b) const {
     return key_off == b.key_off && key_len == b.key_len &&
            val_off == b.val_off && val_len == b.val_len;
+  }
+  inline bool operator!=(const omap_leaf_key_t b) const {
+    return key_off != b.key_off || key_len != b.key_len ||
+           val_off != b.val_off || val_len != b.val_len;
   }
 
   DENC(omap_leaf_key_t, v, p) {
