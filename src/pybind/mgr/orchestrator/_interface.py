@@ -848,7 +848,7 @@ class DaemonDescription(object):
 
         self.ports: Optional[List[int]] = ports
         self.ip: Optional[str] = ip
-        
+
         self.deployed_by = deployed_by
 
         self.is_active = is_active
