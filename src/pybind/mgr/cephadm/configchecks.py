@@ -2,7 +2,7 @@ import json
 import ipaddress
 import logging
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, cast
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -177,6 +177,21 @@ class CephadmConfigChecks:
         self.host_to_role.clear()
         self.kernel_to_hosts.clear()
 
+    def get_ceph_metadata(self) -> Dict[str, Optional[Dict[str, str]]]:
+        """Build a map of service -> service metadata"""
+        service_map: Dict[str, Optional[Dict[str, str]]] = {}
+
+        # If we have the mgr bindings in place, we can create a map
+        if hasattr(self.mgr, '_ceph_get_server'):
+            for server in self.mgr.list_servers():
+                for service in server.get('services', []):
+                    service_map.update(
+                        {
+                            f"{service['type']}.{service['id']}": self.mgr.get_metadata(service['type'], service['id'])
+                        }
+                    )
+        return service_map
+
     def _check_kernel_lsm(self) -> None:
         if len(self.lsm_to_host.keys()) > 1:
             # selinux security policy issue - CEPHADM_CHECK_KERNEL_LSM
@@ -230,9 +245,19 @@ class CephadmConfigChecks:
         if upgrade_status.in_progress:
             # skip version consistency checks during an upgrade cycle
             return
-        # service_map = self.mgr.get('service_map')
-        # CEPHADM_CHECK_CEPH_VERSION
-        pass
+
+        services = self.get_ceph_metadata()
+        self.log.error(json.dumps(services))
+        versions: Set[str] = set()
+        for svc in services:
+            if services[svc]:
+                metadata = cast(Dict[str, str], services[svc])
+                versions.add(metadata.get('ceph_release', ''))
+        self.log.error(f"versions detected are: {versions}")
+        if len(versions) > 1:
+            # CEPHADM_CHECK_CEPH_VERSION
+            self.log.warning(
+                f"running with {len(versions)} different ceph releases within this cluster")
 
     def _check_kernel_version(self) -> None:
         if len(self.kernel_to_hosts.keys()) > 1:
