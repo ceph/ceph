@@ -59,7 +59,7 @@ configobj==5.0.6
     # via -r requirements.in
 configparser==3.5.0
     # via -r requirements.in
-cryptography==3.2
+cryptography==3.3.2
     # via
     #   -r requirements.in
     #   ansible
