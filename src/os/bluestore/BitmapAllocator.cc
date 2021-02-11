@@ -36,12 +36,14 @@ int64_t BitmapAllocator::allocate(
   if (!allocated) {
     return -ENOSPC;
   }
-  for (auto i = old_size; i < extents->size(); ++i) {
-    auto& e = (*extents)[i];
-    ldout(cct, 10) << __func__
-                   << " extent: 0x" << std::hex << e.offset << "~" << e.length
-		   << "/" << alloc_unit << "," << max_alloc_size << "," << hint
-		   << std::dec << dendl;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    for (auto i = old_size; i < extents->size(); ++i) {
+      auto& e = (*extents)[i];
+      ldout(cct, 10) << __func__
+                     << " extent: 0x" << std::hex << e.offset << "~" << e.length
+		     << "/" << alloc_unit << "," << max_alloc_size << "," << hint
+		     << std::dec << dendl;
+    }
   }
   return int64_t(allocated);
 }
@@ -49,9 +51,11 @@ int64_t BitmapAllocator::allocate(
 void BitmapAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
-  for (auto r : release_set) {
-    ldout(cct, 10) << __func__ << " 0x" << std::hex << r.first << "~" << r.second
-		  << std::dec << dendl;
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    for (auto r : release_set) {
+      ldout(cct, 10) << __func__ << " 0x" << std::hex << r.first << "~" << r.second
+		    << std::dec << dendl;
+    }
   }
   _free_l2(release_set);
   ldout(cct, 10) << __func__ << " done" << dendl;
