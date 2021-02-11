@@ -28,8 +28,7 @@ namespace crimson::os::seastore::omap_manager {
 
 struct OMapInnerNode
   : OMapNode,
-    StringKVInnerNodeLayout<
-    omap_node_meta_t, omap_node_meta_le_t> {
+    StringKVInnerNodeLayout {
   using OMapInnerNodeRef = TCachedExtentRef<OMapInnerNode>;
   using internal_iterator_t = const_iterator;
   template <typename... T>
@@ -102,14 +101,16 @@ struct OMapInnerNode
   ceph::bufferlist get_delta() final {
     assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    delta_buffer.encode(bl);
+    encode(delta_buffer, bl);
+    delta_buffer.clear();
     return bl;
   }
 
   void apply_delta(const ceph::bufferlist &bl) final {
     assert(bl.length());
     delta_inner_buffer_t buffer;
-    buffer.decode(bl);
+    auto bptr = bl.cbegin();
+    decode(buffer, bptr);
     buffer.replay(*this);
   }
 
@@ -129,8 +130,7 @@ using OMapInnerNodeRef = OMapInnerNode::OMapInnerNodeRef;
 
 struct OMapLeafNode
   : OMapNode,
-    StringKVLeafNodeLayout<
-      omap_node_meta_t, omap_node_meta_le_t> {
+    StringKVLeafNodeLayout {
 
   using OMapLeafNodeRef = TCachedExtentRef<OMapLeafNode>;
   using internal_iterator_t = const_iterator;
@@ -186,7 +186,8 @@ struct OMapLeafNode
   ceph::bufferlist get_delta() final {
     assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    delta_buffer.encode(bl);
+    encode(delta_buffer, bl);
+    delta_buffer.clear();
     return bl;
   }
 
@@ -195,7 +196,8 @@ struct OMapLeafNode
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     delta_leaf_buffer_t buffer;
-    buffer.decode(bl);
+    auto bptr = bl.cbegin();
+    decode(buffer, bptr);
     buffer.replay(*this);
   }
 

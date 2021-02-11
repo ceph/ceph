@@ -42,8 +42,21 @@ add_executable(unittest-extmap-manager
 add_ceph_unittest(unittest-extmap-manager)
 target_link_libraries(
   unittest-extmap-manager
-  ${CMAKE_DL_LIBS}
-  crimson-seastore)
+  crimson::gtest
+  crimson-seastore
+  crimson-os
+  crimson-common)
+
+add_executable(unittest-collection-manager
+  test_collection_manager.cc
+  ../gtest_seastar.cc)
+add_ceph_unittest(unittest-collection-manager)
+target_link_libraries(
+  unittest-collection-manager
+  crimson::gtest
+  crimson-seastore
+  crimson-os
+  crimson-common)
 
 add_executable(unittest_omap_manager
   test_omap_manager.cc

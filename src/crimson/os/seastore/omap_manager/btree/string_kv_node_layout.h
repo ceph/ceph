@@ -8,23 +8,16 @@
 
 #include "include/byteorder.h"
 #include "include/denc.h"
+#include "include/encoding.h"
 
 #include "crimson/common/layout.h"
 #include "crimson/common/fixed_kv_node_layout.h"
+#include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/omap_manager/btree/omap_types.h"
 
-#define BLOCK_SIZE 4096
 namespace crimson::os::seastore::omap_manager {
-
-template <
-  typename Meta,
-  typename MetaInt,
-  bool VALIDATE_INVARIANTS=true> class StringKVInnerNodeLayout;
-
-template <
-  typename Meta,
-  typename MetaInt,
-  bool VALIDATE_INVARIANTS=true> class StringKVLeafNodeLayout;
+class StringKVInnerNodeLayout;
+class StringKVLeafNodeLayout;
 
 
 /**
@@ -85,12 +78,201 @@ static void copy_from_local(
 
   for ( auto ite = from_src; ite < to_src; ite++) {
       ite->update_offset(-adjust_offset);
-    }
-   memmove(
-      tgt->get_node_key_ptr(), from_src->get_node_key_ptr(),
-      to_src->get_node_key_ptr() - from_src->get_node_key_ptr());
+  }
+  memmove(tgt->get_node_key_ptr(), from_src->get_node_key_ptr(),
+          to_src->get_node_key_ptr() - from_src->get_node_key_ptr());
+}
+
+struct delta_inner_t {
+  enum class op_t : uint_fast8_t {
+    INSERT,
+    UPDATE,
+    REMOVE,
+  } op;
+  omap_inner_key_t key;
+  std::string val;
+
+  DENC(delta_inner_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.op, p);
+    denc(v.key, p);
+    denc(v.val, p);
+    DENC_FINISH(p);
   }
 
+  void replay(StringKVInnerNodeLayout &l);
+  bool operator==(const delta_inner_t &rhs) const {
+    return op == rhs.op &&
+           key == rhs.key &&
+           val == rhs.val;
+  }
+};
+}
+WRITE_CLASS_DENC(crimson::os::seastore::omap_manager::delta_inner_t)
+
+namespace crimson::os::seastore::omap_manager {
+struct delta_leaf_t {
+  enum class op_t : uint_fast8_t {
+    INSERT,
+    UPDATE,
+    REMOVE,
+  } op;
+  std::string key;
+  std::string val;
+
+  DENC(delta_leaf_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.op, p);
+    denc(v.key, p);
+    denc(v.val, p);
+    DENC_FINISH(p);
+  }
+
+  void replay(StringKVLeafNodeLayout &l);
+  bool operator==(const delta_leaf_t &rhs) const {
+    return op == rhs.op &&
+      key == rhs.key &&
+      val == rhs.val;
+  }
+};
+}
+WRITE_CLASS_DENC(crimson::os::seastore::omap_manager::delta_leaf_t)
+
+namespace crimson::os::seastore::omap_manager {
+class delta_inner_buffer_t {
+  std::vector<delta_inner_t> buffer;
+public:
+  bool empty() const {
+    return buffer.empty();
+  }
+  void insert(
+    const omap_inner_key_t key,
+    std::string_view val) {
+    omap_inner_key_le_t k;
+    k = key;
+    buffer.push_back(
+      delta_inner_t{
+        delta_inner_t::op_t::INSERT,
+        k,
+        val.data()
+      });
+  }
+  void update(
+    const omap_inner_key_t key,
+    std::string_view val) {
+    omap_inner_key_le_t k;
+    k = key;
+    buffer.push_back(
+      delta_inner_t{
+        delta_inner_t::op_t::UPDATE,
+        k,
+        val.data()
+      });
+  }
+  void remove(std::string_view val) {
+    buffer.push_back(
+      delta_inner_t{
+        delta_inner_t::op_t::REMOVE,
+        omap_inner_key_le_t(),
+        val.data()
+      });
+  }
+
+  void replay(StringKVInnerNodeLayout &node) {
+    for (auto &i: buffer) {
+      i.replay(node);
+    }
+  }
+  size_t get_bytes() const {
+    size_t size = 0;
+    for (auto &i: buffer) {
+      size += sizeof(i.op) + sizeof(i.key) + i.val.size();
+    }
+    return size;
+  }
+  void clear() {
+    buffer.clear();
+  }
+
+  DENC(delta_inner_buffer_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.buffer, p);
+    DENC_FINISH(p);
+  }
+
+  bool operator==(const delta_inner_buffer_t &rhs) const {
+    return buffer == rhs.buffer;
+  }
+};
+}
+WRITE_CLASS_DENC(crimson::os::seastore::omap_manager::delta_inner_buffer_t)
+
+namespace crimson::os::seastore::omap_manager {
+class delta_leaf_buffer_t {
+  std::vector<delta_leaf_t> buffer;
+public:
+  bool empty() const {
+    return buffer.empty();
+  }
+  void insert(
+    std::string_view key,
+    std::string_view val) {
+    buffer.push_back(
+      delta_leaf_t{
+        delta_leaf_t::op_t::INSERT,
+        key.data(),
+        val.data()
+      });
+  }
+  void update(
+    std::string_view key,
+    std::string_view val) {
+    buffer.push_back(
+      delta_leaf_t{
+        delta_leaf_t::op_t::UPDATE,
+        key.data(),
+        val.data()
+      });
+  }
+  void remove(std::string_view key) {
+    buffer.push_back(
+      delta_leaf_t{
+        delta_leaf_t::op_t::REMOVE,
+        key.data(),
+        ""
+      });
+  }
+
+  void replay(StringKVLeafNodeLayout &node) {
+    for (auto &i: buffer) {
+      i.replay(node);
+    }
+  }
+  size_t get_bytes() const {
+    size_t size = 0;
+    for (auto &i: buffer) {
+      size += sizeof(i.op) + i.key.size() + i.val.size();
+    }
+    return size;
+  }
+  void clear() {
+    buffer.clear();
+  }
+
+  DENC(delta_leaf_buffer_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.buffer, p);
+    DENC_FINISH(p);
+  }
+
+  bool operator==(const delta_leaf_buffer_t &rhs) const {
+    return buffer == rhs.buffer;
+  }
+};
+}
+WRITE_CLASS_DENC(crimson::os::seastore::omap_manager::delta_leaf_buffer_t)
+
+namespace crimson::os::seastore::omap_manager {
 /**
  * StringKVInnerNodeLayout
  *
@@ -104,16 +286,12 @@ static void copy_from_local(
  *
  * Also included are helpers for doing splits and merges as for a btree.
  */
-template <
-  typename Meta,
-  typename MetaInt,
-  bool VALIDATE_INVARIANTS>
 class StringKVInnerNodeLayout {
   char *buf = nullptr;
 
-  using L = absl::container_internal::Layout<ceph_le32, MetaInt, omap_inner_key_le_t>;
+  using L = absl::container_internal::Layout<ceph_le32, omap_node_meta_le_t, omap_inner_key_le_t>;
   static constexpr L layout{1, 1, 1}; // = L::Partial(1, 1, 1);
-
+  friend class delta_inner_t;
 public:
   template <bool is_const>
   struct iter_t : public std::iterator<std::input_iterator_tag, StringKVInnerNodeLayout> {
@@ -198,7 +376,7 @@ public:
     }
 
     char *get_node_val_ptr() {
-      auto tail = node->buf + BLOCK_SIZE;
+      auto tail = node->buf + OMAP_BLOCK_SIZE;
       if (*this == node->iter_end())
         return tail;
       else {
@@ -207,7 +385,7 @@ public:
     }
 
     const char *get_node_val_ptr() const {
-      auto tail = node->buf + BLOCK_SIZE;
+      auto tail = node->buf + OMAP_BLOCK_SIZE;
       if ( *this == node->iter_end())
         return tail;
       else {
@@ -254,24 +432,24 @@ public:
     }
 
     char *get_right_ptr() {
-      return node->buf + BLOCK_SIZE - get_right_offset();
+      return node->buf + OMAP_BLOCK_SIZE - get_right_offset();
     }
 
     const char *get_right_ptr() const {
       static_assert(!is_const);
-      return node->buf + BLOCK_SIZE - get_right_offset();
+      return node->buf + OMAP_BLOCK_SIZE - get_right_offset();
     }
 
     char *get_right_ptr_end() {
       if (index == 0)
-        return node->buf + BLOCK_SIZE;
+        return node->buf + OMAP_BLOCK_SIZE;
       else
         return (*this - 1)->get_right_ptr();
     }
 
     const char *get_right_ptr_end() const {
       if (index == 0)
-        return node->buf + BLOCK_SIZE;
+        return node->buf + OMAP_BLOCK_SIZE;
       else
         return (*this - 1)->get_right_ptr();
     }
@@ -300,130 +478,8 @@ public:
   using const_iterator = iter_t<true>;
   using iterator = iter_t<false>;
 
-  struct delta_inner_t {
-    enum class op_t : uint_fast8_t {
-      INSERT,
-      UPDATE,
-      REMOVE,
-    } op;
-    omap_inner_key_t key;
-    std::string val;
-
-    DENC(delta_inner_t, v, p) {
-      DENC_START(1, 1, p);
-      denc(v.op, p);
-      denc(v.key, p);
-      denc(v.val, p);
-      DENC_FINISH(p);
-    }
-
-    void replay(StringKVInnerNodeLayout &l) {
-      switch (op) {
-      case op_t::INSERT: {
-        l.inner_insert(l.string_lower_bound(val), key, val);
-        break;
-      }
-      case op_t::UPDATE: {
-        auto iter = l.find_string_key(val);
-        assert(iter != l.iter_end());
-        l.inner_update(iter, key);
-        break;
-      }
-      case op_t::REMOVE: {
-        auto iter = l.find_string_key(val);
-        assert(iter != l.iter_end());
-        l.inner_remove(iter);
-        break;
-      }
-      default:
-        assert(0 == "Impossible");
-      }
-    }
-
-    bool operator==(const delta_inner_t &rhs) const {
-      return op == rhs.op &&
-             key == rhs.key &&
-             val == rhs.val;
-    }
-  };
 
 public:
-  class delta_inner_buffer_t {
-    std::vector<delta_inner_t> buffer;
-  public:
-    bool empty() const {
-      return buffer.empty();
-    }
-    void insert(
-      const omap_inner_key_t key,
-      std::string_view val) {
-      omap_inner_key_le_t k;
-      k = key;
-      buffer.push_back(
-       delta_inner_t{
-         delta_inner_t::op_t::INSERT,
-         k,
-         val.data()
-       });
-    }
-    void update(
-      const omap_inner_key_t key,
-      std::string_view val) {
-      omap_inner_key_le_t k;
-      k = key;
-      buffer.push_back(
-       delta_inner_t{
-         delta_inner_t::op_t::UPDATE,
-         k,
-         val.data()
-       });
-    }
-    void remove(std::string_view val) {
-      buffer.push_back(
-        delta_inner_t{
-          delta_inner_t::op_t::REMOVE,
-          omap_inner_key_le_t(),
-          val.data()
-        });
-    }
-
-    void replay(StringKVInnerNodeLayout &node) {
-      for (auto &i: buffer) {
-        i.replay(node);
-      }
-    }
-    size_t get_bytes() const {
-      size_t size = 0;
-      for (auto &i: buffer) {
-        size += sizeof(i.op_t) + sizeof(i.key) + i.val.size();
-      }
-      return size;
-    }
-    //copy out
-    void encode(ceph::bufferlist &bl) {
-      uint32_t num = buffer.size();
-      ::encode(num, bl);
-      for (auto &&i: buffer) {
-        ::encode(i, bl);
-      }
-      buffer.clear();
-    }
-    //copy in
-    void decode(const ceph::bufferlist &bl) {
-      auto p = bl.cbegin();
-      uint32_t num;
-      ::decode(num, p);
-      while (num--) {
-        delta_inner_t delta;
-        ::decode(delta, p);
-        buffer.push_back(delta);
-      }
-    }
-
-    bool operator==(const delta_inner_buffer_t &rhs) const {
-      return buffer == rhs.buffer;
-    }
-  };
 
   void journal_inner_insert(
     const_iterator _iter,
@@ -609,12 +665,12 @@ public:
    * Cannot be modified after initial write as it is not represented
    * in delta_t
    */
-  Meta get_meta() const {
-    MetaInt &metaint = *layout.template Pointer<1>(buf);
-    return Meta(metaint);
+  omap_node_meta_t get_meta() const {
+    omap_node_meta_le_t &metaint = *layout.template Pointer<1>(buf);
+    return omap_node_meta_t(metaint);
   }
-  void set_meta(const Meta &meta) {
-    *layout.template Pointer<1>(buf) = MetaInt(meta);
+  void set_meta(const omap_node_meta_t &meta) {
+    *layout.template Pointer<1>(buf) = omap_node_meta_le_t(meta);
   }
 
   uint32_t used_space() const {
@@ -632,7 +688,7 @@ public:
   }
 
   uint16_t capacity() const {
-    return BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
+    return OMAP_BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
                         reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
   }
 
@@ -706,7 +762,7 @@ public:
       right.iter_begin(),
       right.iter_end());
     set_size(left.get_size() + right.get_size());
-    set_meta(Meta::merge_from(left.get_meta(), right.get_meta()));
+    set_meta(omap_node_meta_t::merge_from(left.get_meta(), right.get_meta()));
   }
 
   /**
@@ -792,7 +848,7 @@ public:
       replacement_right.set_size(right.get_size() + left.get_size() - pivot_idx);
     }
 
-    auto [lmeta, rmeta] = Meta::rebalance(
+    auto [lmeta, rmeta] = omap_node_meta_t::rebalance(
       left.get_meta(), right.get_meta());
     replacement_left.set_meta(lmeta);
     replacement_right.set_meta(rmeta);
@@ -804,15 +860,13 @@ private:
     iterator iter,
     const omap_inner_key_t key,
     const std::string &val) {
-    if (VALIDATE_INVARIANTS) {
-      if (iter != iter_begin()) {
-        assert((iter - 1)->get_node_val() < val);
-      }
-      if (iter != iter_end()) {
-        assert(iter->get_node_val() > val);
-      }
-      assert(is_overflow(val.size() + 1) == false);
+    if (iter != iter_begin()) {
+      assert((iter - 1)->get_node_val() < val);
     }
+    if (iter != iter_end()) {
+      assert(iter->get_node_val() > val);
+    }
+    assert(is_overflow(val.size() + 1) == false);
     if (get_size() != 0 && iter != iter_end())
       copy_from_local(key.key_len, iter + 1, iter, iter_end());
 
@@ -833,15 +887,13 @@ private:
     const omap_inner_key_t key,
     const std::string &val) {
     assert(iter != iter_end());
-    if (VALIDATE_INVARIANTS) {
-      if (iter != iter_begin()) {
-        assert((iter - 1)->get_node_val() < val);
-      }
-      if ((iter + 1) != iter_end()) {
-        assert((iter + 1)->get_node_val() > val);
-      }
-      assert(is_overflow(val.size() + 1) == false);
+    if (iter != iter_begin()) {
+      assert((iter - 1)->get_node_val() < val);
     }
+    if ((iter + 1) != iter_end()) {
+      assert((iter + 1)->get_node_val() > val);
+    }
+    assert(is_overflow(val.size() + 1) == false);
     inner_remove(iter);
     inner_insert(iter, key, val);
   }
@@ -867,15 +919,12 @@ private:
 
 };
 
-template <
-  typename Meta,
-  typename MetaInt,
-  bool VALIDATE_INVARIANTS>
 class StringKVLeafNodeLayout {
   char *buf = nullptr;
 
-  using L = absl::container_internal::Layout<ceph_le32, MetaInt, omap_leaf_key_le_t>;
+  using L = absl::container_internal::Layout<ceph_le32, omap_node_meta_le_t, omap_leaf_key_le_t>;
   static constexpr L layout{1, 1, 1}; // = L::Partial(1, 1, 1);
+  friend class delta_leaf_t;
 
 public:
   template <bool is_const>
@@ -961,7 +1010,7 @@ public:
     }
 
     char *get_node_val_ptr() {
-      auto tail = node->buf + BLOCK_SIZE;
+      auto tail = node->buf + OMAP_BLOCK_SIZE;
       if ( *this == node->iter_end())
         return tail;
       else
@@ -969,7 +1018,7 @@ public:
     }
 
     const char *get_node_val_ptr() const {
-      auto tail = node->buf + BLOCK_SIZE;
+      auto tail = node->buf + OMAP_BLOCK_SIZE;
       if ( *this == node->iter_end())
         return tail;
       else
@@ -977,12 +1026,12 @@ public:
     }
 
     char *get_string_val_ptr() {
-      auto tail = node->buf + BLOCK_SIZE;
+      auto tail = node->buf + OMAP_BLOCK_SIZE;
       return tail - static_cast<int>(get_node_key().val_off);
     }
 
     const char *get_string_val_ptr() const {
-      auto tail = node->buf + BLOCK_SIZE;
+      auto tail = node->buf + OMAP_BLOCK_SIZE;
       return tail - static_cast<int>(get_node_key().val_off);
     }
 
@@ -1041,24 +1090,24 @@ public:
     }
 
     char *get_right_ptr() {
-      return node->buf + BLOCK_SIZE - get_right_offset();
+      return node->buf + OMAP_BLOCK_SIZE - get_right_offset();
     }
 
     const char *get_right_ptr() const {
       static_assert(!is_const);
-      return node->buf + BLOCK_SIZE - get_right_offset();
+      return node->buf + OMAP_BLOCK_SIZE - get_right_offset();
     }
 
     char *get_right_ptr_end() {
       if (index == 0)
-	      return node->buf + BLOCK_SIZE;
+	      return node->buf + OMAP_BLOCK_SIZE;
       else
 	      return (*this - 1)->get_right_ptr();
     }
 
     const char *get_right_ptr_end() const {
       if (index == 0)
-	      return node->buf + BLOCK_SIZE;
+	      return node->buf + OMAP_BLOCK_SIZE;
       else
 	      return (*this - 1)->get_right_ptr();
     }
@@ -1088,126 +1137,8 @@ public:
   using const_iterator = iter_t<true>;
   using iterator = iter_t<false>;
 
-  struct delta_leaf_t {
-    enum class op_t : uint_fast8_t {
-      INSERT,
-      UPDATE,
-      REMOVE,
-    } op;
-    std::string key;
-    std::string val;
-
-    DENC(delta_leaf_t, v, p) {
-      DENC_START(1, 1, p);
-      denc(v.op, p);
-      denc(v.key, p);
-      denc(v.val, p);
-      DENC_FINISH(p);
-    }
-
-    void replay(StringKVLeafNodeLayout &l) {
-      switch (op) {
-      case op_t::INSERT: {
-        l.leaf_insert(l.string_lower_bound(key), key, val);
-        break;
-      }
-      case op_t::UPDATE: {
-        auto iter = l.find_string_key(key);
-        assert(iter != l.iter_end());
-        l.leaf_update(iter, key, val);
-        break;
-      }
-      case op_t::REMOVE: {
-        auto iter = l.find_string_key(key);
-        assert(iter != l.iter_end());
-        l.leaf_remove(iter);
-        break;
-      }
-      default:
-        assert(0 == "Impossible");
-      }
-    }
-
-    bool operator==(const delta_leaf_t &rhs) const {
-      return op == rhs.op &&
-        key == rhs.key &&
-        val == rhs.val;
-    }
-  };
 
 public:
-  class delta_leaf_buffer_t {
-    std::vector<delta_leaf_t> buffer;
-  public:
-    bool empty() const {
-      return buffer.empty();
-    }
-    void insert(
-      std::string_view key,
-      std::string_view val) {
-      buffer.push_back(
-       delta_leaf_t{
-         delta_leaf_t::op_t::INSERT,
-         key.data(),
-         val.data()
-       });
-    }
-    void update(
-      std::string_view key,
-      std::string_view val) {
-      buffer.push_back(
-       delta_leaf_t{
-         delta_leaf_t::op_t::UPDATE,
-         key.data(),
-         val.data()
-       });
-    }
-    void remove(std::string_view key) {
-      buffer.push_back(
-       delta_leaf_t{
-         delta_leaf_t::op_t::REMOVE,
-         key.data(),
-         ""
-       });
-    }
-
-    void replay(StringKVLeafNodeLayout &node) {
-      for (auto &i: buffer) {
-        i.replay(node);
-      }
-    }
-    size_t get_bytes() const {
-      size_t size = 0;
-      for (auto &i: buffer) {
-        size += sizeof(i.op_t) + i.key.size() + i.val.size();
-      }
-      return size;
-    }
-    //copy out
-    void encode(ceph::bufferlist &bl) {
-      uint32_t num = buffer.size();
-      ::encode(num, bl);
-      for (auto &&i: buffer) {
-        ::encode(i, bl);
-      }
-      buffer.clear();
-    }
-    //copy in
-    void decode(const ceph::bufferlist &bl) {
-      auto p = bl.cbegin();
-      uint32_t num;
-      ::decode(num, p);
-      while (num--) {
-        delta_leaf_t delta;
-        ::decode(delta, p);
-        buffer.push_back(delta);
-      }
-    }
-
-    bool operator==(const delta_leaf_buffer_t &rhs) const {
-      return buffer == rhs.buffer;
-    }
-  };
 
   void journal_leaf_insert(
     const_iterator _iter,
@@ -1368,12 +1299,12 @@ public:
    * Cannot be modified after initial write as it is not represented
    * in delta_t
    */
-  Meta get_meta() const {
-    MetaInt &metaint = *layout.template Pointer<1>(buf);
-    return Meta(metaint);
+  omap_node_meta_t get_meta() const {
+    omap_node_meta_le_t &metaint = *layout.template Pointer<1>(buf);
+    return omap_node_meta_t(metaint);
   }
-  void set_meta(const Meta &meta) {
-    *layout.template Pointer<1>(buf) = MetaInt(meta);
+  void set_meta(const omap_node_meta_t &meta) {
+    *layout.template Pointer<1>(buf) = omap_node_meta_le_t(meta);
   }
 
   uint32_t used_space() const {
@@ -1391,7 +1322,7 @@ public:
   }
 
   uint32_t capacity() const {
-    return BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
+    return OMAP_BLOCK_SIZE - (reinterpret_cast<char*>(layout.template Pointer<2>(buf))-
                         reinterpret_cast<char*>(layout.template Pointer<0>(buf)));
   }
 
@@ -1466,7 +1397,7 @@ public:
       right.iter_begin(),
       right.iter_end());
     set_size(left.get_size() + right.get_size());
-    set_meta(Meta::merge_from(left.get_meta(), right.get_meta()));
+    set_meta(omap_node_meta_t::merge_from(left.get_meta(), right.get_meta()));
   }
 
   /**
@@ -1552,7 +1483,7 @@ public:
       replacement_right.set_size(right.get_size() + left.get_size() - pivot_idx);
     }
 
-    auto [lmeta, rmeta] = Meta::rebalance(
+    auto [lmeta, rmeta] = omap_node_meta_t::rebalance(
       left.get_meta(), right.get_meta());
     replacement_left.set_meta(lmeta);
     replacement_right.set_meta(rmeta);
@@ -1564,15 +1495,13 @@ private:
     iterator iter,
     const std::string &key,
     const std::string &val) {
-    if (VALIDATE_INVARIANTS) {
-      if (iter != iter_begin()) {
-        assert((iter - 1)->get_node_val() < key);
-      }
-      if (iter != iter_end()) {
-        assert(iter->get_node_val() > key);
-      }
-      assert(is_overflow(key.size() + 1, val.size() + 1) == false);
+    if (iter != iter_begin()) {
+      assert((iter - 1)->get_node_val() < key);
     }
+    if (iter != iter_end()) {
+      assert(iter->get_node_val() > key);
+    }
+    assert(is_overflow(key.size() + 1, val.size() + 1) == false);
     omap_leaf_key_t node_key;
     if (iter == iter_begin()) {
       node_key.key_off = key.size() + 1 + val.size() + 1;
@@ -1599,9 +1528,7 @@ private:
     const std::string &key,
     const std::string &val) {
     assert(iter != iter_end());
-    if (VALIDATE_INVARIANTS) {
-      assert(is_overflow(0, val.size() + 1) == false);
-    }
+    assert(is_overflow(0, val.size() + 1) == false);
     leaf_remove(iter);
     leaf_insert(iter, key, val);
   }
@@ -1629,9 +1556,50 @@ private:
 
 };
 
+inline void delta_inner_t::replay(StringKVInnerNodeLayout &l) {
+  switch (op) {
+    case op_t::INSERT: {
+      l.inner_insert(l.string_lower_bound(val), key, val);
+      break;
+    }
+    case op_t::UPDATE: {
+      auto iter = l.find_string_key(val);
+      assert(iter != l.iter_end());
+      l.inner_update(iter, key);
+      break;
+    }
+    case op_t::REMOVE: {
+      auto iter = l.find_string_key(val);
+      assert(iter != l.iter_end());
+      l.inner_remove(iter);
+      break;
+    }
+    default:
+      assert(0 == "Impossible");
+  }
 }
-using namespace crimson::os::seastore::omap_manager;
-using InnerNodeLayout = StringKVInnerNodeLayout<omap_node_meta_t, omap_node_meta_le_t>;
-WRITE_CLASS_DENC_BOUNDED(InnerNodeLayout::delta_inner_t)
-using LeafNodeLayout = StringKVLeafNodeLayout<omap_node_meta_t, omap_node_meta_le_t>;
-WRITE_CLASS_DENC_BOUNDED(LeafNodeLayout::delta_leaf_t)
+
+inline void delta_leaf_t::replay(StringKVLeafNodeLayout &l) {
+  switch (op) {
+    case op_t::INSERT: {
+      l.leaf_insert(l.string_lower_bound(key), key, val);
+      break;
+    }
+    case op_t::UPDATE: {
+      auto iter = l.find_string_key(key);
+      assert(iter != l.iter_end());
+      l.leaf_update(iter, key, val);
+      break;
+    }
+    case op_t::REMOVE: {
+      auto iter = l.find_string_key(key);
+      assert(iter != l.iter_end());
+      l.leaf_remove(iter);
+      break;
+    }
+    default:
+      assert(0 == "Impossible");
+  }
+}
+
+}
