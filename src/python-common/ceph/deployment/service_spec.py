@@ -489,6 +489,10 @@ class ServiceSpec(object):
         :param json_spec: A valid dict with ServiceSpec
         """
 
+        if not isinstance(json_spec, dict):
+            raise ServiceSpecValidationError(
+                f'Service Spec is not an (JSON or YAML) object. got "{str(json_spec)}"')
+
         c = json_spec.copy()
 
         # kludge to make `from_json` compatible to `Orchestrator.describe_service`

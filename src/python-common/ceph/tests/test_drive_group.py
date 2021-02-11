@@ -1,4 +1,6 @@
 # flake8: noqa
+import re
+
 import pytest
 import yaml
 
@@ -32,6 +34,10 @@ def test_DriveGroup(test_input):
 
 @pytest.mark.parametrize("match,test_input",
 [
+    (
+        re.escape('Service Spec is not an (JSON or YAML) object. got "None"'),
+        ''
+    ),
     (
         "Failed to validate Drive Group: OSD spec needs a `placement` key.",
         '{}'
