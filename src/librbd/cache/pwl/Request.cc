@@ -262,7 +262,7 @@ bool C_WriteRequest<T>::append_write_request(std::shared_ptr<SyncPoint> sync_poi
 template <typename T>
 void C_WriteRequest<T>::schedule_append() {
   ceph_assert(++m_appended == 1);
-  pwl.setup_schedule_append(this->op_set->operations, m_do_early_flush);
+  pwl.setup_schedule_append(this->op_set->operations, m_do_early_flush, this);
 }
 
 /**
