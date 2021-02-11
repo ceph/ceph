@@ -320,7 +320,7 @@ public:
     fifo.meta(m, null_yield);
     auto p = m.head_part_num;
     if (p < 0) {
-      info->marker = rgw::cls::fifo::marker{}.to_string();
+      info->marker = ""s;
       info->last_update = ceph::real_clock::zero();
       return 0;
     }
