@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Iterator
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from cephadm.schedule import HostAssignment
 
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -76,7 +76,7 @@ class Migrations:
         """
 
         def interesting_specs() -> Iterator[ServiceSpec]:
-            for s in self.mgr.spec_store.specs.values():
+            for s in self.mgr.spec_store.all_specs.values():
                 if s.unmanaged:
                     continue
                 p = s.placement
@@ -101,12 +101,15 @@ class Migrations:
             if len(placements) >= len(existing_daemons):
                 return
 
+            def to_hostname(d: DaemonDescription) -> HostPlacementSpec:
+                if d.hostname in old_hosts:
+                    return old_hosts[d.hostname]
+                else:
+                    assert d.hostname
+                    return HostPlacementSpec(d.hostname, '', '')
+
             old_hosts = {h.hostname: h for h in spec.placement.hosts}
-            new_hosts = [
-                old_hosts[d.hostname] if d.hostname in old_hosts else HostPlacementSpec(
-                    hostname=d.hostname, network='', name='')
-                for d in existing_daemons
-            ]
+            new_hosts = [to_hostname(d) for d in existing_daemons]
 
             new_placement = PlacementSpec(
                 hosts=new_hosts,
@@ -144,17 +147,17 @@ class Migrations:
         This fixes the data structure consistency
         """
         bad_specs = {}
-        for name, spec in self.mgr.spec_store.specs.items():
+        for name, spec in self.mgr.spec_store.all_specs.items():
             if name != spec.service_name():
                 bad_specs[name] = (spec.service_name(), spec)
 
         for old, (new, old_spec) in bad_specs.items():
-            if new not in self.mgr.spec_store.specs:
+            if new not in self.mgr.spec_store.all_specs:
                 spec = old_spec
             else:
-                spec = self.mgr.spec_store.specs[new]
+                spec = self.mgr.spec_store.all_specs[new]
             spec.unmanaged = True
             self.mgr.spec_store.save(spec)
-            self.mgr.spec_store.rm(old)
+            self.mgr.spec_store.finally_rm(old)
 
         return True

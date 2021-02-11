@@ -1,12 +1,10 @@
-import json
 import logging
 from typing import List, cast, Tuple, Dict, Any
 
 from ceph.deployment.service_spec import HA_RGWSpec
 
-from orchestrator import DaemonDescription, OrchestratorError
 from .cephadmservice import CephadmDaemonSpec, CephService
-from ..utils import CephadmNoImage, cephadmNoImage, resolve_ip
+from ..utils import resolve_ip
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +19,13 @@ class HA_RGWService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[HA_RGWSpec]) -> CephadmDaemonSpec:
         assert daemon_spec.daemon_type == 'haproxy' or daemon_spec.daemon_type == 'keepalived'
+        # if spec is not attached to daemon_spec it is likely a redeploy or reconfig and
+        # spec should be in spec store
+        if not daemon_spec.spec:
+            service_name: str = "ha-rgw." + daemon_spec.daemon_id.split('.')[0]
+            if service_name in self.mgr.spec_store:
+                daemon_spec.spec = cast(
+                    HA_RGWSpec, self.mgr.spec_store[service_name].spec)
         assert daemon_spec.spec
 
         if daemon_spec.daemon_type == 'haproxy':
@@ -46,6 +51,9 @@ class HA_RGWService(CephService):
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
+
+        daemon_spec.final_config, daemon_spec.deps = self.haproxy_generate_config(daemon_spec)
+
         return daemon_spec
 
     def keepalived_prepare_create(self, daemon_spec: CephadmDaemonSpec[HA_RGWSpec]) -> CephadmDaemonSpec:
@@ -58,22 +66,25 @@ class HA_RGWService(CephService):
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
+
+        daemon_spec.final_config, daemon_spec.deps = self.keepalived_generate_config(daemon_spec)
+
         return daemon_spec
 
     def haproxy_generate_config(self, daemon_spec: CephadmDaemonSpec) -> Tuple[Dict[str, Any], List[str]]:
         daemon_id = daemon_spec.daemon_id
-        host = daemon_spec.host
 
         service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         # if no service spec, return empty config
-        if not daemon_spec.spec and service_name not in self.mgr.spec_store.specs:
+        # TODO: fail, if we don't have any spec
+        if not daemon_spec.spec and service_name not in self.mgr.spec_store.all_specs:
             config_files = {'files': {}}  # type: Dict[str, Any]
             return config_files, []
         elif daemon_spec.spec:
             spec = daemon_spec.spec
         else:
             # service spec is not attached to daemon spec but is in spec store
-            spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
+            spec = cast(HA_RGWSpec, self.mgr.spec_store.all_specs[service_name])
 
         rgw_daemons = self.mgr.cache.get_daemons_by_type('rgw')
         rgw_servers = []
@@ -113,14 +124,15 @@ class HA_RGWService(CephService):
 
         service_name: str = "ha-rgw." + daemon_id.split('.')[0]
         # if no service spec, return empty config
-        if not daemon_spec.spec and service_name not in self.mgr.spec_store.specs:
+        # TODO: In case of no spec, fail here
+        if not daemon_spec.spec and service_name not in self.mgr.spec_store.all_specs:
             config_file = {'files': {}}  # type: Dict[str, Any]
             return config_file, []
         elif daemon_spec.spec:
             spec = daemon_spec.spec
         else:
             # service spec is not attached to daemon spec but is in spec store
-            spec = cast(HA_RGWSpec, self.mgr.spec_store.specs[service_name])
+            spec = cast(HA_RGWSpec, self.mgr.spec_store.all_specs[service_name])
 
         all_hosts = []
         for h, network, name in spec.definitive_host_list:

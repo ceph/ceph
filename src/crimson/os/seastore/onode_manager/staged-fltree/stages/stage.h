@@ -162,6 +162,7 @@ struct staged {
   using next_param_t = typename Params::next_param_t;
   using position_t = staged_position_t<Params::STAGE>;
   using result_t = staged_result_t<Params::NODE_TYPE, Params::STAGE>;
+  using value_input_t = value_input_type_t<Params::NODE_TYPE>;
   using value_t = value_type_t<Params::NODE_TYPE>;
   static constexpr auto CONTAINER_TYPE = container_t::CONTAINER_TYPE;
   static constexpr bool IS_BOTTOM = (Params::STAGE == STAGE_BOTTOM);
@@ -315,8 +316,11 @@ struct staged {
 
     template <KeyT KT, typename T = value_t>
     std::enable_if_t<IS_BOTTOM, const T*> insert(
-        NodeExtentMutable& mut, const full_key_t<KT>& key,
-        const value_t& value, node_offset_t insert_size, const char* p_left_bound) {
+        NodeExtentMutable& mut,
+        const full_key_t<KT>& key,
+        const value_input_t& value,
+        node_offset_t insert_size,
+        const char* p_left_bound) {
       return container_t::template insert_at<KT>(
           mut, container, key, value, _index, insert_size, p_left_bound);
     }
@@ -467,7 +471,7 @@ struct staged {
 
     template <KeyT KT>
     static node_offset_t estimate_insert(
-        const full_key_t<KT>& key, const value_t& value) {
+        const full_key_t<KT>& key, const value_input_t& value) {
       return container_t::template estimate_insert<KT>(key, value);
     }
 
@@ -783,7 +787,8 @@ struct staged {
     }
 
     template <KeyT KT>
-    static node_offset_t estimate_insert(const full_key_t<KT>& key, const value_t& value) {
+    static node_offset_t estimate_insert(const full_key_t<KT>& key,
+                                         const value_input_t& value) {
       return container_t::template estimate_insert<KT>(key, value);
     }
 
@@ -853,17 +858,21 @@ struct staged {
 
   template <bool GET_KEY>
   static result_t smallest_result(
-      const iterator_t& iter, full_key_t<KeyT::VIEW>* index_key) {
+      const iterator_t& iter, full_key_t<KeyT::VIEW>* p_index_key) {
     static_assert(!IS_BOTTOM);
     assert(!iter.is_end());
-    auto pos_smallest = NXT_STAGE_T::position_t::begin();
     auto nxt_container = iter.get_nxt_container();
-    auto value_ptr = NXT_STAGE_T::template get_p_value<GET_KEY>(
-        nxt_container, pos_smallest, index_key);
+    auto pos_smallest = NXT_STAGE_T::position_t::begin();
+    const value_t* p_value;
+    NXT_STAGE_T::template get_slot<GET_KEY, true>(
+        nxt_container, pos_smallest, p_index_key, &p_value);
     if constexpr (GET_KEY) {
-      index_key->set(iter.get_key());
+      assert(p_index_key);
+      p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
     }
-    return result_t{{iter.index(), pos_smallest}, value_ptr, STAGE};
+    return result_t{{iter.index(), pos_smallest}, p_value, STAGE};
   }
 
   template <bool GET_KEY>
@@ -890,64 +899,71 @@ struct staged {
   }
 
   template <bool GET_POS, bool GET_KEY, bool GET_VAL>
-  static void lookup_largest_slot(
-      const container_t& container, position_t* p_position,
-      full_key_t<KeyT::VIEW>* p_index_key, const value_t** pp_value) {
+  static void get_largest_slot(
+      const container_t& container,        // IN
+      position_t* p_position,              // OUT
+      full_key_t<KeyT::VIEW>* p_index_key, // OUT
+      const value_t** pp_value) {          // OUT
     auto iter = iterator_t(container);
     iter.seek_last();
     if constexpr (GET_KEY) {
       assert(p_index_key);
       p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
     }
     if constexpr (GET_POS) {
       assert(p_position);
       p_position->index = iter.index();
+    } else {
+      assert(!p_position);
     }
     if constexpr (IS_BOTTOM) {
       if constexpr (GET_VAL) {
         assert(pp_value);
         *pp_value = iter.get_p_value();
+      } else {
+        assert(!pp_value);
       }
     } else {
       auto nxt_container = iter.get_nxt_container();
       if constexpr (GET_POS) {
-        NXT_STAGE_T::template lookup_largest_slot<true, GET_KEY, GET_VAL>(
+        NXT_STAGE_T::template get_largest_slot<true, GET_KEY, GET_VAL>(
             nxt_container, &p_position->nxt, p_index_key, pp_value);
       } else {
-        NXT_STAGE_T::template lookup_largest_slot<false, GET_KEY, GET_VAL>(
+        NXT_STAGE_T::template get_largest_slot<false, GET_KEY, GET_VAL>(
             nxt_container, nullptr, p_index_key, pp_value);
       }
     }
   }
 
-  template <bool GET_KEY = false>
-  static const value_t* get_p_value(
-      const container_t& container, const position_t& position,
-      full_key_t<KeyT::VIEW>* index_key = nullptr) {
+  template <bool GET_KEY, bool GET_VAL>
+  static void get_slot(
+      const container_t& container,        // IN
+      const position_t& pos,               // IN
+      full_key_t<KeyT::VIEW>* p_index_key, // OUT
+      const value_t** pp_value) {          // OUT
     auto iter = iterator_t(container);
-    iter.seek_at(position.index);
-    if constexpr (GET_KEY) {
-      index_key->set(iter.get_key());
-    }
-    if constexpr (!IS_BOTTOM) {
-      auto nxt_container = iter.get_nxt_container();
-      return NXT_STAGE_T::template get_p_value<GET_KEY>(
-          nxt_container, position.nxt, index_key);
-    } else {
-      return iter.get_p_value();
-    }
-  }
+    iter.seek_at(pos.index);
 
-  static void get_key_view(
-      const container_t& container,
-      const position_t& position,
-      full_key_t<KeyT::VIEW>& index_key) {
-    auto iter = iterator_t(container);
-    iter.seek_at(position.index);
-    index_key.set(iter.get_key());
+    if constexpr (GET_KEY) {
+      assert(p_index_key);
+      p_index_key->set(iter.get_key());
+    } else {
+      assert(!p_index_key);
+    }
+
     if constexpr (!IS_BOTTOM) {
       auto nxt_container = iter.get_nxt_container();
-      return NXT_STAGE_T::get_key_view(nxt_container, position.nxt, index_key);
+      NXT_STAGE_T::template get_slot<GET_KEY, GET_VAL>(
+          nxt_container, pos.nxt, p_index_key, pp_value);
+    } else {
+      if constexpr (GET_VAL) {
+        assert(pp_value);
+        *pp_value = iter.get_p_value();
+      } else {
+        assert(!pp_value);
+      }
     }
   }
 
@@ -1044,7 +1060,8 @@ struct staged {
   }
 
   template <KeyT KT>
-  static node_offset_t insert_size(const full_key_t<KT>& key, const value_t& value) {
+  static node_offset_t insert_size(const full_key_t<KT>& key,
+                                   const value_input_t& value) {
     if constexpr (IS_BOTTOM) {
       return iterator_t::template estimate_insert<KT>(key, value);
     } else {
@@ -1055,8 +1072,9 @@ struct staged {
   }
 
   template <KeyT KT>
-  static node_offset_t insert_size_at(
-      match_stage_t stage, const full_key_t<KeyT::HOBJ>& key, const value_t& value) {
+  static node_offset_t insert_size_at(match_stage_t stage,
+                                      const full_key_t<KeyT::HOBJ>& key,
+                                      const value_input_t& value) {
     if (stage == STAGE) {
       return insert_size<KT>(key, value);
     } else {
@@ -1068,7 +1086,7 @@ struct staged {
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::INTERNAL, T> evaluate_insert(
       const container_t& container, const full_key_t<KeyT::VIEW>& key,
-      const value_t& value, position_t& position, bool evaluate_last) {
+      const value_input_t& value, position_t& position, bool evaluate_last) {
     auto iter = iterator_t(container);
     auto& index = position.index;
     if (evaluate_last || index == INDEX_END) {
@@ -1167,7 +1185,7 @@ struct staged {
 
   template <typename T = std::tuple<match_stage_t, node_offset_t>>
   static std::enable_if_t<NODE_TYPE == node_type_t::LEAF, T> evaluate_insert(
-      const full_key_t<KeyT::HOBJ>& key, const onode_t& value,
+      const full_key_t<KeyT::HOBJ>& key, const value_config_t& value,
       const MatchHistory& history, match_stat_t mstat, position_t& position) {
     match_stage_t insert_stage = STAGE_TOP;
     while (*history.get_by_stage(insert_stage) == MatchKindCMP::EQ) {
@@ -1212,7 +1230,7 @@ struct staged {
   template <KeyT KT>
   static const value_t* insert_new(
       NodeExtentMutable& mut, const memory_range_t& range,
-      const full_key_t<KT>& key, const value_t& value) {
+      const full_key_t<KT>& key, const value_input_t& value) {
     char* p_insert = const_cast<char*>(range.p_end);
     const value_t* p_value = nullptr;
     StagedAppender<KT> appender;
@@ -1226,7 +1244,7 @@ struct staged {
   template <KeyT KT, bool SPLIT>
   static const value_t* proceed_insert_recursively(
       NodeExtentMutable& mut, const container_t& container,
-      const full_key_t<KT>& key, const value_t& value,
+      const full_key_t<KT>& key, const value_input_t& value,
       position_t& position, match_stage_t& stage,
       node_offset_t& _insert_size, const char* p_left_bound) {
     // proceed insert from right to left
@@ -1295,7 +1313,7 @@ struct staged {
   template <KeyT KT, bool SPLIT>
   static const value_t* proceed_insert(
       NodeExtentMutable& mut, const container_t& container,
-      const full_key_t<KT>& key, const value_t& value,
+      const full_key_t<KT>& key, const value_input_t& value,
       position_t& position, match_stage_t& stage, node_offset_t& _insert_size) {
     auto p_left_bound = container.p_left_bound();
     if (unlikely(!container.keys())) {
@@ -1401,7 +1419,7 @@ struct staged {
         size_t kv_logical_size = index_key.size_logical();
         size_t value_size;
         if constexpr (NODE_TYPE == node_type_t::LEAF) {
-          value_size = iter.get_p_value()->size;
+          value_size = iter.get_p_value()->allocation_size();
         } else {
           value_size = sizeof(value_t);
         }
@@ -1417,17 +1435,24 @@ struct staged {
     } while (true);
   }
 
-  static bool next_position(const container_t& container, position_t& pos) {
+  template <bool GET_KEY, bool GET_VAL>
+  static bool get_next_slot(
+      const container_t& container,         // IN
+      position_t& pos,                      // IN&OUT
+      full_key_t<KeyT::VIEW>* p_index_key,  // OUT
+      const value_t** pp_value) {           // OUT
     auto iter = iterator_t(container);
     assert(!iter.is_end());
     iter.seek_at(pos.index);
     bool find_next;
     if constexpr (!IS_BOTTOM) {
       auto nxt_container = iter.get_nxt_container();
-      find_next = NXT_STAGE_T::next_position(nxt_container, pos.nxt);
+      find_next = NXT_STAGE_T::template get_next_slot<GET_KEY, GET_VAL>(
+          nxt_container, pos.nxt, p_index_key, pp_value);
     } else {
       find_next = true;
     }
+
     if (find_next) {
       if (iter.is_last()) {
         return true;
@@ -1436,9 +1461,17 @@ struct staged {
         if constexpr (!IS_BOTTOM) {
           pos.nxt = NXT_STAGE_T::position_t::begin();
         }
+        get_slot<GET_KEY, GET_VAL>(
+            container, pos, p_index_key, pp_value);
         return false;
       }
-    } else {
+    } else { // !find_next && !IS_BOTTOM
+      if constexpr (GET_KEY) {
+        assert(p_index_key);
+        p_index_key->set(iter.get_key());
+      } else {
+        assert(!p_index_key);
+      }
       return false;
     }
   }
@@ -1796,7 +1829,7 @@ struct staged {
    *       -> std::tuple<NodeExtentMutable&, char*>
    *   wrap_nxt(char* p_append)
    * ELSE
-   *   append(const full_key_t& key, const value_t& value)
+   *   append(const full_key_t& key, const value_input_t& value)
    */
   template <KeyT KT>
   struct _BaseWithNxtAppender {
@@ -1839,7 +1872,7 @@ struct staged {
       }
     }
     void append(const full_key_t<KT>& key,
-                const value_t& value, const value_t*& p_value) {
+                const value_input_t& value, const value_t*& p_value) {
       assert(!require_wrap_nxt);
       if constexpr (!IS_BOTTOM) {
         auto& nxt = open_nxt(key);
@@ -1989,7 +2022,7 @@ struct staged {
 
   template <KeyT KT>
   static bool append_insert(
-      const full_key_t<KT>& key, const value_t& value,
+      const full_key_t<KT>& key, const value_input_t& value,
       StagedIterator& src_iter, StagedAppender<KT>& appender,
       bool is_front_insert, match_stage_t& stage, const value_t*& p_value) {
     assert(src_iter.valid());

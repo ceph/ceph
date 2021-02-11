@@ -104,13 +104,34 @@ set(common_srcs
   version.cc)
 
 if(WIN32)
+  if(MINGW)
+    set(CMAKE_MC_COMPILER x86_64-w64-mingw32-windmc)
+    set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+  endif()
+
+  add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/src/common/event_logging.h
+    COMMAND ${CMAKE_MC_COMPILER} -b -e h -h ${CMAKE_BINARY_DIR}/src/common/
+      -r ${CMAKE_BINARY_DIR}/src/common ${CMAKE_SOURCE_DIR}/src/common/win32/event_logging.mc
+    COMMAND ${CMAKE_RC_COMPILER} ${CMAKE_BINARY_DIR}/src/common/event_logging.rc
+      -o ${CMAKE_BINARY_DIR}/src/common/event_logging.o
+    COMMAND ${CMAKE_CXX_COMPILER} -o ${CMAKE_BINARY_DIR}/bin/event_logging.dll -shared
+      ${CMAKE_BINARY_DIR}/src/common/event_logging.o
+    DEPENDS ${CMAKE_SOURCE_DIR}/src/common/win32/event_logging.mc)
+
+  set_source_files_properties(${CMAKE_SOURCE_DIR}/src/common/win32/syslog.cc
+    APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/common/event_logging.h)
+
+  include_directories(SYSTEM "${CMAKE_BINARY_DIR}/src/common/")
+
   list(APPEND common_srcs
     win32/blkdev.cc
     win32/dns_resolve.cc
     win32/ifaddrs.cc
     win32/registry.cc
     win32/service.cc
-    win32/SubProcess.cc)
+    win32/SubProcess.cc
+    win32/syslog.cc)
 else()
   list(APPEND common_srcs
     blkdev.cc

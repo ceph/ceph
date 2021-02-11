@@ -205,7 +205,7 @@ Response will have the following format:
 ::
 
     <GetTopicAttributesResponse>
-        <GetTopicAttributesRersult>
+        <GetTopicAttributesResult>
             <Attributes>
                 <entry>
                     <key>User</key>
@@ -263,7 +263,7 @@ Response will have the following format:
 ::
 
     <GetTopicResponse>
-        <GetTopicRersult>
+        <GetTopicResult>
             <Topic>
                 <User></User>
                 <Name></Name>
@@ -335,8 +335,8 @@ Response will have the following format:
 
 ::
 
-    <ListTopicdResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
-        <ListTopicsRersult>
+    <ListTopicsResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+        <ListTopicsResult>
             <Topics>
                 <member>
                     <User></User>

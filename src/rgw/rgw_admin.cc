@@ -438,6 +438,11 @@ void usage()
   cout << "   --context                 context in which the script runs. one of: preRequest, postRequest\n";
   cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
   cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
+  cout << "\nradoslist options:\n";
+  cout << "   --rgw-obj-fs              the field separator that will separate the rados\n";
+  cout << "                             object name from the rgw object name;\n";
+  cout << "                             additionally rados objects for incomplete\n";
+  cout << "                             multipart uploads will not be output\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -1373,7 +1378,7 @@ int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& buc
     auto biter = bl.cbegin();
     decode(manifest, biter);
   } catch (buffer::error& err) {
-    ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
+    ldpp_dout(dpp(), 0) << "ERROR: failed to decode manifest" << dendl;
     return -EIO;
   }
 
@@ -2363,7 +2368,7 @@ static void get_hint_entities(const std::set<rgw_zone_id>& zones, const std::set
       rgw_bucket hint_bucket;
       int ret = init_bucket(b, hint_bucket_info, hint_bucket);
       if (ret < 0) {
-	ldout(store->ctx(), 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
+	ldpp_dout(dpp(), 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
 	continue;
       }
 
@@ -2469,7 +2474,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
     RGWBucketSyncPolicyHandlerRef hint_bucket_handler;
     int r = store->ctl()->bucket->get_sync_policy_handler(zid, hint_bucket, &hint_bucket_handler, null_yield, dpp());
     if (r < 0) {
-      ldout(store->ctx(), 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
+      ldpp_dout(dpp(), 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
       continue;
     }
 
@@ -2765,7 +2770,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
                                pins[1].c_str());
       if (rc != OATH_INVALID_OTP) {
         *pofs = time_ofs - step_size + step_size * totp.window / 2;
-        ldout(cct, 20) << "found at time=" << start_time - time_ofs << " time_ofs=" << time_ofs << dendl;
+        ldpp_dout(dpp(), 20) << "found at time=" << start_time - time_ofs << " time_ofs=" << time_ofs << dendl;
         return 0;
       }
     }
@@ -3227,6 +3232,8 @@ int main(int argc, const char **argv)
 
   SimpleCmd cmd(all_cmds, cmd_aliases);
 
+  std::optional<std::string> rgw_obj_fs; // radoslist field separator
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -3650,6 +3657,8 @@ int main(int argc, const char **argv)
       script_package = val;
     } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--rgw-obj-fs", (char*)NULL)) {
+      rgw_obj_fs = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -3759,15 +3768,15 @@ int main(int argc, const char **argv)
   }
 
   if (format ==  "xml")
-    formatter = make_unique<XMLFormatter>(new XMLFormatter(pretty_format));
+    formatter = make_unique<XMLFormatter>(pretty_format);
   else if (format == "json")
-    formatter = make_unique<JSONFormatter>(new JSONFormatter(pretty_format));
+    formatter = make_unique<JSONFormatter>(pretty_format);
   else {
     cerr << "unrecognized format: " << format << std::endl;
     exit(1);
   }
 
-  zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(new JSONFormatter_PrettyZone(pretty_format));
+  zone_formatter = std::make_unique<JSONFormatter_PrettyZone>(pretty_format);
 
   realm_name = g_conf()->rgw_realm;
   zone_name = g_conf()->rgw_zone;
@@ -6101,6 +6110,10 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
     RGWRadosList lister(store,
 			max_concurrent_ios, orphan_stale_secs, tenant);
+    if (rgw_obj_fs) {
+      lister.set_field_separator(*rgw_obj_fs);
+    }
+
     if (bucket_name.empty()) {
       ret = lister.run(dpp());
     } else {
@@ -6735,7 +6748,7 @@ next:
     if (min_rewrite_stripe_size > 0) {
       ret = check_min_obj_stripe_size(store, bucket_info, &obj, min_rewrite_stripe_size, &need_rewrite);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
+        ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
       }
     }
     if (need_rewrite) {
@@ -6745,7 +6758,7 @@ next:
         return -ret;
       }
     } else {
-      ldout(store->ctx(), 20) << "skipped object" << dendl;
+      ldpp_dout(dpp(), 20) << "skipped object" << dendl;
     }
   }
 
@@ -6864,7 +6877,7 @@ next:
           if (min_rewrite_stripe_size > 0) {
             r = check_min_obj_stripe_size(store, bucket_info, &obj, min_rewrite_stripe_size, &need_rewrite);
             if (r < 0) {
-              ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
+              ldpp_dout(dpp(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
             }
           }
           if (!need_rewrite) {

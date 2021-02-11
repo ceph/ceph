@@ -1,4 +1,3 @@
-import datetime
 import threading
 import functools
 import os
@@ -6,6 +5,7 @@ import json
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
+from ceph.utils import datetime_now
 
 from typing import List, Dict, Optional, Callable, Any, TypeVar, Tuple
 
@@ -125,18 +125,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             return False, "Rook version unsupported."
         return True, ''
 
-    def available(self) -> Tuple[bool, str]:
+    def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         if not kubernetes_imported:
-            return False, "`kubernetes` python module not found"
+            return False, "`kubernetes` python module not found", {}
         elif not self._rook_env.has_namespace():
-            return False, "ceph-mgr not running in Rook cluster"
+            return False, "ceph-mgr not running in Rook cluster", {}
 
         try:
             self.k8s.list_namespaced_pod(self._rook_env.namespace)
         except ApiException as e:
-            return False, "Cannot reach Kubernetes API: {}".format(e)
+            return False, "Cannot reach Kubernetes API: {}".format(e), {}
         else:
-            return True, ""
+            return True, "", {}
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(RookOrchestrator, self).__init__(*args, **kwargs)
@@ -263,7 +263,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                          service_type: Optional[str] = None,
                          service_name: Optional[str] = None,
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
-        now = datetime.datetime.utcnow()
+        now = datetime_now()
 
         # CephCluster
         cl = self.rook_cluster.rook_api_get(

@@ -414,8 +414,10 @@ def CLICheckNonemptyFileInput(func: HandlerFuncType) -> HandlerFuncType:
     def check(*args: Any, **kwargs: Any) -> Tuple[int, str, str]:
         if 'inbuf' not in kwargs:
             return -errno.EINVAL, '', ERROR_MSG_NO_INPUT_FILE
-        if not kwargs['inbuf'] or (isinstance(kwargs['inbuf'], str)
-                                   and not kwargs['inbuf'].strip('\n')):
+        if isinstance(kwargs['inbuf'], str):
+            # Delete new line separator at EOF (it may have been added by a text editor).
+            kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
+        if not kwargs['inbuf']:
             return -errno.EINVAL, '', ERROR_MSG_EMPTY_INPUT_FILE
         return func(*args, **kwargs)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
@@ -911,6 +913,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :rtype: str
         """
         return self._ceph_get_release_name()
+
+    def lookup_release_name(self, major: int) -> str:
+        return self._ceph_lookup_release_name(major)
 
     def get_context(self) -> object:
         """

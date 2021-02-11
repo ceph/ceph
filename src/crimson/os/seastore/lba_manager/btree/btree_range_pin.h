@@ -269,6 +269,10 @@ public:
   void take_pin(LBAPin &opin) final {
     pin.take_pin(static_cast<BtreeLBAPin&>(opin).pin);
   }
+
+  bool has_been_invalidated() const final {
+    return parent->has_been_invalidated();
+  }
 };
 
 }

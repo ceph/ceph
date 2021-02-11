@@ -34,6 +34,7 @@
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/QosImageDispatch.h"
+#include "librbd/io/IoOperations.h"
 #include "librbd/journal/StandardPolicy.h"
 #include "librbd/operation/ResizeRequest.h"
 
@@ -141,7 +142,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     } else {
       exclusive_lock_policy = new exclusive_lock::StandardPolicy(this);
     }
-    journal_policy = new journal::StandardPolicy<ImageCtx>(this);
+    journal_policy = new journal::StandardPolicy(this);
   }
 
   ImageCtx::ImageCtx(const string &image_name, const string &image_id,
@@ -859,6 +860,9 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       config.get_val<uint64_t>("rbd_qos_write_bps_limit"),
       config.get_val<uint64_t>("rbd_qos_write_bps_burst"),
       config.get_val<uint64_t>("rbd_qos_write_bps_burst_seconds"));
+    io_image_dispatcher->apply_qos_exclude_ops(
+      librbd::io::rbd_io_operations_from_string(
+        config.get_val<std::string>("rbd_qos_exclude_ops"), nullptr));
 
     if (!disable_zero_copy &&
         config.get_val<bool>("rbd_disable_zero_copy_writes")) {

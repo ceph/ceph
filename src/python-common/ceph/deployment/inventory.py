@@ -15,7 +15,7 @@ class Devices(object):
         # type: (List[Device]) -> None
         self.devices = devices  # type: List[Device]
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
         return self.to_json() == other.to_json()
 
     def to_json(self):
@@ -79,6 +79,8 @@ class Device(object):
                 if key != 'human_readable_type'
             }
         )
+        if ret.rejected_reasons:
+            ret.rejected_reasons = sorted(ret.rejected_reasons)
         return ret
 
     @property

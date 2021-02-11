@@ -31,7 +31,7 @@ cephadmNoImage = CephadmNoImage.token
 class ContainerInspectInfo(NamedTuple):
     image_id: str
     ceph_version: Optional[str]
-    repo_digest: Optional[str]
+    repo_digests: Optional[List[str]]
 
 
 def name_to_config_section(name: str) -> ConfEntity:
@@ -68,7 +68,7 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
                 if self:
                     return f(self, *arg)
                 return f(*arg)
-            except Exception as e:
+            except Exception:
                 logger.exception(f'executing {f.__name__}({args}) failed.')
                 raise
 
@@ -106,3 +106,7 @@ def resolve_ip(hostname: str) -> str:
         return socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM)[0][4][0]
     except socket.gaierror as e:
         raise OrchestratorError(f"Cannot resolve ip for host {hostname}: {e}")
+
+
+def ceph_release_to_major(release: str) -> int:
+    return ord(release[0]) - ord('a') + 1

@@ -1,11 +1,10 @@
+import errno
 import json
 import re
 import logging
-import secrets
 import subprocess
-import collections
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, List, Callable, Any, TypeVar, Generic, \
+from typing import TYPE_CHECKING, List, Callable, TypeVar, Generic, \
     Optional, Dict, Any, Tuple, NewType
 
 from mgr_module import HandleCommandResult, MonCommandFailed
@@ -13,9 +12,9 @@ from mgr_module import HandleCommandResult, MonCommandFailed
 from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from orchestrator import OrchestratorError, DaemonDescription
-from orchestrator._interface import daemon_type_to_service, service_to_daemon_types
+from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
-from mgr_util import create_self_signed_cert, ServerConfigException, verify_tls
+from mgr_util import ServerConfigException, verify_tls
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -66,7 +65,12 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
         self.extra_files = extra_files or {}
 
         # TCP ports used by the daemon
-        self.ports:  List[int] = ports or []
+        self.ports: List[int] = ports or []
+
+        # values to be populated during generate_config calls
+        # and then used in _run_cephadm
+        self.final_config: Dict[str, Any] = {}
+        self.deps: List[str] = []
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -77,6 +81,15 @@ class CephadmDaemonSpec(Generic[ServiceSpecs]):
             files['config'] = self.ceph_conf
 
         return files
+
+    def to_daemon_description(self, status: int, status_desc: str) -> DaemonDescription:
+        return DaemonDescription(
+            daemon_type=self.daemon_type,
+            daemon_id=self.daemon_id,
+            hostname=self.host,
+            status=status,
+            status_desc=status_desc
+        )
 
 
 class CephadmService(metaclass=ABCMeta):
@@ -231,7 +244,7 @@ class CephadmService(metaclass=ABCMeta):
         logger.info(out)
         return HandleCommandResult(r.retval, out, r.stderr)
 
-    def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int) -> Tuple[bool, str]:
+    def _enough_daemons_to_stop(self, daemon_type: str, daemon_ids: List[str], service: str, low_limit: int, alert: bool = False) -> Tuple[bool, str]:
         # Provides a warning about if it possible or not to stop <n> daemons in a service
         names = [f'{daemon_type}.{d_id}' for d_id in daemon_ids]
         number_of_running_daemons = len(
@@ -244,12 +257,16 @@ class CephadmService(metaclass=ABCMeta):
         def plural(count: int) -> str:
             return 'daemon' if count == 1 else 'daemons'
 
-        daemon_count = "only" if number_of_running_daemons == 1 else number_of_running_daemons
         left_count = "no" if num_daemons_left == 0 else num_daemons_left
 
-        out = (f'WARNING: Stopping {len(daemon_ids)} out of {number_of_running_daemons} daemons in {service} service. '
-               f'Service will not be operational with {left_count} {plural(num_daemons_left)} left. '
-               f'At least {low_limit} {plural(low_limit)} must be running to guarantee service. ')
+        if alert:
+            out = (f'ALERT: Cannot stop {names} in {service} service. '
+                   f'Not enough remaining {service} daemons. '
+                   f'Please deploy at least {low_limit + 1} {service} daemons before stopping {names}. ')
+        else:
+            out = (f'WARNING: Stopping {len(daemon_ids)} out of {number_of_running_daemons} daemons in {service} service. '
+                   f'Service will not be operational with {left_count} {plural(num_daemons_left)} left. '
+                   f'At least {low_limit} {plural(low_limit)} must be running to guarantee service. ')
         return True, out
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
@@ -268,7 +285,7 @@ class CephadmService(metaclass=ABCMeta):
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-    def purge(self) -> None:
+    def purge(self, service_name: str) -> None:
         """Called to carry out any purge tasks following service removal"""
         logger.debug(f'Purge called for {self.TYPE} - no action taken')
 
@@ -349,7 +366,7 @@ class CephService(CephadmService):
         entity = self.get_auth_entity(daemon_id, host=host)
 
         logger.info(f'Remove keyring: {entity}')
-        ret, out, err = self.mgr.check_mon_command({
+        ret, out, err = self.mgr.mon_command({
             'prefix': 'auth rm',
             'entity': entity,
         })
@@ -363,7 +380,7 @@ class MonService(CephService):
         Create a new monitor on the given host.
         """
         assert self.TYPE == daemon_spec.daemon_type
-        name, host, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
+        name, _, network = daemon_spec.daemon_id, daemon_spec.host, daemon_spec.network
 
         # get mon. key
         ret, keyring, err = self.mgr.check_mon_command({
@@ -404,6 +421,8 @@ class MonService(CephService):
         daemon_spec.ceph_conf = extra_config
         daemon_spec.keyring = keyring
 
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+
         return daemon_spec
 
     def _check_safe_to_destroy(self, mon_id: str) -> None:
@@ -412,7 +431,7 @@ class MonService(CephService):
         })
         try:
             j = json.loads(out)
-        except Exception as e:
+        except Exception:
             raise OrchestratorError('failed to parse quorum status')
 
         mons = [m['name'] for m in j['monmap']['mons']]
@@ -452,7 +471,7 @@ class MgrService(CephService):
         Create a new manager instance on a host.
         """
         assert self.TYPE == daemon_spec.daemon_type
-        mgr_id, host = daemon_spec.daemon_id, daemon_spec.host
+        mgr_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
@@ -470,7 +489,6 @@ class MgrService(CephService):
         # If this is the case then the dashboard port opened will be only the used
         # as default.
         ports = []
-        config_ports = ''
         ret, mgr_services, err = self.mgr.check_mon_command({
             'prefix': 'mgr services',
         })
@@ -485,6 +503,8 @@ class MgrService(CephService):
             daemon_spec.ports = ports
 
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
@@ -521,6 +541,21 @@ class MgrService(CephService):
         num = len(mgr_map.get('standbys'))
         return bool(num)
 
+    def ok_to_stop(self, daemon_ids: List[str], force: bool = False) -> HandleCommandResult:
+        # ok to stop if there is more than 1 mgr and not trying to stop the active mgr
+
+        warn, warn_message = self._enough_daemons_to_stop(self.TYPE, daemon_ids, 'Mgr', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+        mgr_daemons = self.mgr.cache.get_daemons_by_type(self.TYPE)
+        active = self.get_active_daemon(mgr_daemons).daemon_id
+        if active in daemon_ids:
+            warn_message = 'ALERT: Cannot stop active Mgr daemon, Please switch active Mgrs with \'ceph mgr fail %s\'' % active
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+
+        return HandleCommandResult(0, warn_message, '')
+
 
 class MdsService(CephService):
     TYPE = 'mds'
@@ -539,7 +574,7 @@ class MdsService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        mds_id, host = daemon_spec.daemon_id, daemon_spec.host
+        mds_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         # get mgr. key
         ret, keyring, err = self.mgr.check_mon_command({
@@ -550,6 +585,8 @@ class MdsService(CephService):
                      'mds', 'allow'],
         })
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
@@ -567,6 +604,13 @@ class MdsService(CephService):
                     return daemon
         # if no mds found, return empty Daemon Desc
         return DaemonDescription()
+
+    def purge(self, service_name: str) -> None:
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': service_name,
+            'name': 'mds_join_fs',
+        })
 
 
 class RgwService(CephService):
@@ -628,17 +672,20 @@ class RgwService(CephService):
                 'val': key_data,
             })
 
+        # TODO: fail, if we don't have a spec
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        rgw_id, host = daemon_spec.daemon_id, daemon_spec.host
+        rgw_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         keyring = self.get_keyring(rgw_id)
 
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
@@ -674,7 +721,7 @@ class RgwService(CephService):
             try:
                 j = json.loads(out)
                 return j.get('realms', [])
-            except Exception as e:
+            except Exception:
                 raise OrchestratorError('failed to parse realm info')
 
         def create_realm() -> None:
@@ -685,6 +732,9 @@ class RgwService(CephService):
                    '--rgw-realm=%s' % spec.rgw_realm,
                    '--default']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to create RGW realm "%s": %r' % (spec.rgw_realm, result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('created realm: %s' % spec.rgw_realm)
 
         def get_zonegroups() -> List[str]:
@@ -700,7 +750,7 @@ class RgwService(CephService):
             try:
                 j = json.loads(out)
                 return j.get('zonegroups', [])
-            except Exception as e:
+            except Exception:
                 raise OrchestratorError('failed to parse zonegroup info')
 
         def create_zonegroup() -> None:
@@ -711,6 +761,9 @@ class RgwService(CephService):
                    '--rgw-zonegroup=default',
                    '--master', '--default']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to create RGW zonegroup "%s": %r' % ('default', result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('created zonegroup: default')
 
         def create_zonegroup_if_required() -> None:
@@ -731,7 +784,7 @@ class RgwService(CephService):
             try:
                 j = json.loads(out)
                 return j.get('zones', [])
-            except Exception as e:
+            except Exception:
                 raise OrchestratorError('failed to parse zone info')
 
         def create_zone() -> None:
@@ -743,6 +796,9 @@ class RgwService(CephService):
                    '--rgw-zone=%s' % spec.rgw_zone,
                    '--master', '--default']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to create RGW zone "%s": %r' % (spec.rgw_zone, result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('created zone: %s' % spec.rgw_zone)
 
         changes = False
@@ -766,6 +822,9 @@ class RgwService(CephService):
                    '--rgw-realm=%s' % spec.rgw_realm,
                    '--commit']
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if result.returncode:
+                err = 'failed to update RGW period: %r' % (result.stderr)
+                raise OrchestratorError(err)
             self.mgr.log.info('updated period')
 
 
@@ -774,7 +833,7 @@ class RbdMirrorService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
-        daemon_id, host = daemon_spec.daemon_id, daemon_spec.host
+        daemon_id, _ = daemon_spec.daemon_id, daemon_spec.host
 
         ret, keyring, err = self.mgr.check_mon_command({
             'prefix': 'auth get-or-create',
@@ -784,6 +843,8 @@ class RbdMirrorService(CephService):
         })
 
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
@@ -803,6 +864,8 @@ class CrashService(CephService):
         })
 
         daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 
@@ -935,6 +998,6 @@ class CephadmExporter(CephadmService):
         }
         return config, deps
 
-    def purge(self) -> None:
+    def purge(self, service_name: str) -> None:
         logger.info("Purging cephadm-exporter settings from mon K/V store")
         self.mgr._clear_exporter_config_settings()

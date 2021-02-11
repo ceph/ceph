@@ -2,12 +2,12 @@ import json
 import logging
 import time
 import uuid
-from typing import TYPE_CHECKING, Optional, Dict
+from typing import TYPE_CHECKING, Optional, Dict, List
 
 import orchestrator
 from cephadm.serve import CephadmServe
-from cephadm.utils import name_to_config_section, CEPH_UPGRADE_ORDER
-from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service, service_to_daemon_types
+from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER
+from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -21,26 +21,29 @@ class UpgradeState:
                  target_name: str,
                  progress_id: str,
                  target_id: Optional[str] = None,
-                 repo_digest: Optional[str] = None,
+                 target_digests: Optional[List[str]] = None,
                  target_version: Optional[str] = None,
                  error: Optional[str] = None,
                  paused: Optional[bool] = None,
+                 fs_original_max_mds: Optional[Dict[str, int]] = None,
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
         self.target_id: Optional[str] = target_id
-        self.repo_digest: Optional[str] = repo_digest
+        self.target_digests: Optional[List[str]] = target_digests
         self.target_version: Optional[str] = target_version
         self.error: Optional[str] = error
         self.paused: bool = paused or False
+        self.fs_original_max_mds: Optional[Dict[str, int]] = fs_original_max_mds
 
     def to_json(self) -> dict:
         return {
             'target_name': self._target_name,
             'progress_id': self.progress_id,
             'target_id': self.target_id,
-            'repo_digest': self.repo_digest,
+            'target_digests': self.target_digests,
             'target_version': self.target_version,
+            'fs_original_max_mds': self.fs_original_max_mds,
             'error': self.error,
             'paused': self.paused,
         }
@@ -48,7 +51,10 @@ class UpgradeState:
     @classmethod
     def from_json(cls, data: dict) -> Optional['UpgradeState']:
         if data:
-            return cls(**data)
+            c = {k: v for k, v in data.items()}
+            if 'repo_digest' in c:
+                c['target_digests'] = [c.pop('repo_digest')]
+            return cls(**c)
         else:
             return None
 
@@ -58,6 +64,7 @@ class CephadmUpgrade:
         'UPGRADE_NO_STANDBY_MGR',
         'UPGRADE_FAILED_PULL',
         'UPGRADE_REDEPLOY_DAEMON',
+        'UPGRADE_BAD_TARGET_VERSION',
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -74,10 +81,11 @@ class CephadmUpgrade:
         assert self.upgrade_state
         if not self.mgr.use_repo_digest:
             return self.upgrade_state._target_name
-        if not self.upgrade_state.repo_digest:
+        if not self.upgrade_state.target_digests:
             return self.upgrade_state._target_name
 
-        return self.upgrade_state.repo_digest
+        # FIXME: we assume the first digest is the best one to use
+        return self.upgrade_state.target_digests[0]
 
     def upgrade_status(self) -> orchestrator.UpgradeStatusSpec:
         r = orchestrator.UpgradeStatusSpec()
@@ -90,19 +98,50 @@ class CephadmUpgrade:
                 r.message = 'Upgrade paused'
         return r
 
+    def _check_target_version(self, version: str) -> Optional[str]:
+        try:
+            (major, minor, patch) = version.split('.')
+            assert int(minor) >= 0
+            # patch might be a number or {number}-g{sha1}
+        except ValueError:
+            return 'version must be in the form X.Y.Z (e.g., 15.2.3)'
+        if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
+            return 'cephadm only supports octopus (15.2.0) or later'
+
+        # to far a jump?
+        current_version = self.mgr.version.split('ceph version ')[1]
+        current_major, current_minor, current_patch = current_version.split('-')[0].split('.')
+        if int(current_major) < int(major) - 2:
+            return f'ceph can only upgrade 1 or 2 major versions at a time; {current_version} -> {version} is too big a jump'
+        if int(current_major) > int(major):
+            return f'ceph cannot downgrade major versions (from {current_version} to {version})'
+        if int(current_major) == int(major):
+            if int(current_minor) > int(minor):
+                return f'ceph cannot downgrade to a {"rc" if minor == "1" else "dev"} release'
+
+        # check mon min
+        monmap = self.mgr.get("mon_map")
+        mon_min = monmap.get("min_mon_release", 0)
+        if mon_min < int(major) - 2:
+            return f'min_mon_release ({mon_min}) < target {major} - 2; first complete an upgrade to an earlier release'
+
+        # check osd min
+        osdmap = self.mgr.get("osd_map")
+        osd_min_name = osdmap.get("require_osd_release", "argonaut")
+        osd_min = ceph_release_to_major(osd_min_name)
+        if osd_min < int(major) - 2:
+            return f'require_osd_release ({osd_min_name} or {osd_min}) < target {major} - 2; first complete an upgrade to an earlier release'
+
+        return None
+
     def upgrade_start(self, image: str, version: str) -> str:
         if self.mgr.mode != 'root':
             raise OrchestratorError('upgrade is not supported in %s mode' % (
                 self.mgr.mode))
         if version:
-            try:
-                (major, minor, patch) = version.split('.')
-                assert int(minor) >= 0
-                assert int(patch) >= 0
-            except:
-                raise OrchestratorError('version must be in the form X.Y.Z (e.g., 15.2.3)')
-            if int(major) < 15 or (int(major) == 15 and int(minor) < 2):
-                raise OrchestratorError('cephadm only supports octopus (15.2.0) or later')
+            version_error = self._check_target_version(version)
+            if version_error:
+                raise OrchestratorError(version_error)
             target_name = self.mgr.container_image_base + ':v' + version
         elif image:
             target_name = image
@@ -241,6 +280,75 @@ class CephadmUpgrade:
                 image_settings[opt['section']] = opt['value']
         return image_settings
 
+    def _prepare_for_mds_upgrade(
+        self,
+        target_major: str,
+        need_upgrade: List[DaemonDescription]
+    ) -> bool:
+        # are any daemons running a different major version?
+        scale_down = False
+        for name, info in self.mgr.get("mds_metadata").items():
+            version = info.get("ceph_version_short")
+            major_version = None
+            if version:
+                major_version = version.split('.')[0]
+            if not major_version:
+                self.mgr.log.info('Upgrade: mds.%s version is not known, will retry' % name)
+                time.sleep(5)
+                return False
+            if int(major_version) < int(target_major):
+                scale_down = True
+
+        if not scale_down:
+            self.mgr.log.debug('Upgrade: All MDS daemons run same major version')
+            return True
+
+        # scale down all filesystems to 1 MDS
+        assert self.upgrade_state
+        if not self.upgrade_state.fs_original_max_mds:
+            self.upgrade_state.fs_original_max_mds = {}
+        fsmap = self.mgr.get("fs_map")
+        continue_upgrade = True
+        for i in fsmap.get('filesystems', []):
+            fs = i["mdsmap"]
+            fs_id = i["id"]
+            fs_name = fs["fs_name"]
+
+            # scale down this filesystem?
+            if fs["max_mds"] > 1:
+                self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
+                    fs_name
+                ))
+                if fs_id not in self.upgrade_state.fs_original_max_mds:
+                    self.upgrade_state.fs_original_max_mds[fs_id] = fs['max_mds']
+                    self._save_upgrade_state()
+                ret, out, err = self.mgr.check_mon_command({
+                    'prefix': 'fs set',
+                    'fs_name': fs_name,
+                    'var': 'max_mds',
+                    'val': '1',
+                })
+                continue_upgrade = False
+                continue
+
+            if len(fs['info']) > 1:
+                self.mgr.log.info('Upgrade: Waiting for fs %s to scale down to 1 MDS' % (fs_name))
+                time.sleep(10)
+                continue_upgrade = False
+                continue
+
+            lone_mds = list(fs['info'].values())[0]
+            if lone_mds['state'] != 'up:active':
+                self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
+                    lone_mds['name'],
+                    lone_mds['state'],
+                ))
+                time.sleep(10)
+                continue_upgrade = False
+                continue
+
+        return continue_upgrade
+
     def _do_upgrade(self):
         # type: () -> None
         if not self.upgrade_state:
@@ -249,11 +357,13 @@ class CephadmUpgrade:
 
         target_image = self.target_image
         target_id = self.upgrade_state.target_id
-        if not target_id or (self.mgr.use_repo_digest and not self.upgrade_state.repo_digest):
+        target_digests = self.upgrade_state.target_digests
+        target_version = self.upgrade_state.target_version
+        if not target_id or not target_version or not target_digests:
             # need to learn the container hash
             logger.info('Upgrade: First pull of %s' % target_image)
             try:
-                target_id, target_version, repo_digest = CephadmServe(self.mgr)._get_container_image_info(
+                target_id, target_version, target_digests = CephadmServe(self.mgr)._get_container_image_info(
                     target_image)
             except OrchestratorError as e:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
@@ -263,37 +373,64 @@ class CephadmUpgrade:
                     'detail': [str(e)],
                 })
                 return
+            if not target_version:
+                self._fail_upgrade('UPGRADE_FAILED_PULL', {
+                    'severity': 'warning',
+                    'summary': 'Upgrade: failed to pull target image',
+                    'count': 1,
+                    'detail': ['unable to extract ceph version from container'],
+                })
+                return
             self.upgrade_state.target_id = target_id
-            self.upgrade_state.target_version = target_version
-            self.upgrade_state.repo_digest = repo_digest
+            # extract the version portion of 'ceph version {version} ({sha1})'
+            self.upgrade_state.target_version = target_version.split(' ')[2]
+            self.upgrade_state.target_digests = target_digests
             self._save_upgrade_state()
             target_image = self.target_image
-        target_version = self.upgrade_state.target_version
-        logger.info('Upgrade: Target is %s with id %s' % (target_image,
-                                                          target_id))
+        if target_digests is None:
+            target_digests = []
+        if target_version.startswith('ceph version '):
+            # tolerate/fix upgrade state from older version
+            self.upgrade_state.target_version = target_version.split(' ')[2]
+            target_version = self.upgrade_state.target_version
+        target_major, target_minor, target_patch = target_version.split('.')
+        target_major_name = self.mgr.lookup_release_name(int(target_major))
+        logger.info('Upgrade: Target is version %s (%s), container %s digests %s' % (
+            target_version, target_major_name, target_image, target_digests))
+
+        version_error = self._check_target_version(target_version)
+        if version_error:
+            self._fail_upgrade('UPGRADE_BAD_TARGET_VERSION', {
+                'severity': 'error',
+                'summary': f'Upgrade: cannot upgrade/downgrade to {target_version}',
+                'count': 1,
+                'detail': [version_error],
+            })
+            return
 
         image_settings = self.get_distinct_container_image_settings()
 
         daemons = self.mgr.cache.get_daemons()
         done = 0
         for daemon_type in CEPH_UPGRADE_ORDER:
-            logger.info('Upgrade: Checking %s daemons...' % daemon_type)
+            logger.info('Upgrade: Checking %s daemons' % daemon_type)
+
             need_upgrade_self = False
+            need_upgrade = []
             for d in daemons:
                 if d.daemon_type != daemon_type:
                     continue
-                if d.container_image_id == target_id:
-                    logger.debug('daemon %s.%s version correct' % (
+                if any(d in target_digests for d in (d.container_image_digests or [])):
+                    logger.debug('daemon %s.%s container digest correct' % (
                         daemon_type, d.daemon_id))
                     done += 1
                     continue
                 logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
                     daemon_type, d.daemon_id,
-                    d.container_image_name, d.container_image_id, d.version))
+                    d.container_image_name, d.container_image_digests, d.version))
 
                 assert d.daemon_type is not None
                 assert d.daemon_id is not None
-                assert d.hostname is not None
 
                 if self.mgr.daemon_is_self(d.daemon_type, d.daemon_id):
                     logger.info('Upgrade: Need to upgrade myself (mgr.%s)' %
@@ -301,11 +438,26 @@ class CephadmUpgrade:
                     need_upgrade_self = True
                     continue
 
+                need_upgrade.append(d)
+
+            # prepare filesystems for daemon upgrades?
+            if (
+                daemon_type == 'mds'
+                and need_upgrade
+                and not self._prepare_for_mds_upgrade(target_major, need_upgrade)
+            ):
+                return
+
+            for d in need_upgrade:
+                assert d.daemon_type is not None
+                assert d.daemon_id is not None
+                assert d.hostname is not None
+
                 # make sure host has latest container image
                 out, errs, code = CephadmServe(self.mgr)._run_cephadm(
                     d.hostname, '', 'inspect-image', [],
                     image=target_image, no_fsid=True, error_ok=True)
-                if code or json.loads(''.join(out)).get('image_id') != target_id:
+                if code or not any(d in target_digests for d in json.loads(''.join(out)).get('repo_digests', [])):
                     logger.info('Upgrade: Pulling %s on %s' % (target_image,
                                                                d.hostname))
                     out, errs, code = CephadmServe(self.mgr)._run_cephadm(
@@ -322,10 +474,10 @@ class CephadmUpgrade:
                         })
                         return
                     r = json.loads(''.join(out))
-                    if r.get('image_id') != target_id:
-                        logger.info('Upgrade: image %s pull on %s got new image %s (not %s), restarting' % (
-                            target_image, d.hostname, r['image_id'], target_id))
-                        self.upgrade_state.target_id = r['image_id']
+                    if not any(d in target_digests for d in r.get('repo_digests', [])):
+                        logger.info('Upgrade: image %s pull on %s got new digests %s (not %s), restarting' % (
+                            target_image, d.hostname, r['repo_digests'], target_digests))
+                        self.upgrade_state.target_digests = r['repo_digests']
                         self._save_upgrade_state()
                         return
 
@@ -338,7 +490,7 @@ class CephadmUpgrade:
                         continue
                 if not self._wait_for_ok_to_stop(d):
                     return
-                logger.info('Upgrade: Redeploying %s.%s' %
+                logger.info('Upgrade: Updating %s.%s' %
                             (d.daemon_type, d.daemon_id))
                 try:
                     self.mgr._daemon_action(
@@ -386,14 +538,15 @@ class CephadmUpgrade:
             })
             j = json.loads(out_ver)
             for version, count in j.get(daemon_type, {}).items():
-                if version != target_version:
+                short_version = version.split(' ')[2]
+                if short_version != target_version:
                     logger.warning(
                         'Upgrade: %d %s daemon(s) are %s != target %s' %
-                        (count, daemon_type, version, target_version))
+                        (count, daemon_type, short_version, target_version))
 
             # push down configs
             if image_settings.get(daemon_type) != target_image:
-                logger.info('Upgrade: Setting container_image for all %s...' %
+                logger.info('Upgrade: Setting container_image for all %s' %
                             daemon_type)
                 self.mgr.set_container_image(name_to_config_section(daemon_type), target_image)
             to_clean = []
@@ -401,7 +554,7 @@ class CephadmUpgrade:
                 if section.startswith(name_to_config_section(daemon_type) + '.'):
                     to_clean.append(section)
             if to_clean:
-                logger.debug('Upgrade: Cleaning up container_image for %s...' %
+                logger.debug('Upgrade: Cleaning up container_image for %s' %
                              to_clean)
                 for section in to_clean:
                     ret, image, err = self.mgr.check_mon_command({
@@ -412,6 +565,39 @@ class CephadmUpgrade:
 
             logger.info('Upgrade: All %s daemons are up to date.' %
                         daemon_type)
+
+            # complete osd upgrade?
+            if daemon_type == 'osd':
+                osdmap = self.mgr.get("osd_map")
+                osd_min_name = osdmap.get("require_osd_release", "argonaut")
+                osd_min = ceph_release_to_major(osd_min_name)
+                if osd_min < int(target_major):
+                    logger.info(
+                        f'Upgrade: Setting require_osd_release to {target_major} {target_major_name}')
+                    ret, _, err = self.mgr.check_mon_command({
+                        'prefix': 'osd require-osd-release',
+                        'release': target_major_name,
+                    })
+
+            # complete mds upgrade?
+            if daemon_type == 'mds' and self.upgrade_state.fs_original_max_mds:
+                for i in self.mgr.get("fs_map")['filesystems']:
+                    fs_id = i["id"]
+                    fs_name = i['mdsmap']['fs_name']
+                    new_max = self.upgrade_state.fs_original_max_mds.get(fs_id)
+                    if new_max:
+                        self.mgr.log.info('Upgrade: Scaling up filesystem %s max_mds to %d' % (
+                            fs_name, new_max
+                        ))
+                        ret, _, err = self.mgr.check_mon_command({
+                            'prefix': 'fs set',
+                            'fs_name': fs_name,
+                            'var': 'max_mds',
+                            'val': str(new_max),
+                        })
+
+                self.upgrade_state.fs_original_max_mds = {}
+                self._save_upgrade_state()
 
         # clean up
         logger.info('Upgrade: Finalizing container_image settings')

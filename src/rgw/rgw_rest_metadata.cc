@@ -59,7 +59,7 @@ void RGWOp_Metadata_Get::execute(optional_yield y) {
   /* Get keys */
   op_ret = meta_mgr->get(metadata_key, s->formatter, s->yield, s);
   if (op_ret < 0) {
-    dout(5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
+    ldpp_dout(s, 5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
 
@@ -266,7 +266,7 @@ void RGWOp_Metadata_Put::execute(optional_yield y) {
   op_ret = store->ctl()->meta.mgr->put(metadata_key, bl, s->yield, s, sync_type,
 				       false, &ondisk_version);
   if (op_ret < 0) {
-    dout(5) << "ERROR: can't put key: " << cpp_strerror(op_ret) << dendl;
+    ldpp_dout(s, 5) << "ERROR: can't put key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
   // translate internal codes into return header
@@ -296,7 +296,7 @@ void RGWOp_Metadata_Delete::execute(optional_yield y) {
   frame_metadata_key(s, metadata_key);
   op_ret = store->ctl()->meta.mgr->remove(metadata_key, s->yield, s);
   if (op_ret < 0) {
-    dout(5) << "ERROR: can't remove key: " << cpp_strerror(op_ret) << dendl;
+    ldpp_dout(s, 5) << "ERROR: can't remove key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
   op_ret = 0;

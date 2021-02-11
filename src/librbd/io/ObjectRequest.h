@@ -484,8 +484,7 @@ private:
   void list_from_parent();
   void handle_list_from_parent(int r);
 
-  void zero_initial_extent(const interval_set<uint64_t>& written_extents,
-                           bool dne);
+  void zero_extent(uint64_t snap_id, bool dne);
 };
 
 } // namespace io

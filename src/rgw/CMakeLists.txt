@@ -182,6 +182,8 @@ target_include_directories(rgw_common PRIVATE "${LUA_INCLUDE_DIR}")
 
 target_include_directories(rgw_common PRIVATE
   $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(rgw_common PRIVATE
+  $<TARGET_PROPERTY:spawn,INTERFACE_COMPILE_DEFINITIONS>)
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -441,5 +443,8 @@ if(WITH_TESTS)
     DESTINATION bin)
 endif(WITH_TESTS)
 
-install(PROGRAMS rgw-orphan-list
+install(PROGRAMS
+  rgw-gap-list
+  rgw-gap-list-comparator
+  rgw-orphan-list
   DESTINATION bin)

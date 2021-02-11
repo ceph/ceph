@@ -9,7 +9,7 @@ from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, ServiceSpecValidationError
 
 from cephadm.module import HostAssignment
-from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError, HostSpec
+from orchestrator import DaemonDescription, OrchestratorValidationError, OrchestratorError
 
 
 def wrapper(func):
@@ -69,7 +69,8 @@ def _or(expected, *inners):
         assert False, f"_or failed: {expected}"
 
 
-def _always_true(_): pass
+def _always_true(_):
+    pass
 
 
 def k(s):
@@ -82,19 +83,18 @@ def get_result(key, results):
             if o != k and o != '*':
                 return False
         return True
-    return [v for k, v in results
-     if match(k)][0]
+    return [v for k, v in results if match(k)][0]
 
 
 def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
 
     if spec_section == 'hosts':
-        mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(
-                    hosts=explicit,
-                    count=count,
-                ))
+        mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(  # noqa: E731
+            hosts=explicit,
+            count=count,
+        ))
     elif spec_section == 'label':
-        mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(
+        mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(  # noqa: E731
             label='mylabel',
             count=count,
         ))
@@ -105,17 +105,17 @@ def mk_spec_and_host(spec_section, hosts, explicit_key, explicit, count):
             '12': '[1-2]',
             '123': '*',
         }[explicit_key]
-        mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(
-                    host_pattern=pattern,
-                    count=count,
-                ))
+        mk_spec = lambda: ServiceSpec('mgr', placement=PlacementSpec(  # noqa: E731
+            host_pattern=pattern,
+            count=count,
+        ))
     else:
         assert False
 
     hosts = [
-            HostSpec(h, labels=['mylabel']) if h in explicit else HostSpec(h)
-            for h in hosts
-        ]
+        HostSpec(h, labels=['mylabel']) if h in explicit else HostSpec(h)
+        for h in hosts
+    ]
 
     return mk_spec, hosts
 
@@ -183,14 +183,15 @@ test_explicit_scheduler_results = [
     (k("123 123 * *"), exactly('1', '2', '3')),
 ]
 
+
 @pytest.mark.parametrize("spec_section_key,spec_section",
-    [
+    [   # noqa: E128
         ('h', 'hosts'),
         ('l', 'label'),
         ('p', 'host_pattern'),
     ])
 @pytest.mark.parametrize("count",
-    [
+    [   # noqa: E128
         None,
         0,
         1,
@@ -198,14 +199,14 @@ test_explicit_scheduler_results = [
         3,
     ])
 @pytest.mark.parametrize("explicit_key, explicit",
-    [
+    [   # noqa: E128
         ('e', []),
         ('1', ['1']),
         ('12', ['1', '2']),
         ('123', ['1', '2', '3']),
     ])
 @pytest.mark.parametrize("host_key, hosts",
-    [
+    [   # noqa: E128
         ('1', ['1']),
         ('12', ['1', '2']),
         ('123', ['1', '2', '3']),
@@ -264,13 +265,13 @@ test_scheduler_daemons_results = [
 
 
 @pytest.mark.parametrize("spec_section_key,spec_section",
-    [
+    [   # noqa: E128
         ('h', 'hosts'),
         ('l', 'label'),
         ('p', 'host_pattern'),
     ])
 @pytest.mark.parametrize("daemons_key, daemons",
-    [
+    [   # noqa: E128
         ('e', []),
         ('1', ['1']),
         ('3', ['3']),
@@ -280,19 +281,19 @@ test_scheduler_daemons_results = [
         ('123', ['1', '2', '3']),
     ])
 @pytest.mark.parametrize("count",
-    [
+    [   # noqa: E128
         None,
         1,
         2,
         3,
     ])
 @pytest.mark.parametrize("explicit_key, explicit",
-    [
+    [   # noqa: E128
         ('1', ['1']),
         ('123', ['1', '2', '3']),
     ])
 @pytest.mark.parametrize("host_key, hosts",
-    [
+    [   # noqa: E128
         ('1', ['1']),
         ('12', ['1', '2']),
         ('123', ['1', '2', '3']),
@@ -326,8 +327,9 @@ class NodeAssignmentTest(NamedTuple):
     daemons: List[DaemonDescription]
     expected: List[str]
 
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
-    [
+    [   # noqa: E128
         # just hosts
         NodeAssignmentTest(
             'mgr',
@@ -449,8 +451,9 @@ class NodeAssignmentTest2(NamedTuple):
     expected_len: int
     in_set: List[str]
 
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,in_set",
-    [
+    [   # noqa: E128
         # just count
         NodeAssignmentTest2(
             'mgr',
@@ -475,7 +478,7 @@ class NodeAssignmentTest2(NamedTuple):
             'mgr',
             PlacementSpec(count=1, hosts='host1 host2 host3'.split()),
             'host1 host2 host3'.split(),
-            [DaemonDescription('mgr', 'mgr.a', 'host1'),],
+            [DaemonDescription('mgr', 'mgr.a', 'host1')],
             1,
             ['host1', 'host2', 'host3'],
         ),
@@ -520,8 +523,9 @@ def test_node_assignment2(service_type, placement, hosts,
     for h in [h.hostname for h in hosts]:
         assert h in in_set
 
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected_len,must_have",
-    [
+    [   # noqa: E128
         # hosts + (smaller) count, (more) existing
         NodeAssignmentTest2(
             'mgr',
@@ -553,7 +557,7 @@ def test_node_assignment3(service_type, placement, hosts,
 
 
 @pytest.mark.parametrize("placement",
-    [
+    [   # noqa: E128
         ('1 *'),
         ('* label:foo'),
         ('* host1 host2'),
@@ -561,9 +565,9 @@ def test_node_assignment3(service_type, placement, hosts,
     ])
 def test_bad_placements(placement):
     try:
-        s = PlacementSpec.from_string(placement.split(' '))
+        PlacementSpec.from_string(placement.split(' '))
         assert False
-    except ServiceSpecValidationError as e:
+    except ServiceSpecValidationError:
         pass
 
 
@@ -573,8 +577,10 @@ class NodeAssignmentTestBadSpec(NamedTuple):
     hosts: List[str]
     daemons: List[DaemonDescription]
     expected: str
+
+
 @pytest.mark.parametrize("service_type,placement,hosts,daemons,expected",
-    [
+    [   # noqa: E128
         # unknown host
         NodeAssignmentTestBadSpec(
             'mgr',
@@ -607,6 +613,7 @@ def test_bad_specs(service_type, placement, hosts, daemons, expected):
             hosts=[HostSpec(h) for h in hosts],
             get_daemons_func=lambda _: daemons).place()
     assert str(e.value) == expected
+
 
 class ActiveAssignmentTest(NamedTuple):
     service_type: str
@@ -757,6 +764,7 @@ def test_active_assignment(service_type, placement, hosts, daemons, expected):
         get_daemons_func=lambda _: daemons).place()
     assert sorted([h.hostname for h in hosts]) in expected
 
+
 class OddMonsTest(NamedTuple):
     service_type: str
     placement: PlacementSpec
@@ -834,28 +842,27 @@ class OddMonsTest(NamedTuple):
                                  ],
                                  3
                              ),
-                            OddMonsTest(
-                                'mon',
-                                PlacementSpec(count=5),
-                                'host1 host2 host3 host4'.split(),
-                                [
-                                   DaemonDescription('mon', 'a', 'host1'),
-                                   DaemonDescription('mon', 'b', 'host2'),
-                                ],
-                                3
-                            ),
-                            OddMonsTest(
-                                'mon',
-                                PlacementSpec(hosts='host1 host2 host3 host4'.split()),
-                                'host1 host2 host3 host4 host5'.split(),
-                                [
-                                   DaemonDescription('mon', 'a', 'host1'),
-                                   DaemonDescription('mon', 'b', 'host2'),
-                                   DaemonDescription('mon', 'c', 'host3'),
-                                ],
-                                3
-                            ),
-
+                             OddMonsTest(
+                                 'mon',
+                                 PlacementSpec(count=5),
+                                 'host1 host2 host3 host4'.split(),
+                                 [
+                                     DaemonDescription('mon', 'a', 'host1'),
+                                     DaemonDescription('mon', 'b', 'host2'),
+                                 ],
+                                 3
+                             ),
+                             OddMonsTest(
+                                 'mon',
+                                 PlacementSpec(hosts='host1 host2 host3 host4'.split()),
+                                 'host1 host2 host3 host4 host5'.split(),
+                                 [
+                                     DaemonDescription('mon', 'a', 'host1'),
+                                     DaemonDescription('mon', 'b', 'host2'),
+                                     DaemonDescription('mon', 'c', 'host3'),
+                                 ],
+                                 3
+                             ),
                          ])
 def test_odd_mons(service_type, placement, hosts, daemons, expected_count):
 

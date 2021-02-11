@@ -423,19 +423,6 @@ Ceph disables TCP buffering by default.
 :Default: ``0``
 
 
-``ms_tcp_read_timeout``
-
-:Description: If a client or daemon makes a request to another Ceph daemon and
-              does not drop an unused connection, the ``ms tcp read timeout`` 
-              defines the connection as idle after the specified number 
-              of seconds.
-
-:Type: Unsigned 64-bit Integer
-:Required: No
-:Default: ``900`` 15 minutes.
-
-
-
 .. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../start/hardware-recommendations#networks
 .. _hardware recommendations: ../../../start/hardware-recommendations

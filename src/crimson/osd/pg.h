@@ -518,8 +518,8 @@ private:
   void do_peering_event(
     const boost::statechart::event_base &evt,
     PeeringCtx &rctx);
-  osd_op_params_t&& fill_op_params_bump_pg_version(
-    osd_op_params_t&& osd_op_p,
+  void fill_op_params_bump_pg_version(
+    osd_op_params_t& osd_op_p,
     Ref<MOSDOp> m,
     const bool user_modify);
   seastar::future<Ref<MOSDOpReply>> handle_failed_op(
@@ -527,16 +527,20 @@ private:
     ObjectContextRef obc,
     const OpsExecuter& ox,
     const MOSDOp& m) const;
-  seastar::future<Ref<MOSDOpReply>> do_osd_ops(
+  using do_osd_ops_ertr = crimson::errorator<
+   crimson::ct_error::eagain>;
+  do_osd_ops_ertr::future<Ref<MOSDOpReply>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,
     const OpInfo &op_info);
   seastar::future<Ref<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
   seastar::future<> submit_transaction(const OpInfo& op_info,
-				       const std::vector<OSDOp>& ops,
 				       ObjectContextRef&& obc,
 				       ceph::os::Transaction&& txn,
-				       const osd_op_params_t& oop);
+				       osd_op_params_t&& oop);
+  seastar::future<> repair_object(Ref<MOSDOp> m,
+               const hobject_t& oid,
+               eversion_t& v);
 
 private:
   OSDMapGate osdmap_gate;

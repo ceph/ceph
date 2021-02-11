@@ -497,8 +497,8 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
   dest_owner.set_id(owner->get_id());
   dest_owner.set_name(owner_info.display_name);
 
-  ldout(cct, 20) << "owner id=" << owner->get_id() << dendl;
-  ldout(cct, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
+  ldpp_dout(dpp, 20) << "owner id=" << owner->get_id() << dendl;
+  ldpp_dout(dpp, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
 
   RGWAccessControlList& dst_acl = dest.get_acl();
 
@@ -517,7 +517,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
         string email;
         rgw_user u;
         if (!src_grant.get_id(u)) {
-          ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+          ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
           return -EINVAL;
         }
         email = u.id;
@@ -533,7 +533,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
       {
         if (type.get_type() == ACL_TYPE_CANON_USER) {
           if (!src_grant.get_id(uid)) {
-            ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+            ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
             err_msg = "Invalid id";
             return -EINVAL;
           }
@@ -549,7 +549,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
           grant_ok = true;
           rgw_user new_id;
           new_grant.get_id(new_id);
-          ldout(cct, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
+          ldpp_dout(dpp, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
         }
       }
       break;
@@ -559,9 +559,9 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp, RGWUserCtl
         if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
           new_grant = src_grant;
           grant_ok = true;
-          ldout(cct, 10) << "new grant: " << uri << dendl;
+          ldpp_dout(dpp, 10) << "new grant: " << uri << dendl;
         } else {
-          ldout(cct, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
+          ldpp_dout(dpp, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
           err_msg = "Invalid group uri";
           return -EINVAL;
         }

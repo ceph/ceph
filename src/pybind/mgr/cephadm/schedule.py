@@ -3,7 +3,7 @@ import random
 from typing import List, Optional, Callable, Iterable, TypeVar, Set
 
 import orchestrator
-from ceph.deployment.service_spec import PlacementSpec, HostPlacementSpec, ServiceSpec
+from ceph.deployment.service_spec import HostPlacementSpec, ServiceSpec
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
 
@@ -124,9 +124,10 @@ class HostAssignment(object):
             logger.debug('Provided hosts: %s' % candidates)
             # if asked to place even number of mons, deploy 1 less
             if self.spec.service_type == 'mon' and (len(candidates) % 2) == 0:
-                logger.info("deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
-                    len(candidates) - 1, len(candidates)))
-                return candidates[0:len(candidates)-1]
+                count = len(candidates) - 1
+                logger.info("Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
+                    count, len(candidates)))
+                return candidates[0:count]
 
             # do not deploy ha-rgw on hosts that don't support virtual ips
             if self.spec.service_type == 'ha-rgw' and self.filter_new_host:
@@ -144,7 +145,7 @@ class HostAssignment(object):
             # is determining factor in how many mons will be placed
             if count >= len(candidates):
                 if (len(candidates) % 2) == 0:
-                    logger.info("deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
+                    logger.info("Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (
                         len(candidates) - 1, len(candidates)))
                     count = len(candidates) - 1
             # if count < number of candidates then count is determining
@@ -152,7 +153,7 @@ class HostAssignment(object):
             else:
                 if (count % 2) == 0:
                     logger.info(
-                        "deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (count - 1, count))
+                        "Deploying %s monitor(s) instead of %s so monitors may achieve consensus" % (count - 1, count))
                     count = count - 1
 
         # prefer hosts that already have services.
@@ -181,11 +182,11 @@ class HostAssignment(object):
                     if self.spec.service_type == 'ha-rgw':
                         logger.info(
                             f"Filtered out host {h.hostname} for ha-rgw. Could not verify host allowed virtual ips")
-                logger.info('filtered %s down to %s' % (old, others))
+                logger.debug('filtered %s down to %s' % (old, others))
 
             # ask the scheduler to return a set of hosts with a up to the value of <count>
             others = self.scheduler.place(others, need)
-            logger.info('Combine hosts with existing daemons %s + new hosts %s' % (
+            logger.debug('Combine hosts with existing daemons %s + new hosts %s' % (
                 hosts_with_daemons, others))
             # if a host already has the anticipated daemon, merge it with the candidates
             # to get a list of HostPlacementSpec that can be deployed on.
@@ -271,23 +272,23 @@ class HostAssignment(object):
         return existing
 
 
-def merge_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec]) -> Iterable[HostPlacementSpec]:
+def merge_hostspecs(lh: List[HostPlacementSpec], rh: List[HostPlacementSpec]) -> Iterable[HostPlacementSpec]:
     """
-    Merge two lists of HostPlacementSpec by hostname. always returns `l` first.
+    Merge two lists of HostPlacementSpec by hostname. always returns `lh` first.
 
     >>> list(merge_hostspecs([HostPlacementSpec(hostname='h', name='x', network='')],
     ...                      [HostPlacementSpec(hostname='h', name='y', network='')]))
     [HostPlacementSpec(hostname='h', network='', name='x')]
 
     """
-    l_names = {h.hostname for h in l}
-    yield from l
-    yield from (h for h in r if h.hostname not in l_names)
+    lh_names = {h.hostname for h in lh}
+    yield from lh
+    yield from (h for h in rh if h.hostname not in lh_names)
 
 
-def difference_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
+def difference_hostspecs(lh: List[HostPlacementSpec], rh: List[HostPlacementSpec]) -> List[HostPlacementSpec]:
     """
-    returns l "minus" r by hostname.
+    returns lh "minus" rh by hostname.
 
     >>> list(difference_hostspecs([HostPlacementSpec(hostname='h1', name='x', network=''),
     ...                           HostPlacementSpec(hostname='h2', name='y', network='')],
@@ -295,5 +296,5 @@ def difference_hostspecs(l: List[HostPlacementSpec], r: List[HostPlacementSpec])
     [HostPlacementSpec(hostname='h1', network='', name='x')]
 
     """
-    r_names = {h.hostname for h in r}
-    return [h for h in l if h.hostname not in r_names]
+    rh_names = {h.hostname for h in rh}
+    return [h for h in lh if h.hostname not in rh_names]

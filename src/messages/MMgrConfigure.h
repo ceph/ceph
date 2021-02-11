@@ -59,7 +59,12 @@ public:
     encode(stats_period, payload);
     encode(stats_threshold, payload);
     encode(osd_perf_metric_queries, payload);
-    encode(metric_config_message, payload);
+    if (metric_config_message && metric_config_message->should_encode(features)) {
+      encode(metric_config_message, payload);
+    } else {
+      boost::optional<MetricConfigMessage> empty;
+      encode(empty, payload);
+    }
   }
 
   std::string_view get_type_name() const override { return "mgrconfigure"; }

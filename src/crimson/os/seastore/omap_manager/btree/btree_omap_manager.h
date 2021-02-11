@@ -33,7 +33,7 @@ class BtreeOMapManager : public OMapManager {
    *
    * load omap tree root node
    */
-  using get_root_ertr = TransactionManager::read_extent_ertr;
+  using get_root_ertr = base_ertr;
   using get_root_ret = get_root_ertr::future<OMapNodeRef>;
   get_root_ret get_omap_root(const omap_root_t &omap_root, Transaction &t);
 
@@ -41,7 +41,7 @@ class BtreeOMapManager : public OMapManager {
    *
    * root has been splitted and need update omap_root_t
    */
-  using handle_root_split_ertr = TransactionManager::read_extent_ertr;
+  using handle_root_split_ertr = base_ertr;
   using handle_root_split_ret = handle_root_split_ertr::future<bool>;
   handle_root_split_ret handle_root_split(omap_root_t &omap_root, omap_context_t oc,
                                           OMapNode:: mutation_result_t mresult);
@@ -50,7 +50,7 @@ class BtreeOMapManager : public OMapManager {
    *
    * root node has only one item and it is not leaf node, need remove a layer
    */
-  using handle_root_merge_ertr = TransactionManager::read_extent_ertr;
+  using handle_root_merge_ertr = base_ertr;
   using handle_root_merge_ret = handle_root_merge_ertr::future<bool>;
   handle_root_merge_ret handle_root_merge(omap_root_t &omap_root, omap_context_t oc,
                                           OMapNode:: mutation_result_t mresult);

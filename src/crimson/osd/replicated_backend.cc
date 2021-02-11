@@ -43,7 +43,7 @@ seastar::future<crimson::osd::acked_peers_t>
 ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                        const hobject_t& hoid,
                                        ceph::os::Transaction&& txn,
-                                       const osd_op_params_t& osd_op_p,
+                                       osd_op_params_t&& osd_op_p,
                                        epoch_t min_epoch, epoch_t map_epoch,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {

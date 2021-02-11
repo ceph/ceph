@@ -13,14 +13,14 @@ from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.utils import datetime_now
 
-from mgr_util import format_bytes, to_pretty_timedelta, format_dimless
+from mgr_util import to_pretty_timedelta, format_dimless
 from mgr_module import MgrModule, HandleCommandResult, Option
 
 from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
     raise_if_exception, _cli_write_command, TrivialReadCompletion, OrchestratorError, \
-    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, HA_RGWSpec, \
+    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, GenericSpec
+    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -240,7 +240,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _get_device_locations(self, dev_id):
         # type: (str) -> List[DeviceLightLoc]
         locs = [d['location'] for d in self.get('devices')['devices'] if d['devid'] == dev_id]
-        return [DeviceLightLoc(**l) for l in sum(locs, [])]
+        return [DeviceLightLoc(**loc) for loc in sum(locs, [])]
 
     @_cli_read_command(prefix='device ls-lights')
     def _device_ls(self) -> HandleCommandResult:
@@ -284,7 +284,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 self._refresh_health()
             return HandleCommandResult(stdout=str(completion.result))
 
-        except:
+        except Exception:
             # There are several reasons the try: block might fail:
             # 1. the device no longer exist
             # 2. the device is no longer known to Ceph
@@ -560,7 +560,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             return HandleCommandResult(stdout="No services reported")
         elif format != Format.plain:
             if export:
-                data = [s.spec for s in services]
+                data = [s.spec for s in services if s.deleted is None]
                 return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
             else:
                 return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
@@ -588,10 +588,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     pl = '<unmanaged>'
                 else:
                     pl = s.spec.placement.pretty_str()
+                if s.deleted:
+                    refreshed = '<deleting>'
+                else:
+                    refreshed = nice_delta(now, s.last_refresh, ' ago')
+
                 table.add_row((
                     s.spec.service_name(),
                     '%d/%d' % (s.running, s.size),
-                    nice_delta(now, s.last_refresh, ' ago'),
+                    refreshed,
                     nice_delta(now, s.created),
                     pl,
                     ukn(s.container_image_name),
@@ -883,9 +888,10 @@ Usage:
                 raise OrchestratorValidationError(usage)
             spec = ServiceSpec.from_json(yaml.safe_load(inbuf))
         else:
-            spec = PlacementSpec.from_string(placement)
-            assert daemon_type
-            spec = ServiceSpec(daemon_type.value, placement=spec)
+            if not placement or not daemon_type:
+                raise OrchestratorValidationError(usage)
+            placement_spec = PlacementSpec.from_string(placement)
+            spec = ServiceSpec(daemon_type.value, placement=placement_spec)
 
         if daemon_type == ServiceType.mon:
             completion = self.add_mon(spec)
@@ -906,11 +912,11 @@ Usage:
         elif daemon_type == ServiceType.mds:
             completion = self.add_mds(spec)
         elif daemon_type == ServiceType.rgw:
-            completion = self.add_rgw(spec)
+            completion = self.add_rgw(cast(RGWSpec, spec))
         elif daemon_type == ServiceType.nfs:
-            completion = self.add_nfs(spec)
+            completion = self.add_nfs(cast(NFSServiceSpec, spec))
         elif daemon_type == ServiceType.iscsi:
-            completion = self.add_iscsi(spec)
+            completion = self.add_iscsi(cast(IscsiServiceSpec, spec))
         elif daemon_type == ServiceType.cephadm_exporter:
             completion = self.add_cephadm_exporter(spec)
         else:
@@ -1099,7 +1105,8 @@ Usage:
                 specs.append(spec)
         else:
             placementspec = PlacementSpec.from_string(placement)
-            assert service_type
+            if not service_type:
+                raise OrchestratorValidationError(usage)
             specs = [ServiceSpec(service_type.value, placement=placementspec,
                                  unmanaged=unmanaged, preview_only=dry_run)]
 
@@ -1343,29 +1350,36 @@ Usage:
         return HandleCommandResult()
 
     @_cli_read_command('orch status')
-    def _status(self, format: Format = Format.plain) -> HandleCommandResult:
+    def _status(self,
+                detail: bool = False,
+                format: Format = Format.plain) -> HandleCommandResult:
         """Report configured backend and its status"""
         o = self._select_orchestrator()
         if o is None:
             raise NoOrchestrator()
 
-        avail, why = self.available()
+        avail, why, module_details = self.available()
         result: Dict[str, Any] = {
-            "backend": o
+            "available": avail,
+            "backend": o,
         }
-        if avail is not None:
-            result['available'] = avail
-            if not avail:
-                result['reason'] = why
+
+        if avail:
+            result.update(module_details)
+        else:
+            result['reason'] = why
 
         if format != Format.plain:
             output = to_format(result, format, many=False, cls=None)
         else:
             output = "Backend: {0}".format(result['backend'])
-            if 'available' in result:
-                output += "\nAvailable: {0}".format(result['available'])
-                if 'reason' in result:
-                    output += ' ({0})'.format(result['reason'])
+            output += f"\nAvailable: {'Yes' if result['available'] else 'No'}"
+            if 'reason' in result:
+                output += ' ({0})'.format(result['reason'])
+            if 'paused' in result:
+                output += f"\nPaused: {'Yes' if result['paused'] else 'No'}"
+            if 'workers' in result and detail:
+                output += f"\nHost Parallelism: {result['workers']}"
         return HandleCommandResult(stdout=output)
 
     def self_test(self) -> None:

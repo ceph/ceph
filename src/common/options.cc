@@ -15,8 +15,9 @@
 // Definitions for enums
 #include "common/perf_counters.h"
 
-// rbd feature validation
+// rbd feature and io operation validation
 #include "librbd/Features.h"
+#include "librbd/io/IoOperations.h"
 
 using std::ostream;
 using std::ostringstream;
@@ -5577,6 +5578,11 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description("The maximum number concurrent IO operations, 0 for unlimited"),
 
+    Option("crimson_alien_op_num_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(16)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("The number of threads for serving alienized ObjectStore"),
+
     // ----------------------------
     // blk specific options
     Option("bdev_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -7762,6 +7768,29 @@ static std::vector<Option> get_rbd_options() {
     .set_default(50)
     .set_min(1)
     .set_description("minimum schedule tick (in milliseconds) for QoS"),
+
+    Option("rbd_qos_exclude_ops", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("optionally exclude ops from QoS")
+    .set_long_description(
+        "Optionally exclude ops from QoS. This setting accepts either "
+        "an integer bitmask value or comma-delimited string of op "
+        "names. This setting is always internally stored as an integer "
+        "bitmask value. The mapping between op bitmask value and op "
+        "name is as follows: +1 -> read, +2 -> write, +4 -> discard, "
+        "+8 -> write_same, +16 -> compare_and_write")
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_validator([](std::string *value, std::string *error_message) {
+        ostringstream ss;
+        uint64_t exclude_ops = librbd::io::rbd_io_operations_from_string(*value, &ss);
+        // Leave this in integer form to avoid breaking Cinder.  Someday
+        // we would like to present this in string form instead...
+        *value = stringify(exclude_ops);
+        if (ss.str().size()) {
+          return -EINVAL;
+        }
+        return 0;
+    }),
 
     Option("rbd_discard_on_zeroed_write_same", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

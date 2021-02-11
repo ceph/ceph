@@ -9,28 +9,37 @@ Scheduling Test Run
 Getting binaries
 ****************
 
-To run integration tests using teuthology, you need to have Ceph binaries
-built for your branch. Follow these steps to initiate the build process -
+Ceph binaries must be built for your branch before you can use teuthology to run integration tests on them. Follow these steps to build the Ceph binaries:
 
-#. Push the branch to `ceph-ci`_ repository. This triggers the process of
-   building the binaries on jenkins CI.
+#. Push the branch to the `ceph-ci`_ repository. This triggers the process of
+   building the binaries on the Jenkins CI.
 
-#. To confirm that the build process has been initiated, spot the branch name
-   at `Shaman`_. Little after the build process has been initiated, the single
-   entry with your branch name would multiply, each new entry for a different
-   combination of distro and flavour.
+#. To ensure that the build process has been initiated, confirm that the branch
+   name has appeared in the list of "Latest Builds Available" at `Shaman`_.
+   Soon after you start the build process, the testing infrastructrure adds
+   other, similarly-named builds to the list of "Latest Builds Available".
+   The names of these new builds will contain the names of various Linux
+   distributions of Linux and will be used to test your build against those
+   Linux distributions. 
 
-#. Wait until the packages are built and uploaded to `Chacra`_, and the
-   repository offering them are created. This is marked by colouring the entries
-   for the branch name green. Preferably, wait until each entry is coloured
-   green. Usually, it takes around 2-3 hours depending on the availability of
-   the machines.
+#. Wait for the packages to be built and uploaded to `Chacra`_, and wait for
+   the repositories offering the packages to be created. The entries for the
+   branch names in the list of "Latest Builds Available" on `Shaman`_ will turn
+   green to indicate that the packages have been uploaded to `Chacra`_ and to
+   indicate that their repositories have been created.  Wait until each entry
+   is coloured green. This usually takes between two and three hours depending
+   on the availability of the machines.
+   
+   The Chacra URL for a particular build can be queried from `the Chacra site`_.
 
-.. note:: Branch to be pushed on ceph-ci can be any branch, it shouldn't
-   necessarily be a PR branch.
+.. note:: The branch to be pushed on ceph-ci can be any branch. The branch does
+   not have to be a PR branch.
 
-.. note:: In case you are pushing master or any other standard branch, check
-   `Shaman`_ beforehand since it already might have builds ready for it.
+.. note:: If you intend to push master or any other standard branch, check
+   `Shaman`_ beforehand since it might already have completed builds for it.
+
+.. _the Chacra site: https://shaman.ceph.com/api/search/?status=ready&project=ceph
+
 
 Triggering Tests
 ****************
@@ -91,6 +100,8 @@ Other frequently used/useful options are ``-d`` (or ``--distro``),
 run). Run ``teuthology-suite --help`` to read description of these and every
 other options available.
 
+.. _teuthology_testing_qa_changes:
+
 Testing QA changes (without re-building binaires)
 *************************************************
 
@@ -136,22 +147,25 @@ config printed at the very beginning of the teuthology job.
 About Suites and Filters
 ************************
 
-See `Suites Inventory`_ for a list of suites of integration tests present
-right now. Alternatively, each directory under ``qa/suites`` in Ceph
-repository is an integration test suite, so looking within that directory
-to decide an appropriate argument for ``-s`` also works.
+See `Suites Inventory`_ for a list of available suites of integration tests.
+Each directory under ``qa/suites`` in the Ceph repository is an integration
+test suite, and arguments appropriate to follow ``-s`` can be found there.
 
-For picking an argument for ``--filter``, look within
-``qa/suites/<suite-name>/<subsuite-name>/tasks`` to get keywords for filtering
-tests. Each YAML file in there can trigger a bunch of tests; using the name of
-the file, without the extension part of the file name, as an argument to the
-``--filter`` will trigger those tests.
-For example, the sample command above uses ``cephfs-shell`` since there's a file
-named ``cephfs-shell.yaml`` in ``qa/suites/fs/basic_functional/tasks/``. In
-case, the file name doesn't hint what bunch of tests it would trigger, look at
-the contents of the file for ``modules`` attribute. For ``cephfs-shell.yaml``
-the ``modules`` attribute is ``tasks.cephfs.test_cephfs_shell`` which means
-it'll trigger all tests in ``qa/tasks/cephfs/test_cephfs_shell.py``.
+Keywords for filtering tests can be found in
+``qa/suites/<suite-name>/<subsuite-name>/tasks`` and can be used as arguments
+for ``--filter``. Each YAML file in that directory can trigger tests; using the
+name of the file without its filename extension as an argument to the
+``--filter`` triggers those tests. 
+
+For example, in the command above in the :ref:`Testing QA Changes
+<teuthology_testing_qa_changes>` section, `cephfs-shell`` is specified. 
+This works because there is a file named ``cephfs-shell.yaml`` in
+``qa/suites/fs/basic_functional/tasks/``.
+
+If the filename doesn't suggest what kind of tests it triggers, search the
+contents of the file for the ``modules`` attribute. For ``cephfs-shell.yaml``
+the ``modules`` attribute is ``tasks.cephfs.test_cephfs_shell``. This means
+that it triggers all tests in ``qa/tasks/cephfs/test_cephfs_shell.py``.
 
 Viewing Tests Results
 ---------------------

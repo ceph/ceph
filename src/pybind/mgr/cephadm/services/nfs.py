@@ -1,16 +1,12 @@
 import logging
-from typing import TYPE_CHECKING, Dict, Tuple, Any, List
+from typing import Dict, Tuple, Any, List, cast
 
 from ceph.deployment.service_spec import NFSServiceSpec
 import rados
 
-from orchestrator import OrchestratorError, DaemonDescription
+from orchestrator import DaemonDescription
 
-from cephadm import utils
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonSpec, CephService
-
-if TYPE_CHECKING:
-    from cephadm.module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +19,27 @@ class NFSService(CephService):
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
+        # TODO: Fail here, in case of no spec
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
+        # if spec is not attached to daemon_spec it is likely a redeploy or reconfig and
+        # spec should be in spec store
+        if not daemon_spec.spec:
+            service_name: str = "nfs." + daemon_spec.daemon_id.split('.')[0]
+            if service_name in self.mgr.spec_store:
+                daemon_spec.spec = cast(
+                    NFSServiceSpec, self.mgr.spec_store[service_name].spec)
         assert daemon_spec.spec
 
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = daemon_spec.spec
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         logger.info('Create daemon %s on host %s with spec %s' % (
             daemon_id, host, spec))
@@ -110,7 +116,7 @@ class NFSService(CephService):
             exists = True
             try:
                 ioctx.stat(obj)
-            except rados.ObjectNotFound as e:
+            except rados.ObjectNotFound:
                 exists = False
 
             if exists and not clobber:

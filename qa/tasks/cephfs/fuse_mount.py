@@ -83,7 +83,10 @@ class FuseMount(CephFSMount):
             daemon_signal,
         ]
 
-        fuse_cmd = ['ceph-fuse', "-f"]
+        fuse_cmd = [
+            'ceph-fuse', "-f",
+            "--admin-socket", "/var/run/ceph/$cluster-$name.$pid.asok",
+        ]
         if self.client_id is not None:
             fuse_cmd += ['--id', self.client_id]
         if self.client_keyring_path and self.client_id is not None:

@@ -2348,7 +2348,7 @@ BlueStore::OldExtent* BlueStore::OldExtent::create(CollectionRef c,
 						   BlobRef& b) {
   OldExtent* oe = new OldExtent(lo, o, l, b);
   b->put_ref(c.get(), o, l, &(oe->r));
-  oe->blob_empty = b->get_referenced_bytes() == 0;
+  oe->blob_empty = !b->is_referenced();
   return oe;
 }
 
@@ -3504,7 +3504,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 // decremented. And another 'putting' thread on the instance will release it.
 //
 void BlueStore::Onode::get() {
-  if (++nref == 2) {
+  if (++nref >= 2 && !pinned) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     std::lock_guard l(ocs->lock);
     bool was_pinned = pinned;
@@ -3524,15 +3524,11 @@ void BlueStore::Onode::put() {
   if (n == 2) {
     OnodeCacheShard* ocs = c->get_onode_cache();
     std::lock_guard l(ocs->lock);
-    bool was_pinned = pinned;
+    bool need_unpin = pinned;
     pinned = pinned && nref > 2; // intentionally use > not >= as we have
-    // +1 due to pinned state
-    bool r = was_pinned && !pinned;
-    // additional decrement for newly unpinned instance
-    if (r) {
-      n = --nref;
-    }
-    if (cached && r) {
+                                 // +1 due to pinned state
+    need_unpin = need_unpin && !pinned;
+    if (cached && need_unpin) {
       if (exists) {
         ocs->_unpin(this);
       } else {
@@ -3540,6 +3536,12 @@ void BlueStore::Onode::put() {
         // remove will also decrement nref and delete Onode
         c->onode_map._remove(oid);
       }
+    }
+    // additional decrement for newly unpinned instance
+    // should be the last action since Onode can be released
+    // at any point after this decrement
+    if (need_unpin) {
+      n = --nref;
     }
   }
   if (n == 0) {
@@ -4017,7 +4019,7 @@ void BlueStore::Collection::split_cache(
 
       p = onode_map.onode_map.erase(p);
       dest->onode_map.onode_map[o->oid] = o;
-      if (get_onode_cache() != dest->get_onode_cache()) {
+      if (o->cached) {
         get_onode_cache()->move_pinned(dest->get_onode_cache(), o.get());
       }
       o->c = dest;
@@ -7450,6 +7452,34 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
     }
   } // for (auto& i : ref_map)
 
+  {
+    auto &sbm = o->extent_map.spanning_blob_map;
+    size_t broken = 0;
+    BlobRef first_broken;
+    for (auto it = sbm.begin(); it != sbm.end();) {
+      auto it1 = it++;
+      if (ref_map.count(it1->second) == 0) {
+        if (!broken) {
+          first_broken = it1->second;
+          ++errors;
+        }
+        broken++;
+        if (repairer) {
+          sbm.erase(it1);
+        }
+      }
+    }
+    if (broken) {
+      derr << "fsck error: " << oid << " - " << broken
+           << " zombie spanning blob(s) found, the first one: "
+           << *first_broken << dendl;
+      if(repairer) {
+        auto txn = repairer->fix_spanning_blobs(db);
+	_record_onode(o, txn);
+      }
+    }
+  }
+
   if (o->onode.has_omap()) {
     _fsck_check_object_omap(depth, o, ctx);
   }
@@ -8970,6 +9000,30 @@ void BlueStore::inject_misreference(coll_t cid1, ghobject_t oid1,
   o2->extent_map.update(txn, false);
 
   _record_onode(o2, txn);
+  db->submit_transaction_sync(txn);
+}
+
+void BlueStore::inject_zombie_spanning_blob(coll_t cid, ghobject_t oid,
+                                            int16_t blob_id)
+{
+  OnodeRef o;
+  CollectionRef c = _get_collection(cid);
+  ceph_assert(c);
+  {
+    std::unique_lock l{ c->lock }; // just to avoid internal asserts
+    o = c->get_onode(oid, false);
+    ceph_assert(o);
+    o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  }
+
+  BlobRef b = c->new_blob();
+  b->id = blob_id;
+  o->extent_map.spanning_blob_map[blob_id] = b;
+
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+
+  _record_onode(o, txn);
   db->submit_transaction_sync(txn);
 }
 
@@ -16169,6 +16223,15 @@ bool BlueStoreRepairer::fix_false_free(KeyValueDB *db,
   return true;
 }
 
+KeyValueDB::Transaction BlueStoreRepairer::fix_spanning_blobs(KeyValueDB* db)
+{
+  if (!fix_onode_txn) {
+    fix_onode_txn = db->get_transaction();
+  }
+  ++to_repair_cnt;
+  return fix_onode_txn;
+}
+
 bool BlueStoreRepairer::preprocess_misreference(KeyValueDB *db)
 {
   if (misreferenced_extents.size()) {
@@ -16203,6 +16266,10 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
   if (fix_misreferences_txn) {
     db->submit_transaction_sync(fix_misreferences_txn);
     fix_misreferences_txn = nullptr;
+  }
+  if (fix_onode_txn) {
+    db->submit_transaction_sync(fix_onode_txn);
+    fix_onode_txn = nullptr;
   }
   if (fix_shared_blob_txn) {
     db->submit_transaction_sync(fix_shared_blob_txn);

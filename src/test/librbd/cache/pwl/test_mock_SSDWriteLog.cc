@@ -81,7 +81,7 @@ struct TestMockCacheSSDWriteLog : public TestMockFixture {
     ASSERT_EQ(present, state.present);
     ASSERT_EQ(empty, state.empty);
     ASSERT_EQ(clean, state.clean);
-   
+
     ASSERT_EQ(host, state.host);
     ASSERT_EQ(path, state.path);
     ASSERT_EQ(size, state.size);
@@ -127,7 +127,7 @@ TEST_F(TestMockCacheSSDWriteLog, init_state_write) {
   MockImageCacheStateSSD image_cache_state(&mock_image_ctx, mock_api);
 
   validate_cache_state(ictx, image_cache_state, false, true, true, "", "", 0);
-  
+
   image_cache_state.empty = false;
   image_cache_state.clean = false;
   MockContextSSD finish_ctx;
@@ -206,10 +206,10 @@ TEST_F(TestMockCacheSSDWriteLog, write) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockImageCtx mock_image_ctx(*ictx);
-  MockImageWriteback mock_image_writeback(mock_image_ctx);                               
-  MockApi mock_api;                                                                      
-  MockSSDWriteLog rwl(                                                                   
-      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),                         
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockSSDWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
       mock_image_writeback, mock_api);
 
   MockContextSSD finish_ctx1;
@@ -607,6 +607,174 @@ TEST_F(TestMockCacheSSDWriteLog, invalidate) {
   rwl.shut_down(&finish_ctx3);
 
   ASSERT_EQ(0, finish_ctx3.wait());
+}
+
+TEST_F(TestMockCacheSSDWriteLog, flush) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockSSDWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
+
+  expect_op_work_queue(mock_image_ctx);
+  expect_metadata_set(mock_image_ctx);
+
+  MockContextSSD finish_ctx1;
+  expect_context_complete(finish_ctx1, 0);
+  rwl.init(&finish_ctx1);
+  ASSERT_EQ(0, finish_ctx1.wait());
+
+  MockContextSSD finish_ctx2;
+  expect_context_complete(finish_ctx2, 0);
+  Extents image_extents{{0, 4096}};
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  bufferlist bl_copy = bl;
+  int fadvise_flags = 0;
+  rwl.write(std::move(image_extents), std::move(bl), fadvise_flags, &finish_ctx2);
+  ASSERT_EQ(0, finish_ctx2.wait());
+
+  MockContextSSD finish_ctx_flush;
+  expect_context_complete(finish_ctx_flush, 0);
+  rwl.flush(&finish_ctx_flush);
+  ASSERT_EQ(0, finish_ctx_flush.wait());
+
+  MockContextSSD finish_ctx3;
+  expect_context_complete(finish_ctx3, 0);
+  rwl.shut_down(&finish_ctx3);
+
+  ASSERT_EQ(0, finish_ctx3.wait());
+}
+
+TEST_F(TestMockCacheSSDWriteLog, flush_source_shutdown) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockSSDWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
+
+  expect_op_work_queue(mock_image_ctx);
+  expect_metadata_set(mock_image_ctx);
+
+  MockContextSSD finish_ctx1;
+  expect_context_complete(finish_ctx1, 0);
+  rwl.init(&finish_ctx1);
+  ASSERT_EQ(0, finish_ctx1.wait());
+
+  MockContextSSD finish_ctx2;
+  expect_context_complete(finish_ctx2, 0);
+  Extents image_extents{{0, 4096}};
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  int fadvise_flags = 0;
+  rwl.write(std::move(image_extents), std::move(bl), fadvise_flags, &finish_ctx2);
+  ASSERT_EQ(0, finish_ctx2.wait());
+
+  MockContextSSD finish_ctx_flush;
+  expect_context_complete(finish_ctx_flush, 0);
+  rwl.flush(io::FLUSH_SOURCE_SHUTDOWN, &finish_ctx_flush);
+  ASSERT_EQ(0, finish_ctx_flush.wait());
+
+  MockContextSSD finish_ctx3;
+  expect_context_complete(finish_ctx3, 0);
+  rwl.shut_down(&finish_ctx3);
+  ASSERT_EQ(0, finish_ctx3.wait());
+}
+
+
+TEST_F(TestMockCacheSSDWriteLog, flush_source_internal) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockSSDWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
+
+  expect_op_work_queue(mock_image_ctx);
+  expect_metadata_set(mock_image_ctx);
+
+  MockContextSSD finish_ctx1;
+  expect_context_complete(finish_ctx1, 0);
+  rwl.init(&finish_ctx1);
+  ASSERT_EQ(0, finish_ctx1.wait());
+
+  MockContextSSD finish_ctx2;
+  expect_context_complete(finish_ctx2, 0);
+  Extents image_extents{{0, 4096}};
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  int fadvise_flags = 0;
+  rwl.write(std::move(image_extents), std::move(bl), fadvise_flags, &finish_ctx2);
+  ASSERT_EQ(0, finish_ctx2.wait());
+
+  MockContextSSD finish_ctx_flush;
+  expect_context_complete(finish_ctx_flush, 0);
+  rwl.flush(io::FLUSH_SOURCE_INTERNAL, &finish_ctx_flush);
+  ASSERT_EQ(0, finish_ctx_flush.wait());
+
+  MockContextSSD finish_ctx3;
+  expect_context_complete(finish_ctx3, 0);
+  rwl.shut_down(&finish_ctx3);
+  ASSERT_EQ(0, finish_ctx3.wait());
+}
+
+TEST_F(TestMockCacheSSDWriteLog, flush_source_user) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockImageWriteback mock_image_writeback(mock_image_ctx);
+  MockApi mock_api;
+  MockSSDWriteLog rwl(
+      mock_image_ctx, get_cache_state(mock_image_ctx, mock_api),
+      mock_image_writeback, mock_api);
+  expect_op_work_queue(mock_image_ctx);
+  expect_metadata_set(mock_image_ctx);
+
+  MockContextSSD finish_ctx1;
+  expect_context_complete(finish_ctx1, 0);
+  rwl.init(&finish_ctx1);
+  ASSERT_EQ(0, finish_ctx1.wait());
+
+  MockContextSSD finish_ctx2;
+  expect_context_complete(finish_ctx2, 0);
+  Extents image_extents{{0, 4096}};
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  int fadvise_flags = 0;
+  rwl.write(std::move(image_extents), std::move(bl), fadvise_flags, &finish_ctx2);
+  ASSERT_EQ(0, finish_ctx2.wait());
+
+  usleep(10000);
+  MockContextSSD finish_ctx_flush;
+  expect_context_complete(finish_ctx_flush, 0);
+  rwl.flush(io::FLUSH_SOURCE_USER, &finish_ctx_flush);
+  ASSERT_EQ(0, finish_ctx_flush.wait());
+
+  MockContextSSD finish_ctx3;
+  expect_context_complete(finish_ctx3, 0);
+  Extents image_extents2{{0, 4096}};
+  bufferlist bl2;
+  bl2.append(std::string(4096, '1'));
+  int fadvise_flags2 = 0;
+  rwl.write(std::move(image_extents2), std::move(bl2), fadvise_flags2, &finish_ctx3);
+  ASSERT_EQ(0, finish_ctx3.wait());
+
+  MockContextSSD finish_ctx4;
+  expect_context_complete(finish_ctx4, 0);
+  rwl.shut_down(&finish_ctx4);
+  ASSERT_EQ(0, finish_ctx4.wait());
 }
 
 } // namespace pwl

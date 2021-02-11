@@ -90,7 +90,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             return HandleCommandResult(retval=-errno.EINVAL, stderr=str(e))
 
     def available(self):
-        return True, ""
+        return True, "", {}
 
     def __init__(self, *args, **kwargs):
         super(TestOrchestrator, self).__init__(*args, **kwargs)

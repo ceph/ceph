@@ -10,6 +10,7 @@ LOGROTATE_DIR = '/etc/logrotate.d'
 UNIT_DIR = '/etc/systemd/system'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
+CONTAINER_INIT=True
 CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
 MIN_PODMAN_VERSION = (2, 0, 2)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
@@ -76,28 +77,13 @@ from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, 
 import re
 import uuid
 
+from configparser import ConfigParser
 from functools import wraps
 from glob import glob
+from io import StringIO
 from threading import Thread, RLock
-
-if sys.version_info >= (3, 0):
-    from io import StringIO
-else:
-    from StringIO import StringIO
-
-if sys.version_info >= (3, 2):
-    from configparser import ConfigParser
-else:
-    from ConfigParser import SafeConfigParser
-
-if sys.version_info >= (3, 0):
-    from urllib.request import urlopen
-    from urllib.error import HTTPError
-else:
-    from urllib2 import urlopen, HTTPError
-
-if sys.version_info > (3, 0):
-    unicode = str
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
 cached_stdin = None
 
@@ -122,6 +108,7 @@ class BaseConfig:
         self.retry: int = DEFAULT_RETRY
         self.env: List[str] = []
 
+        self.container_init: bool = CONTAINER_INIT
         self.container_path: str = ""
 
     def set_from_args(self, args: argparse.Namespace):
@@ -1391,32 +1378,10 @@ def call_timeout(ctx, command, timeout):
         logger.debug(msg)
         raise TimeoutExpired(msg)
 
-    def call_timeout_py2(command, timeout):
-        # type: (List[str], int) -> int
-        proc = subprocess.Popen(command)
-        thread = Thread(target=proc.wait)
-        thread.start()
-        thread.join(timeout)
-        if thread.is_alive():
-            proc.kill()
-            thread.join()
-            raise_timeout(command, timeout)
-        return proc.returncode
-
-    def call_timeout_py3(command, timeout):
-        # type: (List[str], int) -> int
-        try:
-            return subprocess.call(command, timeout=timeout)
-        except subprocess.TimeoutExpired as e:
-            raise_timeout(command, timeout)
-
-    ret = 1
-    if sys.version_info >= (3, 3):
-        ret = call_timeout_py3(command, timeout)
-    else:
-        # py2 subprocess has no timeout arg
-        ret = call_timeout_py2(command, timeout)
-    return ret
+    try:
+        return subprocess.call(command, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        raise_timeout(command, timeout)
 
 ##################################
 
@@ -1450,24 +1415,9 @@ def is_available(ctx, what, func):
 
 def read_config(fn):
     # type: (Optional[str]) -> ConfigParser
-    # bend over backwards here because py2's ConfigParser doesn't like
-    # whitespace before config option names (e.g., '\n foo = bar\n').
-    # Yeesh!
-    if sys.version_info >= (3, 2):
-        cp = ConfigParser()
-    else:
-        cp = SafeConfigParser()
-
+    cp = ConfigParser()
     if fn:
-        with open(fn, 'r') as f:
-            raw_conf = f.read()
-        nice_conf = re.sub(r'\n(\s)+', r'\n', raw_conf)
-        s_io = StringIO(nice_conf)
-        if sys.version_info >= (3, 2):
-            cp.read_file(s_io)
-        else:
-            cp.readfp(s_io)
-
+        cp.read(fn)
     return cp
 
 
@@ -2022,6 +1972,13 @@ def check_units(ctx, units, enabler=None):
     return False
 
 
+def is_container_running(ctx: CephadmContext, name: str) -> bool:
+    out, err, ret = call_throws(ctx, [
+        ctx.container_path, 'ps',
+        '--format', '{{.Names}}'])
+    return name in out
+
+
 def get_legacy_config_fsid(cluster, legacy_dir=None):
     # type: (str, Optional[str]) -> Optional[str]
     config_file = '/etc/ceph/%s.conf' % cluster
@@ -2283,6 +2240,8 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         mounts['/run/udev'] = '/run/udev'
     if daemon_type == 'osd':
         mounts['/sys'] = '/sys'  # for numa.cc, pick_address, cgroups, ...
+        # selinux-policy in the container may not match the host.
+        mounts['/usr/share/empty'] = '/sys/fs/selinux:ro'
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
 
@@ -2420,11 +2379,13 @@ def get_container(ctx: CephadmContext,
     # so service can have Type=Forking
     if 'podman' in ctx.container_path:
         runtime_dir = '/run'
-        container_args.extend(['-d',
+        container_args.extend([
+            '-d', '--log-driver', 'journald',
             '--conmon-pidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, daemon_id),
             '--cidfile',
-            runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id)])
+            runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id),
+        ])
 
     return CephContainer(
         ctx,
@@ -2438,7 +2399,6 @@ def get_container(ctx: CephadmContext,
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
-        init=ctx.container_init,
         host_network=host_network,
     )
 
@@ -2961,7 +2921,7 @@ class CephContainer:
                  privileged: bool = False,
                  ptrace: bool = False,
                  bind_mounts: Optional[List[List[str]]] = None,
-                 init: bool = False,
+                 init: Optional[bool] = None,
                  host_network: bool = True,
                  ) -> None:
         self.ctx = ctx
@@ -2975,7 +2935,7 @@ class CephContainer:
         self.privileged = privileged
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
-        self.init = init
+        self.init = init if init else ctx.container_init
         self.host_network = host_network
 
     def run_cmd(self) -> List[str]:
@@ -3051,6 +3011,8 @@ class CephContainer:
                 # let OSD etc read block devs that haven't been chowned
                 '--group-add=disk',
             ])
+        if self.init:
+            cmd_args.append('--init')
         if self.envs:
             for env in self.envs:
                 envs.extend(['-e', env])
@@ -3157,7 +3119,7 @@ def command_inspect_image(ctx):
     # type: (CephadmContext) -> int
     out, err, ret = call_throws(ctx, [
         ctx.container_path, 'inspect',
-        '--format', '{{.ID}},{{json .RepoDigests}}',
+        '--format', '{{.ID}},{{.RepoDigests}}',
         ctx.image])
     if ret:
         return errno.ENOENT
@@ -3171,22 +3133,44 @@ def command_inspect_image(ctx):
 
 
 def get_image_info_from_inspect(out, image):
-    # type: (str, str) -> Dict[str, str]
+    # type: (str, str) -> Dict[str, Union[str,List[str]]]
     image_id, digests = out.split(',', 1)
     if not out:
         raise Error('inspect {}: empty result'.format(image))
     r = {
         'image_id': normalize_container_id(image_id)
-    }
+    } # type: Dict[str, Union[str,List[str]]]
     if digests:
-        json_digests = json.loads(digests)
-        if json_digests:
-            r['repo_digest'] = json_digests[0]
+        r['repo_digests'] = digests[1:-1].split(' ')
     return r
 
 
 ##################################
+def check_subnet(subnets:str) -> Tuple[int, List[int], str]:
+    """Determine whether the given string is a valid subnet
 
+    :param subnets: subnet string, a single definition or comma separated list of CIDR subnets
+    :returns: return code, IP version list of the subnets and msg describing any errors validation errors
+    """
+
+    rc = 0
+    versions = set() 
+    errors = []
+    subnet_list = subnets.split(',')
+    for subnet in subnet_list:
+        # ensure the format of the string is as expected address/netmask
+        if not re.search(r'\/\d+$', subnet):
+            rc = 1
+            errors.append(f"{subnet} is not in CIDR format (address/netmask)")
+            continue
+        try:
+            v = ipaddress.ip_network(subnet).version
+            versions.add(v)
+        except ValueError as e:
+            rc = 1
+            errors.append(f"{subnet} invalid: {str(e)}")
+    
+    return rc, list(versions), ", ".join(errors)
 
 def unwrap_ipv6(address):
     # type: (str) -> str
@@ -3202,7 +3186,7 @@ def wrap_ipv6(address):
     # it's already wrapped it'll not pass (like if it's a hostname) and trigger
     # the ValueError
     try:
-        if ipaddress.ip_address(unicode(address)).version == 6:
+        if ipaddress.ip_address(address).version == 6:
             return f"[{address}]"
     except ValueError:
         pass
@@ -3214,7 +3198,7 @@ def is_ipv6(address):
     # type: (str) -> bool
     address = unwrap_ipv6(address)
     try:
-        return ipaddress.ip_address(unicode(address)).version == 6
+        return ipaddress.ip_address(address).version == 6
     except ValueError:
         logger.warning("Address: {} isn't a valid IP address".format(address))
         return False
@@ -3274,8 +3258,8 @@ def prepare_mon_addresses(
         # make sure IP is configured locally, and then figure out the
         # CIDR network
         for net, ips in list_networks(ctx).items():
-            if ipaddress.ip_address(unicode(unwrap_ipv6(base_ip))) in \
-                    [ipaddress.ip_address(unicode(ip)) for ip in ips]:
+            if ipaddress.ip_address(unwrap_ipv6(base_ip)) in \
+                    [ipaddress.ip_address(ip) for ip in ips]:
                 mon_network = net
                 logger.info('Mon IP %s is in CIDR network %s' % (base_ip,
                                                                  mon_network))
@@ -3283,8 +3267,27 @@ def prepare_mon_addresses(
         if not mon_network:
             raise Error('Failed to infer CIDR network for mon ip %s; pass '
                         '--skip-mon-network to configure it later' % base_ip)
-
+    
     return (addr_arg, ipv6, mon_network)
+
+
+def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
+    cluster_network = ""
+    ipv6_cluster_network = False
+    # the cluster network may not exist on this node, so all we can do is 
+    # validate that the address given is valid ipv4 or ipv6 subnet
+    if ctx.cluster_network:
+        rc, versions, err_msg = check_subnet(ctx.cluster_network)
+        if rc:
+            raise Error(f"Invalid --cluster-network parameter: {err_msg}")
+        cluster_network = ctx.cluster_network
+        ipv6_cluster_network = True if 6 in versions else False
+    else:
+        logger.info("- internal network (--cluster-network) has not "
+                       "been provided, OSD replication will default to "
+                       "the public_network")
+
+    return cluster_network, ipv6_cluster_network
 
 
 def create_initial_keys(
@@ -3548,10 +3551,17 @@ def prepare_ssh(
     except RuntimeError as e:
         raise Error('Failed to add host <%s>: %s' % (host, e))
 
-    if not ctx.orphan_initial_daemons:
-        for t in ['mon', 'mgr', 'crash']:
+    for t in ['mon', 'mgr', 'crash']:
+        if ctx.orphan_initial_daemons:
             logger.info('Deploying %s service with default placement...' % t)
-            cli(['orch', 'apply', t])
+            cli(['orch', 'apply', t, '--unmanaged'])
+        else:
+            logger.info('Deploying unmanaged %s service...' % t)
+            cli(['orch', 'apply', t, '--unmanaged'])
+
+    if not ctx.orphan_initial_daemons:
+        logger.info('Deploying crash service with default placement...')
+        cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
         logger.info('Enabling mgr prometheus module...')
@@ -3645,7 +3655,8 @@ def finish_bootstrap_config(
     config: str,
     mon_id: str, mon_dir: str,
     mon_network: Optional[str], ipv6: bool,
-    cli: Callable
+    cli: Callable,
+    cluster_network: Optional[str], ipv6_cluster_network: bool
 
 ) -> None:
     if not ctx.no_minimize_config:
@@ -3674,11 +3685,15 @@ def finish_bootstrap_config(
         ])
 
     if mon_network:
-        logger.info('Setting mon public_network...')
+        logger.info(f"Setting mon public_network to {mon_network}")
         cli(['config', 'set', 'mon', 'public_network', mon_network])
+    
+    if cluster_network:
+        logger.info(f"Setting cluster_network to {cluster_network}")
+        cli(['config', 'set', 'global', 'cluster_network', cluster_network])
 
-    if ipv6:
-        logger.info('Enabling IPv6 (ms_bind_ipv6)')
+    if ipv6 or ipv6_cluster_network:
+        logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
 
 
@@ -3738,6 +3753,8 @@ def command_bootstrap(ctx):
     l.acquire()
 
     (addr_arg, ipv6, mon_network) = prepare_mon_addresses(ctx)
+    cluster_network, ipv6_cluster_network = prepare_cluster_network(ctx)
+
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
 
     logger.info('Extracting ceph user uid/gid from container image...')
@@ -3787,7 +3804,8 @@ def command_bootstrap(ctx):
     wait_for_mon(ctx, mon_id, mon_dir, admin_keyring.name, tmp_config.name)
 
     finish_bootstrap_config(ctx, fsid, config, mon_id, mon_dir,
-                            mon_network, ipv6, cli)
+                            mon_network, ipv6, cli,
+                            cluster_network, ipv6_cluster_network)
 
     # output files
     with open(ctx.output_keyring, 'w') as f:
@@ -3833,8 +3851,7 @@ def command_bootstrap(ctx):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_username', ctx.registry_username, '--force'])
         cli(['config', 'set', 'mgr', 'mgr/cephadm/registry_password', ctx.registry_password, '--force'])
 
-    if ctx.container_init:
-        cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
+    cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
     if ctx.with_exporter:
         cli(['config-key', 'set', 'mgr/cephadm/exporter_enabled', 'true'])
@@ -3856,7 +3873,6 @@ def command_bootstrap(ctx):
         # deploy the service (commented out until the cephadm changes are in the ceph container build)
         logger.info('Deploying cephadm exporter service with default placement...')
         cli(['orch', 'apply', 'cephadm-exporter'])
-
 
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
@@ -3970,8 +3986,9 @@ def command_deploy(ctx):
 
     redeploy = False
     unit_name = get_unit_name(ctx.fsid, daemon_type, daemon_id)
+    container_name = 'ceph-%s-%s.%s' % (ctx.fsid, daemon_type, daemon_id)
     (_, state, _) = check_unit(ctx, unit_name)
-    if state == 'running':
+    if state == 'running' or is_container_running(ctx, container_name):
         redeploy = True
 
     if ctx.reconfig:
@@ -3983,8 +4000,12 @@ def command_deploy(ctx):
 
     # Get and check ports explicitly required to be opened
     daemon_ports = [] # type: List[int]
-    if ctx.tcp_ports:
-        daemon_ports = list(map(int, ctx.tcp_ports.split()))
+
+    # only check port in use if not reconfig or redeploy since service
+    # we are redeploying/reconfiguring will already be using the port
+    if not ctx.reconfig and not redeploy:
+        if ctx.tcp_ports:
+            daemon_ports = list(map(int, ctx.tcp_ports.split()))
 
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring(ctx)
@@ -4367,7 +4388,7 @@ def _parse_ipv6_route(routes, ips):
         ip = m[0][0]
         # find the network it belongs to
         net = [n for n in r.keys()
-               if ipaddress.ip_address(unicode(ip)) in ipaddress.ip_network(unicode(n))]
+               if ipaddress.ip_address(ip) in ipaddress.ip_network(n)]
         if net:
             r[net[0]].append(ip)
 
@@ -4401,6 +4422,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
 
     # keep track of ceph versions we see
     seen_versions = {}  # type: Dict[str, Optional[str]]
+
+    # keep track of image digests
+    seen_digests = {}   # type: Dict[str, List[str]]
 
     # /var/lib/ceph
     if os.path.exists(data_dir):
@@ -4458,6 +4482,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         container_id = None
                         image_name = None
                         image_id = None
+                        image_digests = None
                         version = None
                         start_stamp = None
 
@@ -4474,6 +4499,22 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             image_id = normalize_container_id(image_id)
                             daemon_type = name.split('.', 1)[0]
                             start_stamp = try_convert_datetime(start)
+
+                            # collect digests for this image id
+                            image_digests = seen_digests.get(image_id)
+                            if not image_digests:
+                                out, err, code = call(
+                                    ctx,
+                                    [
+                                        container_path, 'image', 'inspect', image_name,
+                                        '--format', '{{.RepoDigests}}',
+                                    ],
+                                    verbosity=CallVerbosity.DEBUG)
+                                if not code:
+                                    image_digests = out.strip()[1:-1].split(' ')
+                                    seen_digests[image_id] = image_digests
+
+                            # identify software version inside the container (if we can)
                             if not version or '.' not in version:
                                 version = seen_versions.get(image_id, None)
                             if daemon_type == NFSGanesha.daemon_type:
@@ -4541,6 +4582,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         val['container_id'] = container_id
                         val['container_image_name'] = image_name
                         val['container_image_id'] = image_id
+                        val['container_image_digests'] = image_digests
                         val['version'] = version
                         val['started'] = start_stamp
                         val['created'] = get_file_timestamp(
@@ -7027,6 +7069,11 @@ def _get_parser():
         action='append',
         default=[],
         help='set environment variable')
+    parser.add_argument(
+        '--no-container-init',
+        action='store_true',
+        default=not CONTAINER_INIT,
+        help='Do not run podman/docker with `--init`')
 
     subparsers = parser.add_subparsers(help='sub-command')
 
@@ -7095,7 +7142,8 @@ def _get_parser():
     parser_adopt.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -7360,7 +7408,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--orphan-initial-daemons',
         action='store_true',
-        help='Do not create initial mon, mgr, and crash service specs')
+        help='Set mon and mgr service to `unmanaged`, Do not create the crash service')
     parser_bootstrap.add_argument(
         '--skip-monitoring-stack',
         action='store_true',
@@ -7389,7 +7437,8 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
     parser_bootstrap.add_argument(
         '--with-exporter',
         action='store_true',
@@ -7398,6 +7447,9 @@ def _get_parser():
         '--exporter-config',
         action=CustomValidation,
         help=f'Exporter configuration information in JSON format (providing: {", ".join(CephadmDaemon.config_requirements)}, port information)')
+    parser_bootstrap.add_argument(
+        '--cluster-network',
+        help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
@@ -7444,7 +7496,8 @@ def _get_parser():
     parser_deploy.add_argument(
         '--container-init',
         action='store_true',
-        help='Run podman/docker with `--init`')
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
@@ -7564,9 +7617,22 @@ def _get_parser():
 
 def _parse_args(av):
     parser = _get_parser()
+
     args = parser.parse_args(av)
     if 'command' in args and args.command and args.command[0] == "--":
         args.command.pop(0)
+
+    # workaround argparse to deprecate the subparser `--container-init` flag
+    # container_init and no_container_init must always be mutually exclusive
+    container_init_args = ('--container-init', '--no-container-init')
+    if set(container_init_args).issubset(av):
+        parser.error('argument %s: not allowed with argument %s' % (container_init_args))
+    elif '--container-init' in av:
+        args.no_container_init = not args.container_init
+    else:
+        args.container_init = not args.no_container_init
+    assert args.container_init is not args.no_container_init
+
     return args
 
 
@@ -7629,7 +7695,7 @@ def main():
     except Error as e:
         if ctx.verbose:
             raise
-        sys.stderr.write('ERROR: %s\n' % e)
+        logger.error('ERROR: %s' % e)
         sys.exit(1)
     if not r:
         r = 0

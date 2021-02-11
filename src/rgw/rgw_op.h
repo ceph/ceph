@@ -2015,8 +2015,7 @@ static inline void format_xattr(std::string &xattr)
  * On failure returns a negative error code.
  *
  */
-inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp, 
-                                    CephContext* const cct,
+inline int rgw_get_request_metadata(CephContext* const cct,
 				    struct req_info& info,
 				    std::map<std::string, ceph::bufferlist>& attrs,
 				    const bool allow_empty_attrs = true)
@@ -2034,10 +2033,10 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
     std::string& xattr = kv.second;
 
     if (blocklisted_headers.count(name) == 1) {
-      ldpp_dout(dpp, 10) << "skipping x>> " << name << dendl;
+      lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
       continue;
     } else if (allow_empty_attrs || !xattr.empty()) {
-      ldpp_dout(dpp, 10) << "x>> " << name << ":" << xattr << dendl;
+      lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
       format_xattr(xattr);
 
       std::string attr_name(RGW_ATTR_PREFIX);

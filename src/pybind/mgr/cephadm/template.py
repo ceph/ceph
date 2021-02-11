@@ -1,7 +1,7 @@
 import copy
 from typing import Optional, TYPE_CHECKING
 
-from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined, Template
+from jinja2 import Environment, PackageLoader, select_autoescape, StrictUndefined
 from jinja2 import exceptions as j2_exceptions
 
 if TYPE_CHECKING:

@@ -11,9 +11,12 @@
 #include <utility>
 #include <vector>
 
+#include <seastar/core/thread.hh>
+
 #include "crimson/common/log.h"
 #include "stages/key_layout.h"
 #include "tree.h"
+#include "test/crimson/seastore/onode_tree/test_value.h"
 
 /**
  * tree_utils.h
@@ -23,81 +26,109 @@
 
 namespace crimson::os::seastore::onode {
 
-class Onodes {
+using TestBtree = Btree<TestValue>;
+
+struct value_item_t {
+  value_size_t size;
+  TestValue::id_t id;
+  TestValue::magic_t magic;
+
+  TestBtree::tree_value_config_t get_config() const {
+    assert(size > sizeof(value_header_t));
+    return {static_cast<value_size_t>(size - sizeof(value_header_t))};
+  }
+};
+inline std::ostream& operator<<(std::ostream& os, const value_item_t& item) {
+  return os << "ValueItem(#" << item.id << ", " << item.size << "B)";
+}
+
+class Values {
  public:
-  Onodes(size_t n) {
+  Values(size_t n) {
     for (size_t i = 1; i <= n; ++i) {
-      auto p_onode = &create(i * 8);
-      onodes.push_back(p_onode);
+      auto item = create(i * 8);
+      values.push_back(item);
     }
   }
 
-  Onodes(std::vector<size_t> sizes) {
+  Values(std::vector<size_t> sizes) {
     for (auto& size : sizes) {
-      auto p_onode = &create(size);
-      onodes.push_back(p_onode);
+      auto item = create(size);
+      values.push_back(item);
     }
   }
 
-  ~Onodes() = default;
+  ~Values() = default;
 
-  const onode_t& create(size_t size) {
-    ceph_assert(size <= std::numeric_limits<uint16_t>::max());
-    onode_t config{static_cast<uint16_t>(size), id++};
-    auto onode = onode_t::allocate(config);
-    auto p_onode = onode.get();
-    tracked_onodes.push_back(std::move(onode));
-    return *reinterpret_cast<onode_t*>(p_onode);
+  value_item_t create(size_t _size) {
+    ceph_assert(_size <= std::numeric_limits<value_size_t>::max());
+    ceph_assert(_size > sizeof(value_header_t));
+    value_size_t size = _size;
+    auto current_id = id++;
+    return value_item_t{size, current_id, (TestValue::magic_t)current_id * 137};
   }
 
-  const onode_t& pick() const {
-    auto index = rd() % onodes.size();
-    return *onodes[index];
+  value_item_t pick() const {
+    auto index = rd() % values.size();
+    return values[index];
   }
 
-  const onode_t& pick_largest() const {
-    return *onodes[onodes.size() - 1];
+  static void initialize_cursor(
+      Transaction& t,
+      TestBtree::Cursor& cursor,
+      const value_item_t& item) {
+    ceph_assert(!cursor.is_end());
+    auto value = cursor.value();
+    ceph_assert(value.get_payload_size() + sizeof(value_header_t) == item.size);
+    value.set_id_replayable(t, item.id);
+    value.set_tail_magic_replayable(t, item.magic);
   }
 
   static void validate_cursor(
-      const Btree::Cursor& cursor, const ghobject_t& key, const onode_t& onode) {
+      TestBtree::Cursor& cursor,
+      const ghobject_t& key,
+      const value_item_t& item) {
     ceph_assert(!cursor.is_end());
     ceph_assert(cursor.get_ghobj() == key);
-    ceph_assert(cursor.value());
-    ceph_assert(cursor.value() != &onode);
-    ceph_assert(*cursor.value() == onode);
-    onode_t::validate_tail_magic(*cursor.value());
+    auto value = cursor.value();
+    ceph_assert(value.get_payload_size() + sizeof(value_header_t) == item.size);
+    ceph_assert(value.get_id() == item.id);
+    ceph_assert(value.get_tail_magic() == item.magic);
   }
 
  private:
-  uint16_t id = 0;
+  TestValue::id_t id = 0;
   mutable std::random_device rd;
-  std::vector<const onode_t*> onodes;
-  std::vector<std::unique_ptr<char[]>> tracked_onodes;
+  std::vector<value_item_t> values;
 };
 
 class KVPool {
   struct kv_conf_t {
-    unsigned index2;
-    unsigned index1;
-    unsigned index0;
+    index_t index2;
+    index_t index1;
+    index_t index0;
     size_t ns_size;
     size_t oid_size;
-    const onode_t* p_value;
+    value_item_t value;
 
     ghobject_t get_ghobj() const {
       assert(index1 < 10);
       std::ostringstream os_ns;
-      os_ns << "ns" << index1;
-      unsigned current_size = (unsigned)os_ns.tellp();
-      assert(ns_size >= current_size);
-      os_ns << std::string(ns_size - current_size, '_');
-
       std::ostringstream os_oid;
-      os_oid << "oid" << index1;
-      current_size = (unsigned)os_oid.tellp();
-      assert(oid_size >= current_size);
-      os_oid << std::string(oid_size - current_size, '_');
+      if (index1 == 0) {
+        assert(!ns_size);
+        assert(!oid_size);
+      } else {
+        os_ns << "ns" << index1;
+        auto current_size = (size_t)os_ns.tellp();
+        assert(ns_size >= current_size);
+        os_ns << std::string(ns_size - current_size, '_');
+
+        os_oid << "oid" << index1;
+        current_size = (size_t)os_oid.tellp();
+        assert(oid_size >= current_size);
+        os_oid << std::string(oid_size - current_size, '_');
+      }
 
       return ghobject_t(shard_id_t(index2), index2, index2,
                         os_ns.str(), os_oid.str(), index0, index0);
@@ -106,27 +137,36 @@ class KVPool {
   using kv_vector_t = std::vector<kv_conf_t>;
 
  public:
-  using kv_t = std::pair<ghobject_t, const onode_t*>;
+  using kv_t = std::pair<ghobject_t, value_item_t>;
 
   KVPool(const std::vector<size_t>& str_sizes,
-         const std::vector<size_t>& onode_sizes,
-         const std::pair<unsigned, unsigned>& range2,
-         const std::pair<unsigned, unsigned>& range1,
-         const std::pair<unsigned, unsigned>& range0)
-      : str_sizes{str_sizes}, onodes{onode_sizes} {
+         const std::vector<size_t>& value_sizes,
+         const std::pair<index_t, index_t>& range2,
+         const std::pair<index_t, index_t>& range1,
+         const std::pair<index_t, index_t>& range0)
+      : str_sizes{str_sizes}, values{value_sizes} {
     ceph_assert(range2.first < range2.second);
-    ceph_assert(range2.second - 1 <= (unsigned)std::numeric_limits<shard_t>::max());
+    ceph_assert(range2.second - 1 <= (index_t)std::numeric_limits<shard_t>::max());
     ceph_assert(range2.second - 1 <= std::numeric_limits<crush_hash_t>::max());
     ceph_assert(range1.first < range1.second);
     ceph_assert(range1.second - 1 <= 9);
     ceph_assert(range0.first < range0.second);
     std::random_device rd;
-    for (unsigned i = range2.first; i < range2.second; ++i) {
-      for (unsigned j = range1.first; j < range1.second; ++j) {
-        auto ns_size = (unsigned)str_sizes[rd() % str_sizes.size()];
-        auto oid_size = (unsigned)str_sizes[rd() % str_sizes.size()];
-        for (unsigned k = range0.first; k < range0.second; ++k) {
-          kvs.emplace_back(kv_conf_t{i, j, k, ns_size, oid_size, &onodes.pick()});
+    for (index_t i = range2.first; i < range2.second; ++i) {
+      for (index_t j = range1.first; j < range1.second; ++j) {
+        size_t ns_size;
+        size_t oid_size;
+        if (j == 0) {
+          // store ns0, oid0 as empty strings for test purposes
+          ns_size = 0;
+          oid_size = 0;
+        } else {
+          ns_size = str_sizes[rd() % str_sizes.size()];
+          oid_size = str_sizes[rd() % str_sizes.size()];
+          assert(ns_size && oid_size);
+        }
+        for (index_t k = range0.first; k < range0.second; ++k) {
+          kvs.emplace_back(kv_conf_t{i, j, k, ns_size, oid_size, values.pick()});
         }
       }
     }
@@ -145,10 +185,10 @@ class KVPool {
     kv_t get_kv() const {
       assert(!is_end());
       auto& conf = (*p_kvs)[i];
-      return std::make_pair(conf.get_ghobj(), conf.p_value);
+      return std::make_pair(conf.get_ghobj(), conf.value);
     }
     bool is_end() const { return !p_kvs || i >= p_kvs->size(); }
-    size_t index() const { return i; }
+    index_t index() const { return i; }
 
     iterator_t& operator++() {
       assert(!is_end());
@@ -166,7 +206,7 @@ class KVPool {
     iterator_t(const kv_vector_t& kvs) : p_kvs{&kvs} {}
 
     const kv_vector_t* p_kvs = nullptr;
-    size_t i = 0;
+    index_t i = 0;
     friend class KVPool;
   };
 
@@ -184,7 +224,7 @@ class KVPool {
 
  private:
   std::vector<size_t> str_sizes;
-  Onodes onodes;
+  Values values;
   kv_vector_t kvs;
   kv_vector_t random_kvs;
 };
@@ -192,7 +232,7 @@ class KVPool {
 template <bool TRACK>
 class TreeBuilder {
  public:
-  using ertr = Btree::btree_ertr;
+  using ertr = TestBtree::btree_ertr;
   template <class ValueT=void>
   using future = ertr::future<ValueT>;
 
@@ -225,29 +265,32 @@ class TreeBuilder {
 
   future<> insert(Transaction& t) {
     kv_iter = kvs.random_begin();
-    auto cursors = seastar::make_lw_shared<std::vector<Btree::Cursor>>();
+    auto cursors = seastar::make_lw_shared<std::vector<TestBtree::Cursor>>();
     logger().warn("start inserting {} kvs ...", kvs.size());
     auto start_time = mono_clock::now();
     return crimson::do_until([&t, this, cursors]() -> future<bool> {
       if (kv_iter.is_end()) {
         return ertr::make_ready_future<bool>(true);
       }
-      auto [key, p_value] = kv_iter.get_kv();
-      logger().debug("[{}] {} -> {}", kv_iter.index(), key_hobj_t{key}, *p_value);
-      return tree->insert(t, key, *p_value
-      ).safe_then([&t, this, cursors](auto ret) {
+      auto [key, value] = kv_iter.get_kv();
+      logger().debug("[{}] {} -> {}", kv_iter.index(), key_hobj_t{key}, value);
+      return tree->insert(t, key, value.get_config()
+      ).safe_then([&t, this, cursors, value](auto ret) {
         auto& [cursor, success] = ret;
         assert(success == true);
+        Values::initialize_cursor(t, cursor, value);
         if constexpr (TRACK) {
           cursors->emplace_back(cursor);
         }
 #ifndef NDEBUG
-        auto [key, p_value] = kv_iter.get_kv();
-        Onodes::validate_cursor(cursor, key, *p_value);
-        return tree->lower_bound(t, key).safe_then([this, cursor](auto cursor_) {
-          auto [key, p_value] = kv_iter.get_kv();
+        auto [key, value] = kv_iter.get_kv();
+        Values::validate_cursor(cursor, key, value);
+        return tree->lower_bound(t, key
+        ).safe_then([this, cursor](auto cursor_) mutable {
+          auto [key, value] = kv_iter.get_kv();
           ceph_assert(cursor_.get_ghobj() == key);
           ceph_assert(cursor_.value() == cursor.value());
+          Values::validate_cursor(cursor_, key, value);
           ++kv_iter;
           return ertr::make_ready_future<bool>(false);
         });
@@ -274,9 +317,9 @@ class TreeBuilder {
             // validate values in tree keep intact
             return tree->lower_bound(t, k).safe_then([this, &c_iter](auto cursor) {
               auto [k, v] = kv_iter.get_kv();
-              Onodes::validate_cursor(cursor, k, *v);
+              Values::validate_cursor(cursor, k, v);
               // validate values in cursors keep intact
-              Onodes::validate_cursor(*c_iter, k, *v);
+              Values::validate_cursor(*c_iter, k, v);
               ++kv_iter;
               ++c_iter;
               return ertr::make_ready_future<bool>(false);
@@ -301,22 +344,29 @@ class TreeBuilder {
   }
 
   future<> validate(Transaction& t) {
-    logger().info("Verifing insertion ...");
-    return seastar::do_with(
-        kvs.begin(), [&t, this] (auto& kvs_iter) {
-      return crimson::do_until([&t, this, &kvs_iter]() -> future<bool> {
-        if (kvs_iter.is_end()) {
-          logger().info("Verify done!");
-          return ertr::make_ready_future<bool>(true);
-        }
-        auto [k, v] = kvs_iter.get_kv();
-        return tree->lower_bound(t, k
-        ).safe_then([&kvs_iter, k=k, v=v] (auto cursor) {
-          Onodes::validate_cursor(cursor, k, *v);
-          ++kvs_iter;
-          return ertr::make_ready_future<bool>(false);
-        });
-      });
+    return seastar::async([this, &t] {
+      logger().info("Verifing insertion ...");
+      auto iter = kvs.begin();
+      while (!iter.is_end()) {
+        auto [k, v] = iter.get_kv();
+        auto cursor = tree->lower_bound(t, k).unsafe_get0();
+        Values::validate_cursor(cursor, k, v);
+        ++iter;
+      }
+
+      logger().info("Verifing range query ...");
+      iter = kvs.begin();
+      auto cursor = tree->begin(t).unsafe_get0();
+      while (!iter.is_end()) {
+        assert(!cursor.is_end());
+        auto [k, v] = iter.get_kv();
+        Values::validate_cursor(cursor, k, v);
+        cursor = cursor.get_next(t).unsafe_get0();
+        ++iter;
+      }
+      assert(cursor.is_end());
+
+      logger().info("Verify done!");
     });
   }
 
@@ -326,7 +376,7 @@ class TreeBuilder {
   }
 
   KVPool& kvs;
-  std::optional<Btree> tree;
+  std::optional<TestBtree> tree;
   KVPool::iterator_t kv_iter;
 };
 

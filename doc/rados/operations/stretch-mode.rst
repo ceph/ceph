@@ -162,7 +162,7 @@ When in stretch degraded mode, the cluster will go into "recovery" mode automati
 when the disconnected data center comes back. If that doesn't work, or you want to
 enable recovery mode early, you can invoke ::
 
-  $ ceph osd force_recovery_stretch_mode --yes-i-realy-mean-it
+  $ ceph osd force_recovery_stretch_mode --yes-i-really-mean-it
 
 But this command should not be necessary; it is included to deal with
 unanticipated situations.

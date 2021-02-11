@@ -47,7 +47,6 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
 
   bufferlist src = *data;
   data->clear();
-  src.rebuild_aligned_size_and_memory(m_block_size, CEPH_PAGE_SIZE);
 
   auto ctx = m_data_cryptor->get_context(mode);
   if (ctx == nullptr) {
@@ -57,12 +56,13 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
   auto sector_number = image_offset / 512;
   auto appender = data->get_contiguous_appender(src.length());
   unsigned char* out_buf_ptr = nullptr;
-  uint32_t remaining_block_bytes = 0;
+  unsigned char* leftover_block = (unsigned char*)alloca(m_block_size);
+  uint32_t leftover_size = 0;
   for (auto buf = src.buffers().begin(); buf != src.buffers().end(); ++buf) {
     auto in_buf_ptr = reinterpret_cast<const unsigned char*>(buf->c_str());
     auto remaining_buf_bytes = buf->length();
     while (remaining_buf_bytes > 0) {
-      if (remaining_block_bytes == 0) {
+      if (leftover_size == 0) {
         auto block_offset_le = init_le64(sector_number);
         memcpy(iv, &block_offset_le, sizeof(block_offset_le));
         auto r = m_data_cryptor->init_context(ctx, iv, m_iv_size);
@@ -73,23 +73,37 @@ int BlockCrypto<T>::crypt(ceph::bufferlist* data, uint64_t image_offset,
 
         out_buf_ptr = reinterpret_cast<unsigned char*>(
                 appender.get_pos_add(m_block_size));
-        remaining_block_bytes = m_block_size;
         sector_number += m_block_size / 512;
       }
 
-      auto crypto_input_length = std::min(remaining_buf_bytes,
-                                          remaining_block_bytes);
-      auto crypto_output_length = m_data_cryptor->update_context(
-              ctx, in_buf_ptr, out_buf_ptr, crypto_input_length);
+      if (leftover_size > 0 || remaining_buf_bytes < m_block_size) {
+        auto copy_size = std::min(
+                (uint32_t)m_block_size - leftover_size, remaining_buf_bytes);
+        memcpy(leftover_block + leftover_size, in_buf_ptr, copy_size);
+        in_buf_ptr += copy_size;
+        leftover_size += copy_size;
+        remaining_buf_bytes -= copy_size;
+      }
+
+      int crypto_output_length = 0;
+      if (leftover_size == 0) {
+        crypto_output_length = m_data_cryptor->update_context(
+              ctx, in_buf_ptr, out_buf_ptr, m_block_size);
+
+        in_buf_ptr += m_block_size;
+        remaining_buf_bytes -= m_block_size;
+      } else if (leftover_size == m_block_size) {
+        crypto_output_length = m_data_cryptor->update_context(
+              ctx, leftover_block, out_buf_ptr, m_block_size);
+        leftover_size = 0;
+      }
+
       if (crypto_output_length < 0) {
         lderr(m_cct) << "crypt update failed" << dendl;
         return crypto_output_length;
       }
 
       out_buf_ptr += crypto_output_length;
-      in_buf_ptr += crypto_input_length;
-      remaining_buf_bytes -= crypto_input_length;
-      remaining_block_bytes -= crypto_input_length;
     }
   }
 

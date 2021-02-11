@@ -1226,8 +1226,6 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWRESTConn *conn{nullptr};
   rgw_zone_id last_zone;
 
-  int ret{0};
-
   int source_num_shards{0};
   int target_num_shards{0};
 
@@ -2518,7 +2516,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncCtx *sc, rgw_buck
       sync_pipe.dest_bucket_info.flags = (sync_pipe.dest_bucket_info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
       int op_ret = sync_env->store->getRados()->put_bucket_instance_info(sync_pipe.dest_bucket_info, false, real_time(), NULL, sync_env->dpp);
       if (op_ret < 0) {
-         ldout(sc->cct, 0) << "SYNC_ARCHIVE: sync_object: error versioning archive bucket" << dendl;
+         ldpp_dout(sync_env->dpp, 0) << "SYNC_ARCHIVE: sync_object: error versioning archive bucket" << dendl;
          return NULL;
       }
   }

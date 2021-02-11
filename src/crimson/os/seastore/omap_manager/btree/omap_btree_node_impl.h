@@ -28,8 +28,7 @@ namespace crimson::os::seastore::omap_manager {
 
 struct OMapInnerNode
   : OMapNode,
-    StringKVInnerNodeLayout<
-    omap_node_meta_t, omap_node_meta_le_t> {
+    StringKVInnerNodeLayout {
   using OMapInnerNodeRef = TCachedExtentRef<OMapInnerNode>;
   using internal_iterator_t = const_iterator;
   template <typename... T>
@@ -68,7 +67,7 @@ struct OMapInnerNode
 
   clear_ret clear(omap_context_t oc) final;
 
-  using split_children_ertr = TransactionManager::alloc_extent_ertr;
+  using split_children_ertr = base_ertr;
   using split_children_ret = split_children_ertr::future
           <std::tuple<OMapInnerNodeRef, OMapInnerNodeRef, std::string>>;
   split_children_ret make_split_children(omap_context_t oc);
@@ -78,17 +77,17 @@ struct OMapInnerNode
   make_balanced_ret
     make_balanced(omap_context_t oc, OMapNodeRef right) final;
 
-  using make_split_insert_ertr = TransactionManager::alloc_extent_ertr;
+  using make_split_insert_ertr = base_ertr; 
   using make_split_insert_ret = make_split_insert_ertr::future<mutation_result_t>;
   make_split_insert_ret make_split_insert(omap_context_t oc, internal_iterator_t iter,
                                           std::string key, laddr_t laddr);
 
-  using merge_entry_ertr = TransactionManager::read_extent_ertr;
+  using merge_entry_ertr = base_ertr;
   using merge_entry_ret = merge_entry_ertr::future<mutation_result_t>;
   merge_entry_ret merge_entry(omap_context_t oc,
                               internal_iterator_t iter, OMapNodeRef entry);
 
-  using handle_split_ertr = TransactionManager::read_extent_ertr;
+  using handle_split_ertr = base_ertr;
   using handle_split_ret = handle_split_ertr::future<mutation_result_t>;
   handle_split_ret handle_split(omap_context_t oc, internal_iterator_t iter,
                                       mutation_result_t mresult);
@@ -102,14 +101,16 @@ struct OMapInnerNode
   ceph::bufferlist get_delta() final {
     assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    delta_buffer.encode(bl);
+    encode(delta_buffer, bl);
+    delta_buffer.clear();
     return bl;
   }
 
   void apply_delta(const ceph::bufferlist &bl) final {
     assert(bl.length());
     delta_inner_buffer_t buffer;
-    buffer.decode(bl);
+    auto bptr = bl.cbegin();
+    decode(buffer, bptr);
     buffer.replay(*this);
   }
 
@@ -129,8 +130,7 @@ using OMapInnerNodeRef = OMapInnerNode::OMapInnerNodeRef;
 
 struct OMapLeafNode
   : OMapNode,
-    StringKVLeafNodeLayout<
-      omap_node_meta_t, omap_node_meta_le_t> {
+    StringKVLeafNodeLayout {
 
   using OMapLeafNodeRef = TCachedExtentRef<OMapLeafNode>;
   using internal_iterator_t = const_iterator;
@@ -170,7 +170,7 @@ struct OMapLeafNode
 
   clear_ret clear(omap_context_t oc) final;
 
-  using split_children_ertr = TransactionManager::alloc_extent_ertr;
+  using split_children_ertr = base_ertr;
   using split_children_ret = split_children_ertr::future
           <std::tuple<OMapLeafNodeRef, OMapLeafNodeRef, std::string>>;
   split_children_ret make_split_children(omap_context_t oc);
@@ -186,7 +186,8 @@ struct OMapLeafNode
   ceph::bufferlist get_delta() final {
     assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    delta_buffer.encode(bl);
+    encode(delta_buffer, bl);
+    delta_buffer.clear();
     return bl;
   }
 
@@ -195,7 +196,8 @@ struct OMapLeafNode
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     delta_leaf_buffer_t buffer;
-    buffer.decode(bl);
+    auto bptr = bl.cbegin();
+    decode(buffer, bptr);
     buffer.replay(*this);
   }
 

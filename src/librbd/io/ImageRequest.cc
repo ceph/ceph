@@ -527,7 +527,8 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
   I &image_ctx = this->m_image_ctx;
 
   bufferlist bl;
-  if (single_extent && object_extent.buffer_extents.size() == 1) {
+  if (single_extent && object_extent.buffer_extents.size() == 1 &&
+      m_bl.length() == object_extent.length) {
     // optimization for single object/buffer extent writes
     bl = std::move(m_bl);
   } else {

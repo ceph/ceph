@@ -9,7 +9,7 @@
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/fwd.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_types.h"
-#include "crimson/os/seastore/onode_manager/staged-fltree/tree_types.h"
+#include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 
 namespace crimson::os::seastore::onode {
 
@@ -149,21 +149,37 @@ struct staged_position_t {
     }
   }
 
-  int cmp(const me_t& o) const {
+  MatchKindCMP compare_to(const me_t& o) const {
     if (index > o.index) {
-      return 1;
+      return MatchKindCMP::GT;
     } else if (index < o.index) {
-      return -1;
+      return MatchKindCMP::LT;
     } else {
-      return nxt.cmp(o.nxt);
+      return nxt.compare_to(o.nxt);
     }
   }
-  bool operator>(const me_t& o) const { return cmp(o) > 0; }
-  bool operator>=(const me_t& o) const { return cmp(o) >= 0; }
-  bool operator<(const me_t& o) const { return cmp(o) < 0; }
-  bool operator<=(const me_t& o) const { return cmp(o) <= 0; }
-  bool operator==(const me_t& o) const { return cmp(o) == 0; }
-  bool operator!=(const me_t& o) const { return cmp(o) != 0; }
+  bool operator>(const me_t& o) const { return (int)compare_to(o) > 0; }
+  bool operator>=(const me_t& o) const { return (int)compare_to(o) >= 0; }
+  bool operator<(const me_t& o) const { return (int)compare_to(o) < 0; }
+  bool operator<=(const me_t& o) const { return (int)compare_to(o) <= 0; }
+  bool operator==(const me_t& o) const { return (int)compare_to(o) == 0; }
+  bool operator!=(const me_t& o) const { return (int)compare_to(o) != 0; }
+
+  void assert_next_to(const me_t& prv) const {
+#ifndef NDEBUG
+    if (is_end()) {
+      assert(!prv.is_end());
+    } else if (index == prv.index) {
+      assert(!nxt.is_end());
+      nxt.assert_next_to(prv.nxt);
+    } else if (index == prv.index + 1) {
+      assert(!prv.nxt.is_end());
+      assert(nxt == nxt_t::begin());
+    } else {
+      assert(false);
+    }
+#endif
+  }
 
   me_t& operator-=(const me_t& o) {
     assert(is_valid_index(o.index));
@@ -227,21 +243,21 @@ struct staged_position_t<STAGE_BOTTOM> {
     return index;
   }
 
-  int cmp(const staged_position_t<STAGE_BOTTOM>& o) const {
+  MatchKindCMP compare_to(const staged_position_t<STAGE_BOTTOM>& o) const {
     if (index > o.index) {
-      return 1;
+      return MatchKindCMP::GT;
     } else if (index < o.index) {
-      return -1;
+      return MatchKindCMP::LT;
     } else {
-      return 0;
+      return MatchKindCMP::EQ;
     }
   }
-  bool operator>(const me_t& o) const { return cmp(o) > 0; }
-  bool operator>=(const me_t& o) const { return cmp(o) >= 0; }
-  bool operator<(const me_t& o) const { return cmp(o) < 0; }
-  bool operator<=(const me_t& o) const { return cmp(o) <= 0; }
-  bool operator==(const me_t& o) const { return cmp(o) == 0; }
-  bool operator!=(const me_t& o) const { return cmp(o) != 0; }
+  bool operator>(const me_t& o) const { return (int)compare_to(o) > 0; }
+  bool operator>=(const me_t& o) const { return (int)compare_to(o) >= 0; }
+  bool operator<(const me_t& o) const { return (int)compare_to(o) < 0; }
+  bool operator<=(const me_t& o) const { return (int)compare_to(o) <= 0; }
+  bool operator==(const me_t& o) const { return (int)compare_to(o) == 0; }
+  bool operator!=(const me_t& o) const { return (int)compare_to(o) != 0; }
 
   me_t& operator-=(const me_t& o) {
     assert(is_valid_index(o.index));
@@ -251,6 +267,16 @@ struct staged_position_t<STAGE_BOTTOM> {
       index -= o.index;
     }
     return *this;
+  }
+
+  void assert_next_to(const me_t& prv) const {
+#ifndef NDEBUG
+    if (is_end()) {
+      assert(!prv.is_end());
+    } else {
+      assert(index == prv.index + 1);
+    }
+#endif
   }
 
   void encode(ceph::bufferlist& encoded) const {
@@ -356,9 +382,16 @@ struct memory_range_t {
 
 enum class ContainerType { ITERATIVE, INDEXABLE };
 
+// the input type to construct the value during insert.
+template <node_type_t> struct value_input_type;
+template<> struct value_input_type<node_type_t::INTERNAL> { using type = laddr_t; };
+template<> struct value_input_type<node_type_t::LEAF> { using type = value_config_t; };
+template <node_type_t NODE_TYPE>
+using value_input_type_t = typename value_input_type<NODE_TYPE>::type;
+
 template <node_type_t> struct value_type;
 template<> struct value_type<node_type_t::INTERNAL> { using type = laddr_packed_t; };
-template<> struct value_type<node_type_t::LEAF> { using type = onode_t; };
+template<> struct value_type<node_type_t::LEAF> { using type = value_header_t; };
 template <node_type_t NODE_TYPE>
 using value_type_t = typename value_type<NODE_TYPE>::type;
 

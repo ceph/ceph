@@ -33,6 +33,8 @@ struct btree_lba_manager_test :
 
   const size_t block_size;
 
+  WritePipeline pipeline;
+
   btree_lba_manager_test()
     : segment_manager(segment_manager::create_test_ephemeral()),
       journal(*segment_manager),
@@ -41,6 +43,7 @@ struct btree_lba_manager_test :
       block_size(segment_manager->get_block_size())
   {
     journal.set_segment_provider(this);
+    journal.set_write_pipeline(&pipeline);
   }
 
   segment_id_t next = 0;
@@ -60,7 +63,7 @@ struct btree_lba_manager_test :
       ceph_assert(0 == "cannot fail");
     }
 
-    return journal.submit_record(std::move(*record)).safe_then(
+    return journal.submit_record(std::move(*record), t->handle).safe_then(
       [this, t=std::move(t)](auto p) mutable {
 	auto [addr, seq] = p;
 	cache.complete_commit(*t, addr, seq);

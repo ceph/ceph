@@ -18,6 +18,7 @@ set(crimson_common_srcs
   common/formatter.cc
   common/perf_counters_collection.cc
   common/log.cc
+  common/operation.cc
   common/throttle.cc
   common/tri_mutex.cc)
 
@@ -25,6 +26,7 @@ set(crimson_common_srcs
 #  - the logging is sent to Seastar backend
 #  - and the template parameter of lock_policy is SINGLE
 add_library(crimson-common STATIC
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket_client.cc
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
@@ -94,6 +96,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
+  ${PROJECT_SOURCE_DIR}/src/librbd/io/IoOperations.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/inode_backtrace.cc

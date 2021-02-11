@@ -224,7 +224,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
     if (ret < 0)
       return ret;
   } else {
-    ldout(cct, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(bucket_info.owner);
     /* object exists, but policy is broken */
     int r = user->load_by_id(dpp, y);
@@ -259,7 +259,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
       return ret;
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
-    ldout(cct, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
+    ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
     std::unique_ptr<rgw::sal::RGWUser> user = store->get_user(bucket_info.owner);
     ret = user->load_by_id(dpp, y);
     if (ret < 0)
@@ -3123,7 +3123,7 @@ void RGWCreateBucket::execute(optional_yield y)
   if (need_metadata_upload()) {
     /* It's supposed that following functions WILL NOT change any special
      * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
-    op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
+    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
     if (op_ret < 0) {
       return;
     }
@@ -3217,7 +3217,7 @@ void RGWCreateBucket::execute(optional_yield y)
 
       attrs.clear();
 
-      op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
+      op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
       if (op_ret < 0) {
         return;
       }
@@ -4013,7 +4013,7 @@ void RGWPutObj::execute(optional_yield y)
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   populate_with_generic_attrs(s, attrs);
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
     return;
   }
@@ -4359,7 +4359,7 @@ int RGWPutMetadataAccount::init_processing(optional_yield y)
     attrs.emplace(RGW_ATTR_ACL, std::move(acl_bl));
   }
 
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -4458,7 +4458,7 @@ void RGWPutMetadataBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
   if (op_ret < 0) {
     return;
   }
@@ -4553,7 +4553,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
     return;
   }
@@ -5038,7 +5038,7 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -5768,7 +5768,7 @@ void RGWInitMultipart::execute(optional_yield y)
   if (op_ret != 0)
     return;
 
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs);
+  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
   if (op_ret < 0) {
     return;
   }

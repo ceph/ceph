@@ -105,7 +105,7 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
             return HandleCommandResult(-errno.ENOENT, stderr=msg)
 
     # misuse lambda to copy `wrapper`
-    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)
+    wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
     wrapper_copy._prefix = prefix  # type: ignore
     wrapper_copy._cli_command = CLICommand(prefix, perm)  # type: ignore
     wrapper_copy._cli_command.store_func_metadata(func)  # type: ignore
@@ -115,7 +115,8 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
 
 
 class InnerCliCommandCallable(Protocol):
-    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]: ...
+    def __call__(self, prefix: str) -> Callable[[FuncT], FuncT]:
+        ...
 
 
 def _cli_command(perm: str) -> InnerCliCommandCallable:
@@ -248,8 +249,8 @@ class _Promise(object):
         val = repr(self._value) if self._value not in (self.NO_RESULT, self.ASYNC_RESULT) else '...'
         prefix = {
             self.INITIALIZED: '      ',
-            self.RUNNING:     '   >>>',
-            self.FINISHED:    '(done)'
+            self.RUNNING:     '   >>>',  # noqa: E241
+            self.FINISHED:    '(done)',  # noqa: E241
         }[self._state]
         return '{} {}({}),'.format(prefix, name, val)
 
@@ -703,7 +704,7 @@ class Orchestrator(object):
         return True
 
     @_hide_in_features
-    def available(self) -> Tuple[bool, str]:
+    def available(self) -> Tuple[bool, str, Dict[str, Any]]:
         """
         Report whether we can talk to the orchestrator.  This is the
         place to give the user a meaningful message if the orchestrator
@@ -724,7 +725,9 @@ class Orchestrator(object):
                 ... if OrchestratorClientMixin().available()[0]:  # wrong.
                 ...     OrchestratorClientMixin().get_hosts()
 
-        :return: two-tuple of boolean, string
+        :return: boolean representing whether the module is available/usable
+        :return: string describing any error
+        :return: dict containing any module specific information
         """
         raise NotImplementedError()
 
@@ -882,11 +885,11 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def apply(self, specs: List["GenericSpec"]) -> Completion[List[str]]:
+    def apply(self, specs: Sequence["GenericSpec"]) -> Completion[List[str]]:
         """
         Applies any spec
         """
-        fns: Dict[str, function] = {
+        fns: Dict[str, Callable] = {
             'alertmanager': self.apply_alertmanager,
             'crash': self.apply_crash,
             'grafana': self.apply_grafana,
@@ -921,7 +924,7 @@ class Orchestrator(object):
             completion = completion.then(next)
         return completion
 
-    def plan(self, spec: List["GenericSpec"]) -> Completion[List]:
+    def plan(self, spec: Sequence["GenericSpec"]) -> Completion[List]:
         """
         Plan (Dry-run, Preview) a List of Specs.
         """
@@ -1272,6 +1275,7 @@ class DaemonDescription(object):
                  container_id: Optional[str] = None,
                  container_image_id: Optional[str] = None,
                  container_image_name: Optional[str] = None,
+                 container_image_digests: Optional[List[str]] = None,
                  version: Optional[str] = None,
                  status: Optional[int] = None,
                  status_desc: Optional[str] = None,
@@ -1291,8 +1295,9 @@ class DaemonDescription(object):
         # justify having the container_id (runtime id) and container_image
         # (image name)
         self.container_id = container_id                  # runtime id
-        self.container_image_id = container_image_id      # image hash
+        self.container_image_id = container_image_id      # image id locally
         self.container_image_name = container_image_name  # image friendly name
+        self.container_image_digests = container_image_digests  # reg hashes
 
         # The type of service (osd, mon, mgr, etc.)
         self.daemon_type = daemon_type
@@ -1409,6 +1414,7 @@ class DaemonDescription(object):
         out['container_id'] = self.container_id
         out['container_image_id'] = self.container_image_id
         out['container_image_name'] = self.container_image_name
+        out['container_image_digests'] = self.container_image_digests
         out['version'] = self.version
         out['status'] = self.status
         out['status_desc'] = self.status_desc
@@ -1474,6 +1480,7 @@ class ServiceDescription(object):
                  service_url: Optional[str] = None,
                  last_refresh: Optional[datetime.datetime] = None,
                  created: Optional[datetime.datetime] = None,
+                 deleted: Optional[datetime.datetime] = None,
                  size: int = 0,
                  running: int = 0,
                  events: Optional[List['OrchestratorEvent']] = None) -> None:
@@ -1500,6 +1507,7 @@ class ServiceDescription(object):
         # datetime when this info was last refreshed
         self.last_refresh: Optional[datetime.datetime] = last_refresh
         self.created: Optional[datetime.datetime] = created
+        self.deleted: Optional[datetime.datetime] = deleted
 
         self.spec: ServiceSpec = spec
 
