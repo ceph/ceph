@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional, Dict, List, Tuple
 import orchestrator
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER
+from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, MONITORING_STACK_TYPES
 from orchestrator import OrchestratorError, DaemonDescription, daemon_type_to_service
 
 if TYPE_CHECKING:
@@ -452,18 +452,29 @@ class CephadmUpgrade:
             logger.info('Upgrade: Checking %s daemons' % daemon_type)
 
             need_upgrade_self = False
-            need_upgrade = []
+            need_upgrade: List[Tuple[DaemonDescription, bool]] = []
             for d in daemons:
                 if d.daemon_type != daemon_type:
                     continue
-                if any(d in target_digests for d in (d.container_image_digests or [])):
+                correct_digest = False
+                if (any(d in target_digests for d in (d.container_image_digests or []))
+                        or d.daemon_type in MONITORING_STACK_TYPES):
                     logger.debug('daemon %s.%s container digest correct' % (
                         daemon_type, d.daemon_id))
-                    done += 1
-                    continue
-                logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
-                    daemon_type, d.daemon_id,
-                    d.container_image_name, d.container_image_digests, d.version))
+                    correct_digest = True
+                    if any(d in target_digests for d in (d.deployed_by or [])):
+                        logger.debug('daemon %s.%s deployed by correct version' % (
+                            d.daemon_type, d.daemon_id))
+                        done += 1
+                        continue
+
+                if correct_digest:
+                    logger.debug('daemon %s.%s not deployed by correct version' % (
+                        d.daemon_type, d.daemon_id))
+                else:
+                    logger.debug('daemon %s.%s not correct (%s, %s, %s)' % (
+                        daemon_type, d.daemon_id,
+                        d.container_image_name, d.container_image_digests, d.version))
 
                 assert d.daemon_type is not None
                 assert d.daemon_id is not None
@@ -474,22 +485,23 @@ class CephadmUpgrade:
                     need_upgrade_self = True
                     continue
 
-                need_upgrade.append(d)
+                need_upgrade.append((d, correct_digest))
 
             # prepare filesystems for daemon upgrades?
             if (
                 daemon_type == 'mds'
                 and need_upgrade
-                and not self._prepare_for_mds_upgrade(target_major, need_upgrade)
+                and not self._prepare_for_mds_upgrade(target_major, [d_entry[0] for d_entry in need_upgrade])
             ):
                 return
 
             if need_upgrade:
                 self.upgrade_info_str = 'Currently upgrading %s daemons' % (daemon_type)
 
-            to_upgrade = []
+            to_upgrade: List[Tuple[DaemonDescription, bool]] = []
             known_ok_to_stop: List[str] = []
-            for d in need_upgrade:
+            for d_entry in need_upgrade:
+                d = d_entry[0]
                 assert d.daemon_type is not None
                 assert d.daemon_id is not None
                 assert d.hostname is not None
@@ -503,7 +515,7 @@ class CephadmUpgrade:
                 if known_ok_to_stop:
                     if d.name() in known_ok_to_stop:
                         logger.info(f'Upgrade: {d.name()} is also safe to restart')
-                        to_upgrade.append(d)
+                        to_upgrade.append(d_entry)
                     continue
 
                 if d.daemon_type in ['mon', 'osd', 'mds']:
@@ -512,14 +524,15 @@ class CephadmUpgrade:
                     if not self._wait_for_ok_to_stop(d, known_ok_to_stop):
                         return
 
-                to_upgrade.append(d)
+                to_upgrade.append(d_entry)
 
                 # if we don't have a list of others to consider, stop now
                 if not known_ok_to_stop:
                     break
 
             num = 1
-            for d in to_upgrade:
+            for d_entry in to_upgrade:
+                d = d_entry[0]
                 assert d.daemon_type is not None
                 assert d.daemon_id is not None
                 assert d.hostname is not None
@@ -566,17 +579,18 @@ class CephadmUpgrade:
                 else:
                     logger.info('Upgrade: Updating %s.%s' %
                                 (d.daemon_type, d.daemon_id))
+                action = 'Upgrading' if not d_entry[1] else 'Redeploying'
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(d)
                     self.mgr._daemon_action(
                         daemon_spec,
                         'redeploy',
-                        image=target_image
+                        image=target_image if not d_entry[1] else None
                     )
                 except Exception as e:
                     self._fail_upgrade('UPGRADE_REDEPLOY_DAEMON', {
                         'severity': 'warning',
-                        'summary': f'Upgrading daemon {d.name()} on host {d.hostname} failed.',
+                        'summary': f'{action} daemon {d.name()} on host {d.hostname} failed.',
                         'count': 1,
                         'detail': [
                             f'Upgrade daemon: {d.name()}: {e}'
