@@ -735,6 +735,7 @@ def cluster(ctx, config):
         path=monmap_path,
         mon_bind_addrvec=config.get('mon_bind_addrvec'),
     )
+    ctx.ceph[cluster_name].fsid = fsid
     if not 'global' in conf:
         conf['global'] = {}
     conf['global']['fsid'] = fsid
