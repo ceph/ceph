@@ -162,7 +162,7 @@ class Sig:
     @staticmethod
     def _parse_arg_desc(desc):
         try:
-            return dict(kv.split('=') for kv in desc.split(',') if kv)
+            return dict(kv.split('=', 1) for kv in desc.split(',') if kv)
         except ValueError:
             return desc
 
