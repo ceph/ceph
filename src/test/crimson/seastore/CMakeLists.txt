@@ -67,4 +67,14 @@ target_link_libraries(
   ${CMAKE_DL_LIBS}
   crimson-seastore)
 
+add_executable(unittest-seastore
+  test_seastore.cc
+  ../gtest_seastar.cc)
+add_ceph_unittest(unittest-seastore)
+target_link_libraries(
+  unittest-seastore
+  ${CMAKE_DL_LIBS}
+  crimson-seastore
+  crimson-common)
+
 add_subdirectory(onode_tree)

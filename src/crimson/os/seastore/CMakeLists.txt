@@ -26,6 +26,7 @@ add_library(crimson-seastore STATIC
   onode_manager/staged-fltree/stages/sub_items_stage.cc
   onode_manager/staged-fltree/super.cc
   onode_manager/staged-fltree/value.cc
+  onode_manager/staged-fltree/fltree_onode_manager.cc
   extentmap_manager.cc
   extentmap_manager/btree/extentmap_btree_node_impl.cc
   extentmap_manager/btree/btree_extentmap_manager.cc

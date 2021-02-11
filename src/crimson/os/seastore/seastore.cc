@@ -3,6 +3,8 @@
 
 #include "seastore.h"
 
+#include <algorithm>
+
 #include <boost/algorithm/string/trim.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -37,12 +39,23 @@ struct SeastoreCollection final : public FuturizedCollection {
 
 seastar::future<> SeaStore::stop()
 {
-  return seastar::now();
+  return transaction_manager->close(
+  ).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::stop"
+    }
+  );
+
 }
 
 seastar::future<> SeaStore::mount()
 {
-  return seastar::now();
+  return transaction_manager->mount(
+  ).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::mount"
+    }
+  );
 }
 
 seastar::future<> SeaStore::umount()
@@ -52,7 +65,27 @@ seastar::future<> SeaStore::umount()
 
 seastar::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
 {
-  return seastar::now();
+  return transaction_manager->mkfs(
+  ).safe_then([this] {
+    return seastar::do_with(
+      make_transaction(),
+      [this](auto &t) {
+	return onode_manager->mkfs(*t
+	).safe_then([this, &t] {
+	  return collection_manager->mkfs(*t);
+	}).safe_then([this, &t](auto coll_root) {
+	  transaction_manager->write_collection_root(
+	    *t,
+	    coll_root);
+	  return transaction_manager->submit_transaction(
+	    std::move(t));
+	});
+      });
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::mkfs"
+    }
+  );
 }
 
 seastar::future<store_statfs_t> SeaStore::stat() const
@@ -75,7 +108,20 @@ SeaStore::list_objects(CollectionRef ch,
 seastar::future<CollectionRef> SeaStore::create_new_collection(const coll_t& cid)
 {
   auto c = _get_collection(cid);
-  return seastar::make_ready_future<CollectionRef>(c);
+  return repeat_with_internal_context(
+    c,
+    ceph::os::Transaction{},
+    [this, cid](auto &ctx) {
+      return _create_collection(
+	ctx,
+	cid,
+	4 /* TODO */
+      ).safe_then([this, &ctx] {
+	return transaction_manager->submit_transaction(std::move(ctx.transaction));
+      });
+    }).then([c] {
+      return CollectionRef(c);
+    });
 }
 
 seastar::future<CollectionRef> SeaStore::open_collection(const coll_t& cid)
@@ -85,7 +131,34 @@ seastar::future<CollectionRef> SeaStore::open_collection(const coll_t& cid)
 
 seastar::future<std::vector<coll_t>> SeaStore::list_collections()
 {
-  return seastar::make_ready_future<std::vector<coll_t>>();
+  return seastar::do_with(
+    std::vector<coll_t>(),
+    [this](auto &ret) {
+      return repeat_eagain([this, &ret] {
+
+	return seastar::do_with(
+	  make_transaction(),
+	  [this, &ret](auto &t) {
+	    return transaction_manager->read_collection_root(*t
+	    ).safe_then([this, &ret, &t](auto coll_root) {
+	      return collection_manager->list(
+		coll_root,
+		*t);
+	    }).safe_then([this, &ret, &t](auto colls) {
+	      ret.resize(colls.size());
+	      std::transform(
+		colls.begin(), colls.end(), ret.begin(),
+		[](auto p) { return p.first; });
+	    });
+	  });
+      }).safe_then([&ret] {
+	return seastar::make_ready_future<std::vector<coll_t>>(ret);
+      });
+    }).handle_error(
+      crimson::ct_error::assert_all{
+	"Invalid error in SeaStore::list_collections"
+      }
+    );
 }
 
 SeaStore::read_errorator::future<ceph::bufferlist> SeaStore::read(
@@ -128,20 +201,26 @@ SeaStore::get_attrs_ertr::future<SeaStore::attrs_t> SeaStore::get_attrs(
   return crimson::ct_error::enoent::make();
 }
 
-seastar::future<struct stat> stat(
-  CollectionRef c,
-  const ghobject_t& oid)
-{
-  return seastar::make_ready_future<struct stat>();
-}
-
-
 seastar::future<struct stat> SeaStore::stat(
   CollectionRef c,
   const ghobject_t& oid)
 {
-  struct stat st;
-  return seastar::make_ready_future<struct stat>(st);
+  return repeat_with_onode<struct stat>(
+    c,
+    oid,
+    [=](auto &t, auto &onode) {
+      struct stat st;
+      auto &olayout = onode.get_layout();
+      st.st_size = olayout.size;
+      st.st_blksize = 4096;
+      st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
+      st.st_nlink = 1;
+      return seastar::make_ready_future<struct stat>();
+    }).handle_error(
+      crimson::ct_error::assert_all{
+	"Invalid error in SeaStore::stat"
+       }
+    );
 }
 
 auto
@@ -305,6 +384,12 @@ SeaStore::tm_ret SeaStore::_do_transaction_step(
       return _create_collection(ctx, cid, op->split_bits);
     }
     break;
+    case Transaction::OP_RMCOLL:
+    {
+      coll_t cid = i.get_cid(op->cid);
+      return _remove_collection(ctx, cid);
+    }
+    break;
     case Transaction::OP_OMAP_SETKEYS:
     {
       std::map<std::string, ceph::bufferlist> aset;
@@ -377,17 +462,6 @@ SeaStore::tm_ret SeaStore::_write(
   logger().debug("{}: {} {} ~ {}",
                 __func__, *onode, offset, len);
   assert(len == bl.length());
-
-/*
-  return onode_manager->get_or_create_onode(cid, oid).safe_then([=, &bl](auto ref) {
-    return;
-  }).handle_error(
-    crimson::ct_error::enoent::handle([]() {
-      return;
-    }),
-    OnodeManager::open_ertr::pass_further{}
-  );
-  */
   return tm_ertr::now();
 }
 
@@ -461,7 +535,62 @@ SeaStore::tm_ret SeaStore::_create_collection(
   internal_context_t &ctx,
   const coll_t& cid, int bits)
 {
-  return tm_ertr::now();
+  return transaction_manager->read_collection_root(
+    *ctx.transaction
+  ).safe_then([=, &ctx](auto _cmroot) {
+    return seastar::do_with(
+      _cmroot,
+      [=, &ctx](auto &cmroot) {
+	return collection_manager->create(
+	  cmroot,
+	  *ctx.transaction,
+	  cid,
+	  bits
+	).safe_then([=, &ctx, &cmroot] {
+	  if (cmroot.must_update()) {
+	    transaction_manager->write_collection_root(
+	      *ctx.transaction,
+	      cmroot);
+	  }
+	});
+      });
+  }).handle_error(
+    tm_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::_create_collection"
+    }
+  );
+}
+
+SeaStore::tm_ret SeaStore::_remove_collection(
+  internal_context_t &ctx,
+  const coll_t& cid)
+{
+  return transaction_manager->read_collection_root(
+    *ctx.transaction
+  ).safe_then([=, &ctx](auto _cmroot) {
+    return seastar::do_with(
+      _cmroot,
+      [=, &ctx](auto &cmroot) {
+	return collection_manager->remove(
+	  cmroot,
+	  *ctx.transaction,
+	  cid
+	).safe_then([=, &ctx, &cmroot] {
+	  // param here denotes whether it already existed, probably error
+	  if (cmroot.must_update()) {
+	    transaction_manager->write_collection_root(
+	      *ctx.transaction,
+	      cmroot);
+	  }
+	});
+      });
+  }).handle_error(
+    tm_ertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::_create_collection"
+    }
+  );
 }
 
 boost::intrusive_ptr<SeastoreCollection> SeaStore::_get_collection(const coll_t& cid)
