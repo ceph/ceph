@@ -14,8 +14,12 @@
 
 namespace crimson::os::seastore {
 
-using depth_t = int32_t;
-using depth_le_t = ceph_les32;
+using depth_t = uint32_t;
+using depth_le_t = ceph_le32;
+
+inline depth_le_t init_depth_le(uint32_t i) {
+  return init_le32(i);
+}
 
 using checksum_t = uint32_t;
 
@@ -172,7 +176,7 @@ constexpr paddr_t make_fake_paddr(segment_off_t off) {
   return paddr_t{FAKE_SEG_ID, off};
 }
 
-struct paddr_le_t {
+struct __attribute((packed)) paddr_le_t {
   ceph_le32 segment = init_le32(NULL_SEG_ID);
   ceph_les32 offset = init_les32(NULL_SEG_OFF);
 
@@ -225,7 +229,7 @@ constexpr laddr_t L_ADDR_NULL = std::numeric_limits<laddr_t>::max();
 constexpr laddr_t L_ADDR_ROOT = std::numeric_limits<laddr_t>::max() - 1;
 constexpr laddr_t L_ADDR_LBAT = std::numeric_limits<laddr_t>::max() - 2;
 
-struct laddr_le_t {
+struct __attribute((packed)) laddr_le_t {
   ceph_le64 laddr = init_le64(L_ADDR_NULL);
 
   laddr_le_t() = default;
@@ -250,7 +254,7 @@ constexpr extent_len_t EXTENT_LEN_MAX =
   std::numeric_limits<extent_len_t>::max();
 
 using extent_len_le_t = ceph_le32;
-inline extent_len_le_t init_extent_len_le_t(extent_len_t len) {
+inline extent_len_le_t init_extent_len_le(extent_len_t len) {
   return init_le32(len);
 }
 
@@ -365,42 +369,123 @@ struct record_t {
 };
 
 /**
- * coll_root_t
- *
- * Information for locating CollectionManager information, addr should be
- * embedded into the TransactionManager root.
+ * lba_root_t 
  */
-class coll_root_t {
-  laddr_t coll_root_laddr;
-  segment_off_t size = 0;
-  
-  enum state_t : uint8_t {
-    CLEAN = 0,   /// No pending mutations
-    MUTATED = 1, /// coll_root_laddr state must be written back to persistence
-    NONE = 0xFF  /// Not yet mounted, should not be exposed to user
-  } state = NONE;
+class __attribute__((packed)) lba_root_t {
+  paddr_le_t root_addr;
+  depth_le_t depth = init_extent_len_le(0);
   
 public:
-  coll_root_t() : state(state_t::NONE) {}
+  lba_root_t() = default;
   
-  coll_root_t(laddr_t laddr, segment_off_t size)
-    : coll_root_laddr(laddr), size(size), state(state_t::CLEAN) {}
+  lba_root_t(paddr_t addr, depth_t depth)
+    : root_addr(addr), depth(init_depth_le(depth)) {}
+
+  lba_root_t(const lba_root_t &o) = default;
+  lba_root_t(lba_root_t &&o) = default;
+  lba_root_t &operator=(const lba_root_t &o) = default;
+  lba_root_t &operator=(lba_root_t &&o) = default;
+  
+  paddr_t get_location() const {
+    return root_addr;
+  }
+
+  void set_location(paddr_t location) {
+    root_addr = location;
+  }
+
+  depth_t get_depth() const {
+    return depth;
+  }
+
+  void adjust_addrs_from_base(paddr_t base) {
+    paddr_t _root_addr = root_addr;
+    if (_root_addr.is_relative()) {
+      root_addr = base.add_record_relative(_root_addr);
+    }
+  }
+};
+
+class coll_root_t {
+  laddr_t addr = L_ADDR_NULL;
+  extent_len_t size = 0;
+
+  bool mutated = false;
+
+public:
+  coll_root_t() = default;
+  coll_root_t(laddr_t addr, extent_len_t size) : addr(addr), size(size) {}
+
+  coll_root_t(const coll_root_t &o) = default;
+  coll_root_t(coll_root_t &&o) = default;
+  coll_root_t &operator=(const coll_root_t &o) = default;
+  coll_root_t &operator=(coll_root_t &&o) = default;
   
   bool must_update() const {
-    return state == MUTATED;
+    return mutated;
   }
   
-  void update(laddr_t addr, segment_off_t s) {
-    state = state_t::MUTATED;
-    coll_root_laddr = addr;
-    size = s;
+  void update(laddr_t _addr, extent_len_t _s) {
+    mutated = true;
+    addr = _addr;
+    size = _s;
   }
   
   laddr_t get_location() const {
-    return coll_root_laddr;
+    return addr;
   }
-  auto get_size() const {
+
+  extent_len_t get_size() const {
     return size;
+  }
+};
+
+/**
+ * coll_root_le_t
+ *
+ * Information for locating CollectionManager information, to be embedded
+ * in root block.
+ */
+class __attribute__((packed)) coll_root_le_t {
+  laddr_le_t addr;
+  extent_len_le_t size = init_extent_len_le(0);
+  
+public:
+  coll_root_le_t() = default;
+  
+  coll_root_le_t(laddr_t laddr, segment_off_t size)
+    : addr(laddr), size(init_extent_len_le(size)) {}
+
+
+  coll_root_le_t(const coll_root_le_t &o) = default;
+  coll_root_le_t(coll_root_le_t &&o) = default;
+  coll_root_le_t &operator=(const coll_root_le_t &o) = default;
+  coll_root_le_t &operator=(coll_root_le_t &&o) = default;
+  
+  void update(const coll_root_t &nroot) {
+    addr = nroot.get_location();
+    size = init_extent_len_le(nroot.get_size());
+  }
+  
+  coll_root_t get() const {
+    return coll_root_t(addr, size);
+  }
+};
+
+
+/**
+ * root_t
+ *
+ * Contains information required to find metadata roots.
+ * TODO: generalize this to permit more than one lba_manager implementation
+ */
+struct __attribute__((packed)) root_t {
+  lba_root_t lba_root;
+  laddr_le_t onode_root;
+  coll_root_le_t collection_root;
+
+  void adjust_addrs_from_base(paddr_t base) {
+    lba_root.adjust_addrs_from_base(base);
   }
 };
 
