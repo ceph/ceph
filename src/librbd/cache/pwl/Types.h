@@ -154,7 +154,6 @@ namespace cache {
 namespace pwl {
 
 class ImageExtentBuf;
-typedef std::vector<ImageExtentBuf> ImageExtentBufs;
 
 const int IN_FLIGHT_FLUSH_WRITE_LIMIT = 64;
 const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
