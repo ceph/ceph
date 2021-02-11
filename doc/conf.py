@@ -147,13 +147,6 @@ breathe_doxygen_config_options = {
     'PREDEFINED': 'CEPH_RADOS_API= '
 }
 
-# edit_on_github options
-# the docs are rendered with github links pointing to master. the javascript
-# snippet in _static/ceph.js rewrites the edit links when a page is loaded, to
-# point to the correct branch.
-edit_on_github_project = 'ceph/ceph'
-edit_on_github_branch = 'master'
-
 # graphviz options
 graphviz_output_format = 'svg'
 
@@ -221,7 +214,6 @@ openapi_logger.setLevel(logging.WARNING)
 
 # handles edit-on-github and old version warning display
 def setup(app):
-    app.add_js_file('js/ceph.js')
     if ditaa is None:
         # add "ditaa" as an alias of "diagram"
         from plantweb.directive import DiagramDirective
