@@ -668,7 +668,6 @@ template <typename I>
 void AbstractWriteLog<I>::read(Extents&& image_extents,
                                      ceph::bufferlist* bl,
                                      int fadvise_flags, Context *on_finish) {
-  // TODO: handle writesame and discard case in later PRs
   CephContext *cct = m_image_ctx.cct;
   utime_t now = ceph_clock_now();
 
@@ -737,7 +736,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
         Extent miss_extent(miss_extent_start, miss_extent_length);
         read_ctx->miss_extents.push_back(miss_extent);
         /* Add miss range to read extents */
-        ImageExtentBuf miss_extent_buf(miss_extent);
+        auto miss_extent_buf = std::make_shared<ImageExtentBuf>(miss_extent);
         read_ctx->read_extents.push_back(miss_extent_buf);
         extent_offset += miss_extent_length;
       }
@@ -756,6 +755,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
       if (0 == map_entry.log_entry->write_bytes() &&
           0 < map_entry.log_entry->bytes_dirty()) {
         /* discard log entry */
+        ldout(cct, 20) << "discard log entry" << dendl;
         auto discard_entry = map_entry.log_entry;
         ldout(cct, 20) << "read hit on discard entry: log_entry="
                        << *discard_entry
@@ -764,9 +764,11 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
         bufferlist zero_bl;
         zero_bl.append_zero(entry_hit_length);
         /* Add hit extent to read extents */
-        ImageExtentBuf hit_extent_buf(hit_extent, zero_bl);
+        auto hit_extent_buf = std::make_shared<ImageExtentBuf>(
+            hit_extent, zero_bl);
         read_ctx->read_extents.push_back(hit_extent_buf);
       } else {
+        ldout(cct, 20) << "write or writesame log entry" << dendl;
         /* write and writesame log entry */
         /* Offset of the map entry into the log entry's buffer */
         uint64_t map_entry_buffer_offset = entry_image_extent.first -
@@ -790,7 +792,7 @@ void AbstractWriteLog<I>::read(Extents&& image_extents,
       Extent miss_extent(miss_extent_start, miss_extent_length);
       read_ctx->miss_extents.push_back(miss_extent);
       /* Add miss range to read extents */
-      ImageExtentBuf miss_extent_buf(miss_extent);
+      auto miss_extent_buf = std::make_shared<ImageExtentBuf>(miss_extent);
       read_ctx->read_extents.push_back(miss_extent_buf);
       extent_offset += miss_extent_length;
     }
@@ -878,7 +880,8 @@ void AbstractWriteLog<I>::flush(io::FlushSource flush_source, Context *on_finish
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "on_finish=" << on_finish << " flush_source=" << flush_source << dendl;
 
-  if (io::FLUSH_SOURCE_SHUTDOWN == flush_source || io::FLUSH_SOURCE_INTERNAL == flush_source) {
+  if (io::FLUSH_SOURCE_SHUTDOWN == flush_source || io::FLUSH_SOURCE_INTERNAL == flush_source ||
+      io::FLUSH_SOURCE_WRITE_BLOCK == flush_source) {
     internal_flush(false, on_finish);
     return;
   }

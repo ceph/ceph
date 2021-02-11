@@ -280,6 +280,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
       set(rbd_plugin_pwl_srcs
         ${rbd_plugin_pwl_srcs}
         cache/pwl/ssd/LogEntry.cc
+        cache/pwl/ssd/LogOperation.cc
         cache/pwl/ssd/ReadRequest.cc
         cache/pwl/ssd/Request.cc
         cache/pwl/ssd/WriteLog.cc)

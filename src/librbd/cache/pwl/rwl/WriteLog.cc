@@ -76,7 +76,7 @@ void WriteLog<I>::collect_read_extents(
   ceph_assert(hit_bl.length() == entry_hit_length);
 
   /* Add hit extent to read extents */
-  ImageExtentBuf hit_extent_buf(hit_extent, hit_bl);
+  auto hit_extent_buf = std::make_shared<ImageExtentBuf>(hit_extent, hit_bl);
   read_ctx->read_extents.push_back(hit_extent_buf);
 }
 

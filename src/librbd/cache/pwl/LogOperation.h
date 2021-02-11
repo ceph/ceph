@@ -57,6 +57,9 @@ public:
   virtual bool is_writing_op() const {
     return false;
   }
+  virtual void init_op(uint64_t current_sync_gen, bool persist_on_flush,
+                    uint64_t last_op_sequence_num, Context *write_persist,
+                    Context *write_append) {};
   virtual void copy_bl_to_cache_buffer(
       std::vector<WriteBufferAllocation>::iterator allocation) {};
 };
@@ -209,8 +212,6 @@ public:
   bool reserved_allocated() const override {
     return false;
   }
-  void init(uint64_t current_sync_gen, bool persist_on_flush,
-            uint64_t last_op_sequence_num, Context *write_persist);
   std::ostream &format(std::ostream &os) const;
   friend std::ostream &operator<<(std::ostream &os,
                                   const DiscardLogOperation &op);
