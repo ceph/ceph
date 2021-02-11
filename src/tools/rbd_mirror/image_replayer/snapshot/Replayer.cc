@@ -16,6 +16,7 @@
 #include "librbd/deep_copy/Handler.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
+#include "librbd/mirror/ImageStateUpdateRequest.h"
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
 #include "librbd/mirror/snapshot/GetImageStateRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
@@ -937,6 +938,40 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
   }
 
   dout(15) << "local_snap_id_end=" << m_local_snap_id_end << dendl;
+
+  update_mirror_image_state();
+}
+
+template <typename I>
+void Replayer<I>::update_mirror_image_state() {
+  if (m_local_snap_id_start > 0) {
+    request_sync();
+    return;
+  }
+
+  // a newly created non-primary image has a local mirror state of CREATING
+  // until this point so that we could avoid preserving the image until
+  // the first non-primary snapshot linked the two images together.
+  dout(10) << dendl;
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_update_mirror_image_state>(this);
+  auto req = librbd::mirror::ImageStateUpdateRequest<I>::create(
+    m_state_builder->local_image_ctx->md_ctx,
+    m_state_builder->local_image_ctx->id,
+    cls::rbd::MIRROR_IMAGE_STATE_ENABLED, {}, ctx);
+  req->send();
+}
+
+template <typename I>
+void Replayer<I>::handle_update_mirror_image_state(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to update local mirror image state: " << cpp_strerror(r)
+         << dendl;
+    handle_replay_complete(r, "failed to update local mirror image state");
+    return;
+  }
 
   request_sync();
 }

@@ -130,6 +130,9 @@ private:
    *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
    *    |                       |                     | |
+   *    |                       v (skip if not needed)| |
+   *    |                 UPDATE_MIRROR_IMAGE_STATE   | |
+   *    |                       |                     | |
    *    |                       |/--------------------/ |
    *    |                       |                       |
    *    |                       v                       |
@@ -268,6 +271,9 @@ private:
 
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
+
+  void update_mirror_image_state();
+  void handle_update_mirror_image_state(int r);
 
   void request_sync();
   void handle_request_sync(int r);
