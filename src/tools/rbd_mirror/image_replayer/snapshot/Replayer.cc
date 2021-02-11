@@ -405,6 +405,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
 
   std::set<uint64_t> prune_snap_ids;
 
+  bool completed_non_primary_snapshots_exist = false;
   auto local_image_ctx = m_state_builder->local_image_ctx;
   std::shared_lock image_locker{local_image_ctx->image_lock};
   for (auto snap_info_it = local_image_ctx->snap_info.begin();
@@ -426,26 +427,39 @@ void Replayer<I>::scan_local_mirror_snapshots(
         // if remote has new snapshots, we would sync from here
         m_local_snap_id_start = local_snap_id;
         m_local_snap_id_end = CEPH_NOSNAP;
+        completed_non_primary_snapshots_exist = true;
 
         if (mirror_ns->mirror_peer_uuids.empty()) {
           // no other peer will attempt to sync to this snapshot so store as
           // a candidate for removal
           prune_snap_ids.insert(local_snap_id);
         }
-      } else {
-        if (mirror_ns->last_copied_object_number == 0) {
-          // snapshot might be missing image state, object-map, etc, so just
-          // delete and re-create it if we haven't started copying data
-          // objects. Also only prune this snapshot since we will need the
-          // previous mirror snapshot for syncing.
-          prune_snap_ids.clear();
-          prune_snap_ids.insert(local_snap_id);
-          break;
+      } else if (mirror_ns->last_copied_object_number == 0 &&
+                 m_local_snap_id_start > 0) {
+        // shouldn't be possible, but ensure that pruning this snapshot
+        // wouldn't leave this image w/o any non-primary snapshots
+        if (!completed_non_primary_snapshots_exist) {
+          derr << "incomplete local non-primary snapshot" << dendl;
+          handle_replay_complete(locker, -EINVAL,
+                                 "incomplete local non-primary snapshot");
+          return;
         }
 
+        // snapshot might be missing image state, object-map, etc, so just
+        // delete and re-create it if we haven't started copying data
+        // objects. Also only prune this snapshot since we will need the
+        // previous mirror snapshot for syncing. Special case exception for
+        // the first non-primary snapshot since we know its snapshot is
+        // well-formed because otherwise the mirror-image-state would have
+        // forced an image deletion.
+        prune_snap_ids.clear();
+        prune_snap_ids.insert(local_snap_id);
+        break;
+      } else {
         // start snap will be last complete mirror snapshot or initial
         // image revision
         m_local_snap_id_end = local_snap_id;
+        break;
       }
     } else if (mirror_ns->is_primary()) {
       if (mirror_ns->complete) {
