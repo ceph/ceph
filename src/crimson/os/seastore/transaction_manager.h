@@ -348,10 +348,14 @@ public:
    * Get collection root addr
    */
   using read_collection_root_ertr = base_ertr;
-  using read_collection_root_ret = read_collection_root_ertr::future<laddr_t>;
+  using read_collection_root_ret = read_collection_root_ertr::future<
+    coll_root_t>;
   read_collection_root_ret read_collection_root(Transaction &t) {
-    return cache.get_root(t).safe_then([](auto croot) {
-      return croot->get_root().collection_root;
+    return cache->get_root(t).safe_then([](auto croot) {
+      return coll_root_t{
+	croot->get_root().collection_root,
+	croot->get_root().collection_root_size
+      };
     });
   }
 
@@ -360,10 +364,11 @@ public:
    *
    * Update collection root addr
    */
-  void write_collection_root(Transaction &t, laddr_t addr) {
-    auto croot = cache.get_root_fast(t);
-    croot = cache.duplicate_for_write(t, croot)->cast<RootBlock>();
-    croot->get_root().collection_root = addr;
+  void write_collection_root(Transaction &t, coll_root_t cmroot) {
+    auto croot = cache->get_root_fast(t);
+    croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
+    croot->get_root().collection_root = cmroot.get_location();
+    croot->get_root().collection_root_size = cmroot.get_size();
   }
 
   ~TransactionManager();
