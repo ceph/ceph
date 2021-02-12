@@ -963,10 +963,12 @@ class TestCephadm(object):
                                  True
                              ])
     def test_upgrade_run(self, use_repo_digest, cephadm_module: CephadmOrchestrator):
+        cephadm_module.use_repo_digest = use_repo_digest
+
         with with_host(cephadm_module, 'test', refresh_hosts=False):
             cephadm_module.set_container_image('global', 'image')
+
             if use_repo_digest:
-                cephadm_module.use_repo_digest = True
 
                 CephadmServe(cephadm_module).convert_tags_to_repo_digest()
 
