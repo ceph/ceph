@@ -18,21 +18,6 @@
 
 namespace crimson::os::seastore {
 
-enum class omap_root_state_t : uint8_t {
-  INITIAL = 0,
-  MUTATED = 1,
-  NONE = 0xFF
-};
-
-struct omap_root_t {
-  depth_t depth = 0;
-  omap_root_state_t state;
-  laddr_t omap_root_laddr;
-  omap_root_t(depth_t dep, laddr_t laddr)
-  : depth(dep),
-    omap_root_laddr(laddr) { state = omap_root_state_t::INITIAL; }
-};
-
 struct list_keys_result_t {
   std::vector<std::string> keys;
   std::optional<std::string> next;  // if return std::nullopt, means list all keys in omap tree.
@@ -84,10 +69,9 @@ public:
    * @param Transaction &t,  current transaction
    * @param string &key, omap string key
    * @param string &value, mapped value corresponding key
-   * @retval mutation_result_t, status should be success.
    */
   using omap_set_key_ertr = base_ertr;
-  using omap_set_key_ret = omap_set_key_ertr::future<bool>;
+  using omap_set_key_ret = omap_set_key_ertr::future<>;
   virtual omap_set_key_ret omap_set_key(omap_root_t &omap_root, Transaction &t,
 		                        const std::string &key, const std::string &value) = 0;
 
@@ -97,10 +81,9 @@ public:
    * @param omap_root_t &omap_root,  omap btree root information
    * @param Transaction &t,  current transaction
    * @param string &key, omap string key
-   * @retval remove success return true, else return false.
    */
   using omap_rm_key_ertr = base_ertr;
-  using omap_rm_key_ret = omap_rm_key_ertr::future<bool>;
+  using omap_rm_key_ret = omap_rm_key_ertr::future<>;
   virtual omap_rm_key_ret omap_rm_key(omap_root_t &omap_root, Transaction &t,
 		                                    const std::string &key) = 0;
 

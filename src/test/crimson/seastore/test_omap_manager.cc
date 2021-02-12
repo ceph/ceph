@@ -48,15 +48,13 @@ struct omap_manager_test_t :
   using test_omap_t = std::map<std::string, std::string>;
   test_omap_t test_omap_mappings;
 
-  bool set_key(
+  void set_key(
     omap_root_t &omap_root,
     Transaction &t,
     string &key,
     string &val) {
-    auto ret = omap_manager->omap_set_key(omap_root, t, key, val).unsafe_get0();
-    EXPECT_EQ(ret, true);
+    omap_manager->omap_set_key(omap_root, t, key, val).unsafe_get0();
     test_omap_mappings[key] = val;
-    return ret;
   }
 
   std::pair<string, string> get_value(
@@ -68,14 +66,12 @@ struct omap_manager_test_t :
     return ret;
   }
 
-  bool rm_key(
+  void rm_key(
     omap_root_t &omap_root,
     Transaction &t,
     const string &key) {
-    auto ret = omap_manager->omap_rm_key(omap_root, t, key).unsafe_get0();
-    EXPECT_EQ(ret, true);
+    omap_manager->omap_rm_key(omap_root, t, key).unsafe_get0();
     test_omap_mappings.erase(test_omap_mappings.find(key));
-    return ret;
   }
 
   list_keys_result_t list_keys(
@@ -145,7 +141,7 @@ struct omap_manager_test_t :
     omap_root_t &omap_root,
     Transaction &t) {
     omap_manager->omap_clear(omap_root, t).unsafe_get0();
-    EXPECT_EQ(omap_root.omap_root_laddr, L_ADDR_NULL);
+    EXPECT_EQ(omap_root.get_location(), L_ADDR_NULL);
   }
 
   void check_mappings(omap_root_t &omap_root, Transaction &t) {
@@ -192,7 +188,7 @@ char* rand_string(char* str, const int len)
 TEST_F(omap_manager_test_t, basic)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -204,7 +200,7 @@ TEST_F(omap_manager_test_t, basic)
     {
       auto t = tm->create_transaction();
       logger().debug("first transaction");
-      [[maybe_unused]] auto setret = set_key(omap_root, *t, key, val);
+      set_key(omap_root, *t, key, val);
       [[maybe_unused]] auto getret = get_value(omap_root, *t, key);
       tm->submit_transaction(std::move(t)).unsafe_get();
     }
@@ -212,7 +208,7 @@ TEST_F(omap_manager_test_t, basic)
       auto t = tm->create_transaction();
       logger().debug("second transaction");
       [[maybe_unused]] auto getret = get_value(omap_root, *t, key);
-      [[maybe_unused]] auto rmret = rm_key(omap_root, *t, key);
+      rm_key(omap_root, *t, key);
       [[maybe_unused]] auto getret2 = get_value(omap_root, *t, key);
       EXPECT_EQ(getret2.second, "");
       tm->submit_transaction(std::move(t)).unsafe_get();
@@ -230,7 +226,7 @@ TEST_F(omap_manager_test_t, basic)
 TEST_F(omap_manager_test_t, force_leafnode_split)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -244,7 +240,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split)
       for (unsigned j = 0; j < 10; ++j) {
         string key(rand_string(str, rand() % STR_LEN));
         string val(rand_string(str, rand() % STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
         if ((i % 20 == 0) && (j == 5)) {
           check_mappings(omap_root, *t);
         }
@@ -259,7 +255,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split)
 TEST_F(omap_manager_test_t, force_leafnode_split_merge)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -274,7 +270,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
       for (unsigned j = 0; j < 5; ++j) {
         string key(rand_string(str, rand() % STR_LEN));
         string val(rand_string(str, rand() % STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
         if ((i % 10 == 0) && (j == 3)) {
           check_mappings(omap_root, *t);
         }
@@ -289,7 +285,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
     int i = 0;
     for (auto &e: test_omap_mappings) {
       if (i % 3 != 0) {
-        [[maybe_unused]] auto rmref= rm_key(omap_root, *t, e.first);
+        rm_key(omap_root, *t, e.first);
       }
 
       if (i % 10 == 0) {
@@ -312,7 +308,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge)
 TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -327,7 +323,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
       for (unsigned j = 0; j < 5; ++j) {
         string key(rand_string(str, rand() % STR_LEN));
         string val(rand_string(str, rand() % STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
         if ((i % 10 == 0) && (j == 3)) {
           check_mappings(omap_root, *t);
         }
@@ -343,7 +339,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
     for (auto &e: test_omap_mappings) {
       if (30 < i && i < 100) {
         auto val = e;
-        [[maybe_unused]] auto rmref= rm_key(omap_root, *t, e.first);
+        rm_key(omap_root, *t, e.first);
       }
 
       if (i % 10 == 0) {
@@ -370,7 +366,7 @@ TEST_F(omap_manager_test_t, force_leafnode_split_merge_fullandbalanced)
 TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -385,7 +381,7 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
       for (unsigned j = 0; j < 10; ++j) {
         string key(rand_string(str, rand() % STR_LEN));
         string val(rand_string(str, rand() % STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
         if (i == 10)
           temp = key;
         if ((i % 20 == 0) && (j == 5)) {
@@ -423,7 +419,7 @@ TEST_F(omap_manager_test_t, force_split_listkeys_list_clear)
 TEST_F(omap_manager_test_t, internal_force_split)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -438,7 +434,7 @@ TEST_F(omap_manager_test_t, internal_force_split)
       for (unsigned j = 0; j < 80; ++j) {
         string key(rand_string(str, rand() % STR_LEN));
         string val(rand_string(str, rand() % STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
         if ((i % 2 == 0) && (j % 50 == 0)) {
           check_mappings(omap_root, *t);
         }
@@ -453,7 +449,7 @@ TEST_F(omap_manager_test_t, internal_force_split)
 TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -469,7 +465,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
       for (unsigned j = 0; j < 80; ++j) {
         string key(rand_string(str, rand() % STR_LEN));
         string val(rand_string(str, rand() % STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
         if ((i % 2 == 0) && (j % 50 == 0)) {
           check_mappings(omap_root, *t);
         }
@@ -481,7 +477,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
     int i = 0;
     for (auto &e: test_omap_mappings) {
         auto val = e;
-        [[maybe_unused]] auto rmref= rm_key(omap_root, *t, e.first);
+        rm_key(omap_root, *t, e.first);
 
       if (i % 10 == 0) {
       logger().debug("submitting transaction i= {}", i);
@@ -504,7 +500,7 @@ TEST_F(omap_manager_test_t, internal_force_merge_fullandbalanced)
 TEST_F(omap_manager_test_t, replay)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -521,7 +517,7 @@ TEST_F(omap_manager_test_t, replay)
       for (unsigned j = 0; j < 80; ++j) {
         string key(rand_string(str, rand() % STR_LEN));
         string val(rand_string(str, rand() % STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
         if ((i % 2 == 0) && (j % 50 == 0)) {
           check_mappings(omap_root, *t);
         }
@@ -536,7 +532,7 @@ TEST_F(omap_manager_test_t, replay)
     int i = 0;
     for (auto &e: test_omap_mappings) {
         auto val = e;
-        [[maybe_unused]] auto rmref= rm_key(omap_root, *t, e.first);
+        rm_key(omap_root, *t, e.first);
 
       if (i % 10 == 0) {
       logger().debug("submitting transaction i= {}", i);
@@ -562,7 +558,7 @@ TEST_F(omap_manager_test_t, replay)
 TEST_F(omap_manager_test_t, internal_force_split_to_root)
 {
   run_async([this] {
-    omap_root_t omap_root(0, L_ADDR_NULL);
+    omap_root_t omap_root(L_ADDR_NULL, 0);
     {
       auto t = tm->create_transaction();
       omap_root = omap_manager->initialize_omap(*t).unsafe_get0();
@@ -578,7 +574,7 @@ TEST_F(omap_manager_test_t, internal_force_split_to_root)
       for (unsigned j = 0; j < 8; ++j) {
         string key(rand_string(str, STR_LEN));
         string val(rand_string(str, STR_LEN));
-        [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+        set_key(omap_root, *t, key, val);
       }
       logger().debug("submitting transaction i = {}", i);
       tm->submit_transaction(std::move(t)).unsafe_get();
@@ -592,7 +588,7 @@ TEST_F(omap_manager_test_t, internal_force_split_to_root)
        for (unsigned j = 0; j < 8; ++j) {
          string key(rand_string(str_2, STR_LEN_2));
          string val(rand_string(str_2, STR_LEN_2));
-         [[maybe_unused]] auto addref = set_key(omap_root, *t, key, val);
+         set_key(omap_root, *t, key, val);
        }
       logger().debug("submitting transaction last");
       tm->submit_transaction(std::move(t)).unsafe_get();
