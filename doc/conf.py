@@ -3,9 +3,8 @@ import logging
 import os
 import shutil
 import sys
-
 import yaml
-
+import sphinx.util
 
 top_level = \
     os.path.dirname(
@@ -208,7 +207,7 @@ for c in pybinds:
         sys.path.insert(0, pybind)
 
 # openapi
-openapi_logger = logging.getLogger('sphinxcontrib.openapi.openapi30')
+openapi_logger = sphinx.util.logging.getLogger('sphinxcontrib.openapi.openapi30')
 openapi_logger.setLevel(logging.WARNING)
 
 
