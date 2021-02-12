@@ -1486,8 +1486,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     if not dd.osdspec_affinity:
                         # If there is no osdspec_affinity, the spec should suffice for displaying
                         continue
-                if n in self.spec_store.specs:
-                    spec = self.spec_store.specs[n]
+                if n in self.spec_store.all_specs:
+                    spec = self.spec_store.all_specs[n]
                 else:
                     spec = ServiceSpec(
                         unmanaged=True,
@@ -1505,7 +1505,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         spec=spec,
                         events=self.events.get_for_service(spec.service_name()),
                     )
-                if n in self.spec_store.specs:
+                if n in self.spec_store.all_specs:
                     if dd.daemon_type == 'osd':
                         """
                         The osd count can't be determined by the Placement spec.
@@ -1519,6 +1519,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                             self.inventory.all_specs())
 
                     sm[n].created = self.spec_store.spec_created[n]
+                    sm[n].deleted = self.spec_store.spec_deleted.get(n, None)
+
                     if service_type == 'nfs':
                         spec = cast(NFSServiceSpec, spec)
                         sm[n].rados_config_location = spec.rados_config_location()
@@ -1535,7 +1537,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 if dd.daemon_type == 'haproxy' or dd.daemon_type == 'keepalived':
                     # ha-rgw has 2 daemons running per host
                     sm[n].size = sm[n].size * 2
-        for n, spec in self.spec_store.specs.items():
+        for n, spec in self.spec_store.all_specs.items():
             if n in sm:
                 continue
             if service_type is not None and service_type != spec.service_type:
@@ -1693,12 +1695,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def remove_service(self, service_name: str) -> str:
         self.log.info('Remove service %s' % service_name)
         self._trigger_preview_refresh(service_name=service_name)
+        if service_name in self.spec_store:
+            if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
+                return f'Unable to remove {service_name} service.\n' \
+                       f'Note, you might want to mark the {service_name} service as "unmanaged"'
         found = self.spec_store.rm(service_name)
         if found:
             self._kick_serve_loop()
-            service = self.cephadm_services.get(service_name, None)
-            if service:
-                service.purge()
             return 'Removed service %s' % service_name
         else:
             # must be idempotent: still a success.
@@ -1897,6 +1900,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
         """
+        if spec.service_name() not in self.spec_store:
+            raise OrchestratorError('Unable to add a Daemon without Service.\n'
+                                    'Please use `ceph orch apply ...` to create a Service.\n'
+                                    'Note, you might want to create the service with "unmanaged=true"')
+
         self.log.debug('_add_daemon %s spec %s' % (daemon_type, spec.placement))
         if not spec.placement.hosts:
             raise OrchestratorError('must specify host(s) to deploy on')

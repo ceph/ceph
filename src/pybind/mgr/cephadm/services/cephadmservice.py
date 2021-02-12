@@ -280,7 +280,7 @@ class CephadmService(metaclass=ABCMeta):
         assert self.TYPE == daemon_type_to_service(daemon.daemon_type)
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
 
-    def purge(self) -> None:
+    def purge(self, service_name: str) -> None:
         """Called to carry out any purge tasks following service removal"""
         logger.debug(f'Purge called for {self.TYPE} - no action taken')
 
@@ -594,6 +594,13 @@ class MdsService(CephService):
         # if no mds found, return empty Daemon Desc
         return DaemonDescription()
 
+    def purge(self, service_name: str) -> None:
+        self.mgr.check_mon_command({
+            'prefix': 'config rm',
+            'who': service_name,
+            'name': 'mds_join_fs',
+        })
+
 
 class RgwService(CephService):
     TYPE = 'rgw'
@@ -654,6 +661,7 @@ class RgwService(CephService):
                 'val': key_data,
             })
 
+        # TODO: fail, if we don't have a spec
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
         self.mgr.spec_store.save(spec)
@@ -973,6 +981,6 @@ class CephadmExporter(CephadmService):
         }
         return config, deps
 
-    def purge(self) -> None:
+    def purge(self, service_name: str) -> None:
         logger.info("Purging cephadm-exporter settings from mon K/V store")
         self.mgr._clear_exporter_config_settings()
