@@ -25,7 +25,8 @@ namespace crimson::os::seastore::omap_manager {
 class BtreeOMapManager : public OMapManager {
   TransactionManager &tm;
 
-  omap_context_t get_omap_context(Transaction &t) {
+  omap_context_t get_omap_context(
+    Transaction &t) {
     return omap_context_t{tm, t};
   }
 
@@ -35,25 +36,31 @@ class BtreeOMapManager : public OMapManager {
    */
   using get_root_ertr = base_ertr;
   using get_root_ret = get_root_ertr::future<OMapNodeRef>;
-  get_root_ret get_omap_root(const omap_root_t &omap_root, Transaction &t);
+  get_root_ret get_omap_root(
+    omap_context_t c,
+    const omap_root_t &omap_root);
 
   /* handle_root_split
    *
-   * root has been splitted and need update omap_root_t
+   * root has been split and needs to update omap_root_t
    */
   using handle_root_split_ertr = base_ertr;
-  using handle_root_split_ret = handle_root_split_ertr::future<bool>;
-  handle_root_split_ret handle_root_split(omap_root_t &omap_root, omap_context_t oc,
-                                          OMapNode:: mutation_result_t mresult);
+  using handle_root_split_ret = handle_root_split_ertr::future<>;
+  handle_root_split_ret handle_root_split(
+    omap_context_t c,
+    omap_root_t &omap_root,
+    OMapNode::mutation_result_t mresult);
 
   /* handle_root_merge
    *
    * root node has only one item and it is not leaf node, need remove a layer
    */
   using handle_root_merge_ertr = base_ertr;
-  using handle_root_merge_ret = handle_root_merge_ertr::future<bool>;
-  handle_root_merge_ret handle_root_merge(omap_root_t &omap_root, omap_context_t oc,
-                                          OMapNode:: mutation_result_t mresult);
+  using handle_root_merge_ret = handle_root_merge_ertr::future<>;
+  handle_root_merge_ret handle_root_merge(
+    omap_context_t oc,
+    omap_root_t &omap_root, 
+    OMapNode:: mutation_result_t mresult);
 
 public:
   explicit BtreeOMapManager(TransactionManager &tm);

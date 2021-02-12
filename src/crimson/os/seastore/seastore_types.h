@@ -368,6 +368,68 @@ struct record_t {
   std::vector<delta_info_t> deltas;
 };
 
+struct omap_root_t {
+  laddr_t addr = L_ADDR_NULL;
+  depth_t depth = 0;
+  bool mutated = false;
+
+  omap_root_t(laddr_t addr, depth_t depth)
+    : addr(addr),
+      depth(depth) {}
+
+  omap_root_t(const omap_root_t &o) = default;
+  omap_root_t(omap_root_t &&o) = default;
+  omap_root_t &operator=(const omap_root_t &o) = default;
+  omap_root_t &operator=(omap_root_t &&o) = default;
+
+  bool is_null() const {
+    return addr == L_ADDR_NULL;
+  }
+
+  bool must_update() const {
+    return mutated;
+  }
+  
+  void update(laddr_t _addr, depth_t _depth) {
+    mutated = true;
+    addr = _addr;
+    depth = _depth;
+  }
+  
+  laddr_t get_location() const {
+    return addr;
+  }
+
+  depth_t get_depth() const {
+    return depth;
+  }
+};
+
+class __attribute__((packed)) omap_root_le_t {
+  laddr_le_t addr = laddr_le_t(L_ADDR_NULL);
+  depth_le_t depth = init_depth_le(0);
+
+public: 
+  omap_root_le_t() = default;
+  
+  omap_root_le_t(laddr_t addr, depth_t depth)
+    : addr(addr), depth(init_depth_le(depth)) {}
+
+  omap_root_le_t(const omap_root_le_t &o) = default;
+  omap_root_le_t(omap_root_le_t &&o) = default;
+  omap_root_le_t &operator=(const omap_root_le_t &o) = default;
+  omap_root_le_t &operator=(omap_root_le_t &&o) = default;
+  
+  void update(const omap_root_t &nroot) {
+    addr = nroot.get_location();
+    depth = init_depth_le(nroot.get_depth());
+  }
+  
+  omap_root_t get() const {
+    return omap_root_t(addr, depth);
+  }
+};
+
 /**
  * lba_root_t 
  */
