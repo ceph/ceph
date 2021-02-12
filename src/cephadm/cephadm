@@ -272,8 +272,8 @@ class Monitoring(object):
             "cpus": "2",
             "memory": "2GB",
             "args": [
-               "--web.listen-address=:{}".format(port_map['alertmanager'][0]),
-               "--cluster.listen-address=:{}".format(port_map['alertmanager'][1]),
+                "--web.listen-address=:{}".format(port_map['alertmanager'][0]),
+                "--cluster.listen-address=:{}".format(port_map['alertmanager'][1]),
             ],
             "config-json-files": [
                 "alertmanager.yml",
