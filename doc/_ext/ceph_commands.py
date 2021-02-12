@@ -179,7 +179,7 @@ class Sig:
 
 
 TEMPLATE = '''
-{% set punct_char = '-' %}
+{%- set punct_char = '-' -%}
 {# add a header if we have multiple commands in this section #}
 {% if commands | length > 1 %}
 {{ section }}
@@ -187,38 +187,28 @@ TEMPLATE = '''
 {# and demote the subsection #}
 {% set punct_char = '^' %}
 {% endif %}
-
 {% for command in commands %}
-
 {{ command.prefix }}
 {{ command.prefix | length * punct_char }}
 
-{{ command.help | wordwrap(70)}}
+{{ command.help | wordwrap(70) }}
 
-Example command:
+:Example command:
+    .. code-block:: bash
 
-.. code-block:: bash
+       {{ command.mk_bash_example() }}
 
-    {{ command.mk_bash_example() }}
-{% if command.params %}
-Parameters:
-
-{% for param in command.params %}* **{{param.name}}**: {{ param.help() | wordwrap(70) | indent(2) }}
-{% endfor %}{% endif %}
-Ceph Module:
-
-* *{{ command.module }}*
-
-Required Permissions:
-
-* *{{ command.perm }}*
-
-{% if command.flags %}Command Flags:
-
-* *{{ command.flags }}*
+{%- if command.params %}
+:Parameters:{% for param in command.params -%}
+{{" -" | indent(12, not loop.first) }} **{{param.name}}**: {{ param.help() }}
+{% endfor %}
+{% endif %}
+:Ceph Module: {{ command.module }}
+:Required Permissions: ``{{ command.perm }}``
+{%- if command.flags %}
+:Command Flags: ``{{ command.flags }}``
 {% endif %}
 {% endfor %}
-
 '''
 
 
@@ -244,8 +234,6 @@ def render_commands(commands):
     rendered = io.StringIO()
     for section, grouped in group_by_prefix(commands):
         logger.debug('rendering commands: %s: %d', section, len(grouped))
-        for cmd in grouped:
-            logger.info('%s ==> %s', section, cmd.prefix)
         rendered.write(Template(TEMPLATE).render(
             section=section,
             commands=grouped))
