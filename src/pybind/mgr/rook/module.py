@@ -1,4 +1,3 @@
-import datetime
 import threading
 import functools
 import os
@@ -6,6 +5,7 @@ import json
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
+from ceph.utils import datetime_now
 
 from typing import List, Dict, Optional, Callable, Any, TypeVar, Tuple
 
@@ -263,7 +263,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                          service_type: Optional[str] = None,
                          service_name: Optional[str] = None,
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
-        now = datetime.datetime.utcnow()
+        now = datetime_now()
 
         # CephCluster
         cl = self.rook_cluster.rook_api_get(
