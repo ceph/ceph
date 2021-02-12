@@ -949,6 +949,41 @@ seastar::future<> Client::stop()
   return fut;
 }
 
+bool should_use_msgr2(const entity_addrvec_t& my_addrs)
+{
+  // if we are bound to v1 only, and we are connecting to a v2 peer,
+  // we cannot use the peer's v2 address. otherwise the connection
+  // is assymetrical, because they would have to use v1 to connect
+  // to us, and we would use v2, and connection race detection etc
+  // would totally break down (among other things).  or, the other
+  // end will be confused that we advertise ourselve with a v1
+  // address only (that we bound to) but connected with protocol v2.
+  // NOTE: assuming that not having an addresses assigned is the
+  // equivalent of the unbound state (`!did_bind` in ceph-osd).
+  return my_addrs.empty() || my_addrs.has_msgr2();
+}
+
+static entity_addr_t choose_client_addr(
+  const entity_addrvec_t& my_addrs,
+  const entity_addrvec_t& client_addrs)
+{
+  if (!should_use_msgr2(my_addrs)) {
+    logger().info("{} {} limiting to v1", __func__, client_addrs);
+    return client_addrs.legacy_addr();
+  } else {
+    // here is where we decide which of the addrs to connect to.  always prefer
+    // the first one, if we support it.
+    for (const auto& a : client_addrs.v) {
+      if (a.is_msgr2() || a.is_legacy()) {
+        // FIXME: for ipv4 vs ipv6, check whether local host can handle ipv6 before
+        // trying it?  for now, just pick whichever is listed first.
+        return a;
+      }
+    }
+    return entity_addr_t{};
+  }
+}
+
 seastar::future<> Client::reopen_session(int rank)
 {
   logger().info("{} to mon.{}", __func__, rank);
@@ -962,18 +997,11 @@ seastar::future<> Client::reopen_session(int rank)
   }
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
-    // TODO: connect to multiple addrs
-    // connect to v2 addresses if we have not bound to any address, otherwise
-    // use the advertised msgr protocol
-    uint32_t type = msgr.get_myaddr().get_type();
-    if (type == entity_addr_t::TYPE_NONE) {
-      type = entity_addr_t::TYPE_MSGR2;
-    }
-    auto peer = monmap.get_addrs(rank).pick_addr(type);
+    auto peer = choose_client_addr(msgr.get_myaddrs(),
+                                   monmap.get_addrs(rank));
     if (peer == entity_addr_t{}) {
       // crimson msgr only uses the first bound addr
-      logger().warn("mon.{} does not have an addr compatible with my type: {}",
-		    rank, msgr.get_myaddr().get_type());
+      logger().warn("mon.{} does not have an addr compatible with me", rank);
       return seastar::now();
     }
     logger().info("connecting to mon.{}", rank);
