@@ -101,17 +101,33 @@ def with_host(m: CephadmOrchestrator, name, refresh_hosts=True):
     wait(m, m.remove_host(name))
 
 
-def assert_rm_service(cephadm, srv_name):
+def assert_rm_service(cephadm: CephadmOrchestrator, srv_name):
+    mon_or_mgr = cephadm.spec_store[srv_name].spec.service_type in ('mon', 'mgr')
+    if mon_or_mgr:
+        assert 'Unable' in wait(cephadm, cephadm.remove_service(srv_name))
+        return
     assert wait(cephadm, cephadm.remove_service(srv_name)) == f'Removed service {srv_name}'
+    assert cephadm.spec_store[srv_name].deleted is not None
+    CephadmServe(cephadm)._check_daemons()
     CephadmServe(cephadm)._apply_all_services()
+    assert cephadm.spec_store[srv_name].deleted
+    unmanaged = cephadm.spec_store[srv_name].spec.unmanaged
+    CephadmServe(cephadm)._purge_deleted_services()
+    if not unmanaged:  # cause then we're not deleting daemons
+        assert srv_name not in cephadm.spec_store, f'{cephadm.spec_store[srv_name]!r}'
 
 
 @contextmanager
-def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, host: str) -> Iterator[List[str]]:
-    if spec.placement.is_empty():
+def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth=None, host: str = '') -> Iterator[List[str]]:
+    if spec.placement.is_empty() and host:
         spec.placement = PlacementSpec(hosts=[host], count=1)
-    c = meth(cephadm_module, spec)
-    assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+    if meth is not None:
+        c = meth(cephadm_module, spec)
+        assert wait(cephadm_module, c) == f'Scheduled {spec.service_name()} update...'
+    else:
+        c = cephadm_module.apply([spec])
+        assert wait(cephadm_module, c) == [f'Scheduled {spec.service_name()} update...']
+
     specs = [d.spec for d in wait(cephadm_module, cephadm_module.describe_service())]
     assert spec in specs
 
@@ -119,7 +135,8 @@ def with_service(cephadm_module: CephadmOrchestrator, spec: ServiceSpec, meth, h
 
     dds = wait(cephadm_module, cephadm_module.list_daemons())
     own_dds = [dd for dd in dds if dd.service_name() == spec.service_name()]
-    assert own_dds
+    if host:
+        assert own_dds
 
     yield [dd.name() for dd in own_dds]
 

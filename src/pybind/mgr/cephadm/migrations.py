@@ -76,7 +76,7 @@ class Migrations:
         """
 
         def interesting_specs() -> Iterator[ServiceSpec]:
-            for s in self.mgr.spec_store.specs.values():
+            for s in self.mgr.spec_store.all_specs.values():
                 if s.unmanaged:
                     continue
                 p = s.placement
@@ -147,17 +147,17 @@ class Migrations:
         This fixes the data structure consistency
         """
         bad_specs = {}
-        for name, spec in self.mgr.spec_store.specs.items():
+        for name, spec in self.mgr.spec_store.all_specs.items():
             if name != spec.service_name():
                 bad_specs[name] = (spec.service_name(), spec)
 
         for old, (new, old_spec) in bad_specs.items():
-            if new not in self.mgr.spec_store.specs:
+            if new not in self.mgr.spec_store.all_specs:
                 spec = old_spec
             else:
-                spec = self.mgr.spec_store.specs[new]
+                spec = self.mgr.spec_store.all_specs[new]
             spec.unmanaged = True
             self.mgr.spec_store.save(spec)
-            self.mgr.spec_store.rm(old)
+            self.mgr.spec_store.finally_rm(old)
 
         return True
