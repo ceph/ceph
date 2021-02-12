@@ -1211,7 +1211,7 @@ if sys.version_info < (3, 8):
             self._threads = {}
 
         def is_active(self):
-                return True
+            return True
 
         def close(self):
             self._join_threads()
@@ -3152,7 +3152,7 @@ def _pull_image(ctx, image):
 
     cmd = [ctx.container_path, 'pull', image]
     if 'podman' in ctx.container_path and os.path.exists('/etc/ceph/podman-auth.json'):
-            cmd.append('--authfile=/etc/ceph/podman-auth.json')
+        cmd.append('--authfile=/etc/ceph/podman-auth.json')
     cmd_str = ' '.join(cmd)
 
     for sleep_secs in [1, 4, 25]:
