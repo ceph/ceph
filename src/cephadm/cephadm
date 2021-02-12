@@ -1,7 +1,14 @@
 #!/usr/bin/python3
 
-DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-pacific-devel'
-DEFAULT_IMAGE_IS_MASTER = False
+# Default container images -----------------------------------------------------
+DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-master-devel'
+DEFAULT_IMAGE_IS_MASTER = True
+DEFAULT_PROMETHEUS_IMAGE = "docker.io/prom/prometheus:v2.18.1"
+DEFAULT_NODE_EXPORTER_IMAGE = "docker.io/prom/node-exporter:v0.18.1"
+DEFAULT_GRAFANA_IMAGE = "docker.io/ceph/ceph-grafana:6.7.4"
+DEFAULT_ALERT_MANAGER_IMAGE = "docker.io/prom/alertmanager:v0.20.0"
+# ------------------------------------------------------------------------------
+
 LATEST_STABLE_RELEASE = 'pacific'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
@@ -240,7 +247,7 @@ class Monitoring(object):
 
     components = {
         "prometheus": {
-            "image": "docker.io/prom/prometheus:v2.18.1",
+            "image": DEFAULT_PROMETHEUS_IMAGE,
             "cpus": '2',
             "memory": '4GB',
             "args": [
@@ -253,7 +260,7 @@ class Monitoring(object):
             ],
         },
         "node-exporter": {
-            "image": "docker.io/prom/node-exporter:v0.18.1",
+            "image": DEFAULT_NODE_EXPORTER_IMAGE,
             "cpus": "1",
             "memory": "1GB",
             "args": [
@@ -261,7 +268,7 @@ class Monitoring(object):
             ],
         },
         "grafana": {
-            "image": "docker.io/ceph/ceph-grafana:6.7.4",
+            "image": DEFAULT_GRAFANA_IMAGE,
             "cpus": "2",
             "memory": "4GB",
             "args": [],
@@ -273,7 +280,7 @@ class Monitoring(object):
             ],
         },
         "alertmanager": {
-            "image": "docker.io/prom/alertmanager:v0.20.0",
+            "image": DEFAULT_ALERT_MANAGER_IMAGE,
             "cpus": "2",
             "memory": "2GB",
             "args": [
