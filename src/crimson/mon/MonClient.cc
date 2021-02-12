@@ -133,6 +133,7 @@ Connection::Connection(const AuthRegistry& auth_registry,
 
 seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 {
+  logger().info("{}", __func__);
   reply.set_value(m);
   reply = {};
   return seastar::now();
@@ -436,6 +437,7 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
 
 void Connection::close()
 {
+  logger().info("{}", __func__);
   reply.set_value(Ref<MAuthReply>(nullptr));
   reply = {};
   if (auth_done) {
