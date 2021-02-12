@@ -784,9 +784,14 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   m_snapshot_delta->clear();
   auto& snapshot_delta = *m_snapshot_delta;
 
+  ceph_assert(!m_snap_ids.empty());
+  librados::snap_t start_snap_id = 0;
+  librados::snap_t first_snap_id = *m_snap_ids.begin();
+  librados::snap_t last_snap_id = *m_snap_ids.rbegin();
+
   if (r == -ENOENT) {
     // the object does not exist -- mark the missing extents
-    zero_initial_extent({}, true);
+    zero_extent(first_snap_id, true);
     list_from_parent();
     return;
   } else if (r < 0) {
@@ -800,14 +805,16 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
   librados::snap_set_t snap_set;
   convert_snap_set(m_snap_set, &snap_set);
 
-  ceph_assert(!m_snap_ids.empty());
-  librados::snap_t start_snap_id = 0;
-  librados::snap_t first_snap_id = *m_snap_ids.begin();
-  librados::snap_t last_snap_id = *m_snap_ids.rbegin();
+  bool initial_extents_written = false;
+
+  interval_set<uint64_t> object_interval;
+  for (auto& object_extent : m_object_extents) {
+    object_interval.insert(object_extent.first, object_extent.second);
+  }
+  ldout(cct, 20) << "object_interval=" << object_interval << dendl;
 
   // loop through all expected snapshots and build interval sets for
   // data and zeroed ranges for each snapshot
-  bool prev_exists = false;
   uint64_t prev_end_size = 0;
   interval_set<uint64_t> initial_written_extents;
   for (auto end_snap_id : m_snap_ids) {
@@ -849,87 +856,76 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
       }
     }
 
+    // clip diff to current object extent
+    interval_set<uint64_t> diff_interval;
+    diff_interval.intersection_of(object_interval, diff);
+
+    // clip diff to size of object (in case it was truncated)
+    interval_set<uint64_t> zero_interval;
+    if (end_size < prev_end_size) {
+      zero_interval.insert(end_size, prev_end_size - end_size);
+      zero_interval.intersection_of(object_interval);
+
+      interval_set<uint64_t> trunc_interval;
+      trunc_interval.intersection_of(zero_interval, diff_interval);
+      if (!trunc_interval.empty()) {
+        diff_interval.subtract(trunc_interval);
+        ldout(cct, 20) << "clearing truncate diff: " << trunc_interval << dendl;
+      }
+    }
+
     ldout(cct, 20) << "start_snap_id=" << start_snap_id << ", "
                    << "end_snap_id=" << end_snap_id << ", "
                    << "clone_end_snap_id=" << clone_end_snap_id << ", "
                    << "diff=" << diff << ", "
+                   << "diff_interval=" << diff_interval<< ", "
+                   << "zero_interval=" << zero_interval<< ", "
                    << "end_size=" << end_size << ", "
+                   << "prev_end_size=" << prev_end_size << ", "
                    << "exists=" << exists << ", "
                    << "whole_object=" << read_whole_object << dendl;
-    if (end_snap_id <= first_snap_id) {
-      // don't include deltas from the starting snapshots, but we iterate over
-      // it to track its existence and size
-      ldout(cct, 20) << "skipping prior snapshots" << dendl;
-    } else if (exists || prev_exists || !diff.empty()) {
-      // clip diff to size of object (in case it was truncated)
-      if (exists && end_size < prev_end_size) {
-        interval_set<uint64_t> trunc;
-        trunc.insert(end_size, prev_end_size - end_size);
-        trunc.intersection_of(diff);
-        diff.subtract(trunc);
-        ldout(cct, 20) << "clearing truncate diff: " << trunc << dendl;
-      }
 
-      bool maybe_whiteout_detected = (exists && start_snap_id == 0);
-      for (auto& object_extent : m_object_extents) {
-        interval_set<uint64_t> object_interval;
-        object_interval.insert(object_extent.first, object_extent.second);
-
-        // clip diff to current object extent
-        interval_set<uint64_t> diff_interval;
-        diff_interval.intersection_of(object_interval, diff);
-
-        interval_set<uint64_t> zero_interval;
-        if (end_size < prev_end_size) {
-          // insert zeroed object extent from truncation
-          auto zero_length = prev_end_size - end_size;
-          zero_interval.insert(end_size, zero_length);
-        }
-
-        if (exists) {
-          ldout(cct, 20) << "object_extent=" << object_extent.first << "~"
-                         << object_extent.second << ", "
-                         << "data_interval=" << diff_interval << dendl;
-          for (auto& interval : diff_interval) {
-            snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
-              interval.first, interval.second,
-              SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
-            if (maybe_whiteout_detected) {
-              initial_written_extents.union_insert(interval.first,
-                                                   interval.second);
-            }
-          }
-        } else {
-          zero_interval.union_of(diff_interval);
-        }
-
-        zero_interval.intersection_of(object_interval);
-        if (!zero_interval.empty() &&
-            ((m_list_snaps_flags &
-                LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0)) {
-          ldout(cct, 20) << "object_extent=" << object_extent.first << "~"
-                         << object_extent.second << " "
-                         << "zero_interval=" << zero_interval << dendl;
-          for (auto& interval : zero_interval) {
-            snapshot_delta[{end_snap_id, end_snap_id}].insert(
-              interval.first, interval.second,
-              SparseExtent(SPARSE_EXTENT_STATE_ZEROED, interval.second));
-            if (maybe_whiteout_detected) {
-              initial_written_extents.union_insert(interval.first,
-                                                   interval.second);
-            }
-          }
-        }
-      }
+    // check if object exists prior to start of incremental snap delta so that
+    // we don't DNE the object if no additional deltas exist
+    if (exists && start_snap_id == 0 &&
+        (!diff_interval.empty() || !zero_interval.empty())) {
+      ldout(cct, 20) << "object exists at snap id " << end_snap_id << dendl;
+      initial_extents_written = true;
     }
 
     prev_end_size = end_size;
-    prev_exists = exists;
     start_snap_id = end_snap_id;
+
+    if (end_snap_id <= first_snap_id) {
+      // don't include deltas from the starting snapshots, but we iterate over
+      // it to track its existence and size
+      ldout(cct, 20) << "skipping prior snapshot " << dendl;
+      continue;
+    }
+
+    if (exists) {
+      for (auto& interval : diff_interval) {
+        snapshot_delta[{end_snap_id, clone_end_snap_id}].insert(
+          interval.first, interval.second,
+          SparseExtent(SPARSE_EXTENT_STATE_DATA, interval.second));
+      }
+    } else {
+      zero_interval.union_of(diff_interval);
+    }
+
+    if ((m_list_snaps_flags & LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0) {
+      for (auto& interval : zero_interval) {
+        snapshot_delta[{end_snap_id, end_snap_id}].insert(
+          interval.first, interval.second,
+          SparseExtent(SPARSE_EXTENT_STATE_ZEROED, interval.second));
+      }
+    }
   }
 
   bool snapshot_delta_empty = snapshot_delta.empty();
-  zero_initial_extent(initial_written_extents, false);
+  if (!initial_extents_written) {
+    zero_extent(first_snap_id, first_snap_id > 0);
+  }
   ldout(cct, 20) << "snapshot_delta=" << snapshot_delta << dendl;
 
   if (snapshot_delta_empty) {
@@ -992,8 +988,8 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
      m_list_snaps_flags | LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS);
 
   ImageListSnapsRequest<I> req(
-    *image_ctx->parent, aio_comp, std::move(parent_image_extents), {0,
-    image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
+    *image_ctx->parent, aio_comp, std::move(parent_image_extents),
+    {0, image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
     this->m_trace);
   req.send();
 }
@@ -1007,8 +1003,7 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
                  << "parent_snapshot_delta=" << m_parent_snapshot_delta
                  << dendl;
 
-  // ignore special-case of fully empty dataset
-  m_parent_snapshot_delta.erase(INITIAL_WRITE_READ_SNAP_IDS);
+  // ignore special-case of fully empty dataset (we ignore zeroes)
   if (m_parent_snapshot_delta.empty()) {
     this->finish(0);
     return;
@@ -1040,32 +1035,24 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
 }
 
 template <typename I>
-void ObjectListSnapsRequest<I>::zero_initial_extent(
-    const interval_set<uint64_t>& written_extents, bool dne) {
+void ObjectListSnapsRequest<I>::zero_extent(uint64_t snap_id, bool dne) {
   I *image_ctx = this->m_ictx;
   auto cct = image_ctx->cct;
-
-  ceph_assert(!m_snap_ids.empty());
-  librados::snap_t snap_id_start = *m_snap_ids.begin();
 
   // the object does not exist or is (partially) under whiteout -- mark the
   // missing extents which would be any portion of the object that does not
   // have data in the initial snapshot set
-  if ((snap_id_start == 0) &&
-       ((m_list_snaps_flags & LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0)) {
+  if ((m_list_snaps_flags & LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS) == 0) {
     interval_set<uint64_t> interval;
     for (auto [object_offset, object_length] : m_object_extents) {
       interval.insert(object_offset, object_length);
     }
 
-    interval_set<uint64_t> intersection;
-    intersection.intersection_of(interval, written_extents);
-
-    interval.subtract(intersection);
     for (auto [offset, length] : interval) {
-      ldout(cct, 20) << "zeroing initial extent " << offset << "~" << length
-                     << dendl;
-      (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS].insert(
+      ldout(cct, 20) << "snapshot " << snap_id << ": "
+                     << (dne ? "DNE" : "zeroed") << " extent "
+                     << offset << "~" << length << dendl;
+      (*m_snapshot_delta)[{snap_id, snap_id}].insert(
         offset, length,
         SparseExtent(
           (dne ? SPARSE_EXTENT_STATE_DNE : SPARSE_EXTENT_STATE_ZEROED),
