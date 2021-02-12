@@ -6103,8 +6103,7 @@ class HostFacts():
                 "wwid": disk_wwid,
                 "dev_name": dev,
                 "disk_size_bytes": disk_size_bytes,
-                }
-            )
+            })
         return disk_list
 
     @property
