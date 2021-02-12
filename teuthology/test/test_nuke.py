@@ -4,12 +4,12 @@ import os
 import pytest
 import subprocess
 
-from unittest.mock import patch, Mock, DEFAULT
+from unittest.mock import patch, Mock, DEFAULT, ANY
 
 from teuthology import nuke
 from teuthology import misc
 from teuthology.config import config
-
+from teuthology.dispatcher.supervisor import create_fake_context
 
 class TestNuke(object):
 
@@ -230,3 +230,61 @@ class TestNuke(object):
                 misc.canonicalize_hostname(name, user=None): {},
             })
             m['destroy'].assert_not_called()
+
+def test_nuke_internal():
+    job_config = dict(
+        owner='test_owner',
+        targets={'user@host1': 'key1', 'user@host2': 'key2'},
+        archive_path='/path/to/test_run',
+        machine_type='test_machine',
+        os_type='centos',
+        os_version='8.3',
+        name='test_name',
+    )
+    locks = [{'name': target, 'description': job_config['name']} for target
+             in job_config['targets'].keys()]
+    ctx = create_fake_context(job_config)
+
+    # minimal call using defaults
+    with patch.multiple(
+            nuke,
+            nuke_helper=DEFAULT,
+            list_locks=lambda: locks,
+            unlock_one=DEFAULT,
+            ) as m:
+        nuke.nuke(ctx, True)
+        m['nuke_helper'].assert_called_with(ANY, True, False, True)
+        m['unlock_one'].assert_called()
+
+    # don't unlock
+    with patch.multiple(
+            nuke,
+            nuke_helper=DEFAULT,
+            list_locks=lambda: locks,
+            unlock_one=DEFAULT,
+            ) as m:
+        nuke.nuke(ctx, False)
+        m['nuke_helper'].assert_called_with(ANY, False, False, True)
+        m['unlock_one'].assert_not_called()
+
+    # mimicing what teuthology-dispatcher --supervisor does
+    with patch.multiple(
+            nuke,
+            nuke_helper=DEFAULT,
+            list_locks=lambda: locks,
+            unlock_one=DEFAULT,
+            ) as m:
+        nuke.nuke(ctx, False, True, False, True, False)
+        m['nuke_helper'].assert_called_with(ANY, False, True, False)
+        m['unlock_one'].assert_not_called()
+
+    # no targets
+    del ctx.config['targets']
+    with patch.multiple(
+            nuke,
+            nuke_helper=DEFAULT,
+            unlock_one=DEFAULT,
+            ) as m:
+        nuke.nuke(ctx, True)
+        m['nuke_helper'].assert_not_called()
+        m['unlock_one'].assert_not_called()
