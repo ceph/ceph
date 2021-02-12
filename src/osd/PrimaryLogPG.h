@@ -1405,7 +1405,6 @@ protected:
 
   // -- cls_gather --
   std::map<hobject_t, CLSGatherOp> cls_gather_ops;
-  void cls_gather_set_result(map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p, int r);
   void cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, bool requeue, std::vector<ceph_tid_t> *tids);
   void cancel_cls_gather_ops(bool requeue, std::vector<ceph_tid_t> *tids);
 
@@ -1554,7 +1553,6 @@ public:
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
-  int finish_cls_gather(OpContext *ctx);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
