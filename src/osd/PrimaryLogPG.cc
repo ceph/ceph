@@ -10083,8 +10083,9 @@ struct C_gather : public Context {
   hobject_t oid;
   PrimaryLogPG::OpContext *ctx;
   epoch_t last_peering_reset;
-  C_gather(PrimaryLogPG *pg_, hobject_t oid_, PrimaryLogPG::OpContext *ctx_, epoch_t lpr_) :
-    pg(pg_), oid(oid_), ctx(ctx_), last_peering_reset(lpr_) {}
+  OSDOp *osd_op;
+  C_gather(PrimaryLogPG *pg_, hobject_t oid_, PrimaryLogPG::OpContext *ctx_, epoch_t lpr_, OSDOp *osd_op_) :
+    pg(pg_), oid(oid_), ctx(ctx_), last_peering_reset(lpr_), osd_op(osd_op_) {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
@@ -10097,7 +10098,8 @@ struct C_gather : public Context {
     if (last_peering_reset != pg->get_last_peering_reset()) {
       return;
     }
-    pg->cls_gather_set_result(p, r);
+    osd_op->rval = r;
+    pg->cls_gather_ops.erase(p);
     pg->execute_ctx(ctx);
   }
 };
@@ -10132,25 +10134,13 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
     cgop.objecter_tids.push_back(tid);
     dout(10) << __func__ << " src=" << oid << ", tgt=" << soid << dendl;
   }
-  
-  C_gather *fin = new C_gather(this, soid, ctx, get_last_peering_reset());
+
+  C_gather *fin = new C_gather(this, soid, ctx, get_last_peering_reset(), &(*ctx->ops)[ctx->current_osd_subop_num]);
   gather.set_finisher(new C_OnFinisher(fin,
 				       osd->get_objecter_finisher(get_pg_shard())));
   gather.activate();
 
   return -EINPROGRESS;
-}
-
-int PrimaryLogPG::finish_cls_gather(OpContext *ctx)
-{
-  ObjectState& obs = ctx->new_obs;
-  object_info_t& oi = obs.oi;
-  const hobject_t& soid = oi.soid;
-  map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p = cls_gather_ops.find(soid);
-  ceph_assert(p != cls_gather_ops.end());
-  int r = p->second.rval;
-  cls_gather_ops.erase(p);
-  return r;
 }
 
 // ========================================================================
@@ -10947,12 +10937,6 @@ bool PrimaryLogPG::is_present_clone(hobject_t coid)
 // ========================================================================
 // cls gather
 //
-
-void PrimaryLogPG::cls_gather_set_result(map<hobject_t,PrimaryLogPG::CLSGatherOp>::iterator p, int r)
-{
-  ceph_assert(p != cls_gather_ops.end());
-  p->second.rval = r;
-}
 
 void PrimaryLogPG::cancel_cls_gather(map<hobject_t,CLSGatherOp>::iterator iter, bool requeue,
 				     vector<ceph_tid_t> *tids)

@@ -703,6 +703,8 @@ uint64_t cls_get_pool_stripe_width(cls_method_context_t hctx)
 
 struct GatherFinisher : public PrimaryLogPG::OpFinisher {
   std::map<std::string, bufferlist> src_obj_buffs;
+  OSDOp *osd_op;
+  GatherFinisher(OSDOp *osd_op_) : osd_op(osd_op_) {}
   int execute() override {
     return 0;
   }
@@ -712,7 +714,9 @@ int cls_cxx_gather(cls_method_context_t hctx, const std::set<std::string> &src_o
 		   const char *cls, const char *method, bufferlist& inbl)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext**)hctx;
-  auto [iter, inserted] = (*pctx)->op_finishers.emplace(std::make_pair((*pctx)->current_osd_subop_num, std::make_unique<GatherFinisher>()));
+  int subop_num = (*pctx)->current_osd_subop_num;
+  OSDOp *osd_op = &(*(*pctx)->ops)[subop_num];
+  auto [iter, inserted] = (*pctx)->op_finishers.emplace(std::make_pair(subop_num, std::make_unique<GatherFinisher>(osd_op)));
   assert(inserted);
   auto &gather = *static_cast<GatherFinisher*>(iter->second.get());
   for (const auto &obj : src_objs) {
@@ -737,7 +741,7 @@ int cls_cxx_get_gathered_data(cls_method_context_t hctx, std::map<std::string, b
   } else {
     GatherFinisher *gf = (GatherFinisher*)op_finisher;
     *results = gf->src_obj_buffs;
-    r = (*pctx)->pg->finish_cls_gather(*pctx);
+    r = gf->osd_op->rval;
   }
   return r;
 }
