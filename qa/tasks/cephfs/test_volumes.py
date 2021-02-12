@@ -1441,7 +1441,7 @@ class TestSubvolumes(TestVolumesHelper):
         # list authorized-ids of the subvolume
         expected_auth_list = [{'alice': 'rw'}, {'guest1': 'rw'}, {'guest2': 'r'}]
         auth_list = json.loads(self._fs_cmd('subvolume', 'authorized_list', self.volname, subvolume, "--group_name", group))
-        self.assertListEqual(auth_list, expected_auth_list)
+        self.assertCountEqual(expected_auth_list, auth_list)
 
         # cleanup
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, authid1,
@@ -1626,7 +1626,7 @@ class TestSubvolumes(TestVolumesHelper):
         # created on authorizing 'guest1' access to the subvolume.
         auth_metadata_filename = "${0}.meta".format(guestclient_1["auth_id"])
         self.assertIn(auth_metadata_filename, guest_mount.ls("volumes"))
-        expected_auth_metadata_content = self.mount_a.run_shell(['cat', 'volumes/{0}'.format(auth_metadata_filename)]).stdout.getvalue().strip()
+        expected_auth_metadata_content = self._auth_metadata_get(self.mount_a.read_file("volumes/{0}".format(auth_metadata_filename)))
 
         # Induce partial auth update state by modifying the auth metadata file,
         # and then run authorize again.
@@ -1636,7 +1636,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "authorize", self.volname, subvolume, guestclient_1["auth_id"],
                      "--group_name", group, "--tenant_id", guestclient_1["tenant_id"])
 
-        auth_metadata_content = self.mount_a.run_shell(['cat', 'volumes/{0}'.format(auth_metadata_filename)]).stdout.getvalue().strip()
+        auth_metadata_content = self._auth_metadata_get(self.mount_a.read_file("volumes/{0}".format(auth_metadata_filename)))
         self.assertEqual(auth_metadata_content, expected_auth_metadata_content)
 
         # clean up
@@ -1678,7 +1678,7 @@ class TestSubvolumes(TestVolumesHelper):
         # created on authorizing 'guest1' access to the subvolume1.
         auth_metadata_filename = "${0}.meta".format(guestclient_1["auth_id"])
         self.assertIn(auth_metadata_filename, guest_mount.ls("volumes"))
-        expected_auth_metadata_content = self.mount_a.run_shell(['cat', 'volumes/{0}'.format(auth_metadata_filename)]).stdout.getvalue().strip()
+        expected_auth_metadata_content = self._auth_metadata_get(self.mount_a.read_file("volumes/{0}".format(auth_metadata_filename)))
 
         # Authorize 'guestclient_1' to access the subvolume2.
         self._fs_cmd("subvolume", "authorize", self.volname, subvolume2, guestclient_1["auth_id"],
@@ -1692,7 +1692,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, guestclient_1["auth_id"],
                      "--group_name", group)
 
-        auth_metadata_content = self.mount_a.run_shell(['cat', 'volumes/{0}'.format(auth_metadata_filename)]).stdout.getvalue().strip()
+        auth_metadata_content = self._auth_metadata_get(self.mount_a.read_file("volumes/{0}".format(auth_metadata_filename)))
         self.assertEqual(auth_metadata_content, expected_auth_metadata_content)
 
         # clean up
