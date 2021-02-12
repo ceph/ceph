@@ -100,47 +100,52 @@ Other frequently used/useful options are ``-d`` (or ``--distro``),
 run). Run ``teuthology-suite --help`` to read description of these and every
 other options available.
 
-Testing QA changes (without re-building binaires)
+Testing QA changes (without rebuilding binaires)
 *************************************************
 
-While writing a PR you might need to test your PR repeatedly using teuthology.
-If you are making non-QA changes, you need to follow the standard process of
-triggering builds, waiting for it to finish and then triggering tests and
-wait for the result.
-But if changes you made are purely changes in qa/, you don't need rebuild the
-binaries. Instead you can test binaries built for the ceph-ci branch and
-instruct ``teuthology-suite`` command to use a separate branch for running
-tests.
+If you are making changes only in the ``qa/`` directory, you do not have to
+rebuild the binaries before you re-run tests. If you make changes only in
+``qa/``, you can use the binaries built for the ceph-ci branch to re-run tests.
+You just have to make sure to tell the ``teuthology-suite`` command to use a
+separate branch for running the tests.
+
 The separate branch can be passed to the command by using ``--suite-repo`` and
-``--suite-branch``. Pass the link to the GitHub fork where your PR branch exists
-to the first option and pass the PR branch name to the second option.
+``--suite-branch``. The first option (``--suite-repo``) accepts the link to the GitHub fork where your PR branch exists and the second option (``--suite-branch``) accepts the name of the PR branch.
 
 For example, if you want to make changes in ``qa/`` after testing ``branch-x``
-(of which has ceph-ci branch is ``wip-username-branch-x``) by running
-following command::
+(which shows up in ceph-ci as a branch named ``wip-username-branch-x``), you
+can do so by running following command:
 
-    teuthology-suite -v \
-    -m smithi \
-    -c wip-username-branch-x \
-    -s fs \
-    -p 50
-    --filter cephfs-shell
+.. prompt:: bash $
 
+   teuthology-suite -v \
+   -m smithi \
+   -c wip-username-branch-x \
+   -s fs \
+   -p 50
+   --filter cephfs-shell
 
-You can make the modifications locally, update the PR branch and then
-trigger tests from your PR branch as follows::
+Then make modifications locally, update the PR branch, and trigger tests from
+your PR branch as follows:
 
-    teuthology-suite -v \
-    -m smithi \
-    -c wip-username-branch-x \
-    -s fs -p 50 \
-    --filter cephfs-shell \
-    --suite-repo https://github.com/$username/ceph \
-    --suite-branch branch-x
+.. prompt:: bash $
 
-You can verify if the tests were run using this branch by looking at values
-for the keys ``suite_branch``, ``suite_repo`` and ``suite_sha1`` in the job
-config printed at the very beginning of the teuthology job.
+   teuthology-suite -v \
+   -m smithi \
+   -c wip-username-branch-x \
+   -s fs -p 50 \
+   --filter cephfs-shell \
+   --suite-repo https://github.com/$username/ceph \
+   --suite-branch branch-x
+
+You can verify that the tests were run using this branch by looking at the
+values for the keys ``suite_branch``, ``suite_repo`` and ``suite_sha1`` in the
+job config printed at the beginning of the teuthology job.
+
+.. note:: If you are making changes that are not in the ``qa/`` directory, 
+          you must follow the standard process of triggering builds, waiting 
+          for the builds to finish, then triggering tests and waiting for 
+          the test results. 
 
 About Suites and Filters
 ************************
