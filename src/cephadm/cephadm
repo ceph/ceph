@@ -2979,15 +2979,13 @@ StartLimitBurst=5
 {extra_args}
 [Install]
 WantedBy=ceph-{fsid}.target
-""".format(
-    container_path=ctx.container_path,
-    fsid=fsid,
-    data_dir=ctx.data_dir,
-    extra_args=extra_args,
-    # if docker, we depend on docker.service
-    docker_after=' docker.service' if docker else '',
-    docker_requires='Requires=docker.service\n' if docker else '',
-)
+""".format(container_path=ctx.container_path,
+           fsid=fsid,
+           data_dir=ctx.data_dir,
+           extra_args=extra_args,
+           # if docker, we depend on docker.service
+           docker_after=' docker.service' if docker else '',
+           docker_requires='Requires=docker.service\n' if docker else '')
 
     return u
 
@@ -4887,7 +4885,7 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
     if not os.path.exists(data_dir_src):
         raise Error("{}.{} data directory '{}' does not exist.  "
                     "Incorrect ID specified, or daemon alrady adopted?".format(
-                    daemon_type, daemon_id, data_dir_src))
+                        daemon_type, daemon_id, data_dir_src))
 
     osd_fsid = None
     if daemon_type == 'osd':
@@ -7007,13 +7005,11 @@ RestartSec=10s
 
 [Install]
 WantedBy=ceph-{fsid}.target
-""".format(
-        fsid=self.fsid,
-        daemon_path=self.daemon_path,
-        # if docker, we depend on docker.service
-        docker_after=' docker.service' if docker else '',
-        docker_requires='Requires=docker.service\n' if docker else '',
-        )
+""".format(fsid=self.fsid,
+           daemon_path=self.daemon_path,
+           # if docker, we depend on docker.service
+           docker_after=' docker.service' if docker else '',
+           docker_requires='Requires=docker.service\n' if docker else '')
 
     def deploy_daemon_unit(self, config=None):
         """deploy a specific unit file for cephadm
