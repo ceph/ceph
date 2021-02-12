@@ -443,7 +443,6 @@ class Manager : public DoutPrefixProvider {
             std::lock_guard lock_guard(queue_gc_lock);
             queue_gc.push_back(queue_name);
             ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " marked for removal" << dendl;
-            ldout(cct, 10) << "INFO: queue: " << queue_name << " marked for removal" << dendl;
           }, make_stack_allocator());
         } else {
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " ownership (lock) renewed" << dendl;
