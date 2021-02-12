@@ -148,11 +148,9 @@ class CephadmContext:
 
 
     def __getattr__(self, name: str) -> Any:
-        if "_conf" in self.__dict__ and \
-             hasattr(self._conf, name):
+        if "_conf" in self.__dict__ and hasattr(self._conf, name):
             return getattr(self._conf, name)
-        elif "_args" in self.__dict__ and \
-           hasattr(self._args, name):
+        elif "_args" in self.__dict__ and hasattr(self._args, name):
             return getattr(self._args, name)        
         else:
             return super().__getattribute__(name)
@@ -298,9 +296,9 @@ class Monitoring(object):
         if daemon_type == 'alertmanager':
             for cmd in ['alertmanager', 'prometheus-alertmanager']:
                 _, err, code = call(ctx, [
-                        ctx.container_path, 'exec', container_id, cmd,
-                        '--version'
-                    ], verbosity=CallVerbosity.SILENT)
+                    ctx.container_path, 'exec', container_id, cmd,
+                    '--version'
+                ], verbosity=CallVerbosity.SILENT)
                 if code == 0:
                     break
             cmd = 'alertmanager'  # reset cmd for version extraction
@@ -1401,12 +1399,12 @@ def call(ctx: CephadmContext,
 
 
 def call_throws(
-         ctx: CephadmContext,
-         command: List[str],
-         desc: Optional[str] = None,
-         verbosity: CallVerbosity = CallVerbosity.VERBOSE_ON_FAILURE,
-         timeout: Optional[int] = DEFAULT_TIMEOUT,
-         **kwargs) -> Tuple[str, str, int]:
+        ctx: CephadmContext,
+        command: List[str],
+        desc: Optional[str] = None,
+        verbosity: CallVerbosity = CallVerbosity.VERBOSE_ON_FAILURE,
+        timeout: Optional[int] = DEFAULT_TIMEOUT,
+        **kwargs) -> Tuple[str, str, int]:
     out, err, ret = call(ctx, command, desc, verbosity, timeout, **kwargs)
     if ret:
         raise RuntimeError('Failed command: %s' % ' '.join(command))
@@ -2898,14 +2896,14 @@ def install_base_units(ctx, fsid):
     existed = os.path.exists(ctx.unit_dir + '/ceph-%s.target' % fsid)
     with open(ctx.unit_dir + '/ceph-%s.target.new' % fsid, 'w') as f:
         f.write(
-                '[Unit]\n'
-                'Description=Ceph cluster {fsid}\n'
-                'PartOf=ceph.target\n'
-                'Before=ceph.target\n'
-                '\n'
-                '[Install]\n'
-                'WantedBy=multi-user.target ceph.target\n'.format(
-                    fsid=fsid)
+            '[Unit]\n'
+            'Description=Ceph cluster {fsid}\n'
+            'PartOf=ceph.target\n'
+            'Before=ceph.target\n'
+            '\n'
+            '[Install]\n'
+            'WantedBy=multi-user.target ceph.target\n'.format(
+                fsid=fsid)
         )
         os.rename(ctx.unit_dir + '/ceph-%s.target.new' % fsid,
                   ctx.unit_dir + '/ceph-%s.target' % fsid)
@@ -3082,9 +3080,10 @@ class CephContainer:
         binds = sum([['--mount', '{}'.format(','.join(bind))]
                      for bind in self.bind_mounts], [])
 
-        return cmd_args + self.container_args + envs + vols + binds + [
-                   self.image,
-               ] + self.args  # type: ignore
+        return \
+            cmd_args + self.container_args + \
+            envs + vols + binds + \
+            [self.image] + self.args  # type: ignore
 
     def shell_cmd(self, cmd: List[str]) -> List[str]:
         cmd_args: List[str] = [
@@ -3156,9 +3155,8 @@ class CephContainer:
 
     def run(self, timeout=DEFAULT_TIMEOUT):
         # type: (Optional[int]) -> str
-        out, _, _ = call_throws(
-                self.ctx,
-                self.run_cmd(), desc=self.entrypoint, timeout=timeout)
+        out, _, _ = call_throws(self.ctx, self.run_cmd(),
+                                desc=self.entrypoint, timeout=timeout)
         return out
 
 ##################################
@@ -4574,8 +4572,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                     if '-' not in j:
                         continue
                     (cluster, daemon_id) = j.split('-', 1)
-                    fsid = get_legacy_daemon_fsid(
-                            ctx,
+                    fsid = get_legacy_daemon_fsid(ctx,
                             cluster, daemon_type, daemon_id,
                             legacy_dir=legacy_dir)
                     legacy_unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
@@ -5863,12 +5860,12 @@ def get_ipv4_address(ifname):
     # type: (str) -> str
     def _extract(sock, offset):
         return socket.inet_ntop(
-                socket.AF_INET,
-                fcntl.ioctl(
-                    sock.fileno(),
-                    offset,
-                    struct.pack('256s', bytes(ifname[:15], 'utf-8'))
-                )[20:24])
+            socket.AF_INET,
+            fcntl.ioctl(
+                sock.fileno(),
+                offset,
+                struct.pack('256s', bytes(ifname[:15], 'utf-8'))
+            )[20:24])
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -6209,8 +6206,7 @@ class HostFacts():
                     iftype = 'physical'
                     driver_path = os.path.join(dev_link, 'driver')
                     if os.path.exists(driver_path):
-                        driver = os.path.basename(
-                                    os.path.realpath(driver_path))
+                        driver = os.path.basename(os.path.realpath(driver_path))
                     else:
                         driver = 'Unknown'
 
@@ -6408,10 +6404,10 @@ class HostFacts():
         # type: () -> str
         """Return the attributes of this HostFacts object as json"""
         data = {
-                k: getattr(self, k) for k in dir(self)
-                if not k.startswith('_') and
-                isinstance(getattr(self, k),
-                           (float, int, str, list, dict, tuple))
+            k: getattr(self, k) for k in dir(self)
+            if not k.startswith('_') and
+            isinstance(getattr(self, k),
+                       (float, int, str, list, dict, tuple))
         }
         return json.dumps(data, indent=2, sort_keys=True)
 
