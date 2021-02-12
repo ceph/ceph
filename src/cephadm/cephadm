@@ -2481,11 +2481,12 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
             ctx,
             image=ctx.image,
             entrypoint='/usr/bin/ceph-mon',
-            args=['--mkfs',
-                  '-i', str(daemon_id),
-                  '--fsid', fsid,
-                  '-c', '/tmp/config',
-                  '--keyring', '/tmp/keyring',
+            args=[
+                '--mkfs',
+                '-i', str(daemon_id),
+                '--fsid', fsid,
+                '-c', '/tmp/config',
+                '--keyring', '/tmp/keyring',
             ] + get_daemon_args(ctx, fsid, 'mon', daemon_id),
             volume_mounts={
                 log_dir: '/var/log/ceph:z',
@@ -2862,7 +2863,8 @@ def install_base_units(ctx, fsid):
     # cluster unit
     existed = os.path.exists(ctx.unit_dir + '/ceph-%s.target' % fsid)
     with open(ctx.unit_dir + '/ceph-%s.target.new' % fsid, 'w') as f:
-        f.write('[Unit]\n'
+        f.write(
+                '[Unit]\n'
                 'Description=Ceph cluster {fsid}\n'
                 'PartOf=ceph.target\n'
                 'Before=ceph.target\n'
@@ -3413,11 +3415,12 @@ def create_initial_monmap(
         ctx,
         image=ctx.image,
         entrypoint='/usr/bin/monmaptool',
-        args=['--create',
-              '--clobber',
-              '--fsid', fsid,
-              '--addv', mon_id, mon_addr,
-              '/tmp/monmap'
+        args=[
+            '--create',
+            '--clobber',
+            '--fsid', fsid,
+            '--addv', mon_id, mon_addr,
+            '/tmp/monmap'
         ],
         volume_mounts={
             monmap.name: '/tmp/monmap:z',
@@ -3445,12 +3448,13 @@ def prepare_create_mon(
         ctx,
         image=ctx.image,
         entrypoint='/usr/bin/ceph-mon',
-        args=['--mkfs',
-              '-i', mon_id,
-              '--fsid', fsid,
-              '-c', '/dev/null',
-              '--monmap', '/tmp/monmap',
-              '--keyring', '/tmp/keyring',
+        args=[
+            '--mkfs',
+            '-i', mon_id,
+            '--fsid', fsid,
+            '-c', '/dev/null',
+            '--monmap', '/tmp/monmap',
+            '--keyring', '/tmp/keyring',
         ] + get_daemon_args(ctx, fsid, 'mon', mon_id),
         volume_mounts={
             log_dir: '/var/log/ceph:z',
@@ -3819,9 +3823,7 @@ def command_bootstrap(ctx):
     (uid, gid) = extract_uid_gid(ctx)
 
     # create some initial keys
-    (mon_key, mgr_key, admin_key,
-     bootstrap_keyring, admin_keyring
-    ) = \
+    (mon_key, mgr_key, admin_key, bootstrap_keyring, admin_keyring) = \
         create_initial_keys(ctx, uid, gid, mgr_id)
 
     monmap = create_initial_monmap(ctx, uid, gid, fsid, mon_id, addr_arg)
@@ -6371,7 +6373,8 @@ class HostFacts():
     def dump(self):
         # type: () -> str
         """Return the attributes of this HostFacts object as json"""
-        data = {k: getattr(self, k) for k in dir(self)
+        data = {
+                k: getattr(self, k) for k in dir(self)
                 if not k.startswith('_') and
                 isinstance(getattr(self, k),
                            (float, int, str, list, dict, tuple))
@@ -6997,9 +7000,10 @@ WantedBy=ceph-{fsid}.target
         with open(os.path.join(self.daemon_path, 'unit.run'), "w") as f:
             f.write(self.unit_run)
 
-        with open(os.path.join(self.ctx.unit_dir,
-                              f"{self.unit_name}.new"),
-                  "w"
+        with open(
+                os.path.join(self.ctx.unit_dir,
+                f"{self.unit_name}.new"),
+                "w"
         ) as f:
             f.write(self.unit_file)
             os.rename(
