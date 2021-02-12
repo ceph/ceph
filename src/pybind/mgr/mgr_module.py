@@ -906,6 +906,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_release_name()
 
+    def lookup_release_name(self, major: int) -> str:
+        return self._ceph_lookup_release_name(major)
+
     def get_context(self) -> object:
         """
         :return: a Python capsule containing a C++ CephContext pointer

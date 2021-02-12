@@ -12,7 +12,7 @@ from threading import Event
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, Iterator, NamedTuple
+    Any, Set, TYPE_CHECKING, cast, Iterator, NamedTuple, Sequence
 
 import datetime
 import os
@@ -1469,8 +1469,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         osd_count = 0
         for h, dm in self.cache.get_daemons_with_volatile_status():
             for name, dd in dm.items():
-                assert dd.hostname is not None
-                assert dd.daemon_type is not None
+                assert dd.hostname is not None, f'no hostname for {dd!r}'
+                assert dd.daemon_type is not None, f'no daemon_type for {dd!r}'
 
                 if service_type and service_type != dd.daemon_type:
                     continue
@@ -2003,7 +2003,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         }
 
     @trivial_completion
-    def plan(self, specs: List[GenericSpec]) -> List:
+    def plan(self, specs: Sequence[GenericSpec]) -> List:
         results = [{'warning': 'WARNING! Dry-Runs are snapshots of a certain point in time and are bound \n'
                                'to the current inventory setup. If any on these conditions changes, the \n'
                                'preview will be invalid. Please make sure to have a minimal \n'
@@ -2054,7 +2054,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return "Scheduled %s update..." % spec.service_name()
 
     @trivial_completion
-    def apply(self, specs: List[GenericSpec]) -> List[str]:
+    def apply(self, specs: Sequence[GenericSpec]) -> List[str]:
         results = []
         for spec in specs:
             results.append(self._apply(spec))
@@ -2210,8 +2210,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         'current_id': dd.container_image_id,
                         'current_version': dd.version,
                     }
-        if self.use_repo_digest:
-            r['target_digest'] = image_info.repo_digest
+        if self.use_repo_digest and image_info.repo_digests:
+            # FIXME: we assume the first digest is the best one to use
+            r['target_digest'] = image_info.repo_digests[0]
 
         return json.dumps(r, indent=4, sort_keys=True)
 

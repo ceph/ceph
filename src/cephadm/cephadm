@@ -148,7 +148,7 @@ class CephadmContext:
         return "func" in self._args
 
 
-    def has(self, name: str) -> bool:
+    def __contains__(self, name: str) -> bool:
         return hasattr(self, name)
 
 
@@ -1621,7 +1621,7 @@ def infer_fsid(func):
             if not is_fsid(daemon['fsid']):
                 # 'unknown' fsid
                 continue
-            elif ctx.has("name") or not ctx.name:
+            elif "name" not in ctx or not ctx.name:
                 # ctx.name not specified
                 fsids_set.add(daemon['fsid'])
             elif daemon['name'] == ctx.name:
@@ -1706,7 +1706,7 @@ def default_image(func):
     @wraps(func)
     def _default_image(ctx: CephadmContext):
         if not ctx.image:
-            if ctx.has("name") and ctx.name:
+            if "name" in ctx and ctx.name:
                 type_ = ctx.name.split('.', 1)[0]
                 if type_ in Monitoring.components:
                     ctx.image = Monitoring.components[type_]['image']
@@ -2215,18 +2215,18 @@ def get_config_and_keyring(ctx):
     config = None
     keyring = None
 
-    if ctx.has("config_json") and ctx.config_json:
+    if "config_json" in ctx and ctx.config_json:
         d = get_parm(ctx.config_json)
         config = d.get('config')
         keyring = d.get('keyring')
 
-    if ctx.has("config") and ctx.config:
+    if "config" in ctx and ctx.config:
         with open(ctx.config, 'r') as f:
             config = f.read()
 
-    if ctx.has("key") and ctx.key:
+    if "key" in ctx and ctx.key:
         keyring = '[%s]\n\tkey = %s\n' % (ctx.name, ctx.key)
-    elif ctx.has("keyring") and ctx.keyring:
+    elif "keyring" in ctx and ctx.keyring:
         with open(ctx.keyring, 'r') as f:
             keyring = f.read()
 
@@ -2326,7 +2326,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
 
     if daemon_type == HAproxy.daemon_type:
         assert daemon_id
-        data_dir = get_data_dir(fsid, daemon_type, daemon_type, daemon_id)
+        data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(HAproxy.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
@@ -2337,7 +2337,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
 
     if daemon_type == Keepalived.daemon_type:
         assert daemon_id
-        data_dir = get_data_dir(fsid, daemon_type, daemon_type, daemon_id)
+        data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(Keepalived.get_container_mounts(data_dir))
 
     if daemon_type == CustomContainer.daemon_type:
@@ -3157,7 +3157,7 @@ def command_inspect_image(ctx):
     # type: (CephadmContext) -> int
     out, err, ret = call_throws(ctx, [
         ctx.container_path, 'inspect',
-        '--format', '{{.ID}},{{json .RepoDigests}}',
+        '--format', '{{.ID}},{{.RepoDigests}}',
         ctx.image])
     if ret:
         return errno.ENOENT
@@ -3171,22 +3171,44 @@ def command_inspect_image(ctx):
 
 
 def get_image_info_from_inspect(out, image):
-    # type: (str, str) -> Dict[str, str]
+    # type: (str, str) -> Dict[str, Union[str,List[str]]]
     image_id, digests = out.split(',', 1)
     if not out:
         raise Error('inspect {}: empty result'.format(image))
     r = {
         'image_id': normalize_container_id(image_id)
-    }
+    } # type: Dict[str, Union[str,List[str]]]
     if digests:
-        json_digests = json.loads(digests)
-        if json_digests:
-            r['repo_digest'] = json_digests[0]
+        r['repo_digests'] = digests[1:-1].split(' ')
     return r
 
 
 ##################################
+def check_subnet(subnets:str) -> Tuple[int, List[int], str]:
+    """Determine whether the given string is a valid subnet
 
+    :param subnets: subnet string, a single definition or comma separated list of CIDR subnets
+    :returns: return code, IP version list of the subnets and msg describing any errors validation errors
+    """
+
+    rc = 0
+    versions = set() 
+    errors = []
+    subnet_list = subnets.split(',')
+    for subnet in subnet_list:
+        # ensure the format of the string is as expected address/netmask
+        if not re.search(r'\/\d+$', subnet):
+            rc = 1
+            errors.append(f"{subnet} is not in CIDR format (address/netmask)")
+            continue
+        try:
+            v = ipaddress.ip_network(unicode(subnet)).version
+            versions.add(v)
+        except ValueError as e:
+            rc = 1
+            errors.append(f"{subnet} invalid: {str(e)}")
+    
+    return rc, list(versions), ", ".join(errors)
 
 def unwrap_ipv6(address):
     # type: (str) -> str
@@ -3283,8 +3305,27 @@ def prepare_mon_addresses(
         if not mon_network:
             raise Error('Failed to infer CIDR network for mon ip %s; pass '
                         '--skip-mon-network to configure it later' % base_ip)
-
+    
     return (addr_arg, ipv6, mon_network)
+
+
+def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
+    cluster_network = ""
+    ipv6_cluster_network = False
+    # the cluster network may not exist on this node, so all we can do is 
+    # validate that the address given is valid ipv4 or ipv6 subnet
+    if ctx.cluster_network:
+        rc, versions, err_msg = check_subnet(ctx.cluster_network)
+        if rc:
+            raise Error(f"Invalid --cluster-network parameter: {err_msg}")
+        cluster_network = ctx.cluster_network
+        ipv6_cluster_network = True if 6 in versions else False
+    else:
+        logger.info("- internal network (--cluster-network) has not "
+                       "been provided, OSD replication will default to "
+                       "the public_network")
+
+    return cluster_network, ipv6_cluster_network
 
 
 def create_initial_keys(
@@ -3645,7 +3686,8 @@ def finish_bootstrap_config(
     config: str,
     mon_id: str, mon_dir: str,
     mon_network: Optional[str], ipv6: bool,
-    cli: Callable
+    cli: Callable,
+    cluster_network: Optional[str], ipv6_cluster_network: bool
 
 ) -> None:
     if not ctx.no_minimize_config:
@@ -3674,11 +3716,15 @@ def finish_bootstrap_config(
         ])
 
     if mon_network:
-        logger.info('Setting mon public_network...')
+        logger.info(f"Setting mon public_network to {mon_network}")
         cli(['config', 'set', 'mon', 'public_network', mon_network])
+    
+    if cluster_network:
+        logger.info(f"Setting cluster_network to {cluster_network}")
+        cli(['config', 'set', 'global', 'cluster_network', cluster_network])
 
-    if ipv6:
-        logger.info('Enabling IPv6 (ms_bind_ipv6)')
+    if ipv6 or ipv6_cluster_network:
+        logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
 
 
@@ -3738,6 +3784,8 @@ def command_bootstrap(ctx):
     l.acquire()
 
     (addr_arg, ipv6, mon_network) = prepare_mon_addresses(ctx)
+    cluster_network, ipv6_cluster_network = prepare_cluster_network(ctx)
+
     config = prepare_bootstrap_config(ctx, fsid, addr_arg, ctx.image)
 
     logger.info('Extracting ceph user uid/gid from container image...')
@@ -3787,7 +3835,8 @@ def command_bootstrap(ctx):
     wait_for_mon(ctx, mon_id, mon_dir, admin_keyring.name, tmp_config.name)
 
     finish_bootstrap_config(ctx, fsid, config, mon_id, mon_dir,
-                            mon_network, ipv6, cli)
+                            mon_network, ipv6, cli,
+                            cluster_network, ipv6_cluster_network)
 
     # output files
     with open(ctx.output_keyring, 'w') as f:
@@ -4402,6 +4451,9 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
     # keep track of ceph versions we see
     seen_versions = {}  # type: Dict[str, Optional[str]]
 
+    # keep track of image digests
+    seen_digests = {}   # type: Dict[str, List[str]]
+
     # /var/lib/ceph
     if os.path.exists(data_dir):
         for i in os.listdir(data_dir):
@@ -4458,6 +4510,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         container_id = None
                         image_name = None
                         image_id = None
+                        image_digests = None
                         version = None
                         start_stamp = None
 
@@ -4474,6 +4527,22 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             image_id = normalize_container_id(image_id)
                             daemon_type = name.split('.', 1)[0]
                             start_stamp = try_convert_datetime(start)
+
+                            # collect digests for this image id
+                            image_digests = seen_digests.get(image_id)
+                            if not image_digests:
+                                out, err, code = call(
+                                    ctx,
+                                    [
+                                        container_path, 'image', 'inspect', image_name,
+                                        '--format', '{{.RepoDigests}}',
+                                    ],
+                                    verbosity=CallVerbosity.DEBUG)
+                                if not code:
+                                    image_digests = out.strip()[1:-1].split(' ')
+                                    seen_digests[image_id] = image_digests
+
+                            # identify software version inside the container (if we can)
                             if not version or '.' not in version:
                                 version = seen_versions.get(image_id, None)
                             if daemon_type == NFSGanesha.daemon_type:
@@ -4541,6 +4610,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         val['container_id'] = container_id
                         val['container_image_name'] = image_name
                         val['container_image_id'] = image_id
+                        val['container_image_digests'] = image_digests
                         val['version'] = version
                         val['started'] = start_stamp
                         val['created'] = get_file_timestamp(
@@ -5105,7 +5175,7 @@ def command_check_host(ctx: CephadmContext) -> None:
     if not check_time_sync(ctx):
         errors.append('ERROR: No time synchronization is active')
 
-    if ctx.has("expect_hostname") and ctx.expect_hostname:
+    if "expect_hostname" in ctx and ctx.expect_hostname:
         if get_hostname().lower() != ctx.expect_hostname.lower():
             errors.append('ERROR: hostname "%s" does not match expected hostname "%s"' % (
                 get_hostname(), ctx.expect_hostname))
@@ -5148,7 +5218,7 @@ def command_prepare_host(ctx: CephadmContext) -> None:
         # the service
         check_time_sync(ctx, enabler=pkg)
 
-    if ctx.has("expect_hostname") and ctx.expect_hostname and ctx.expect_hostname != get_hostname():
+    if "expect_hostname" in ctx and ctx.expect_hostname and ctx.expect_hostname != get_hostname():
         logger.warning('Adjusting hostname from %s -> %s...' % (get_hostname(), ctx.expect_hostname))
         call_throws(ctx, ['hostname', ctx.expect_hostname])
         with open('/etc/hostname', 'w') as f:
@@ -5336,13 +5406,13 @@ class Apt(Packager):
 
     def install(self, ls):
         logger.info('Installing packages %s...' % ls)
-        call_throws(self.ctx, ['apt', 'install', '-y'] + ls)
+        call_throws(self.ctx, ['apt-get', 'install', '-y'] + ls)
 
     def install_podman(self):
         if self.distro == 'ubuntu':
             logger.info('Setting up repo for podman...')
             self.add_kubic_repo()
-            call_throws(self.ctx, ['apt', 'update'])
+            call_throws(self.ctx, ['apt-get', 'update'])
 
         logger.info('Attempting podman install...')
         try:
@@ -7398,6 +7468,9 @@ def _get_parser():
         '--exporter-config',
         action=CustomValidation,
         help=f'Exporter configuration information in JSON format (providing: {", ".join(CephadmDaemon.config_requirements)}, port information)')
+    parser_bootstrap.add_argument(
+        '--cluster-network',
+        help='subnet to use for cluster replication, recovery and heartbeats (in CIDR notation network/mask)')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
