@@ -1,4 +1,4 @@
 tasks:
 - cephadm.shell:
     mon.a:
-      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+      - ceph config set mgr mgr/cephadm/use_repo_digest false --force
