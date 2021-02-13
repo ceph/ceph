@@ -25,9 +25,9 @@ class HA_RGWService(CephService):
         # spec should be in spec store
         if not daemon_spec.spec:
             service_name: str = "ha-rgw." + daemon_spec.daemon_id.split('.')[0]
-            if service_name in self.mgr.spec_store.specs:
+            if service_name in self.mgr.spec_store:
                 daemon_spec.spec = cast(
-                    HA_RGWSpec, self.mgr.spec_store.specs.get(service_name))
+                    HA_RGWSpec, self.mgr.spec_store[service_name].spec)
         assert daemon_spec.spec
 
         if daemon_spec.daemon_type == 'haproxy':

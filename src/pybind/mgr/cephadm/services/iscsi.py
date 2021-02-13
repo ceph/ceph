@@ -31,9 +31,9 @@ class IscsiService(CephService):
         # spec should be in spec store
         if not daemon_spec.spec:
             service_name: str = "iscsi." + daemon_spec.daemon_id.split('.')[0]
-            if service_name in self.mgr.spec_store.specs:
+            if service_name in self.mgr.spec_store:
                 daemon_spec.spec = cast(
-                    IscsiServiceSpec, self.mgr.spec_store.specs.get(service_name))
+                    IscsiServiceSpec, self.mgr.spec_store[service_name].spec)
         assert daemon_spec.spec
 
         spec = daemon_spec.spec
