@@ -26,6 +26,13 @@ class IscsiService(CephService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> CephadmDaemonSpec:
         assert self.TYPE == daemon_spec.daemon_type
+        # if spec is not attached to daemon_spec it is likely a redeploy or reconfig and
+        # spec should be in spec store
+        if not daemon_spec.spec:
+            service_name: str = "iscsi." + daemon_spec.daemon_id.split('.')[0]
+            if service_name in self.mgr.spec_store.specs:
+                daemon_spec.spec = cast(
+                    IscsiServiceSpec, self.mgr.spec_store.specs.get(service_name))
         assert daemon_spec.spec
 
         spec = daemon_spec.spec
@@ -71,6 +78,8 @@ class IscsiService(CephService):
 
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'iscsi-gateway.cfg': igw_conf}
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
         return daemon_spec
 

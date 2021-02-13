@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock, call
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmExporter
+    RbdMirrorService, CrashService, CephadmExporter, CephadmDaemonSpec
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
 from cephadm.services.osd import OSDService
@@ -28,6 +28,9 @@ class FakeMgr:
             self.config = cmd_dict.get('value')
             return 0, 'value set', ''
         return -1, '', 'error'
+
+    def get_minimal_ceph_conf(self) -> str:
+        return ''
 
 
 class TestCephadmService:
@@ -89,7 +92,9 @@ class TestCephadmService:
         iscsi_spec.spec.daemon_type = "iscsi"
         iscsi_spec.spec.ssl_cert = ''
 
-        iscsi_service.prepare_create(iscsi_spec)
+        iscsi_daemon_spec = CephadmDaemonSpec(host='host', daemon_id='a', spec=iscsi_spec)
+
+        iscsi_service.prepare_create(iscsi_daemon_spec)
 
         expected_caps = ['mon',
                          'profile rbd, allow command "osd blocklist", allow command "config-key get" with "key" prefix "iscsi/"',
