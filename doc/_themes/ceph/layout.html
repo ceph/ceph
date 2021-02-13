@@ -114,6 +114,9 @@
 <body class="wy-body-for-nav">
 
   {% block extrabody %} {% endblock %}
+  <header class="top-bar">
+    {% include "breadcrumbs.html" %}
+  </header>
   <div class="wy-grid-for-nav">
     {# SIDE NAV, TOGGLES ON MOBILE #}
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
@@ -195,7 +198,6 @@
         {% else %}
         <div class="rst-content">
         {% endif %}
-          {% include "breadcrumbs.html" %}
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
           {%- block document %}
            <div itemprop="articleBody">
