@@ -20,6 +20,7 @@
 #include "cls/log/cls_log_types.h"
 #include "cls/timeindex/cls_timeindex_types.h"
 #include "cls/otp/cls_otp_types.h"
+#include "rgw_tools.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
@@ -76,7 +77,7 @@ static inline void prepend_bucket_marker(const rgw_bucket& bucket, const string&
   }
 }
 
-static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& locator)
+inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, string& locator)
 {
   const rgw_bucket& bucket = obj.bucket;
   prepend_bucket_marker(bucket, obj.get_oid(), oid);
@@ -401,6 +402,9 @@ class lru_map;
 using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
 
 class RGWIndexCompletionManager;
+
+
+
 
 class RGWRados
 {
@@ -1590,6 +1594,35 @@ public:
    */
   static uint32_t calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 						     uint32_t num_shards);
+  // Neorados
+  bs::error_code set_omap_heavy(std::string_view pool, optional_yield y) {
+    return rgw_rados_set_omap_heavy(neorados(), pool, y);
+  }
+public:
+  tl::expected<std::int64_t, bs::error_code>
+  acquire_pool_id(std::string_view pool, bool mostly_omap,
+		  optional_yield y, bool create = true) {
+    return rgw_rados_acquire_pool_id(neorados(), pool, mostly_omap, y, create);
+  }
+  tl::expected<nr::IOContext, bs::error_code>
+  acquire_pool(rgw_pool pool, bool mostly_omap,
+	       optional_yield y, bool create = true) {
+    return rgw_rados_acquire_pool(neorados(), pool, mostly_omap, y, create);
+  }
+  tl::expected<neo_obj_ref, bs::error_code>
+  acquire_obj(const rgw_raw_obj& obj, optional_yield y) {
+    return rgw_rados_acquire_obj(neorados(), obj, y);
+  }
+  bs::error_code list_pool(const nr::IOContext& i,
+			   const int max,
+			   const rgw_rados_list_filter& filter,
+			   nr::Cursor& iter,
+			   std::vector<std::string>* oids,
+			   bool* is_truncated, optional_yield y) {
+    return rgw_rados_list_pool(neorados(), i, max, filter,
+			       iter, oids, is_truncated, y);
+  }
 };
+
 
 #endif

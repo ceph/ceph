@@ -3,8 +3,13 @@
 
 #include <errno.h>
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/async/blocked_completion.h"
 #include "librados/librados_asio.h"
 #include "common/async/yield_context.h"
 
@@ -25,6 +30,8 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
+
+namespace ca = ceph::async;
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -300,6 +307,138 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
   }
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
+
+// Neorados
+bs::error_code rgw_rados_set_omap_heavy(nr::RADOS& r, std::string_view pool,
+					optional_yield y)
+{
+  using namespace std::literals;
+  static constexpr auto pool_set =
+    "{\"prefix\": \"osd pool set\", "
+    "\"pool\": \"{}\" "
+    "\"var\": \"{}\", "
+    "\"val\": \"{}\"}"sv;
+  static constexpr auto autoscale_param = "pg_autoscale_bias"sv;
+  static const auto autoscale =
+    fmt::format(pool_set, pool, autoscale_param,
+		r.cct()->_conf.get_val<double>("rgw_rados_pool_autoscale_bias"));
+  static constexpr auto num_min_param = "pg_num_min"sv;
+  static const auto num_min =
+    fmt::format(pool_set, pool, num_min_param,
+		r.cct()->_conf.get_val<uint64_t>("rgw_rados_pool_pg_num_min"));
+  std::string_view setting;
+  try {
+    setting = autoscale_param;
+    r.mon_command({ autoscale },
+		  {}, nullptr, nullptr, y);
+    setting = num_min_param;
+    r.mon_command({ num_min }, {}, nullptr, nullptr, y);
+  } catch (const bs::system_error& e) {
+    ldout(r.cct(), 10) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		       << " warning: failed to set "
+		       << setting << " on " << pool << ":"
+		       << e.what() << dendl;
+    return e.code();
+  }
+  return {};
+}
+
+tl::expected<std::int64_t, bs::error_code>
+rgw_rados_acquire_pool_id(nr::RADOS& r, std::string_view pool, bool mostly_omap,
+			  optional_yield y, bool create)
+{
+  bs::error_code ec;
+  auto id = r.lookup_pool(std::string(pool), y[ec]);
+  if (!ec)
+    return id;
+
+  if ((ec != bs::errc::no_such_file_or_directory) || !create)
+    return tl::unexpected(ec);
+
+  r.create_pool(pool, nullopt, y[ec]);
+  if (ec && ec != bs::errc::file_exists) {
+    if (ec == bs::errc::result_out_of_range) {
+      ldout(r.cct(), 0)
+	<< __PRETTY_FUNCTION__ << ":" << __LINE__
+	<< " ERROR: neorados::RADOS::create_pool returned " << ec
+	<< " (this can be due to a pool or placement group misconfiguration, e.g."
+	<< " pg_num < pgp_num or mon_max_pg_per_osd exceeded)"
+	<< dendl;
+    }
+    return tl::unexpected(ec);
+  }
+  id = r.lookup_pool(std::string(pool), y[ec]);
+  if (ec)
+    return tl::unexpected(ec);
+  r.enable_application(pool, pg_pool_t::APPLICATION_NAME_RGW, false,
+		       y[ec]);
+  if (ec && ec != bs::errc::operation_not_supported) {
+    return tl::unexpected(ec);
+  }
+  if (mostly_omap)
+    rgw_rados_set_omap_heavy(r, pool, y);
+  return id;
+}
+
+tl::expected<nr::IOContext, bs::error_code>
+rgw_rados_acquire_pool(nr::RADOS& r, rgw_pool pool, bool mostly_omap,
+		       optional_yield y, bool create)
+{
+  auto p = rgw_rados_acquire_pool_id(r, pool.name, mostly_omap, y, create);
+  if (p)
+    return nr::IOContext(*p, pool.ns);
+  else
+    return tl::unexpected(p.error());
+}
+
+tl::expected<neo_obj_ref, bs::error_code>
+rgw_rados_acquire_obj(nr::RADOS& r, const rgw_raw_obj& obj, optional_yield y)
+{
+  neo_obj_ref ref;
+  auto p = rgw_rados_acquire_pool_id(r, obj.pool.name, false, y);
+  if (!p)
+    return tl::unexpected(p.error());
+  ref.r = &r;
+  ref.pool_name = obj.pool.name;
+  ref.oid = std::string(obj.oid);
+  ref.ioc.pool(*p);
+  ref.ioc.ns(obj.pool.ns);
+  ref.ioc.key(obj.loc);
+  return ref;
+}
+
+bs::error_code rgw_rados_list_pool(nr::RADOS& r, const nr::IOContext& i,
+				   const int max,
+				   const rgw_rados_list_filter& filter,
+				   nr::Cursor& iter,
+				   std::vector<std::string>* oids,
+				   bool* is_truncated, optional_yield y)
+{
+  bs::error_code ec;
+  if (iter == nr::Cursor::end())
+    return ceph::to_error_code(-ENOENT);
+
+  std::vector<nr::Entry> ls;
+
+  std::tie(ls, iter) = r.enumerate_objects(i, iter, nr::Cursor::end(),
+					   max, {}, y[ec]);
+  if (ec)
+    return ec;
+
+  for (auto& e : ls) {
+    auto& oid = e.oid;
+    ldout(r.cct(), 20) << "Pool::get_ext: got " << oid << dendl;
+    if (filter && !filter(oid, oid))
+      continue;
+
+    oids->push_back(std::move(oid));
+  }
+
+  if (is_truncated)
+    *is_truncated = (iter != nr::Cursor::end());
+  return {};
+}
+
 
 void parse_mime_map_line(const char *start, const char *end)
 {

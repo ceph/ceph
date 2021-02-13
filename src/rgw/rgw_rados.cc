@@ -15,6 +15,10 @@
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include <fmt/format.h>
+
 #include "common/ceph_json.h"
 
 #include "common/async/blocked_completion.h"

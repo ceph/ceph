@@ -6,12 +6,19 @@
 
 #include <string>
 
+#include <boost/system/error_code.hpp>
+
 #include "include/types.h"
 #include "include/ceph_hash.h"
+#include "include/neorados/RADOS.hpp"
+#include "include/expected.hpp"
 
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
+
+namespace nr = neorados;
+namespace bs = boost::system;
 
 class RGWSI_SysObj;
 
@@ -38,13 +45,13 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 
 extern const std::string MP_META_SUFFIX;
 
-inline int rgw_shards_max()
+constexpr inline int rgw_shards_max()
 {
   return RGW_SHARDS_PRIME_1;
 }
 
 // only called by rgw_shard_id and rgw_bucket_shard_index
-static inline int rgw_shards_mod(unsigned hval, int max_shards)
+constexpr inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
   if (max_shards <= RGW_SHARDS_PRIME_0) {
     return hval % RGW_SHARDS_PRIME_0 % max_shards;
@@ -102,6 +109,116 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
 
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();
+
+
+// Neorados
+//
+// We need all these available as free functions so we can use them in
+// unit tests without having to spin up an entire RGWRados.
+
+bs::error_code
+rgw_rados_set_omap_heavy(nr::RADOS& r, std::string_view pool,
+			 optional_yield y);
+tl::expected<std::int64_t, bs::error_code>
+rgw_rados_acquire_pool_id(nr::RADOS& r, std::string_view pool, bool mostly_omap,
+			  optional_yield y, bool create = true);
+tl::expected<nr::IOContext, bs::error_code>
+rgw_rados_acquire_pool(nr::RADOS& r, rgw_pool pool, bool mostly_omap,
+		       optional_yield y, bool create = true);
+
+using rgw_rados_list_filter = std::function<bool(std::string_view,
+						 std::string_view)>;
+inline auto rgw_rados_prefix_filter(std::string prefix) {
+  return [prefix = std::move(prefix)](std::string_view,
+				      std::string_view key) -> bool {
+	   return (prefix.compare(key.substr(0, prefix.size())) == 0);
+	 };
+}
+
+bs::error_code
+rgw_rados_list_pool(nr::RADOS& r, const nr::IOContext& i, const int max,
+		    const rgw_rados_list_filter& filter,
+		    nr::Cursor& iter, std::vector<std::string>* oids,
+		    bool* is_truncated, optional_yield y);
+
+
+// Analogous to rgw_rados_ref, contains a pointer to the RADOS handle,
+// IOContext, Object, and the name of the pool. (Since in one place we
+// end up looking it up.)
+struct neo_obj_ref {
+  nr::RADOS* r = nullptr;
+  nr::Object oid;
+  nr::IOContext ioc;
+  std::string pool_name;
+
+  neo_obj_ref() = default;
+
+  neo_obj_ref(nr::RADOS* r, nr::Object oid, nr::IOContext ioc,
+	      std::string pool_name)
+    : r(r), oid(std::move(oid)), ioc(std::move(ioc)),
+      pool_name(std::move(pool_name)) {}
+
+  template<typename CT>
+  auto operate(nr::WriteOp&& op, CT&& ct, version_t* objver = nullptr) {
+    return r->execute(oid, ioc, std::move(op), std::forward<CT>(ct), objver);
+  }
+  template<typename CT>
+  auto operate(nr::ReadOp&& op, bufferlist* bl, CT&& ct,
+	       version_t* objver = nullptr) {
+    return r->execute(oid, ioc, std::move(op), bl, std::forward<CT>(ct),
+		      objver);
+  }
+  template<typename CT>
+  auto watch(nr::RADOS::WatchCB&& f, CT&& ct) {
+    return r->watch(oid, ioc, nullopt, std::move(f), std::forward<CT>(ct));
+  }
+  template<typename CT>
+  auto unwatch(uint64_t handle, CT&& ct) {
+    return r->unwatch(handle, ioc, std::forward<CT>(ct));
+  }
+  template<typename CT>
+  auto notify(bufferlist&& bl,
+	      std::optional<std::chrono::milliseconds> timeout,
+	      CT&& ct) {
+    return r->notify(oid, ioc, std::move(bl), timeout, std::forward<CT>(ct));
+  }
+  template<typename CT>
+  auto notify_ack(uint64_t notify_id, uint64_t cookie, bufferlist&& bl,
+		  CT&& ct) {
+    return r->notify_ack(oid, ioc, notify_id, cookie, std::move(bl),
+			 std::forward<CT>(ct));
+  }
+};
+inline bool operator <(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) < std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator <=(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) <= std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator >=(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) >= std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator >(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) > std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator ==(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) == std::tie(rhs.ioc, rhs.oid);
+}
+inline bool operator !=(const neo_obj_ref& lhs, const neo_obj_ref& rhs) {
+  return std::tie(lhs.ioc, lhs.oid) != std::tie(rhs.ioc, rhs.oid);
+}
+namespace std {
+template<>
+struct hash<neo_obj_ref> {
+  size_t operator ()(const neo_obj_ref& ref) const {
+    return hash<nr::IOContext>{}(ref.ioc) ^ (hash<nr::Object>{}(ref.oid) << 1);
+  }
+};
+}
+
+tl::expected<neo_obj_ref, bs::error_code>
+rgw_rados_acquire_obj(nr::RADOS& r, const rgw_raw_obj& obj, optional_yield y);
+
 
 template<class H, size_t S>
 class RGWEtag
