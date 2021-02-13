@@ -1358,10 +1358,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp)
 int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp)
 {
   if (raw) {
-    return svc.init_raw(cct, use_cache, null_yield, dpp);
+    return svc.init_raw(cct, this, use_cache, null_yield, dpp);
   }
 
-  return svc.init(cct, use_cache, run_sync_thread, null_yield, dpp);
+  return svc.init(cct, this, use_cache, run_sync_thread, null_yield, dpp);
 }
 
 int RGWRados::init_ctl(const DoutPrefixProvider *dpp)

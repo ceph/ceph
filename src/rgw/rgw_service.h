@@ -13,6 +13,7 @@
 
 #include "rgw/rgw_common.h"
 
+class RGWRados;
 struct RGWServices_Def;
 
 class RGWServiceInstance
@@ -108,7 +109,8 @@ struct RGWServices_Def
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
+  int init(CephContext *cct, RGWRados* r, bool have_cache, bool raw_storage,
+	   bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
   void shutdown();
 };
 
@@ -147,14 +149,14 @@ struct RGWServices
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
+  int do_init(CephContext *cct, RGWRados* r, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, false, run_sync, y, dpp);
+  int init(CephContext *cct, RGWRados* r, bool have_cache, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, r, have_cache, false, run_sync, y, dpp);
   }
 
-  int init_raw(CephContext *cct, bool have_cache, optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, true, false, y, dpp);
+  int init_raw(CephContext *cct, RGWRados* r, bool have_cache, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, r, have_cache, true, false, y, dpp);
   }
   void shutdown() {
     _svc.shutdown();

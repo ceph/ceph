@@ -7,9 +7,6 @@
 
 int RGWSI_Finisher::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
-  finisher = new Finisher(cct);
-  finisher->start();
-
   return 0;
 }
 
@@ -19,15 +16,10 @@ void RGWSI_Finisher::shutdown()
     return;
   }
 
-  if (finisher) {
-    finisher->stop();
-
-    map<int, ShutdownCB *> cbs;
-    cbs.swap(shutdown_cbs); /* move cbs out, in case caller unregisetrs */
-    for (auto& iter : cbs) {
-      iter.second->call();
-    }
-    delete finisher;
+  std::unordered_map<int, fu2::unique_function<void()>> cbs;
+  cbs.swap(shutdown_cbs); /* move cbs out, in case caller unregisetrs */
+  for (auto& iter : cbs) {
+    std::move(iter.second)();
   }
 
   finalized = true;
@@ -38,19 +30,14 @@ RGWSI_Finisher::~RGWSI_Finisher()
   shutdown();
 }
 
-void RGWSI_Finisher::register_caller(ShutdownCB *cb, int *phandle)
+int RGWSI_Finisher::register_caller(fu2::unique_function<void()>&& cb)
 {
-  *phandle = ++handles_counter;
-  shutdown_cbs[*phandle] = cb;
+  int handle = ++handles_counter;
+  shutdown_cbs[handle] = std::move(cb);
+  return handle;
 }
 
 void RGWSI_Finisher::unregister_caller(int handle)
 {
   shutdown_cbs.erase(handle);
 }
-
-void RGWSI_Finisher::schedule_context(Context *c)
-{
-  finisher->queue(c);
-}
-
