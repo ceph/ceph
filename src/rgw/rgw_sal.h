@@ -19,10 +19,12 @@
 
 class RGWGetDataCB;
 struct RGWObjState;
-class RGWAccessListFilter;
 class RGWLC;
 class RGWObjManifest;
 struct RGWZoneGroup;
+
+using RGWAccessListFilter = std::function<bool(std::string_view name,
+					       std::string_view key)>;
 
 struct RGWUsageIter {
   string read_iter;
@@ -188,7 +190,7 @@ class RGWBucket {
       rgw_obj_key end_marker;
       std::string ns;
       bool enforce_ns{true};
-      RGWAccessListFilter *filter{nullptr};
+      RGWAccessListFilter filter;
       bool list_versions{false};
       bool allow_unordered{false};
       int shard_id{-1};

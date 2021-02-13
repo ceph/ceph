@@ -637,9 +637,7 @@ int RGWSI_SysObj_Core::pool_list_prefixed_objs(const rgw_pool& pool, const strin
 
   auto op = rados_pool.op();
 
-  RGWAccessListFilterPrefix filter(prefix);
-
-  int r = op.init(string(), &filter);
+  int r = op.init(string(), RGWAccessListFilterPrefix(prefix));
   if (r < 0) {
     return r;
   }
@@ -673,7 +671,7 @@ int RGWSI_SysObj_Core::pool_list_objects_init(const rgw_pool& pool,
   ctx.pool = rados_svc->pool(pool);
   ctx.op = ctx.pool.op();
 
-  int r = ctx.op.init(marker, &ctx.filter);
+  int r = ctx.op.init(marker, ctx.filter);
   if (r < 0) {
     ldout(cct, 10) << "failed to list objects pool_iterate_begin() returned r=" << r << dendl;
     return r;

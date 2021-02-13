@@ -1478,14 +1478,13 @@ int RGWRadosList::do_incomplete_multipart(
   constexpr int max_uploads = 1000;
   constexpr int max_parts = 1000;
   static const std::string mp_ns = RGW_OBJ_NS_MULTIPART;
-  static MultipartMetaFilter mp_filter;
 
   int ret;
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
   list_op.params.ns = mp_ns;
-  list_op.params.filter = &mp_filter;
+  list_op.params.filter = MultipartMetaFilter{};
   // use empty string for initial list_op.params.marker
   // use empty strings for list_op.params.{prefix,delim}
 

@@ -371,4 +371,14 @@ public:
 
 using RGWDataAccessRef = std::shared_ptr<RGWDataAccess>;
 
+using RGWAccessListFilter = std::function<bool(std::string_view name,
+					       std::string_view key)>;
+
+inline auto RGWAccessListFilterPrefix(std::string prefix) {
+  return [prefix = std::move(prefix)](std::string_view name,
+				      std::string_view key) {
+    return (prefix.compare(key.substr(0, prefix.size())) == 0);
+  };
+}
+
 #endif

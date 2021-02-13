@@ -297,13 +297,12 @@ int list_bucket_multiparts(const DoutPrefixProvider *dpp,
 {
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
-  MultipartMetaFilter mp_filter;
 
   list_op.params.prefix = prefix;
   list_op.params.delim = delim;
   list_op.params.marker = marker;
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
-  list_op.params.filter = &mp_filter;
+  list_op.params.filter = MultipartMetaFilter{};
 
   return(list_op.list_objects(dpp, max_uploads, objs, common_prefixes, is_truncated, null_yield));
 }

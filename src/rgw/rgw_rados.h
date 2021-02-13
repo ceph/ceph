@@ -1055,7 +1055,7 @@ public:
         rgw_obj_key end_marker;
         string ns;
         bool enforce_ns;
-        RGWAccessListFilter *filter;
+        RGWAccessListFilter filter;
         bool list_versions;
 	bool allow_unordered;
 
@@ -1585,7 +1585,7 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_dir_entry>& objs,
-                   bool *is_truncated, RGWAccessListFilter *filter);
+                   bool *is_truncated, const RGWAccessListFilter& filter);
 
   uint64_t next_bucket_id();
 

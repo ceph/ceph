@@ -1921,8 +1921,8 @@ int RGWRados::Bucket::List::list_objects_ordered(
       }
 
       if (params.filter &&
-	  ! params.filter->filter(obj.name, index_key.name)) {
-        continue;
+	  !params.filter(obj.name, index_key.name)) {
+	continue;
       }
 
       if (params.prefix.size() &&
@@ -2170,7 +2170,7 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 	continue;
       }
 
-      if (params.filter && !params.filter->filter(obj.name, index_key.name))
+      if (params.filter && !params.filter(obj.name, index_key.name))
         continue;
 
       if (params.prefix.size() &&
@@ -7909,7 +7909,7 @@ string RGWRados::pool_iterate_get_cursor(RGWPoolIterCtx& ctx)
 
 static int do_pool_iterate(CephContext* cct, RGWPoolIterCtx& ctx, uint32_t num,
                            vector<rgw_bucket_dir_entry>& objs,
-                           bool *is_truncated, RGWAccessListFilter *filter)
+                           bool *is_truncated, const RGWAccessListFilter& filter)
 {
   librados::IoCtx& io_ctx = ctx.io_ctx;
   librados::NObjectIterator& iter = ctx.iter;
@@ -7926,7 +7926,7 @@ static int do_pool_iterate(CephContext* cct, RGWPoolIterCtx& ctx, uint32_t num,
     ldout(cct, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
     // fill it in with initial values; we may correct later
-    if (filter && !filter->filter(oid, oid))
+    if (filter && !filter(oid, oid))
       continue;
 
     e.key = oid;
@@ -7940,7 +7940,7 @@ static int do_pool_iterate(CephContext* cct, RGWPoolIterCtx& ctx, uint32_t num,
 }
 
 int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_dir_entry>& objs,
-                           bool *is_truncated, RGWAccessListFilter *filter)
+                           bool *is_truncated, const RGWAccessListFilter& filter)
 {
   // catch exceptions from NObjectIterator::operator++()
   try {
@@ -7977,9 +7977,9 @@ int RGWRados::list_raw_objects_next(const string& prefix_filter, int max,
   if (!ctx.initialized) {
     return -EINVAL;
   }
-  RGWAccessListFilterPrefix filter(prefix_filter);
   vector<rgw_bucket_dir_entry> objs;
-  int r = pool_iterate(ctx.iter_ctx, max, objs, is_truncated, &filter);
+  int r = pool_iterate(ctx.iter_ctx, max, objs, is_truncated,
+		       RGWAccessListFilterPrefix(prefix_filter));
   if (r < 0) {
     if(r != -ENOENT)
       ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
@@ -8644,7 +8644,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 
     std::string key;
     // test whether object name is a multipart meta name
-    if(! multipart_meta_filter.filter(start_after.name, key)) {
+    if(! multipart_meta_filter(start_after.name, key)) {
       // if multipart_meta_filter fails, must be "regular" (i.e.,
       // unadorned) and the name is the key
       key = start_after.name;

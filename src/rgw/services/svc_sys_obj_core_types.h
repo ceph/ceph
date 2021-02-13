@@ -27,9 +27,10 @@ struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
 struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
   RGWSI_RADOS::Pool pool;
   RGWSI_RADOS::Pool::List op;
-  RGWAccessListFilterPrefix filter;
+  RGWAccessListFilter filter;
 
-  RGWSI_SysObj_Core_PoolListImplInfo(const string& prefix) : op(pool.op()), filter(prefix) {}
+  RGWSI_SysObj_Core_PoolListImplInfo(std::string prefix)
+    : filter(RGWAccessListFilterPrefix(std::move(prefix))) {}
 };
 
 struct RGWSysObjState {
