@@ -4,6 +4,7 @@
 #include "include/random.h"
 #include "include/Context.h"
 #include "common/errno.h"
+#include "common/async/waiter.h"
 
 #include "svc_notify.h"
 #include "svc_finisher.h"
@@ -14,23 +15,40 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static string notify_oid_prefix = "notify";
+static std::string notify_oid_prefix = "notify";
 
-class RGWWatcher : public librados::WatchCtx2 {
+class RGWWatcher {
   CephContext *cct;
   RGWSI_Notify *svc;
   int index;
-  RGWSI_RADOS::Obj obj;
+  neo_obj_ref obj;
   uint64_t watch_handle;
-  int register_ret{0};
-  librados::AioCompletion *register_completion{nullptr};
+  bs::error_code register_ret;
+  std::optional<ceph::async::waiter<bs::error_code,
+				    uint64_t>> register_completion;
+
+  auto watch_handler() {
+    return [this](bs::error_code ec,
+                  uint64_t notify_id,
+                  uint64_t cookie,
+                  uint64_t notifier_id,
+                  cb::list&& bl) {
+             if (ec)
+               handle_error(cookie, ec);
+             else
+               handle_notify(notify_id, cookie, notifier_id,
+                             std::move(bl));
+           };
+  }
+
 
 public:
-  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, RGWSI_RADOS::Obj& o) : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
+  RGWWatcher(CephContext *_cct, RGWSI_Notify *s, int i, neo_obj_ref& o)
+    : cct(_cct), svc(s), index(i), obj(o), watch_handle(0) {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
-		     bufferlist& bl) override {
+		     cb::list&& bl) {
     ldout(cct, 10) << "RGWWatcher::handle_notify() "
                    << " notify_id " << notify_id
                    << " cookie " << cookie
@@ -50,79 +68,74 @@ public:
 
     svc->watch_cb(notify_id, cookie, notifier_id, bl);
 
-    bufferlist reply_bl; // empty reply payload
-    obj.notify_ack(notify_id, cookie, reply_bl);
+    obj.notify_ack(notify_id, cookie, {}, null_yield);
   }
-  void handle_error(uint64_t cookie, int err) override {
+  void handle_error(uint64_t cookie, bs::error_code err) {
     lderr(cct) << "RGWWatcher::handle_error cookie " << cookie
-			<< " err " << cpp_strerror(err) << dendl;
+               << " err " << err << dendl;
     svc->remove_watcher(index);
-    svc->finisher_svc->schedule([this] { reinit(); });
+    svc->finisher_svc->schedule(std::bind(&RGWWatcher::reinit, this));
   }
 
   void reinit() {
-    int ret = unregister_watch();
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
+    auto ret = unregister_watch();
+    if (ret) {
+      ldout(cct, 0) << "ERROR: unregister_watch() returned ret="
+		    << ret.message() << dendl;
       return;
     }
     ret = register_watch();
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: register_watch() returned ret=" << ret << dendl;
+    if (ret) {
+      ldout(cct, 0) << "ERROR: register_watch() returned ret="
+		    << ret.message() << dendl;
       return;
     }
   }
 
-  int unregister_watch() {
-    int r = svc->unwatch(obj, watch_handle);
-    if (r < 0) {
+  bs::error_code unregister_watch() {
+    auto r = svc->unwatch(obj, watch_handle);
+    if (r) {
       return r;
     }
     svc->remove_watcher(index);
-    return 0;
+    return {};
   }
 
-  int register_watch_async() {
+  void register_watch_async() {
     if (register_completion) {
-      register_completion->release();
-      register_completion = nullptr;
+      register_completion.reset();
     }
-    register_completion = librados::Rados::aio_create_completion(nullptr, nullptr);
-    register_ret = obj.aio_watch(register_completion, &watch_handle, this);
-    if (register_ret < 0) {
-      register_completion->release();
-      return register_ret;
-    }
-    return 0;
+    register_completion.emplace();
+    // This actually gets a waiter rather than a use_blocked so we can
+    // start the operation in one function and wait on it in another.
+    obj.watch(watch_handler(), register_completion->ref());
   }
 
-  int register_watch_finish() {
-    if (register_ret < 0) {
-      return register_ret;
-    }
+  bs::error_code register_watch_finish() {
     if (!register_completion) {
-      return -EINVAL;
+      return bs::error_code(EINVAL,
+				       bs::system_category());
     }
-    register_completion->wait_for_complete();
-    int r = register_completion->get_return_value();
-    register_completion->release();
-    register_completion = nullptr;
-    if (r < 0) {
-      return r;
-    }
-    svc->add_watcher(index);
-    return 0;
+    std::tie(register_ret, watch_handle) = register_completion->wait();
+    register_completion.reset();
+    if (!register_ret)
+      svc->add_watcher(index);
+    return register_ret;
   }
 
-  int register_watch() {
-    int r = obj.watch(&watch_handle, this);
-    if (r < 0) {
-      return r;
+  bs::error_code register_watch() {
+    bs::error_code ec;
+    auto r = obj.watch(watch_handler(), null_yield[ec]);
+    if (!ec) {
+      watch_handle = r;
+      svc->add_watcher(index);
+      return {};
+    } else {
+      return ec;
     }
-    svc->add_watcher(index);
-    return 0;
   }
 };
+
 
 string RGWSI_Notify::get_control_oid(int i)
 {
@@ -133,7 +146,7 @@ string RGWSI_Notify::get_control_oid(int i)
 }
 
 // do not call pick_obj_control before init_watch
-RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
+neo_obj_ref& RGWSI_Notify::pick_control_obj(const string& key)
 {
   uint32_t r = ceph_str_hash_linux(key.c_str(), key.size());
 
@@ -141,7 +154,7 @@ RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
   return notify_objs[i];
 }
 
-int RGWSI_Notify::init_watch(optional_yield y)
+bs::error_code RGWSI_Notify::init_watch(optional_yield y)
 {
   num_watchers = cct->_conf->rgw_num_control_oids;
 
@@ -152,9 +165,10 @@ int RGWSI_Notify::init_watch(optional_yield y)
 
   watchers = new RGWWatcher *[num_watchers];
 
-  int error = 0;
+  bs::error_code error;
 
-  notify_objs.resize(num_watchers);
+  notify_objs.clear();
+  notify_objs.reserve(num_watchers);
 
   for (int i=0; i < num_watchers; i++) {
     string notify_oid;
@@ -165,47 +179,40 @@ int RGWSI_Notify::init_watch(optional_yield y)
       notify_oid = notify_oid_prefix;
     }
 
-    notify_objs[i] = rados_svc->handle().obj({control_pool, notify_oid});
-    auto& notify_obj = notify_objs[i];
-
-    int r = notify_obj.open();
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: notify_obj.open() returned r=" << r << dendl;
-      return r;
+    auto res = rados->acquire_obj({control_pool, notify_oid}, null_yield);
+    if (!res) {
+      ldout(cct, 0) << "ERROR: notify_obj.open() returned r="
+		    << res.error().message() << dendl;
+      return res.error();
     }
 
-    librados::ObjectWriteOperation op;
+    notify_objs.emplace_back(std::move(*res));
+    auto& notify_obj = notify_objs[i];
+    neorados::WriteOp op;
     op.create(false);
-    r = notify_obj.operate(&op, y);
-    if (r < 0 && r != -EEXIST) {
-      ldout(cct, 0) << "ERROR: notify_obj.operate() returned r=" << r << dendl;
-      return r;
+    bs::error_code ec;
+    notify_obj.operate(std::move(op), y[ec]);
+    if (ec && ec != bs::errc::file_exists) {
+      ldout(cct, 0) << "ERROR: notify_obj.operate() returned ec="
+		    << ec.message() << dendl;
+      return ec;
     }
 
     RGWWatcher *watcher = new RGWWatcher(cct, this, i, notify_obj);
     watchers[i] = watcher;
 
-    r = watcher->register_watch_async();
-    if (r < 0) {
-      ldout(cct, 0) << "WARNING: register_watch_aio() returned " << r << dendl;
-      error = r;
-      continue;
-    }
+    watcher->register_watch_async();
   }
 
   for (int i = 0; i < num_watchers; ++i) {
-    int r = watchers[i]->register_watch_finish();
-    if (r < 0) {
-      ldout(cct, 0) << "WARNING: async watch returned " << r << dendl;
+    auto r = watchers[i]->register_watch_finish();
+    if (r) {
+      ldout(cct, 0) << "WARNING: async watch returned " << r.message() << dendl;
       error = r;
     }
   }
 
-  if (error < 0) {
-    return error;
-  }
-
-  return 0;
+  return error;
 }
 
 void RGWSI_Notify::finalize_watch()
@@ -221,17 +228,13 @@ void RGWSI_Notify::finalize_watch()
 
 int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
-  int r = zone_svc->start(y, dpp);
+  auto r = zone_svc->start(y, dpp);
   if (r < 0) {
     return r;
   }
 
   assert(zone_svc->is_started()); /* otherwise there's an ordering problem */
 
-  r = rados_svc->start(y, dpp);
-  if (r < 0) {
-    return r;
-  }
   r = finisher_svc->start(y, dpp);
   if (r < 0) {
     return r;
@@ -239,15 +242,15 @@ int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   control_pool = zone_svc->get_zone_params().control_pool;
 
-  int ret = init_watch(y);
-  if (ret < 0) {
-    lderr(cct) << "ERROR: failed to initialize watch: " << cpp_strerror(-ret) << dendl;
-    return ret;
+  auto ec = init_watch(y);
+  if (ec) {
+    lderr(cct) << "ERROR: failed to initialize watch: " << ec << dendl;
+    return ceph::from_error_code(ec);
   }
 
   finisher_handle = finisher_svc->register_caller([this] { shutdown(); });
 
-  return 0;
+  return {};
 }
 
 void RGWSI_Notify::shutdown()
@@ -269,19 +272,16 @@ RGWSI_Notify::~RGWSI_Notify()
   shutdown();
 }
 
-int RGWSI_Notify::unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle)
+bs::error_code RGWSI_Notify::unwatch(neo_obj_ref& obj,
+				     uint64_t watch_handle)
 {
-  int r = obj.unwatch(watch_handle);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
-    return r;
-  }
-  r = rados_svc->handle().watch_flush();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
-    return r;
-  }
-  return 0;
+  bs::error_code ec;
+  obj.unwatch(watch_handle, null_yield[ec]);
+  if (ec)
+    ldout(cct, 0) << "ERROR: rados.unwatch() returned ec=" << ec.message() << dendl;
+  else
+    rados->neorados().flush_watch(null_yield);
+  return ec;
 }
 
 void RGWSI_Notify::add_watcher(int i)
@@ -311,7 +311,7 @@ void RGWSI_Notify::remove_watcher(int i)
 int RGWSI_Notify::watch_cb(uint64_t notify_id,
                            uint64_t cookie,
                            uint64_t notifier_id,
-                           bufferlist& bl)
+                           cb::list& bl)
 {
   std::shared_lock l{watchers_lock};
   if (cb) {
@@ -334,8 +334,9 @@ void RGWSI_Notify::_set_enabled(bool status)
   }
 }
 
-int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
-                             optional_yield y)
+bs::error_code RGWSI_Notify::distribute(const string& key,
+                                                   cb::list& bl,
+                                                   optional_yield y)
 {
   /* The RGW uses the control pool to store the watch notify objects.
     The precedence in RGWSI_Notify::do_start is to call to zone_svc->start and later to init_watch().
@@ -344,30 +345,29 @@ int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
     which will lead to division by 0 in pick_obj_control (num_watchers is 0).
   */
   if (num_watchers > 0) {
-    RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
+    auto& notify_obj = pick_control_obj(key);
 
-    ldout(cct, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
-        << " bl.length()=" << bl.length() << dendl;
+    ldout(cct, 10) << "distributing notification oid=" << notify_obj.oid
+		   << " bl.length()=" << bl.length() << dendl;
     return robust_notify(notify_obj, bl, y);
   }
-  return 0;
+  return {};
 }
 
-int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
-                                optional_yield y)
+bs::error_code
+RGWSI_Notify::robust_notify(neo_obj_ref& notify_obj, cb::list& bl,
+                            optional_yield y)
 {
   // The reply of every machine that acks goes in here.
   boost::container::flat_set<std::pair<uint64_t, uint64_t>> acks;
-  bufferlist rbl;
-
   // First, try to send, without being fancy about it.
-  auto r = notify_obj.notify(bl, 0, &rbl, y);
+  bs::error_code ec;
+  cb::list rbl = notify_obj.notify(cb::list(bl), nullopt, y[ec]);
 
   // If that doesn't work, get serious.
-  if (r < 0) {
+  if (ec) {
     ldout(cct, 1) << "robust_notify: If at first you don't succeed: "
-		  << cpp_strerror(-r) << dendl;
-
+                  << ec.message() << dendl;
 
     auto p = rbl.cbegin();
     // Gather up the replies to the first attempt.
@@ -384,7 +384,7 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	decode(blen, p);
 	p += blen;
       }
-    } catch (const buffer::error& e) {
+    } catch (const ceph::buffer::error& e) {
       ldout(cct, 0) << "robust_notify: notify response parse failed: "
 		    << e.what() << dendl;
       acks.clear(); // Throw away junk on failed parse.
@@ -396,15 +396,15 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
     boost::container::flat_set<std::pair<uint64_t, uint64_t>> timeouts;
 
     auto tries = 1u;
-    while (r < 0 && tries < max_notify_retries) {
+    while (!ec && tries < max_notify_retries) {
       ++tries;
       rbl.clear();
       // Reset the timeouts, we're only concerned with new ones.
       timeouts.clear();
-      r = notify_obj.notify(bl, 0, &rbl, y);
-      if (r < 0) {
+      rbl = notify_obj.notify(cb::list(bl), nullopt, y[ec]);
+      if (ec) {
 	ldout(cct, 1) << "robust_notify: retry " << tries << " failed: "
-		      << cpp_strerror(-r) << dendl;
+		      << ec.message() << dendl;
 	p = rbl.begin();
 	try {
 	  uint32_t num_acks;
@@ -436,7 +436,7 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	      timeouts.insert(id);
 	    }
 	  }
-	} catch (const buffer::error& e) {
+	} catch (const ceph::buffer::error& e) {
 	  ldout(cct, 0) << "robust_notify: notify response parse failed: "
 			<< e.what() << dendl;
 	  continue;
@@ -445,12 +445,12 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
 	// everyone who timed out in one call received the update in a
 	// previous one.
 	if (timeouts.empty()) {
-	  r = 0;
+	  ec.clear();
 	}
       }
     }
   }
-  return r;
+  return ec;
 }
 
 void RGWSI_Notify::register_watch_cb(CB *_cb)
