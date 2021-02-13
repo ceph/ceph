@@ -232,10 +232,10 @@ def main(args):
         else:
             subprocess.check_call(["kill", "-9", str(ctx.pid)])
 
-    nuke(ctx, ctx.unlock, ctx.synch_clocks, ctx.noipmi, ctx.keep_logs)
+    nuke(ctx, ctx.unlock, ctx.synch_clocks, ctx.noipmi, ctx.keep_logs, not ctx.no_reboot)
 
 
-def nuke(ctx, should_unlock, sync_clocks=True, noipmi=False, keep_logs=False):
+def nuke(ctx, should_unlock, sync_clocks=True, noipmi=False, keep_logs=False, should_reboot=True):
     if 'targets' not in ctx.config:
         return
     total_unnuked = {}
@@ -263,6 +263,7 @@ def nuke(ctx, should_unlock, sync_clocks=True, noipmi=False, keep_logs=False):
                 ctx.config.get('check-locks', True),
                 noipmi,
                 keep_logs,
+                should_reboot,
             )
         for unnuked in p:
             if unnuked:
@@ -276,9 +277,8 @@ def nuke(ctx, should_unlock, sync_clocks=True, noipmi=False, keep_logs=False):
 
 
 def nuke_one(ctx, target, should_unlock, synch_clocks,
-             check_locks, noipmi, keep_logs):
+             check_locks, noipmi, keep_logs, should_reboot):
     ret = None
-    should_reboot = not ctx.no_reboot
     ctx = argparse.Namespace(
         config=dict(targets=target),
         owner=ctx.owner,
