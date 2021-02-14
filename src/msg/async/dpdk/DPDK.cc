@@ -54,10 +54,6 @@ void* as_cookie(struct rte_pktmbuf_pool_private& p) {
   return &p;
 };
 
-#ifndef MARKER
-typedef void    *MARKER[0];   /**< generic marker for a point in a structure */
-#endif
-
 /******************* Net device related constatns *****************************/
 static constexpr uint16_t default_ring_size      = 512;
 
