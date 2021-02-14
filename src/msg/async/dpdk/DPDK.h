@@ -87,6 +87,10 @@ class DPDKDevice;
 class DPDKWorker;
 
 
+#ifndef MARKER
+typedef void    *MARKER[0];   /**< generic marker for a point in a structure */
+#endif
+
 class DPDKQueuePair {
   using packet_provider_type = std::function<std::optional<Packet> ()>;
  public:
