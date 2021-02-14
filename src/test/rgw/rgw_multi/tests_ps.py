@@ -3053,17 +3053,19 @@ def test_ps_admin():
             + ps_zone.zone.zone_arg())
     assert_equal(status, 0)
     parsed_result = json.loads(result)
-    assert_equal(len(parsed_result['events']), 100)
     marker = parsed_result['next_marker']
+    events1 = parsed_result['events']
     result, status = ps_zone.zone.cluster.admin(['subscription', 'pull', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX, '--marker', marker]
             + ps_zone.zone.zone_arg())
     assert_equal(status, 0)
     parsed_result = json.loads(result)
-    assert_equal(len(parsed_result['events']), 10)
-    event_id = parsed_result['events'][0]['id']
+    events2 = parsed_result['events'] 
+    
+    keys = list(bucket.list())
+    verify_events_by_elements({"events": events1+events2}, keys, exact_match=False)
 
     # ack an event in the subscription 
-    result, status = ps_zone.zone.cluster.admin(['subscription', 'ack', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX, '--event-id', event_id]
+    result, status = ps_zone.zone.cluster.admin(['subscription', 'ack', '--uid', get_user(), '--subscription', bucket_name+SUB_SUFFIX, '--event-id', events2[0]['id']]
             + ps_zone.zone.zone_arg())
     assert_equal(status, 0)
 
