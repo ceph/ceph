@@ -196,7 +196,7 @@ TEMPLATE = '''
 :Example command:
     .. code-block:: bash
 
-       {{ command.mk_bash_example() }}
+       {{ command.mk_bash_example() | wordwrap(70) | indent(9) }}
 
 {%- if command.params %}
 :Parameters:{% for param in command.params -%}
