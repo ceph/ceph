@@ -15,13 +15,13 @@
 #ifndef CEPH_LZ4COMPRESSOR_H
 #define CEPH_LZ4COMPRESSOR_H
 
+#include <optional>
 #include <lz4.h>
 
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "common/config.h"
-#include "common/Tub.h"
 
 
 class LZ4Compressor : public Compressor {
@@ -118,11 +118,11 @@ class LZ4Compressor : public Compressor {
 
     ceph::buffer::ptr cur_ptr = p.get_current_ptr();
     ceph::buffer::ptr *ptr = &cur_ptr;
-    Tub<ceph::buffer::ptr> data_holder;
+    optional<ceph::buffer::ptr> data_holder;
     if (compressed_len != cur_ptr.length()) {
-      data_holder.construct(compressed_len);
+      data_holder.emplace(compressed_len);
       p.copy_deep(compressed_len, *data_holder);
-      ptr = data_holder.get();
+      ptr = &*data_holder;
     }
 
     char *c_in = ptr->c_str();
