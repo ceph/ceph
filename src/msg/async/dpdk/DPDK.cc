@@ -29,6 +29,7 @@
 #include <rte_eal.h>
 #include <rte_pci.h>
 #include <rte_ethdev.h>
+#include <rte_ether.h>
 #include <rte_cycles.h>
 #include <rte_memzone.h>
 
@@ -1023,14 +1024,14 @@ void DPDKQueuePair::tx_buf::set_cluster_offload_info(const Packet& p, const DPDK
   if (oi.needs_ip_csum) {
     head->ol_flags |= PKT_TX_IP_CKSUM;
     // TODO: Take a VLAN header into an account here
-    head->l2_len = sizeof(struct ether_hdr);
+    head->l2_len = sizeof(struct rte_ether_hdr);
     head->l3_len = oi.ip_hdr_len;
   }
   if (qp.port().get_hw_features().tx_csum_l4_offload) {
     if (oi.protocol == ip_protocol_num::tcp) {
       head->ol_flags |= PKT_TX_TCP_CKSUM;
       // TODO: Take a VLAN header into an account here
-      head->l2_len = sizeof(struct ether_hdr);
+      head->l2_len = sizeof(struct rte_ether_hdr);
       head->l3_len = oi.ip_hdr_len;
 
       if (oi.tso_seg_size) {
