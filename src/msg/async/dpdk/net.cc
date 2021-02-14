@@ -52,7 +52,7 @@ interface::interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCen
   auto idx = 0u;
   unsigned qid = center->get_id();
   dev->queue_for_cpu(center->get_id()).register_packet_provider([this, idx, qid] () mutable {
-    Tub<Packet> p;
+    std::optional<Packet> p;
     for (size_t i = 0; i < _pkt_providers.size(); i++) {
       auto l3p = _pkt_providers[idx++]();
       if (idx == _pkt_providers.size())

@@ -33,9 +33,9 @@ int UserspaceEventManager::get_eventfd()
     fds.resize(fd + 1);
   }
 
-  Tub<UserspaceFDImpl> &impl = fds[fd];
+  std::optional<UserspaceFDImpl> &impl = fds[fd];
   ceph_assert(!impl);
-  impl.construct();
+  impl.emplace();
   ldout(cct, 20) << __func__ << " fd=" << fd << dendl;
   return fd;
 }
@@ -46,7 +46,7 @@ int UserspaceEventManager::notify(int fd, int mask)
   if ((size_t)fd >= fds.size())
     return -ENOENT;
 
-  Tub<UserspaceFDImpl> &impl = fds[fd];
+  std::optional<UserspaceFDImpl> &impl = fds[fd];
   if (!impl)
     return -ENOENT;
 
@@ -77,7 +77,7 @@ void UserspaceEventManager::close(int fd)
   if ((size_t)fd >= fds.size())
     return ;
 
-  Tub<UserspaceFDImpl> &impl = fds[fd];
+  std::optional<UserspaceFDImpl> &impl = fds[fd];
   if (!impl)
     return ;
 
@@ -93,7 +93,7 @@ void UserspaceEventManager::close(int fd)
     }
     waiting_fds[impl->waiting_idx] = -1;
   }
-  impl.destroy();
+  impl.reset();
 }
 
 int UserspaceEventManager::poll(int *events, int *masks, int num_events, struct timeval *tp)
@@ -109,7 +109,7 @@ int UserspaceEventManager::poll(int *events, int *masks, int num_events, struct 
       continue;
 
     events[count] = fd;
-    Tub<UserspaceFDImpl> &impl = fds[fd];
+    std::optional<UserspaceFDImpl> &impl = fds[fd];
     ceph_assert(impl);
     masks[count] = impl->listening_mask & impl->activating_mask;
     ceph_assert(masks[count]);

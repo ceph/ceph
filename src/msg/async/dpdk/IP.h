@@ -60,7 +60,7 @@ struct ipv4_traits {
     ethernet_address e_dst;
     ip_protocol_num proto_num;
   };
-  using packet_provider_type = std::function<Tub<l4packet> ()>;
+  using packet_provider_type = std::function<std::optional<l4packet> ()>;
   static void tcp_pseudo_header_checksum(checksummer& csum, ipv4_address src, ipv4_address dst, uint16_t len) {
     csum.sum_many(src.ip, dst.ip, uint8_t(0), uint8_t(ip_protocol_num::tcp), len);
   }
@@ -131,7 +131,7 @@ class icmp {
   explicit icmp(CephContext *c, inet_type& inet)
       : cct(c), _inet(inet), _queue_space(c, "DPDK::icmp::_queue_space", 212992) {
     _inet.register_packet_provider([this] {
-      Tub<ipv4_traits::l4packet> l4p;
+      std::optional<ipv4_traits::l4packet> l4p;
       if (!_packetq.empty()) {
         l4p = std::move(_packetq.front());
         _packetq.pop_front();
@@ -213,7 +213,7 @@ class ipv4 {
  private:
   interface* _netif;
   std::vector<ipv4_traits::packet_provider_type> _pkt_providers;
-  Tub<uint64_t> frag_timefd;
+  std::optional<uint64_t> frag_timefd;
   EventCallbackRef frag_handler;
   arp _global_arp;
   arp_for<ipv4> _arp;
@@ -251,7 +251,7 @@ class ipv4 {
  private:
   int handle_received_packet(Packet p, ethernet_address from);
   bool forward(forward_hash& out_hash_data, Packet& p, size_t off);
-  Tub<l3_protocol::l3packet> get_packet();
+  std::optional<l3_protocol::l3packet> get_packet();
   bool in_my_netmask(ipv4_address a) const {
     return !((a.ip ^ _host_address.ip) & _netmask.ip);
   }
@@ -262,11 +262,11 @@ class ipv4 {
   }
   void frag_arm(utime_t now) {
     auto tp = now + _frag_timeout;
-    frag_timefd.construct(center->create_time_event(tp.to_nsec() / 1000, frag_handler));
+    frag_timefd = center->create_time_event(tp.to_nsec() / 1000, frag_handler);
   }
   void frag_arm() {
     auto now = ceph_clock_now();
-    frag_timefd.construct(center->create_time_event(now.to_nsec() / 1000, frag_handler));
+    frag_timefd = center->create_time_event(now.to_nsec() / 1000, frag_handler);
   }
 
  public:
