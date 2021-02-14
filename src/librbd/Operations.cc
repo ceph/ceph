@@ -580,19 +580,19 @@ void Operations<I>::execute_rename(const std::string &dest_name,
     return;
   }
 
-  m_image_ctx.image_lock.lock_shared();
-  if (m_image_ctx.name == dest_name) {
-    m_image_ctx.image_lock.unlock_shared();
-    on_finish->complete(-EEXIST);
-    return;
-  }
-  m_image_ctx.image_lock.unlock_shared();
-
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": dest_name=" << dest_name
                 << dendl;
 
   if (m_image_ctx.old_format) {
+    m_image_ctx.image_lock.lock_shared();
+    if (m_image_ctx.name == dest_name) {
+      m_image_ctx.image_lock.unlock_shared();
+      on_finish->complete(-EEXIST);
+      return;
+    }
+    m_image_ctx.image_lock.unlock_shared();
+
     // unregister watch before and register back after rename
     on_finish = new C_NotifyUpdate<I>(m_image_ctx, on_finish);
     on_finish = new LambdaContext([this, on_finish](int r) {
