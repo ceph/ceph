@@ -80,7 +80,7 @@ class l3_protocol {
     ethernet_address to;
     Packet p;
   };
-  using packet_provider_type = std::function<Tub<l3packet> ()>;
+  using packet_provider_type = std::function<std::optional<l3packet> ()>;
 
  private:
   interface* _netif;

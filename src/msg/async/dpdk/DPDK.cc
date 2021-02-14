@@ -467,7 +467,7 @@ void DPDKQueuePair::configure_proxies(const std::map<unsigned, float>& cpu_weigh
     return;
   }
   register_packet_provider([this] {
-    Tub<Packet> p;
+    std::optional<Packet> p;
     if (!_proxy_packetq.empty()) {
       p = std::move(_proxy_packetq.front());
       _proxy_packetq.pop_front();
@@ -716,7 +716,7 @@ bool DPDKQueuePair::poll_tx() {
   return false;
 }
 
-inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
+inline std::optional<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
 {
   _frags.clear();
   _bufs.clear();
@@ -736,7 +736,7 @@ inline Tub<Packet> DPDKQueuePair::from_mbuf_lro(rte_mbuf* m)
       _frags.begin(), _frags.end(), make_deleter(std::move(del)));
 }
 
-inline Tub<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
+inline std::optional<Packet> DPDKQueuePair::from_mbuf(rte_mbuf* m)
 {
   _rx_free_pkts.push_back(m);
   _num_rx_free_segs += m->nb_segs;
@@ -824,7 +824,7 @@ void DPDKQueuePair::process_packets(
     struct rte_mbuf *m = bufs[i];
     offload_info oi;
 
-    Tub<Packet> p = from_mbuf(m);
+    std::optional<Packet> p = from_mbuf(m);
 
     // Drop the packet if translation above has failed
     if (!p) {
