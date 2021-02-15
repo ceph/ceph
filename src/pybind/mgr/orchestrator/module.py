@@ -1222,9 +1222,7 @@ Usage:
     @_cli_write_command('orch cancel')
     def _cancel(self) -> HandleCommandResult:
         """
-        cancels ongoing operations
-
-        ProgressReferences might get stuck. Let's unstuck them.
+        Cancel ongoing background operations
         """
         self.cancel_completions()
         return HandleCommandResult()
