@@ -289,7 +289,7 @@ Commands
   All data previously written to the image will become unreadable.
   A cloned image cannot be formatted, although encrypted images can be cloned.
   Supported formats: *luks1*, *luks2*.
-  Supported cipher algorithms: *aes-128*, "aes-256" (default).
+  Supported cipher algorithms: *aes-128*, *aes-256* (default).
 
 :command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Export image to dest path (use - for stdout).
