@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -129,6 +130,26 @@ struct RGWDataChangesLogMarker {
 
 class RGWDataChangesLog;
 
+struct rgw_data_notify_entry {
+  std::string key;
+  uint64_t gen = 0;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+
+  rgw_data_notify_entry& operator=(const rgw_data_notify_entry&) = default;
+
+  bool operator<(const rgw_data_notify_entry& d) const {
+    if (key < d.key) {
+      return true;
+    }
+    if (d.key < key) {
+      return false;
+    }
+    return gen < d.gen;
+  }
+};
+
 class RGWDataChangesBE;
 
 class DataLogBackends final
@@ -194,7 +215,7 @@ class RGWDataChangesLog {
   ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
   ceph::shared_mutex modified_lock =
     ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
-  bc::flat_map<int, bc::flat_set<std::string>> modified_shards;
+  bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
 
   std::atomic<bool> down_flag = { false };
 
@@ -256,7 +277,7 @@ public:
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   LogMarker& marker, bool* ptruncated);
 
-  void mark_modified(int shard_id, const rgw_bucket_shard& bs);
+  void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
   auto read_clear_modified() {
     std::unique_lock wl{modified_lock};
     decltype(modified_shards) modified;

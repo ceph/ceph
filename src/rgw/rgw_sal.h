@@ -18,6 +18,7 @@
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_putobj.h"
+#include "rgw_datalog_notify.h"
 
 class RGWGetDataCB;
 struct RGWObjState;
@@ -196,7 +197,7 @@ class Store {
 					optional_yield y) = 0;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;
     virtual void wakeup_meta_sync_shards(set<int>& shard_ids) = 0;
-    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, map<int, set<std::string> >& shard_ids) = 0;
+    virtual void wakeup_data_sync_shards(const rgw_zone_id& source_zone, bc::flat_map<int, bc::flat_set<rgw_data_notify_entry> >& shard_ids) = 0;
     virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
