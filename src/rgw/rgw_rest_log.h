@@ -277,6 +277,21 @@ public:
   RGWOpType get_type() override { return RGW_OP_SYNC_DATALOG_NOTIFY; }
 };
 
+class RGWOp_DATALog_Notify2 : public RGWRESTOp {
+  rgw_data_notify_entry data_notify;
+public:
+  RGWOp_DATALog_Notify2() {}
+  ~RGWOp_DATALog_Notify2() override {}
+
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute(optional_yield y) override;
+  const char* name() const override {
+    return "datalog_notify2";
+  }
+};
+
 class RGWOp_DATALog_Delete : public RGWRESTOp {
 public:
   RGWOp_DATALog_Delete() {}

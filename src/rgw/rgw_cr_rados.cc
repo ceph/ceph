@@ -8,6 +8,10 @@
 #include "rgw_cr_rados.h"
 #include "rgw_sync_counters.h"
 #include "rgw_bucket.h"
+#include "rgw_datalog_notify.h"
+#include "rgw_cr_rest.h"
+#include "rgw_rest_conn.h"
+#include "rgw_rados.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -18,6 +22,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 
 #include <boost/asio/yield.hpp>
+#include <boost/container/flat_set.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1025,4 +1030,35 @@ int RGWRadosNotifyCR::request_complete()
   set_status() << "request complete; ret=" << r;
 
   return r;
+}
+
+
+int RGWDataPostNotifyCR::operate(const DoutPrefixProvider* dpp)
+{
+  reenter(this) {
+    using PostNotify2 = RGWPostRESTResourceCR<bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>>, int>;
+    yield {
+      rgw_http_param_pair pairs[] = { { "type", "data" },
+                                      { "notify2", NULL },
+                                      { "source-zone", source_zone },
+                                      { NULL, NULL } };
+      call(new PostNotify2(store->ctx(), conn, &http_manager, "/admin/log", pairs, shards, nullptr));
+    }
+    if (retcode == -ERR_METHOD_NOT_ALLOWED) {
+      using PostNotify1 = RGWPostRESTResourceCR<rgw_data_notify_v1_encoder, int>;
+      yield {
+        rgw_http_param_pair pairs[] = { { "type", "data" },
+                                        { "notify", NULL },
+                                        { "source-zone", source_zone },
+                                        { NULL, NULL } };
+        auto encoder = rgw_data_notify_v1_encoder{shards};
+        call(new PostNotify1(store->ctx(), conn, &http_manager, "/admin/log", pairs, encoder, nullptr));
+      }
+    }
+    if (retcode < 0) {
+      return set_cr_error(retcode);
+    }
+    return set_cr_done();
+  }
+  return 0;
 }
