@@ -388,7 +388,7 @@ class TestProgress(MgrTestCase):
 
         # Wait for a progress event to pop up
         self.wait_until_equal(lambda: self._osd_in_out_events_count('out'), 1,
-                              timeout=self.EVENT_CREATION_PERIOD*2,
+                              timeout=self.RECOVERY_PERIOD,
                               period=1)
 
         ev1 = self._get_osd_in_out_events('out')[0]
@@ -397,4 +397,5 @@ class TestProgress(MgrTestCase):
 
         self.wait_until_true(lambda: self._is_complete(ev1['id']),
                              timeout=self.RECOVERY_PERIOD)
-        self.assertTrue(self._is_quiet())
+
+        self.assertEqual(self._osd_in_out_events_count(), 0)
