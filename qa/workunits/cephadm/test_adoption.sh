@@ -67,7 +67,7 @@ for subdir in `ls ${CORPUS_DIR}`; do
 	$SUDO tar xzvf $tarball -C $TMP_TAR_DIR
 	NAMES=$($CEPHADM ls --legacy-dir $TMP_TAR_DIR | jq -r '.[].name')
 	for name in $NAMES; do
-            $CEPHADM adopt \
+            sudo $CEPHADM adopt \
                      --style legacy \
                      --legacy-dir $TMP_TAR_DIR \
                      --name $name
