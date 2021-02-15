@@ -164,6 +164,7 @@ quorum.
 	
 #. Remove the monitor entry from ``ceph.conf``. 
 
+.. _rados-mon-remove-from-unhealthy: 
 
 Removing Monitors from an Unhealthy Cluster
 -------------------------------------------
@@ -176,7 +177,7 @@ quorum.
 #. Stop all ``ceph-mon`` daemons on all monitor hosts. ::
 
 	ssh {mon-host}
-	service ceph stop mon || stop ceph-mon-all
+	systemctl stop ceph-mon.target
 	# and repeat for all mons
 
 #. Identify a surviving monitor and log in to that host. :: 
