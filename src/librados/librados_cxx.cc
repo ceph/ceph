@@ -2306,22 +2306,22 @@ librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
 
 void librados::IoCtx::set_osdmap_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_osdmap_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::set_pool_full_try()
 {
-  io_ctx_impl->objecter->set_pool_full_try();
+  io_ctx_impl->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 }
 
 void librados::IoCtx::unset_pool_full_try()
 {
-  io_ctx_impl->objecter->unset_pool_full_try();
+  io_ctx_impl->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
 }
 
 ///////////////////////////// Rados //////////////////////////////
