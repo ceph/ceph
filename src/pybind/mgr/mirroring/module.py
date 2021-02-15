@@ -68,3 +68,9 @@ class Module(MgrModule):
                                      fs_name: str):
         """Get current instance to directory map for a filesystem"""
         return self.fs_snapshot_mirror.show_distribution(fs_name)
+
+    @CLIReadCommand('fs snapshot mirror daemon status')
+    def snapshot_mirror_daemon_status(self,
+                                      fs_name: str):
+        """Get mirror daemon status"""
+        return self.fs_snapshot_mirror.daemon_status(fs_name)

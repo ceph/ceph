@@ -599,3 +599,34 @@ class FSSnapshotMirror:
                 return fspolicy.summary()
         except MirrorException as me:
             return me.args[0], '', me.args[1]
+
+    def daemon_status(self, filesystem):
+        try:
+            with self.lock:
+                if not self.filesystem_exist(filesystem):
+                    raise MirrorException(-errno.ENOENT, f'filesystem {filesystem} does not exist')
+                fspolicy = self.pool_policy.get(filesystem, None)
+                if not fspolicy:
+                    raise MirrorException(-errno.EINVAL, f'filesystem {filesystem} is not mirrored')
+                daemons = {}
+                sm = self.mgr.get('service_map')
+                daemon_entry = sm['services'].get('cephfs-mirror', None)
+                if daemon_entry:
+                    for daemon_key in daemon_entry['daemons']:
+                        try:
+                            daemon_id = int(daemon_key)
+                            daemon_status = self.mgr.get_daemon_status('cephfs-mirror', daemon_key)
+                            if not daemon_status:
+                                # temporary, should get updated soon
+                                log.debug(f'daemon status not yet availble for daemon_id {daemon_id}')
+                                continue
+                            try:
+                                daemons[daemon_id] = json.loads(daemon_status['status_json'])
+                            except KeyError:
+                                # temporary, should get updated soon
+                                log.debug(f'daemon status not yet available for daemon_id {daemon_id}')
+                        except ValueError:
+                            pass
+                return 0, json.dumps(daemons), ''
+        except MirrorException as me:
+            return me.args[0], '', me.args[1]
