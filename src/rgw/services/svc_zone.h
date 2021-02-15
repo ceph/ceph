@@ -106,7 +106,7 @@ public:
   bool has_zonegroup_api(const std::string& api) const;
 
   bool zone_is_writeable();
-  bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
+  bool zone_syncs_from(const RGWZone& target_zone, const RGWDataProvider& source_zone) const;
   bool sync_module_supports_writes() const { return writeable_zone; }
   bool sync_module_exports_data() const { return exports_data; }
 

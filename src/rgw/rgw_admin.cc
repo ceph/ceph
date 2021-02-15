@@ -2289,9 +2289,9 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
 {
   stringstream ss;
 
-  RGWZone *sz;
+  RGWDataProvider *sz;
 
-  if (!static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(source_zone, &sz)) {
+  if (!static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(source_zone, &sz)) {
     push_ss(ss, status, tab) << string("zone not found");
     flush_ss(ss, status);
     return;
@@ -2486,8 +2486,8 @@ static void sync_status(Formatter *formatter)
     auto& source_id = entry.first;
     string source_str = "source: ";
     string s = source_str + source_id.id;
-    RGWZone *sz;
-    if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(source_id, &sz)) {
+    RGWDataProvider *sz;
+    if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(source_id, &sz)) {
       s += string(" (") + sz->name + ")";
     }
     data_status.push_back(s);
@@ -2637,8 +2637,8 @@ static rgw_zone_id resolve_zone_id(const string& s)
 {
   rgw_zone_id result;
 
-  RGWZone *zone;
-  if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone(s, &zone)) {
+  RGWDataProvider *zone;
+  if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_data_provider(s, &zone)) {
     return rgw_zone_id(s);
   }
   if (static_cast<rgw::sal::RadosStore*>(store)->svc()->zone->find_zone_id_by_name(s, &result)) {

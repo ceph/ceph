@@ -667,6 +667,10 @@ struct RGWDataProvider {
 
   void dump_dp_extra(Formatter *f) const;
   void decode_json_dp_extra(JSONObj *obj);
+
+  virtual std::optional<std::string> get_tier_type() const {
+    return std::nullopt;
+  }
 };
 WRITE_CLASS_ENCODER(RGWDataProvider::RESTConfig)
 WRITE_CLASS_ENCODER(RGWDataProvider::SIPConfig)
@@ -758,6 +762,10 @@ struct RGWZone : public RGWDataProvider {
   static void generate_test_instances(std::list<RGWZone*>& o);
 
   bool is_read_only() const { return read_only; }
+
+  std::optional<std::string> get_tier_type() const override {
+    return tier_type;
+  }
 
   bool syncs_from(const std::string& zone_name) const {
     return (sync_from_all || sync_from.find(zone_name) != sync_from.end());

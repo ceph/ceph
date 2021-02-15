@@ -59,10 +59,12 @@ std::shared_ptr<RGWBucketSyncPolicyHandler> RGWSI_Zone::get_sync_policy_handler(
   return iter->second;
 }
 
-bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const
+bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWDataProvider& source_zone) const
 {
+  auto source_tier_type = source_zone.get_tier_type();
   return target_zone.syncs_from(source_zone.name) &&
-         sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
+         (!source_tier_type ||
+          sync_modules_svc->get_manager()->supports_data_export(*source_tier_type));
 }
 
 int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
