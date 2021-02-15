@@ -1429,10 +1429,10 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   boost::asio::coroutine full_cr;
 
 
-  set<string> modified_shards;
-  set<string> current_modified;
+  bc::flat_set<rgw_data_notify_entry> modified_shards;
+  bc::flat_set<rgw_data_notify_entry> current_modified;
 
-  set<string>::iterator modified_iter;
+  bc::flat_set<rgw_data_notify_entry>::iterator modified_iter;
 
   uint64_t total_entries = 0;
   bool *reset_backoff = nullptr;
@@ -1491,9 +1491,9 @@ public:
     }
   }
 
-  void append_modified_shards(set<string>& keys) {
+  void append_modified_shards(bc::flat_set<rgw_data_notify_entry>& entries) {
     std::lock_guard l{inc_lock};
-    modified_shards.insert(keys.begin(), keys.end());
+    modified_shards.insert(entries.begin(), entries.end());
   }
 
   int operate(const DoutPrefixProvider *dpp) override {
@@ -1669,13 +1669,13 @@ public:
         }
         /* process out of band updates */
         for (modified_iter = current_modified.begin(); modified_iter != current_modified.end(); ++modified_iter) {
-          retcode = parse_bucket_key(*modified_iter, source_bs);
+          retcode = parse_bucket_key(modified_iter->key, source_bs);
           if (retcode < 0) {
-            tn->log(1, SSTR("failed to parse bucket shard: " << *modified_iter));
+            tn->log(1, SSTR("failed to parse bucket shard: " << modified_iter->key));
             continue;
           }
-          tn->log(20, SSTR("received async update notification: " << *modified_iter));
-          spawn(sync_single_entry(source_bs, std::nullopt, string(),
+          tn->log(20, SSTR("received async update notification: " << modified_iter->key));
+          spawn(sync_single_entry(source_bs, modified_iter->gen, string(),
                                   ceph::real_time{}, false), false);
         }
 
@@ -1807,7 +1807,7 @@ public:
                                                           &sync_marker);
   }
 
-  void append_modified_shards(set<string>& keys) {
+  void append_modified_shards(bc::flat_set<rgw_data_notify_entry>& keys) {
     std::lock_guard l{cr_lock()};
 
     RGWDataSyncShardCR *cr = static_cast<RGWDataSyncShardCR *>(get_cr());
@@ -1940,13 +1940,13 @@ public:
                                                          sync_status.sync_info);
   }
 
-  void wakeup(int shard_id, set<string>& keys) {
+  void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries) {
     std::lock_guard l{shard_crs_lock};
     map<int, RGWDataSyncShardControlCR *>::iterator iter = shard_crs.find(shard_id);
     if (iter == shard_crs.end()) {
       return;
     }
-    iter->second->append_modified_shards(keys);
+    iter->second->append_modified_shards(entries);
     iter->second->wakeup();
   }
 };
@@ -2562,7 +2562,7 @@ public:
     return new RGWDataSyncCR(sc, num_shards, tn, backoff_ptr());
   }
 
-  void wakeup(int shard_id, set<string>& keys) {
+  void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries) {
     ceph::mutex& m = cr_lock();
 
     m.lock();
@@ -2576,20 +2576,19 @@ public:
     m.unlock();
 
     if (cr) {
-      tn->log(20, SSTR("notify shard=" << shard_id << " keys=" << keys));
-      cr->wakeup(shard_id, keys);
+      cr->wakeup(shard_id, entries);
     }
 
     cr->put();
   }
 };
 
-void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
+void RGWRemoteDataLog::wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries) {
   std::shared_lock rl{lock};
   if (!data_sync_cr) {
     return;
   }
-  data_sync_cr->wakeup(shard_id, keys);
+  data_sync_cr->wakeup(shard_id, entries);
 }
 
 int RGWRemoteDataLog::run_sync(const DoutPrefixProvider *dpp, int num_shards)
