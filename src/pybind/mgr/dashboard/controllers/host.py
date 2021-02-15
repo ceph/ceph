@@ -375,6 +375,12 @@ class Host(RESTController):
 
     @raise_if_no_orchestrator([OrchFeature.HOST_LABEL_ADD, OrchFeature.HOST_LABEL_REMOVE])
     @handle_orchestrator_error('host')
+    @EndpointDoc('',
+                 parameters={
+                     'hostname': (str, 'Hostname'),
+                     'labels': ([str], 'Host Labels'),
+                 },
+                 responses={200: None, 204: None})
     def set(self, hostname: str, labels: List[str]):
         """
         Update the specified host.
@@ -384,6 +390,12 @@ class Host(RESTController):
         """
         orch = OrchClient.instance()
         host = get_host(hostname)
+        # only allow List[str] type for labels
+        if not isinstance(labels, list):
+            raise DashboardException(
+                msg='Expected list of labels. Please check API documentation.',
+                http_status_code=400,
+                component='orchestrator')
         current_labels = set(host['labels'])
         # Remove labels.
         remove_labels = list(current_labels.difference(set(labels)))
