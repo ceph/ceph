@@ -82,13 +82,6 @@ public:
     int64_t  hint,
     PExtentVector *extents) override;
   void release(const interval_set<uint64_t>& release_set) override;
-  int64_t get_capacity() const {
-    return num_total;
-  }
-
-  uint64_t get_block_size() const {
-    return block_size;
-  }
   uint64_t get_free() override;
   double get_fragmentation() override;
 
@@ -141,8 +134,6 @@ private:
       boost::intrusive::constant_time_size<true>>;
   range_size_tree_t range_size_tree;
 
-  const int64_t num_total;   ///< device size
-  const uint64_t block_size; ///< block size
   uint64_t num_free = 0;     ///< total bytes in freelist
 
   /*
@@ -244,7 +235,7 @@ protected:
   std::mutex lock;
 
   double _get_fragmentation() const {
-    auto free_blocks = p2align(num_free, block_size) / block_size;
+    auto free_blocks = p2align(num_free, (uint64_t)block_size) / block_size;
     if (free_blocks <= 1) {
       return .0;
     }
