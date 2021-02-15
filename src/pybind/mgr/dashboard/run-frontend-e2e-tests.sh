@@ -66,11 +66,11 @@ fi
 cd $DASH_DIR/frontend
 jq .[].target=$BASE_URL proxy.conf.json.sample > proxy.conf.json
 
-. $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
+[ -z $(command -v npm) ] && . $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
 npm ci
 
 if [ $DEVICE == "chrome" ]; then
-    npm run e2e || stop 1
+    npm run e2e -- --dev-server-target --baseUrl=$(echo $BASE_URL | tr -d '"') || stop 1
     stop 0
 elif [ $DEVICE == "docker" ]; then
     failed=0
