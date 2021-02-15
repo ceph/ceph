@@ -1,4 +1,3 @@
-
 Troubleshooting
 ===============
 
@@ -219,3 +218,28 @@ To access the admin socket, first enter the daemon container on the host::
 
     [root@mon1 ~]# cephadm enter --name <daemon-name>
     [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
+
+
+Restoring the MON quorum
+------------------------
+
+In case the Ceph MONs cannot form a quorum, cephadm is not able
+to manage the cluster, until the quorum is restored. 
+
+In order to restore the MON quorum, remove unhealthy MONs
+form the monmap by following these steps:
+
+1. Stop all MONs. For each MON host::
+
+    ssh {mon-host}
+    cephadm unit --name mon.`hostname` stop
+
+
+2. Identify a surviving monitor and log in to that host::
+
+    ssh {mon-host} 
+    cephadm enter --name mon.`hostname`
+
+3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy` 
+
+
