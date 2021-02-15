@@ -76,6 +76,17 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entry", entry, obj);
 }
 
+void rgw_data_notify_entry::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("gen", gen, f);
+}
+
+void rgw_data_notify_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("gen", gen, obj);
+}
+
 class RGWDataChangesOmap final : public RGWDataChangesBE {
   using centries = std::list<cls_log_entry>;
   std::vector<std::string> oids;
@@ -625,7 +636,8 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
   rgw_bucket_shard bs(bucket, shard_id);
 
   int index = choose_oid(bs);
-  mark_modified(index, bs);
+
+  mark_modified(index, bs, gen.gen);
 
   std::unique_lock l(lock);
 
@@ -1002,7 +1014,7 @@ void RGWDataChangesLog::renew_stop()
   renew_cond.notify_all();
 }
 
-void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
+void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen)
 {
   if (!cct->_conf->rgw_data_notify_interval_msec) {
     return;
@@ -1012,13 +1024,13 @@ void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
   {
     std::shared_lock rl{modified_lock}; // read lock to check for existence
     auto shard = modified_shards.find(shard_id);
-    if (shard != modified_shards.end() && shard->second.count(key)) {
+    if (shard != modified_shards.end() && shard->second.count({key, gen})) {
       return;
     }
   }
 
   std::unique_lock wl{modified_lock}; // write lock for insertion
-  modified_shards[shard_id].insert(key);
+  modified_shards[shard_id].insert(rgw_data_notify_entry{key, gen});
 }
 
 std::string RGWDataChangesLog::max_marker() const {
