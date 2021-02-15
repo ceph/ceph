@@ -2288,7 +2288,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             selinux_folder = '/var/lib/ceph/%s/selinux' % fsid
             if not os.path.exists(selinux_folder):
                 os.makedirs(selinux_folder, mode=0o755)
-                mounts[selinux_folder] = '/sys/fs/selinux:ro'
+            mounts[selinux_folder] = '/sys/fs/selinux:ro'
         mounts['/run/lvm'] = '/run/lvm'
         mounts['/run/lock/lvm'] = '/run/lock/lvm'
 
