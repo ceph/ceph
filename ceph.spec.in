@@ -293,13 +293,24 @@ BuildRequires:  pyOpenSSL%{_python_buildid}
 %else
 BuildRequires:  python%{_python_buildid}-pyOpenSSL
 %endif
+BuildRequires:	libtool-ltdl-devel
 BuildRequires:	python%{_python_buildid}-cherrypy
 BuildRequires:	python%{_python_buildid}-jwt
 BuildRequires:	python%{_python_buildid}-routes
 BuildRequires:  python%{_python_buildid}-scipy
 BuildRequires:	python%{_python_buildid}-werkzeug
+BuildRequires:	xmlsec1
+BuildRequires:	xmlsec1-devel
+BuildRequires:	xmlsec1-nss
+BuildRequires:	xmlsec1-openssl
+BuildRequires:	xmlsec1-openssl-devel
 %endif
 %if 0%{?suse_version}
+BuildRequires:	libxmlsec1-1
+BuildRequires:	libxmlsec1-nss1
+BuildRequires:	libxmlsec1-openssl1
+BuildRequires:	xmlsec1-devel
+BuildRequires:	xmlsec1-openssl-devel
 BuildRequires:	python%{_python_buildid}-CherryPy
 BuildRequires:	python%{_python_buildid}-PyJWT
 BuildRequires:	python%{_python_buildid}-Routes
@@ -310,7 +321,6 @@ BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-pyOpenSSL
 BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	rpm-build
-BuildRequires:  xmlsec1-devel
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
