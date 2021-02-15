@@ -425,12 +425,14 @@ class TestNFS(MgrTestCase):
         '''
         self._test_create_cluster()
         info_output = json.loads(self._nfs_cmd('cluster', 'info', self.cluster_id))
+        info_ip = info_output[self.cluster_id][0].pop("ip")
         host_details = {self.cluster_id: [{
             "hostname": self._sys_cmd(['hostname']).decode("utf-8").strip(),
-            "ip": list(set(self._sys_cmd(['hostname', '-I']).decode("utf-8").split())),
             "port": 2049
             }]}
+        host_ip = self._sys_cmd(['hostname', '-I']).decode("utf-8").split()
         self.assertDictEqual(info_output, host_details)
+        self.assertTrue(any([ip in info_ip for ip in host_ip]))
         self._test_delete_cluster()
 
     def test_cluster_set_reset_user_config(self):
