@@ -39,7 +39,7 @@ Platforms
 The charts below show how Ceph's requirements map onto various Linux
 platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
-package (i.e., sysvinit, upstart, systemd).
+package (i.e., sysvinit, systemd).
 
 Octopus (15.2.z)
 -----------------
