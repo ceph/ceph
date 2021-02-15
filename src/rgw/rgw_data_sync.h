@@ -390,7 +390,7 @@ public:
   int init_sync_status(int num_shards);
   int run_sync(int num_shards);
 
-  void wakeup(int shard_id, set<string>& keys);
+  void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries);
 };
 
 class RGWDataSyncStatusManager : public DoutPrefixProvider {
@@ -457,7 +457,8 @@ public:
 
   int run() { return source_log.run_sync(num_shards); }
 
-  void wakeup(int shard_id, set<string>& keys) { return source_log.wakeup(shard_id, keys); }
+  void wakeup(int shard_id, bc::flat_set<rgw_data_notify_entry>& entries) { return source_log.wakeup(shard_id, entries); }
+
   void stop() {
     source_log.finish();
   }
