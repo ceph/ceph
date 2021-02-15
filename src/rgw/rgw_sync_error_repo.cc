@@ -102,7 +102,7 @@ int write(librados::ObjectWriteOperation& op,
 {
   // overwrite the existing timestamp if value is greater
   const uint64_t value = timestamp.time_since_epoch().count();
-  using namespace cls::cmpomap;
+  using namespace ::cls::cmpomap;
   const bufferlist zero = u64_buffer(0); // compare against 0 for missing keys
   return cmp_set_vals(op, Mode::U64, Op::GT, {{key, u64_buffer(value)}}, zero);
 }
@@ -113,7 +113,7 @@ int remove(librados::ObjectWriteOperation& op,
 {
   // remove the omap key if value >= existing
   const uint64_t value = timestamp.time_since_epoch().count();
-  using namespace cls::cmpomap;
+  using namespace ::cls::cmpomap;
   return cmp_rm_keys(op, Mode::U64, Op::GTE, {{key, u64_buffer(value)}});
 }
 
