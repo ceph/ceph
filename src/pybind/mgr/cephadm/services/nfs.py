@@ -30,9 +30,9 @@ class NFSService(CephService):
         # spec should be in spec store
         if not daemon_spec.spec:
             service_name: str = "nfs." + daemon_spec.daemon_id.split('.')[0]
-            if service_name in self.mgr.spec_store.specs:
+            if service_name in self.mgr.spec_store:
                 daemon_spec.spec = cast(
-                    NFSServiceSpec, self.mgr.spec_store.specs.get(service_name))
+                    NFSServiceSpec, self.mgr.spec_store[service_name].spec)
         assert daemon_spec.spec
 
         daemon_id = daemon_spec.daemon_id
