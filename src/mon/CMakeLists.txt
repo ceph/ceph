@@ -20,7 +20,7 @@ set(lib_mon_srcs
   ElectionLogic.cc
   ConnectionTracker.cc
   HealthMonitor.cc
-  ConfigKeyService.cc
+  KVMonitor.cc
   ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc
   ../osd/OSDCap.cc

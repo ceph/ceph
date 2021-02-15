@@ -1200,7 +1200,7 @@ COMMAND("osd tier add-cache "
 	"osd", "rw")
 
 /*
- * mon/ConfigKeyService.cc
+ * mon/KVMonitor.cc
  */
 
 COMMAND("config-key get "

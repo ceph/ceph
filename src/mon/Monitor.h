@@ -99,7 +99,6 @@ enum {
   l_mon_last,
 };
 
-class ConfigKeyService;
 class PaxosService;
 
 class AdminSocketHook;
@@ -678,14 +677,16 @@ public:
     return (class ConfigMonitor*) paxos_service[PAXOS_CONFIG].get();
   }
 
+  class KVMonitor *kvmon() {
+    return (class KVMonitor*) paxos_service[PAXOS_KV].get();
+  }
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
   friend class MonmapMonitor;
   friend class LogMonitor;
-  friend class ConfigKeyService;
-
-  std::unique_ptr<ConfigKeyService> config_key_service;
+  friend class KVMonitor;
 
   // -- sessions --
   MonSessionMap session_map;

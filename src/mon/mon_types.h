@@ -35,12 +35,11 @@ enum {
   PAXOS_MGRSTAT,
   PAXOS_HEALTH,
   PAXOS_CONFIG,
+  PAXOS_KV,
   PAXOS_NUM
 };
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
-
-extern const std::string CONFIG_PREFIX;
 
 // map of entity_type -> features -> count
 struct FeatureMap {
