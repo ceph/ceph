@@ -1128,7 +1128,14 @@ struct LruOnodeCacheShard : public BlueStore::OnodeCacheShard {
     --num_pinned;
     dout(20) << __func__ << this << " " << " " << " " << o->oid << " unpinned" << dendl;
   }
-
+  void _unpin_and_rm(BlueStore::Onode* o) override
+  {
+    o->pop_cache();
+    ceph_assert(num_pinned);
+    --num_pinned;
+    ceph_assert(num);
+    --num;
+  }
   void _trim_to(uint64_t new_size) override
   {
     if (new_size >= lru.size()) {
@@ -1978,12 +1985,12 @@ void BlueStore::OnodeSpace::rename(
   cache->_trim();
 }
 
-bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
+bool BlueStore::OnodeSpace::map_any(std::function<bool(Onode*)> f)
 {
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << dendl;
   for (auto& i : onode_map) {
-    if (f(i.second)) {
+    if (f(i.second.get())) {
       return true;
     }
   }
@@ -3547,34 +3554,47 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 // decremented. And another 'putting' thread on the instance will release it.
 //
 void BlueStore::Onode::get() {
-  if (++nref == 2) {
-    c->get_onode_cache()->pin(this, [&]() {
-        bool was_pinned = pinned;
-        pinned = nref >= 2;
-        // additional increment for newly pinned instance
-        bool r = !was_pinned && pinned;
-        if (r) {
-          ++nref;
-        }
-        return cached && r;
-      });
+  if (++nref >= 2 && !pinned) {
+    OnodeCacheShard* ocs = c->get_onode_cache();
+    std::lock_guard l(ocs->lock);
+    bool was_pinned = pinned;
+    pinned = nref >= 2;
+    // additional increment for newly pinned instance
+    bool r = !was_pinned && pinned;
+    if (r) {
+      ++nref;
+    }
+    if (cached && r) {
+      ocs->_pin(this);
+    }
   }
 }
 void BlueStore::Onode::put() {
-  if (--nref == 2) {
-    c->get_onode_cache()->unpin(this, [&]() {
-        bool was_pinned = pinned;
-        pinned = pinned && nref > 2; // intentionally use > not >= as we have
-                                     // +1 due to pinned state
-        bool r = was_pinned && !pinned;
-        // additional decrement for newly unpinned instance
-        if (r) {
-          --nref;
-        }
-        return cached && r;
-      });
+  int n = --nref;
+  if (n == 2) {
+    OnodeCacheShard* ocs = c->get_onode_cache();
+    std::lock_guard l(ocs->lock);
+    bool need_unpin = pinned;
+    pinned = pinned && nref > 2; // intentionally use > not >= as we have
+                                 // +1 due to pinned state
+    need_unpin = need_unpin && !pinned;
+    if (cached && need_unpin) {
+      if (exists) {
+        ocs->_unpin(this);
+      } else {
+        ocs->_unpin_and_rm(this);
+        // remove will also decrement nref and delete Onode
+        c->onode_map._remove(oid);
+      }
+    }
+    // additional decrement for newly unpinned instance
+    // should be the last action since Onode can be released
+    // at any point after this decrement
+    if (need_unpin) {
+      n = --nref;
+    }
   }
-  if (nref == 0) {
+  if (n == 0) {
     delete this;
   }
 }
@@ -4023,7 +4043,7 @@ void BlueStore::Collection::split_cache(
 
       p = onode_map.onode_map.erase(p);
       dest->onode_map.onode_map[o->oid] = o;
-      if (get_onode_cache() != dest->get_onode_cache()) {
+      if (o->cached) {
         get_onode_cache()->move_pinned(dest->get_onode_cache(), o.get());
       }
       o->c = dest;
@@ -9612,7 +9632,7 @@ void BlueStore::_reap_collections()
   while (p != removed_colls.end()) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
-    if (c->onode_map.map_any([&](OnodeRef o) {
+    if (c->onode_map.map_any([&](Onode* o) {
 	  ceph_assert(!o->exists);
 	  if (o->flushing_count.load()) {
 	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
@@ -15206,7 +15226,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     }
     size_t nonexistent_count = 0;
     ceph_assert((*c)->exists);
-    if ((*c)->onode_map.map_any([&](OnodeRef o) {
+    if ((*c)->onode_map.map_any([&](Onode* o) {
         if (o->exists) {
           dout(1) << __func__ << " " << o->oid << " " << o
 		  << " exists in onode_map" << dendl;
