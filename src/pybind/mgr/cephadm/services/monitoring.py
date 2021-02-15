@@ -101,9 +101,9 @@ class AlertmanagerService(CephadmService):
         # spec should be in spec store
         if not daemon_spec.spec:
             service_name: str = "alertmanager"
-            if service_name in self.mgr.spec_store.specs:
+            if service_name in self.mgr.spec_store:
                 daemon_spec.spec = cast(
-                    AlertManagerSpec, self.mgr.spec_store.specs.get(service_name))
+                    AlertManagerSpec, self.mgr.spec_store[service_name].spec)
         assert daemon_spec.spec
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
