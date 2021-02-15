@@ -44,20 +44,26 @@ Ceph binaries must be built for your branch before you can use teuthology to run
 Triggering Tests
 ****************
 
-After building is complete, proceed to trigger tests -
+After you have built Ceph binaries for your branch, you can run tests using
+teuthology. This procedure explains how to run tests using teuthology.
 
-#. Log in to the teuthology machine::
+#. Log in to the teuthology machine:
+
+   .. prompt:: bash $
 
        ssh <username>@teuthology.front.sepia.ceph.com
 
-   This would require Sepia lab access. To know how to request it, see:
-   https://ceph.github.io/sepia/adding_users/
+   This requires that you have access to the Sepia lab. Learn about requesting
+   access here: 
+   
+       https://ceph.github.io/sepia/adding_users/
 
-#. Next, get teuthology installed. Run the first set of commands in
-   `Running Your First Test`_ for that. After that, activate the virtual
-   environment in which teuthology is installed.
+#. Install teuthology in a virtual environment and activate that virtual
+   environment. Follow the relevant instructions in `Running Your First Test`_.
 
-#. Run the ``teuthology-suite`` command::
+#. Run the ``teuthology-suite`` command:
+
+   .. prompt:: bash $
 
         teuthology-suite -v \
         -m smithi \
@@ -68,37 +74,44 @@ After building is complete, proceed to trigger tests -
         -e foo@gmail.com \
         -R fail
 
-   Following are the options used in above command with their meanings -
+   The options in the above command are defined here: 
+
+      =============  =========================================================
+         Option        Meaning
+      =============  =========================================================
         -v            verbose
         -m            machine name
-        -c            branch name, the branch that was pushed on ceph-ci
+        -c            the name of the branch that was pushed on ceph-ci
         -s            test-suite name
-        -p            higher the number, lower the priority of the job
-        --filter      filter tests in given suite that needs to run, the arg to
-                      filter should be the test you want to run
-        -e <email>    When tests finish or time out, send an email
-                      here. May also be specified in ~/.teuthology.yaml
-                      as 'results_email'
+        -p            the higher the number, the lower the priority of 
+                      the job
+        --filter      filter tests in a given suite. The argument
+                      passed to this filter specifies which test you 
+                      want to run
+        -e <email>    When tests finish or time out, send an email to the
+                      specified address. Can also be specified in 
+                      ~/.teuthology.yaml as 'results_email'
         -R            A comma-separated list of statuses to be used
-                      with --rerun. Supported statuses are: 'dead',
+                      with --rerun. Supported statuses: 'dead',
                       'fail', 'pass', 'queued', 'running', 'waiting'
                       [default: fail,dead]
+      =============  =========================================================
 
-#. Wait for the tests to run. ``teuthology-suite`` prints a link to the
-   `Pulpito`_ page created for the tests triggered.
+   .. note:: The priority number present in the command above is a placeholder. 
+      Do not use it in your own tests. See `Testing Priority`_ for information 
+      about recommended values.
 
-.. note:: The priority number present in the command above is just a
-   placeholder. It might be highly inappropriate for the jobs you may want to
-   trigger. See `Testing Priority`_ section to pick a priority number.
+   .. note:: Do not issue a command without a priority number. The default 
+      value is 1000, a value so large that your job is unlikely ever to run.
 
-.. note:: Don't skip passing a priority number, the default value is 1000
-   which is way too high; the job probably might never run.
+   Run ``teuthology-suite --help`` to read descriptions of these and other 
+   available options.
 
-Other frequently used/useful options are ``-d`` (or ``--distro``),
-``--distroversion``, ``--filter-out``, ``--timeout``, ``flavor``, ``-rerun``,
-``-l`` (for limiting number of jobs) , ``-n`` (for how many times job would
-run). Run ``teuthology-suite --help`` to read description of these and every
-other options available.
+#. Wait for the tests to run. ``teuthology-suite`` prints a link to
+   `Pulpito`_ where the test results can be viewed.
+
+
+
 
 .. _teuthology_testing_qa_changes:
 
