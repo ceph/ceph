@@ -39,6 +39,7 @@ class Options(object):
 
     # Grafana settings
     GRAFANA_API_URL = ('', str)
+    GRAFANA_FRONTEND_API_URL = ('', str)
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
     GRAFANA_API_SSL_VERIFY = (True, bool)
