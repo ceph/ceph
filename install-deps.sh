@@ -177,7 +177,7 @@ function install_boost_on_ubuntu {
     local codename=$1
     if apt -qq list ceph-libboost1.72-dev 2>/dev/null | grep -q installed; then
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove 'ceph-libboost.*1.72.*'
-	$SUDO rm /etc/apt/sources.list.d/ceph-libboost1.72.list
+	$SUDO rm -f /etc/apt/sources.list.d/ceph-libboost1.72.list
     fi
     local project=libboost
     local ver=1.73
