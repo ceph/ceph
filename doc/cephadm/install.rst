@@ -157,6 +157,8 @@ or run ``cephadm bootstrap -h`` to see all available options:
   the login info in its config database so other hosts added to the cluster
   may also make use of the authenticated registry.
 
+.. _cephadm-enable-cli:
+
 Enable Ceph CLI
 ===============
 
