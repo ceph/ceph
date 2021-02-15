@@ -506,8 +506,12 @@ protected:
           RGWBucketSyncPolicyHandlerRef *phandler,
           optional_yield y) override;
       virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
-      virtual void wakeup_meta_sync_shards(set<int>& shard_ids) override { return; }
-      virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, map<int, set<string> >& shard_ids) override { return; }
+      virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { return; }
+      virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp,
+					   const rgw_zone_id& source_zone,
+					   boost::container::flat_map<
+					     int,
+					   boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) override { return; }
       virtual int clear_usage(const DoutPrefixProvider *dpp) override { return 0; }
       virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
           uint32_t max_entries, bool *is_truncated,
