@@ -125,8 +125,7 @@ int StandbyPyModule::load()
 bool StandbyPyModule::get_config(const std::string &key,
                                  std::string *value) const
 {
-  const std::string global_key = PyModule::config_prefix
-    + get_name() + "/" + key;
+  const std::string global_key = "mgr/" + get_name() + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;
  
