@@ -53,6 +53,10 @@ ActivePyModules::ActivePyModules(
   server(server), py_module_registry(pmr)
 {
   store_cache = std::move(store_data);
+  // we can only trust our ConfigMap if the mon cluster has provided
+  // kv sub since our startup.
+  have_local_config_map = mon_provides_kv_sub;
+  _refresh_config_map();
   cmd_finisher.start();
 }
 
@@ -731,6 +735,7 @@ void ActivePyModules::update_kv_data(
   const map<std::string, boost::optional<bufferlist>, std::less<>>& data)
 {
   std::lock_guard l(lock);
+  bool do_config = false;
   if (!incremental) {
     dout(10) << "full update on " << prefix << dendl;
     auto p = store_cache.lower_bound(prefix);
@@ -748,6 +753,68 @@ void ActivePyModules::update_kv_data(
     } else {
       dout(20) << " rm " << i.first << dendl;
       store_cache.erase(i.first);
+    }
+    if (i.first.find("config/") == 0) {
+      do_config = true;
+    }
+  }
+  if (do_config) {
+    _refresh_config_map();
+  }
+}
+
+void ActivePyModules::_refresh_config_map()
+{
+  dout(10) << dendl;
+  config_map.clear();
+  for (auto p = store_cache.lower_bound("config/");
+       p != store_cache.end() && p->first.find("config/") == 0;
+       ++p) {
+    string key = p->first.substr(7);
+    if (key.find("mgr/") == 0) {
+      // NOTE: for now, we ignore module options.  see also ceph_foreign_option_get().
+      continue;
+    }
+    string value = p->second;
+    string name;
+    string who;
+    config_map.parse_key(key, &name, &who);
+
+    const Option *opt = g_conf().find_option(name);
+    if (!opt) {
+      config_map.stray_options.push_back(
+	std::unique_ptr<Option>(
+	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+      opt = config_map.stray_options.back().get();
+    }
+
+    string err;
+    int r = opt->pre_validate(&value, &err);
+    if (r < 0) {
+      dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
+	       << value << "' for " << name << dendl;
+    }
+
+    MaskedOption mopt(opt);
+    mopt.raw_value = value;
+    string section_name;
+    if (who.size() &&
+	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+      derr << __func__ << " invalid mask for key " << key << dendl;
+    } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      dout(10) << __func__ << " NO_MON_UPDATE option '"
+	       << name << "' = '" << value << "' for " << name
+	       << dendl;
+    } else {
+      Section *section = &config_map.global;;
+      if (section_name.size() && section_name != "global") {
+	if (section_name.find('.') != std::string::npos) {
+	  section = &config_map.by_id[section_name];
+	} else {
+	  section = &config_map.by_type[section_name];
+	}
+      }
+      section->options.insert(make_pair(name, std::move(mopt)));
     }
   }
 }

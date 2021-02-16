@@ -26,6 +26,7 @@
 #include "mon/MgrMap.h"
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
+#include "mon/ConfigMap.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -46,6 +47,7 @@ class ActivePyModules
   PyModuleConfig &module_config;
   bool have_local_config_map = false;
   std::map<std::string, std::string> store_cache;
+  ConfigMap config_map;  ///< derived from store_cache config/ keys
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
@@ -168,6 +170,7 @@ public:
     const std::string prefix,
     bool incremental,
     const map<std::string, boost::optional<bufferlist>, std::less<>>& data);
+  void _refresh_config_map();
 
   // Public so that MonCommandCompletion can use it
   // FIXME: for send_command completion notifications,
