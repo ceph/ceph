@@ -303,6 +303,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=True,
             desc='Automatically convert image tags to image digest. Make sure all daemons use the same image',
         ),
+        Option(
+            'config_checks_enabled',
+            type='bool',
+            default=False,
+            desc='Enable or disable the cephadm configuration analysis',
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
