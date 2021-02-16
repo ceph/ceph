@@ -777,18 +777,9 @@ void ConfigMonitor::load_config()
 
     current[key] = it->value();
 
-    auto last_slash = key.rfind('/');
     string name;
     string who;
-    if (last_slash == std::string::npos) {
-      name = key;
-    } else if (auto mgrpos = key.find("/mgr/"); mgrpos != std::string::npos) {
-      name = key.substr(mgrpos + 1);
-      who = key.substr(0, mgrpos);
-    } else {
-      name = key.substr(last_slash + 1);
-      who = key.substr(0, last_slash);
-    }
+    config_map.parse_key(key, &name, &who);
 
     // has this option been renamed?
     {
