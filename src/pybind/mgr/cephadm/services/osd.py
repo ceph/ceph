@@ -17,7 +17,7 @@ from ceph.utils import datetime_now
 from orchestrator import OrchestratorError
 from mgr_module import MonCommandFailed
 
-from cephadm.services.cephadmservice import CephadmDaemonSpec, CephService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -121,7 +121,8 @@ class OSDService(CephService):
                     continue
 
                 created.append(osd_id)
-                daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
+                daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
+                    service_name=drive_group.service_name(),
                     daemon_id=osd_id,
                     host=host,
                     daemon_type='osd',

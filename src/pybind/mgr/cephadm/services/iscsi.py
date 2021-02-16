@@ -5,7 +5,7 @@ from typing import List, cast
 from ceph.deployment.service_spec import IscsiServiceSpec
 
 from orchestrator import DaemonDescription
-from .cephadmservice import CephadmDaemonSpec, CephService
+from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .. import utils
 
 logger = logging.getLogger(__name__)
@@ -19,23 +19,10 @@ class IscsiService(CephService):
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
-        # TODO: remove this:
-        logger.info('Saving service %s spec with placement %s' % (
-            spec.service_name(), spec.placement.pretty_str()))
-        self.mgr.spec_store.save(spec)
-
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec[IscsiServiceSpec]) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        # if spec is not attached to daemon_spec it is likely a redeploy or reconfig and
-        # spec should be in spec store
-        if not daemon_spec.spec:
-            service_name: str = "iscsi." + daemon_spec.daemon_id.split('.')[0]
-            if service_name in self.mgr.spec_store:
-                daemon_spec.spec = cast(
-                    IscsiServiceSpec, self.mgr.spec_store[service_name].spec)
-        assert daemon_spec.spec
 
-        spec = daemon_spec.spec
+        spec = cast(IscsiServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id
 
         ret, keyring, err = self.mgr.check_mon_command({

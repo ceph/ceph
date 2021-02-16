@@ -3,7 +3,7 @@ import pytest
 from unittest.mock import MagicMock, call
 
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
-    RbdMirrorService, CrashService, CephadmExporter, CephadmDaemonSpec
+    RbdMirrorService, CrashService, CephadmExporter, CephadmDaemonDeploySpec
 from cephadm.services.iscsi import IscsiService
 from cephadm.services.nfs import NFSService
 from cephadm.services.osd import OSDService
@@ -92,7 +92,11 @@ class TestCephadmService:
         iscsi_spec.spec.daemon_type = "iscsi"
         iscsi_spec.spec.ssl_cert = ''
 
-        iscsi_daemon_spec = CephadmDaemonSpec(host='host', daemon_id='a', spec=iscsi_spec)
+        mgr.spec_store = MagicMock()
+        mgr.spec_store.__getitem__.return_value = iscsi_spec
+
+        iscsi_daemon_spec = CephadmDaemonDeploySpec(
+            host='host', daemon_id='a', service_name=iscsi_spec.service_name())
 
         iscsi_service.prepare_create(iscsi_daemon_spec)
 

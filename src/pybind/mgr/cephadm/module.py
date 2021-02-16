@@ -27,7 +27,7 @@ from ceph.deployment.service_spec import \
     HostPlacementSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from cephadm.serve import CephadmServe
-from cephadm.services.cephadmservice import CephadmDaemonSpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from mgr_module import MgrModule, HandleCommandResult, Option
 from mgr_util import create_self_signed_cert
@@ -1593,10 +1593,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ]
 
     def _daemon_action(self, daemon_type: str, daemon_id: str, host: str, action: str, image: Optional[str] = None) -> str:
-        daemon_spec: CephadmDaemonSpec = CephadmDaemonSpec(
+        dd = DaemonDescription(
+            hostname=host,
+            daemon_type=daemon_type,
+            daemon_id=daemon_id
+        )
+        daemon_spec: CephadmDaemonDeploySpec = CephadmDaemonDeploySpec(
             host=host,
             daemon_id=daemon_id,
             daemon_type=daemon_type,
+            service_name=dd.service_name(),
         )
 
         self._daemon_action_set_image(action, image, daemon_type, daemon_id)
@@ -1895,7 +1901,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _add_daemon(self,
                     daemon_type: str,
                     spec: ServiceSpec,
-                    create_func: Callable[..., CephadmDaemonSpec]) -> List[str]:
+                    create_func: Callable[..., CephadmDaemonDeploySpec]) -> List[str]:
         """
         Add (and place) a daemon. Require explicit host placement.  Do not
         schedule, and do not apply the related scheduling limitations.
@@ -1920,7 +1926,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                         daemons: List[DaemonDescription],
                         hosts: List[HostPlacementSpec],
                         count: int,
-                        create_func: Callable[..., CephadmDaemonSpec]) -> List[str]:
+                        create_func: Callable[..., CephadmDaemonDeploySpec]) -> List[str]:
         if count > len(hosts):
             raise OrchestratorError('too few hosts: want %d, have %s' % (
                 count, hosts))
@@ -1928,7 +1934,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         did_config = False
         service_type = daemon_type_to_service(daemon_type)
 
-        args = []  # type: List[CephadmDaemonSpec]
+        args = []  # type: List[CephadmDaemonDeploySpec]
         for host, network, name in hosts:
             daemon_id = self.get_unique_name(daemon_type, host, daemons,
                                              prefix=spec.service_id,
@@ -1952,7 +1958,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             )
             daemons.append(sd)
 
-        @forall_hosts
+        @ forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = create_func(*args)
             return CephadmServe(self)._create_daemon(daemon_spec)

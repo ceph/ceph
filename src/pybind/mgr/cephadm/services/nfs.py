@@ -6,7 +6,7 @@ import rados
 
 from orchestrator import DaemonDescription
 
-from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonSpec, CephService
+from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
 
 logger = logging.getLogger(__name__)
 
@@ -19,40 +19,18 @@ class NFSService(CephService):
         assert spec.pool
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
-        # TODO: Fail here, in case of no spec
-        logger.info('Saving service %s spec with placement %s' % (
-            spec.service_name(), spec.placement.pretty_str()))
-        self.mgr.spec_store.save(spec)
-
-    def prepare_create(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> CephadmDaemonSpec:
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
-        # if spec is not attached to daemon_spec it is likely a redeploy or reconfig and
-        # spec should be in spec store
-        if not daemon_spec.spec:
-            service_name: str = "nfs." + daemon_spec.daemon_id.split('.')[0]
-            if service_name in self.mgr.spec_store:
-                daemon_spec.spec = cast(
-                    NFSServiceSpec, self.mgr.spec_store[service_name].spec)
-        assert daemon_spec.spec
-
-        daemon_id = daemon_spec.daemon_id
-        host = daemon_spec.host
-        spec = daemon_spec.spec
-
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-
-        logger.info('Create daemon %s on host %s with spec %s' % (
-            daemon_id, host, spec))
         return daemon_spec
 
-    def generate_config(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> Tuple[Dict[str, Any], List[str]]:
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        assert daemon_spec.spec
 
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
-        spec = daemon_spec.spec
+        spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
         deps: List[str] = []
 
@@ -127,10 +105,9 @@ class NFSService(CephService):
                 logger.info('Creating rados config object: %s' % obj)
                 ioctx.write_full(obj, ''.encode('utf-8'))
 
-    def create_keyring(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> str:
-        assert daemon_spec.spec
+    def create_keyring(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         daemon_id = daemon_spec.daemon_id
-        spec = daemon_spec.spec
+        spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         entity: AuthEntity = self.get_auth_entity(daemon_id)
 
         osd_caps = 'allow rw pool=%s' % (spec.pool)
@@ -147,7 +124,7 @@ class NFSService(CephService):
 
         return keyring
 
-    def create_rgw_keyring(self, daemon_spec: CephadmDaemonSpec[NFSServiceSpec]) -> str:
+    def create_rgw_keyring(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         daemon_id = daemon_spec.daemon_id
         entity: AuthEntity = self.get_auth_entity(f'{daemon_id}-rgw')
 
