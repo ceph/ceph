@@ -3,11 +3,13 @@
 
 #include "amqp_mock.h"
 #include <amqp.h>
+#include <amqp_ssl_socket.h>
 #include <amqp_tcp_socket.h>
 #include <string>
 #include <stdarg.h>
 #include <mutex>
 #include <boost/lockfree/queue.hpp>
+#include <openssl/ssl.h>
 
 namespace amqp_mock {
 
@@ -74,6 +76,7 @@ struct amqp_connection_state_t_ {
   amqp_rpc_reply_t reply;
   amqp_basic_ack_t ack;
   amqp_basic_nack_t nack;
+  bool use_ssl;
   // ctor
   amqp_connection_state_t_() : 
     socket(nullptr), 
@@ -86,15 +89,18 @@ struct amqp_connection_state_t_ {
     login_called(false),
     ack_list(1024),
     nack_list(1024),
-    delivery_tag(1) {
+    delivery_tag(1),
+    use_ssl(false) {
       reply.reply_type = AMQP_RESPONSE_NONE;
     }
 };
 
 struct amqp_socket_t_ {
+  void *klass;
+  void *ssl_ctx;
   bool open_called;
   // ctor
-  amqp_socket_t_() : open_called(false) {
+  amqp_socket_t_() : klass(nullptr), ssl_ctx(nullptr), open_called(false) {
   }
 };
 
@@ -118,6 +124,35 @@ int amqp_destroy_connection(amqp_connection_state_t state) {
 amqp_socket_t* amqp_tcp_socket_new(amqp_connection_state_t state) {
   state->socket = new amqp_socket_t;
   return state->socket;
+}
+
+amqp_socket_t* amqp_ssl_socket_new(amqp_connection_state_t state) {
+  state->socket = new amqp_socket_t;
+  state->use_ssl = true;
+  return state->socket;
+}
+
+int amqp_ssl_socket_set_cacert(amqp_socket_t *self, const char *cacert) {
+  // do nothing
+  return AMQP_STATUS_OK;
+}
+
+void amqp_ssl_socket_set_verify_peer(amqp_socket_t *self, amqp_boolean_t verify) {
+  // do nothing
+}
+
+void amqp_ssl_socket_set_verify_hostname(amqp_socket_t *self, amqp_boolean_t verify) {
+  // do nothing
+}
+
+#if AMQP_VERSION >= AMQP_VERSION_CODE(0, 10, 0, 1)
+void* amqp_ssl_socket_get_context(amqp_socket_t *self) {
+  return nullptr;
+}
+#endif
+
+int SSL_CTX_set_default_verify_paths(SSL_CTX *ctx) {
+  return 1;
 }
 
 int amqp_socket_open(amqp_socket_t *self, const char *host, int port) {
