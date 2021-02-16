@@ -433,6 +433,18 @@ ceph_option_get(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_foreign_option_get(BaseMgrModule *self, PyObject *args)
+{
+  char *who = nullptr;
+  char *what = nullptr;
+  if (!PyArg_ParseTuple(args, "ss:ceph_foreign_option_get", &who, &what)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+  return self->py_modules->get_foreign_config(who, what);
+}
+
+static PyObject*
 ceph_get_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *module = nullptr;
@@ -1388,6 +1400,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
    "Get a native configuration option value"},
+
+  {"_ceph_get_foreign_option", (PyCFunction)ceph_foreign_option_get, METH_VARARGS,
+   "Get a native configuration option value for another entity"},
 
   {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
    "Get a module configuration option value"},
