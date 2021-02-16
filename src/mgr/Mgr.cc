@@ -29,6 +29,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MLog.h"
 #include "messages/MServiceMap.h"
+#include "messages/MKVData.h"
 #include "PyModule.h"
 #include "Mgr.h"
 
@@ -178,11 +179,11 @@ std::map<std::string, std::string> Mgr::load_store()
     
     dout(20) << "saw key '" << key << "'" << dendl;
 
-    const std::string config_prefix = PyModule::config_prefix;
+    const std::string store_prefix = PyModule::config_prefix;
     const std::string device_prefix = "device/";
 
-    if (key.substr(0, config_prefix.size()) == config_prefix ||
-	key.substr(0, device_prefix.size()) == device_prefix) {
+    if (key.substr(0, device_prefix.size()) == device_prefix ||
+	key.substr(0, store_prefix.size()) == store_prefix) {
       dout(20) << "fetching '" << key << "'" << dendl;
       Command get_cmd;
       std::ostringstream cmd_json;
@@ -192,26 +193,7 @@ std::map<std::string, std::string> Mgr::load_store()
       get_cmd.wait();
       lock.lock();
       if (get_cmd.r == 0) { // tolerate racing config-key change
-	if (key.substr(0, device_prefix.size()) == device_prefix) {
-	  // device/
-	  string devid = key.substr(device_prefix.size());
-	  map<string,string> meta;
-	  ostringstream ss;
-	  string val = get_cmd.outbl.to_str();
-	  int r = get_json_str_map(val, ss, &meta, false);
-	  if (r < 0) {
-	    derr << __func__ << " failed to parse " << val << ": " << ss.str()
-		 << dendl;
-	  } else {
-	    daemon_state.with_device_create(
-	      devid, [&meta] (DeviceState& dev) {
-		dev.set_metadata(std::move(meta));
-	      });
-	  }
-	} else {
-	  // config/
-	  loaded[key] = get_cmd.outbl.to_str();
-	}
+	loaded[key] = get_cmd.outbl.to_str();
       }
     }
   }
@@ -246,11 +228,26 @@ void Mgr::init()
   register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
+  // Only pacific+ monitors support subscribe to kv updates
+  bool mon_allows_kv_sub = false;
+  monc->with_monmap(
+    [&](const MonMap &monmap) {
+      if (monmap.get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_PACIFIC)) {
+	mon_allows_kv_sub = true;
+      }
+    });
+
   // subscribe to all the maps
   monc->sub_want("log-info", 0, 0);
   monc->sub_want("mgrdigest", 0, 0);
   monc->sub_want("fsmap", 0, 0);
   monc->sub_want("servicemap", 0, 0);
+  if (mon_allows_kv_sub) {
+    monc->sub_want("kv:config/", 0, 0);
+    monc->sub_want("kv:mgr/", 0, 0);
+    monc->sub_want("kv:device/", 0, 0);
+  }
 
   dout(4) << "waiting for OSDMap..." << dendl;
   // Subscribe to OSDMap update to pass on to ClusterState
@@ -299,20 +296,45 @@ void Mgr::init()
   dout(4) << "waiting for FSMap..." << dendl;
   fs_map_cond.wait(l, [this] { return cluster_state.have_fsmap();});
 
-  dout(4) << "waiting for config-keys..." << dendl;
-
   // Wait for MgrDigest...
   dout(4) << "waiting for MgrDigest..." << dendl;
   digest_cond.wait(l, [this] { return digest_received; });
 
-  // Load module KV store
-  auto kv_store = load_store();
+  if (!mon_allows_kv_sub) {
+    dout(4) << "loading config-key data from pre-pacific mon cluster..." << dendl;
+    pre_init_store = load_store();
+  }
 
+  dout(4) << "initializing device state..." << dendl;
+  // Note: we only have to do this during startup because once we are
+  // active the only changes to this state will originate from one of our
+  // own modules.
+  for (auto p = pre_init_store.lower_bound("device/");
+       p != pre_init_store.end() && p->first.find("device/") == 0;
+       ++p) {
+    string devid = p->first.substr(7);
+    dout(10) << "  updating " << devid << dendl;
+    map<string,string> meta;
+    ostringstream ss;
+    int r = get_json_str_map(p->second, ss, &meta, false);
+    if (r < 0) {
+      derr << __func__ << " failed to parse " << p->second << ": " << ss.str()
+	   << dendl;
+    } else {
+      daemon_state.with_device_create(
+	devid, [&meta] (DeviceState& dev) {
+		 dev.set_metadata(std::move(meta));
+	       });
+    }
+  }
+  
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
-  py_module_registry->active_start(daemon_state, cluster_state,
-      kv_store, *monc, clog, audit_clog, *objecter, *client,
-      finisher, server);
+  py_module_registry->active_start(
+    daemon_state, cluster_state,
+    pre_init_store, mon_allows_kv_sub,
+    *monc, clog, audit_clog, *objecter, *client,
+    finisher, server);
 
   cluster_state.final_init();
 
@@ -566,6 +588,43 @@ bool Mgr::ms_dispatch2(const ref_t<Message>& m)
       break;
     case MSG_LOG:
       handle_log(ref_cast<MLog>(m));
+      break;
+    case MSG_KV_DATA:
+      {
+	auto msg = ref_cast<MKVData>(m);
+	monc->sub_got("kv:"s + msg->prefix, msg->version);
+	if (!msg->data.empty()) {
+	  if (initialized) {
+	    py_module_registry->update_kv_data(
+	      msg->prefix,
+	      msg->incremental,
+	      msg->data
+	      );
+	  } else {
+	    // before we have created the ActivePyModules, we need to
+	    // track the store regions we're monitoring
+	    if (!msg->incremental) {
+	      dout(10) << "full update on " << msg->prefix << dendl;
+	      auto p = pre_init_store.lower_bound(msg->prefix);
+	      while (p != pre_init_store.end() && p->first.find(msg->prefix) == 0) {
+		dout(20) << " rm prior " << p->first << dendl;
+		p = pre_init_store.erase(p);
+	      }
+	    } else {
+	      dout(10) << "incremental update on " << msg->prefix << dendl;
+	    }
+	    for (auto& i : msg->data) {
+	      if (i.second) {
+		dout(20) << " set " << i.first << " = " << i.second->to_str() << dendl;
+		pre_init_store[i.first] = i.second->to_str();
+	      } else {
+		dout(20) << " rm " << i.first << dendl;
+		pre_init_store.erase(i.first);
+	      }
+	    }
+	  }
+	}
+      }
       break;
 
     default:

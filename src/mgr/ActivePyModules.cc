@@ -37,18 +37,20 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
-          std::map<std::string, std::string> store_data,
-          DaemonStateIndex &ds, ClusterState &cs,
-          MonClient &mc, LogChannelRef clog_,
-          LogChannelRef audit_clog_, Objecter &objecter_,
-          Client &client_, Finisher &f, DaemonServer &server,
-          PyModuleRegistry &pmr)
-  : module_config(module_config_), daemon_state(ds), cluster_state(cs),
-    monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
-    client(client_), finisher(f),
-    cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
-    server(server), py_module_registry(pmr)
+ActivePyModules::ActivePyModules(
+  PyModuleConfig &module_config_,
+  std::map<std::string, std::string> store_data,
+  bool mon_provides_kv_sub,
+  DaemonStateIndex &ds, ClusterState &cs,
+  MonClient &mc, LogChannelRef clog_,
+  LogChannelRef audit_clog_, Objecter &objecter_,
+  Client &client_, Finisher &f, DaemonServer &server,
+  PyModuleRegistry &pmr)
+: module_config(module_config_), daemon_state(ds), cluster_state(cs),
+  monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
+  client(client_), finisher(f),
+  cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
+  server(server), py_module_registry(pmr)
 {
   store_cache = std::move(store_data);
   cmd_finisher.start();
@@ -703,6 +705,9 @@ void ActivePyModules::set_store(const std::string &module_name,
   Command set_cmd;
   {
     std::lock_guard l(lock);
+
+    // NOTE: this isn't strictly necessary since we'll also get an MKVData
+    // update from the mon due to our subscription *before* our command is acked.
     if (val) {
       store_cache[global_key] = *val;
     } else {
@@ -754,6 +759,33 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
   }
 
   return result;
+}
+
+void ActivePyModules::update_kv_data(
+  const std::string prefix,
+  bool incremental,
+  const map<std::string, boost::optional<bufferlist>, std::less<>>& data)
+{
+  std::lock_guard l(lock);
+  if (!incremental) {
+    dout(10) << "full update on " << prefix << dendl;
+    auto p = store_cache.lower_bound(prefix);
+    while (p != store_cache.end() && p->first.find(prefix) == 0) {
+      dout(20) << " rm prior " << p->first << dendl;
+      p = store_cache.erase(p);
+    }
+  } else {
+    dout(10) << "incremental update on " << prefix << dendl;
+  }
+  for (auto& i : data) {
+    if (i.second) {
+      dout(20) << " set " << i.first << " = " << i.second->to_str() << dendl;
+      store_cache[i.first] = i.second->to_str();
+    } else {
+      dout(20) << " rm " << i.first << dendl;
+      store_cache.erase(i.first);
+    }
+  }
 }
 
 PyObject* ActivePyModules::with_perf_counters(
