@@ -44,6 +44,7 @@ class ActivePyModules
   // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
   PyModuleConfig &module_config;
+  bool have_local_config_map = false;
   std::map<std::string, std::string> store_cache;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
@@ -63,11 +64,13 @@ private:
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
 public:
-  ActivePyModules(PyModuleConfig &module_config,
-            std::map<std::string, std::string> store_data,
-            DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
-            Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
+  ActivePyModules(
+    PyModuleConfig &module_config,
+    std::map<std::string, std::string> store_data,
+    bool mon_provides_kv_sub,
+    DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+    LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
+    Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
 
   ~ActivePyModules();
 
@@ -160,6 +163,11 @@ public:
     std::stringstream *ss);
 
   std::map<std::string, std::string> get_services() const;
+
+  void update_kv_data(
+    const std::string prefix,
+    bool incremental,
+    const map<std::string, boost::optional<bufferlist>, std::less<>>& data);
 
   // Public so that MonCommandCompletion can use it
   // FIXME: for send_command completion notifications,
