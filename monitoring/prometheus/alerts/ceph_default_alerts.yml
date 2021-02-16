@@ -200,6 +200,17 @@ groups:
             will be full in less than 5 days assuming the average fill-up
             rate of the past 48 hours.
 
+      - alert: MTU Mismatch
+        expr: node_network_mtu_bytes{device!="lo"} != on(device) group_left() (quantile(0.5, node_network_mtu_bytes{device!="lo"}) by (device))
+        labels:
+          severity: warning
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.15.1.2.8.5
+        annotations:
+          description: >
+            Node {{ $labels.instance }} has a different MTU size ({{ $value }})
+            than the median value on device {{ $labels.device }}.
+
   - name: pools
     rules:
       - alert: pool full
