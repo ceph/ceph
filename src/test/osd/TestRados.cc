@@ -15,7 +15,6 @@
 
 #include "test/osd/RadosModel.h"
 
-
 using namespace std;
 
 class WeightedTestGenerator : public TestOpGenerator
@@ -716,6 +715,12 @@ int main(int argc, char **argv)
     exit(1);
   }
   context.loop(&gen);
+  if (enable_dedup) {
+    if (!context.check_chunks_refcount(context.low_tier_io_ctx, context.io_ctx)) {
+      cerr << " Invalid refcount " << std::endl;
+      exit(1);
+    }
+  }
 
   context.shutdown();
   cerr << context.errors << " errors." << std::endl;

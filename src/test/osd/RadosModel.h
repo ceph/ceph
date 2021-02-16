@@ -24,6 +24,9 @@
 #include "osd/HitSet.h"
 #include "common/ceph_crypto.h"
 
+#include "cls/cas/cls_cas_client.h"
+#include "cls/cas/cls_cas_internal.h"
+
 #ifndef RADOSMODEL_H
 #define RADOSMODEL_H
 
@@ -584,6 +587,80 @@ public:
     find_object(oid, &contents, snap);
     contents.dirty = true;
     pool_obj_cont.rbegin()->second.insert_or_assign(oid, contents);
+  }
+
+  bool check_chunks_refcount(librados::IoCtx &chunk_pool_ctx, librados::IoCtx &manifest_pool_ctx)
+  {
+    librados::ObjectCursor shard_start;
+    librados::ObjectCursor shard_end;
+    librados::ObjectCursor begin;
+    librados::ObjectCursor end;
+    begin = chunk_pool_ctx.object_list_begin();
+    end = chunk_pool_ctx.object_list_end();
+
+    chunk_pool_ctx.object_list_slice(
+      begin,
+      end,
+      1,
+      1,
+      &shard_start,
+      &shard_end);
+
+    librados::ObjectCursor c(shard_start);
+    while(c < shard_end)
+    {
+      std::vector<librados::ObjectItem> result;
+      int r = chunk_pool_ctx.object_list(c, shard_end, 12, {}, &result, &c);
+      if (r < 0) {
+	cerr << "error object_list : " << cpp_strerror(r) << std::endl;
+	return false;
+      }
+
+      for (const auto & i : result) {
+	auto oid = i.oid;
+	cout << oid << std::endl;
+	chunk_refs_t refs;
+	{
+	  bufferlist t;
+	  r = chunk_pool_ctx.getxattr(oid, CHUNK_REFCOUNT_ATTR, t);
+	  if (r < 0) {
+	    continue;
+	  }
+	  auto p = t.cbegin();
+	  decode(refs, p);
+	}
+	ceph_assert(refs.get_type() == chunk_refs_t::TYPE_BY_OBJECT);
+
+	chunk_refs_by_object_t *byo =
+	  static_cast<chunk_refs_by_object_t*>(refs.r.get());
+
+	for (auto& pp : byo->by_object) {
+	  int src_refcount = 0;
+	  int dst_refcount = byo->by_object.count(pp);
+	  for (int tries = 0; tries < 10; tries++) {
+	    r = cls_cas_references_chunk(manifest_pool_ctx, pp.oid.name, oid);
+	    if (r == -ENOENT || r == -ENOLINK) {
+	      src_refcount = 0;
+	    } else if (r == -EBUSY) {
+	      sleep(10);
+	      continue;
+	    } else {
+	      src_refcount = r;
+	    }
+	    break;
+	  }
+	  if (src_refcount > dst_refcount) {
+	    cerr << " src_object " << pp
+		 << ": src_refcount " << src_refcount 
+		 << ", dst_object " << oid 
+		 << ": dst_refcount " << dst_refcount 
+		 << std::endl;
+	    return false;
+	  }
+	}
+      }
+    }
+    return true;
   }
 };
 
