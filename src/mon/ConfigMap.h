@@ -129,6 +129,10 @@ struct ConfigMap {
     const std::string& device_class,
     std::map<std::string,std::pair<std::string,const MaskedOption*>> *src=0);
 
+  void parse_key(
+    const std::string& key,
+    std::string *name,
+    std::string *who);
   static bool parse_mask(
     const std::string& in,
     std::string *section,
