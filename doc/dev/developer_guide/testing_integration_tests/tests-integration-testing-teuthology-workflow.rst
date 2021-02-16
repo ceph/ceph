@@ -176,7 +176,7 @@ name of the file without its filename extension as an argument to the
 ``--filter`` triggers those tests. 
 
 For example, in the command above in the :ref:`Testing QA Changes
-<teuthology_testing_qa_changes>` section, `cephfs-shell`` is specified. 
+<teuthology_testing_qa_changes>` section, ``cephfs-shell`` is specified. 
 This works because there is a file named ``cephfs-shell.yaml`` in
 ``qa/suites/fs/basic_functional/tasks/``.
 
