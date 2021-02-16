@@ -36,6 +36,7 @@
 #include "messages/MMonPaxos.h"
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
+#include "messages/MKVData.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
@@ -403,6 +404,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_GET_CONFIG:
     m = make_message<MGetConfig>();
+    break;
+  case MSG_KV_DATA:
+    m = make_message<MKVData>();
     break;
 
   case MSG_MON_PROBE:
