@@ -67,24 +67,30 @@ public:
 
   initialize_omap_ret initialize_omap(Transaction &t) final;
 
-  omap_get_value_ret omap_get_value(const omap_root_t &omap_root, Transaction &t,
-                                    const std::string &key) final;
+  omap_get_value_ret omap_get_value(
+    const omap_root_t &omap_root,
+    Transaction &t,
+    const std::string &key) final;
 
-  omap_set_key_ret omap_set_key(omap_root_t &omap_root, Transaction &t,
-                                const std::string &key, const std::string &value) final;
+  omap_set_key_ret omap_set_key(
+    omap_root_t &omap_root,
+    Transaction &t,
+    const std::string &key, const ceph::bufferlist &value) final;
 
-  omap_rm_key_ret omap_rm_key(omap_root_t &omap_root, Transaction &t,
-                              const std::string &key) final;
+  omap_rm_key_ret omap_rm_key(
+    omap_root_t &omap_root,
+    Transaction &t,
+    const std::string &key) final;
 
-  omap_list_keys_ret omap_list_keys(const omap_root_t &omap_root, Transaction &t,
-                                    std::string &start,
-                                    size_t max_result_size = MAX_SIZE) final;
+  omap_list_ret omap_list(
+    const omap_root_t &omap_root,
+    Transaction &t,
+    const std::optional<std::string> &start,
+    size_t max_result_size) final;
 
-  omap_list_ret omap_list(const omap_root_t &omap_root, Transaction &t,
-                          std::string &start,
-                          size_t max_result_size = MAX_SIZE) final;
-
-  omap_clear_ret omap_clear(omap_root_t &omap_root, Transaction &t) final;
+  omap_clear_ret omap_clear(
+    omap_root_t &omap_root,
+    Transaction &t) final;
 
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;

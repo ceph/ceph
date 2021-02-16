@@ -57,13 +57,19 @@ struct OMapInnerNode
 
   get_value_ret get_value(omap_context_t oc, const std::string &key) final;
 
-  insert_ret insert(omap_context_t oc, const std::string &key, const std::string &value) final;
+  insert_ret insert(
+    omap_context_t oc,
+    const std::string &key,
+    const ceph::bufferlist &value) final;
 
-  rm_key_ret rm_key(omap_context_t oc, const std::string &key) final;
+  rm_key_ret rm_key(
+    omap_context_t oc,
+    const std::string &key) final;
 
-  list_keys_ret list_keys(omap_context_t oc, std::string &start, size_t max_result_size) final;
-
-  list_ret list(omap_context_t oc, std::string &start, size_t max_result_size) final;
+  list_ret list(
+    omap_context_t oc,
+    const std::optional<std::string> &start,
+    size_t max_result_size) final;
 
   clear_ret clear(omap_context_t oc) final;
 
@@ -72,25 +78,29 @@ struct OMapInnerNode
           <std::tuple<OMapInnerNodeRef, OMapInnerNodeRef, std::string>>;
   split_children_ret make_split_children(omap_context_t oc);
 
-  full_merge_ret make_full_merge(omap_context_t oc, OMapNodeRef right) final;
+  full_merge_ret make_full_merge(
+    omap_context_t oc, OMapNodeRef right) final;
 
-  make_balanced_ret
-    make_balanced(omap_context_t oc, OMapNodeRef right) final;
+  make_balanced_ret make_balanced(
+    omap_context_t oc, OMapNodeRef right) final;
 
   using make_split_insert_ertr = base_ertr; 
   using make_split_insert_ret = make_split_insert_ertr::future<mutation_result_t>;
-  make_split_insert_ret make_split_insert(omap_context_t oc, internal_iterator_t iter,
-                                          std::string key, laddr_t laddr);
+  make_split_insert_ret make_split_insert(
+    omap_context_t oc, internal_iterator_t iter,
+    std::string key, laddr_t laddr);
 
   using merge_entry_ertr = base_ertr;
   using merge_entry_ret = merge_entry_ertr::future<mutation_result_t>;
-  merge_entry_ret merge_entry(omap_context_t oc,
-                              internal_iterator_t iter, OMapNodeRef entry);
+  merge_entry_ret merge_entry(
+    omap_context_t oc,
+    internal_iterator_t iter, OMapNodeRef entry);
 
   using handle_split_ertr = base_ertr;
   using handle_split_ret = handle_split_ertr::future<mutation_result_t>;
-  handle_split_ret handle_split(omap_context_t oc, internal_iterator_t iter,
-                                      mutation_result_t mresult);
+  handle_split_ret handle_split(
+    omap_context_t oc, internal_iterator_t iter,
+    mutation_result_t mresult);
 
   std::ostream &print_detail_l(std::ostream &out) const final;
 
@@ -115,9 +125,9 @@ struct OMapInnerNode
   }
 
   internal_iterator_t get_containing_child(const std::string &key);
-
 };
 using OMapInnerNodeRef = OMapInnerNode::OMapInnerNodeRef;
+
 /**
  * OMapLeafNode
  *
@@ -142,7 +152,8 @@ struct OMapLeafNode
   static constexpr extent_types_t type = extent_types_t::OMAP_LEAF;
 
   omap_node_meta_t get_node_meta() const final { return get_meta(); }
-  bool extent_will_overflow(size_t ksize, std::optional<size_t> vsize) const {
+  bool extent_will_overflow(
+    size_t ksize, std::optional<size_t> vsize) const {
     return is_overflow(ksize, *vsize);
   }
   bool extent_is_below_min() const { return below_min(); }
@@ -158,26 +169,38 @@ struct OMapLeafNode
     return is_mutation_pending() ? &delta_buffer : nullptr;
   }
 
-  get_value_ret get_value(omap_context_t oc, const std::string &key) final;
+  get_value_ret get_value(
+    omap_context_t oc, const std::string &key) final;
 
-  insert_ret insert(omap_context_t oc, const std::string &key, const std::string &value) final;
+  insert_ret insert(
+    omap_context_t oc,
+    const std::string &key,
+    const ceph::bufferlist &value) final;
 
-  rm_key_ret rm_key(omap_context_t oc, const std::string &key) final;
+  rm_key_ret rm_key(
+    omap_context_t oc, const std::string &key) final;
 
-  list_keys_ret list_keys(omap_context_t oc, std::string &start, size_t max_result_size) final;
+  list_ret list(
+    omap_context_t oc,
+    const std::optional<std::string> &start,
+    size_t max_result_size) final;
 
-  list_ret list(omap_context_t oc, std::string &start, size_t max_result_size) final;
-
-  clear_ret clear(omap_context_t oc) final;
+  clear_ret clear(
+    omap_context_t oc) final;
 
   using split_children_ertr = base_ertr;
   using split_children_ret = split_children_ertr::future
           <std::tuple<OMapLeafNodeRef, OMapLeafNodeRef, std::string>>;
-  split_children_ret make_split_children(omap_context_t oc);
+  split_children_ret make_split_children(
+    omap_context_t oc);
 
-  full_merge_ret make_full_merge(omap_context_t oc, OMapNodeRef right) final;
+  full_merge_ret make_full_merge(
+    omap_context_t oc,
+    OMapNodeRef right) final;
 
-  make_balanced_ret make_balanced(omap_context_t oc, OMapNodeRef _right) final;
+  make_balanced_ret make_balanced(
+    omap_context_t oc,
+    OMapNodeRef _right) final;
 
   extent_types_t get_type() const final {
     return type;

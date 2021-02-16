@@ -53,24 +53,30 @@ struct OMapNode : LogicalCachedExtent {
 
   using get_value_ertr = base_ertr;
   using get_value_ret = OMapManager::omap_get_value_ret;
-  virtual get_value_ret get_value(omap_context_t oc, const std::string &key) = 0;
+  virtual get_value_ret get_value(
+    omap_context_t oc,
+    const std::string &key) = 0;
 
   using insert_ertr = base_ertr;
   using insert_ret = insert_ertr::future<mutation_result_t>;
-  virtual insert_ret insert(omap_context_t oc, const std::string &key, const std::string &value) = 0;
+  virtual insert_ret insert(
+    omap_context_t oc,
+    const std::string &key,
+    const ceph::bufferlist &value) = 0;
 
   using rm_key_ertr = base_ertr;
   using rm_key_ret = rm_key_ertr::future<mutation_result_t>;
-  virtual rm_key_ret rm_key(omap_context_t oc, const std::string &key) = 0;
-
-  using list_keys_ertr = OMapManager::omap_list_keys_ertr;
-  using list_keys_ret = OMapManager::omap_list_keys_ret;
-  virtual list_keys_ret list_keys(omap_context_t oc, std::string &start,
-                                  size_t max_result_size) = 0;
+  virtual rm_key_ret rm_key(
+    omap_context_t oc,
+    const std::string &key) = 0;
 
   using list_ertr = base_ertr;
+  using list_bare_ret = OMapManager::omap_list_bare_ret;
   using list_ret = OMapManager::omap_list_ret;
-  virtual list_ret list(omap_context_t oc, std::string &start, size_t max_result_size) = 0;
+  virtual list_ret list(
+    omap_context_t oc,
+    const std::optional<std::string> &start,
+    size_t max_result_size) = 0;
 
   using clear_ertr = base_ertr;
   using clear_ret = clear_ertr::future<>;
@@ -78,15 +84,21 @@ struct OMapNode : LogicalCachedExtent {
 
   using full_merge_ertr = base_ertr;
   using full_merge_ret = full_merge_ertr::future<OMapNodeRef>;
-  virtual full_merge_ret make_full_merge(omap_context_t oc, OMapNodeRef right) = 0;
+  virtual full_merge_ret make_full_merge(
+    omap_context_t oc,
+    OMapNodeRef right) = 0;
 
   using make_balanced_ertr = base_ertr;
   using make_balanced_ret = make_balanced_ertr::future
           <std::tuple<OMapNodeRef, OMapNodeRef, std::string>>;
-  virtual make_balanced_ret make_balanced(omap_context_t oc, OMapNodeRef _right) = 0;
+  virtual make_balanced_ret make_balanced(
+    omap_context_t oc,
+    OMapNodeRef _right) = 0;
 
   virtual omap_node_meta_t get_node_meta() const = 0;
-  virtual bool extent_will_overflow(size_t ksize, std::optional<size_t> vsize) const = 0;
+  virtual bool extent_will_overflow(
+    size_t ksize,
+    std::optional<size_t> vsize) const = 0;
   virtual bool extent_is_below_min() const = 0;
   virtual uint32_t get_node_size() = 0;
 
