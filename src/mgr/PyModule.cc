@@ -150,8 +150,7 @@ void PyModuleConfig::set_config(
     const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = PyModule::config_prefix
-                                   + module_name + "/" + key;
+  const std::string global_key = "mgr/" + module_name + "/" + key;
   Command set_cmd;
   {
     std::ostringstream cmd_json;
