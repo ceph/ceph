@@ -179,7 +179,7 @@ std::map<std::string, std::string> Mgr::load_store()
     
     dout(20) << "saw key '" << key << "'" << dendl;
 
-    const std::string store_prefix = PyModule::config_prefix;
+    const std::string store_prefix = PyModule::mgr_store_prefix;
     const std::string device_prefix = "device/";
 
     if (key.substr(0, device_prefix.size()) == device_prefix ||

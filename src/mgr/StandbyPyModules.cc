@@ -20,7 +20,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/Gil.h"
 
-// For ::config_prefix
+// For ::mgr_store_prefix
 #include "PyModuleRegistry.h"
 
 #define dout_context g_ceph_context
@@ -143,7 +143,7 @@ bool StandbyPyModule::get_store(const std::string &key,
                                 std::string *value) const
 {
 
-  const std::string global_key = PyModule::config_prefix
+  const std::string global_key = PyModule::mgr_store_prefix
     + get_name() + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;
