@@ -152,7 +152,7 @@ BuildRequires:  cmake > 3.5
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
 %if 0%{with seastar}
-BuildRequires:	gcc-toolset-9-gcc-c++ >= 9.2.1-2.3
+BuildRequires:	gcc-toolset-10-gcc-c++
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -254,10 +254,10 @@ BuildRequires:  libasan
 BuildRequires:  libatomic
 %endif
 %if 0%{?rhel}
-BuildRequires:  gcc-toolset-9-annobin
-BuildRequires:  gcc-toolset-9-libubsan-devel
-BuildRequires:  gcc-toolset-9-libasan-devel
-BuildRequires:  gcc-toolset-9-libatomic-devel
+BuildRequires:  gcc-toolset-10-annobin
+BuildRequires:  gcc-toolset-10-libubsan-devel
+BuildRequires:  gcc-toolset-10-libasan-devel
+BuildRequires:  gcc-toolset-10-libatomic-devel
 %endif
 %endif
 #################################################################################
@@ -1165,7 +1165,7 @@ This package provides Ceph default alerts for Prometheus.
 %define _lto_cflags %{nil}
 
 %if 0%{with seastar} && 0%{?rhel}
-. /opt/rh/gcc-toolset-9/enable
+. /opt/rh/gcc-toolset-10/enable
 %endif
 
 %if 0%{with cephfs_java}
