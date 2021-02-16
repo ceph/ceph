@@ -70,7 +70,7 @@ dict_templ = {
                 'osd': {
                     'debug filestore': 20,
                     'debug journal': 20,
-                    'debug ms': 20,
+                    'debug ms': 1,
                     'debug osd': 25
                 }
             },
