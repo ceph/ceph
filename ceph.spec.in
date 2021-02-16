@@ -151,11 +151,8 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
-%if 0%{with seastar}
-BuildRequires:	gcc-toolset-9-gcc-c++ >= 9.2.1-2.3
-%else
-BuildRequires:	gcc-c++
-%endif
+BuildRequires:	gcc-toolset-10-gcc
+BuildRequires:	gcc-toolset-10-systemtap
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
