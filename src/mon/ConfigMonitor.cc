@@ -756,8 +756,10 @@ void ConfigMonitor::load_config()
     }
     if (!opt) {
       dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
-      // FIXME: this will be leaked!
+      config_map.stray_options.push_back(
+	std::unique_ptr<Option>(
+	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+      opt = config_map.stray_options.back().get();
     }
 
     string err;
