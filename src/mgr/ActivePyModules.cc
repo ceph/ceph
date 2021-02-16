@@ -27,6 +27,7 @@
 // For ::config_prefix
 #include "PyModule.h"
 #include "PyModuleRegistry.h"
+#include "PyUtil.h"
 
 #include "ActivePyModules.h"
 #include "DaemonKey.h"
@@ -1068,6 +1069,102 @@ PyObject *ActivePyModules::get_osdmap()
     return newmap;
   });
   return construct_with_capsule("mgr_module", "OSDMap", (void*)newmap);
+}
+
+PyObject *ActivePyModules::get_foreign_config(
+  const std::string& who,
+  const std::string& name)
+{
+  dout(10) << "ceph_foreign_option_get " << who << " " << name << dendl;
+
+  // NOTE: for now this will only work with build-in options, not module options.
+  const Option *opt = g_conf().find_option(name);
+  if (!opt) {
+    dout(4) << "ceph_foreign_option_get " << name << " not found " << dendl;
+    PyErr_Format(PyExc_KeyError, "option not found: %s", name.c_str());
+    return nullptr;
+  }
+
+  // If the monitors are not yet running pacific, we cannot rely on our local
+  // ConfigMap
+  if (!have_local_config_map) {
+    dout(20) << "mon cluster wasn't pacific when we started: falling back to 'config get'"
+	     << dendl;
+    without_gil_t no_gil;
+    Command cmd;
+    {
+      std::lock_guard l(lock);
+      cmd.run(
+	&monc,
+	"{\"prefix\": \"config get\","s +
+	"\"who\": \""s + who + "\","s +
+	"\"key\": \""s + name + "\"}");
+    }
+    cmd.wait();
+    dout(10) << "ceph_foreign_option_get (mon command) " << who << " " << name << " = "
+	     << cmd.outbl.to_str() << dendl;
+    with_gil_t gil(no_gil);
+    return get_python_typed_option_value(opt->type, cmd.outbl.to_str());
+  }
+
+  // mimic the behavor of mon/ConfigMonitor's 'config get' command
+  EntityName entity;
+  if (!entity.from_str(who) &&
+      !entity.from_str(who + ".")) {
+    dout(5) << "unrecognized entity '" << who << "'" << dendl;
+    PyErr_Format(PyExc_KeyError, "invalid entity: %s", who.c_str());
+    return nullptr;
+  }
+
+  without_gil_t no_gil;
+  lock.lock();
+
+  // FIXME: this is super inefficient, since we generate the entire daemon
+  // config just to extract one value from it!
+
+  std::map<std::string,std::string,std::less<>> config;
+  cluster_state.with_osdmap([&](const OSDMap &osdmap) {
+      map<string,string> crush_location;
+      string device_class;
+      if (entity.is_osd()) {
+	osdmap.crush->get_full_location(who, &crush_location);
+	int id = atoi(entity.get_id().c_str());
+	const char *c = osdmap.crush->get_item_class(id);
+	if (c) {
+	  device_class = c;
+	}
+	dout(10) << __func__ << " crush_location " << crush_location
+		 << " class " << device_class << dendl;
+      }
+
+      std::map<std::string,pair<std::string,const MaskedOption*>> src;
+      config = config_map.generate_entity_map(
+	entity,
+	crush_location,
+	osdmap.crush.get(),
+	device_class,
+	&src);
+    });
+
+  // get a single value
+  string value;
+  auto p = config.find(name);
+  if (p != config.end()) {
+    value = p->second;
+  } else {
+    if (!entity.is_client() &&
+	!boost::get<boost::blank>(&opt->daemon_value)) {
+      value = Option::to_str(opt->daemon_value);
+    } else {
+      value = Option::to_str(opt->value);
+    }
+  }
+
+  dout(10) << "ceph_foreign_option_get (configmap) " << who << " " << name << " = "
+	   << value << dendl;
+  lock.unlock();
+  with_gil_t with_gil(no_gil);
+  return get_python_typed_option_value(opt->type, value);
 }
 
 void ActivePyModules::set_health_checks(const std::string& module_name,

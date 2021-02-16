@@ -1358,6 +1358,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def get_ceph_option(self, key: str) -> OptionValue:
         return self._ceph_get_option(key)
 
+    def get_foreign_ceph_option(self, entity: str, key: str) -> OptionValue:
+        return self._ceph_get_foreign_option(entity, key)
+
     def _validate_module_option(self, key: str) -> None:
         """
         Helper: don't allow get/set config callers to
