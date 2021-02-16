@@ -20,7 +20,7 @@ from ceph.utils import str_to_datetime, datetime_now
 
 import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent
-from cephadm.services.cephadmservice import CephadmDaemonSpec
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_UPGRADE_ORDER, ContainerInspectInfo
@@ -734,7 +734,7 @@ class CephadmServe:
         return spec
 
     def _create_daemon(self,
-                       daemon_spec: CephadmDaemonSpec,
+                       daemon_spec: CephadmDaemonDeploySpec,
                        reconfig: bool = False,
                        osd_uuid_map: Optional[Dict[str, Any]] = None,
                        ) -> str:
@@ -751,18 +751,8 @@ class CephadmServe:
                 ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
 
                 if daemon_spec.daemon_type == 'container':
-                    spec: Optional[CustomContainerSpec] = daemon_spec.spec
-                    if spec is None:
-                        # Exit here immediately because the required service
-                        # spec to create a daemon is not provided. This is only
-                        # provided when a service is applied via 'orch apply'
-                        # command.
-                        msg = "Failed to {} daemon {} on {}: Required " \
-                              "service specification not provided".format(
-                                  'reconfigure' if reconfig else 'deploy',
-                                  daemon_spec.name(), daemon_spec.host)
-                        self.log.info(msg)
-                        return msg
+                    spec = cast(CustomContainerSpec,
+                                self.mgr.spec_store[daemon_spec.service_name].spec)
                     image = spec.image
                     if spec.ports:
                         ports.extend(spec.ports)
@@ -777,12 +767,12 @@ class CephadmServe:
                             return msg
 
                 if daemon_spec.daemon_type == 'haproxy':
-                    haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                    haspec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
                     if haspec.haproxy_container_image:
                         image = haspec.haproxy_container_image
 
                 if daemon_spec.daemon_type == 'keepalived':
-                    haspec = cast(HA_RGWSpec, daemon_spec.spec)
+                    haspec = cast(HA_RGWSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
                     if haspec.keepalived_container_image:
                         image = haspec.keepalived_container_image
 
