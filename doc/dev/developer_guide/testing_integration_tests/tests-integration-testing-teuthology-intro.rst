@@ -138,8 +138,8 @@ integration tests for all the Ceph components.
 
 `ceph-deploy man page`_
 
-teuthology-describe-tests
--------------------------
+teuthology-describe
+-------------------
 
 ``teuthology-describe`` was added to the `teuthology framework`_ to facilitate
 documentation and better understanding of integration tests.
