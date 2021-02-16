@@ -182,7 +182,7 @@ class CephadmServe:
         health_changed = False
         for k in [
                 'CEPHADM_HOST_CHECK_FAILED',
-                'CEPHADM_FAILED_DAEMON'
+                'CEPHADM_FAILED_DAEMON',
                 'CEPHADM_REFRESH_FAILED',
         ]:
             if k in self.mgr.health_checks:
