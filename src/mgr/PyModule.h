@@ -86,7 +86,7 @@ private:
   std::map<std::string, MgrMap::ModuleOption> options;
 
 public:
-  static std::string config_prefix;
+  static std::string mgr_store_prefix;
 
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
