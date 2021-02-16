@@ -164,15 +164,6 @@ non-trivial task, it `is` possible. Here are `some notes
 <https://docs.ceph.com/projects/teuthology/en/latest/LAB_SETUP.html>`_ to get
 you started if you decide to go this route.
 
-If you have access to an OpenStack tenant, you have another option: the
-`teuthology framework`_ has an OpenStack backend, which is documented `here
-<https://docs.ceph.com/projects/teuthology/en/latest/openstack_backend.html>`__.
-This OpenStack backend can build packages from a given git commit or
-branch, provision VMs, install the packages and run integration tests
-on those VMs. This process is controlled using a tool called
-``ceph-workbench ceph-qa-suite``. This tool also automates publishing of
-test results at http://teuthology-logs.public.ceph.com.
-
 Running integration tests on your code contributions and publishing the
 results allows reviewers to verify that changes to the code base do not
 cause regressions, or to analyze test failures when they do occur.
