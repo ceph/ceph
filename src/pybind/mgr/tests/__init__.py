@@ -147,6 +147,15 @@ if 'UNITTEST' in os.environ:
 
             res.complete(0, outb, '')
 
+        def _ceph_get_foreign_option(self, entity, name):
+            who = entity.split('.')
+            whos = ['global'] + ['.'.join(who[:i+1]) for i in range(len(who))]
+            for attepmt in reversed(whos):
+                val = self.mock_store_get('config', f'{attepmt}/{name}', None)
+                if val is not None:
+                    return val
+            return None
+
         def assert_issued_mon_command(self, command):
             assert command in self._mon_commands_sent, self._mon_commands_sent
 

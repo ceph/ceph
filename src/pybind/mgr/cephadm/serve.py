@@ -471,11 +471,7 @@ class CephadmServe:
 
         public_network = None
         if service_type == 'mon':
-            ret, out, err = self.mgr.check_mon_command({
-                'prefix': 'config get',
-                'who': 'mon',
-                'key': 'public_network',
-            })
+            out = str(self.mgr.get_foreign_ceph_option('mon', 'public_network'))
             if '/' in out:
                 public_network = out.strip()
                 self.log.debug('mon public_network is %s' % public_network)
