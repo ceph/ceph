@@ -44,12 +44,12 @@ struct omap_node_meta_le_t {
 };
 
 struct omap_inner_key_t {
-  int16_t key_off = 0;
-  int16_t key_len = 0;
+  uint16_t key_off = 0;
+  uint16_t key_len = 0;
   laddr_t laddr = 0;
 
   omap_inner_key_t() = default;
-  omap_inner_key_t(int16_t off, int16_t len, laddr_t addr)
+  omap_inner_key_t(uint16_t off, uint16_t len, laddr_t addr)
   : key_off(off), key_len(len), laddr(addr) {}
 
   inline bool operator==(const omap_inner_key_t b) const {
@@ -68,24 +68,24 @@ struct omap_inner_key_t {
 };
 
 struct omap_inner_key_le_t {
-  ceph_les16 key_off = init_les16(0);
-  ceph_les16 key_len = init_les16(0);
+  ceph_le16 key_off = init_le16(0);
+  ceph_le16 key_len = init_le16(0);
   laddr_le_t laddr = laddr_le_t(0);
 
   omap_inner_key_le_t() = default;
   omap_inner_key_le_t(const omap_inner_key_le_t &) = default;
   explicit omap_inner_key_le_t(const omap_inner_key_t &key)
-    : key_off(init_les16(key.key_off)),
-      key_len(init_les16(key.key_len)),
+    : key_off(init_le16(key.key_off)),
+      key_len(init_le16(key.key_len)),
       laddr(laddr_le_t(key.laddr)) {}
 
   operator omap_inner_key_t() const {
-    return omap_inner_key_t{int16_t(key_off), int16_t(key_len), laddr_t(laddr)};
+    return omap_inner_key_t{uint16_t(key_off), uint16_t(key_len), laddr_t(laddr)};
   }
 
   omap_inner_key_le_t& operator=(omap_inner_key_t key) {
-    key_off = init_les16(key.key_off);
-    key_len = init_les16(key.key_len);
+    key_off = init_le16(key.key_off);
+    key_len = init_le16(key.key_len);
     laddr = laddr_le_t(key.laddr);
     return *this;
   }
@@ -96,64 +96,59 @@ struct omap_inner_key_le_t {
 };
 
 struct omap_leaf_key_t {
-  int16_t key_off = 0;
-  int16_t key_len = 0;
-  int16_t val_off = 0;
-  int16_t val_len = 0;
+  uint16_t key_off = 0;
+  uint16_t key_len = 0;
+  uint16_t val_len = 0;
 
   omap_leaf_key_t() = default;
-  omap_leaf_key_t(int16_t k_off, int16_t k_len, int16_t v_off, int16_t v_len)
-  : key_off(k_off), key_len(k_len), val_off(v_off), val_len(v_len) {}
+  omap_leaf_key_t(uint16_t k_off, uint16_t k_len, uint16_t v_len)
+  : key_off(k_off), key_len(k_len), val_len(v_len) {}
 
   inline bool operator==(const omap_leaf_key_t b) const {
     return key_off == b.key_off && key_len == b.key_len &&
-           val_off == b.val_off && val_len == b.val_len;
+           val_len == b.val_len;
   }
   inline bool operator!=(const omap_leaf_key_t b) const {
     return key_off != b.key_off || key_len != b.key_len ||
-           val_off != b.val_off || val_len != b.val_len;
+           val_len != b.val_len;
   }
 
   DENC(omap_leaf_key_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.key_off, p);
     denc(v.key_len, p);
-    denc(v.val_off, p);
     denc(v.val_len, p);
     DENC_FINISH(p);
   }
 };
 
 struct omap_leaf_key_le_t {
-  ceph_les16 key_off = init_les16(0);
-  ceph_les16 key_len = init_les16(0);
-  ceph_les16 val_off = init_les16(0);
-  ceph_les16 val_len = init_les16(0);
+  ceph_le16 key_off = init_le16(0);
+  ceph_le16 key_len = init_le16(0);
+  ceph_le16 val_len = init_le16(0);
 
   omap_leaf_key_le_t() = default;
   omap_leaf_key_le_t(const omap_leaf_key_le_t &) = default;
   explicit omap_leaf_key_le_t(const omap_leaf_key_t &key)
-    : key_off(init_les16(key.key_off)),
-      key_len(init_les16(key.key_len)),
-      val_off(init_les16(key.val_off)),
-      val_len(init_les16(key.val_len)) {}
+    : key_off(init_le16(key.key_off)),
+      key_len(init_le16(key.key_len)),
+      val_len(init_le16(key.val_len)) {}
 
   operator omap_leaf_key_t() const {
-    return omap_leaf_key_t{int16_t(key_off), int16_t(key_len),
-                           int16_t(val_off), int16_t(val_len)};
+    return omap_leaf_key_t{uint16_t(key_off), uint16_t(key_len),
+                           uint16_t(val_len)};
   }
 
   omap_leaf_key_le_t& operator=(omap_leaf_key_t key) {
-    key_off = init_les16(key.key_off);
-    key_len = init_les16(key.key_len);
-    val_off = init_les16(key.val_off);
-    val_len = init_les16(key.val_len);
+    key_off = init_le16(key.key_off);
+    key_len = init_le16(key.key_len);
+    val_len = init_le16(key.val_len);
     return *this;
   }
 
   inline bool operator==(const omap_leaf_key_le_t b) const {
     return key_off == b.key_off && key_len == b.key_len &&
-           val_off == b.val_off && val_len == b.val_len;
+           val_len == b.val_len;
   }
 };
 
