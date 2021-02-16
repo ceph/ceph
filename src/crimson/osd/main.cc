@@ -173,7 +173,8 @@ int main(int argc, char* argv[])
     ("mkkey", "generate a new secret key. "
               "This is normally used in combination with --mkfs")
     ("mkfs", "create a [new] data directory")
-    ("debug", "enable debug output on all loggers");
+    ("debug", "enable debug output on all loggers")
+    ("no-mon-config", "do not retrieve configuration from monitors on boot");
 
   auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
   if (ceph_argparse_need_usage(ceph_args) &&
@@ -242,7 +243,9 @@ int main(int argc, char* argv[])
             seastar::engine().exit(1);
           }).get();
         }
-        fetch_config().get();
+        if (config.count("no-mon-config") == 0) {
+          fetch_config().get();
+        }
         if (config.count("mkfs")) {
           osd.invoke_on(
 	    0,
