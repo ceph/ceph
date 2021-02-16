@@ -49,4 +49,10 @@ public:
       const std::string& dmcrypt_key,
       std::stringstream& ss);
   void do_osd_new(const uuid_d& uuid, const std::string& dmcrypt_key);
+
+  void check_sub(MonSession *s);
+  void check_sub(Subscription *sub);
+  void check_all_subs();
+
+  bool maybe_send_update(Subscription *sub);
 };
