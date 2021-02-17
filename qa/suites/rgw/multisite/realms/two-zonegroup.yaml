@@ -25,3 +25,5 @@ overrides:
             endpoints: [c2.client.0]
           - name: b2
             endpoints: [c2.client.1]
+  rgw-multisite-tests:
+    args: [tests.py]
