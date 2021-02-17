@@ -1584,6 +1584,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @trivial_completion
     def service_action(self, action: str, service_name: str) -> List[str]:
         dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
+        if not dds:
+            raise OrchestratorError(f'No daemons exist under service name "{service_name}".'
+                                    + ' View currently running services using "ceph orch ls"')
         self.log.info('%s service %s' % (action.capitalize(), service_name))
         return [
             self._schedule_daemon_action(dd.name(), action)
