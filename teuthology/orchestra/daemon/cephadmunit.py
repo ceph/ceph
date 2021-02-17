@@ -120,7 +120,12 @@ class CephadmUnit(DaemonState):
         """
         if not silent:
             self.log.info('Senging signal %d to %s...' % (sig, self.name()))
-        self.remote.sh(self.kill_cmd(sig))
+        # Ignore exception here because sending a singal via docker can be
+        # quite slow and easily race with, say, the daemon shutting down.
+        try:
+            self.remote.sh(self.kill_cmd(sig))
+        except Exception as e:
+            self.log.info(f'Ignoring exception while sending signal: {e}')
 
     def start(self, timeout=300):
         """
