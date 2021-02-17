@@ -486,6 +486,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       mgr_map.dump(&f);
       return f.get();
     });
+  } else if (what == "have_local_config_map") {
+    with_gil_t with_gil{no_gil};
+    f.dump_bool("have_local_config_map", have_local_config_map);
+    return f.get();
   } else {
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     with_gil_t with_gil{no_gil};
