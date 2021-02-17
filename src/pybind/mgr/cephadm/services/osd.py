@@ -480,7 +480,6 @@ class OSD:
                  replace: bool = False,
                  force: bool = False,
                  hostname: Optional[str] = None,
-                 fullname: Optional[str] = None,
                  ):
         # the ID of the OSD
         self.osd_id = osd_id
@@ -512,8 +511,6 @@ class OSD:
         self.force = force
         # The name of the node
         self.hostname = hostname
-        # The full name of the osd
-        self.fullname = fullname
 
         # mgr obj to make mgr/mon calls
         self.rm_util: RemoveUtil = remove_util
@@ -708,21 +705,24 @@ class OSDRemovalQueue(object):
                 raise orchestrator.OrchestratorError(
                     f"Could not set OSD <{osd.osd_id}> to 'down'")
 
+            # stop and remove daemon
+            assert osd.hostname is not None
+            CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
+            logger.info(f"Successfully removed {osd} on {osd.hostname}")
+
             if osd.replace:
+                # mark destroyed in osdmap
                 if not osd.destroy():
                     raise orchestrator.OrchestratorError(
-                        f"Could not destroy OSD <{osd.osd_id}>")
+                        f"Could not destroy {osd}")
+                logger.info(f"Successfully destroyed old {osd} on {osd.hostname}; ready for replacement")
             else:
+                # purge from osdmap
                 if not osd.purge():
-                    raise orchestrator.OrchestratorError(f"Could not purge OSD <{osd.osd_id}>")
+                    raise orchestrator.OrchestratorError(f"Could not purge {osd}")
+                logger.info(f"Successfully purged {osd} on {osd.hostname}")
 
-            if not osd.exists:
-                continue
-            assert osd.fullname is not None
-            assert osd.hostname is not None
-            CephadmServe(self.mgr)._remove_daemon(osd.fullname, osd.hostname)
-            logger.info(f"Successfully removed OSD <{osd.osd_id}> on {osd.hostname}")
-            logger.debug(f"Removing {osd.osd_id} from the queue.")
+            logger.debug(f"Removing {osd} from the queue.")
 
         # self could change while this is processing (osds get added from the CLI)
         # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
