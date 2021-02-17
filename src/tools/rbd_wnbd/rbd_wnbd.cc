@@ -1345,6 +1345,7 @@ static int do_show_mapped_device(std::string format, bool pretty_format,
   }
 
   auto conn_props = conn_info.Properties;
+  cfg.active = conn_info.DiskNumber > 0 && is_process_running(conn_props.Pid);
   f->open_object_section("device");
   f->dump_int("id", conn_props.Pid ? conn_props.Pid : -1);
   f->dump_string("device", cfg.devpath);
