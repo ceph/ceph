@@ -8,6 +8,8 @@ a specific service no longer runs properly.
 As cephadm deploys daemons as containers, troubleshooting daemons is slightly
 different. Here are a few tools and commands to help investigating issues.
 
+.. _cephadm-pause:
+
 Pausing or disabling cephadm
 ----------------------------
 
@@ -26,6 +28,9 @@ completely with::
 This will disable all of the ``ceph orch ...`` CLI commands but the previously
 deployed daemon containers will still continue to exist and start as they
 did before.
+
+Please refer to :ref:`cephadm-spec-unmanaged` for disabling individual
+services.
 
 
 Per-service and per-daemon events

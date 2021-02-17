@@ -198,6 +198,8 @@ If you want to avoid this behavior (disable automatic creation of OSD on availab
 
     ceph orch apply osd --all-available-devices --unmanaged=true
 
+* For cephadm, see also :ref:`cephadm-spec-unmanaged`.
+
 Remove an OSD
 -------------
 ::
@@ -703,7 +705,7 @@ where the properties of a service specification are:
     If set to ``true``, the orchestrator will not deploy nor
     remove any daemon associated with this service. Placement and all other
     properties will be ignored. This is useful, if this service should not
-    be managed temporarily.
+    be managed temporarily. For cephadm, See :ref:`cephadm-spec-unmanaged`
 
 Each service type can have additional service specific properties.
 
