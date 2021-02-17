@@ -363,8 +363,7 @@ class NFSGanesha(object):
     @classmethod
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> NFSGanesha
-        return cls(ctx, fsid, daemon_id, get_parm(ctx.config_json),
-                                                  ctx.image)
+        return cls(ctx, fsid, daemon_id, get_parm(ctx.config_json), ctx.image)
 
     def get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
@@ -376,7 +375,7 @@ class NFSGanesha(object):
             cluster = self.rgw.get('cluster', 'ceph')
             rgw_user = self.rgw.get('user', 'admin')
             mounts[os.path.join(data_dir, 'keyring.rgw')] = \
-                    '/var/lib/ceph/radosgw/%s-%s/keyring:z' % (cluster, rgw_user)
+                '/var/lib/ceph/radosgw/%s-%s/keyring:z' % (cluster, rgw_user)
         return mounts
 
     @staticmethod
@@ -3382,8 +3381,8 @@ def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
         ipv6_cluster_network = True if 6 in versions else False
     else:
         logger.info("- internal network (--cluster-network) has not "
-                       "been provided, OSD replication will default to "
-                       "the public_network")
+                    "been provided, OSD replication will default to "
+                    "the public_network")
 
     return cluster_network, ipv6_cluster_network
 
@@ -3434,8 +3433,8 @@ def create_initial_keys(
                % (mon_key, admin_key, mgr_id, mgr_key))
 
     admin_keyring = write_tmp('[client.admin]\n'
-                                  '\tkey = ' + admin_key + '\n',
-                                       uid, gid)
+                              '\tkey = ' + admin_key + '\n',
+                              uid, gid)
 
     # tmp keyring file
     bootstrap_keyring = write_tmp(keyring, uid, gid)
@@ -3815,7 +3814,7 @@ def command_bootstrap(ctx):
         ctx.output_config = os.path.join(ctx.output_dir, 'ceph.conf')
     if not ctx.output_keyring:
         ctx.output_keyring = os.path.join(ctx.output_dir,
-                                           'ceph.client.admin.keyring')
+                                          'ceph.client.admin.keyring')
     if not ctx.output_pub_ssh_key:
         ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, 'ceph.pub')
 
@@ -3825,7 +3824,7 @@ def command_bootstrap(ctx):
         if not ctx.allow_overwrite:
             if os.path.exists(f):
                 raise Error('%s already exists; delete or pass '
-                              '--allow-overwrite to overwrite' % f)
+                            '--allow-overwrite to overwrite' % f)
         dirname = os.path.dirname(f)
         if dirname and not os.path.exists(dirname):
             fname = os.path.basename(f)
@@ -4025,18 +4024,18 @@ def command_registry_login(ctx: CephadmContext):
             registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
         else:
             raise Error("json provided for custom registry login did not include all necessary fields. "
-                            "Please setup json file as\n"
-                            "{\n"
-                              " \"url\": \"REGISTRY_URL\",\n"
-                              " \"username\": \"REGISTRY_USERNAME\",\n"
-                              " \"password\": \"REGISTRY_PASSWORD\"\n"
-                            "}\n")
+                        "Please setup json file as\n"
+                        "{\n"
+                        " \"url\": \"REGISTRY_URL\",\n"
+                        " \"username\": \"REGISTRY_USERNAME\",\n"
+                        " \"password\": \"REGISTRY_PASSWORD\"\n"
+                        "}\n")
     elif ctx.registry_url and ctx.registry_username and ctx.registry_password:
         registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
     else:
         raise Error("Invalid custom registry arguments received. To login to a custom registry include "
-                        "--registry-url, --registry-username and --registry-password "
-                        "options or --registry-json option")
+                    "--registry-url, --registry-username and --registry-password "
+                    "options or --registry-json option")
     return 0
 
 def registry_login(ctx: CephadmContext, url, username, password):
@@ -4975,7 +4974,7 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
     # logs
     logger.info('Moving logs...')
     log_dir_src = ('/var/log/ceph/%s-%s.%s.log*' %
-                    (ctx.cluster, daemon_type, daemon_id))
+                   (ctx.cluster, daemon_type, daemon_id))
     log_dir_src = os.path.abspath(ctx.legacy_dir + log_dir_src)
     log_dir_dst = make_log_dir(ctx, fsid, uid=uid, gid=gid)
     move_files(ctx, glob(log_dir_src),
@@ -5000,7 +4999,7 @@ def command_adopt_prometheus(ctx, daemon_id, fsid):
     _stop_and_disable(ctx, 'prometheus')
 
     data_dir_dst = make_data_dir(ctx, fsid, daemon_type, daemon_id,
-                                     uid=uid, gid=gid)
+                                 uid=uid, gid=gid)
 
     # config
     config_src = '/etc/prometheus/prometheus.yml'
@@ -5030,7 +5029,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
     _stop_and_disable(ctx, 'grafana-server')
 
     data_dir_dst = make_data_dir(ctx, fsid, daemon_type, daemon_id,
-                                     uid=uid, gid=gid)
+                                 uid=uid, gid=gid)
 
     # config
     config_src = '/etc/grafana/grafana.ini'
@@ -5084,7 +5083,7 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
     _stop_and_disable(ctx, 'prometheus-alertmanager')
 
     data_dir_dst = make_data_dir(ctx, fsid, daemon_type, daemon_id,
-                                     uid=uid, gid=gid)
+                                 uid=uid, gid=gid)
 
     # config
     config_src = '/etc/prometheus/alertmanager.yml'
@@ -5154,7 +5153,7 @@ def command_rm_daemon(ctx):
 
     if daemon_type in ['mon', 'osd'] and not ctx.force:
         raise Error('must pass --force to proceed: '
-                      'this command may destroy precious data!')
+                    'this command may destroy precious data!')
 
     call(ctx, ['systemctl', 'stop', unit_name],
          verbosity=CallVerbosity.DEBUG)
@@ -5185,7 +5184,7 @@ def command_rm_cluster(ctx):
     # type: (CephadmContext) -> None
     if not ctx.force:
         raise Error('must pass --force to proceed: '
-                      'this command may destroy precious data!')
+                    'this command may destroy precious data!')
 
     l = FileLock(ctx, ctx.fsid)
     l.acquire()
@@ -5213,16 +5212,15 @@ def command_rm_cluster(ctx):
         call(ctx, ['systemctl', 'disable', unit_name],
              verbosity=CallVerbosity.DEBUG)
 
-    slice_name = 'system-%s.slice' % (('ceph-%s' % ctx.fsid).replace('-',
-                                                                      '\\x2d'))
+    slice_name = 'system-%s.slice' % (('ceph-%s' % ctx.fsid).replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
          verbosity=CallVerbosity.DEBUG)
 
     # rm units
     call_throws(ctx, ['rm', '-f', ctx.unit_dir +
-                             '/ceph-%s@.service' % ctx.fsid])
+                      '/ceph-%s@.service' % ctx.fsid])
     call_throws(ctx, ['rm', '-f', ctx.unit_dir +
-                             '/ceph-%s.target' % ctx.fsid])
+                      '/ceph-%s.target' % ctx.fsid])
     call_throws(ctx, ['rm', '-rf',
                   ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
     # rm data
@@ -5230,7 +5228,7 @@ def command_rm_cluster(ctx):
     # rm logs
     call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
     call_throws(ctx, ['rm', '-rf', ctx.log_dir +
-                             '/*.wants/ceph-%s@*' % ctx.fsid])
+                      '/*.wants/ceph-%s@*' % ctx.fsid])
     # rm logrotate config
     call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
 
