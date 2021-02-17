@@ -361,8 +361,8 @@ class NFSGanesha(object):
         # type: (CephadmContext, str) -> Optional[str]
         version = None
         out, err, code = call(ctx,
-            [ctx.container_path, 'exec', container_id,
-             NFSGanesha.entrypoint, '-v'])
+                              [ctx.container_path, 'exec', container_id,
+                               NFSGanesha.entrypoint, '-v'])
         if code == 0:
             match = re.search(r'NFS-Ganesha Release\s*=\s*[V]*([\d.]+)', out)
             if match:
@@ -522,8 +522,8 @@ class CephIscsi(object):
         # type: (CephadmContext, str) -> Optional[str]
         version = None
         out, err, code = call(ctx,
-            [ctx.container_path, 'exec', container_id,
-             '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"])
+                              [ctx.container_path, 'exec', container_id,
+                               '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"])
         if code == 0:
             version = out.strip()
         return version
@@ -1383,7 +1383,7 @@ def call_throws(
 def call_timeout(ctx, command, timeout):
     # type: (CephadmContext, List[str], int) -> int
     logger.debug('Running command (timeout=%s): %s'
-            % (timeout, ' '.join(command)))
+                 % (timeout, ' '.join(command)))
 
     def raise_timeout(command, timeout):
         # type: (List[str], int) -> NoReturn
@@ -1417,10 +1417,10 @@ def is_available(ctx, what, func):
             break
         elif num > retry:
             raise Error('%s not available after %s tries'
-                    % (what, retry))
+                        % (what, retry))
 
         logger.info('%s not available, waiting (%s/%s)...'
-                % (what, num, retry))
+                    % (what, num, retry))
 
         num += 1
         time.sleep(2)
@@ -1692,10 +1692,10 @@ def get_last_local_ceph_image(ctx: CephadmContext, container_path: str):
     :return: The most recent local ceph image (already pulled)
     """
     out, _, _ = call_throws(ctx,
-        [container_path, 'images',
-         '--filter', 'label=ceph=True',
-         '--filter', 'dangling=false',
-         '--format', '{{.Repository}}@{{.Digest}}'])
+                            [container_path, 'images',
+                             '--filter', 'label=ceph=True',
+                             '--filter', 'dangling=false',
+                             '--format', '{{.Repository}}@{{.Digest}}'])
     return _filter_last_local_ceph_image(out)
 
 
@@ -1771,7 +1771,7 @@ def make_log_dir(ctx, fsid, uid=None, gid=None):
 def make_var_run(ctx, fsid, uid, gid):
     # type: (CephadmContext, str, int, int) -> None
     call_throws(ctx, ['install', '-d', '-m0770', '-o', str(uid), '-g', str(gid),
-                 '/var/run/ceph/%s' % fsid])
+                      '/var/run/ceph/%s' % fsid])
 
 
 def copy_tree(ctx, src, dst, uid=None, gid=None):
@@ -2273,8 +2273,8 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
                 mounts[ceph_folder + '/monitoring/prometheus/alerts'] = '/etc/prometheus/ceph'
             else:
                 logger.error('{}{}{}'.format(termcolor.red,
-                'Ceph shared source folder does not exist.',
-                termcolor.end))
+                                             'Ceph shared source folder does not exist.',
+                                             termcolor.end))
     except AttributeError:
         pass
 
@@ -2548,9 +2548,9 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         # ceph daemons do not need a restart; others (presumably) do to pick
         # up the new config
         call_throws(ctx, ['systemctl', 'reset-failed',
-                     get_unit_name(fsid, daemon_type, daemon_id)])
+                          get_unit_name(fsid, daemon_type, daemon_id)])
         call_throws(ctx, ['systemctl', 'restart',
-                     get_unit_name(fsid, daemon_type, daemon_id)])
+                          get_unit_name(fsid, daemon_type, daemon_id)])
 
 def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, background=False):
     # type: (CephadmContext, IO[str], CephContainer, Optional[str], Optional[bool]) -> None
@@ -2688,7 +2688,7 @@ def deploy_daemon_units(
             f.write(c.image + '\n')
             os.fchmod(f.fileno(), 0o600)
             os.rename(data_dir + '/unit.image.new',
-                    data_dir + '/unit.image')
+                      data_dir + '/unit.image')
 
     # systemd
     install_base_units(ctx, fsid)
@@ -2780,7 +2780,7 @@ class Firewalld(object):
                 out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--add-port', tcp_port])
                 if ret:
                     raise RuntimeError('unable to add port %s to current zone: %s' %
-                                    (tcp_port, err))
+                                       (tcp_port, err))
             else:
                 logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
 
@@ -2801,7 +2801,7 @@ class Firewalld(object):
                 out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--remove-port', tcp_port])
                 if ret:
                     raise RuntimeError('unable to remove port %s from current zone: %s' %
-                                    (tcp_port, err))
+                                       (tcp_port, err))
                 else:
                     logger.info(f"Port {tcp_port} disabled")
             else:
@@ -2907,9 +2907,9 @@ def get_unit_file(ctx, fsid):
     extra_args = ''
     if 'podman' in ctx.container_path:
         extra_args = ('ExecStartPre=-/bin/rm -f /%t/%n-pid /%t/%n-cid\n'
-            'ExecStopPost=-/bin/rm -f /%t/%n-pid /%t/%n-cid\n'
-            'Type=forking\n'
-            'PIDFile=/%t/%n-pid\n')
+                      'ExecStopPost=-/bin/rm -f /%t/%n-pid /%t/%n-cid\n'
+                      'Type=forking\n'
+                      'PIDFile=/%t/%n-pid\n')
 
     u = """# generated by cephadm
 [Unit]
@@ -3826,7 +3826,7 @@ def command_bootstrap(ctx):
     monmap = create_initial_monmap(ctx, uid, gid, fsid, mon_id, addr_arg)
     (mon_dir, log_dir) = \
         prepare_create_mon(ctx, uid, gid, fsid, mon_id,
-                   bootstrap_keyring.name, monmap.name)
+                           bootstrap_keyring.name, monmap.name)
 
     with open(mon_dir + '/config', 'w') as f:
         os.fchown(f.fileno(), uid, gid)
@@ -4532,8 +4532,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         continue
                     (cluster, daemon_id) = j.split('-', 1)
                     fsid = get_legacy_daemon_fsid(ctx,
-                            cluster, daemon_type, daemon_id,
-                            legacy_dir=legacy_dir)
+                                                  cluster, daemon_type, daemon_id,
+                                                  legacy_dir=legacy_dir)
                     legacy_unit_name = 'ceph-%s@%s' % (daemon_type, daemon_id)
                     val: Dict[str, Any] = {
                         'style': 'legacy',
@@ -4581,13 +4581,12 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                         version = None
                         start_stamp = None
 
-                        out, err, code = call(ctx,
-                            [
-                                container_path, 'inspect',
-                                '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
-                                'ceph-%s-%s' % (fsid, j)
-                            ],
-                            verbosity=CallVerbosity.DEBUG)
+                        cmd = [
+                            container_path, 'inspect',
+                            '--format', '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+                            'ceph-%s-%s' % (fsid, j)
+                        ]
+                        out, err, code = call(ctx, cmd, verbosity=CallVerbosity.DEBUG)
                         if not code:
                             (container_id, image_name, image_id, start,
                              version) = out.strip().split(',')
@@ -4619,16 +4618,16 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             elif not version:
                                 if daemon_type in Ceph.daemons:
                                     out, err, code = call(ctx,
-                                        [container_path, 'exec', container_id,
-                                         'ceph', '-v'])
+                                                          [container_path, 'exec', container_id,
+                                                           'ceph', '-v'])
                                     if not code and \
                                        out.startswith('ceph version '):
                                         version = out.split(' ')[2]
                                         seen_versions[image_id] = version
                                 elif daemon_type == 'grafana':
                                     out, err, code = call(ctx,
-                                        [container_path, 'exec', container_id,
-                                         'grafana-server', '-v'])
+                                                          [container_path, 'exec', container_id,
+                                                           'grafana-server', '-v'])
                                     if not code and \
                                        out.startswith('Version '):
                                         version = out.split(' ')[1]
@@ -4638,24 +4637,24 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                                      'node-exporter']:
                                     cmd = daemon_type.replace('-', '_')
                                     out, err, code = call(ctx,
-                                        [container_path, 'exec', container_id,
-                                         cmd, '--version'])
+                                                          [container_path, 'exec', container_id,
+                                                           cmd, '--version'])
                                     if not code and \
                                        err.startswith('%s, version ' % cmd):
                                         version = err.split(' ')[2]
                                         seen_versions[image_id] = version
                                 elif daemon_type == 'haproxy':
                                     out, err, code = call(ctx,
-                                        [container_path, 'exec', container_id,
-                                         'haproxy', '-v'])
+                                                          [container_path, 'exec', container_id,
+                                                           'haproxy', '-v'])
                                     if not code and \
                                        out.startswith('HA-Proxy version '):
                                         version = out.split(' ')[2]
                                         seen_versions[image_id] = version
                                 elif daemon_type == 'keepalived':
                                     out, err, code = call(ctx,
-                                        [container_path, 'exec', container_id,
-                                         'keepalived', '--version'])
+                                                          [container_path, 'exec', container_id,
+                                                           'keepalived', '--version'])
                                     if not code and \
                                        err.startswith('Keepalived '):
                                         version = err.split(' ')[1]
@@ -4923,13 +4922,13 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
             os.rename(simple_fn, new_fn)
             logger.info('Disabling host unit ceph-volume@ simple unit...')
             call(ctx, ['systemctl', 'disable',
-                  'ceph-volume@simple-%s-%s.service' % (daemon_id, osd_fsid)])
+                       'ceph-volume@simple-%s-%s.service' % (daemon_id, osd_fsid)])
         else:
             # assume this is an 'lvm' c-v for now, but don't error
             # out if it's not.
             logger.info('Disabling host unit ceph-volume@ lvm unit...')
             call(ctx, ['systemctl', 'disable',
-                  'ceph-volume@lvm-%s-%s.service' % (daemon_id, osd_fsid)])
+                       'ceph-volume@lvm-%s-%s.service' % (daemon_id, osd_fsid)])
 
     # config
     config_src = '/etc/ceph/%s.conf' % (ctx.cluster)
@@ -5087,9 +5086,9 @@ def _adjust_grafana_ini(filename):
                     server_section=True
                 if server_section:
                     line = re.sub(r'^cert_file.*',
-                            'cert_file = /etc/grafana/certs/cert_file', line)
+                                  'cert_file = /etc/grafana/certs/cert_file', line)
                     line = re.sub(r'^cert_key.*',
-                            'cert_key = /etc/grafana/certs/cert_key', line)
+                                  'cert_key = /etc/grafana/certs/cert_key', line)
                 grafana_ini.write(line)
         os.rename("{}.new".format(filename), filename)
     except OSError as err:
@@ -5188,7 +5187,7 @@ def command_rm_cluster(ctx):
     call_throws(ctx, ['rm', '-f', ctx.unit_dir +
                       '/ceph-%s.target' % ctx.fsid])
     call_throws(ctx, ['rm', '-rf',
-                  ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
+                      ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
     # rm data
     call_throws(ctx, ['rm', '-rf', ctx.data_dir + '/' + ctx.fsid])
     # rm logs
@@ -5778,7 +5777,7 @@ def create_packager(ctx: CephadmContext,
     if distro in YumDnf.DISTRO_NAMES:
         return YumDnf(ctx, stable=stable, version=version,
                       branch=branch, commit=commit,
-                   distro=distro, distro_version=distro_version)
+                      distro=distro, distro_version=distro_version)
     elif distro in Apt.DISTRO_NAMES:
         return Apt(ctx, stable=stable, version=version,
                    branch=branch, commit=commit,
@@ -6996,7 +6995,7 @@ WantedBy=ceph-{fsid}.target
 
         with open(
                 os.path.join(self.ctx.unit_dir,
-                f"{self.unit_name}.new"),
+                             f"{self.unit_name}.new"),
                 "w"
         ) as f:
             f.write(self.unit_file)
@@ -7006,9 +7005,9 @@ WantedBy=ceph-{fsid}.target
         
         call_throws(self.ctx, ['systemctl', 'daemon-reload'])
         call(self.ctx, ['systemctl', 'stop', self.unit_name],
-            verbosity=CallVerbosity.DEBUG)
+             verbosity=CallVerbosity.DEBUG)
         call(self.ctx, ['systemctl', 'reset-failed', self.unit_name],
-            verbosity=CallVerbosity.DEBUG)
+             verbosity=CallVerbosity.DEBUG)
         call_throws(self.ctx, ['systemctl', 'enable', '--now', self.unit_name])
 
     @classmethod
@@ -7083,18 +7082,16 @@ def command_maintenance(ctx: CephadmContext):
         logger.info("Requested to place host into maintenance")
         if systemd_target_state(target):
             _out, _err, code = call(ctx,
-                ['systemctl', 'disable', target],
-                verbosity=CallVerbosity.DEBUG
-            )
+                                    ['systemctl', 'disable', target],
+                                    verbosity=CallVerbosity.DEBUG)
             if code:
                 logger.error(f"Failed to disable the {target} target")
                 return "failed - to disable the target"
             else:
                 # stopping a target waits by default
                 _out, _err, code = call(ctx,
-                    ['systemctl', 'stop', target],
-                    verbosity=CallVerbosity.DEBUG
-                )
+                                        ['systemctl', 'stop', target],
+                                        verbosity=CallVerbosity.DEBUG)
                 if code:
                     logger.error(f"Failed to stop the {target} target")
                     return "failed - to disable the target"
@@ -7109,18 +7106,16 @@ def command_maintenance(ctx: CephadmContext):
         # exit maintenance request
         if not systemd_target_state(target):
             _out, _err, code = call(ctx,
-                ['systemctl', 'enable', target],
-                verbosity=CallVerbosity.DEBUG
-            )
+                                    ['systemctl', 'enable', target],
+                                    verbosity=CallVerbosity.DEBUG)
             if code:
                 logger.error(f"Failed to enable the {target} target")
                 return "failed - unable to enable the target"
             else:
                 # starting a target waits by default
                 _out, _err, code = call(ctx,
-                    ['systemctl', 'start', target],
-                    verbosity=CallVerbosity.DEBUG
-                )
+                                        ['systemctl', 'start', target],
+                                        verbosity=CallVerbosity.DEBUG)
                 if code:
                     logger.error(f"Failed to start the {target} target")
                     return "failed - unable to start the target"
