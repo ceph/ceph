@@ -3903,7 +3903,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
 
-  neo::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this->store, dest_bucket, nullptr, user_id,
                                   obj_ctx, dest_obj->clone(), olh_epoch,
@@ -4564,7 +4564,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
-  neo::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   // do not change the null_yield in the initialization of this AtomicObjectProcessor
   // it causes crashes in the ragweed tests
@@ -6459,17 +6459,17 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl,
 struct get_obj_data {
   RGWRados* store;
   RGWGetDataCB* client_cb;
-  neo::Aio* aio;
+  rgw::Aio* aio;
   uint64_t offset; // next offset to write to client
-  neo::AioResultList completed; // completed read results, sorted by offset
+  rgw::AioResultList completed; // completed read results, sorted by offset
   optional_yield yield;
 
-  get_obj_data(RGWRados* store, RGWGetDataCB* cb, neo::Aio* aio,
+  get_obj_data(RGWRados* store, RGWGetDataCB* cb, rgw::Aio* aio,
                uint64_t offset, optional_yield yield)
     : store(store), client_cb(cb), aio(aio), offset(offset), yield(yield) {}
 
-  int flush(neo::AioResultList&& results) {
-    auto ec = neo::check_for_errors(results);
+  int flush(rgw::AioResultList&& results) {
+    auto ec = rgw::check_for_errors(results);
     if (ec) {
       return ceph::from_error_code(ec);
     }
@@ -6480,7 +6480,7 @@ struct get_obj_data {
 
     while (!completed.empty() && completed.front().id == offset) {
       auto bl = std::move(completed.front().data);
-      completed.pop_front_and_dispose(std::default_delete<neo::AioResultEntry>{});
+      completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
 
       offset += bl.length();
       int r = client_cb->handle_data(bl, 0, bl.length());
@@ -6566,7 +6566,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
   auto completed = d->aio->get(std::move(*ref),
-			       neo::Aio::rados_op(std::move(op), d->yield),
+			       rgw::Aio::rados_op(std::move(op), d->yield),
 			       cost, id);
 
   return d->flush(std::move(completed));
@@ -6581,7 +6581,7 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
-  auto aio = neo::make_throttle(window_size, y);
+  auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
   int r = store->iterate_obj(dpp, obj_ctx, source->get_bucket_info(), state.obj,

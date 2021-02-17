@@ -61,7 +61,7 @@ int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)
 }
 
 
-static int process_completed(const neo::AioResultList& completed,
+static int process_completed(const rgw::AioResultList& completed,
 			     ObjSet *written)
 {
   std::optional<int> error;
@@ -100,7 +100,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     op.write(offset, std::move(data));
   }
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, neo::Aio::rados_op(std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj, rgw::Aio::rados_op(std::move(op), y), cost, id);
   return process_completed(c, &written);
 }
 
@@ -113,7 +113,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.write_full(bufferlist(data));
 
   constexpr uint64_t id = 0; // unused
-  auto c = aio->get(stripe_obj, neo::Aio::rados_op(std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj, rgw::Aio::rados_op(std::move(op), y), cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
