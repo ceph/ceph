@@ -233,7 +233,7 @@ groups:
             rate of the past 48 hours.
 
       - alert: MTU Mismatch
-        expr: node_network_mtu_bytes{device!="lo"} != on(device) group_left() (quantile(0.5, node_network_mtu_bytes{device!="lo"}) by (device))
+        expr: node_network_mtu_bytes{device!="lo"} != on() group_left() (quantile(0.5, node_network_mtu_bytes{device!="lo"}))
         labels:
           severity: warning
           type: ceph_default
