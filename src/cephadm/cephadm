@@ -3669,8 +3669,6 @@ def prepare_ssh(
         cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
-        logger.info('Enabling mgr prometheus module...')
-        cli(['mgr', 'module', 'enable', 'prometheus'])
         for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
             cli(['orch', 'apply', t])

@@ -6,7 +6,7 @@ from typing import List, Any, Tuple, Dict, Optional, cast
 from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AlertManagerSpec
+from ceph.deployment.service_spec import AlertManagerSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert
 
@@ -192,15 +192,20 @@ class PrometheusService(CephadmService):
     TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
 
+    def config(self, spec: ServiceSpec, daemon_id: str) -> None:
+        mgr_map = self.mgr.get('mgr_map')
+        if 'prometheus' not in mgr_map.get('services', {}):
+            self.mgr.check_mon_command({
+                'prefix': 'mgr module enable',
+                'module': 'prometheus'
+            })
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
-    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
-        assert self.TYPE == daemon_spec.daemon_type
-        deps = []  # type: List[str]
-
+    def get_mgr_scrape_list(self) -> List[str]:
         # scrape mgrs
         mgr_scrape_list = []
         mgr_map = self.mgr.get('mgr_map')
@@ -215,9 +220,6 @@ class PrometheusService(CephadmService):
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
-            # we consider the mgr a dep even if the prometheus module is
-            # disabled in order to be consistent with _calc_daemon_deps().
-            deps.append(dd.name())
             if not port:
                 continue
             if dd.daemon_id == self.mgr.get_mgr_id():
@@ -225,6 +227,18 @@ class PrometheusService(CephadmService):
             assert dd.hostname is not None
             addr = self.mgr.inventory.get_addr(dd.hostname)
             mgr_scrape_list.append(addr.split(':')[0] + ':' + port)
+        return mgr_scrape_list
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        assert self.TYPE == daemon_spec.daemon_type
+        deps = []  # type: List[str]
+
+        # scrape mgrs
+        mgr_scrape_list = self.get_mgr_scrape_list()
+        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            # we consider the mgr a dep even if the prometheus module is
+            # disabled in order to be consistent with _calc_daemon_deps().
+            deps.append(dd.name())
 
         # scrape node exporters
         nodes = []

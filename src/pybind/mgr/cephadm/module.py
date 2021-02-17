@@ -432,6 +432,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.requires_post_actions: Set[str] = set()
 
+        self.prometheus_scrape_list = self.prometheus_service.get_mgr_scrape_list()
+
     def shutdown(self) -> None:
         self.log.debug('shutdown')
         self._worker_pool.close()
@@ -497,6 +499,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 self._kick_serve_loop()
         if notify_type == "pg_summary":
             self._trigger_osd_removal()
+        if notify_type == 'mgr_map':
+            old_prometheus_scrape_list = self.prometheus_scrape_list
+            new_prometheus_scrape_list = self.prometheus_service.get_mgr_scrape_list()
+            if old_prometheus_scrape_list != new_prometheus_scrape_list:
+                self.prometheus_scrape_list = new_prometheus_scrape_list
+                if self.cache.get_daemons_by_type('prometheus'):
+                    self._service_action('redeploy', 'prometheus')
 
     def _trigger_osd_removal(self) -> None:
         data = self.get("osd_stats")
@@ -1574,6 +1583,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     @handle_orch_error
     def service_action(self, action: str, service_name: str) -> List[str]:
+        return self._service_action(action, service_name)
+
+    def _service_action(self, action: str, service_name: str) -> List[str]:
         dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
         if not dds:
             raise OrchestratorError(f'No daemons exist under service name "{service_name}".'

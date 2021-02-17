@@ -46,12 +46,6 @@ did not do this (by passing ``--skip-monitoring-stack``, or if you
 converted an existing cluster to cephadm management, you can set up
 monitoring by following the steps below.
 
-#. Enable the prometheus module in the ceph-mgr daemon.  This exposes the internal Ceph metrics so that prometheus can scrape them.
-
-   .. code-block:: bash
-
-     ceph mgr module enable prometheus
-
 #. Deploy a node-exporter service on every node of the cluster.  The node-exporter provides host-level metrics like CPU and memory utilization.
 
    .. code-block:: bash
