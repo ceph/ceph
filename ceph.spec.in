@@ -1283,8 +1283,7 @@ cat ./CMakeFiles/CMakeOutput.log
 cat ./CMakeFiles/CMakeError.log
 %endif
 
-make %{_smp_mflags}
-
+%make_build
 
 %if 0%{with make_check}
 %check
