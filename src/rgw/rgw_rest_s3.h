@@ -939,7 +939,7 @@ private:
 
   std::unique_ptr<boost::crc_32_type> crc32;
 
-  int create_message(char* buff, u_int32_t result_len, u_int32_t header_len);
+  int create_message(std::string&, u_int32_t result_len, u_int32_t header_len);
 
   int run_s3select(const char* query, const char* input, size_t input_length);
 

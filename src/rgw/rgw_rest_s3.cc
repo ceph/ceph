@@ -6029,6 +6029,9 @@ int RGWSelectObj_ObjStore_S3::create_header_records(char* buff)
 {
   int i = 0;
 
+  //headers description(AWS)
+  //[header-name-byte-length:1][header-name:variable-length][header-value-type:1][header-value:variable-length]
+  
   //1
   buff[i++] = char(strlen(header_name_str[EVENT_TYPE]));
   memcpy(&buff[i], header_name_str[EVENT_TYPE], strlen(header_name_str[EVENT_TYPE]));
@@ -6059,34 +6062,42 @@ int RGWSelectObj_ObjStore_S3::create_header_records(char* buff)
   return i;
 }
 
-int RGWSelectObj_ObjStore_S3::create_message(char* buff, u_int32_t result_len, u_int32_t header_len)
+int RGWSelectObj_ObjStore_S3::create_message(std::string &out_string, u_int32_t result_len, u_int32_t header_len)
 {
+  //message description(AWS): 
+  //[total-byte-length:4][header-byte-length:4][crc:4][headers:variable-length][payload:variable-length][crc:4]
+  //s3select result is produced into m_result, the m_result is also the response-message, thus the attach headers and CRC 
+  //are created later to the produced SQL result, and actually wrapping the payload.
+
   u_int32_t total_byte_len = 0;
   u_int32_t preload_crc = 0;
   u_int32_t message_crc = 0;
   int i = 0;
+  char * buff = out_string.data();
 
   if(crc32 ==0) {
     // the parameters are according to CRC-32 algorithm and its aligned with AWS-cli checksum
     crc32 = std::unique_ptr<boost::crc_32_type>(new boost::crc_optimal<32, 0x04C11DB7, 0xFFFFFFFF, 0xFFFFFFFF, true, true>);
   }
 
-  total_byte_len = result_len + 16;
+  total_byte_len = result_len + 16;//the total is greater in 4 bytes than current size
 
-  encode_int(&buff[i], total_byte_len, i);
+  encode_int(&buff[i], total_byte_len, i);//store sizes at the beginning of the buffer
   encode_int(&buff[i], header_len, i);
 
   crc32->reset();
-  *crc32 = std::for_each( buff, buff + 8, *crc32 );
+  *crc32 = std::for_each( buff, buff + 8, *crc32 );//crc for starting 8 bytes
   preload_crc = (*crc32)();
   encode_int(&buff[i], preload_crc, i);
 
-  i += result_len;
+  i += result_len;//advance to the end of payload.
 
   crc32->reset();
-  *crc32 = std::for_each( buff, buff + i, *crc32 );
+  *crc32 = std::for_each( buff, buff + i, *crc32 );//crc for payload + checksum
   message_crc = (*crc32)();
-  encode_int(&buff[i], message_crc, i);
+  char out_encode[4];
+  encode_int(out_encode, message_crc, i);
+  out_string.append(out_encode,sizeof(out_encode));
 
   return i;
 }
@@ -6132,18 +6143,16 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
     m_s3_csv_object = std::unique_ptr<s3selectEngine::csv_object>(new s3selectEngine::csv_object(s3select_syntax.get(), csv));
   }
 
+  header_size = create_header_records(m_buff_header.get());
+  m_result.append(m_buff_header.get(), header_size);
+  m_result.append(PAYLOAD_LINE);
+
   if (s3select_syntax->get_error_description().empty() == false) {
-    header_size = create_header_records(m_buff_header.get());
-    m_result.append(m_buff_header.get(), header_size);
-    m_result.append(PAYLOAD_LINE);
     m_result.append(s3select_syntax->get_error_description());
     ldout(s->cct, 10) << "s3-select query: failed to prase query; {" << s3select_syntax->get_error_description() << "}"<< dendl;
     status = -1;
   }
   else {
-    header_size = create_header_records(m_buff_header.get());
-    m_result.append(m_buff_header.get(), header_size);
-    m_result.append(PAYLOAD_LINE);
     status = m_s3_csv_object->run_s3select_on_stream(m_result, input, input_length, s->obj_size);
     if(status<0) {
       m_result.append(m_s3_csv_object->get_error_description());
@@ -6152,7 +6161,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select(const char* query, const char* input,
 
   if (m_result.size() > strlen(PAYLOAD_LINE)) {
     m_result.append(END_PAYLOAD_LINE);
-    int buff_len = create_message(m_result.data(), m_result.size() - 12, header_size);
+    int buff_len = create_message(m_result, m_result.size() - 12, header_size);
     s->formatter->write_bin_data(m_result.data(), buff_len);
     if (op_ret < 0) {
       return op_ret;
