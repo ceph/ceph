@@ -399,6 +399,34 @@ class RemoveUtil(object):
         self.mgr.log.info(f"OSDs <{osds}> are now <{flag}>")
         return True
 
+    def get_weight(self, osd: "OSD") -> Optional[float]:
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'osd crush tree',
+            'format': 'json',
+        })
+        if ret != 0:
+            self.mgr.log.error(f"Could not dump crush weights. <{err}>")
+            return None
+        j = json.loads(out)
+        for n in j.get("nodes", []):
+            if n.get("name") == f"osd.{osd.osd_id}":
+                self.mgr.log.info(f"{osd} crush weight is {n.get('crush_weight')}")
+                return n.get("crush_weight")
+        return None
+
+    def reweight_osd(self, osd: "OSD", weight: float) -> bool:
+        self.mgr.log.debug(f"running cmd: osd crush reweight on {osd}")
+        ret, out, err = self.mgr.mon_command({
+            'prefix': "osd crush reweight",
+            'name': f"osd.{osd.osd_id}",
+            'weight': weight,
+        })
+        if ret != 0:
+            self.mgr.log.error(f"Could not reweight {osd} to {weight}. <{err}>")
+            return False
+        self.mgr.log.info(f"{osd} weight is now {weight}")
+        return True
+
     def safe_to_destroy(self, osd_ids: List[int]) -> bool:
         """ Queries the safe-to-destroy flag for OSDs """
         cmd_args = {'prefix': 'osd safe-to-destroy',
@@ -491,6 +519,8 @@ class OSD:
         # mgr obj to make mgr/mon calls
         self.rm_util: RemoveUtil = remove_util
 
+        self.original_weight: Optional[float] = None
+
     def start(self) -> None:
         if self.started:
             logger.debug(f"Already started draining {self}")
@@ -502,14 +532,22 @@ class OSD:
         if self.stopped:
             logger.debug(f"Won't start draining {self}. OSD draining is stopped.")
             return False
-        self.rm_util.set_osd_flag([self], 'out')
+        if self.replace:
+            self.rm_util.set_osd_flag([self], 'out')
+        else:
+            self.original_weight = self.rm_util.get_weight(self)
+            self.rm_util.reweight_osd(self, 0.0)
         self.drain_started_at = datetime.utcnow()
         self.draining = True
         logger.debug(f"Started draining {self}.")
         return True
 
     def stop_draining(self) -> bool:
-        self.rm_util.set_osd_flag([self], 'in')
+        if self.replace:
+            self.rm_util.set_osd_flag([self], 'in')
+        else:
+            if self.original_weight:
+                self.rm_util.reweight_osd(self, self.original_weight)
         self.drain_stopped_at = datetime.utcnow()
         self.draining = False
         logger.debug(f"Stopped draining {self}.")
