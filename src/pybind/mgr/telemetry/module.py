@@ -327,6 +327,8 @@ class Module(MgrModule):
             r.append('crash')
         if self.channel_device:
             r.append('device')
+        if self.channel_ident:
+            r.append('ident')
         return r
 
     def gather_device_report(self) -> Dict[str, Dict[str, Dict[str, str]]]:
