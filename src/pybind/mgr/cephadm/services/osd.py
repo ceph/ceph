@@ -654,12 +654,12 @@ class OSDRemovalQueue(object):
             if not osd.force:
                 # skip criteria
                 if not osd.is_empty:
-                    logger.info(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
+                    logger.debug(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
                     new_queue.add(osd)
                     continue
 
             if not osd.safe_to_destroy():
-                logger.info(
+                logger.debug(
                     f"OSD <{osd.osd_id}> is not safe-to-destroy yet. Waiting a bit more")
                 new_queue.add(osd)
                 continue
