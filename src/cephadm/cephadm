@@ -6699,10 +6699,10 @@ class CephadmDaemon():
         logger.exception(exc)
         self.cephadm_cache.update_task(
             thread_type,
-                {
-                    "scrape_errors": errors,
-                    "data": None,
-                }
+            {
+                "scrape_errors": errors,
+                "data": None,
+            }
         )
 
     def _scrape_host_facts(self, refresh_interval=10):
@@ -7309,7 +7309,7 @@ def _get_parser():
               "Support multiple mounts. "
               "ie: `--mount /foo /bar:/bar`. "
               "When no destination is passed, default is /mnt"),
-              nargs='+')
+        nargs='+')
     parser_shell.add_argument(
         '--env', '-e',
         action='append',
