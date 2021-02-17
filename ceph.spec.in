@@ -109,26 +109,22 @@
 %global _source_payload w7T%{_smp_build_ncpus}.xzdio
 %global _binary_payload w7T%{_smp_build_ncpus}.xzdio
 
-# Parallel build settings ...
-CEPH_SMP_NCPUS=$(RPM_BUILD_NCPUS)
+%define smp_limit_mem_per_job() %( \
+  kb_per_job=%1 \
+  kb_total=$(head -1 /proc/meminfo | sed 's/MemTotal:\\s*\\(.*\\) kB.*/\\1/') \
+  jobs=$(( $kb_total / $kb_per_job )) \
+  [ $jobs -lt 1 ] && jobs=1 \
+  echo $jobs )
+
+%if 0%{?_smp_ncpus_max} == 0
 %if 0%{?__isa_bits} == 32
 # 32-bit builds can use 3G memory max, which is not enough even for -j2
-CEPH_SMP_NCPUS="1"
+%global _smp_ncpus_max 1
+%else
+# 2.5 GiB mem per job
+%global _smp_ncpus_max %{smp_limit_mem_per_job 2500000}
 %endif
-# do not eat all memory
-echo "Available memory:"
-free -h
-echo "System limits:"
-ulimit -a
-if test -n "$CEPH_SMP_NCPUS" -a "$CEPH_SMP_NCPUS" -gt 1 ; then
-    mem_per_process=2500
-    max_mem=$(LANG=C free -m | sed -n "s|^Mem: *\([0-9]*\).*$|\1|p")
-    max_jobs="$(($max_mem / $mem_per_process))"
-    test "$CEPH_SMP_NCPUS" -gt "$max_jobs" && CEPH_SMP_NCPUS="$max_jobs" && echo "Warning: Reducing build parallelism to -j$max_jobs because of memory limits"
-    test "$CEPH_SMP_NCPUS" -le 0 && CEPH_SMP_NCPUS="1" && echo "Warning: Not using parallel build at all because of memory limits"
-fi
-export CEPH_SMP_NCPUS
-export CEPH_MFLAGS_JOBS="-j$CEPH_SMP_NCPUS"
+%endif
 
 #################################################################################
 # main package definition
@@ -1279,7 +1275,7 @@ cd build
 %if 0%{with rbd_ssd_cache}
     -DWITH_RBD_SSD_CACHE:BOOL=ON \
 %endif
-    -DBOOST_J:STRING=$CEPH_SMP_NCPUS \
+    -DBOOST_J:STRING=%{_smp_build_ncpus} \
     -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
@@ -1287,14 +1283,14 @@ cat ./CMakeFiles/CMakeOutput.log
 cat ./CMakeFiles/CMakeError.log
 %endif
 
-make "$CEPH_MFLAGS_JOBS"
+make %{_smp_mflags}
 
 
 %if 0%{with make_check}
 %check
 # run in-tree unittests
 cd build
-ctest "$CEPH_MFLAGS_JOBS"
+ctest %{_smp_mflags}
 %endif
 
 
