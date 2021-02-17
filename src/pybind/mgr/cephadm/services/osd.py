@@ -393,9 +393,9 @@ class RemoveUtil(object):
             'ids': [str(osd.osd_id) for osd in osds]
         })
         if ret != 0:
-            self.mgr.log.error(f"Could not set <{flag}> flag for osds: {osds}. <{err}>")
+            self.mgr.log.error(f"Could not set {flag} flag for {osds}. <{err}>")
             return False
-        self.mgr.log.info(f"OSDs <{osds}> are now <{flag}>")
+        self.mgr.log.info(f"{','.join([str(o) for o in osds])} now {flag}")
         return True
 
     def get_weight(self, osd: "OSD") -> Optional[float]:
@@ -689,13 +689,13 @@ class OSDRemovalQueue(object):
             if not osd.force:
                 # skip criteria
                 if not osd.is_empty:
-                    logger.debug(f"OSD <{osd.osd_id}> is not empty yet. Waiting a bit more")
+                    logger.debug(f"{osd} is not empty yet. Waiting a bit more")
                     new_queue.add(osd)
                     continue
 
             if not osd.safe_to_destroy():
                 logger.debug(
-                    f"OSD <{osd.osd_id}> is not safe-to-destroy yet. Waiting a bit more")
+                    f"{osd} is not safe-to-destroy yet. Waiting a bit more")
                 new_queue.add(osd)
                 continue
 
@@ -703,7 +703,7 @@ class OSDRemovalQueue(object):
             if not osd.down():
                 # also remove it from the remove_osd list and set a health_check warning?
                 raise orchestrator.OrchestratorError(
-                    f"Could not set OSD <{osd.osd_id}> to 'down'")
+                    f"Could not mark {osd} down")
 
             # stop and remove daemon
             assert osd.hostname is not None
