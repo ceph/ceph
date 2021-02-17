@@ -3281,7 +3281,7 @@ def prepare_mon_addresses(
                 logger.warning('Using msgr2 protocol for unrecognized port %d' %
                                port)
                 addr_arg = '[v2:%s]' % ctx.mon_ip
-            base_ip = ctx.mon_ip[0:-(len(str(port)))-1]
+            base_ip = ctx.mon_ip[0:-(len(str(port))) - 1]
             check_ip_port(ctx, base_ip, port)
         else:
             base_ip = ctx.mon_ip
@@ -3302,7 +3302,7 @@ def prepare_mon_addresses(
             port = int(hasport[0])
             # strip off v1: or v2: prefix
             addr = re.sub(r'^\w+:', '', addr)
-            base_ip = addr[0:-(len(str(port)))-1]
+            base_ip = addr[0:-(len(str(port))) - 1]
             check_ip_port(ctx, base_ip, port)
     else:
         raise Error('must specify --mon-ip or --mon-addrv')
@@ -3592,7 +3592,7 @@ def prepare_ssh(
             with open(auth_keys_file, 'r') as f:
                 f.seek(0, os.SEEK_END)
                 if f.tell() > 0:
-                    f.seek(f.tell()-1, os.SEEK_SET) # go to last char
+                    f.seek(f.tell() - 1, os.SEEK_SET) # go to last char
                     if f.read() != '\n':
                         add_newline = True
 
@@ -5856,7 +5856,7 @@ def get_ipv6_address(ifname):
         field = iface_setting.split()
         if field[-1] == ifname:
             ipv6_raw = field[0]
-            ipv6_fmtd = ":".join([ipv6_raw[_p:_p+4] for _p in range(0, len(field[0]),4)])
+            ipv6_fmtd = ":".join([ipv6_raw[_p:_p + 4] for _p in range(0, len(field[0]),4)])
             # apply naming rules using ipaddress module
             ipv6 = ipaddress.ip_address(ipv6_fmtd)
             return "{}/{}".format(str(ipv6), int('0x{}'.format(field[2]), 16))
