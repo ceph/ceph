@@ -1295,7 +1295,7 @@ ctest %{_smp_mflags}
 
 %install
 pushd build
-make DESTDIR=%{buildroot} install
+%make_install
 # we have dropped sysvinit bits
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
 popd
