@@ -87,19 +87,23 @@ int get_process_name(char *buf, int len)
     return -EINVAL;
   }
 
-  int length = GetModuleFileNameA(nullptr, buf, len);
+  char full_path[MAX_PATH];
+  int length = GetModuleFileNameA(nullptr, full_path, sizeof(full_path));
   if (length <= 0)
     return -ENOSYS;
 
-  char* start = strrchr(buf, '\\');
+  char* start = strrchr(full_path, '\\');
   if (!start)
     return -ENOSYS;
   start++;
   char* end = strstr(start, ".exe");
   if (!end)
     return -ENOSYS;
+  if (len <= end - start) {
+    return -ENAMETOOLONG;
+  }
 
-  memmove(buf, start, end - start);
+  memcpy(buf, start, end - start);
   buf[end - start] = '\0';
   return 0;
 }
