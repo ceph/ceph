@@ -334,7 +334,7 @@ class NFSGanesha(object):
     required_files = ['ganesha.conf']
 
     port_map = {
-        "nfs" : 2049,
+        "nfs": 2049,
     }
 
     def __init__(self,
@@ -3680,7 +3680,7 @@ def prepare_dashboard(
 
     # Configure SSL port (cephadm only allows to configure dashboard SSL port)
     # if the user does not want to use SSL he can change this setting once the cluster is up
-    cli(["config", "set",  "mgr", "mgr/dashboard/ssl_server_port" , str(ctx.ssl_dashboard_port)])
+    cli(["config", "set",  "mgr", "mgr/dashboard/ssl_server_port", str(ctx.ssl_dashboard_port)])
 
     # configuring dashboard parameters
     logger.info('Enabling the dashboard module...')
