@@ -1111,7 +1111,7 @@ class FileLock(object):
             self._lock_counter = max(0, self._lock_counter - 1)
 
             raise
-        return _Acquire_ReturnProxy(lock = self)
+        return _Acquire_ReturnProxy(lock=self)
 
     def release(self, force=False):
         """
@@ -6937,7 +6937,7 @@ class CephadmDaemon():
         
         return """set -e 
 {py3} {bin_path} exporter --fsid {fsid} --id {daemon_id} --port {port} &""".format(
-            py3 = shutil.which('python3'),
+            py3=shutil.which('python3'),
             bin_path=self.binary_path,
             fsid=self.fsid,
             daemon_id=self.daemon_id,
@@ -7435,7 +7435,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--ssl-dashboard-port',
         type=int,
-        default = 8443,
+        default=8443,
         help='Port number used to connect with dashboard using SSL')
     parser_bootstrap.add_argument(
         '--dashboard-key',
