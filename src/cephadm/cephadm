@@ -6389,7 +6389,7 @@ class HostFacts():
         out, _, _ = call_throws(self.ctx, ['sysctl', '-a'], verbosity=CallVerbosity.SILENT)
         if out:
             param_list = out.split('\n')
-            param_dict = { param.split(" = ")[0]:param.split(" = ")[-1] for param in param_list}
+            param_dict = {param.split(" = ")[0]:param.split(" = ")[-1] for param in param_list}
 
             # return only desired parameters
             if 'net.ipv4.ip_nonlocal_bind' in param_dict:
