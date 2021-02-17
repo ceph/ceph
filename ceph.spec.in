@@ -105,6 +105,9 @@
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
+# use multi-threaded xz compression: xz level 7 using ncpus threads
+%global _source_payload w7T%{_smp_build_ncpus}.xzdio
+%global _binary_payload w7T%{_smp_build_ncpus}.xzdio
 
 #################################################################################
 # main package definition
