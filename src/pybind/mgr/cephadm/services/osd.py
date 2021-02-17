@@ -649,7 +649,7 @@ class OSD:
         return self.osd_id == other.osd_id
 
     def __repr__(self) -> str:
-        return f"<OSD>(osd_id={self.osd_id}, draining={self.draining})"
+        return f"osd.{self.osd_id}{' (draining)' if self.draining else ''}"
 
 
 class OSDRemovalQueue(object):
