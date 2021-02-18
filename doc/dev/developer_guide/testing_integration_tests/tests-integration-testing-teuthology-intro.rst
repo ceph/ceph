@@ -63,23 +63,23 @@ Select your job's priority (the value of ``N``) in accordance with the following
 
    * - Priority
      - Explanation
-   * - **Priority < 10**
+   * - **N < 10**
      - Use this if the sky is falling and some group of tests must be run ASAP.
-   * - **10 <= Priority < 50**
+   * - **10 <= N < 50**
      - Use this if your tests are urgent and blocking other important
        development.
-   * - **50 <= Priority < 75**
+   * - **50 <= N < 75**
      - Use this if you are testing a particular feature/fix and running fewer
        than about 25 jobs. This range is also used for urgent release testing.
-   * - **75 <= Priority < 100**
+   * - **75 <= N < 100**
      - Tech Leads regularly schedule integration tests with this priority to
        verify pull requests against master.
-   * - **100 <= Priority < 150**
+   * - **100 <= N < 150**
      - This priority is used for QE validation of point releases.
-   * - **150 <= Priority < 200**
+   * - **150 <= N < 200**
      - Use this priority for 100 jobs or fewer that test a particular feature
        or fix.  Results are available in about 24 hours.
-   * - **200 <= Priority < 1000**
+   * - **200 <= N < 1000**
      - Use this priority for large test runs.  Results are available in about a
        week.
 
