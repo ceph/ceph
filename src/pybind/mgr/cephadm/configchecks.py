@@ -196,6 +196,7 @@ class CephadmConfigChecks:
         self.subscribed: Dict[str, List[str]] = {
             "yes": [],
             "no": [],
+            "unknown": [],
         }
         self.host_to_role: Dict[str, List[Optional[str]]] = {}
         self.kernel_to_hosts: Dict[str, List[str]] = {}
@@ -261,7 +262,7 @@ class CephadmConfigChecks:
         return [check.to_json() for check in self.health_checks]
 
     def load_network_config(self) -> None:
-        ret, out, _err = self.mgr.mon_command({
+        ret, out, _err = self.mgr.check_mon_command({
             'prefix': 'config dump',
             'format': 'json'
         })
@@ -294,7 +295,7 @@ class CephadmConfigChecks:
                 iface4 = ipaddress.IPv4Interface(nic['ipv4_address'])
                 subnet = str(iface4.network)
             except ipaddress.AddressValueError as e:
-                self.log.error(f"Invalid network on {hostname}, interface {devname} : {str(e)}")
+                self.log.exception(f"Invalid network on {hostname}, interface {devname} : {str(e)}")
             else:
                 self._update_subnet(subnet, hostname, nic)
 
@@ -303,7 +304,7 @@ class CephadmConfigChecks:
                 iface6 = ipaddress.IPv6Interface(nic['ipv6_address'])
                 subnet = str(iface6.network)
             except ipaddress.AddressValueError as e:
-                self.log.error(f"Invalid network on {hostname}, interface {devname} : {str(e)}")
+                self.log.exception(f"Invalid network on {hostname}, interface {devname} : {str(e)}")
             else:
                 self._update_subnet(subnet, hostname, nic)
 
@@ -319,6 +320,7 @@ class CephadmConfigChecks:
         self.lsm_to_host.clear()
         self.subscribed['yes'] = []
         self.subscribed['no'] = []
+        self.subscribed['unknown'] = []
         self.host_to_role.clear()
         self.kernel_to_hosts.clear()
 
@@ -391,29 +393,43 @@ class CephadmConfigChecks:
             self.mgr.health_checks.pop('CEPHADM_CHECK_SUBSCRIPTION', None)
 
     def _check_public_network(self) -> None:
-        all_hosts = set(self.mgr.cache.facts.keys())
-        self.log.debug(f"checking public network membership for: {all_hosts}")
+        hosts_remaining: List[str] = list(self.mgr.cache.facts.keys())
+        hosts_removed: List[str] = []
+        self.log.debug(f"checking public network membership for: {hosts_remaining}")
 
-        public_errors = []
-        for c_net in self.public_network_list:
-            self.log.debug(f"checking network {c_net}")
-            subnet_data = self.subnet_lookup.get(c_net, None)
+        for p_net in self.public_network_list:
+            self.log.debug(f"checking network {p_net}")
+            subnet_data = self.subnet_lookup.get(p_net, None)
             self.log.debug(f"subnet data - {subnet_data}")
 
             if subnet_data:
-                hosts_in_subnet = set(subnet_data.host_list)
-                errors = all_hosts.difference(hosts_in_subnet)
-                if errors:
-                    public_errors.append(errors)
+                hosts_in_subnet = subnet_data.host_list
+                for host in hosts_in_subnet:
+                    if host in hosts_remaining:
+                        hosts_remaining.remove(host)
+                        hosts_removed.append(host)
+                    else:
+                        if host not in hosts_removed:
+                            self.log.debug(f"host={host}, subnet={p_net}")
+                            self.log.exception(
+                                "Host listed for a subnet but not present in the host facts?")
 
-        if public_errors:
-            self.mgr.health_checks['CEPHADM_CHECK_PUBLIC_MEMBERSHIP'] = {
-                'severity': 'warning',
-                'summary': 'Public network is not accessible from <some> cluster hosts',
-                'count': 1,
-                'detail': ["wah"],
-            }
-            self.health_check_raised = True
+        # Ideally all hosts will have been removed since they have an IP on at least
+        # one of the public networks
+        if hosts_remaining:
+            if len(hosts_remaining) != len(self.mgr.cache.facts):
+                # public network is visible on some hosts
+                details = [
+                    f"{host} does not have an interface on any public network" for host in hosts_remaining]
+
+                self.mgr.health_checks['CEPHADM_CHECK_PUBLIC_MEMBERSHIP'] = {
+                    'severity': 'warning',
+                    'summary': f"Public network(s) is not directly accessible from {len(hosts_remaining)} "
+                                "cluster hosts",
+                    'count': len(details),
+                    'detail': details,
+                }
+                self.health_check_raised = True
         else:
             self.mgr.health_checks.pop('CEPHADM_CHECK_PUBLIC_MEMBERSHIP', None)
 
@@ -521,13 +537,13 @@ class CephadmConfigChecks:
         all_networks.extend(self.cluster_network_list)
 
         missing_networks = []
-        for osd_net in all_networks:
-            subnet_data = self.subnet_lookup.get(osd_net, None)
+        for subnet in all_networks:
+            subnet_data = self.subnet_lookup.get(subnet, None)
 
             if not subnet_data:
-                missing_networks.append(f"{osd_net} not found on any host in the cluster")
+                missing_networks.append(f"{subnet} not found on any host in the cluster")
                 self.log.warning(
-                    f"Network {osd_net} has been defined, but is not present on any host")
+                    f"Network {subnet} has been defined, but is not present on any host")
 
         if missing_networks:
             net_sfx = 's' if len(missing_networks) > 1 else ''
@@ -643,14 +659,10 @@ class CephadmConfigChecks:
             else:
                 self.log.warning(f"Host gather facts for {hostname} is missing kernel information")
 
-            host_daemons = self.mgr.cache.daemons[hostname]
-
-            # NOTE: should daemondescription provide the systemd enabled state?
-            self.host_to_role[hostname] = list({host_daemons[name].daemon_type
-                                                for name in host_daemons})
+            # NOTE: if daemondescription had systemd enabled state, we could check for systemd 'tampering'
+            self.host_to_role[hostname] = self.mgr.cache.get_daemon_types(hostname)
 
     def run_checks(self) -> None:
-
         checks_enabled = self.mgr.get_module_option('config_checks_enabled')
         if checks_enabled is not True:
             self.log.info("ALL cephadm checks are disabled, use 'ceph config set mgr "
@@ -665,7 +677,7 @@ class CephadmConfigChecks:
             try:
                 check_config.update(json.loads(checks_raw))
             except json.JSONDecodeError:
-                self.log.error(
+                self.log.exception(
                     "mgr/cephadm/config_checks is not JSON serializable - all checks will run")
 
         # build lookup "maps" by walking the host facts, once
