@@ -4,7 +4,6 @@ os_type: centos
 overrides:
   install:
     ceph:
-      flavor: notcmalloc
       debuginfo: true
   rbd_fsx:
     valgrind: ["--tool=memcheck"]
