@@ -47,45 +47,48 @@ also reported on the `ceph-qa mailing list <https://ceph.com/irc/>`_.
 Testing Priority
 ----------------
 
-The ``teuthology-suite`` command includes an almost mandatory option ``-p <N>``
-which specifies the priority of the jobs submitted to the queue. The lower
-the value of ``N``, the higher the priority. The option is almost mandatory
-because the default is ``1000`` which matches the priority of the nightlies.
-Nightlies are often half-finished and cancelled due to the volume of testing
-done so your jobs may never finish. Therefore, it is common to select a
-priority less than 1000.
+In brief: in the ``teuthology-suite`` command option ``-p <N>``, set the value of ``<N>`` to a number lower than 1000. An explanation of why follows.
 
-Job priority should be selected based on the following recommendations:
+The ``teuthology-suite`` command includes an option ``-p <N>``. This option specifies the priority of the jobs submitted to the queue. The lower the value of ``N``, the higher the priority.
 
-* **Priority < 10:** Use this if the sky is falling and some group of tests
-  must be run ASAP.
+The default value of ``N`` is ``1000``. This is the same priority value given to the nightly tests (the nightlies). Often, the volume of testing done during the nightly tests is so great that the full number of nightly tests do not get run during the time allotted for their run.
 
-* **10 <= Priority < 50:** Use this if your tests are urgent and blocking
-  other important development.
+Set the value of ``N`` lower than ``1000``, or your tests will not have priority over the nightly tests. This means that they might never run.
 
-* **50 <= Priority < 75:** Use this if you are testing a particular
-  feature/fix and running fewer than about 25 jobs. This range can also be
-  used for urgent release testing.
+Select your job's priority (the value of ``N``) in accordance with the following guidelines:
 
-* **75 <= Priority < 100:** Tech Leads will regularly schedule integration
-  tests with this priority to verify pull requests against master.
+.. list-table::
+   :widths: 30 30
+   :header-rows: 1
 
-* **100 <= Priority < 150:** This priority is to be used for QE validation of
-  point releases.
+   * - Priority
+     - Explanation
+   * - **Priority < 10**
+     - Use this if the sky is falling and some group of tests must be run ASAP.
+   * - **10 <= Priority < 50**
+     - Use this if your tests are urgent and blocking other important
+       development.
+   * - **50 <= Priority < 75**
+     - Use this if you are testing a particular feature/fix and running fewer
+       than about 25 jobs. This range is also used for urgent release testing.
+   * - **75 <= Priority < 100**
+     - Tech Leads regularly schedule integration tests with this priority to
+       verify pull requests against master.
+   * - **100 <= Priority < 150**
+     - This priority is used for QE validation of point releases.
+   * - **150 <= Priority < 200**
+     - Use this priority for 100 jobs or fewer that test a particular feature
+       or fix.  Results are available in about 24 hours.
+   * - **200 <= Priority < 1000**
+     - Use this priority for large test runs.  Results are available in about a
+       week.
 
-* **150 <= Priority < 200:** Use this priority for 100 jobs or fewer of a
-  particular feature/fix that you'd like results on in a day or so.
+To see how many jobs the ``teuthology-suite`` command will trigger, use the
+``--dry-run`` flag. If you are happy with the number of jobs returned by the
+dry run, issue the ``teuthology-suite`` command again without ``--dry-run`` and
+with ``-p`` and an appropriate number as an argument. 
 
-* **200 <= Priority < 1000:** Use this priority for large test runs that can
-  be done over the course of a week.
-
-To learn how many jobs the ``teuthology-suite`` command will trigger, use the
-``--dry-run`` flag. If you are happy with the number of jobs, issue the ``teuthology-suite`` command again without
-``--dry-run`` and with ``-p`` and an appropriate number as an argument. 
-
-To skip the priority check, use ``--force-priority``. In order to be sensitive
-to the runs of other developers who also need to do testing, please use it in
-emergency only.
+To skip the priority check, use ``--force-priority``. Be considerate of the needs of other developers to run tests, and use ``--force-priority`` only in emergencies. 
 
 Suites Inventory
 ----------------
