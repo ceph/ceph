@@ -419,6 +419,20 @@ class TestConfigCheck:
         assert mgr.health_checks['CEPHADM_CHECK_LINKSPEED']['detail'][0] == \
             'host node-1.ceph.com(eth0) has linkspeed of 100 on 10.9.64.0/24, NICs on other hosts use 1000'
 
+    def test_super_linkspeed_single(self, mgr):
+
+        bad_node = mgr.cache.facts['node-1.ceph.com']
+        bad_node['interfaces']['eth0']['speed'] = 10000
+
+        checker = CephadmConfigChecks(mgr)
+        checker.cluster_network_list = []
+        checker.public_network_list = ['10.9.64.0/24']
+
+        checker.run_checks()
+        logger.info(json.dumps(mgr.health_checks))
+        logger.info(checker.subnet_lookup)
+        assert not mgr.health_checks
+
     def test_release_mismatch_single(self, mgr):
 
         mgr.version_overrides = {
