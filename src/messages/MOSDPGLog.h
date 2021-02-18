@@ -22,7 +22,7 @@
 class MOSDPGLog final : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 6;
-  static constexpr int COMPAT_VERSION = 5;
+  static constexpr int COMPAT_VERSION = 6;
 
   epoch_t epoch = 0;
   /// query_epoch is the epoch of the query being responded to, or
@@ -101,12 +101,8 @@ public:
     encode(info, payload);
     encode(log, payload);
     encode(missing, payload, features);
-    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-      // pre-nautilus OSDs do not set last_peering_reset properly
-      encode(epoch, payload);
-    } else {
-      encode(query_epoch, payload);
-    }
+    assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
+    encode(query_epoch, payload);
     encode(past_intervals, payload);
     encode(to, payload);
     encode(from, payload);
@@ -123,9 +119,8 @@ public:
     decode(past_intervals, p);
     decode(to, p);
     decode(from, p);
-    if (header.version >= 6) {
-      decode(lease, p);
-    }
+    assert(header.version >= 6);
+    decode(lease, p);
   }
 private:
   template<class T, typename... Args>
