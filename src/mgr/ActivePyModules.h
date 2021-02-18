@@ -151,6 +151,7 @@ public:
   void config_notify();
 
   void set_uri(const std::string& module_name, const std::string &uri);
+  void set_device_wear_level(const std::string& devid, float wear_level);
 
   int handle_command(
     const ModuleCommand& module_command,

@@ -1613,6 +1613,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_set_uri(uri)
 
+    def set_device_wear_level(self, devid: str, wear_level: float) -> None:
+        return self._ceph_set_device_wear_level(devid, wear_level)
+
     def have_mon_connection(self) -> bool:
         """
         Check whether this ceph-mgr daemon has an open connection
