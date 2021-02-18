@@ -11394,7 +11394,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-    ceph_assert(osdmap.require_osd_release >= ceph_release_t::luminous);
+    ceph_assert(osdmap.require_osd_release >= ceph_release_t::octopus);
     if (!osdmap.get_num_up_osds() && !sure) {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
