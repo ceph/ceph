@@ -31,13 +31,12 @@ versions of Ceph.
     install
     adoption
     host-management
-    
+    osd
     upgrade
     Cephadm operations <operations>
     Cephadm monitoring <monitoring>
     Cephadm CLI <../mgr/orchestrator>
     Client Setup <client-setup>
-    DriveGroups <drivegroups>
     troubleshooting
     concepts
     Cephadm Feature Planning <../dev/cephadm/index>

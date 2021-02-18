@@ -377,55 +377,17 @@ hosts to the cluster. No further steps are necessary.
              - host2
              - host3
 
+Adding Storage
+==============
 
-Deploy OSDs
-===========
-
-An inventory of storage devices on all cluster hosts can be displayed with:
-
-.. prompt:: bash #
-
-  ceph orch device ls
-
-A storage device is considered *available* if all of the following
-conditions are met:
-
-* The device must have no partitions.
-* The device must not have any LVM state.
-* The device must not be mounted.
-* The device must not contain a file system.
-* The device must not contain a Ceph BlueStore OSD.
-* The device must be larger than 5 GB.
-
-Ceph refuses to provision an OSD on a device that is not available.
-
-There are a few ways to create new OSDs:
-
-* Tell Ceph to consume any available and unused storage device:
+To add storage to the cluster, either tell Ceph to consume any
+available and unused device:
 
   .. prompt:: bash #
 
     ceph orch apply osd --all-available-devices
 
-* Create an OSD from a specific device on a specific host:
-  
-  .. prompt:: bash #
-
-    ceph orch daemon add osd *<host>*:*<device-path>*
-
-  For example:
-  
-  .. prompt:: bash #
-
-    ceph orch daemon add osd host1:/dev/sdb
-
-* Use :ref:`drivegroups` to describe device(s) to consume
-  based on their properties, such device type (SSD or HDD), device
-  model names, size, or the hosts on which the devices exist:
-  
-  .. prompt:: bash #
-
-    ceph orch apply osd -i spec.yml
+Or See :ref:`cephadm-deploy-osds` for more detailed instructions.
 
 
 Deploy CephFS
