@@ -343,6 +343,19 @@ class TestConfigCheck:
 
         assert not mgr.health_checks
 
+    def test_no_public_network(self, mgr):
+        bad_node = mgr.cache.facts['node-1.ceph.com']
+        bad_node['interfaces']['eth0']['ipv4_address'] = "192.168.1.20/24"
+        checker = CephadmConfigChecks(mgr)
+        checker.cluster_network_list = []
+        checker.public_network_list = ['10.9.64.0/24']
+        checker.run_checks()
+        logger.debug(mgr.health_checks)
+        assert len(mgr.health_checks) == 1
+        assert 'CEPHADM_CHECK_PUBLIC_MEMBERSHIP' in mgr.health_checks
+        assert mgr.health_checks['CEPHADM_CHECK_PUBLIC_MEMBERSHIP']['detail'][0] == \
+            'node-1.ceph.com does not have an interface on any public network'
+
     def test_missing_networks(self, mgr):
 
         checker = CephadmConfigChecks(mgr)
