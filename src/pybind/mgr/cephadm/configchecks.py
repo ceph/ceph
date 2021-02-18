@@ -116,46 +116,75 @@ class SubnetLookup:
 
 
 class CephadmCheckDefinition:
-    def __init__(self, name: str, description: str, parameter: str, func: Callable) -> None:
-        self.name = name
+    def __init__(self, mgr: "CephadmOrchestrator", healthcheck_name: str, description: str, name: str, func: Callable) -> None:
+        self.mgr = mgr
+        self.log = logger
+        self.healthcheck_name = healthcheck_name
         self.description = description
-        self.parameter = parameter
+        self.name = name
         self.func = func
+
+    @property
+    def status(self) -> str:
+        check_states: Dict[str, str] = {}
+        # Issuing a get each time, since the value could be set at the CLI
+        raw_states = self.mgr.get_store('config_checks')
+        if not raw_states:
+            self.log.error(
+                "config_checks setting is not defined - unable to determine healthcheck state")
+            return "Unknown"
+
+        try:
+            check_states = json.loads(raw_states)
+        except json.JSONDecodeError:
+            self.log.error("Unable to serialize the config_checks settings to JSON")
+            return "Unavailable"
+
+        return check_states.get(self.name, 'Missing')
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "healthcheck_name": self.healthcheck_name,
+            "description": self.description,
+            "name": self.name,
+            "status": self.status,
+            "valid": True if self.func else False
+        }
 
 
 class CephadmConfigChecks:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.health_checks: List[CephadmCheckDefinition] = [
-            CephadmCheckDefinition("CEPHADM_CHECK_KERNEL_LSM",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_KERNEL_LSM",
                                    "checks SELINUX/Apparmor profiles are consistent across cluster hosts",
                                    "kernel_security",
                                    self._check_kernel_lsm),
-            CephadmCheckDefinition("CEPHADM_CHECK_SUBSCRIPTION",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_SUBSCRIPTION",
                                    "checks subscription states are consistent for all cluster hosts",
                                    "os_subscription",
                                    self._check_subscription),
-            CephadmCheckDefinition("CEPHADM_CHECK_PUBLIC_MEMBERSHIP",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_PUBLIC_MEMBERSHIP",
                                    "check that all hosts have a NIC on the Ceph public_netork",
                                    "public_network",
                                    self._check_public_network),
-            CephadmCheckDefinition("CEPHADM_CHECK_MTU",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_MTU",
                                    "check that OSD hosts share a common MTU setting",
                                    "osd_mtu_size",
                                    self._check_osd_mtu),
-            CephadmCheckDefinition("CEPHADM_CHECK_LINKSPEED",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_LINKSPEED",
                                    "check that OSD hosts share a common linkspeed",
                                    "osd_linkspeed",
                                    self._check_osd_linkspeed),
-            CephadmCheckDefinition("CEPHADM_CHECK_NETWORK_MISSING",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_NETWORK_MISSING",
                                    "checks that the cluster/public networks defined exist on the Ceph hosts",
                                    "network_missing",
                                    self._check_network_missing),
-            CephadmCheckDefinition("CEPHADM_CHECK_CEPH_RELEASE",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_CEPH_RELEASE",
                                    "check for Ceph version consistency - ceph daemons should be on the same release (unless upgrade is active)",
                                    "ceph_release",
                                    self._check_release_parity),
-            CephadmCheckDefinition("CEPHADM_CHECK_KERNEL_VERSION",
+            CephadmCheckDefinition(mgr, "CEPHADM_CHECK_KERNEL_VERSION",
                                    "checks that the MAJ.MIN of the kernel on Ceph hosts is consistent",
                                    "kernel_version",
                                    self._check_kernel_version),
@@ -175,7 +204,42 @@ class CephadmConfigChecks:
         self.cluster_network_list: List[str] = []
         self.health_check_raised = False
         self.active_checks: List[str] = []   # checks enabled and executed
-        self.skipped_checks: List[str] = []  # checks enabled, but skipped due to a pre-req
+        self.skipped_checks: List[str] = []  # checks enabled, but skipped due to a pre-req failure
+
+        raw_checks = self.mgr.get_store('config_checks')
+        if not raw_checks:
+            # doesn't exist, so seed the checks
+            self.seed_config_checks()
+        else:
+            # setting is there, so ensure there is an entry for each of the checks that
+            # this module supports (account for upgrades/changes)
+            try:
+                config_checks = json.loads(raw_checks)
+            except json.JSONDecodeError:
+                self.log.error("Unable to serialize config_checks config. Reset to defaults")
+                self.seed_config_checks()
+            else:
+                # Ensure the config_checks setting is consistent with this module
+                from_config = set(config_checks.keys())
+                from_module = set([c.name for c in self.health_checks])
+                old_checks = from_config.difference(from_module)
+                new_checks = from_module.difference(from_config)
+
+                if old_checks:
+                    self.log.debug(f"old checks being removed from config_checks: {old_checks}")
+                    for i in old_checks:
+                        del config_checks[i]
+                if new_checks:
+                    self.log.debug(f"new checks being added to config_checks: {new_checks}")
+                    for i in new_checks:
+                        config_checks[i] = 'enabled'
+
+                if old_checks or new_checks:
+                    self.log.info(
+                        f"config_checks updated: {len(old_checks)} removed, {len(new_checks)} added")
+                    self.mgr.set_store('config_checks', json.dumps(config_checks))
+                else:
+                    self.log.debug("config_checks match module definition")
 
     @property
     def defined_checks(self) -> int:
@@ -185,9 +249,16 @@ class CephadmConfigChecks:
     def active_checks_count(self) -> int:
         return len(self.active_checks)
 
+    def seed_config_checks(self) -> None:
+        defaults = {check.name: 'enabled' for check in self.health_checks}
+        self.mgr.set_store('config_checks', json.dumps(defaults))
+
     @property
     def skipped_checks_count(self) -> int:
         return len(self.skipped_checks)
+
+    def to_json(self) -> List[Dict[str, str]]:
+        return [check.to_json() for check in self.health_checks]
 
     def load_network_config(self) -> None:
         ret, out, _err = self.mgr.mon_command({
@@ -205,30 +276,36 @@ class CephadmConfigChecks:
         self.log.debug(f"public networks {self.public_network_list}")
         self.log.debug(f"cluster networks {self.cluster_network_list}")
 
+    def _update_subnet(self, subnet: str, hostname: str, nic: Dict[str, Any]) -> None:
+        mtu = nic.get('mtu', None)
+        speed = nic.get('speed', None)
+        if not mtu or not speed:
+            return
+
+        this_subnet = self.subnet_lookup.get(subnet, None)
+        if this_subnet:
+            this_subnet.update(hostname, mtu, speed)
+        else:
+            self.subnet_lookup[subnet] = SubnetLookup(subnet, hostname, mtu, speed)
+
     def _update_subnet_lookups(self, hostname: str, devname: str, nic: Dict[str, Any]) -> None:
         if nic['ipv4_address']:
             try:
-                iface = ipaddress.IPv4Interface(nic['ipv4_address'])
-                subnet = str(iface.network)
+                iface4 = ipaddress.IPv4Interface(nic['ipv4_address'])
+                subnet = str(iface4.network)
             except ipaddress.AddressValueError as e:
                 self.log.error(f"Invalid network on {hostname}, interface {devname} : {str(e)}")
-                return
-
-            if subnet:
-                mtu = nic.get('mtu', None)
-                speed = nic.get('speed', None)
-                if not mtu or not speed:
-                    return
-
-                this_subnet = self.subnet_lookup.get(subnet, None)
-                if this_subnet:
-                    this_subnet.update(hostname, mtu, speed)
-                else:
-                    self.subnet_lookup[subnet] = SubnetLookup(subnet, hostname, mtu, speed)
+            else:
+                self._update_subnet(subnet, hostname, nic)
 
         if nic['ipv6_address']:
-            # TODO
-            pass
+            try:
+                iface6 = ipaddress.IPv6Interface(nic['ipv6_address'])
+                subnet = str(iface6.network)
+            except ipaddress.AddressValueError as e:
+                self.log.error(f"Invalid network on {hostname}, interface {devname} : {str(e)}")
+            else:
+                self._update_subnet(subnet, hostname, nic)
 
     def hosts_with_role(self, role: str) -> List[str]:
         host_list = []
@@ -575,8 +652,8 @@ class CephadmConfigChecks:
     def run_checks(self) -> None:
 
         checks_enabled = self.mgr.get_module_option('config_checks_enabled')
-        if checks_enabled != 'true':
-            self.log.info("ALL cephadm checks are disabled, use 'ceph config set "
+        if checks_enabled is not True:
+            self.log.info("ALL cephadm checks are disabled, use 'ceph config set mgr "
                           "mgr/cephadm/config_checks_enabled true' to enable")
             return
 
@@ -600,8 +677,8 @@ class CephadmConfigChecks:
 
         # process all healthchecks that are not explcitly disabled
         for health_check in self.health_checks:
-            if check_config.get(health_check.parameter, '') != 'disabled':
-                self.active_checks.append(health_check.parameter)
+            if check_config.get(health_check.name, '') != 'disabled':
+                self.active_checks.append(health_check.name)
                 health_check.func()
 
         if self.health_check_raised:
@@ -609,6 +686,7 @@ class CephadmConfigChecks:
         else:
             self.log.info(
                 f"CEPHADM {self.active_checks_count}/{self.defined_checks} checks enabled "
-                f"and executed ({self.skipped_checks_count} bypassed). No issues detected")
+                f"and executed ({self.skipped_checks_count} bypassed, "
+                f"{self.defined_checks - self.active_checks_count} disabled). No issues detected")
 
         self.mgr.set_health_checks(self.mgr.health_checks)
