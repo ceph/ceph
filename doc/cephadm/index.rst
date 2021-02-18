@@ -35,6 +35,7 @@ versions of Ceph.
     osd
     rgw
     nfs
+    iscsi
     custom-container
     monitoring
     service-management
