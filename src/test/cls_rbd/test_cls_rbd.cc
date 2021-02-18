@@ -3335,6 +3335,53 @@ TEST_F(TestClsRbd, group_snap_remove_without_order) {
   ASSERT_EQ("snap_max_order", *keys.begin());
 }
 
+TEST_F(TestClsRbd, group_snap_unlink) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string image_id = "image_id_snap_unlink";
+
+  string group_id = "group_id_snap_unlink";
+  ASSERT_EQ(0, ioctx.create(group_id, true));
+
+  string snap_id = "snap_id";
+  cls::rbd::GroupSnapshot snap = {snap_id,
+                                  cls::rbd::UserGroupSnapshotNamespace{},
+                                  "test_snapshot",
+                                  cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
+  ASSERT_EQ(-ENOENT, group_snap_unlink(&ioctx, group_id, snap_id, {}));
+
+  cls::rbd::GroupSnapshot read_snap;
+  ASSERT_EQ(0, group_snap_get_by_id(&ioctx, group_id, snap_id, &read_snap));
+  ASSERT_EQ(read_snap, snap);
+
+  snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
+  ASSERT_EQ(0, group_snap_unlink(&ioctx, group_id, snap_id, {}));
+  ASSERT_EQ(-ENOENT, group_snap_get_by_id(&ioctx, group_id, snap_id, &read_snap));
+
+  cls::rbd::ImageSnapshotSpec image_snap1 = {1, "image_id1", 1};
+  cls::rbd::ImageSnapshotSpec image_snap2 = {1, "image_id2", 2};
+  snap.snaps = {image_snap1, image_snap2};
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
+
+  ASSERT_EQ(0, group_snap_unlink(&ioctx, group_id, snap_id, {}));
+  ASSERT_EQ(0, group_snap_get_by_id(&ioctx, group_id, snap_id, &read_snap));
+  ASSERT_EQ(read_snap, snap);
+
+  ASSERT_EQ(0, group_snap_unlink(&ioctx, group_id, snap_id, image_snap1));
+  ASSERT_EQ(0, group_snap_get_by_id(&ioctx, group_id, snap_id, &read_snap));
+  ASSERT_EQ(read_snap.snaps, std::vector<cls::rbd::ImageSnapshotSpec>{image_snap2});
+
+  ASSERT_EQ(0, group_snap_unlink(&ioctx, group_id, snap_id, image_snap1));
+  ASSERT_EQ(0, group_snap_get_by_id(&ioctx, group_id, snap_id, &read_snap));
+  ASSERT_EQ(read_snap.snaps, std::vector<cls::rbd::ImageSnapshotSpec>{image_snap2});
+
+  ASSERT_EQ(0, group_snap_unlink(&ioctx, group_id, snap_id, image_snap2));
+  ASSERT_EQ(-ENOENT, group_snap_get_by_id(&ioctx, group_id, snap_id, &read_snap));
+}
+
 TEST_F(TestClsRbd, group_snap_get_by_id) {
   librados::IoCtx ioctx;
 
