@@ -35,10 +35,10 @@ versions of Ceph.
     osd
     rgw
     custom-container
+    monitoring
     service-management
     upgrade
     Cephadm operations <operations>
-    Cephadm monitoring <monitoring>
     Cephadm CLI <../mgr/orchestrator>
     Client Setup <client-setup>
     troubleshooting
