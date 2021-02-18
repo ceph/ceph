@@ -198,7 +198,7 @@ class CephadmConfigChecks:
             "no": [],
             "unknown": [],
         }
-        self.host_to_role: Dict[str, List[Optional[str]]] = {}
+        self.host_to_role: Dict[str, List[str]] = {}
         self.kernel_to_hosts: Dict[str, List[str]] = {}
 
         self.public_network_list: List[str] = []
