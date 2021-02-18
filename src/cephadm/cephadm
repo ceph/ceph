@@ -2388,13 +2388,11 @@ def get_container(ctx: CephadmContext,
     # so service can have Type=Forking
     if 'podman' in ctx.container_path:
         runtime_dir = '/run'
-        container_args.extend([
-            '-d', '--log-driver', 'journald',
+        container_args.extend(['-d',
             '--conmon-pidfile',
             runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, daemon_id),
             '--cidfile',
-            runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id),
-        ])
+            runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, daemon_id)])
 
     return CephContainer(
         ctx,
