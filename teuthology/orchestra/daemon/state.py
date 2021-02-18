@@ -23,13 +23,13 @@ class DaemonState(object):
         """
         self.remote = remote
         self.command_args = command_args
-        self.command_kwargs = command_kwargs
         self.role = role
         self.cluster, self.type_ = self.role.split('.')[0:2]
         self.id_ = id_
         self.log = command_kwargs.get('logger', log)
-        self.fsid = command_kwargs.get('fsid')
+        self.fsid = command_kwargs.pop('fsid', None)
         self.proc = None
+        self.command_kwargs = command_kwargs
 
     def check_status(self):
         """
