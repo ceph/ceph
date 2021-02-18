@@ -31,6 +31,7 @@ versions of Ceph.
     install
     adoption
     host-management
+    mon
     osd
     rgw
     custom-container

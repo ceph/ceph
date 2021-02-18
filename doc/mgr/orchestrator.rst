@@ -106,39 +106,6 @@ To remove a label, run::
     where ``journal`` is the filestore journal device, ``wal`` is the bluestore
     write ahead log device, and ``all`` stands for all devices associated with the OSD
 
-
-Monitor and manager management
-==============================
-
-Creates or removes MONs or MGRs from the cluster. Orchestrator may return an
-error if it doesn't know how to do this transition.
-
-Update the number of monitor hosts::
-
-    ceph orch apply mon --placement=<placement> [--dry-run]
-
-Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
-
-Each host can optionally specify a network for the monitor to listen on.
-
-Update the number of manager hosts::
-
-    ceph orch apply mgr --placement=<placement> [--dry-run]
-
-Where ``placement`` is a :ref:`orchestrator-cli-placement-spec`.
-
-..
-    .. note::
-
-        The host lists are the new full list of mon/mgr hosts
-
-    .. note::
-
-        specifying hosts is optional for some orchestrator modules
-        and mandatory for others (e.g. Ansible).
-
-
-
 .. _orchestrator-cli-cephfs:
 
 Deploying CephFS
