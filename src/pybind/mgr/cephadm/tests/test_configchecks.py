@@ -224,7 +224,7 @@ def mgr():
     mgr.cache.facts, mgr.cache.daemons, mgr.daemon_to_host = \
         generate_testdata(public_network='10.9.64.0/24', cluster_network='')
     mgr.module_option.update({
-        "config_checks_enabled": 'true',
+        "config_checks_enabled": True,
     })
     yield mgr
 
@@ -255,6 +255,7 @@ class FakeMgr:
         return self.datastore.get(keyname, None)
 
     def set_store(self, keyname: str, value: str) -> None:
+        self.datastore[keyname] = value
         return None
 
     def _ceph_get_server(self) -> None:
@@ -302,6 +303,37 @@ class FakeMgr:
 
 
 class TestConfigCheck:
+
+    def test_to_json(self, mgr):
+        checker = CephadmConfigChecks(mgr)
+        out = checker.to_json()
+        assert out
+        assert len(out) == len(checker.health_checks)
+
+    def test_old_checks_removed(self, mgr):
+        mgr.datastore.update({
+            "config_checks": '{"bogus_one": "enabled", "bogus_two": "enabled", '
+                             '"kernel_security": "enabled", "public_network": "enabled", '
+                             '"kernel_version": "enabled", "network_missing": "enabled", '
+                             '"osd_mtu_size": "enabled", "osd_linkspeed": "enabled", '
+                             '"os_subscription": "enabled", "ceph_release": "enabled"}'
+        })
+        checker = CephadmConfigChecks(mgr)
+        raw = mgr.get_store('config_checks')
+        checks = json.loads(raw)
+        assert "bogus_one" not in checks
+        assert "bogus_two" not in checks
+        assert len(checks) == len(checker.health_checks)
+
+    def test_new_checks(self, mgr):
+        mgr.datastore.update({
+            "config_checks": '{"kernel_security": "enabled", "public_network": "enabled", '
+                             '"osd_mtu_size": "enabled", "osd_linkspeed": "enabled"}'
+        })
+        checker = CephadmConfigChecks(mgr)
+        raw = mgr.get_store('config_checks')
+        checks = json.loads(raw)
+        assert len(checks) == len(checker.health_checks)
 
     def test_no_issues(self, mgr):
         checker = CephadmConfigChecks(mgr)
