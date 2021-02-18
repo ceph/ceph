@@ -23,14 +23,12 @@ and write data to the Ceph Storage Cluster.
 
       Ceph Storage Clusters have a few required settings, but most configuration
       settings have default values. A typical deployment uses a deployment tool
-      to define a cluster and bootstrap a monitor. See `Deployment`_ for details
-      on ``cephadm.``
+      to define a cluster and bootstrap a monitor. See :ref:`cephadm` for details.
 
       .. toctree::
          :maxdepth: 2
 
          Configuration <configuration/index>
-         Deployment <../cephadm/index>
 
    .. container:: column
 
