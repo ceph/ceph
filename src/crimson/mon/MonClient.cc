@@ -513,7 +513,9 @@ void Client::tick()
                                        active_con->renew_tickets(),
                                        active_con->renew_rotating_keyring()).then_unpack([] {});
     } else {
-      return seastar::now();
+      assert(is_hunting());
+      logger().info("{} continuing the hunt", __func__);
+      return authenticate();
     }
   });
 }
@@ -1032,8 +1034,8 @@ seastar::future<> Client::reopen_session(int rank)
     });
   }).then([this] {
     if (!active_con) {
-      return seastar::make_exception_future(
-	  crimson::common::system_shutdown_exception());
+      logger().warn("cannot establish the active_con with any mon");
+      return seastar::now();
     }
     return active_con->renew_rotating_keyring();
   });
