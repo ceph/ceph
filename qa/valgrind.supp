@@ -1,3 +1,11 @@
+
+{
+   <allthefrees, so we can behave with tcmalloc>
+   Memcheck:Free
+   fun:free
+   ...
+}
+
 {
    older boost mersenne twister uses uninitialized memory for randomness
    Memcheck:Cond
