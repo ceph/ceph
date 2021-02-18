@@ -3,7 +3,6 @@ os_type: centos
 
 tasks:
 - install:
-#    flavor: notcmalloc
 - ceph:
 - openssl_keys:
 - rgw:
