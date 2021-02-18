@@ -559,6 +559,7 @@ struct part_header {
   std::uint64_t max_index{0};
   ceph::real_time max_time;
   segment_map listed_segments;
+  segment_map trimmed_segments;
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
@@ -572,6 +573,7 @@ struct part_header {
     encode(max_index, bl);
     encode(max_time, bl);
     rados::cls::fifo::encode(listed_segments, bl);
+    rados::cls::fifo::encode(trimmed_segments, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
@@ -587,6 +589,7 @@ struct part_header {
     decode(max_time, bl);
     if (struct_v >= 2) {
       rados::cls::fifo::decode(listed_segments, bl);
+      rados::cls::fifo::decode(trimmed_segments, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -603,6 +606,7 @@ inline std::ostream& operator <<(std::ostream& m, const part_header& p) {
 	   << "min_index: " << p.min_index << ", "
 	   << "max_index: " << p.max_index << ", "
 	   << "max_time: " << p.max_time << ", "
-     << "listed_offsets: {" << p.listed_segments << "}";
+     << "listed_offsets: {" << p.listed_segments << ", "
+     << "trimmed_offsets: {" << p.trimmed_segments << "}";
 }
 } // namespace rados::cls::fifo

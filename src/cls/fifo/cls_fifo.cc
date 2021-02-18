@@ -991,6 +991,8 @@ int get_part_visible_offset(cls_method_context_t hctx, ceph::buffer::list* in,
   std::uint64_t end_ofs;
   segment_type segment;
   auto& listed_segments = part_header.listed_segments;
+  auto& trimmed_segments = part_header.trimmed_segments;
+	const auto combined_segments = listed_segments + trimmed_segments;
 
   while(true) {
     CLS_LOG(5, "%s: find end offset for start offset: %lu. with: %u entries", __PRETTY_FUNCTION__, start_ofs, max_entries);
@@ -998,12 +1000,13 @@ int get_part_visible_offset(cls_method_context_t hctx, ceph::buffer::list* in,
     if (r < 0) {
       return r;
     }
+
     segment = segment_type(start_ofs, end_ofs);
     
     CLS_LOG(5, "%s: requested segment is: [%lu, %lu)", __PRETTY_FUNCTION__, segment.lower(), segment.upper());
     
-    auto segment_it = listed_segments.find(segment);
-    if (segment_it == listed_segments.end()) {
+    auto segment_it = combined_segments.find(segment);
+    if (segment_it == combined_segments.end()) {
       CLS_LOG(5, "%s: requested segment: [%lu, %lu) was not yet listed", 
         __PRETTY_FUNCTION__, segment.lower(), segment.upper());
       break;
@@ -1017,6 +1020,7 @@ int get_part_visible_offset(cls_method_context_t hctx, ceph::buffer::list* in,
       // partially overlapping segment, returning non-overlapping left side
       break;
     }
+
     // completly ovarlapping segmenst - trying on the right side of the overlapping segment
     start_ofs = segment_it->first.upper();
     if (start_ofs >= part_header.last_ofs) {
