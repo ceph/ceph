@@ -155,28 +155,31 @@ Since this is a new feature, many yaml files have yet to be annotated.
 Developers are encouraged to improve the coverage and the quality of the
 documentation. 
 
-How integration tests are run
------------------------------
+How to run integration tests 
+----------------------------
 
-As a new Ceph developer you will probably not have access to the `Sepia lab`_.
-You might however be able to run some integration tests in your own
-environment. Ask members from the relevant team how to do this. 
+Typically, the `Sepia lab`_ is used to run integration tests. But as a new Ceph
+developer, you will probably not have access to the `Sepia lab`_.  You might
+however be able to run some integration tests in an environment separate from
+the `Sepia lab`_ . Ask members from the relevant team how to do this. 
 
-One option is to set up a teuthology cluster on bare metal. Though this is a
-non-trivial task, it `is` possible. Here are `some notes
+One way to run your own integration tests is to set up a teuthology cluster on
+bare metal. Setting up a teuthology cluster on bare metal is a complex task.
+Here are `some notes
 <https://docs.ceph.com/projects/teuthology/en/latest/LAB_SETUP.html>`_ to get
-you started if you decide to go this route.
+you started if you decide that you are interested in undertaking the complex
+task of setting up a teuthology cluster on bare metal.
 
-Running integration tests on your code contributions and publishing the
-results allows reviewers to verify that changes to the code base do not
-cause regressions, or to analyze test failures when they do occur.
+Running integration tests on your code contributions and publishing the results
+allows reviewers to verify that changes to the code base do not cause
+regressions, and allows reviewers to analyze test failures when they occur.
 
 Every teuthology cluster, whether bare-metal or cloud-provisioned, has a
 so-called "teuthology machine" from which tests suites are triggered using the
 ``teuthology-suite`` command.
 
 A detailed and up-to-date description of each `teuthology-suite`_ option is
-available by running the following command on the teuthology machine
+available by running the following command on the teuthology machine:
 
 .. prompt:: bash $
 
