@@ -229,7 +229,7 @@ Restoring the MON quorum
 ------------------------
 
 In case the Ceph MONs cannot form a quorum, cephadm is not able
-to manage the cluster, until the quorum is restored. 
+to manage the cluster, until the quorum is restored.
 
 In order to restore the MON quorum, remove unhealthy MONs
 form the monmap by following these steps:
@@ -242,14 +242,14 @@ form the monmap by following these steps:
 
 2. Identify a surviving monitor and log in to that host::
 
-    ssh {mon-host} 
+    ssh {mon-host}
     cephadm enter --name mon.`hostname`
 
-3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy` 
+3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`
+
 
 Manually deploying a MGR daemon
 -------------------------------
-
 cephadm requires a MGR daemon in order to manage the cluster. In case the cluster
 the last MGR of a cluster was removed, follow these steps in order to deploy 
 a MGR ``mgr.hostname.smfvfd`` on a random host of your cluster manually. 
