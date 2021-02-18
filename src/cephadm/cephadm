@@ -100,6 +100,7 @@ logger: logging.Logger = None  # type: ignore
 
 ##################################
 
+
 class BaseConfig:
 
     def __init__(self):
@@ -194,6 +195,7 @@ logging_config = {
     }
 }
 
+
 class termcolor:
     yellow = '\033[93m'
     red = '\033[31m'
@@ -279,6 +281,8 @@ class Monitoring(object):
     }  # type: ignore
 
 ##################################
+
+
 def populate_files(config_dir, config_files, uid, gid):
     # type: (str, Dict, int, int) -> None
     """create config files for different services"""
@@ -290,6 +294,7 @@ def populate_files(config_dir, config_files, uid, gid):
             os.fchown(f.fileno(), uid, gid)
             os.fchmod(f.fileno(), 0o600)
             f.write(config_content)
+
 
 class NFSGanesha(object):
     """Defines a NFS-Ganesha container"""
@@ -587,6 +592,7 @@ class CephIscsi(object):
         return tcmu_container
 
 ##################################
+
 
 class HAproxy(object):
     """Defines an HAproxy container"""
@@ -926,6 +932,7 @@ def get_supported_daemons():
 
 ##################################
 
+
 class PortOccupiedError(Error):
     pass
 
@@ -983,6 +990,7 @@ def check_ip_port(ctx, ip, port):
         attempt_bind(ctx, s, ip, port)
 
 ##################################
+
 
 # this is an abbreviated version of
 # https://github.com/benediktschmitt/py-filelock/blob/master/filelock.py
@@ -1301,6 +1309,7 @@ except ImportError:
             finally:
                 asyncio.set_event_loop(None)
                 loop.close()
+
 
 def call(ctx: CephadmContext,
          command: List[str],
@@ -2549,6 +2558,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         call_throws(ctx, ['systemctl', 'restart',
                           get_unit_name(fsid, daemon_type, daemon_id)])
 
+
 def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, background=False):
     # type: (CephadmContext, IO[str], CephContainer, Optional[str], Optional[bool]) -> None
     if comment:
@@ -2828,6 +2838,7 @@ def update_firewalld(ctx, daemon_type):
 
     firewall.open_ports(fw_ports)
     firewall.apply_rules()
+
 
 def install_base_units(ctx, fsid):
     # type: (CephadmContext, str) -> None
@@ -3163,6 +3174,7 @@ def _pull_image(ctx, image):
         time.sleep(sleep_secs)
 
     raise RuntimeError('Failed command: %s: maximum retries reached' % cmd_str)
+
 ##################################
 
 
@@ -3196,8 +3208,9 @@ def get_image_info_from_inspect(out, image):
         r['repo_digests'] = digests[1:-1].split(' ')
     return r
 
-
 ##################################
+
+
 def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
     """Determine whether the given string is a valid subnet
 
@@ -3223,6 +3236,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
             errors.append(f"{subnet} invalid: {str(e)}")
     
     return rc, list(versions), ", ".join(errors)
+
 
 def unwrap_ipv6(address):
     # type: (str) -> str
@@ -3971,6 +3985,7 @@ def command_bootstrap(ctx):
 
 ##################################
 
+
 def command_registry_login(ctx: CephadmContext):
     if ctx.registry_json:
         logger.info("Pulling custom registry login info from %s." % ctx.registry_json)
@@ -3995,6 +4010,7 @@ def command_registry_login(ctx: CephadmContext):
                     "--registry-url, --registry-username and --registry-password "
                     "options or --registry-json option")
     return 0
+
 
 def registry_login(ctx: CephadmContext, url, username, password):
     logger.info("Logging into custom registry.")
@@ -4714,8 +4730,8 @@ def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
         return d
     raise Error('Daemon not found: {}. See `cephadm ls`'.format(name))
 
-
 ##################################
+
 
 @default_image
 def command_adopt(ctx):
@@ -5105,8 +5121,8 @@ def _stop_and_disable(ctx, unit_name):
         logger.info('Disabling old systemd unit %s...' % unit_name)
         call_throws(ctx, ['systemctl', 'disable', unit_name])
 
-
 ##################################
+
 
 def command_rm_daemon(ctx):
     # type: (CephadmContext) -> None
@@ -5209,8 +5225,8 @@ def command_rm_cluster(ctx):
                 if os.path.exists(files[n]):
                     os.remove(files[n])
 
-
 ##################################
+
 
 def check_time_sync(ctx, enabler=None):
     # type: (CephadmContext, Optional[Packager]) -> bool
@@ -5818,6 +5834,7 @@ def command_install(ctx: CephadmContext):
 
 ##################################
 
+
 def get_ipv4_address(ifname):
     # type: (str) -> str
     def _extract(sock, offset):
@@ -5911,8 +5928,9 @@ def read_file(path_list, file_name=''):
                     return content
     return "Unknown"
 
-
 ##################################
+
+
 class HostFacts():
     _dmi_path_list = ['/sys/class/dmi/id']
     _nic_path_list = ['/sys/class/net']
@@ -6375,13 +6393,14 @@ class HostFacts():
 
 ##################################
 
+
 def command_gather_facts(ctx: CephadmContext):
     """gather_facts is intended to provide host releated metadata to the caller"""
     host = HostFacts(ctx)
     print(host.dump())
 
-
 ##################################
+
 
 def command_verify_prereqs(ctx: CephadmContext):
     if ctx.service_type == 'haproxy' or ctx.service_type == 'keepalived':
@@ -6450,6 +6469,7 @@ class CephadmHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
     cephadm_cache: CephadmCache
     token: str
+
 
 class CephadmDaemonHandler(BaseHTTPRequestHandler):
     server: CephadmHTTPServer
@@ -7055,9 +7075,9 @@ def command_exporter(ctx: CephadmContext):
         raise Error(f"cluster fsid '{ctx.fsid}' not found in '{ctx.data_dir}'")
             
     exporter.run()
-        
 
 ##################################
+
 
 def systemd_target_state(target_name: str, subsystem: str = 'ceph') -> bool:
     # TODO: UNITTEST
@@ -7121,8 +7141,8 @@ def command_maintenance(ctx: CephadmContext):
                 else:
                     return f"success - systemd target {target} enabled and started"
 
-
 ##################################
+
 
 def _get_parser():
     # type: () -> argparse.ArgumentParser
