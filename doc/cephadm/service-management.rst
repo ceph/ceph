@@ -279,3 +279,65 @@ specification.
 3. Apply the new ``ServiceSpec``::
 
     ceph orch apply -i myservice.yaml [--dry-run]
+
+
+.. _cephadm-spec-unmanaged:
+
+Disable automatic deployment of daemons
+=======================================
+
+Cephadm supports disabling the automated deployment and removal of daemons per service. In
+this case, the CLI supports two commands that are dedicated to this mode. 
+
+To disable the automatic management of dameons, apply
+the :ref:`orchestrator-cli-service-spec` with ``unmanaged=True``. 
+
+``mgr.yaml``:
+
+.. code-block:: yaml
+
+  service_type: mgr
+  unmanaged: true
+  placement:
+    label: mgr
+
+.. code-block:: bash
+
+  ceph orch apply -i mgr.yaml
+
+.. note::
+
+  cephadm will no longer deploy any new daemons, if the placement
+  specification matches additional hosts.
+
+To manually deploy a daemon on a host, please execute:
+
+.. code-block:: bash
+
+  ceph orch daemon add <daemon-type>  --placement=<placement spec>
+
+For example 
+
+.. code-block:: bash
+
+  ceph orch daemon add mgr --placement=my_host
+
+To manually remove a daemon, please run:
+
+.. code-block:: bash
+
+  ceph orch daemon rm <daemon name>... [--force]
+
+For example 
+
+.. code-block:: bash
+
+  ceph orch daemon rm mgr.my_host.xyzxyz
+
+.. note:: 
+
+  For managed services (``unmanaged=False``), cephadm will automatically
+  deploy a new daemon a few seconds later.
+    
+* See :ref:`cephadm-osd-declarative` for special handling of unmanaged OSDs. 
+* See also :ref:`cephadm-pause`
