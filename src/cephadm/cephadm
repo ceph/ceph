@@ -1,50 +1,5 @@
 #!/usr/bin/python3
 
-# Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-master-devel'
-DEFAULT_IMAGE_IS_MASTER = True
-DEFAULT_PROMETHEUS_IMAGE = "docker.io/prom/prometheus:v2.18.1"
-DEFAULT_NODE_EXPORTER_IMAGE = "docker.io/prom/node-exporter:v0.18.1"
-DEFAULT_GRAFANA_IMAGE = "docker.io/ceph/ceph-grafana:6.7.4"
-DEFAULT_ALERT_MANAGER_IMAGE = "docker.io/prom/alertmanager:v0.20.0"
-# ------------------------------------------------------------------------------
-
-LATEST_STABLE_RELEASE = 'pacific'
-DATA_DIR = '/var/lib/ceph'
-LOG_DIR = '/var/log/ceph'
-LOCK_DIR = '/run/cephadm'
-LOGROTATE_DIR = '/etc/logrotate.d'
-UNIT_DIR = '/etc/systemd/system'
-LOG_DIR_MODE = 0o770
-DATA_DIR_MODE = 0o700
-CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
-MIN_PODMAN_VERSION = (2, 0, 2)
-CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
-DEFAULT_TIMEOUT = None  # in seconds
-DEFAULT_RETRY = 15
-SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
-SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
-
-"""
-You can invoke cephadm in two ways:
-
-1. The normal way, at the command line.
-
-2. By piping the script to the python3 binary.  In this latter case, you should
-   prepend one or more lines to the beginning of the script.
-
-   For arguments,
-
-       injected_argv = [...]
-
-   e.g.,
-
-       injected_argv = ['ls']
-
-   For reading stdin from the '--config-json -' argument,
-
-       injected_stdin = '...'
-"""
 import asyncio
 import asyncio.subprocess
 import argparse
@@ -77,7 +32,6 @@ from contextlib import redirect_stdout
 import ssl
 from enum import Enum
 
-
 from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO
 
 import re
@@ -91,12 +45,56 @@ from threading import Thread, RLock
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
-cached_stdin = None
 
+# Default container images -----------------------------------------------------
+DEFAULT_IMAGE = 'docker.io/ceph/daemon-base:latest-master-devel'
+DEFAULT_IMAGE_IS_MASTER = True
+DEFAULT_PROMETHEUS_IMAGE = "docker.io/prom/prometheus:v2.18.1"
+DEFAULT_NODE_EXPORTER_IMAGE = "docker.io/prom/node-exporter:v0.18.1"
+DEFAULT_GRAFANA_IMAGE = "docker.io/ceph/ceph-grafana:6.7.4"
+DEFAULT_ALERT_MANAGER_IMAGE = "docker.io/prom/alertmanager:v0.20.0"
+# ------------------------------------------------------------------------------
+
+LATEST_STABLE_RELEASE = 'pacific'
+DATA_DIR = '/var/lib/ceph'
+LOG_DIR = '/var/log/ceph'
+LOCK_DIR = '/run/cephadm'
+LOGROTATE_DIR = '/etc/logrotate.d'
+UNIT_DIR = '/etc/systemd/system'
+LOG_DIR_MODE = 0o770
+DATA_DIR_MODE = 0o700
+CONTAINER_PREFERENCE = ['podman', 'docker']  # prefer podman to docker
+MIN_PODMAN_VERSION = (2, 0, 2)
+CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
+DEFAULT_TIMEOUT = None  # in seconds
+DEFAULT_RETRY = 15
+SHELL_DEFAULT_CONF = '/etc/ceph/ceph.conf'
+SHELL_DEFAULT_KEYRING = '/etc/ceph/ceph.client.admin.keyring'
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
-
 logger: logging.Logger = None  # type: ignore
+
+"""
+You can invoke cephadm in two ways:
+
+1. The normal way, at the command line.
+
+2. By piping the script to the python3 binary.  In this latter case, you should
+   prepend one or more lines to the beginning of the script.
+
+   For arguments,
+
+       injected_argv = [...]
+
+   e.g.,
+
+       injected_argv = ['ls']
+
+   For reading stdin from the '--config-json -' argument,
+
+       injected_stdin = '...'
+"""
+cached_stdin = None
 
 ##################################
 
