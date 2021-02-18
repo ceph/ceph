@@ -33,6 +33,7 @@ versions of Ceph.
     host-management
     osd
     rgw
+    custom-container
     service-management
     upgrade
     Cephadm operations <operations>
