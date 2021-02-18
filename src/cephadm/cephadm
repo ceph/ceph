@@ -4016,7 +4016,7 @@ def registry_login(ctx: CephadmContext, url, username, password):
         out, _, _ = call_throws(ctx, cmd)
         if 'podman' in container_path:
             os.chmod('/etc/ceph/podman-auth.json', 0o600)
-    except:
+    except Exception:
         raise Error("Failed to login to custom registry @ %s as %s with given password" % (ctx.registry_url, ctx.registry_username))
 
 ##################################
