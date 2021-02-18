@@ -30,6 +30,8 @@ versions of Ceph.
     stability
     install
     adoption
+    host-management
+    
     upgrade
     Cephadm operations <operations>
     Cephadm monitoring <monitoring>

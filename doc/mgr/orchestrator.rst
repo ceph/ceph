@@ -58,54 +58,6 @@ Status
 Show current orchestrator mode and high-level status (whether the orchestrator
 plugin is available and operational)
 
-.. _orchestrator-cli-host-management:
-
-Host Management
-===============
-
-List hosts associated with the cluster::
-
-    ceph orch host ls
-
-Add and remove hosts::
-
-    ceph orch host add <hostname> [<addr>] [<labels>...]
-    ceph orch host rm <hostname>
-
-Place a host in and out of maintenance mode (stops all Ceph daemons on host)::
-
-    ceph orch host maintenance enter <hostname> [--force]
-    ceph orch host maintenace exit <hostname>
-
-Where the force flag when entering maintenance allows the user to bypass warnings (but not alerts)
-
-For cephadm, see also :ref:`cephadm-fqdn` and :ref:`cephadm-removing-hosts`.
-
-Host Specification
-------------------
-
-Many hosts can be added at once using
-``ceph orch apply -i`` by submitting a multi-document YAML file::
-
-    ---
-    service_type: host
-    addr: node-00
-    hostname: node-00
-    labels:
-    - example1
-    - example2
-    ---
-    service_type: host
-    addr: node-01
-    hostname: node-01
-    labels:
-    - grafana
-    ---
-    service_type: host
-    addr: node-02
-    hostname: node-02
-
-This can be combined with service specifications (below) to create a cluster spec file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
 
 .. _orchestrator-host-labels:
 

@@ -307,56 +307,6 @@ Then, run bootstrap referencing this file::
   cephadm bootstrap -c /root/ceph.conf ...
 
 
-.. _cephadm-removing-hosts:
-
-Removing Hosts
-==============
-
-If the node that want you to remove is running OSDs, make sure you remove the OSDs from the node.
-
-To remove a host from a cluster, do the following:
-
-For all Ceph service types, except for ``node-exporter`` and ``crash``, remove
-the host from the placement specification file (for example, cluster.yml).
-For example, if you are removing the host named host2, remove all occurrences of
-``- host2`` from all ``placement:`` sections.
-
-Update:
-
-.. code-block:: yaml
-
-  service_type: rgw
-  placement:
-    hosts:
-    - host1
-    - host2
-
-To:
-
-.. code-block:: yaml
-
-
-  service_type: rgw
-  placement:
-    hosts:
-    - host1
-
-Remove the host from cephadm's environment:
-
-.. code-block:: bash
-
-  ceph orch host rm host2
-
-See also :ref:`orchestrator-cli-host-management`.
-
-If the host is running ``node-exporter`` and crash services, remove them by running
-the following command on the host:
-
-.. code-block:: bash
-
-  cephadm rm-daemon --fsid CLUSTER_ID --name SERVICE_NAME
-
-
 .. _cephadm-spec-unmanaged:
 
 Disable automatic deployment of daemons
