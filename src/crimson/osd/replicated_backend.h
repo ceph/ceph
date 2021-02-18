@@ -43,13 +43,22 @@ private:
   ceph_tid_t next_txn_id = 0;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
-    pending_on_t(size_t pending)
-      : pending{static_cast<unsigned>(pending)}
+    pending_on_t(size_t pending, const eversion_t& at_version)
+      : pending{static_cast<unsigned>(pending)}, at_version(at_version)
     {}
     unsigned pending;
+    // The order of pending_txns' at_version must be the same as their
+    // corresponding ceph_tid_t, as we rely on this condition for checking
+    // whether a client request is already completed. To put it another
+    // way, client requests at_version must be updated synchorously/simultaneously
+    // with ceph_tid_t.
+    const eversion_t at_version;
     crimson::osd::acked_peers_t acked_peers;
-    seastar::promise<> all_committed;
+    seastar::shared_promise<> all_committed;
   };
   using pending_transactions_t = std::map<ceph_tid_t, pending_on_t>;
   pending_transactions_t pending_trans;
+
+  seastar::future<> request_committed(
+    const osd_reqid_t& reqid, const eversion_t& at_version) final;
 };
