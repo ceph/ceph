@@ -700,8 +700,8 @@ static int block_device_run_smartctl(const string& devname, int timeout,
     timeout);
   smartctl.add_cmd_args(
     "smartctl",
-    "-a",
-    //"-x",
+    //"-a",    // all SMART info
+    "-x",    // all SMART and non-SMART info
     "--json=o",
     device.c_str(),
     NULL);
