@@ -3852,8 +3852,8 @@ def command_bootstrap(ctx):
     mgr_id = ctx.mgr_id or generate_service_id()
     logger.info('Cluster fsid: %s' % fsid)
 
-    l = FileLock(ctx, fsid)
-    l.acquire()
+    lock = FileLock(ctx, fsid)
+    lock.acquire()
 
     (addr_arg, ipv6, mon_network) = prepare_mon_addresses(ctx)
     cluster_network, ipv6_cluster_network = prepare_cluster_network(ctx)
@@ -4083,8 +4083,8 @@ def command_deploy(ctx):
     # type: (CephadmContext) -> None
     daemon_type, daemon_id = ctx.name.split('.', 1)
 
-    l = FileLock(ctx, ctx.fsid)
-    l.acquire()
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
 
     if daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % daemon_type)
@@ -4350,8 +4350,8 @@ def command_ceph_volume(ctx):
     if ctx.fsid:
         make_log_dir(ctx, ctx.fsid)
 
-        l = FileLock(ctx, ctx.fsid)
-        l.acquire()
+        lock = FileLock(ctx, ctx.fsid)
+        lock.acquire()
 
     (uid, gid) = (0, 0)  # ceph-volume runs as root
     mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
@@ -4780,8 +4780,8 @@ def command_adopt(ctx):
                                   legacy_dir=ctx.legacy_dir)
     if not fsid:
         raise Error('could not detect legacy fsid; set fsid in ceph.conf')
-    l = FileLock(ctx, fsid)
-    l.acquire()
+    lock = FileLock(ctx, fsid)
+    lock.acquire()
 
     # call correct adoption
     if daemon_type in Ceph.daemons:
@@ -5152,8 +5152,9 @@ def _stop_and_disable(ctx, unit_name):
 
 def command_rm_daemon(ctx):
     # type: (CephadmContext) -> None
-    l = FileLock(ctx, ctx.fsid)
-    l.acquire()
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+
     (daemon_type, daemon_id) = ctx.name.split('.', 1)
     unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
@@ -5192,8 +5193,8 @@ def command_rm_cluster(ctx):
         raise Error('must pass --force to proceed: '
                     'this command may destroy precious data!')
 
-    l = FileLock(ctx, ctx.fsid)
-    l.acquire()
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
 
     # stop + disable individual daemon units
     for d in list_daemons(ctx, detail=False):
@@ -5988,7 +5989,7 @@ class HostFacts():
         cpu_set = set()
 
         for line in output:
-            field = [l.strip() for l in line.split(':')]
+            field = [f.strip() for f in line.split(':')]
             if "model name" in line:
                 self.cpu_model = field[1]
             if "physical id" in line:
