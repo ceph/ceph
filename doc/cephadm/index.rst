@@ -32,6 +32,7 @@ versions of Ceph.
     adoption
     host-management
     osd
+    service-management
     upgrade
     Cephadm operations <operations>
     Cephadm monitoring <monitoring>
