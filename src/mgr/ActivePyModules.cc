@@ -1052,6 +1052,36 @@ void ActivePyModules::set_uri(const std::string& module_name,
   modules.at(module_name)->set_uri(uri);
 }
 
+void ActivePyModules::set_device_wear_level(const std::string& devid,
+					    float wear_level)
+{
+  // update mgr state
+  map<string,string> meta;
+  daemon_state.with_device(
+    devid,
+    [wear_level, &meta] (DeviceState& dev) {
+      dev.set_wear_level(wear_level);
+      meta = dev.metadata;
+    });
+
+  // tell mon
+  json_spirit::Object json_object;
+  for (auto& i : meta) {
+    json_spirit::Config::add(json_object, i.first, i.second);
+  }
+  bufferlist json;
+  json.append(json_spirit::write(json_object));
+  const string cmd =
+    "{"
+    "\"prefix\": \"config-key set\", "
+    "\"key\": \"device/" + devid + "\""
+    "}";
+
+  Command set_cmd;
+  set_cmd.run(&monc, cmd, json);
+  set_cmd.wait();
+}
+
 MetricQueryID ActivePyModules::add_osd_perf_query(
     const OSDPerfMetricQuery &query,
     const std::optional<OSDPerfMetricLimit> &limit)
