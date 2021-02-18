@@ -127,8 +127,8 @@ class Alerts(MgrModule):
                 if 'new' not in d:
                     d['new'] = {}
                 d['new'][code] = alert
-            elif (alert['summary'].get('count', 0) >
-                  last['checks'][code]['summary'].get('count', 0)):
+            elif (alert['summary'].get('count', 0)
+                  > last['checks'][code]['summary'].get('count', 0)):
                 if 'updated' not in d:
                     d['updated'] = {}
                 d['updated'][code] = alert

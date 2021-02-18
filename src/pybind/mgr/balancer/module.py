@@ -210,7 +210,7 @@ class Eval:
 
                     cdf of standard normal distribution: https://stackoverflow.com/a/29273201
                     '''
-                    score += target[k] * (math.erf(((adjusted - avg)/avg) / math.sqrt(2.0)))
+                    score += target[k] * (math.erf(((adjusted - avg) / avg) / math.sqrt(2.0)))
                     sum_weight += target[k]
                 dev += (avg - adjusted) * (avg - adjusted)
             stddev = math.sqrt(dev / float(max(num - 1, 1)))
@@ -1056,8 +1056,6 @@ class Module(MgrModule):
         # get current osd reweights
         orig_osd_weight = {a['osd']: a['weight']
                            for a in ms.osdmap_dump.get('osds', [])}
-        reweighted_osds = [a for a, b in orig_osd_weight.items()
-                           if b < 1.0 and b > 0.0]
 
         # get current compat weight-set weights
         orig_ws = self.get_compat_weight_set_weights(ms)
@@ -1071,7 +1069,6 @@ class Module(MgrModule):
         self.log.debug('roots %s', roots)
         visited: Dict[int, str] = {}
         overlap: Dict[int, List[str]] = {}
-        root_ids: Dict[str, int] = {}
         for root, wm in pe.target_by_root.items():
             for osd in wm:
                 if osd in visited:
