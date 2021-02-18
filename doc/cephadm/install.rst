@@ -258,5 +258,7 @@ To use the *Ceph Object Gateway*, follow :ref:`cephadm-deploy-rgw`.
 
 To use *NFS*, follow :ref:`deploy-cephadm-nfs-ganesha`
 
+To use *iSCSI*, follow :ref:`cephadm-iscsi`
+
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network
