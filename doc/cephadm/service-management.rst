@@ -84,25 +84,6 @@ Each service type can have additional service specific properties.
 Service specifications of type ``mon``, ``mgr``, and the monitoring
 types do not require a ``service_id``.
 
-A service of type ``nfs`` requires a pool name and may contain
-an optional namespace:
-
-.. code-block:: yaml
-
-    service_type: nfs
-    service_id: mynfs
-    placement:
-      hosts:
-        - host1
-        - host2
-    spec:
-      pool: mypool
-      namespace: mynamespace
-
-where ``pool`` is a RADOS pool where NFS client recovery data is stored
-and ``namespace`` is a RADOS namespace where NFS client recovery
-data is stored in the pool.
-
 A service of type ``osd`` is described in :ref:`drivegroups`
 
 Many service specifications can be applied at once using

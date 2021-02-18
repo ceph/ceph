@@ -256,32 +256,7 @@ MDS daemons.
 
 To use the *Ceph Object Gateway*, follow :ref:`cephadm-deploy-rgw`.
 
-
-.. _deploy-cephadm-nfs-ganesha:
-
-Deploying NFS ganesha
-=====================
-
-Cephadm deploys NFS Ganesha using a pre-defined RADOS *pool*
-and optional *namespace*
-
-To deploy a NFS Ganesha gateway, run the following command:
-
-.. prompt:: bash #
-
-    ceph orch apply nfs *<svc_id>* *<pool>* *<namespace>* --placement="*<num-daemons>* [*<host1>* ...]"
-
-For example, to deploy NFS with a service id of *foo*, that will use the RADOS
-pool *nfs-ganesha* and namespace *nfs-ns*:
-
-.. prompt:: bash #
-
-   ceph orch apply nfs foo nfs-ganesha nfs-ns
-
-.. note::
-   Create the *nfs-ganesha* pool first if it doesn't exist.
-
-See :ref:`orchestrator-cli-placement-spec` for details of the placement specification.
+To use *NFS*, follow :ref:`deploy-cephadm-nfs-ganesha`
 
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network

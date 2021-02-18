@@ -34,6 +34,7 @@ versions of Ceph.
     mon
     osd
     rgw
+    nfs
     custom-container
     monitoring
     service-management
