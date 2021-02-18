@@ -105,6 +105,26 @@
 
 # disable dwz which compresses the debuginfo
 %global _find_debuginfo_dwz_opts %{nil}
+# use multi-threaded xz compression: xz level 7 using ncpus threads
+%global _source_payload w7T%{_smp_build_ncpus}.xzdio
+%global _binary_payload w7T%{_smp_build_ncpus}.xzdio
+
+%define smp_limit_mem_per_job() %( \
+  kb_per_job=%1 \
+  kb_total=$(head -1 /proc/meminfo | sed 's/MemTotal:\\s*\\(.*\\) kB.*/\\1/') \
+  jobs=$(( $kb_total / $kb_per_job )) \
+  [ $jobs -lt 1 ] && jobs=1 \
+  echo $jobs )
+
+%if 0%{?_smp_ncpus_max} == 0
+%if 0%{?__isa_bits} == 32
+# 32-bit builds can use 3G memory max, which is not enough even for -j2
+%global _smp_ncpus_max 1
+%else
+# 2.5 GiB mem per job
+%global _smp_ncpus_max %{smp_limit_mem_per_job 2500000}
+%endif
+%endif
 
 #################################################################################
 # main package definition
@@ -1190,121 +1210,96 @@ export LDFLAGS="$RPM_LD_FLAGS"
 export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
 %endif
 
-# Parallel build settings ...
-CEPH_MFLAGS_JOBS="%{?_smp_mflags}"
-CEPH_SMP_NCPUS=$(echo "$CEPH_MFLAGS_JOBS" | sed 's/-j//')
-%if 0%{?__isa_bits} == 32
-# 32-bit builds can use 3G memory max, which is not enough even for -j2
-CEPH_SMP_NCPUS="1"
-%endif
-# do not eat all memory
-echo "Available memory:"
-free -h
-echo "System limits:"
-ulimit -a
-if test -n "$CEPH_SMP_NCPUS" -a "$CEPH_SMP_NCPUS" -gt 1 ; then
-    mem_per_process=2500
-    max_mem=$(LANG=C free -m | sed -n "s|^Mem: *\([0-9]*\).*$|\1|p")
-    max_jobs="$(($max_mem / $mem_per_process))"
-    test "$CEPH_SMP_NCPUS" -gt "$max_jobs" && CEPH_SMP_NCPUS="$max_jobs" && echo "Warning: Reducing build parallelism to -j$max_jobs because of memory limits"
-    test "$CEPH_SMP_NCPUS" -le 0 && CEPH_SMP_NCPUS="1" && echo "Warning: Not using parallel build at all because of memory limits"
-fi
-export CEPH_SMP_NCPUS
-export CEPH_MFLAGS_JOBS="-j$CEPH_SMP_NCPUS"
-
 env | sort
 
 mkdir build
 cd build
-CMAKE=cmake
-${CMAKE} .. \
-    -DCMAKE_INSTALL_PREFIX=%{_prefix} \
-    -DCMAKE_INSTALL_LIBDIR=%{_libdir} \
-    -DCMAKE_INSTALL_LIBEXECDIR=%{_libexecdir} \
-    -DCMAKE_INSTALL_LOCALSTATEDIR=%{_localstatedir} \
-    -DCMAKE_INSTALL_SYSCONFDIR=%{_sysconfdir} \
-    -DCMAKE_INSTALL_MANDIR=%{_mandir} \
-    -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
-    -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
-    -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=%{_unitdir} \
-    -DWITH_MANPAGE=ON \
-    -DWITH_PYTHON3=%{python3_version} \
-    -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
+%cmake .. \
+    -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
+    -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
+    -DCMAKE_INSTALL_LOCALSTATEDIR:PATH=%{_localstatedir} \
+    -DCMAKE_INSTALL_SYSCONFDIR:PATH=%{_sysconfdir} \
+    -DCMAKE_INSTALL_MANDIR:PATH=%{_mandir} \
+    -DCMAKE_INSTALL_DOCDIR:PATH=%{_docdir}/ceph \
+    -DCMAKE_INSTALL_INCLUDEDIR:PATH=%{_includedir} \
+    -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR:PATH=%{_unitdir} \
+    -DWITH_MANPAGE:BOOL=ON \
+    -DWITH_PYTHON3:STRING=%{python3_version} \
+    -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=OFF \
 %if 0%{without ceph_test_package}
-    -DWITH_TESTS=OFF \
+    -DWITH_TESTS:BOOL=OFF \
 %endif
 %if 0%{with cephfs_java}
-    -DWITH_CEPHFS_JAVA=ON \
+    -DWITH_CEPHFS_JAVA:BOOL=ON \
 %endif
 %if 0%{with selinux}
-    -DWITH_SELINUX=ON \
+    -DWITH_SELINUX:BOOL=ON \
 %endif
 %if %{with lttng}
-    -DWITH_LTTNG=ON \
-    -DWITH_BABELTRACE=ON \
+    -DWITH_LTTNG:BOOL=ON \
+    -DWITH_BABELTRACE:BOOL=ON \
 %else
-    -DWITH_LTTNG=OFF \
-    -DWITH_BABELTRACE=OFF \
+    -DWITH_LTTNG:BOOL=OFF \
+    -DWITH_BABELTRACE:BOOL=OFF \
 %endif
     $CEPH_EXTRA_CMAKE_ARGS \
 %if 0%{with ocf}
-    -DWITH_OCF=ON \
+    -DWITH_OCF:BOOL=ON \
 %endif
 %if 0%{with cephfs_shell}
-    -DWITH_CEPHFS_SHELL=ON \
+    -DWITH_CEPHFS_SHELL:BOOL=ON \
 %endif
 %if 0%{with libradosstriper}
-    -DWITH_LIBRADOSSTRIPER=ON \
+    -DWITH_LIBRADOSSTRIPER:BOOL=ON \
 %else
-    -DWITH_LIBRADOSSTRIPER=OFF \
+    -DWITH_LIBRADOSSTRIPER:BOOL=OFF \
 %endif
 %if 0%{with amqp_endpoint}
-    -DWITH_RADOSGW_AMQP_ENDPOINT=ON \
+    -DWITH_RADOSGW_AMQP_ENDPOINT:BOOL=ON \
 %else
-    -DWITH_RADOSGW_AMQP_ENDPOINT=OFF \
+    -DWITH_RADOSGW_AMQP_ENDPOINT:BOOL=OFF \
 %endif
 %if 0%{with kafka_endpoint}
-    -DWITH_RADOSGW_KAFKA_ENDPOINT=ON \
+    -DWITH_RADOSGW_KAFKA_ENDPOINT:BOOL=ON \
 %else
-    -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
+    -DWITH_RADOSGW_KAFKA_ENDPOINT:BOOL=OFF \
 %endif
 %if 0%{without lua_packages}
-    -DWITH_RADOSGW_LUA_PACKAGES=OFF \
+    -DWITH_RADOSGW_LUA_PACKAGES:BOOL=OFF \
 %endif
 %if 0%{with zbd}
-    -DWITH_ZBD=ON \
+    -DWITH_ZBD:BOOL=ON \
 %endif
 %if 0%{with cmake_verbose_logging}
-    -DCMAKE_VERBOSE_MAKEFILE=ON \
+    -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
 %endif
 %if 0%{with rbd_rwl_cache}
-    -DWITH_RBD_RWL=ON \
+    -DWITH_RBD_RWL:BOOL=ON \
 %endif
 %if 0%{with rbd_ssd_cache}
-    -DWITH_RBD_SSD_CACHE=ON \
+    -DWITH_RBD_SSD_CACHE:BOOL=ON \
 %endif
-    -DBOOST_J=$CEPH_SMP_NCPUS \
-    -DWITH_GRAFANA=ON
+    -DBOOST_J:STRING=%{_smp_build_ncpus} \
+    -DWITH_GRAFANA:BOOL=ON
 
 %if %{with cmake_verbose_logging}
 cat ./CMakeFiles/CMakeOutput.log
 cat ./CMakeFiles/CMakeError.log
 %endif
 
-make "$CEPH_MFLAGS_JOBS"
-
+%make_build
 
 %if 0%{with make_check}
 %check
 # run in-tree unittests
 cd build
-ctest "$CEPH_MFLAGS_JOBS"
+ctest %{_smp_mflags}
 %endif
 
 
 %install
 pushd build
-make DESTDIR=%{buildroot} install
+%make_install
 # we have dropped sysvinit bits
 rm -f %{buildroot}/%{_sysconfdir}/init.d/ceph
 popd
